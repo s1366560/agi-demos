@@ -34,6 +34,10 @@ from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 
 logger = logging.getLogger(__name__)
 
+# Flush accumulated events to DB every N seconds during streaming,
+# so they survive service restarts.
+_PERSIST_INTERVAL_SECONDS = 30
+
 
 def _inject_app_model_context(
     conversation_context: List[Dict[str, Any]],
@@ -80,6 +84,8 @@ async def execute_project_chat(
     try:
         redis_client = await _get_redis_client()
         last_refresh = time_module.time()
+        last_persist = time_module.time()
+        persisted_count = 0
 
         async for event in agent.execute_chat(
             conversation_id=request.conversation_id,
@@ -124,12 +130,29 @@ async def execute_project_chat(
                 await refresh_agent_running_ttl(request.conversation_id)
                 last_refresh = now
 
-        await _persist_events(
-            conversation_id=request.conversation_id,
-            message_id=request.message_id,
-            events=events,
-            correlation_id=request.correlation_id,
-        )
+            # Incremental persistence: flush to DB periodically so events
+            # survive service restarts mid-stream.
+            if now - last_persist > _PERSIST_INTERVAL_SECONDS:
+                batch = events[persisted_count:]
+                if batch:
+                    await _persist_events(
+                        conversation_id=request.conversation_id,
+                        message_id=request.message_id,
+                        events=batch,
+                        correlation_id=request.correlation_id,
+                    )
+                    persisted_count = len(events)
+                last_persist = now
+
+        # Final flush for any remaining events
+        remaining = events[persisted_count:]
+        if remaining:
+            await _persist_events(
+                conversation_id=request.conversation_id,
+                message_id=request.message_id,
+                events=remaining,
+                correlation_id=request.correlation_id,
+            )
 
         # Save context summary if compression generated one
         if summary_save_data and not is_error:
@@ -173,6 +196,21 @@ async def execute_project_chat(
         execution_time_ms = (time_module.time() - start_time) * 1000
         agent_metrics.increment("project_agent.chat_errors")
         logger.error(f"[ActorExecution] Chat error: {e}", exc_info=True)
+
+        # Persist events collected before the error so they survive restarts
+        remaining = events[persisted_count:] if events else []
+        if remaining:
+            try:
+                await _persist_events(
+                    conversation_id=request.conversation_id,
+                    message_id=request.message_id,
+                    events=remaining,
+                    correlation_id=request.correlation_id,
+                )
+            except Exception as persist_err:
+                logger.warning(
+                    f"[ActorExecution] Failed to persist events on error: {persist_err}"
+                )
 
         try:
             await _publish_error_event(
@@ -349,6 +387,8 @@ async def continue_project_chat(
         await delete_hitl_snapshot(request_id)
 
         last_refresh = time_module.time()
+        last_persist = time_module.time()
+        persisted_count = 0
 
         async for event in agent.execute_chat(
             conversation_id=state.conversation_id,
@@ -385,12 +425,26 @@ async def continue_project_chat(
                 await refresh_agent_running_ttl(state.conversation_id)
                 last_refresh = now
 
-        await _persist_events(
-            conversation_id=state.conversation_id,
-            message_id=state.message_id,
-            events=events,
-            correlation_id=state.correlation_id,
-        )
+            if now - last_persist > _PERSIST_INTERVAL_SECONDS:
+                batch = events[persisted_count:]
+                if batch:
+                    await _persist_events(
+                        conversation_id=state.conversation_id,
+                        message_id=state.message_id,
+                        events=batch,
+                        correlation_id=state.correlation_id,
+                    )
+                    persisted_count = len(events)
+                last_persist = now
+
+        remaining = events[persisted_count:]
+        if remaining:
+            await _persist_events(
+                conversation_id=state.conversation_id,
+                message_id=state.message_id,
+                events=remaining,
+                correlation_id=state.correlation_id,
+            )
 
         execution_time_ms = (time_module.time() - start_time) * 1000
 
@@ -409,6 +463,21 @@ async def continue_project_chat(
     except Exception as e:
         execution_time_ms = (time_module.time() - start_time) * 1000
         logger.error(f"[ActorExecution] Continue chat error: {e}", exc_info=True)
+
+        remaining = events[persisted_count:] if events else []
+        if remaining:
+            try:
+                await _persist_events(
+                    conversation_id=state.conversation_id,
+                    message_id=state.message_id,
+                    events=remaining,
+                    correlation_id=state.correlation_id,
+                )
+            except Exception as persist_err:
+                logger.warning(
+                    f"[ActorExecution] Failed to persist events on error: {persist_err}"
+                )
+
         return ProjectChatResult(
             conversation_id=state.conversation_id,
             message_id=state.message_id,

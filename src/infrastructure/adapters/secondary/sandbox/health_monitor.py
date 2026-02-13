@@ -562,11 +562,13 @@ class EnhancedHealthMonitor:
 
         for sandbox_id, client in sandbox_clients:
             try:
-                # Send ping via WebSocket client
+                # Send ping via WebSocket client.
+                # Use a generous timeout (30s) to avoid false unhealthy reports
+                # when the sandbox event loop is busy processing long tool calls.
                 if hasattr(client, "ping"):
-                    await asyncio.wait_for(client.ping(), timeout=5)
+                    await asyncio.wait_for(client.ping(), timeout=30)
                 elif hasattr(client, "_ws") and client._ws:
-                    await asyncio.wait_for(client._ws.ping(), timeout=5)
+                    await asyncio.wait_for(client._ws.ping(), timeout=30)
             except Exception as e:
                 logger.warning(f"Heartbeat failed for {sandbox_id}: {e}")
                 # Mark for health check

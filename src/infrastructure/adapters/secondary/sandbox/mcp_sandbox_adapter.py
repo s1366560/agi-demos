@@ -154,6 +154,14 @@ class MCPSandboxAdapter(SandboxPort):
             max_size=1000,
         )
 
+        # Cache health check results to avoid Docker API call on every call_tool.
+        # If a sandbox was checked healthy within this TTL, skip the full health check.
+        self._health_check_ttl_seconds = 30.0
+        self._last_healthy_at: TTLCache = TTLCache(
+            default_ttl_seconds=self._health_check_ttl_seconds,
+            max_size=1000,
+        )
+
         # URL service for building service URLs
         self._url_service = SandboxUrlService(default_host="localhost", api_base="/api/v1")
 
@@ -473,7 +481,10 @@ class MCPSandboxAdapter(SandboxPort):
 
         # Verify container is running before attempting connection
         try:
-            container = self._docker.containers.get(sandbox_id)
+            loop = asyncio.get_event_loop()
+            container = await loop.run_in_executor(
+                None, lambda: self._docker.containers.get(sandbox_id)
+            )
             if container.status != "running":
                 logger.warning(
                     f"Sandbox {sandbox_id} container not running (status={container.status}), "
@@ -2216,11 +2227,18 @@ class MCPSandboxAdapter(SandboxPort):
                 return False
             logger.info(f"Successfully synced sandbox {sandbox_id} from Docker")
 
-        # Check health using existing health_check method
+        # Fast path: if recently checked healthy AND MCP client is still connected,
+        # skip the expensive Docker API call.
+        last_healthy = await self._last_healthy_at.get(sandbox_id)
+        if last_healthy and instance.mcp_client and instance.mcp_client.is_connected:
+            return True
+
+        # Full health check (includes Docker API call)
         is_healthy = await self.health_check(sandbox_id)
 
         if is_healthy:
-            # Container is healthy, update instance reference
+            # Cache the healthy result to skip Docker API calls for subsequent tool calls
+            await self._last_healthy_at.set(sandbox_id, True)
             instance = self._active_sandboxes.get(sandbox_id)
             return True
 
@@ -2341,6 +2359,8 @@ class MCPSandboxAdapter(SandboxPort):
                 }
 
             except (SandboxConnectionError, ConnectionError) as e:
+                # Invalidate health cache so next call_tool does a full check
+                await self._last_healthy_at.delete(sandbox_id)
                 if attempt < max_retries - 1:
                     logger.warning(
                         f"Tool call connection error (attempt {attempt + 1}/{max_retries}): {e}. "

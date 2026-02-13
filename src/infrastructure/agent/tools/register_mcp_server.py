@@ -199,6 +199,12 @@ class RegisterMCPServerTool(AgentTool):
                 arguments={"name": server_name},
                 timeout=30.0,
             )
+            if discover_result.get("is_error") or discover_result.get("isError"):
+                error_text = self._extract_error_text(discover_result)
+                return (
+                    f"Error: MCP server '{server_name}' was installed and started, "
+                    f"but tool discovery failed: {error_text}"
+                )
             tools = self._parse_result(discover_result)
             if not isinstance(tools, list):
                 tools = []
@@ -312,6 +318,18 @@ class RegisterMCPServerTool(AgentTool):
             await session.commit()
 
         return app.id
+
+    @staticmethod
+    def _extract_error_text(result: Dict[str, Any]) -> str:
+        """Extract human-readable error text from an MCP result."""
+        content = result.get("content", [])
+        for item in content:
+            if item.get("type") == "text":
+                text = item.get("text", "")
+                if text.startswith("Error: "):
+                    text = text[7:]
+                return text
+        return result.get("error_message", "Unknown error")
 
     @staticmethod
     def _parse_result(result: Dict[str, Any]) -> Any:

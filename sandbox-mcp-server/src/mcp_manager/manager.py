@@ -102,6 +102,29 @@ class _WebSocketConnection:
         return self._request_id
 
 
+@dataclass
+class _SSEConnection:
+    """Active JSON-RPC connection to a legacy SSE MCP server.
+
+    Legacy SSE protocol:
+      1. GET /sse -> persistent SSE stream, receives 'endpoint' event with messages URL
+      2. POST to messages URL with JSON-RPC payload
+      3. Read JSON-RPC responses from the SSE stream
+    """
+
+    server: ManagedServer
+    session: Any = field(default=None)  # aiohttp.ClientSession
+    messages_url: str = ""  # URL from the 'endpoint' SSE event
+    _request_id: int = field(default=0, init=False)
+    _pending: Dict[int, asyncio.Future] = field(default_factory=dict, init=False)
+    _reader_task: Optional[asyncio.Task] = field(default=None, init=False)
+    _initialized: bool = field(default=False, init=False)
+
+    def next_id(self) -> int:
+        self._request_id += 1
+        return self._request_id
+
+
 class MCPServerManager:
     """Manages user MCP servers within the sandbox container.
 
@@ -114,6 +137,7 @@ class MCPServerManager:
         self._tracker = ProcessTracker()
         self._connections: Dict[str, _StdioConnection] = {}
         self._ws_connections: Dict[str, "_WebSocketConnection"] = {}
+        self._sse_connections: Dict[str, "_SSEConnection"] = {}
         self._tools_cache: Dict[str, List[MCPToolInfo]] = {}
         # StreamableHTTP session tracking
         self._session_ids: Dict[str, str] = {}  # server_name -> Mcp-Session-Id
@@ -229,6 +253,8 @@ class MCPServerManager:
                     # Initialize MCP protocol
                     if server_type == "websocket":
                         await self._init_ws_connection(server)
+                    elif server_type == "sse":
+                        await self._init_sse_connection(server)
                     else:
                         await self._init_network_connection(server)
                 else:
@@ -246,6 +272,8 @@ class MCPServerManager:
                         try:
                             if server_type == "websocket":
                                 await self._init_ws_connection(server)
+                            elif server_type == "sse":
+                                await self._init_sse_connection(server)
                             else:
                                 await self._init_network_connection(server)
                         except Exception as e:
@@ -284,6 +312,9 @@ class MCPServerManager:
 
         # Clean up WebSocket connection
         await self._close_ws_connection(name)
+
+        # Clean up SSE connection
+        await self._close_sse_connection(name)
 
         # Clean up tools cache
         self._tools_cache.pop(name, None)
@@ -335,6 +366,8 @@ class MCPServerManager:
             return await self._send_stdio_request(server_name, method, params, timeout)
         elif server.server_type == "websocket" and server_name in self._ws_connections:
             return await self._send_ws_request(server_name, method, params, timeout)
+        elif server.server_type == "sse" and server_name in self._sse_connections:
+            return await self._send_sse_request(server_name, method, params, timeout)
         else:
             return await self._send_network_request(server, method, params, timeout)
 
@@ -487,6 +520,8 @@ class MCPServerManager:
                 conn._reader_task.cancel()
         for name in list(self._ws_connections.keys()):
             await self._close_ws_connection(name)
+        for name in list(self._sse_connections.keys()):
+            await self._close_sse_connection(name)
         # Close shared HTTP session
         if self._http_session and not self._http_session.closed:
             await self._http_session.close()
@@ -714,13 +749,26 @@ class MCPServerManager:
                     return response.get("result", {})
 
             except aiohttp.ClientError as e:
-                last_error = RuntimeError(f"HTTP request to '{server.url}' failed: {e}")
+                err_str = str(e)
+                if "Connect call failed" in err_str or "Cannot connect" in err_str:
+                    msg = (
+                        f"Cannot connect to MCP server '{server.name}' at {server.url}. "
+                        f"The server may not be running or the port is incorrect."
+                    )
+                else:
+                    msg = (
+                        f"HTTP request to MCP server '{server.name}' "
+                        f"at {server.url} failed: {err_str}"
+                    )
+                last_error = RuntimeError(msg)
                 if attempt < max_retries - 1:
                     await asyncio.sleep(0.5 * (2 ** attempt))
                     continue
                 raise last_error
 
-        raise last_error or RuntimeError(f"Request to '{server.url}' failed after retries")
+        raise last_error or RuntimeError(
+            f"Request to MCP server '{server.name}' at {server.url} failed after retries"
+        )
 
     async def _read_sse_response(
         self, resp, request_id: int
@@ -917,5 +965,254 @@ class MCPServerManager:
                 conn._reader_task.cancel()
             if conn.ws and not conn.ws.closed:
                 await conn.ws.close()
+            if conn.session and not conn.session.closed:
+                await conn.session.close()
+
+    # -- Legacy SSE protocol methods --
+
+    async def _init_sse_connection(self, server: ManagedServer) -> None:
+        """Initialize a persistent SSE connection to a legacy MCP SSE server.
+
+        Legacy SSE protocol:
+          1. GET /sse -> persistent SSE stream
+          2. Server sends 'endpoint' event with the messages URL
+          3. Client POSTs JSON-RPC to the messages URL
+          4. Responses arrive on the SSE stream
+        """
+        import aiohttp
+
+        if not server.url:
+            raise ValueError(f"No URL for SSE server '{server.name}'")
+
+        session = aiohttp.ClientSession()
+        try:
+            # Establish persistent SSE stream
+            resp = await session.get(
+                server.url,
+                headers={"Accept": "text/event-stream"},
+                timeout=aiohttp.ClientTimeout(total=None),
+            )
+            if resp.status != 200:
+                body = await resp.text()
+                raise RuntimeError(
+                    f"SSE connection to '{server.url}' returned HTTP {resp.status}: "
+                    f"{body[:200]}"
+                )
+
+            conn = _SSEConnection(server=server, session=session)
+            self._sse_connections[server.name] = conn
+
+            # Read the 'endpoint' event to get the messages URL
+            endpoint_url = await self._read_sse_endpoint(resp, server, timeout=10)
+            conn.messages_url = endpoint_url
+
+            # Start background reader for JSON-RPC responses
+            conn._reader_task = asyncio.create_task(
+                self._read_sse_stream(server.name, resp)
+            )
+
+            # Send initialize request
+            req_id = conn.next_id()
+            future: asyncio.Future = asyncio.get_event_loop().create_future()
+            conn._pending[req_id] = future
+
+            await session.post(
+                conn.messages_url,
+                json={
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {
+                            "name": "sandbox-mcp-manager",
+                            "version": "1.0.0",
+                        },
+                    },
+                },
+                headers={"Content-Type": "application/json"},
+                timeout=aiohttp.ClientTimeout(total=MCP_INIT_TIMEOUT),
+            )
+
+            result = await asyncio.wait_for(future, timeout=MCP_INIT_TIMEOUT)
+            conn._initialized = True
+            logger.info(
+                f"MCP SSE connection initialized for '{server.name}': "
+                f"server={result.get('serverInfo', {}).get('name', 'unknown')}, "
+                f"messages_url={conn.messages_url}"
+            )
+
+            # Send initialized notification (fire-and-forget)
+            try:
+                await session.post(
+                    conn.messages_url,
+                    json={
+                        "jsonrpc": "2.0",
+                        "method": "notifications/initialized",
+                    },
+                    headers={"Content-Type": "application/json"},
+                    timeout=aiohttp.ClientTimeout(total=5),
+                )
+            except Exception:
+                pass  # Notifications are best-effort
+
+        except Exception as e:
+            await session.close()
+            self._sse_connections.pop(server.name, None)
+            logger.warning(f"Failed to init SSE MCP for '{server.name}': {e}")
+            raise
+
+    async def _read_sse_endpoint(
+        self, resp, server: ManagedServer, timeout: int = 10
+    ) -> str:
+        """Read the 'endpoint' event from an SSE stream to get the messages URL."""
+        deadline = asyncio.get_event_loop().time() + timeout
+        event_type = ""
+
+        async for line_bytes in resp.content:
+            if asyncio.get_event_loop().time() > deadline:
+                raise RuntimeError(
+                    f"Timeout waiting for 'endpoint' event from SSE server "
+                    f"'{server.name}' at {server.url}"
+                )
+
+            line = line_bytes.decode("utf-8").rstrip("\n").rstrip("\r")
+
+            if not line:
+                event_type = ""
+                continue
+            if line.startswith(":"):
+                continue
+            if line.startswith("event: "):
+                event_type = line[7:].strip()
+                continue
+            if line.startswith("data: ") and event_type == "endpoint":
+                messages_path = line[6:].strip()
+                # Resolve relative path to absolute URL
+                if messages_path.startswith("/"):
+                    from urllib.parse import urlparse
+
+                    parsed = urlparse(server.url)
+                    return f"{parsed.scheme}://{parsed.netloc}{messages_path}"
+                return messages_path
+
+        raise RuntimeError(
+            f"SSE stream from '{server.name}' closed without sending "
+            f"'endpoint' event"
+        )
+
+    async def _read_sse_stream(self, server_name: str, resp) -> None:
+        """Background task: read JSON-RPC responses from a legacy SSE stream."""
+        conn = self._sse_connections.get(server_name)
+        if not conn:
+            return
+
+        event_type = ""
+        data_buffer = ""
+
+        try:
+            async for line_bytes in resp.content:
+                line = line_bytes.decode("utf-8").rstrip("\n").rstrip("\r")
+
+                if not line:
+                    # Empty line = end of event
+                    if event_type == "message" and data_buffer:
+                        try:
+                            data = json.loads(data_buffer)
+                            req_id = data.get("id")
+                            if req_id is not None and req_id in conn._pending:
+                                future = conn._pending.pop(req_id)
+                                if "error" in data:
+                                    future.set_exception(
+                                        RuntimeError(
+                                            data["error"].get("message", "Unknown")
+                                        )
+                                    )
+                                else:
+                                    future.set_result(data.get("result", {}))
+                        except json.JSONDecodeError:
+                            pass
+                    event_type = ""
+                    data_buffer = ""
+                    continue
+
+                if line.startswith(":"):
+                    continue
+                if line.startswith("event: "):
+                    event_type = line[7:].strip()
+                elif line.startswith("data: "):
+                    data_buffer += line[6:]
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            logger.error(f"SSE reader error for '{server_name}': {e}")
+        finally:
+            for future in conn._pending.values():
+                if not future.done():
+                    future.set_exception(RuntimeError("SSE connection closed"))
+            conn._pending.clear()
+
+    async def _send_sse_request(
+        self,
+        server_name: str,
+        method: str,
+        params: Optional[Dict[str, Any]] = None,
+        timeout: int = TOOL_CALL_TIMEOUT,
+    ) -> Dict[str, Any]:
+        """Send a JSON-RPC request via legacy SSE transport."""
+        import aiohttp
+
+        conn = self._sse_connections.get(server_name)
+        if not conn or not conn.messages_url:
+            raise RuntimeError(
+                f"No SSE connection for '{server_name}'. "
+                f"The server may need to be restarted."
+            )
+
+        req_id = conn.next_id()
+        request: Dict[str, Any] = {
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "method": method,
+        }
+        if params is not None:
+            request["params"] = params
+
+        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        conn._pending[req_id] = future
+
+        try:
+            async with conn.session.post(
+                conn.messages_url,
+                json=request,
+                headers={"Content-Type": "application/json"},
+                timeout=aiohttp.ClientTimeout(total=timeout),
+            ) as resp:
+                if resp.status >= 400:
+                    body = await resp.text()
+                    conn._pending.pop(req_id, None)
+                    if not future.done():
+                        future.cancel()
+                    raise RuntimeError(
+                        f"HTTP {resp.status} from SSE server '{server_name}' "
+                        f"messages endpoint: {body[:300]}"
+                    )
+        except aiohttp.ClientError as e:
+            conn._pending.pop(req_id, None)
+            if not future.done():
+                future.cancel()
+            raise RuntimeError(
+                f"Cannot send request to SSE server '{server_name}': {e}"
+            ) from e
+
+        return await asyncio.wait_for(future, timeout=timeout)
+
+    async def _close_sse_connection(self, server_name: str) -> None:
+        """Close an SSE connection."""
+        conn = self._sse_connections.pop(server_name, None)
+        if conn:
+            if conn._reader_task and not conn._reader_task.done():
+                conn._reader_task.cancel()
             if conn.session and not conn.session.closed:
                 await conn.session.close()
