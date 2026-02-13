@@ -144,7 +144,13 @@ class MCPHttpClient:
                 "initialize",
                 {
                     "protocolVersion": "2024-11-05",
-                    "capabilities": {},
+                    "capabilities": {
+                        "extensions": {
+                            "io.modelcontextprotocol/ui": {
+                                "mimeTypes": ["text/html;profile=mcp-app"],
+                            },
+                        },
+                    },
                     "clientInfo": {"name": "memstack-mcp-worker", "version": "1.0.0"},
                 },
                 timeout=timeout,
@@ -348,6 +354,7 @@ class MCPHttpClient:
                             name=tool_dict.get("name", ""),
                             description=tool_dict.get("description"),
                             inputSchema=tool_dict.get("inputSchema", {}),
+                            meta=tool_dict.get("_meta") or tool_dict.get("meta"),
                         )
                     )
                 logger.info(f"tools/list returned {len(tools)} tools")
@@ -525,6 +532,7 @@ class MCPHttpClient:
                     name=tool.get("name", ""),
                     description=tool.get("description"),
                     inputSchema=tool.get("inputSchema", {}),
+                    meta=tool.get("_meta"),
                 )
                 for tool in tools_data
             ]

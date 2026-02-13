@@ -22,6 +22,8 @@ __all__ = [
     "AgentArtifactOpenEvent",
     "AgentArtifactUpdateEvent",
     "AgentArtifactCloseEvent",
+    "AgentMCPAppResultEvent",
+    "AgentMCPAppRegisteredEvent",
     "get_frontend_event_types",
 ]
 
@@ -605,6 +607,46 @@ class AgentArtifactCloseEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.ARTIFACT_CLOSE
     artifact_id: str
+
+
+# === MCP App Events ===
+
+
+class AgentMCPAppResultEvent(AgentDomainEvent):
+    """Event: An MCP tool with interactive UI was called.
+
+    Carries the tool result alongside the resolved HTML resource
+    for rendering in the Canvas panel as a sandboxed iframe.
+    """
+
+    event_type: AgentEventType = AgentEventType.MCP_APP_RESULT
+    app_id: str
+    tool_name: str
+    tool_result: Optional[Any] = None
+    tool_input: Optional[Dict[str, Any]] = None
+    resource_html: str
+    resource_uri: str
+    ui_metadata: Dict[str, Any] = Field(default_factory=dict)
+    tool_execution_id: Optional[str] = None
+    project_id: str = ""
+    server_name: str = ""
+    structured_content: Optional[Dict[str, Any]] = None
+
+
+class AgentMCPAppRegisteredEvent(AgentDomainEvent):
+    """Event: A new MCP App was auto-detected during tool discovery.
+
+    Emitted when SandboxMCPServerManager discovers tools with
+    _meta.ui.resourceUri, whether from user-added or agent-developed servers.
+    """
+
+    event_type: AgentEventType = AgentEventType.MCP_APP_REGISTERED
+    app_id: str
+    server_name: str
+    tool_name: str
+    source: str  # "user_added" | "agent_developed"
+    resource_uri: str
+    title: Optional[str] = None
 
 
 # =========================================================================

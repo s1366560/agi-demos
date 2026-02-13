@@ -176,7 +176,15 @@ class MCPWebSocketClient:
                 "initialize",
                 {
                     "protocolVersion": "2024-11-05",
-                    "capabilities": {"roots": {"listChanged": True}, "sampling": {}},
+                    "capabilities": {
+                        "roots": {"listChanged": True},
+                        "sampling": {},
+                        "extensions": {
+                            "io.modelcontextprotocol/ui": {
+                                "mimeTypes": ["text/html;profile=mcp-app"],
+                            },
+                        },
+                    },
                     "clientInfo": {"name": "memstack-mcp-worker", "version": "1.0.0"},
                 },
                 timeout=timeout,
@@ -351,11 +359,11 @@ class MCPWebSocketClient:
                     name=tool.get("name", ""),
                     description=tool.get("description"),
                     inputSchema=tool.get("inputSchema", {}),
+                    meta=tool.get("_meta"),
                 )
                 for tool in tools_data
             ]
         return []
-
     async def call_tool(
         self,
         name: str,
@@ -421,6 +429,49 @@ class MCPWebSocketClient:
     def get_cached_tools(self) -> List[MCPToolSchema]:
         """Get cached tools list (from connection time)."""
         return self._tools
+
+    async def read_resource(
+        self,
+        uri: str,
+        timeout: Optional[float] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Read a resource from the MCP server via resources/read.
+
+        Args:
+            uri: Resource URI (e.g., ui://server/app.html)
+            timeout: Operation timeout in seconds
+
+        Returns:
+            Resource response dict with 'contents' list, or None on error.
+        """
+        timeout = timeout or self.timeout
+        try:
+            result = await self._send_request(
+                "resources/read", {"uri": uri}, timeout=timeout,
+            )
+            return result
+        except Exception as e:
+            logger.error("resources/read error for %s: %s", uri, e)
+            return None
+
+    async def list_resources(
+        self,
+        timeout: Optional[float] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """List resources from the MCP server via resources/list.
+
+        Returns:
+            Response dict with 'resources' list, or None on error.
+        """
+        timeout = timeout or self.timeout
+        try:
+            result = await self._send_request(
+                "resources/list", {}, timeout=timeout,
+            )
+            return result
+        except Exception as e:
+            logger.error("resources/list error: %s", e)
+            return None
 
     async def _send_request(
         self,

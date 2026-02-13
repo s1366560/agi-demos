@@ -4,9 +4,9 @@ All request/response models for the Agent API endpoints.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from src.domain.model.agent import Conversation
 
@@ -76,6 +76,10 @@ class ChatRequest(BaseModel):
     conversation_id: str
     message: str
     reply_to_id: Optional[str] = None
+    app_model_context: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Context injected by MCP Apps via ui/update-model-context (SEP-1865)",
+    )
 
 
 # === Tool Schemas ===

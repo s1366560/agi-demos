@@ -305,6 +305,9 @@ class DIContainer:
     def sandbox_mcp_server_manager(self):
         return self._sandbox.sandbox_mcp_server_manager()
 
+    def mcp_app_service(self):
+        return self._sandbox.mcp_app_service()
+
     # === Agent Container delegates ===
 
     def conversation_repository(self) -> SqlConversationRepository:

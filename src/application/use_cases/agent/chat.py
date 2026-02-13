@@ -31,6 +31,7 @@ class ChatUseCase:
         project_id: str,
         user_id: str,
         tenant_id: str,
+        app_model_context: dict | None = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Execute the use case.
@@ -80,6 +81,7 @@ class ChatUseCase:
             project_id=project_id,
             user_id=user_id,
             tenant_id=tenant_id,
+            app_model_context=app_model_context,
         ):
             yield event
 

@@ -779,7 +779,17 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
             className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 mobile-full"
             style={{ width: rightPercent }}
           >
-            <CanvasPanel onSendPrompt={(prompt) => handleSend(prompt)} />
+            <CanvasPanel
+              onSendPrompt={(prompt) => handleSend(prompt)}
+              onUpdateModelContext={(ctx) => {
+                const convId = useAgentV3Store.getState().activeConversationId;
+                if (convId) {
+                  useAgentV3Store.getState().updateConversationState(convId, {
+                    appModelContext: ctx,
+                  });
+                }
+              }}
+            />
           </div>
         </div>
 

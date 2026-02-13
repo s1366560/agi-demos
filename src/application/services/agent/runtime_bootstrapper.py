@@ -26,6 +26,7 @@ class AgentRuntimeBootstrapper:
         correlation_id: Optional[str] = None,
         forced_skill_name: Optional[str] = None,
         context_summary_data: Optional[Dict[str, Any]] = None,
+        app_model_context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Start agent execution via Ray Actor, with local fallback."""
         from src.configuration.config import get_settings
@@ -70,6 +71,7 @@ class AgentRuntimeBootstrapper:
             forced_skill_name=forced_skill_name,
             context_summary_data=context_summary_data,
             plan_mode=conversation.is_in_plan_mode,
+            app_model_context=app_model_context,
         )
 
         await register_project(conversation.tenant_id, conversation.project_id)

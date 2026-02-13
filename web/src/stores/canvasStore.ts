@@ -9,7 +9,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
-export type CanvasContentType = 'code' | 'markdown' | 'preview' | 'data';
+export type CanvasContentType = 'code' | 'markdown' | 'preview' | 'data' | 'mcp-app';
 
 export interface CanvasTab {
   id: string;
@@ -25,6 +25,24 @@ export interface CanvasTab {
   artifactId?: string;
   /** Presigned URL for downloading the original artifact */
   artifactUrl?: string;
+  /** MCP App ID (when type is 'mcp-app') */
+  mcpAppId?: string;
+  /** MCP App HTML content (when type is 'mcp-app') */
+  mcpAppHtml?: string;
+  /** MCP App initial tool result (when type is 'mcp-app') */
+  mcpAppToolResult?: unknown;
+  /** MCP App tool input arguments (when type is 'mcp-app') */
+  mcpAppToolInput?: Record<string, unknown>;
+  /** MCP App UI metadata (when type is 'mcp-app') */
+  mcpAppUiMetadata?: Record<string, unknown>;
+  /** MCP resource URI (stable identifier for MCP Apps standard) */
+  mcpResourceUri?: string;
+  /** MCP tool name (for AppRenderer) */
+  mcpToolName?: string;
+  /** Project ID (for backend proxy calls) */
+  mcpProjectId?: string;
+  /** MCP server name (for proxy routing) */
+  mcpServerName?: string;
 }
 
 const MAX_HISTORY = 50;
@@ -36,6 +54,7 @@ interface CanvasState {
   openTab: (tab: Omit<CanvasTab, 'dirty' | 'createdAt' | 'history' | 'historyIndex'>) => void;
   closeTab: (id: string) => void;
   setActiveTab: (id: string) => void;
+  updateTab: (id: string, updates: Partial<CanvasTab>) => void;
   updateContent: (id: string, content: string) => void;
   undo: (tabId: string) => void;
   redo: (tabId: string) => void;
@@ -54,7 +73,13 @@ export const useCanvasStore = create<CanvasState>()(
         set((state) => {
           const existing = state.tabs.find((t) => t.id === tab.id);
           if (existing) {
-            return { activeTabId: tab.id };
+            // Merge new data into existing tab (preserves history/dirty state)
+            return {
+              tabs: state.tabs.map((t) =>
+                t.id === tab.id ? { ...t, ...tab, dirty: t.dirty } : t,
+              ),
+              activeTabId: tab.id,
+            };
           }
           const newTab: CanvasTab = {
             ...tab,
@@ -82,6 +107,11 @@ export const useCanvasStore = create<CanvasState>()(
         }),
 
       setActiveTab: (id) => set({ activeTabId: id }),
+
+      updateTab: (id, updates) =>
+        set((state) => ({
+          tabs: state.tabs.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+        })),
 
       updateContent: (id, content) =>
         set((state) => ({
@@ -160,6 +190,7 @@ export const useCanvasActions = () =>
       openTab: s.openTab,
       closeTab: s.closeTab,
       setActiveTab: s.setActiveTab,
+      updateTab: s.updateTab,
       updateContent: s.updateContent,
       undo: s.undo,
       redo: s.redo,

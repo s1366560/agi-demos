@@ -1,0 +1,154 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="light dark">
+    <title>MCP App Sandbox Proxy</title>
+    <style>
+      html, body { margin: 0; height: 100vh; width: 100vw; background-color: transparent; }
+      body { display: flex; flex-direction: column; }
+      * { box-sizing: border-box; }
+      iframe { background-color: transparent; border: 0 none transparent; padding: 0; overflow: hidden; flex-grow: 1; color-scheme: inherit; }
+    </style>
+  </head>
+  <body>
+    <script>
+      // MCP Apps Sandbox Proxy
+      // Implements the double-iframe security model from the MCP Apps spec (SEP-1865).
+      // This page runs in an outer iframe (different origin from host).
+      // It creates an inner iframe for untrusted app HTML content with CSP enforcement.
+
+      if (window.self === window.top) {
+        throw new Error("This file must be loaded in an iframe.");
+      }
+
+      // Validate embedding origin
+      var EXPECTED_HOST_ORIGIN = document.referrer ? new URL(document.referrer).origin : "*";
+
+      // Security check: verify iframe isolation
+      try {
+        void window.top.document;
+        throw "FAIL";
+      } catch (e) {
+        if (e === "FAIL") throw new Error("Sandbox is not secure - can access parent.");
+      }
+
+      // Create inner iframe for app content
+      var inner = document.createElement("iframe");
+      inner.style = "width:100%; height:100%; border:none;";
+      inner.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");
+      document.body.appendChild(inner);
+
+      var RESOURCE_READY = "ui/notifications/sandbox-resource-ready";
+      var PROXY_READY = "ui/notifications/sandbox-proxy-ready";
+
+      // Build Permission Policy allow attribute from permissions object or array
+      function buildAllowAttr(permissions) {
+        if (!permissions) return "";
+        // Support both object format (spec) and array format (legacy)
+        if (Array.isArray(permissions)) {
+          var mapping = {
+            camera: "camera", microphone: "microphone",
+            geolocation: "geolocation", clipboard: "clipboard-write",
+            "clipboard-read": "clipboard-read", clipboardWrite: "clipboard-write"
+          };
+          return permissions.map(function(p) { return mapping[p] || p; }).filter(Boolean).join("; ");
+        }
+        // Object format from spec: { camera: {}, microphone: {}, ... }
+        var parts = [];
+        if (permissions.camera) parts.push("camera");
+        if (permissions.microphone) parts.push("microphone");
+        if (permissions.geolocation) parts.push("geolocation");
+        if (permissions.clipboardWrite) parts.push("clipboard-write");
+        return parts.join("; ");
+      }
+
+      // Build CSP meta tag content from _meta.ui.csp metadata per SEP-1865.
+      // If no CSP metadata is provided, applies restrictive defaults.
+      function buildCSPContent(csp) {
+        var connectSrc = "'self'";
+        var resourceSrc = "";
+        var frameSrc = "'none'";
+        var baseUri = "'self'";
+
+        if (csp) {
+          if (csp.connectDomains && csp.connectDomains.length > 0) {
+            connectSrc = "'self' " + csp.connectDomains.join(" ");
+          }
+          if (csp.resourceDomains && csp.resourceDomains.length > 0) {
+            resourceSrc = " " + csp.resourceDomains.join(" ");
+          }
+          if (csp.frameDomains && csp.frameDomains.length > 0) {
+            frameSrc = csp.frameDomains.join(" ");
+          }
+          if (csp.baseUriDomains && csp.baseUriDomains.length > 0) {
+            baseUri = csp.baseUriDomains.join(" ");
+          }
+        }
+
+        return [
+          "default-src 'none'",
+          "script-src 'self' 'unsafe-inline'" + resourceSrc,
+          "style-src 'self' 'unsafe-inline'" + resourceSrc,
+          "img-src 'self' data:" + resourceSrc,
+          "font-src 'self'" + resourceSrc,
+          "media-src 'self' data:" + resourceSrc,
+          "connect-src " + connectSrc,
+          "frame-src " + frameSrc,
+          "object-src 'none'",
+          "base-uri " + baseUri
+        ].join("; ");
+      }
+
+      // Inject CSP meta tag into HTML string before it is written to the inner iframe
+      function injectCSP(html, cspContent) {
+        if (!cspContent) return html;
+        var cspTag = '<meta http-equiv="Content-Security-Policy" content="' + cspContent.replace(/"/g, '&quot;') + '">';
+        // Insert after <head> if present, otherwise prepend
+        var headIdx = html.indexOf("<head>");
+        if (headIdx === -1) headIdx = html.indexOf("<HEAD>");
+        if (headIdx !== -1) {
+          var insertAt = headIdx + 6; // length of "<head>"
+          return html.slice(0, insertAt) + cspTag + html.slice(insertAt);
+        }
+        return cspTag + html;
+      }
+
+      // Message relay: Host <-> Sandbox <-> Inner iframe
+      window.addEventListener("message", function(event) {
+        if (event.source === window.parent) {
+          // Message from host
+          if (EXPECTED_HOST_ORIGIN !== "*" && event.origin !== EXPECTED_HOST_ORIGIN) return;
+
+          if (event.data && event.data.method === RESOURCE_READY) {
+            var params = event.data.params || {};
+            if (typeof params.sandbox === "string") inner.setAttribute("sandbox", params.sandbox);
+            var allow = buildAllowAttr(params.permissions);
+            if (allow) inner.setAttribute("allow", allow);
+
+            if (typeof params.html === "string") {
+              // Build and inject CSP based on metadata
+              var cspContent = buildCSPContent(params.csp || null);
+              var htmlWithCSP = injectCSP(params.html, cspContent);
+
+              var doc = inner.contentDocument || (inner.contentWindow && inner.contentWindow.document);
+              if (doc) { doc.open(); doc.write(htmlWithCSP); doc.close(); }
+              else { inner.srcdoc = htmlWithCSP; }
+            }
+          } else {
+            if (inner.contentWindow) inner.contentWindow.postMessage(event.data, "*");
+          }
+        } else if (event.source === inner.contentWindow) {
+          // Message from inner app -> relay to host
+          window.parent.postMessage(event.data, EXPECTED_HOST_ORIGIN);
+        }
+      });
+
+      // Signal readiness to host
+      window.parent.postMessage({
+        method: PROXY_READY,
+        params: {}
+      }, EXPECTED_HOST_ORIGIN);
+    </script>
+  </body>
+</html>

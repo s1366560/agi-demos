@@ -35,6 +35,7 @@ import {
   StickyNote,
   Save,
   Loader2,
+  AppWindow,
 } from 'lucide-react';
 
 import {
@@ -51,6 +52,9 @@ import { MARKDOWN_PROSE_CLASSES } from '../styles';
 import { useMarkdownPlugins } from '../chat/markdownPlugins';
 
 import { SelectionToolbar } from './SelectionToolbar';
+import { StandardMCPAppRenderer } from '@/components/mcp-app/StandardMCPAppRenderer';
+
+import type { StandardMCPAppRendererHandle } from '@/components/mcp-app/StandardMCPAppRenderer';
 
 const typeIcon = (type: CanvasContentType, size = 14) => {
   switch (type) {
@@ -62,11 +66,13 @@ const typeIcon = (type: CanvasContentType, size = 14) => {
       return <Eye size={size} />;
     case 'data':
       return <Table size={size} />;
+    case 'mcp-app':
+      return <AppWindow size={size} />;
   }
 };
 
 // Tab bar
-const CanvasTabBar = memo(() => {
+const CanvasTabBar = memo<{ onBeforeCloseTab?: (tabId: string) => void }>(({ onBeforeCloseTab }) => {
   const tabs = useCanvasStore((s) => s.tabs);
   const activeTabId = useCanvasStore((s) => s.activeTabId);
   const { setActiveTab, closeTab, openTab } = useCanvasActions();
@@ -78,19 +84,27 @@ const CanvasTabBar = memo(() => {
     openTab({ id, title: 'untitled.py', type: 'code', content: '', language: undefined });
   }, [openTab]);
 
+  const handleClose = useCallback((tabId: string) => {
+    onBeforeCloseTab?.(tabId);
+    closeTab(tabId);
+  }, [onBeforeCloseTab, closeTab]);
+
   if (tabs.length === 0) return null;
 
   return (
     <div className="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/50">
       <div className="flex-1 flex items-center overflow-x-auto scrollbar-none">
         {tabs.map((tab) => (
-          <button
+          <div
             key={tab.id}
+            role="tab"
+            tabIndex={0}
             onClick={() => setActiveTab(tab.id)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveTab(tab.id); }}
             className={`
               group flex items-center gap-1.5 px-3 py-2 text-xs font-medium
               border-r border-slate-200/60 dark:border-slate-700/60
-              transition-colors whitespace-nowrap max-w-[180px]
+              transition-colors whitespace-nowrap max-w-[180px] cursor-pointer
               ${
                 tab.id === activeTabId
                   ? 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200'
@@ -109,13 +123,13 @@ const CanvasTabBar = memo(() => {
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                closeTab(tab.id);
+                handleClose(tab.id);
               }}
               className="ml-1 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
             >
               <X size={12} />
             </button>
-          </button>
+          </div>
         ))}
         <button
           type="button"
@@ -144,7 +158,10 @@ const CanvasContent = memo<{
   tab: CanvasTab;
   editMode: boolean;
   onContentChange: (content: string) => void;
-}>(({ tab, editMode, onContentChange }) => {
+  onSendPrompt?: (prompt: string) => void;
+  onUpdateModelContext?: (context: Record<string, unknown>) => void;
+  mcpAppRef?: React.Ref<StandardMCPAppRendererHandle>;
+}>(({ tab, editMode, onContentChange, onSendPrompt, onUpdateModelContext, mcpAppRef }) => {
   const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(tab.type === 'markdown' ? tab.content : undefined);
   if (editMode && (tab.type === 'code' || tab.type === 'markdown' || tab.type === 'data')) {
     const bgClass =
@@ -194,6 +211,24 @@ const CanvasContent = memo<{
             {tab.content}
           </pre>
         </div>
+      );
+    case 'mcp-app':
+      return (
+        <StandardMCPAppRenderer
+          ref={mcpAppRef}
+          toolName={tab.mcpToolName || tab.title}
+          resourceUri={tab.mcpResourceUri}
+          html={tab.mcpAppHtml}
+          toolInput={tab.mcpAppToolInput}
+          toolResult={tab.mcpAppToolResult}
+          projectId={tab.mcpProjectId}
+          serverName={tab.mcpServerName}
+          appId={tab.mcpAppId}
+          uiMetadata={tab.mcpAppUiMetadata as import('@/types/mcpApp').MCPAppUIMetadata | undefined}
+          onMessage={onSendPrompt ? (msg) => onSendPrompt(msg.content.text) : undefined}
+          onUpdateModelContext={onUpdateModelContext}
+          height="100%"
+        />
       );
   }
 });
@@ -477,13 +512,26 @@ const CanvasEmptyState = memo(() => {
 CanvasEmptyState.displayName = 'CanvasEmptyState';
 
 // Main CanvasPanel component
-export const CanvasPanel = memo<{ onSendPrompt?: (prompt: string) => void }>(
-  ({ onSendPrompt }) => {
+export const CanvasPanel = memo<{
+  onSendPrompt?: (prompt: string) => void;
+  onUpdateModelContext?: (context: Record<string, unknown>) => void;
+}>(
+  ({ onSendPrompt, onUpdateModelContext }) => {
     const activeTab = useActiveCanvasTab();
     const { updateContent } = useCanvasActions();
     const contentRef = useRef<HTMLDivElement>(null);
+    const mcpAppRef = useRef<StandardMCPAppRendererHandle>(null);
     const [editMode, setEditMode] = useState(false);
     const { t } = useTranslation();
+
+    // SEP-1865: Send ui/resource-teardown before closing MCP App tabs
+    const handleBeforeCloseTab = useCallback((tabId: string) => {
+      const tabs = useCanvasStore.getState().tabs;
+      const tab = tabs.find((t) => t.id === tabId);
+      if (tab?.type === 'mcp-app' && tab.id === activeTab?.id) {
+        mcpAppRef.current?.teardown();
+      }
+    }, [activeTab?.id]);
 
     const handleSelectionAction = useCallback(
       (prompt: string) => {
@@ -516,7 +564,7 @@ export const CanvasPanel = memo<{ onSendPrompt?: (prompt: string) => void }>(
 
     return (
       <div className="h-full flex flex-col bg-white dark:bg-slate-900 overflow-hidden">
-        <CanvasTabBar />
+        <CanvasTabBar onBeforeCloseTab={handleBeforeCloseTab} />
         {activeTab ? (
           <>
             <CanvasToolbar
@@ -534,6 +582,9 @@ export const CanvasPanel = memo<{ onSendPrompt?: (prompt: string) => void }>(
                 tab={activeTab}
                 editMode={editMode}
                 onContentChange={handleContentChange}
+                onSendPrompt={onSendPrompt}
+                onUpdateModelContext={onUpdateModelContext}
+                mcpAppRef={mcpAppRef}
               />
               {!editMode && (
                 <SelectionToolbar containerRef={contentRef} onAction={handleSelectionAction} />

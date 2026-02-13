@@ -25,7 +25,13 @@ import {
   Clock,
   Wrench,
   Undo2,
+  AppWindow,
 } from 'lucide-react';
+
+import { useCanvasStore } from '@/stores/canvasStore';
+import { useLayoutModeStore } from '@/stores/layoutMode';
+import { useMCPAppStore } from '@/stores/mcpAppStore';
+import { useProjectStore } from '@/stores/project';
 
 export interface TimelineStep {
   id: string;
@@ -152,10 +158,10 @@ const TimelineStepItem = memo<{
 
   const statusBg =
     step.status === 'running'
-      ? 'bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800/40'
+      ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800/40'
       : step.status === 'success'
-        ? 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/60 dark:border-emerald-800/30'
-        : 'bg-red-50/50 dark:bg-red-950/20 border-red-200/60 dark:border-red-800/30';
+        ? 'bg-emerald-50 dark:bg-emerald-950 border-emerald-200/60 dark:border-emerald-800/30'
+        : 'bg-red-50 dark:bg-red-950 border-red-200/60 dark:border-red-800/30';
 
   const statusIcon =
     step.status === 'running'
@@ -238,6 +244,80 @@ const TimelineStepItem = memo<{
           )}
         </button>
 
+        {/* MCP App "Open App" button - visible without expanding */}
+        {(step.toolName.startsWith('mcp__') || step.toolName === 'register_app') &&
+          step.status === 'success' && !step.isError && (
+          <button
+            type="button"
+            onClick={async (e) => {
+              e.stopPropagation();
+              const canvasState = useCanvasStore.getState();
+              const mcpState = useMCPAppStore.getState();
+
+              // Priority 1: Find existing tab for this tool
+              const existingMcpTab = canvasState.tabs.find(
+                (t) => t.type === 'mcp-app' && t.mcpToolName === step.toolName,
+              );
+              if (existingMcpTab) {
+                canvasState.setActiveTab(existingMcpTab.id);
+                useLayoutModeStore.getState().setMode('canvas');
+                return;
+              }
+
+              // Priority 2: Look up app from store
+              let apps = mcpState.apps;
+              const currentProjectId = useProjectStore.getState().currentProject?.id || '';
+
+              let match = Object.values(apps).find(
+                (a) =>
+                  step.toolName === `mcp__${a.server_name}__${a.tool_name}` ||
+                  step.toolName.replace(/-/g, '_') ===
+                    `mcp__${(a.server_name || '').replace(/-/g, '_')}__${a.tool_name}` ||
+                  a.tool_name === step.toolName,
+              );
+
+              // Priority 3: If no match in store, fetch from API
+              if (!match && currentProjectId) {
+                try {
+                  await mcpState.fetchApps(currentProjectId);
+                  apps = useMCPAppStore.getState().apps;
+                  match = Object.values(apps).find(
+                    (a) =>
+                      step.toolName === `mcp__${a.server_name}__${a.tool_name}` ||
+                      step.toolName.replace(/-/g, '_') ===
+                        `mcp__${(a.server_name || '').replace(/-/g, '_')}__${a.tool_name}` ||
+                      a.tool_name === step.toolName,
+                  );
+                } catch {
+                  // Ignore fetch errors - fall through to open without match
+                }
+              }
+
+              const resourceUri = match?.ui_metadata?.resourceUri as string | undefined;
+              const tabKey = resourceUri || match?.id || step.id;
+              const tabId = `mcp-app-${tabKey}`;
+
+              canvasState.openTab({
+                id: tabId,
+                title: match?.ui_metadata?.title as string || getToolLabel(step.toolName),
+                type: 'mcp-app' as const,
+                content: '',
+                mcpResourceUri: resourceUri,
+                mcpToolName: match?.tool_name || step.toolName,
+                mcpProjectId: currentProjectId,
+                mcpAppToolResult: step.output,
+                mcpServerName: match?.server_name,
+                mcpAppId: match?.id,
+              });
+              useLayoutModeStore.getState().setMode('canvas');
+            }}
+            className="flex items-center gap-1.5 px-2.5 py-1 mt-1 text-xs rounded-md bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 border border-violet-200/60 dark:border-violet-800/30 transition-colors"
+          >
+            <AppWindow size={12} />
+            {t('agent.timeline.openApp', 'Open App')}
+          </button>
+        )}
+
         {expanded && (
           <div className="mt-1.5 space-y-1.5 text-xs">
             {step.input && Object.keys(step.input).length > 0 && (
@@ -299,7 +379,7 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
   if (steps.length === 0) return null;
 
   return (
-    <div className="mb-2">
+    <div className="mb-2 rounded-md">
       {/* Summary header */}
       <button
         type="button"

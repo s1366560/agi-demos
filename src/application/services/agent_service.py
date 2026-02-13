@@ -171,6 +171,7 @@ class AgentService(AgentServicePort):
         attachment_ids: Optional[List[str]] = None,
         file_metadata: Optional[List[Dict[str, Any]]] = None,
         forced_skill_name: Optional[str] = None,
+        app_model_context: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream agent response using Ray Actors.
@@ -323,6 +324,7 @@ class AgentService(AgentServicePort):
                 correlation_id=correlation_id,
                 forced_skill_name=forced_skill_name,
                 context_summary_data=(context_summary.to_dict() if context_summary else None),
+                app_model_context=app_model_context,
             )
             logger.info(
                 f"[AgentService] Started actor {actor_id} for conversation {conversation_id}"
@@ -356,6 +358,7 @@ class AgentService(AgentServicePort):
         correlation_id: Optional[str] = None,
         forced_skill_name: Optional[str] = None,
         context_summary_data: Optional[Dict[str, Any]] = None,
+        app_model_context: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Start agent execution via Ray Actor, with local fallback."""
         return await self._runtime.start_chat_actor(
@@ -368,6 +371,7 @@ class AgentService(AgentServicePort):
             correlation_id=correlation_id,
             forced_skill_name=forced_skill_name,
             context_summary_data=context_summary_data,
+            app_model_context=app_model_context,
         )
 
     async def _get_stream_events(

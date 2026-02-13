@@ -43,12 +43,12 @@ from src.domain.events.agent_events import (
     AgentDoomLoopDetectedEvent,
     AgentErrorEvent,
     AgentEventType,
+    AgentMCPAppResultEvent,
     AgentObserveEvent,
     AgentPermissionAskedEvent,
     AgentRetryEvent,
     AgentStartEvent,
     AgentStatusEvent,
-
     AgentSuggestionsEvent,
     AgentTextDeltaEvent,
     AgentTextEndEvent,
@@ -1241,6 +1241,76 @@ class SessionProcessor:
                 tool_execution_id=tool_part.tool_execution_id,
             )
 
+            # Emit MCP App result event if the tool declares an interactive UI
+            tool_instance = getattr(tool_def, "_tool_instance", None)
+            has_ui = getattr(tool_instance, "has_ui", False) if tool_instance else False
+
+            # Fallback: for mcp__ tools without _ui_metadata, try DB lookup
+            if (
+                not has_ui
+                and tool_name.startswith("mcp__")
+                and tool_instance
+            ):
+                _app_id_fb = getattr(tool_instance, "_app_id", "") or ""
+                if _app_id_fb:
+                    has_ui = True
+                    logger.debug(
+                        "[MCPApp] Fallback: tool %s has app_id=%s but no _ui_metadata",
+                        tool_name, _app_id_fb,
+                    )
+
+            if tool_instance and has_ui:
+                ui_meta = getattr(tool_instance, "ui_metadata", None) or {}
+                app_id = (
+                    getattr(tool_instance, "_last_app_id", "")
+                    or getattr(tool_instance, "_app_id", "")
+                    or ""
+                )
+                # Generate a synthetic app_id from tool name when no DB record
+                if not app_id:
+                    app_id = f"auto-{tool_name}"
+                # Fetch live HTML from MCP server via resources/read
+                resource_html = ""
+                fetch_fn = getattr(tool_instance, "fetch_resource_html", None)
+                if fetch_fn:
+                    try:
+                        resource_html = await fetch_fn()
+                    except Exception as fetch_err:
+                        logger.warning(
+                            "[MCPApp] fetch_resource_html failed for %s: %s",
+                            tool_name, fetch_err,
+                        )
+                if not resource_html:
+                    # Fallback to cached inline HTML (register_app path)
+                    resource_html = getattr(tool_instance, "_last_html", "") or ""
+                logger.debug(
+                    "[MCPApp] Emitting event: tool=%s, app_id=%s, "
+                    "resource_uri=%s, html_len=%d",
+                    tool_name, app_id,
+                    ui_meta.get("resourceUri", ""), len(resource_html),
+                )
+                _server_name = getattr(tool_instance, "_server_name", "") or ""
+                _project_id = (self._langfuse_context or {}).get("project_id", "")
+
+                # SEP-1865: Extract structuredContent from tool result if present
+                _structured_content = None
+                if isinstance(sse_result, dict):
+                    _structured_content = sse_result.get("structuredContent")
+
+                yield AgentMCPAppResultEvent(
+                    app_id=app_id,
+                    tool_name=tool_name,
+                    tool_result=sse_result,
+                    tool_input=arguments if arguments else None,
+                    resource_html=resource_html,
+                    resource_uri=ui_meta.get("resourceUri", ""),
+                    ui_metadata=ui_meta,
+                    tool_execution_id=tool_part.tool_execution_id,
+                    project_id=_project_id,
+                    server_name=_server_name,
+                    structured_content=_structured_content,
+                )
+
             # Extract and upload artifacts from tool result (images, files, etc.)
             # Timeouts are handled inside _process_tool_artifacts itself.
             try:
@@ -1350,6 +1420,18 @@ class SessionProcessor:
                                     self._current_task = None
                 except Exception as task_err:
                     logger.error(f"Task event emission failed: {task_err}", exc_info=True)
+
+            # Emit pending SSE events from register_app / register_mcp_server tools
+            if (
+                tool_name in ("register_app", "register_mcp_server")
+                and tool_instance
+                and hasattr(tool_instance, "consume_pending_events")
+            ):
+                try:
+                    for event in tool_instance.consume_pending_events():
+                        yield event
+                except Exception as reg_err:
+                    logger.error(f"{tool_name} event emission failed: {reg_err}")
 
         except Exception as e:
             logger.error(f"Tool execution error: {e}", exc_info=True)

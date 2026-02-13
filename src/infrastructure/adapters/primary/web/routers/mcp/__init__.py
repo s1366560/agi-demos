@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 
-from . import servers, tools
+from . import apps, servers, tools
 from .schemas import (
     MCPServerCreate,
     MCPServerResponse,
@@ -27,7 +27,8 @@ from .utils import get_container_with_db
 # Create main router with prefix
 router = APIRouter(prefix="/api/v1/mcp", tags=["MCP Servers"])
 
-# Include all sub-routers
+# Include all sub-routers (apps before servers to avoid /{server_id} catching /apps)
+router.include_router(apps.router)  # MCP Apps management
 router.include_router(servers.router)  # Database-backed server management
 router.include_router(tools.router)  # Tool listing and calling
 

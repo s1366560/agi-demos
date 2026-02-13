@@ -309,7 +309,7 @@ function buildSubAgentGroup(
  */
 function estimateGroupedItemHeight(item: GroupedItem): number {
   if (item.kind === 'timeline') {
-    return 80 + item.steps.length * 40;
+    return 80 + item.steps.length * 52;
   }
   if (item.kind === 'subagent') {
     const base = 60;

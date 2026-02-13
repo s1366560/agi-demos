@@ -28,6 +28,7 @@ import type {
   ArtifactReadyEventData,
   ArtifactErrorEventData,
   ArtifactCreatedEvent,
+  TimelineEvent,
 } from '../../types/agent';
 import type { ConversationState, CostTrackingState } from '../../types/conversationState';
 import type { AdditionalAgentHandlers } from '../agentV3';
@@ -801,6 +802,104 @@ export function createStreamEventHandlers(
       );
     },
 
+    // MCP App handlers
+    onMCPAppResult: (event) => {
+      const data = event.data as any;
+      const appId = data.app_id || '';
+      const htmlContent = data.resource_html || undefined;
+      let resourceUri = data.resource_uri || undefined;
+      const toolName = data.tool_name || '';
+      const projectId = data.project_id || '';
+      const serverName = data.server_name || '';
+
+      // Always invalidate cached resource so fresh HTML is used
+      if (appId) {
+        import('../mcpAppStore').then(({ useMCPAppStore }) => {
+          useMCPAppStore.getState().invalidateResource(appId);
+
+          // Fallback: if no resourceUri from SSE, try looking up from the store.
+          // This handles tools where _ui_metadata wasn't populated on the backend
+          // but the MCPApp was registered (with resourceUri) via onMCPAppRegistered.
+          if (!resourceUri) {
+            const app = useMCPAppStore.getState().apps[appId];
+            const storeUri = app?.ui_metadata?.resourceUri as string | undefined;
+            if (storeUri) {
+              // Re-open the tab with the resolved resourceUri
+              const tabKey = storeUri;
+              const tabId = `mcp-app-${tabKey}`;
+              useCanvasStore.getState().openTab({
+                id: tabId,
+                title: (app.ui_metadata?.title as string) || toolName || 'MCP App',
+                type: 'mcp-app',
+                content: '',
+                mcpAppId: appId,
+                mcpAppHtml: htmlContent,
+                mcpAppToolResult: data.tool_result,
+                mcpResourceUri: storeUri,
+                mcpToolName: app.tool_name || toolName || undefined,
+                mcpProjectId: projectId || undefined,
+                mcpServerName: app.server_name || serverName || undefined,
+              });
+            }
+          }
+        });
+      }
+
+      // SEP-1865: Merge structuredContent into tool result for the renderer
+      const toolResult = data.structured_content
+        ? { ...((typeof data.tool_result === 'object' && data.tool_result) || {}), structuredContent: data.structured_content }
+        : data.tool_result;
+
+      // Use resourceUri as the canonical tab key (stable across sessions)
+      const tabKey = resourceUri || appId || `app-${Date.now()}`;
+      const tabId = `mcp-app-${tabKey}`;
+      const title = data.ui_metadata?.title || toolName || 'MCP App';
+
+      useCanvasStore.getState().openTab({
+        id: tabId,
+        title,
+        type: 'mcp-app',
+        content: '',
+        mcpAppId: appId || undefined,
+        mcpAppHtml: htmlContent,
+        mcpAppToolResult: toolResult,
+        mcpAppToolInput: (typeof data.tool_input === 'object' && data.tool_input) || undefined,
+        mcpAppUiMetadata: data.ui_metadata,
+        mcpResourceUri: resourceUri,
+        mcpToolName: toolName || undefined,
+        mcpProjectId: projectId || undefined,
+        mcpServerName: serverName || undefined,
+      });
+
+      useLayoutModeStore.getState().setMode('canvas');
+    },
+
+    onMCPAppRegistered: (event) => {
+      const data = event.data as any;
+      if (!data.app_id) return;
+      // Dynamically import to avoid circular deps
+      import('../mcpAppStore').then(({ useMCPAppStore }) => {
+        const store = useMCPAppStore.getState();
+        // Invalidate cached resource so re-registration picks up new HTML
+        store.invalidateResource(data.app_id);
+        store.addApp({
+          id: data.app_id,
+          project_id: '',
+          tenant_id: '',
+          server_id: null,
+          server_name: data.server_name || '',
+          tool_name: data.tool_name || '',
+          ui_metadata: {
+            resourceUri: data.resource_uri || '',
+            title: data.title,
+          },
+          source: data.source || 'user_added',
+          status: 'discovered',
+          has_resource: false,
+        });
+      });
+    },
+
     onComplete: (event) => {
       const { updateConversationState, getConversationState } = get();
 
@@ -808,21 +907,39 @@ export function createStreamEventHandlers(
 
       const convState = getConversationState(handlerConversationId);
 
-      // Remove transient streaming events (text_start, text_end, text_delta) from timeline.
-      // These are never persisted to DB, so keeping them causes a mismatch between
-      // in-memory state and what history API returns after refresh.
-      const cleanedTimeline = convState.timeline.filter(
-        (e) => e.type !== 'text_start' && e.type !== 'text_end' && e.type !== 'text_delta'
+      // Convert text_end events to assistant_message so intermediate text between
+      // tool execution groups is preserved in the timeline (matches backend persistence).
+      // Remove text_start and text_delta as they are transient streaming events.
+      const hasTextEndMessages = convState.timeline.some(
+        (e) => e.type === 'text_end' && !!(e as any).fullText?.trim()
       );
+      const cleanedTimeline = convState.timeline
+        .filter((e) => e.type !== 'text_start' && e.type !== 'text_delta')
+        .map((e) => {
+          if (e.type === 'text_end') {
+            const content = (e as any).fullText || '';
+            if (!content.trim()) return null;
+            return {
+              ...e,
+              id: (e.id || '').replace('text_end', 'assistant') || `assistant-${Date.now()}`,
+              type: 'assistant_message' as const,
+              content,
+              role: 'assistant',
+            } as TimelineEvent;
+          }
+          return e;
+        })
+        .filter(Boolean) as TimelineEvent[];
 
-      // Always add assistant_message from the complete event (if it has content).
-      // This matches what the backend persists (complete -> assistant_message conversion).
+      // Only add assistant_message from complete event if no text_end events were converted,
+      // to avoid duplicating the last message.
       const completeEvent: AgentEvent<CompleteEventData> =
         event as AgentEvent<CompleteEventData>;
       const hasContent = !!(completeEvent.data as any)?.content?.trim();
-      const updatedTimeline = hasContent
-        ? appendSSEEventToTimeline(cleanedTimeline, completeEvent)
-        : cleanedTimeline;
+      const updatedTimeline =
+        hasContent && !hasTextEndMessages
+          ? appendSSEEventToTimeline(cleanedTimeline, completeEvent)
+          : cleanedTimeline;
 
       const newMessages = timelineToMessages(updatedTimeline);
 

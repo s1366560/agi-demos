@@ -111,4 +111,19 @@ class SandboxContainer:
 
         return SandboxMCPServerManager(
             sandbox_resource=self.sandbox_resource(),
+            app_service=self.mcp_app_service() if self._db else None,
         )
+
+    def mcp_app_service(self):
+        """Get MCPAppService for MCP App lifecycle management."""
+        from src.application.services.mcp_app_service import MCPAppService
+        from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
+            SqlMCPAppRepository,
+        )
+        from src.infrastructure.mcp.resource_resolver import MCPAppResourceResolver
+
+        app_repo = SqlMCPAppRepository(self._db)
+        resource_resolver = MCPAppResourceResolver(
+            sandbox_mcp_server_manager=None,  # Lazy: avoids circular dep
+        )
+        return MCPAppService(app_repo=app_repo, resource_resolver=resource_resolver)

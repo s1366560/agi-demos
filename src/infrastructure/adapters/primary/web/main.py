@@ -13,8 +13,11 @@ logging.basicConfig(
     force=True,
 )
 
+from pathlib import Path  # noqa: E402
+
 from fastapi import FastAPI  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
+from fastapi.staticfiles import StaticFiles  # noqa: E402
 from slowapi import _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 
@@ -269,6 +272,11 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     @app.get("/health")
     async def health_check():
         return {"status": "ok", "version": "0.2.0"}
+
+    # Serve static files (MCP Apps sandbox proxy, etc.)
+    _static_dir = Path(__file__).parent / "static"
+    if _static_dir.is_dir():
+        app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 
     # Register Routers
     app.include_router(auth.router, prefix="/api/v1")

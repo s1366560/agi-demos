@@ -35,6 +35,30 @@ from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 logger = logging.getLogger(__name__)
 
 
+def _inject_app_model_context(
+    conversation_context: List[Dict[str, Any]],
+    app_model_context: Optional[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Inject MCP App model context as a system message (SEP-1865).
+
+    If the frontend received a ui/update-model-context from an MCP App,
+    the context is serialized and prepended as a system message so the
+    LLM is aware of the app's state in the next turn.
+    """
+    if not app_model_context:
+        return conversation_context
+    context_msg = {
+        "role": "system",
+        "content": (
+            "[MCP App Context]\n"
+            "The following context was provided by an active MCP App UI. "
+            "Use it to inform your response.\n"
+            f"{json.dumps(app_model_context, ensure_ascii=False)}"
+        ),
+    }
+    return [context_msg, *conversation_context]
+
+
 async def execute_project_chat(
     agent: ProjectReActAgent,
     request: ProjectChatRequest,
@@ -61,7 +85,9 @@ async def execute_project_chat(
             conversation_id=request.conversation_id,
             user_message=request.user_message,
             user_id=request.user_id,
-            conversation_context=request.conversation_context,
+            conversation_context=_inject_app_model_context(
+                request.conversation_context, request.app_model_context
+            ),
             tenant_id=agent.config.tenant_id,
             message_id=request.message_id,
             file_metadata=request.file_metadata,
@@ -438,10 +464,10 @@ async def _persist_events(
         "thought_delta",
         "text_delta",
         "text_start",
-        "text_end",
     }
 
     try:
+        has_text_end_messages = False
         async with async_session_factory() as session:
             async with session.begin():
                 for event in events:
@@ -453,7 +479,25 @@ async def _persist_events(
                     if event_type in SKIP_EVENT_TYPES:
                         continue
 
+                    # Persist text_end as assistant_message so intermediate
+                    # text between tool calls survives in history.
+                    if event_type == "text_end":
+                        full_text = event_data.get("full_text", "")
+                        if full_text and full_text.strip():
+                            event_type = "assistant_message"
+                            event_data = {
+                                "content": full_text,
+                                "message_id": str(uuid.uuid4()),
+                                "role": "assistant",
+                            }
+                            has_text_end_messages = True
+                        else:
+                            continue
+
                     if event_type == "complete":
+                        # Skip if text_end events already cover the text content
+                        if has_text_end_messages:
+                            continue
                         content = event_data.get("content", "")
                         if content:
                             event_type = "assistant_message"

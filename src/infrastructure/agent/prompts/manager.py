@@ -294,11 +294,24 @@ Current Step: {context.current_step}/{context.max_steps}
             ]
         )
 
-        return f"""## Available Tools
+        section = f"""## Available Tools
 
 {tool_descriptions}
 
 Use these tools to search memories, query the knowledge graph, create memories, and interact with external services."""
+
+        # Add Canvas hint when MCP tools are present
+        mcp_tools = [
+            t.get("name", "") for t in context.tool_definitions
+            if t.get("name", "").startswith("mcp__")
+        ]
+        if mcp_tools:
+            names = ", ".join(mcp_tools[:5])
+            section += f"""
+
+NOTE: The following MCP server tools may have interactive UIs that auto-render in Canvas when called: {names}. If these tools declare _meta.ui, their UI opens automatically - do NOT call register_app for them."""
+
+        return section
 
     def _build_skill_section(self, context: PromptContext) -> str:
         """

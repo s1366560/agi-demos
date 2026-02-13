@@ -11,12 +11,25 @@ Key entities:
 - Connection: Connection state management
 """
 
+from src.domain.model.mcp.app import (
+    MCPApp,
+    MCPAppResource,
+    MCPAppSource,
+    MCPAppStatus,
+    MCPAppUIMetadata,
+)
 from src.domain.model.mcp.connection import ConnectionInfo, ConnectionState
 from src.domain.model.mcp.server import MCPServer, MCPServerConfig, MCPServerStatus
 from src.domain.model.mcp.tool import MCPTool, MCPToolResult, MCPToolSchema
 from src.domain.model.mcp.transport import TransportConfig, TransportType
 
 __all__ = [
+    # App
+    "MCPApp",
+    "MCPAppResource",
+    "MCPAppSource",
+    "MCPAppStatus",
+    "MCPAppUIMetadata",
     # Server
     "MCPServer",
     "MCPServerConfig",

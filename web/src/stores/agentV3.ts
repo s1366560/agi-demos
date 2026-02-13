@@ -1529,6 +1529,10 @@ export const useAgentV3Store = create<AgentV3State>()(
           // For new conversations, return ID immediately and start stream in background
           // This allows the UI to navigate to the conversation URL right away
           if (isNewConversation) {
+            // Get app model context from conversation state (SEP-1865)
+            const convState = get().conversationStates.get(conversationId!);
+            const appCtx = convState?.appModelContext || undefined;
+
             agentService
               .chat(
                 {
@@ -1537,6 +1541,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                   project_id: projectId,
                   file_metadata: additionalHandlers?.fileMetadata,
                   forced_skill_name: additionalHandlers?.forcedSkillName,
+                  app_model_context: appCtx ?? undefined,
                 },
                 handler
               )
@@ -1558,6 +1563,10 @@ export const useAgentV3Store = create<AgentV3State>()(
 
           // For existing conversations, wait for stream to complete
           try {
+            // Get app model context from conversation state (SEP-1865)
+            const convState2 = get().conversationStates.get(conversationId!);
+            const appCtx2 = convState2?.appModelContext || undefined;
+
             await agentService.chat(
               {
                 conversation_id: conversationId!,
@@ -1565,6 +1574,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                 project_id: projectId,
                 file_metadata: additionalHandlers?.fileMetadata,
                 forced_skill_name: additionalHandlers?.forcedSkillName,
+                app_model_context: appCtx2 ?? undefined,
               },
               handler
             );

@@ -1216,3 +1216,112 @@ async def proxy_project_terminal_websocket(
             await websocket.close()
         except Exception:
             pass
+
+
+@router.websocket("/{project_id}/sandbox/mcp/proxy")
+async def proxy_project_mcp_websocket(
+    websocket: WebSocket,
+    project_id: str,
+    current_user: User = Depends(get_current_user_from_header_or_query),
+    service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
+):
+    """WebSocket proxy for the project's sandbox MCP server.
+
+    Tunnels MCP JSON-RPC protocol traffic between browser and sandbox MCP server.
+    Enables direct MCP client connections from the frontend (Mode A) for
+    low-latency tool calls without HTTP round-trips.
+    """
+    import websockets
+
+    info = await service.get_project_sandbox(project_id)
+
+    if not info:
+        await websocket.close(
+            code=1008, reason=f"No sandbox found for project {project_id}"
+        )
+        return
+
+    if not info.websocket_url:
+        await websocket.close(
+            code=1008,
+            reason=f"MCP service is not running for project {project_id}",
+        )
+        return
+
+    ws_target = info.websocket_url
+
+    logger.info(
+        f"MCP WS proxy: project={project_id} -> ws_target={ws_target}"
+    )
+
+    await websocket.accept()
+
+    upstream_ws = None
+    try:
+        upstream_ws = await websockets.connect(
+            ws_target,
+            open_timeout=10,
+            ping_interval=30,
+            ping_timeout=10,
+            max_size=2**22,  # 4MB max frame for MCP messages
+            proxy=None,  # bypass http_proxy env var for local container connections
+        )
+
+        logger.info(f"MCP WS proxy: upstream connected to {ws_target}")
+
+        async def relay_browser_to_upstream():
+            """Forward JSON-RPC messages from browser to MCP server."""
+            try:
+                while True:
+                    data = await websocket.receive()
+                    msg_type = data.get("type", "")
+                    if msg_type == "websocket.disconnect":
+                        break
+                    if "text" in data and data["text"]:
+                        await upstream_ws.send(data["text"])
+            except WebSocketDisconnect:
+                logger.debug("MCP proxy: browser disconnected")
+            except Exception as e:
+                logger.warning(f"MCP proxy browser->upstream: {type(e).__name__}: {e}")
+
+        async def relay_upstream_to_browser():
+            """Forward JSON-RPC messages from MCP server to browser."""
+            try:
+                async for message in upstream_ws:
+                    if isinstance(message, str):
+                        await websocket.send_text(message)
+                    else:
+                        await websocket.send_bytes(message)
+            except Exception as e:
+                logger.warning(f"MCP proxy upstream->browser: {type(e).__name__}: {e}")
+
+        browser_task = asyncio.create_task(relay_browser_to_upstream())
+        upstream_task = asyncio.create_task(relay_upstream_to_browser())
+
+        done, pending = await asyncio.wait(
+            [browser_task, upstream_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    except Exception as e:
+        logger.error(f"MCP WebSocket proxy error for project {project_id}: {e}")
+        try:
+            await websocket.send_text(f'{{"error": "{str(e)}"}}')
+        except Exception:
+            pass
+    finally:
+        if upstream_ws:
+            try:
+                await upstream_ws.close()
+            except Exception:
+                pass
+        try:
+            await websocket.close()
+        except Exception:
+            pass

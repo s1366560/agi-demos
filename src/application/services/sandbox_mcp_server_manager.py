@@ -37,13 +37,16 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
     def __init__(
         self,
         sandbox_resource: SandboxResourcePort,
+        app_service: Any = None,
     ) -> None:
         """Initialize the manager.
 
         Args:
             sandbox_resource: Port for sandbox access (ensure/execute tools).
+            app_service: Optional MCPAppService for auto-detecting MCP Apps.
         """
         self._sandbox_resource = sandbox_resource
+        self._app_service = app_service
 
     async def install_and_start(
         self,
@@ -166,6 +169,18 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         )
         tools = self._parse_tool_result(result)
         if isinstance(tools, list):
+            # Auto-detect MCP Apps (tools with _meta.ui.resourceUri)
+            if self._app_service and tools:
+                try:
+                    await self._app_service.detect_apps_from_tools(
+                        server_id="",  # resolved by service from server_name
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        server_name=server_name,
+                        tools=tools,
+                    )
+                except Exception as e:
+                    logger.warning(f"MCP App auto-detection failed: {e}")
             return tools
         return []
 
@@ -203,6 +218,67 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 is_error=True,
                 error_message=str(e),
             )
+
+    async def read_resource(
+        self,
+        project_id: str,
+        uri: str,
+        server_name: str | None = None,
+        tenant_id: str | None = None,
+    ) -> str | None:
+        """Read a resource from an MCP server via resources/read.
+
+        Proxies the resources/read call through the sandbox WebSocket client.
+        Returns HTML content string or None.
+        """
+        try:
+            # The sandbox resource port wraps the sandbox adapter which can
+            # do a direct resources/read on the WebSocket connection.
+            adapter = getattr(self._sandbox_resource, "_adapter", None) or getattr(
+                self._sandbox_resource, "_sandbox_adapter", None
+            )
+            if adapter and hasattr(adapter, "read_resource"):
+                sandbox_id = await self._sandbox_resource.get_sandbox_id(
+                    project_id, tenant_id or ""
+                )
+                if not sandbox_id:
+                    logger.warning("No sandbox for project %s", project_id)
+                    return None
+                return await adapter.read_resource(sandbox_id, uri)
+
+            # Fallback: use management tool mcp_server_call_tool with
+            # the "resources/read" protocol path (for future compat).
+            logger.warning("read_resource: no adapter path, falling back to None")
+            return None
+        except Exception as e:
+            logger.warning(f"read_resource failed for '{uri}': {e}")
+            return None
+
+    async def list_resources(
+        self,
+        project_id: str,
+        tenant_id: str | None = None,
+    ) -> list:
+        """List resources from MCP servers in the sandbox.
+
+        Proxies the resources/list call through the sandbox WebSocket client.
+        Returns list of resource descriptors or empty list.
+        """
+        try:
+            adapter = getattr(self._sandbox_resource, "_adapter", None) or getattr(
+                self._sandbox_resource, "_sandbox_adapter", None
+            )
+            if adapter and hasattr(adapter, "list_resources"):
+                sandbox_id = await self._sandbox_resource.get_sandbox_id(
+                    project_id, tenant_id or ""
+                )
+                if not sandbox_id:
+                    return []
+                return await adapter.list_resources(sandbox_id)
+            return []
+        except Exception as e:
+            logger.warning(f"list_resources failed: {e}")
+            return []
 
     async def test_connection(
         self,

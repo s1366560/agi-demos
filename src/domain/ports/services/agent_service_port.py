@@ -27,6 +27,7 @@ class AgentServicePort(ABC):
         user_id: str,
         tenant_id: str,
         attachment_ids: Optional[List[str]] = None,
+        app_model_context: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Stream agent response using self-developed ReAct core.

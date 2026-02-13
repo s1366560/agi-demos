@@ -6,7 +6,7 @@ interface. Tool calls are proxied through the sandbox's mcp_server_call_tool.
 
 import json
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from src.infrastructure.agent.tools.base import AgentTool
 
@@ -39,7 +39,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
             sandbox_adapter: MCPSandboxAdapter instance.
             sandbox_id: Sandbox container ID.
             server_name: User MCP server name.
-            tool_info: Tool definition dict (name, description, input_schema).
+            tool_info: Tool definition dict (name, description, input_schema, _meta).
         """
         self._sandbox_adapter = sandbox_adapter
         self._sandbox_id = sandbox_id
@@ -49,6 +49,23 @@ class SandboxMCPServerToolAdapter(AgentTool):
         self._description = tool_info.get("description", "")
         self._input_schema = tool_info.get("input_schema", tool_info.get("inputSchema", {}))
         self._name = self._generate_tool_name()
+
+        # Preserve _meta.ui for MCP Apps support
+        meta = tool_info.get("_meta")
+        self._ui_metadata = meta.get("ui") if meta and isinstance(meta, dict) else None
+        if self._ui_metadata:
+            logger.info(
+                "SandboxMCPServerToolAdapter %s: _ui_metadata=%s",
+                self._name, self._ui_metadata,
+            )
+        else:
+            logger.debug(
+                "SandboxMCPServerToolAdapter %s: no _meta.ui in tool_info (keys=%s)",
+                self._name, list(tool_info.keys()),
+            )
+
+        # MCP App ID (set externally after auto-detection)
+        self._app_id: str = ""
 
     def _generate_tool_name(self) -> str:
         clean_server = self._server_name.replace("-", "_")
@@ -71,6 +88,48 @@ class SandboxMCPServerToolAdapter(AgentTool):
     @property
     def parameters(self) -> Dict[str, Any]:
         return self._input_schema
+
+    @property
+    def ui_metadata(self) -> Optional[Dict[str, Any]]:
+        """Get MCP App UI metadata if this tool declares an interactive UI."""
+        return self._ui_metadata
+
+    @property
+    def has_ui(self) -> bool:
+        """Check if this tool declares an MCP App UI.
+
+        Accepts any non-empty resourceUri scheme (ui://, mcp-resource://, etc.)
+        as long as _meta.ui is present with a resourceUri field.
+        """
+        return (
+            self._ui_metadata is not None
+            and bool(self._ui_metadata.get("resourceUri"))
+        )
+
+    @property
+    def resource_uri(self) -> str:
+        """Get the ui:// resource URI, if declared."""
+        if self._ui_metadata:
+            return str(self._ui_metadata.get("resourceUri", ""))
+        return ""
+
+    async def fetch_resource_html(self) -> str:
+        """Fetch HTML from the MCP server via resources/read.
+
+        Returns the live HTML content from the running MCP server,
+        or empty string on failure.
+        """
+        uri = self.resource_uri
+        if not uri:
+            return ""
+        try:
+            html = await self._sandbox_adapter.read_resource(
+                self._sandbox_id, uri
+            )
+            return html or ""
+        except Exception as e:
+            logger.warning("fetch_resource_html failed for %s: %s", uri, e)
+            return ""
 
     def get_parameters_schema(self) -> Dict[str, Any]:
         if not self._input_schema:

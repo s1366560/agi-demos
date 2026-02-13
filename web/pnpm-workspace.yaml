@@ -1,3 +1,6 @@
+ignoredBuiltDependencies:
+  - '@modelcontextprotocol/ext-apps'
+
 onlyBuiltDependencies:
   - core-js
   - electron

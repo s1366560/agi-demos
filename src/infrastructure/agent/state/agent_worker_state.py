@@ -559,6 +559,48 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create todo tools: {e}")
 
+    # 10. Add RegisterAppTool (register interactive HTML apps in Canvas)
+    try:
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory as app_session_factory,
+        )
+        from src.infrastructure.agent.tools.register_app import RegisterAppTool
+
+        register_app_tool = RegisterAppTool(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            session_factory=app_session_factory,
+            sandbox_adapter=_mcp_sandbox_adapter,
+        )
+        # Set sandbox_id from loaded sandbox tools
+        sandbox_id_for_tools = None
+        for tool in tools.values():
+            if hasattr(tool, "sandbox_id") and tool.sandbox_id:
+                sandbox_id_for_tools = tool.sandbox_id
+                register_app_tool.set_sandbox_id(sandbox_id_for_tools)
+                break
+        tools["register_app"] = register_app_tool
+        logger.info(f"Agent Worker: RegisterAppTool added for project {project_id}")
+    except Exception as e:
+        logger.warning(f"Agent Worker: Failed to create RegisterAppTool: {e}")
+        sandbox_id_for_tools = None
+
+    # 11. Add RegisterMCPServerTool (register full MCP servers built in sandbox)
+    try:
+        from src.infrastructure.agent.tools.register_mcp_server import RegisterMCPServerTool
+
+        register_server_tool = RegisterMCPServerTool(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            sandbox_adapter=_mcp_sandbox_adapter,
+            sandbox_id=sandbox_id_for_tools,
+            session_factory=app_session_factory,
+        )
+        tools["register_mcp_server"] = register_server_tool
+        logger.info(f"Agent Worker: RegisterMCPServerTool added for project {project_id}")
+    except Exception as e:
+        logger.warning(f"Agent Worker: Failed to create RegisterMCPServerTool: {e}")
+
     return tools
 
 
@@ -743,6 +785,55 @@ async def _load_project_sandbox_tools(
                 f"[AgentWorker] Loaded {len(user_mcp_tools)} user MCP server tools "
                 f"from sandbox {project_sandbox_id} for project {project_id}"
             )
+
+            # Resolve MCPApp IDs for sandbox MCP tools so processor can emit app events.
+            # This handles both tools that declare _meta.ui AND tools registered via
+            # register_app (which uses different naming). We fetch ALL project apps
+            # from DB and fuzzy-match against all adapters.
+            from src.infrastructure.mcp.sandbox_tool_adapter import SandboxMCPServerToolAdapter
+
+            all_adapters = [
+                t for t in user_mcp_tools.values()
+                if isinstance(t, SandboxMCPServerToolAdapter)
+            ]
+            if all_adapters:
+                try:
+                    from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
+                        SqlMCPAppRepository,
+                    )
+
+                    async with async_session_factory() as db:
+                        app_repo = SqlMCPAppRepository(db)
+                        project_apps = await app_repo.find_by_project(project_id)
+
+                    logger.info(
+                        "[AgentWorker] Found %d project apps, matching against %d adapters",
+                        len(project_apps) if project_apps else 0,
+                        len(all_adapters),
+                    )
+                    if project_apps:
+                        for adapter in all_adapters:
+                            matched_app = _match_adapter_to_app(adapter, project_apps)
+                            if matched_app:
+                                adapter._app_id = matched_app.id
+                                if not adapter._ui_metadata and matched_app.ui_metadata:
+                                    adapter._ui_metadata = matched_app.ui_metadata.to_dict()
+                                logger.info(
+                                    "[AgentWorker] Resolved MCPApp %s for tool %s "
+                                    "(ui_metadata=%s)",
+                                    matched_app.id, adapter.name,
+                                    adapter._ui_metadata,
+                                )
+                            else:
+                                logger.warning(
+                                    "[AgentWorker] No MCPApp match for tool %s "
+                                    "(server=%s, original=%s, has _ui_metadata=%s)",
+                                    adapter.name, adapter._server_name,
+                                    adapter._original_tool_name,
+                                    adapter._ui_metadata is not None,
+                                )
+                except Exception as e:
+                    logger.warning(f"[AgentWorker] Failed to resolve MCPApp IDs: {e}")
 
     except Exception as e:
         logger.warning(f"[AgentWorker] Failed to load project sandbox tools: {e}")
@@ -988,6 +1079,54 @@ def _parse_discovered_tools(content: list) -> list:
             except (json.JSONDecodeError, TypeError):
                 pass
     return []
+
+
+def _match_adapter_to_app(adapter: Any, apps: list) -> Any:
+    """Match a SandboxMCPServerToolAdapter to an MCPApp from DB.
+
+    Matching strategy (in priority order):
+    1. Exact server_name + tool_name match
+    2. Normalized server_name + tool_name match (handles hyphens vs underscores)
+    3. Fuzzy server_name match with usability check (resource HTML or ui_metadata)
+
+    Args:
+        adapter: SandboxMCPServerToolAdapter instance
+        apps: List of MCPApp domain objects from DB
+
+    Returns:
+        Matched MCPApp or None
+    """
+    adapter_server = getattr(adapter, "_server_name", "")
+    adapter_tool = getattr(adapter, "_original_tool_name", "")
+    if not adapter_server:
+        return None
+
+    # Normalize for comparison: lowercase, replace hyphens with underscores
+    def _norm(s: str) -> str:
+        return s.lower().replace("-", "_")
+
+    norm_server = _norm(adapter_server)
+    norm_tool = _norm(adapter_tool)
+
+    # Priority 1: exact server_name + tool_name
+    for app in apps:
+        if app.server_name == adapter_server and app.tool_name == adapter_tool:
+            return app
+
+    # Priority 2: normalized server_name + tool_name
+    for app in apps:
+        if _norm(app.server_name) == norm_server and _norm(app.tool_name) == norm_tool:
+            return app
+
+    # Priority 3: fuzzy server_name match with usability check
+    for app in apps:
+        app_norm = _norm(app.server_name)
+        if norm_server in app_norm or app_norm in norm_server:
+            # Accept apps with resource HTML or ui_metadata (resourceUri-based apps)
+            if (app.resource and app.resource.html_content) or app.ui_metadata:
+                return app
+
+    return None
 
 
 def get_cached_tools() -> Dict[str, Dict[str, Any]]:

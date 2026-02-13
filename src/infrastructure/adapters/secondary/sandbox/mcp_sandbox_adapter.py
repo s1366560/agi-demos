@@ -554,14 +554,103 @@ class MCPSandboxAdapter(SandboxPort):
             return []
 
         tools = instance.mcp_client.get_cached_tools()
-        return [
-            {
+        result = []
+        for t in tools:
+            tool_info = {
                 "name": t.name,
                 "description": t.description,
                 "input_schema": t.inputSchema,
             }
-            for t in tools
-        ]
+            if t.meta:
+                tool_info["_meta"] = t.meta
+            result.append(tool_info)
+        return result
+
+    async def read_resource(
+        self, sandbox_id: str, uri: str
+    ) -> Optional[str]:
+        """Read a resource from a sandbox MCP server via resources/read.
+
+        Args:
+            sandbox_id: Sandbox identifier.
+            uri: Resource URI (e.g., ui://server/app.html).
+
+        Returns:
+            HTML content string, or None if unavailable.
+        """
+        # Use get_sandbox() which auto-recovers from Docker if not in memory
+        instance = await self.get_sandbox(sandbox_id)
+        if not instance:
+            logger.warning("read_resource: sandbox %s not found", sandbox_id)
+            return None
+
+        # Auto-connect MCP client if needed
+        if not instance.mcp_client or not instance.mcp_client.is_connected:
+            try:
+                connected = await self.connect_mcp(sandbox_id, timeout=15.0)
+                if not connected:
+                    logger.warning(
+                        "read_resource: MCP client connect failed for %s",
+                        sandbox_id,
+                    )
+                    return None
+            except Exception as e:
+                logger.warning(
+                    "read_resource: MCP client connect error for %s: %s",
+                    sandbox_id, e,
+                )
+                return None
+
+        if not instance.mcp_client:
+            return None
+
+        try:
+            result = await instance.mcp_client.read_resource(uri)
+            if not result:
+                return None
+
+            contents = result.get("contents", [])
+            for item in contents:
+                if isinstance(item, dict):
+                    text = item.get("text", "")
+                    if text:
+                        return text
+            return None
+        except Exception as e:
+            logger.warning("read_resource error for %s: %s", uri, e)
+            return None
+
+    async def list_resources(
+        self, sandbox_id: str
+    ) -> list:
+        """List resources from sandbox MCP servers via resources/list.
+
+        Returns:
+            List of resource descriptors, or empty list.
+        """
+        instance = await self.get_sandbox(sandbox_id)
+        if not instance:
+            return []
+
+        if not instance.mcp_client or not instance.mcp_client.is_connected:
+            try:
+                connected = await self.connect_mcp(sandbox_id, timeout=15.0)
+                if not connected:
+                    return []
+            except Exception:
+                return []
+
+        if not instance.mcp_client:
+            return []
+
+        try:
+            result = await instance.mcp_client.list_resources()
+            if not result:
+                return []
+            return result.get("resources", [])
+        except Exception as e:
+            logger.warning("list_resources error for sandbox %s: %s", sandbox_id, e)
+            return []
 
     # === SandboxPort interface implementation ===
 

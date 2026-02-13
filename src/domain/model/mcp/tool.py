@@ -21,22 +21,66 @@ class MCPToolSchema:
     name: str
     description: Optional[str] = None
     input_schema: Dict[str, Any] = field(default_factory=dict)
+    ui_metadata: Optional[Dict[str, Any]] = None
+
+    @property
+    def has_ui(self) -> bool:
+        """Check if this tool declares an MCP App UI via _meta.ui.
+
+        Accepts any non-empty resourceUri scheme (ui://, mcp-app://, etc.)."""
+        return (
+            self.ui_metadata is not None
+            and "resourceUri" in self.ui_metadata
+            and bool(self.ui_metadata["resourceUri"])
+        )
+
+    @property
+    def resource_uri(self) -> Optional[str]:
+        """Get the resource URI if present (any scheme: ui://, mcp-app://, etc.)."""
+        if self.ui_metadata:
+            return self.ui_metadata.get("resourceUri")
+        return None
+
+    @property
+    def visibility(self) -> List[str]:
+        """Get visibility from _meta.ui.visibility (SEP-1865).
+
+        Returns ["model", "app"] if not specified (default per spec).
+        "model" = visible to and callable by the LLM agent.
+        "app" = callable by the MCP App UI only.
+        """
+        if self.ui_metadata:
+            return self.ui_metadata.get("visibility", ["model", "app"])
+        return ["model", "app"]
+
+    @property
+    def is_model_visible(self) -> bool:
+        """Whether this tool should be included in the LLM's tool list."""
+        return "model" in self.visibility
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API responses."""
-        return {
+        result = {
             "name": self.name,
             "description": self.description,
             "inputSchema": self.input_schema,
         }
+        if self.ui_metadata:
+            result["_meta"] = {"ui": self.ui_metadata}
+        return result
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "MCPToolSchema":
         """Create from dictionary (MCP protocol format)."""
+        ui_metadata = None
+        meta = data.get("_meta")
+        if meta and isinstance(meta, dict):
+            ui_metadata = meta.get("ui")
         return cls(
             name=data.get("name", ""),
             description=data.get("description"),
             input_schema=data.get("inputSchema", data.get("input_schema", {})),
+            ui_metadata=ui_metadata,
         )
 
 
@@ -164,7 +208,7 @@ class MCPTool:
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for API responses."""
-        return {
+        result = {
             "server_id": self.server_id,
             "server_name": self.server_name,
             "name": self.name,
@@ -173,6 +217,9 @@ class MCPTool:
             "input_schema": self.input_schema,
             "enabled": self.enabled,
         }
+        if self.schema.has_ui:
+            result["_meta"] = {"ui": self.schema.ui_metadata}
+        return result
 
 
 @dataclass

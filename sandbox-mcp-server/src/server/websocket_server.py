@@ -429,6 +429,10 @@ class MCPWebSocketServer:
             return await self._handle_list_tools()
         elif method == "tools/call":
             return await self._handle_call_tool(params)
+        elif method == "resources/read":
+            return await self._handle_read_resource(params)
+        elif method == "resources/list":
+            return await self._handle_list_resources(params)
         elif method == "ping":
             return {}
         else:
@@ -550,3 +554,49 @@ class MCPWebSocketServer:
                 "content": [{"type": "text", "text": f"Error: {str(e)}"}],
                 "isError": True,
             }
+
+    async def _handle_read_resource(self, params: dict) -> dict:
+        """Handle resources/read by proxying to managed MCP servers."""
+        uri = params.get("uri", "")
+        if not uri:
+            return {"contents": []}
+
+        # Try each running managed MCP server until one returns content
+        from src.tools.mcp_management import _get_manager
+
+        manager = _get_manager(self.workspace_dir)
+        for server_info in await manager.list_servers():
+            name = server_info.get("name", "")
+            status = server_info.get("status", "")
+            if status != "running" or not name:
+                continue
+            text = await manager.read_resource(name, uri)
+            if text:
+                return {
+                    "contents": [
+                        {
+                            "uri": uri,
+                            "mimeType": "text/html",
+                            "text": text,
+                        }
+                    ]
+                }
+
+        logger.warning(f"[MCP] resources/read - no server returned content for {uri}")
+        return {"contents": []}
+
+    async def _handle_list_resources(self, params: dict) -> dict:
+        """Handle resources/list by aggregating from all managed MCP servers."""
+        from src.tools.mcp_management import _get_manager
+
+        manager = _get_manager(self.workspace_dir)
+        all_resources = []
+        for server_info in await manager.list_servers():
+            name = server_info.get("name", "")
+            status = server_info.get("status", "")
+            if status != "running" or not name:
+                continue
+            resources = await manager.list_resources(name)
+            all_resources.extend(resources)
+
+        return {"resources": all_resources}

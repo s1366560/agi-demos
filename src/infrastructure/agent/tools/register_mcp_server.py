@@ -1,0 +1,331 @@
+"""RegisterMCPServerTool - Agent tool for registering MCP servers built in sandbox.
+
+When the agent builds a full MCP server in the sandbox (with bidirectional tool
+support), it calls this tool to register, start, and discover tools from it.
+Auto-detection of MCP Apps (tools with _meta.ui) happens through the existing
+pipeline.
+
+This is the advanced path (Path B) for agents who need full MCP server
+capabilities. For simple HTML UIs, use register_app instead.
+"""
+
+import json
+import logging
+from typing import Any, Dict, List, Optional
+
+from src.domain.events.agent_events import AgentMCPAppRegisteredEvent
+from src.infrastructure.agent.tools.base import AgentTool
+
+logger = logging.getLogger(__name__)
+
+TOOL_NAME = "register_mcp_server"
+TOOL_DESCRIPTION = (
+    "Register and start an MCP server that you built in the sandbox. "
+    "Use this when you have created a full MCP server (not just HTML) that "
+    "provides tools for bidirectional interaction.\n\n"
+    "After registration, the server's tools are discovered automatically. "
+    "Any tool that declares _meta.ui.resourceUri will auto-render its UI in "
+    "the Canvas panel when called - no separate register_app step needed.\n\n"
+    "The MCP server MUST implement resources/read to serve HTML for _meta.ui tools. "
+    "HTML is fetched live from the server each time, never cached in the database.\n\n"
+    "Example for stdio server:\n"
+    "  server_type='stdio', command='node', args=['server.js']\n\n"
+    "Example for SSE server:\n"
+    "  server_type='sse', url='http://localhost:3001/sse'\n\n"
+    "Example for HTTP server:\n"
+    "  server_type='http', url='http://localhost:3001/mcp'\n\n"
+    "Example for WebSocket server:\n"
+    "  server_type='websocket', url='ws://localhost:3001/ws'"
+)
+
+
+class RegisterMCPServerTool(AgentTool):
+    """Agent tool for registering MCP servers built in the sandbox."""
+
+    def __init__(
+        self,
+        tenant_id: str,
+        project_id: str,
+        sandbox_adapter: Optional[Any] = None,
+        sandbox_id: Optional[str] = None,
+        session_factory: Optional[Any] = None,
+    ) -> None:
+        super().__init__(name=TOOL_NAME, description=TOOL_DESCRIPTION)
+        self._tenant_id = tenant_id
+        self._project_id = project_id
+        self._sandbox_adapter = sandbox_adapter
+        self._sandbox_id = sandbox_id
+        self._session_factory = session_factory
+        self._pending_events: List[Any] = []
+
+    def set_sandbox_id(self, sandbox_id: str) -> None:
+        """Set sandbox ID (called when sandbox becomes available)."""
+        self._sandbox_id = sandbox_id
+
+    def consume_pending_events(self) -> List[Any]:
+        """Consume pending SSE events (called by processor after execute)."""
+        events = list(self._pending_events)
+        self._pending_events.clear()
+        return events
+
+    def get_parameters_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "server_name": {
+                    "type": "string",
+                    "description": (
+                        "Unique name for the MCP server (e.g., 'sales-dashboard-server'). "
+                        "Use lowercase with hyphens."
+                    ),
+                },
+                "server_type": {
+                    "type": "string",
+                    "enum": ["stdio", "sse", "http", "websocket"],
+                    "description": (
+                        "Transport type: 'stdio' for command-line servers, "
+                        "'sse' for SSE servers, 'http' for HTTP servers, "
+                        "'websocket' for WebSocket servers."
+                    ),
+                },
+                "command": {
+                    "type": "string",
+                    "description": (
+                        "Command to start the server (e.g., 'node', 'python', 'npx'). "
+                        "Required for stdio servers."
+                    ),
+                },
+                "args": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Arguments for the command (e.g., ['server.js', '--port', '3001'])."
+                    ),
+                },
+                "url": {
+                    "type": "string",
+                    "description": (
+                        "URL for network servers (e.g., 'http://localhost:3001/mcp'). "
+                        "Required for sse, http, and websocket servers."
+                    ),
+                },
+            },
+            "required": ["server_name", "server_type"],
+        }
+
+    def validate_args(self, **kwargs) -> bool:
+        server_name = kwargs.get("server_name", "")
+        server_type = kwargs.get("server_type", "")
+        if not server_name or not server_type:
+            return False
+        if server_type == "stdio" and not kwargs.get("command"):
+            return False
+        if server_type in ("sse", "http", "websocket") and not kwargs.get("url"):
+            return False
+        return True
+
+    async def execute(self, **kwargs) -> str:
+        """Register, start, and discover tools from an MCP server."""
+        server_name = kwargs.get("server_name", "")
+        server_type = kwargs.get("server_type", "stdio")
+        command = kwargs.get("command", "")
+        args = kwargs.get("args", [])
+        url = kwargs.get("url", "")
+
+        # Validation
+        if not server_name:
+            return "Error: server_name is required."
+        if server_type not in ("stdio", "sse", "http", "websocket"):
+            return (
+                f"Error: Invalid server_type '{server_type}'. "
+                "Must be 'stdio', 'sse', 'http', or 'websocket'."
+            )
+        if server_type == "stdio" and not command:
+            return "Error: 'command' is required for stdio servers."
+        if server_type in ("sse", "http", "websocket") and not url:
+            return f"Error: 'url' is required for {server_type} servers."
+
+        if not self._sandbox_adapter or not self._sandbox_id:
+            return (
+                "Error: Sandbox not available. "
+                "This tool requires a running sandbox with MCP support."
+            )
+
+        # Build transport config
+        if server_type == "stdio":
+            transport_config = {"command": command, "args": args}
+        else:
+            transport_config = {"url": url}
+
+        config_json = json.dumps(transport_config)
+
+        try:
+            # Step 1: Install the MCP server
+            install_result = await self._sandbox_adapter.call_tool(
+                sandbox_id=self._sandbox_id,
+                tool_name="mcp_server_install",
+                arguments={
+                    "name": server_name,
+                    "server_type": server_type,
+                    "transport_config": config_json,
+                },
+                timeout=120.0,
+            )
+            install_data = self._parse_result(install_result)
+            if not install_data.get("success", False):
+                error = install_data.get("error", "Installation failed")
+                return f"Error: Failed to install MCP server '{server_name}': {error}"
+
+            # Step 2: Start the MCP server
+            start_result = await self._sandbox_adapter.call_tool(
+                sandbox_id=self._sandbox_id,
+                tool_name="mcp_server_start",
+                arguments={
+                    "name": server_name,
+                    "server_type": server_type,
+                    "transport_config": config_json,
+                },
+                timeout=60.0,
+            )
+            start_data = self._parse_result(start_result)
+            if not start_data.get("success", False):
+                error = start_data.get("error", "Start failed")
+                return f"Error: Failed to start MCP server '{server_name}': {error}"
+
+            # Step 3: Discover tools
+            discover_result = await self._sandbox_adapter.call_tool(
+                sandbox_id=self._sandbox_id,
+                tool_name="mcp_server_discover_tools",
+                arguments={"name": server_name},
+                timeout=30.0,
+            )
+            tools = self._parse_result(discover_result)
+            if not isinstance(tools, list):
+                tools = []
+
+            tool_names = [t.get("name", "unknown") for t in tools]
+
+            # Step 4: Auto-detect MCP Apps and persist
+            app_tools = await self._detect_and_persist_apps(server_name, tools)
+
+            # Step 5: Invalidate agent tool cache so new tools are available
+            try:
+                from src.infrastructure.agent.state.agent_worker_state import (
+                    invalidate_tools_cache,
+                )
+                invalidate_tools_cache(self._project_id)
+                logger.info("Tool cache invalidated for project %s", self._project_id)
+            except Exception as cache_err:
+                logger.warning("Failed to invalidate tool cache: %s", cache_err)
+
+            result = (
+                f"MCP server '{server_name}' registered and started successfully.\n"
+                f"Discovered {len(tool_names)} tool(s): {', '.join(tool_names)}"
+            )
+            if app_tools:
+                result += (
+                    f"\n\nDetected {len(app_tools)} MCP App(s) with UI: "
+                    f"{', '.join(app_tools)}"
+                )
+            return result
+
+        except Exception as e:
+            logger.error("Failed to register MCP server '%s': %s", server_name, e)
+            return f"Error: Failed to register MCP server '{server_name}' - {e}"
+
+    async def _detect_and_persist_apps(
+        self, server_name: str, tools: List[Dict]
+    ) -> List[str]:
+        """Detect tools with UI metadata and persist as MCP Apps."""
+        app_tools = []
+        for t in tools:
+            meta = t.get("_meta", {}) or {}
+            ui = meta.get("ui", {}) or {}
+            resource_uri = ui.get("resourceUri", "")
+            if resource_uri:
+                tool_name = t.get("name", "unknown")
+                app_tools.append(tool_name)
+
+                # Persist to DB via MCPAppService
+                app_id = ""
+                if self._session_factory:
+                    try:
+                        app_id = await self._persist_app(
+                            server_name=server_name,
+                            tool_name=tool_name,
+                            resource_uri=resource_uri,
+                            ui_metadata=ui,
+                        )
+                    except Exception as e:
+                        logger.warning("Failed to persist MCP App %s: %s", tool_name, e)
+
+                self._pending_events.append(
+                    AgentMCPAppRegisteredEvent(
+                        app_id=app_id,
+                        server_name=server_name,
+                        tool_name=tool_name,
+                        source="agent_developed",
+                        resource_uri=resource_uri,
+                        title=ui.get("title"),
+                    )
+                )
+
+        return app_tools
+
+    async def _persist_app(
+        self,
+        server_name: str,
+        tool_name: str,
+        resource_uri: str,
+        ui_metadata: Dict,
+    ) -> str:
+        """Persist an auto-detected MCP App to the database. Returns app ID."""
+        from src.domain.model.mcp.app import (
+            MCPApp,
+            MCPAppSource,
+            MCPAppStatus,
+            MCPAppUIMetadata,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
+            SqlMCPAppRepository,
+        )
+
+        app = MCPApp(
+            project_id=self._project_id,
+            tenant_id=self._tenant_id,
+            server_id=None,
+            server_name=server_name,
+            tool_name=tool_name,
+            ui_metadata=MCPAppUIMetadata(
+                resource_uri=resource_uri,
+                permissions=ui_metadata.get("permissions", []),
+                csp=ui_metadata.get("csp", {}),
+                title=ui_metadata.get("title"),
+            ),
+            source=MCPAppSource.AGENT_DEVELOPED,
+            status=MCPAppStatus.DISCOVERED,
+        )
+
+        async with self._session_factory() as session:
+            repo = SqlMCPAppRepository(session)
+            await repo.save(app)
+            await session.commit()
+
+        return app.id
+
+    @staticmethod
+    def _parse_result(result: Dict[str, Any]) -> Any:
+        """Parse MCP tool call result, extracting text content."""
+        if not result:
+            return {}
+        content = result.get("content", [])
+        if not content:
+            return {}
+        for item in content:
+            if item.get("type") == "text":
+                text = item.get("text", "")
+                try:
+                    return json.loads(text)
+                except (json.JSONDecodeError, TypeError):
+                    return {"text": text}
+        return {}

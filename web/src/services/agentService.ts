@@ -932,6 +932,13 @@ class AgentServiceImpl implements AgentService {
       case 'task_complete':
         handler.onTaskComplete?.(event as AgentEvent<TaskCompleteEventData>);
         break;
+      // MCP App events
+      case 'mcp_app_result':
+        handler.onMCPAppResult?.(event as AgentEvent<Record<string, unknown>>);
+        break;
+      case 'mcp_app_registered':
+        handler.onMCPAppRegistered?.(event as AgentEvent<Record<string, unknown>>);
+        break;
     }
   }
 

@@ -13,6 +13,10 @@ def convert_tools(tools: Dict[str, Any]) -> List[ToolDefinition]:
     """
     Convert tool instances to ToolDefinition format.
 
+    Tools whose _meta.ui.visibility is ["app"] only (not including "model")
+    are excluded from the LLM tool list per SEP-1865 spec. They remain
+    callable by the MCP App UI through the tool call proxy.
+
     Args:
         tools: Dictionary of tool name -> tool instance
 
@@ -22,6 +26,24 @@ def convert_tools(tools: Dict[str, Any]) -> List[ToolDefinition]:
     definitions = []
 
     for name, tool in tools.items():
+        # SEP-1865: Filter out app-only tools from the LLM tool list.
+        # Check MCPToolSchema.is_model_visible or raw _schema dict for visibility.
+        tool_schema = getattr(tool, "_tool_schema", None) or getattr(tool, "tool_info", None)
+        if tool_schema is not None and hasattr(tool_schema, "is_model_visible"):
+            if not tool_schema.is_model_visible:
+                continue
+
+        # Also check raw dict schema (SandboxMCPToolWrapper stores _schema as dict)
+        raw_schema = getattr(tool, "_schema", None)
+        if isinstance(raw_schema, dict):
+            meta = raw_schema.get("_meta")
+            if isinstance(meta, dict):
+                ui = meta.get("ui")
+                if isinstance(ui, dict):
+                    visibility = ui.get("visibility", ["model", "app"])
+                    if "model" not in visibility:
+                        continue
+
         # Extract tool metadata
         description = getattr(tool, "description", f"Tool: {name}")
 

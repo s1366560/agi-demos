@@ -22,6 +22,7 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { message, Popconfirm, Select, Empty, Spin, Input, Switch, Tooltip } from 'antd';
 
 import { McpServerModal } from '../../components/mcp/McpServerModal';
+import { MCPAppList } from '../../components/mcp/MCPAppList';
 import { useMCPStore } from '../../stores/mcp';
 import { useProjectStore } from '../../stores/project';
 
@@ -765,6 +766,10 @@ export const McpServerList: React.FC<McpServerListProps> & {
           formatLastSync={formatLastSync}
         />
       )}
+      {/* MCP Apps Section */}
+      <div className="border-t border-slate-200 dark:border-slate-700 pt-6">
+        <MCPAppList />
+      </div>
       <Modal
         isOpen={isModalOpen}
         server={editingServer}

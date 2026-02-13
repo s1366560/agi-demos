@@ -154,6 +154,11 @@ export interface ConversationState {
   // ===== Suggestions =====
   /** Follow-up suggestions from the agent */
   suggestions: string[];
+
+  // ===== MCP App Context (SEP-1865) =====
+  /** Context injected by MCP Apps via ui/update-model-context.
+   * Included in next LLM call to inform the model of app state. */
+  appModelContext: Record<string, unknown> | null;
 }
 
 /**
@@ -200,6 +205,9 @@ export function createDefaultConversationState(): ConversationState {
 
     // Suggestions
     suggestions: [],
+
+    // MCP App context
+    appModelContext: null,
   };
 }
 

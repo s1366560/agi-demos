@@ -116,7 +116,15 @@ class StdioTransport(MCPTransport):
         # Step 1: Send initialize request
         init_params = {
             "protocolVersion": "2024-11-05",
-            "capabilities": {"roots": {"listChanged": True}, "sampling": {}},
+            "capabilities": {
+                "roots": {"listChanged": True},
+                "sampling": {},
+                "extensions": {
+                    "io.modelcontextprotocol/ui": {
+                        "mimeTypes": ["text/html;profile=mcp-app"],
+                    },
+                },
+            },
             "clientInfo": {"name": "MemStack", "version": "0.2.0"},
         }
 
@@ -322,7 +330,10 @@ class SSETransport(MCPTransport):
             method="initialize",
             params=InitializeRequestParams(
                 protocolVersion="2024-11-05",
-                capabilities=ClientCapabilities(),
+                capabilities=ClientCapabilities(
+                    roots={"listChanged": True},
+                    sampling={},
+                ),
                 clientInfo=Implementation(name="MemStack", version="0.2.0"),
             ),
         )
@@ -335,11 +346,19 @@ class SSETransport(MCPTransport):
         self._pending_requests[request_id] = future
 
         # Send message - wrap JSONRPCRequest in JSONRPCMessage
+        # Inject SEP-1865 UI extension capability into the raw params
+        params_dict = init_request.params.model_dump() if init_request.params else {}
+        if "capabilities" in params_dict:
+            params_dict["capabilities"]["extensions"] = {
+                "io.modelcontextprotocol/ui": {
+                    "mimeTypes": ["text/html;profile=mcp-app"],
+                },
+            }
         jsonrpc_request = JSONRPCRequest(
             jsonrpc="2.0",
             id=request_id,
             method=init_request.method,
-            params=init_request.params.model_dump() if init_request.params else None,
+            params=params_dict,
         )
         await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=jsonrpc_request)))
 
@@ -543,7 +562,15 @@ class WebSocketTransport(MCPTransport):
         # Step 1: Send initialize request
         init_params = {
             "protocolVersion": "2024-11-05",
-            "capabilities": {"roots": {"listChanged": True}, "sampling": {}},
+            "capabilities": {
+                "roots": {"listChanged": True},
+                "sampling": {},
+                "extensions": {
+                    "io.modelcontextprotocol/ui": {
+                        "mimeTypes": ["text/html;profile=mcp-app"],
+                    },
+                },
+            },
             "clientInfo": {"name": "MemStack", "version": "0.2.0"},
         }
 

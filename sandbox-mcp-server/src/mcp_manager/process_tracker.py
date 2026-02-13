@@ -39,6 +39,7 @@ class ManagedServer:
     process: Optional[asyncio.subprocess.Process] = None
     pid: Optional[int] = None
     port: Optional[int] = None
+    url: Optional[str] = None  # For remote http/sse servers
     started_at: Optional[datetime] = None
     error: Optional[str] = None
     restart_count: int = 0

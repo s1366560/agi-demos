@@ -35,6 +35,7 @@ class MCPToolSchema:
     name: str
     description: Optional[str] = None
     inputSchema: Dict[str, Any] = field(default_factory=dict)
+    meta: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -138,7 +139,13 @@ class MCPSubprocessClient:
                 "initialize",
                 {
                     "protocolVersion": "2024-11-05",
-                    "capabilities": {},
+                    "capabilities": {
+                        "extensions": {
+                            "io.modelcontextprotocol/ui": {
+                                "mimeTypes": ["text/html;profile=mcp-app"],
+                            },
+                        },
+                    },
                     "clientInfo": {"name": "memstack-mcp-worker", "version": "1.0.0"},
                 },
                 timeout=timeout,
@@ -224,11 +231,10 @@ class MCPSubprocessClient:
                     name=tool.get("name", ""),
                     description=tool.get("description"),
                     inputSchema=tool.get("inputSchema", {}),
+                    meta=tool.get("_meta"),
                 )
                 for tool in tools_data
             ]
-        return []
-
     async def call_tool(
         self,
         name: str,

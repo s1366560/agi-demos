@@ -54,6 +54,8 @@
     },
     "dependencies": {
         "@ant-design/icons": "^6.1.0",
+        "@mcp-ui/client": "^6.0.0",
+        "@modelcontextprotocol/sdk": "^1.26.0",
         "@tanstack/react-virtual": "^3.13.18",
         "@types/react-syntax-highlighter": "^15.5.13",
         "@types/uuid": "^11.0.0",

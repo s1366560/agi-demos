@@ -143,6 +143,7 @@ function deserializeState(stored: SerializedConversationState): ConversationStat
     costTracking: stored.costTracking as ConversationState['costTracking'],
     suggestions: (stored as any).suggestions ?? [],
     tasks: (stored as any).tasks ?? [],
+    appModelContext: (stored as any).appModelContext ?? null,
   };
 }
 

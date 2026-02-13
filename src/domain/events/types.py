@@ -165,6 +165,12 @@ class AgentEventType(str, Enum):
     ARTIFACT_CLOSE = "artifact_close"
 
     # =========================================================================
+    # MCP App events (interactive HTML interfaces)
+    # =========================================================================
+    MCP_APP_RESULT = "mcp_app_result"
+    MCP_APP_REGISTERED = "mcp_app_registered"
+
+    # =========================================================================
     # SubAgent events (L3 layer independent execution)
     # =========================================================================
     SUBAGENT_ROUTED = "subagent_routed"
@@ -272,6 +278,9 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.ARTIFACT_OPEN: EventCategory.AGENT,
     AgentEventType.ARTIFACT_UPDATE: EventCategory.AGENT,
     AgentEventType.ARTIFACT_CLOSE: EventCategory.AGENT,
+    # MCP App events
+    AgentEventType.MCP_APP_RESULT: EventCategory.AGENT,
+    AgentEventType.MCP_APP_REGISTERED: EventCategory.AGENT,
     # Task list events
     AgentEventType.TASK_LIST_UPDATED: EventCategory.AGENT,
     AgentEventType.TASK_UPDATED: EventCategory.AGENT,

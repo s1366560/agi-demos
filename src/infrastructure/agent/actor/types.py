@@ -43,6 +43,8 @@ class ProjectChatRequest:
     context_summary_data: Optional[Dict[str, Any]] = None
     # Whether conversation is in Plan Mode (read-only analysis)
     plan_mode: bool = False
+    # Context injected by MCP Apps via ui/update-model-context (SEP-1865)
+    app_model_context: Optional[Dict[str, Any]] = None
 
 
 @dataclass(frozen=True)

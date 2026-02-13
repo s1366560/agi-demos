@@ -641,6 +641,18 @@ import { Button } from '@/components';
 import { Button } from '@/components/ui/Button';
 ```
 
+**⚠️ API Service Paths (httpClient baseURL):**
+```tsx
+// httpClient already sets baseURL: '/api/v1'
+// All service paths MUST be relative to that base.
+
+// ❌ WRONG - causes doubled prefix: /api/v1/api/v1/mcp/apps
+const BASE_URL = '/api/v1/mcp/apps';
+
+// ✅ CORRECT - resolves to /api/v1/mcp/apps
+const BASE_URL = '/mcp/apps';
+```
+
 **Component Template:**
 ```tsx
 import React from 'react';

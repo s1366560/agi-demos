@@ -380,7 +380,10 @@ export type AgentEventType =
   | 'task_updated' // Single task status change
   // Task timeline events (plan execution tracking)
   | 'task_start' // Agent started working on a task
-  | 'task_complete'; // Agent finished a task
+  | 'task_complete' // Agent finished a task
+  // MCP App events
+  | 'mcp_app_result' // MCP tool with UI returned result + HTML
+  | 'mcp_app_registered'; // New MCP App auto-detected
 
 /**
  * Base SSE event from agent
@@ -817,6 +820,8 @@ export interface ChatRequest {
   }>;
   /** Force execution of a specific skill by name */
   forced_skill_name?: string;
+  /** Context injected by MCP Apps via ui/update-model-context (SEP-1865) */
+  app_model_context?: Record<string, unknown>;
 }
 
 /**
@@ -1028,6 +1033,9 @@ export interface AgentStreamHandler {
   // Task timeline handlers
   onTaskStart?: (event: AgentEvent<TaskStartEventData>) => void;
   onTaskComplete?: (event: AgentEvent<TaskCompleteEventData>) => void;
+  // MCP App handlers
+  onMCPAppResult?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onMCPAppRegistered?: (event: AgentEvent<Record<string, unknown>>) => void;
   // Terminal handlers
   onComplete?: (event: AgentEvent<CompleteEventData>) => void;
   onError?: (event: AgentEvent<ErrorEventData>) => void;

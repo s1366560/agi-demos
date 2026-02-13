@@ -1430,3 +1430,58 @@ class AgentTaskModel(IdGeneratorMixin, Base):
     __table_args__ = (
         Index("ix_agent_tasks_conv_status", "conversation_id", "status"),
     )
+
+
+class MCPAppModel(Base):
+    """
+    MCP App persistence model.
+
+    Stores MCP Apps - interactive HTML interfaces declared by MCP tools
+    via the _meta.ui.resourceUri extension.
+    """
+
+    __tablename__ = "mcp_apps"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    server_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("mcp_servers.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    server_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    tool_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    ui_metadata: Mapped[dict] = mapped_column(JSON, nullable=False)
+    resource_html: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    resource_uri: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    resource_mime_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    resource_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    resource_resolved_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    source: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="user_added"
+    )
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="discovered"
+    )
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now(), nullable=True
+    )
+
+    # Relationships
+    tenant: Mapped["Tenant"] = relationship(foreign_keys=[tenant_id])
+    project: Mapped["Project"] = relationship(foreign_keys=[project_id])
+    server: Mapped[Optional["MCPServer"]] = relationship(foreign_keys=[server_id])
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "server_name", "tool_name", name="uq_mcp_app_project_server_tool"),
+        Index("ix_mcp_apps_project_status", "project_id", "status"),
+    )
