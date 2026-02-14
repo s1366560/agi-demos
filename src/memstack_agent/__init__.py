@@ -39,6 +39,24 @@ from memstack_agent.tools.protocol import (
     ToolMetadata,
 )
 
+# LLM exports
+from memstack_agent.llm import (
+    ChatResponse,
+    LLMClient,
+    LLMConfig,
+    LiteLLMAdapter,
+    Message,
+    MessageRole,
+    StreamChunk,
+    ToolCall,
+    Usage,
+    anthropic_config,
+    create_llm_client,
+    deepseek_config,
+    gemini_config,
+    openai_config,
+)
+
 __all__ = [
     # Core
     "AgentContext",
@@ -59,4 +77,19 @@ __all__ = [
     "ToolMetadata",
     "function_to_tool",
     "infer_type_schema",
+    # LLM
+    "Message",
+    "MessageRole",
+    "ToolCall",
+    "Usage",
+    "ChatResponse",
+    "StreamChunk",
+    "LLMConfig",
+    "LLMClient",
+    "LiteLLMAdapter",
+    "create_llm_client",
+    "anthropic_config",
+    "openai_config",
+    "gemini_config",
+    "deepseek_config",
 ]
