@@ -84,7 +84,7 @@ class MCPServerStatus:
         )
 
 
-@dataclass
+@dataclass(frozen=True)
 class MCPServerConfig:
     """
     MCP server configuration.

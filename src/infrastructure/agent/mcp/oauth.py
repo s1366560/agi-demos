@@ -75,13 +75,21 @@ class MCPAuthStorage:
     """Storage for MCP OAuth credentials and tokens.
 
     Stores data in ~/.memstack/mcp-auth.json with restricted permissions.
+    Sensitive fields (tokens, client secrets) are encrypted at rest using AES-256-GCM
+    when an EncryptionService is available.
     """
 
-    def __init__(self, data_dir: Optional[Path] = None):
+    # Fields that contain sensitive data and should be encrypted
+    _SENSITIVE_TOKEN_FIELDS = ("accessToken", "refreshToken")
+    _SENSITIVE_CLIENT_FIELDS = ("clientSecret",)
+
+    def __init__(self, data_dir: Optional[Path] = None, encryption_service=None):
         """Initialize auth storage.
 
         Args:
             data_dir: Directory for storing auth data (default: ~/.memstack)
+            encryption_service: Optional EncryptionService for encrypting tokens at rest.
+                              If None, attempts to load the global singleton.
         """
         if data_dir is None:
             home = Path.home()
@@ -90,10 +98,37 @@ class MCPAuthStorage:
         self._data_dir = data_dir
         self._filepath = data_dir / "mcp-auth.json"
         self._lock = asyncio.Lock()
+        self._encryption = encryption_service
+        if self._encryption is None:
+            try:
+                from src.infrastructure.security.encryption_service import get_encryption_service
+
+                self._encryption = get_encryption_service()
+            except Exception:
+                logger.warning("EncryptionService not available; OAuth tokens stored unencrypted")
 
     async def _ensure_dir(self) -> None:
         """Ensure data directory exists."""
         self._data_dir.mkdir(parents=True, exist_ok=True)
+
+    def _encrypt_value(self, value: str) -> str:
+        """Encrypt a sensitive string value. Returns original if no encryption available."""
+        if self._encryption and value:
+            try:
+                return "enc:" + self._encryption.encrypt(value)
+            except Exception:
+                logger.warning("Failed to encrypt value, storing as plaintext")
+        return value
+
+    def _decrypt_value(self, value: str) -> str:
+        """Decrypt a sensitive string value. Handles both encrypted and legacy plaintext."""
+        if value and value.startswith("enc:") and self._encryption:
+            try:
+                return self._encryption.decrypt(value[4:])
+            except Exception:
+                logger.warning("Failed to decrypt value, returning as-is")
+                return value
+        return value
 
     async def _read_all(self) -> Dict[str, Dict[str, Any]]:
         """Read all auth entries from storage.
@@ -125,10 +160,10 @@ class MCPAuthStorage:
 
         if entry.tokens:
             result["tokens"] = {
-                "accessToken": entry.tokens.access_token,
+                "accessToken": self._encrypt_value(entry.tokens.access_token),
             }
             if entry.tokens.refresh_token:
-                result["tokens"]["refreshToken"] = entry.tokens.refresh_token
+                result["tokens"]["refreshToken"] = self._encrypt_value(entry.tokens.refresh_token)
             if entry.tokens.expires_at:
                 result["tokens"]["expiresAt"] = entry.tokens.expires_at
             if entry.tokens.scope:
@@ -139,7 +174,9 @@ class MCPAuthStorage:
                 "clientId": entry.client_info.client_id,
             }
             if entry.client_info.client_secret:
-                result["clientInfo"]["clientSecret"] = entry.client_info.client_secret
+                result["clientInfo"]["clientSecret"] = self._encrypt_value(
+                    entry.client_info.client_secret
+                )
             if entry.client_info.client_id_issued_at:
                 result["clientInfo"]["clientIdIssuedAt"] = entry.client_info.client_id_issued_at
             if entry.client_info.client_secret_expires_at:
@@ -172,8 +209,12 @@ class MCPAuthStorage:
         if "tokens" in data:
             tokens_data = data["tokens"]
             entry.tokens = OAuthTokens(
-                access_token=tokens_data["accessToken"],
-                refresh_token=tokens_data.get("refreshToken"),
+                access_token=self._decrypt_value(tokens_data["accessToken"]),
+                refresh_token=(
+                    self._decrypt_value(tokens_data["refreshToken"])
+                    if tokens_data.get("refreshToken")
+                    else None
+                ),
                 expires_at=tokens_data.get("expiresAt"),
                 scope=tokens_data.get("scope"),
             )
@@ -182,7 +223,11 @@ class MCPAuthStorage:
             client_data = data["clientInfo"]
             entry.client_info = OAuthClientInfo(
                 client_id=client_data["clientId"],
-                client_secret=client_data.get("clientSecret"),
+                client_secret=(
+                    self._decrypt_value(client_data["clientSecret"])
+                    if client_data.get("clientSecret")
+                    else None
+                ),
                 client_id_issued_at=client_data.get("clientIdIssuedAt"),
                 client_secret_expires_at=client_data.get("clientSecretExpiresAt"),
             )
@@ -369,6 +414,32 @@ class MCPAuthStorage:
             return False
         return entry.tokens.expires_at < time.time()
 
+    async def revoke(self, mcp_name: str) -> bool:
+        """Revoke all OAuth credentials for an MCP server.
+
+        Removes tokens, client info, and all transient state.
+        This is a security operation that should be called when a server
+        is deleted or its OAuth access should be fully invalidated.
+
+        Args:
+            mcp_name: Name of the MCP server
+
+        Returns:
+            True if an entry was removed, False if none existed
+        """
+        async with self._lock:
+            all_data = await self._read_all()
+
+            if mcp_name not in all_data:
+                return False
+
+            del all_data[mcp_name]
+            await self._ensure_dir()
+            self._filepath.write_text(json.dumps(all_data, indent=2))
+            os.chmod(self._filepath, 0o600)
+            logger.info(f"Revoked all OAuth credentials for MCP server: {mcp_name}")
+            return True
+
 
 # ============================================
 # OAuth Provider
@@ -495,6 +566,88 @@ class MCPOAuthProvider:
             return None
 
         return entry.tokens
+
+    async def get_valid_tokens(self) -> Optional[OAuthTokens]:
+        """Get valid (non-expired) OAuth tokens, refreshing if necessary.
+
+        Checks token expiration and attempts automatic refresh using
+        the refresh_token grant. Falls back to returning None if
+        refresh fails or no refresh token is available.
+
+        Returns:
+            Valid OAuth tokens or None if unavailable
+        """
+        tokens = await self.get_tokens()
+        if not tokens:
+            return None
+
+        # Check if token is expired
+        if tokens.expires_at and tokens.expires_at < time.time():
+            # Attempt refresh
+            if tokens.refresh_token:
+                refreshed = await self.refresh_access_token()
+                if refreshed:
+                    return await self.get_tokens()
+            logger.warning(f"OAuth token expired for {self._mcp_name} and refresh unavailable")
+            return None
+
+        return tokens
+
+    async def refresh_access_token(self) -> bool:
+        """Refresh expired access token using the refresh_token grant.
+
+        Returns:
+            True if refresh succeeded, False otherwise
+        """
+        try:
+            import aiohttp
+
+            tokens = await self.get_tokens()
+            if not tokens or not tokens.refresh_token:
+                logger.warning(f"No refresh token available for {self._mcp_name}")
+                return False
+
+            client_info = await self.client_information()
+            if not client_info:
+                logger.warning(f"No client info available for refresh: {self._mcp_name}")
+                return False
+
+            # Build token endpoint URL from server URL
+            token_url = f"{self._server_url.rstrip('/')}/token"
+
+            data = {
+                "grant_type": "refresh_token",
+                "refresh_token": tokens.refresh_token,
+                "client_id": client_info.client_id,
+            }
+            if client_info.client_secret:
+                data["client_secret"] = client_info.client_secret
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    token_url, data=data, timeout=aiohttp.ClientTimeout(total=30)
+                ) as resp:
+                    if resp.status != 200:
+                        body = await resp.text()
+                        logger.warning(
+                            f"Token refresh failed for {self._mcp_name}: "
+                            f"status={resp.status}, body={body[:200]}"
+                        )
+                        return False
+
+                    result = await resp.json()
+                    await self.save_tokens(
+                        access_token=result["access_token"],
+                        refresh_token=result.get("refresh_token", tokens.refresh_token),
+                        expires_in=result.get("expires_in"),
+                        scope=result.get("scope", tokens.scope),
+                    )
+                    logger.info(f"Successfully refreshed OAuth token for {self._mcp_name}")
+                    return True
+
+        except Exception as e:
+            logger.error(f"Failed to refresh OAuth token for {self._mcp_name}: {e}")
+            return False
 
     async def save_tokens(
         self,

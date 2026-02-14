@@ -1,32 +1,20 @@
 /**
- * MCP Server Modal
- *
- * Modal component for creating and editing MCP servers with JSON-based
- * transport configuration.
+ * McpServerDrawer - Side drawer for creating and editing MCP servers.
+ * Replaces McpServerModal with an Ant Design Drawer for more form space.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { useTranslation } from 'react-i18next';
-
-import { Modal, Form, Input, Select, Switch, message, Alert } from 'antd';
+import { Drawer, Form, Input, Select, Switch, message, Alert, Button } from 'antd';
 import { useShallow } from 'zustand/react/shallow';
 
-import { useMCPStore } from '../../stores/mcp';
-import { useProjectStore } from '../../stores/project';
+import { useMCPStore } from '@/stores/mcp';
+import { useProjectStore } from '@/stores/project';
 
-import type { MCPServerResponse, MCPServerCreate, MCPServerType } from '../../types/agent';
+import type { MCPServerResponse, MCPServerCreate, MCPServerType } from '@/types/agent';
 
 const { TextArea } = Input;
 
-interface McpServerModalProps {
-  isOpen: boolean;
-  server: MCPServerResponse | null;
-  onClose: () => void;
-  onSuccess: () => void;
-}
-
-// Default transport configs by type
 const DEFAULT_TRANSPORT_CONFIGS: Record<MCPServerType, object> = {
   stdio: { command: '', args: [], env: {} },
   sse: { url: '', headers: {} },
@@ -34,16 +22,22 @@ const DEFAULT_TRANSPORT_CONFIGS: Record<MCPServerType, object> = {
   websocket: { url: '' },
 };
 
-export const McpServerModal: React.FC<McpServerModalProps> = ({
-  isOpen,
+export interface McpServerDrawerProps {
+  open: boolean;
+  server: MCPServerResponse | null;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
+  open,
   server,
   onClose,
   onSuccess,
 }) => {
-  const { t } = useTranslation();
   const [form] = Form.useForm();
+  const isEdit = !!server;
 
-  // Compute initial JSON config based on server prop
   const initialJsonConfig = useMemo(
     () =>
       server
@@ -54,22 +48,21 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
 
   const [jsonConfig, setJsonConfig] = useState(initialJsonConfig);
   const [jsonError, setJsonError] = useState<string | null>(null);
-
-  // Track server ID to detect changes
   const prevServerIdRef = useRef<string | undefined>(server?.id);
 
-  const { createServer, updateServer, isSubmitting } = useMCPStore();
+  const { createServer, updateServer, isSubmitting } = useMCPStore(
+    useShallow((s) => ({
+      createServer: s.createServer,
+      updateServer: s.updateServer,
+      isSubmitting: s.isSubmitting,
+    }))
+  );
   const { projects, currentProject } = useProjectStore(
-    useShallow((state) => ({ projects: state.projects, currentProject: state.currentProject }))
+    useShallow((s) => ({ projects: s.projects, currentProject: s.currentProject }))
   );
 
-  const isEdit = !!server;
-
-  // Initialize form when server changes
-  // Note: setState in effect is necessary here for form modal initialization pattern
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    // Check if server actually changed
     if (prevServerIdRef.current === server?.id && prevServerIdRef.current !== undefined) {
       return;
     }
@@ -98,13 +91,11 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
   }, [server, form, currentProject]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // Handle server type change
   const handleServerTypeChange = useCallback((type: MCPServerType) => {
     setJsonConfig(JSON.stringify(DEFAULT_TRANSPORT_CONFIGS[type], null, 2));
     setJsonError(null);
   }, []);
 
-  // Validate JSON config
   const validateJsonConfig = useCallback((json: string): boolean => {
     try {
       JSON.parse(json);
@@ -116,30 +107,20 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
     }
   }, []);
 
-  // Build transport config from JSON
-  const buildTransportConfig = useCallback((): Record<string, unknown> | null => {
-    if (!validateJsonConfig(jsonConfig)) {
-      return null;
-    }
-    return JSON.parse(jsonConfig);
-  }, [jsonConfig, validateJsonConfig]);
-
-  // Handle submit
   const handleSubmit = useCallback(async () => {
     try {
       await form.validateFields(['project_id', 'name', 'server_type']);
-
       const values = form.getFieldsValue();
-      const transportConfig = buildTransportConfig();
 
-      if (!transportConfig) {
-        message.error(t('tenant.mcpServers.invalidConfig'));
+      if (!validateJsonConfig(jsonConfig)) {
+        message.error('Invalid JSON configuration');
         return;
       }
 
+      const transportConfig = JSON.parse(jsonConfig);
       const projectId = values.project_id;
       if (!projectId) {
-        message.error(t('tenant.mcpServers.selectProjectFirst', 'Please select a project first'));
+        message.error('Please select a project');
         return;
       }
 
@@ -154,48 +135,41 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
 
       if (isEdit && server) {
         await updateServer(server.id, data);
-        message.success(t('tenant.mcpServers.updateSuccess'));
+        message.success('Server updated successfully');
       } else {
         await createServer(data);
-        message.success(t('tenant.mcpServers.createSuccess'));
+        message.success('Server created successfully');
       }
-
       onSuccess();
     } catch (error: unknown) {
       const err = error as { errorFields?: unknown };
       if (!err.errorFields) {
-        // Not a form validation error
         console.error('Submit error:', error);
       }
     }
-  }, [form, buildTransportConfig, isEdit, server, updateServer, createServer, onSuccess, t]);
+  }, [form, jsonConfig, validateJsonConfig, isEdit, server, updateServer, createServer, onSuccess]);
 
   return (
-    <Modal
-      title={isEdit ? t('tenant.mcpServers.editTitle') : t('tenant.mcpServers.createTitle')}
-      open={isOpen}
-      onCancel={onClose}
-      onOk={handleSubmit}
-      confirmLoading={isSubmitting}
-      okText={isEdit ? t('common.save') : t('common.create')}
-      cancelText={t('common.cancel')}
-      width={600}
-      destroyOnHidden
+    <Drawer
+      title={isEdit ? 'Edit MCP Server' : 'Create MCP Server'}
+      open={open}
+      onClose={onClose}
+      width={520}
+      destroyOnClose
+      extra={
+        <Button type="primary" onClick={handleSubmit} loading={isSubmitting}>
+          {isEdit ? 'Save' : 'Create'}
+        </Button>
+      }
     >
-      <Form form={form} layout="vertical" className="mt-4">
-        {/* Project */}
+      <Form form={form} layout="vertical">
         <Form.Item
-          label={t('tenant.mcpServers.fields.project', 'Project')}
+          label="Project"
           name="project_id"
-          rules={[
-            {
-              required: true,
-              message: t('tenant.mcpServers.validation.projectRequired', 'Please select a project'),
-            },
-          ]}
+          rules={[{ required: true, message: 'Please select a project' }]}
         >
           <Select
-            placeholder={t('tenant.mcpServers.placeholders.project', 'Select a project')}
+            placeholder="Select a project"
             disabled={isEdit}
             options={projects.map((p) => ({ label: p.name, value: p.id }))}
             showSearch
@@ -205,39 +179,25 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
           />
         </Form.Item>
 
-        {/* Name */}
         <Form.Item
-          label={t('tenant.mcpServers.fields.name')}
+          label="Name"
           name="name"
           rules={[
-            {
-              required: true,
-              message: t('tenant.mcpServers.validation.nameRequired'),
-            },
-            {
-              max: 100,
-              message: t('tenant.mcpServers.validation.nameTooLong'),
-            },
+            { required: true, message: 'Name is required' },
+            { max: 100, message: 'Name must be less than 100 characters' },
           ]}
         >
-          <Input placeholder={t('tenant.mcpServers.placeholders.name')} />
+          <Input placeholder="My MCP Server" />
         </Form.Item>
 
-        {/* Description */}
-        <Form.Item label={t('tenant.mcpServers.fields.description')} name="description">
-          <TextArea rows={2} placeholder={t('tenant.mcpServers.placeholders.description')} />
+        <Form.Item label="Description" name="description">
+          <TextArea rows={2} placeholder="Server description (optional)" />
         </Form.Item>
 
-        {/* Server Type */}
         <Form.Item
-          label={t('tenant.mcpServers.fields.serverType')}
+          label="Server Type"
           name="server_type"
-          rules={[
-            {
-              required: true,
-              message: t('tenant.mcpServers.validation.typeRequired'),
-            },
-          ]}
+          rules={[{ required: true, message: 'Server type is required' }]}
         >
           <Select
             options={[
@@ -250,32 +210,24 @@ export const McpServerModal: React.FC<McpServerModalProps> = ({
           />
         </Form.Item>
 
-        {/* Enabled */}
-        <Form.Item
-          label={t('tenant.mcpServers.fields.enabled')}
-          name="enabled"
-          valuePropName="checked"
-        >
+        <Form.Item label="Enabled" name="enabled" valuePropName="checked">
           <Switch />
         </Form.Item>
 
-        {/* JSON Config */}
-        <Form.Item label={t('tenant.mcpServers.fields.transportConfig')}>
+        <Form.Item label="Transport Config">
           <TextArea
             value={jsonConfig}
             onChange={(e) => {
               setJsonConfig(e.target.value);
               validateJsonConfig(e.target.value);
             }}
-            rows={8}
+            rows={10}
             className="font-mono text-sm"
             status={jsonError ? 'error' : undefined}
           />
           {jsonError && <Alert type="error" message={jsonError} showIcon className="mt-2" />}
         </Form.Item>
       </Form>
-    </Modal>
+    </Drawer>
   );
 };
-
-export default McpServerModal;

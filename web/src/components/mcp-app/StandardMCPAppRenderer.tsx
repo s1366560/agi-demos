@@ -141,13 +141,20 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
     return () => observer.disconnect();
   }, []);
 
-  // Mark app as initialized after the iframe has time to connect.
+  // Mark app as initialized once the MCP client connects (Mode A) or
+  // after a short fallback delay (Mode B / no direct client).
   // This defers hostContext delivery to avoid "Not connected" errors
-  // from @mcp-ui/client's internal setHostContext → notification().
+  // from @mcp-ui/client's internal setHostContext -> notification().
   useEffect(() => {
-    const timer = setTimeout(() => setAppInitialized(true), 2000);
+    if (useDirectClient) {
+      // Mode A: MCP client is already connected, initialize immediately
+      setAppInitialized(true);
+      return;
+    }
+    // Mode B: No direct client, use a short delay for iframe bridge setup
+    const timer = setTimeout(() => setAppInitialized(true), 500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [useDirectClient]);
 
   // Normalize: treat empty strings as undefined
   const effectiveHtml = html || undefined;

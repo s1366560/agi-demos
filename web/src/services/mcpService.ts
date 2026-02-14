@@ -87,11 +87,17 @@ export const mcpAPI = {
   },
 
   /**
-   * Get all tools from all enabled MCP servers, optionally filtered by project
+   * Get all tools from all enabled MCP servers, optionally filtered by project.
+   * Backend returns paginated response; this fetches the first page (up to 200 items).
    */
   listAllTools: async (projectId?: string): Promise<MCPToolInfo[]> => {
-    const params = projectId ? { project_id: projectId } : {};
-    return await api.get<MCPToolInfo[]>('/mcp/tools/all', { params });
+    const params: Record<string, string | number> = { per_page: 200 };
+    if (projectId) params.project_id = projectId;
+    const resp = await api.get<{ items: MCPToolInfo[]; total: number }>(
+      '/mcp/tools/all',
+      { params },
+    );
+    return resp.items;
   },
 
   /**

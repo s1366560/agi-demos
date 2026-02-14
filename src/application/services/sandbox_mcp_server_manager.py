@@ -7,6 +7,7 @@ management, tool discovery, and tool call proxying.
 
 import json
 import logging
+import os
 from typing import Any, Dict, List
 
 from src.domain.ports.services.sandbox_mcp_server_port import (
@@ -25,6 +26,13 @@ TOOL_STOP = "mcp_server_stop"
 TOOL_LIST = "mcp_server_list"
 TOOL_DISCOVER = "mcp_server_discover_tools"
 TOOL_CALL = "mcp_server_call_tool"
+
+# Timeouts (seconds) - override via env MCP_INSTALL_TIMEOUT, etc.
+MCP_INSTALL_TIMEOUT = float(os.environ.get("MCP_INSTALL_TIMEOUT", "120"))
+MCP_START_TIMEOUT = float(os.environ.get("MCP_START_TIMEOUT", "60"))
+MCP_STOP_TIMEOUT = float(os.environ.get("MCP_STOP_TIMEOUT", "30"))
+MCP_CALL_TOOL_TIMEOUT = float(os.environ.get("MCP_CALL_TOOL_TIMEOUT", "60"))
+MCP_DISCOVER_TIMEOUT = float(os.environ.get("MCP_DISCOVER_TIMEOUT", "30"))
 
 
 class SandboxMCPServerManager(SandboxMCPServerPort):
@@ -75,7 +83,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 "server_type": server_type,
                 "transport_config": config_json,
             },
-            timeout=120.0,
+            timeout=MCP_INSTALL_TIMEOUT,
         )
         install_data = self._parse_tool_result(install_result)
         if not install_data.get("success", False):
@@ -97,7 +105,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 "server_type": server_type,
                 "transport_config": config_json,
             },
-            timeout=60.0,
+            timeout=MCP_START_TIMEOUT,
         )
         start_data = self._parse_tool_result(start_result)
         if not start_data.get("success", False):
@@ -130,7 +138,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 project_id=project_id,
                 tool_name=TOOL_STOP,
                 arguments={"name": server_name},
-                timeout=30.0,
+                timeout=MCP_STOP_TIMEOUT,
             )
             data = self._parse_tool_result(result)
             return data.get("success", False)
@@ -165,7 +173,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             project_id=project_id,
             tool_name=TOOL_DISCOVER,
             arguments={"name": server_name},
-            timeout=30.0,
+            timeout=MCP_DISCOVER_TIMEOUT,
         )
         tools = self._parse_tool_result(result)
         if isinstance(tools, list):
@@ -201,7 +209,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                     "tool_name": tool_name,
                     "arguments": json.dumps(arguments),
                 },
-                timeout=60.0,
+                timeout=MCP_CALL_TOOL_TIMEOUT,
             )
 
             content = result.get("content", [])
@@ -307,7 +315,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 project_id=project_id,
                 tool_name=TOOL_DISCOVER,
                 arguments={"name": server_name},
-                timeout=30.0,
+                timeout=MCP_DISCOVER_TIMEOUT,
             )
             tools = self._parse_tool_result(result)
             tool_count = len(tools) if isinstance(tools, list) else 0

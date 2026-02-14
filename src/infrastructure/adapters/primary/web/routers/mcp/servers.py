@@ -16,7 +16,9 @@ from src.infrastructure.adapters.primary.web.dependencies import get_current_use
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 
 from .schemas import (
+    MCPHealthSummary,
     MCPServerCreate,
+    MCPServerHealthStatus,
     MCPServerResponse,
     MCPServerTestResult,
     MCPServerUpdate,
@@ -284,6 +286,14 @@ async def update_mcp_server(
                     await manager.stop_server(project_id, updated_server["name"])
                     logger.info(f"Stopped MCP server {server_id}")
 
+                    # Clean up tool adapter cache on disable
+                    try:
+                        from src.infrastructure.mcp.tools.factory import MCPToolFactory
+
+                        MCPToolFactory.remove_adapter(updated_server["name"])
+                    except Exception:
+                        pass
+
                 from src.infrastructure.agent.state.agent_session_pool import (
                     invalidate_mcp_tools_cache,
                 )
@@ -350,6 +360,31 @@ async def delete_mcp_server(
                 logger.info(f"Stopped MCP server for deleted config {server_id}")
             except Exception as e:
                 logger.warning(f"Failed to stop MCP server {server_id}: {e}")
+
+        # Clean up tool adapter cache
+        try:
+            from src.infrastructure.mcp.tools.factory import MCPToolFactory
+
+            MCPToolFactory.remove_adapter(server["name"])
+        except Exception:
+            pass
+
+        # Clean up associated MCP Apps before deleting server
+        try:
+            from src.application.services.mcp_app_service import MCPAppService
+            from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
+                SqlMCPAppRepository,
+            )
+
+            app_service = MCPAppService(
+                app_repo=SqlMCPAppRepository(db),
+                resource_resolver=None,
+            )
+            deleted_count = await app_service.delete_apps_by_server(server_id)
+            if deleted_count > 0:
+                logger.info(f"Cleaned up {deleted_count} MCP apps for server {server_id}")
+        except Exception as e:
+            logger.warning(f"Failed to clean up MCP apps for server {server_id}: {e}")
 
         await repository.delete(server_id)
         await db.commit()
@@ -515,3 +550,84 @@ async def test_mcp_server_connection(
             message=f"Connection failed: {e!s}",
             errors=[str(e)],
         )
+
+
+def _compute_server_health(server: dict) -> MCPServerHealthStatus:
+    """Compute health status for a single server from its stored state."""
+    if not server.get("enabled"):
+        health_status = "disabled"
+    elif server.get("sync_error"):
+        health_status = "error"
+    elif not server.get("last_sync_at"):
+        health_status = "unknown"
+    elif server.get("discovered_tools"):
+        health_status = "healthy"
+    else:
+        health_status = "degraded"
+
+    return MCPServerHealthStatus(
+        id=server["id"],
+        name=server["name"],
+        status=health_status,
+        enabled=server.get("enabled", False),
+        last_sync_at=server.get("last_sync_at"),
+        sync_error=server.get("sync_error"),
+        tools_count=len(server.get("discovered_tools") or []),
+    )
+
+
+@router.get("/health/summary", response_model=MCPHealthSummary)
+async def get_mcp_health_summary(
+    project_id: Optional[str] = Query(None, description="Filter by project ID"),
+    db: AsyncSession = Depends(get_db),
+    tenant_id: str = Depends(get_current_user_tenant),
+):
+    """Get aggregated health summary for all MCP servers."""
+    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
+        SqlMCPServerRepository,
+    )
+
+    repository = SqlMCPServerRepository(db)
+
+    if project_id:
+        servers = await repository.list_by_project(project_id)
+    else:
+        servers = await repository.list_by_tenant(tenant_id)
+
+    statuses = [_compute_server_health(s) for s in servers]
+
+    return MCPHealthSummary(
+        total=len(statuses),
+        healthy=sum(1 for s in statuses if s.status == "healthy"),
+        degraded=sum(1 for s in statuses if s.status == "degraded"),
+        error=sum(1 for s in statuses if s.status == "error"),
+        disabled=sum(1 for s in statuses if s.status == "disabled"),
+        servers=statuses,
+    )
+
+
+@router.get("/{server_id}/health", response_model=MCPServerHealthStatus)
+async def get_mcp_server_health(
+    server_id: str,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: str = Depends(get_current_user_tenant),
+):
+    """Get health status for a single MCP server (lightweight, no connection test)."""
+    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
+        SqlMCPServerRepository,
+    )
+
+    repository = SqlMCPServerRepository(db)
+    server = await repository.get_by_id(server_id)
+    if not server:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"MCP server not found: {server_id}",
+        )
+    if server["tenant_id"] != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied",
+        )
+
+    return _compute_server_health(server)

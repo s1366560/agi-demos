@@ -19,6 +19,8 @@ interface MCPAppState {
   apps: Record<string, MCPApp>;
   /** Cached HTML resources indexed by app ID */
   resources: Record<string, MCPAppResource>;
+  /** Timestamps when resources were cached (for TTL expiry) */
+  resourceCachedAt: Record<string, number>;
   /** Loading state */
   loading: boolean;
   /** Error message */
@@ -43,6 +45,7 @@ export const useMCPAppStore = create<MCPAppState>()(
     (set, get) => ({
       apps: {},
       resources: {},
+      resourceCachedAt: {},
       loading: false,
       error: null,
 
@@ -64,9 +67,11 @@ export const useMCPAppStore = create<MCPAppState>()(
         set((state) => {
           // Clear cached resource so re-registration picks up new HTML
           const { [app.id]: _, ...restResources } = state.resources;
+          const { [app.id]: __, ...restCachedAt } = state.resourceCachedAt;
           return {
             apps: { ...state.apps, [app.id]: app },
             resources: restResources,
+            resourceCachedAt: restCachedAt,
           };
         });
       },
@@ -75,24 +80,33 @@ export const useMCPAppStore = create<MCPAppState>()(
         set((state) => {
           const { [appId]: _, ...rest } = state.apps;
           const { [appId]: __, ...restResources } = state.resources;
-          return { apps: rest, resources: restResources };
+          const { [appId]: ___, ...restCachedAt } = state.resourceCachedAt;
+          return { apps: rest, resources: restResources, resourceCachedAt: restCachedAt };
         });
       },
 
       loadResource: async (appId: string, bustCache = false) => {
-        // Check cache first (unless bust requested)
+        const RESOURCE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+        // Check cache first (unless bust requested or TTL expired)
         if (!bustCache) {
           const cached = get().resources[appId];
-          if (cached) return cached;
+          const cachedAt = get().resourceCachedAt[appId];
+          if (cached && cachedAt && Date.now() - cachedAt < RESOURCE_CACHE_TTL_MS) {
+            return cached;
+          }
         }
 
         try {
           const resource = await mcpAppAPI.getResource(appId);
           set((state) => ({
             resources: { ...state.resources, [appId]: resource },
+            resourceCachedAt: { ...state.resourceCachedAt, [appId]: Date.now() },
+            error: null,
           }));
           return resource;
-        } catch {
+        } catch (err) {
+          set({ error: getErrorMessage(err) });
           return null;
         }
       },
@@ -100,7 +114,8 @@ export const useMCPAppStore = create<MCPAppState>()(
       invalidateResource: (appId: string) => {
         set((state) => {
           const { [appId]: _, ...rest } = state.resources;
-          return { resources: rest };
+          const { [appId]: __, ...restCachedAt } = state.resourceCachedAt;
+          return { resources: rest, resourceCachedAt: restCachedAt };
         });
       },
 
@@ -115,7 +130,7 @@ export const useMCPAppStore = create<MCPAppState>()(
         });
       },
 
-      reset: () => set({ apps: {}, resources: {}, loading: false, error: null }),
+      reset: () => set({ apps: {}, resources: {}, resourceCachedAt: {}, loading: false, error: null }),
     }),
     { name: 'mcp-app-store' },
   ),

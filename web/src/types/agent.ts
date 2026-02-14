@@ -1753,6 +1753,7 @@ export interface MCPServerResponse {
   enabled: boolean;
   discovered_tools: MCPToolInfo[];
   last_sync_at?: string;
+  sync_error?: string;
   created_at: string;
   updated_at: string;
 }
