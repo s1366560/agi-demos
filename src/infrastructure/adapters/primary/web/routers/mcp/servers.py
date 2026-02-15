@@ -482,7 +482,7 @@ async def sync_mcp_server_tools(
             invalidate_mcp_tools_cache(tenant_id)
 
         logger.info(
-            f"Synced {len(tools)} tools from MCP server '{server['name']}' (project={project_id})"
+            f"Synced {len(tools)} tools from MCP server '{server.name}' (project={project_id})"
         )
 
         server = await repository.get_by_id(server_id)
