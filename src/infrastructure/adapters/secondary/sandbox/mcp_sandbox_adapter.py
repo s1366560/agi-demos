@@ -1307,17 +1307,37 @@ class MCPSandboxAdapter(SandboxPort):
             )
 
             count = 0
+            orphans_cleaned = 0
             async with self._lock:
                 for container in containers:
                     # Skip already tracked containers
                     if container.name in self._active_sandboxes:
                         continue
 
+                    labels = container.labels or {}
+
+                    # Clean up orphan containers without project_id
+                    # These are leftover from previous sessions or failed creations
+                    if not labels.get("memstack.project_id"):
+                        logger.warning(
+                            f"Cleaning up orphan sandbox container {container.name} "
+                            f"(no project_id label, status={container.status})"
+                        )
+                        try:
+                            await loop.run_in_executor(
+                                None, lambda c=container: c.remove(force=True)
+                            )
+                            orphans_cleaned += 1
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to cleanup orphan container {container.name}: {e}"
+                            )
+                        continue
+
                     # Skip non-running containers
                     if container.status != "running":
                         continue
 
-                    labels = container.labels or {}
                     sandbox_id = labels.get("memstack.sandbox.id", container.name)
 
                     # Extract port information from labels
@@ -1392,6 +1412,11 @@ class MCPSandboxAdapter(SandboxPort):
                         f"(project_id={labels.get('memstack.project_id', 'unknown')})"
                     )
 
+            if orphans_cleaned > 0:
+                logger.info(
+                    f"Cleaned up {orphans_cleaned} orphan sandbox containers "
+                    f"(no project_id label)"
+                )
             if count > 0:
                 logger.info(f"Synced {count} existing sandbox containers from Docker")
 

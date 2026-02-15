@@ -902,7 +902,7 @@ async def _load_user_mcp_server_tools(
                     sandbox_id=sandbox_id,
                     tool_name="mcp_server_discover_tools",
                     arguments={"name": server_name},
-                    timeout=15.0,
+                    timeout=30.0,
                 )
 
                 if discover_result.get("is_error"):
