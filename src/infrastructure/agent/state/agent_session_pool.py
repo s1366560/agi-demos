@@ -408,6 +408,8 @@ def invalidate_mcp_tools_cache(tenant_id: Optional[str] = None) -> int:
     When MCP tools change (server create/delete/enable/disable/sync),
     the tool definitions cache must also be cleared since it holds
     converted ToolDefinition objects derived from MCP tools.
+    Agent session contexts are also invalidated since they hold
+    cached tool_definitions that reference stale MCP tools.
 
     Args:
         tenant_id: Specific tenant to invalidate, or None for all
@@ -428,6 +430,13 @@ def invalidate_mcp_tools_cache(tenant_id: Optional[str] = None) -> int:
                     f"Agent Session Pool: Cascaded tool definitions cache clear "
                     f"({td_count} entries) due to MCP tools change for {tenant_id}"
                 )
+            # Cascade: clear agent sessions so they rebuild with new tools
+            session_count = invalidate_agent_session(tenant_id=tenant_id)
+            if session_count:
+                logger.info(
+                    f"Agent Session Pool: Cascaded agent session clear "
+                    f"({session_count} entries) due to MCP tools change for {tenant_id}"
+                )
             return 1
         return 0
     else:
@@ -440,6 +449,13 @@ def invalidate_mcp_tools_cache(tenant_id: Optional[str] = None) -> int:
             logger.info(
                 f"Agent Session Pool: Cascaded tool definitions cache clear "
                 f"({td_count} entries) due to full MCP tools invalidation"
+            )
+        # Cascade: clear all agent sessions
+        session_count = invalidate_agent_session()
+        if session_count:
+            logger.info(
+                f"Agent Session Pool: Cascaded agent session clear "
+                f"({session_count} entries) due to full MCP tools invalidation"
             )
         return count
 

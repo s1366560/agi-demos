@@ -960,9 +960,7 @@ async def _auto_restore_mcp_servers(
             db_servers = await repo.list_by_project(project_id, enabled_only=True)
 
         # Find servers that need restoring
-        servers_to_restore = [
-            s for s in db_servers if s.get("name") and s["name"] not in running_names
-        ]
+        servers_to_restore = [s for s in db_servers if s.name and s.name not in running_names]
 
         if not servers_to_restore:
             return
