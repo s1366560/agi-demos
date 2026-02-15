@@ -64,7 +64,12 @@ class MCPAppService:
 
             ui_meta = meta.get("ui")
             if not ui_meta or not isinstance(ui_meta, dict):
-                continue
+                # SEP-1865: Check deprecated flat format _meta["ui/resourceUri"]
+                deprecated_uri = meta.get("ui/resourceUri")
+                if deprecated_uri:
+                    ui_meta = {"resourceUri": deprecated_uri}
+                else:
+                    continue
 
             resource_uri = ui_meta.get("resourceUri", "")
             if not resource_uri:
@@ -77,10 +82,24 @@ class MCPAppService:
             # Check if already registered
             existing = await self._app_repo.find_by_server_and_tool(server_id, tool_name)
             if existing:
-                logger.debug(
-                    "MCP App already registered: server=%s, tool=%s",
-                    server_name, tool_name,
-                )
+                # Compare ui_metadata to detect changes (e.g. resourceUri update)
+                new_ui_metadata = MCPAppUIMetadata.from_dict(ui_meta)
+                if existing.ui_metadata.to_dict() != new_ui_metadata.to_dict():
+                    existing.ui_metadata = new_ui_metadata
+                    existing.status = MCPAppStatus.DISCOVERED
+                    existing.cached_resource = None
+                    await self._app_repo.save(existing)
+                    logger.info(
+                        "Updated MCP App metadata: server=%s, tool=%s",
+                        server_name,
+                        tool_name,
+                    )
+                else:
+                    logger.debug(
+                        "MCP App already registered: server=%s, tool=%s",
+                        server_name,
+                        tool_name,
+                    )
                 apps.append(existing)
                 continue
 
@@ -101,7 +120,11 @@ class MCPAppService:
 
             logger.info(
                 "Registered MCP App: id=%s, server=%s, tool=%s, uri=%s, source=%s",
-                app.id, server_name, tool_name, resource_uri, source.value,
+                app.id,
+                server_name,
+                tool_name,
+                resource_uri,
+                source.value,
             )
 
         return apps
@@ -141,7 +164,8 @@ class MCPAppService:
 
             logger.info(
                 "Resolved MCP App resource: id=%s, size=%d bytes",
-                app.id, resource.size_bytes,
+                app.id,
+                resource.size_bytes,
             )
             return app
 
@@ -154,9 +178,7 @@ class MCPAppService:
         """Get an MCP App by ID."""
         return await self._app_repo.find_by_id(app_id)
 
-    async def get_app_by_server_and_tool(
-        self, server_id: str, tool_name: str
-    ) -> Optional[MCPApp]:
+    async def get_app_by_server_and_tool(self, server_id: str, tool_name: str) -> Optional[MCPApp]:
         """Get an MCP App by server and tool name."""
         return await self._app_repo.find_by_server_and_tool(server_id, tool_name)
 
@@ -187,6 +209,17 @@ class MCPAppService:
     async def delete_apps_by_server(self, server_id: str) -> int:
         """Delete all MCP Apps when a server is removed."""
         return await self._app_repo.delete_by_server(server_id)
+
+    async def disable_apps_by_server(self, server_id: str) -> int:
+        """Disable all MCP Apps when a server is disabled.
+
+        Apps are marked DISABLED rather than deleted so they can be
+        re-enabled when the server comes back online.
+        """
+        count = await self._app_repo.disable_by_server(server_id)
+        if count > 0:
+            logger.info("Disabled %d apps for server %s", count, server_id)
+        return count
 
     async def disable_app(self, app_id: str) -> Optional[MCPApp]:
         """Disable an MCP App."""

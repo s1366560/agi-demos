@@ -12,8 +12,9 @@
 
 import { memo, useState, useEffect, useRef } from 'react';
 
-import { ChevronDown, ChevronRight, Brain } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+import { ChevronDown, ChevronRight, Brain } from 'lucide-react';
 
 interface ThinkingBlockProps {
   content: string;

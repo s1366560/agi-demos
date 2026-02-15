@@ -4,8 +4,9 @@
 
 import { memo, useCallback } from 'react';
 
-import { Search, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+import { Search, RefreshCw } from 'lucide-react';
 
 export type StatusFilter = 'all' | 'enabled' | 'disabled';
 export type SortField = 'name' | 'invocations' | 'success_rate' | 'recent';

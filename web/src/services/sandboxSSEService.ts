@@ -80,6 +80,11 @@ class SandboxSSEService {
    * @returns Unsubscribe function
    */
   subscribe(projectId: string, handler: SandboxEventHandler): () => void {
+    // If switching projects, clean up old subscription first
+    if (this.projectId && this.projectId !== projectId) {
+      this.disconnect();
+    }
+
     this.projectId = projectId;
     this.handlers.add(handler);
 
@@ -107,20 +112,24 @@ class SandboxSSEService {
     }
 
     this.status = 'connecting';
+    const projectId = this.projectId;
 
-    // Ensure agentService WebSocket is connected
+    // Ensure agentService WebSocket is connected with timeout
     const connectPromise = agentService.isConnected()
       ? Promise.resolve()
       : agentService.connect();
 
-    connectPromise
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('WebSocket connection timeout')), 15000),
+    );
+
+    Promise.race([connectPromise, timeoutPromise])
       .then(() => {
-        if (!this.projectId) return;
+        // Guard: project may have changed during async connect
+        if (this.projectId !== projectId) return;
 
         // Subscribe to sandbox events via agentService WebSocket
-        // agentService.subscribeSandboxState requires a tenantId but sandbox events
-        // are routed by project_id on the backend, so we pass empty string.
-        agentService.subscribeSandboxState(this.projectId, '', (state: SandboxStateData) => {
+        agentService.subscribeSandboxState(projectId, '', (state: SandboxStateData) => {
           this.handleSandboxState(state);
         });
 
@@ -130,12 +139,12 @@ class SandboxSSEService {
         };
 
         this.status = 'connected';
-        logger.debug(`[SandboxWS] Connected to project ${this.projectId} via agentService`);
+        logger.debug(`[SandboxWS] Connected to project ${projectId} via agentService`);
       })
       .catch((err) => {
         logger.error('[SandboxWS] Failed to connect:', err);
         this.status = 'error';
-        this.notifyHandlers('onError', err as Error);
+        this.notifyHandlers('onError', err instanceof Error ? err : new Error(String(err)));
       });
   }
 

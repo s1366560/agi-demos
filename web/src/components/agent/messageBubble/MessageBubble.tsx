@@ -9,8 +9,8 @@ import React, { memo, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
-
 import type { Components } from 'react-markdown';
+
 import {
   User,
   Sparkles,
@@ -31,7 +31,6 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useSandboxStore } from '@/stores/sandbox';
 
-import { MARKDOWN_PROSE_CLASSES } from '../styles';
 import { CodeBlock as SharedCodeBlock } from '../chat/CodeBlock';
 import { useMarkdownPlugins, safeMarkdownComponents } from '../chat/markdownPlugins';
 import { MessageActionBar } from '../chat/MessageActionBar';
@@ -39,6 +38,7 @@ import { SaveTemplateModal } from '../chat/SaveTemplateModal';
 
 // Import types without type qualifier
 import { InlineHITLCard } from '../InlineHITLCard';
+import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 import type {
   UserMessageProps,

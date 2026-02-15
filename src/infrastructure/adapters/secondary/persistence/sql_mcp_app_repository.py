@@ -30,9 +30,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
 
     async def save(self, app: MCPApp) -> MCPApp:
         """Save or update an MCP App."""
-        result = await self._session.execute(
-            select(MCPAppModel).where(MCPAppModel.id == app.id)
-        )
+        result = await self._session.execute(select(MCPAppModel).where(MCPAppModel.id == app.id))
         db_app = result.scalar_one_or_none()
 
         if db_app:
@@ -42,20 +40,18 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
             self._session.add(db_app)
 
         await self._session.flush()
-        logger.info("Saved MCP App: %s (server=%s, tool=%s)", app.id, app.server_name, app.tool_name)
+        logger.info(
+            "Saved MCP App: %s (server=%s, tool=%s)", app.id, app.server_name, app.tool_name
+        )
         return app
 
     async def find_by_id(self, app_id: str) -> Optional[MCPApp]:
         """Find an MCP App by its ID."""
-        result = await self._session.execute(
-            select(MCPAppModel).where(MCPAppModel.id == app_id)
-        )
+        result = await self._session.execute(select(MCPAppModel).where(MCPAppModel.id == app_id))
         db_app = result.scalar_one_or_none()
         return self._to_domain(db_app) if db_app else None
 
-    async def find_by_server_and_tool(
-        self, server_id: str, tool_name: str
-    ) -> Optional[MCPApp]:
+    async def find_by_server_and_tool(self, server_id: str, tool_name: str) -> Optional[MCPApp]:
         """Find an MCP App by server and tool name."""
         result = await self._session.execute(
             select(MCPAppModel).where(
@@ -103,9 +99,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
         )
         return [self._to_domain(db) for db in result.scalars().all()]
 
-    async def find_by_tenant(
-        self, tenant_id: str, include_disabled: bool = False
-    ) -> List[MCPApp]:
+    async def find_by_tenant(self, tenant_id: str, include_disabled: bool = False) -> List[MCPApp]:
         """Find all MCP Apps for a tenant (across all projects)."""
         query = select(MCPAppModel).where(MCPAppModel.tenant_id == tenant_id)
         if not include_disabled:
@@ -117,9 +111,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
 
     async def delete(self, app_id: str) -> bool:
         """Delete an MCP App."""
-        result = await self._session.execute(
-            delete(MCPAppModel).where(MCPAppModel.id == app_id)
-        )
+        result = await self._session.execute(delete(MCPAppModel).where(MCPAppModel.id == app_id))
         if result.rowcount == 0:
             return False
         logger.info("Deleted MCP App: %s", app_id)
@@ -133,6 +125,26 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
         count = result.rowcount
         if count > 0:
             logger.info("Deleted %d MCP Apps for server %s", count, server_id)
+        return count
+
+    async def disable_by_server(self, server_id: str) -> int:
+        """Disable all MCP Apps for a server."""
+        from sqlalchemy import update
+
+        result = await self._session.execute(
+            update(MCPAppModel)
+            .where(
+                MCPAppModel.server_id == server_id,
+                MCPAppModel.status != MCPAppStatus.DISABLED.value,
+            )
+            .values(
+                status=MCPAppStatus.DISABLED.value,
+                updated_at=datetime.now(timezone.utc),
+            )
+        )
+        count = result.rowcount
+        if count > 0:
+            logger.info("Disabled %d MCP Apps for server %s", count, server_id)
         return count
 
     def _to_domain(self, db: MCPAppModel) -> MCPApp:

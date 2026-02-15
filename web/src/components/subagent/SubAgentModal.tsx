@@ -7,7 +7,6 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react';
 
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
 
 import {
   Modal,
@@ -21,6 +20,8 @@ import {
   message,
   Slider,
 } from 'antd';
+import { X } from 'lucide-react';
+
 
 import { useSubAgentStore, useSubAgentSubmitting } from '../../stores/subagent';
 

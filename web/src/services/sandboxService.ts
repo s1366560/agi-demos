@@ -371,11 +371,19 @@ class SandboxServiceImpl implements SandboxService {
       // Close specific session
       await this.api.delete(`/terminal/${sandboxId}/sessions/${sessionId}`);
     } else {
-      // Get active sessions and close them
+      // Get active sessions and close them all (continue on individual failures)
       const sessions = await this.api.get<any>(`/terminal/${sandboxId}/sessions`);
       if (sessions && sessions.length > 0) {
-        for (const session of sessions) {
-          await this.api.delete(`/terminal/${sandboxId}/sessions/${session.session_id}`);
+        const results = await Promise.allSettled(
+          sessions.map((session: any) =>
+            this.api.delete(`/terminal/${sandboxId}/sessions/${session.session_id}`),
+          ),
+        );
+        const failed = results.filter((r) => r.status === 'rejected');
+        if (failed.length > 0) {
+          logger.warn(
+            `[SandboxService] Failed to close ${failed.length}/${sessions.length} sessions`,
+          );
         }
       }
     }

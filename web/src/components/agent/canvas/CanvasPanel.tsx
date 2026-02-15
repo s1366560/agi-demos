@@ -46,15 +46,17 @@ import {
   type CanvasContentType,
 } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
+
 import { artifactService } from '@/services/artifactService';
 
-import { MARKDOWN_PROSE_CLASSES } from '../styles';
+import { StandardMCPAppRenderer } from '@/components/mcp-app/StandardMCPAppRenderer';
+import type { StandardMCPAppRendererHandle } from '@/components/mcp-app/StandardMCPAppRenderer';
+
 import { useMarkdownPlugins } from '../chat/markdownPlugins';
+import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 import { SelectionToolbar } from './SelectionToolbar';
-import { StandardMCPAppRenderer } from '@/components/mcp-app/StandardMCPAppRenderer';
 
-import type { StandardMCPAppRendererHandle } from '@/components/mcp-app/StandardMCPAppRenderer';
 
 const typeIcon = (type: CanvasContentType, size = 14) => {
   switch (type) {

@@ -7,8 +7,10 @@
  */
 
 import { memo, useState, useCallback, useRef, useEffect } from 'react';
+import type { ReactElement, ReactNode, HTMLAttributes } from 'react';
 
 import { useTranslation } from 'react-i18next';
+
 import { Copy, Check, PanelRight } from 'lucide-react';
 
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -16,7 +18,6 @@ import { useLayoutModeStore } from '@/stores/layoutMode';
 
 import { MermaidBlock } from './MermaidBlock';
 
-import type { ReactElement, ReactNode, HTMLAttributes } from 'react';
 
 function extractCodeContent(children: ReactNode): { text: string; language?: string } {
   if (!children) return { text: '' };

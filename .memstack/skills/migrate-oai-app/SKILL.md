@@ -170,33 +170,9 @@ Once the app loads in basic-host, confirm:
 
 After migrating the app to MCP Apps SDK, register it on the MemStack platform to render in the Canvas panel.
 
-### Path A: Simple HTML Apps (register_app)
+### Registering with register_mcp_server
 
-If the migrated app is a self-contained HTML file (no running server needed):
-
-```
-register_app(
-  title="My Migrated App",
-  file_path="/workspace/dist/index.html",
-  description="Migrated from OpenAI Apps SDK"
-)
-```
-
-The HTML receives data via postMessage:
-```html
-<script>
-window.addEventListener('message', (event) => {
-  if (event.data?.type === 'ui/toolResult') {
-    const result = event.data.toolResult;
-    // Use result data to populate the UI
-  }
-});
-</script>
-```
-
-### Path B: Full MCP Server Apps (register_mcp_server)
-
-If the migrated app needs a running MCP server for bidirectional tool calls:
+Build a full MCP server wrapping the migrated app, then register it:
 
 ```
 register_mcp_server(
@@ -208,12 +184,3 @@ register_mcp_server(
 ```
 
 This will install, start, and discover tools from the server. Any tools with `_meta.ui.resourceUri` will be auto-detected as MCP Apps and rendered in the Canvas panel.
-
-### When to use which
-
-| Scenario | Tool |
-|----------|------|
-| Static HTML visualization | `register_app` |
-| App with `callServerTool` interactions | `register_mcp_server` |
-| App needing real-time data fetching | `register_mcp_server` |
-| Quick prototype / chart / form | `register_app` |

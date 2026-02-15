@@ -4,9 +4,6 @@ When the agent builds a full MCP server in the sandbox (with bidirectional tool
 support), it calls this tool to register, start, and discover tools from it.
 Auto-detection of MCP Apps (tools with _meta.ui) happens through the existing
 pipeline.
-
-This is the advanced path (Path B) for agents who need full MCP server
-capabilities. For simple HTML UIs, use register_app instead.
 """
 
 import json
@@ -25,7 +22,7 @@ TOOL_DESCRIPTION = (
     "provides tools for bidirectional interaction.\n\n"
     "After registration, the server's tools are discovered automatically. "
     "Any tool that declares _meta.ui.resourceUri will auto-render its UI in "
-    "the Canvas panel when called - no separate register_app step needed.\n\n"
+    "the Canvas panel when called.\n\n"
     "The MCP server MUST implement resources/read to serve HTML for _meta.ui tools. "
     "HTML is fetched live from the server each time, never cached in the database.\n\n"
     "Example for stdio server:\n"
@@ -174,7 +171,7 @@ class RegisterMCPServerTool(AgentTool):
             install_data = self._parse_result(install_result)
             if not install_data.get("success", False):
                 error = install_data.get("error", "Installation failed")
-                return f"Error: Failed to install MCP server '{server_name}': {error}"
+                return f"Error: Failed to install MCP server '{server_name}':\n{error}"
 
             # Step 2: Start the MCP server
             start_result = await self._sandbox_adapter.call_tool(
@@ -190,7 +187,7 @@ class RegisterMCPServerTool(AgentTool):
             start_data = self._parse_result(start_result)
             if not start_data.get("success", False):
                 error = start_data.get("error", "Start failed")
-                return f"Error: Failed to start MCP server '{server_name}': {error}"
+                return f"Error: Failed to start MCP server '{server_name}':\n{error}"
 
             # Step 3: Discover tools
             discover_result = await self._sandbox_adapter.call_tool(
@@ -237,7 +234,7 @@ class RegisterMCPServerTool(AgentTool):
 
         except Exception as e:
             logger.error("Failed to register MCP server '%s': %s", server_name, e)
-            return f"Error: Failed to register MCP server '{server_name}' - {e}"
+            return f"Error: Failed to register MCP server '{server_name}':\n{e}"
 
     async def _detect_and_persist_apps(
         self, server_name: str, tools: List[Dict]

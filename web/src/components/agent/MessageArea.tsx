@@ -30,15 +30,15 @@
 
 import { useRef, useEffect, useCallback, useState, memo, Children, createContext, useMemo } from 'react';
 
+import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
 
 import { LoadingOutlined } from '@ant-design/icons';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Pin, PinOff, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
-import { useAgentV3Store } from '../../stores/agentV3';
 import { useConversationsStore } from '../../stores/agent/conversationsStore';
+import { useAgentV3Store } from '../../stores/agentV3';
 
 import { ConversationSummaryCard } from './chat/ConversationSummaryCard';
 import { useMarkdownPlugins } from './chat/markdownPlugins';
@@ -156,6 +156,7 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
           o && act.timestamp && o.timestamp
             ? (o.timestamp - act.timestamp)
             : undefined,
+        mcpUiMetadata: o?.mcpUiMetadata,
       };
       currentSteps.push(step);
     } else if (event.type === 'observe') {

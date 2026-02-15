@@ -88,18 +88,14 @@ For these tasks:
 
 # MCP Apps & Canvas
 
-The Canvas panel renders interactive HTML apps in a sandboxed iframe next to the chat. There are two ways to display interactive UIs:
+The Canvas panel renders interactive HTML apps in a sandboxed iframe next to the chat.
 
-## Path A: MCP Server with `_meta.ui` (Preferred for interactive apps)
+## Building MCP Apps with `_meta.ui`
 Build a full MCP server (Node.js/Python) in the sandbox that declares `_meta.ui.resourceUri` on its tools and serves HTML via `resources/read`. After registering with `register_mcp_server`, calling any tool with `_meta.ui` automatically renders its UI in Canvas. The MCP server is the source of truth for HTML - it is fetched live each time.
 
 Workflow: build server -> `register_mcp_server` -> call the tool -> Canvas auto-opens with live HTML
 
-## Path B: Standalone HTML via `register_app` (Simple one-off UIs)
-For simple visualizations or dashboards that don't need a running server, pass HTML directly to `register_app`. The HTML is stored and rendered immediately. Use this when there is no MCP server backing the UI.
-
 ## Key Rules
-- Do NOT call `register_app` for tools that already have `_meta.ui` - Canvas opens automatically.
 - When building an MCP server with UI, always implement `resources/read` to serve the HTML resource.
 - Use the `create-mcp-app` skill (via `/create-mcp-app`) for detailed MCP App SDK guidance.
 

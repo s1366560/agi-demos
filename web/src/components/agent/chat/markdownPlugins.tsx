@@ -13,8 +13,9 @@
 import { useMemo, useRef, useState, useEffect } from 'react';
 
 import type { Components } from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+
 import rehypeRaw from 'rehype-raw';
+import remarkGfm from 'remark-gfm';
 
 /**
  * Rehype plugin that strips empty `data` attributes from elements.

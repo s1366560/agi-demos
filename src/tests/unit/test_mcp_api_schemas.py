@@ -297,38 +297,77 @@ class TestMCPHealthSchemas:
         assert summary.error == 1
 
     def test_compute_server_health_statuses(self):
+        from types import SimpleNamespace
+
         from src.infrastructure.adapters.primary.web.routers.mcp.servers import (
             _compute_server_health,
         )
 
+        _s = SimpleNamespace
+
         # Disabled
-        h = _compute_server_health({"id": "1", "name": "s", "enabled": False})
+        h = _compute_server_health(
+            _s(
+                id="1",
+                name="s",
+                enabled=False,
+                sync_error=None,
+                last_sync_at=None,
+                discovered_tools=None,
+            )
+        )
         assert h.status == "disabled"
 
         # Error
-        h = _compute_server_health({"id": "2", "name": "s", "enabled": True, "sync_error": "fail"})
+        h = _compute_server_health(
+            _s(
+                id="2",
+                name="s",
+                enabled=True,
+                sync_error="fail",
+                last_sync_at=None,
+                discovered_tools=None,
+            )
+        )
         assert h.status == "error"
 
         # Unknown (never synced)
-        h = _compute_server_health({"id": "3", "name": "s", "enabled": True})
+        h = _compute_server_health(
+            _s(
+                id="3",
+                name="s",
+                enabled=True,
+                sync_error=None,
+                last_sync_at=None,
+                discovered_tools=None,
+            )
+        )
         assert h.status == "unknown"
 
         # Healthy
         h = _compute_server_health(
-            {
-                "id": "4",
-                "name": "s",
-                "enabled": True,
-                "last_sync_at": "2024-01-01",
-                "discovered_tools": [{"name": "t"}],
-            }
+            _s(
+                id="4",
+                name="s",
+                enabled=True,
+                sync_error=None,
+                last_sync_at="2024-01-01",
+                discovered_tools=[{"name": "t"}],
+            )
         )
         assert h.status == "healthy"
         assert h.tools_count == 1
 
         # Degraded (synced but no tools)
         h = _compute_server_health(
-            {"id": "5", "name": "s", "enabled": True, "last_sync_at": "2024-01-01"}
+            _s(
+                id="5",
+                name="s",
+                enabled=True,
+                sync_error=None,
+                last_sync_at="2024-01-01",
+                discovered_tools=None,
+            )
         )
         assert h.status == "degraded"
 

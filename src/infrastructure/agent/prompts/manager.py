@@ -309,7 +309,7 @@ Use these tools to search memories, query the knowledge graph, create memories, 
             names = ", ".join(mcp_tools[:5])
             section += f"""
 
-NOTE: The following MCP server tools may have interactive UIs that auto-render in Canvas when called: {names}. If these tools declare _meta.ui, their UI opens automatically - do NOT call register_app for them."""
+NOTE: The following MCP server tools may have interactive UIs that auto-render in Canvas when called: {names}. If these tools declare _meta.ui, their UI opens automatically."""
 
         return section
 
@@ -418,6 +418,8 @@ You MUST:
 2. Use the skill's workflow, tools, and output format as described
 3. Do NOT skip, summarize, or modify the execution plan
 4. Do NOT ask for confirmation before executing - proceed immediately
+5. Do NOT call the skill_loader tool - the skill instructions are already provided below
+6. Do NOT load or switch to any other skill - only "{name}" is active
 
 Skill: {name}
 Description: {description}"""

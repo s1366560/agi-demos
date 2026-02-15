@@ -1233,31 +1233,46 @@ class SessionProcessor:
             tool_part.output = self._sanitize_tool_output(output_str)
             tool_part.end_time = end_time
 
+            # Check if tool has MCP App UI metadata (needed for observe + mcp_app_result)
+            tool_instance = getattr(tool_def, "_tool_instance", None)
+            has_ui = getattr(tool_instance, "has_ui", False) if tool_instance else False
+
+            # Fallback: for mcp__ tools without _ui_metadata, try DB lookup
+            if not has_ui and tool_name.startswith("mcp__") and tool_instance:
+                _app_id_fb = getattr(tool_instance, "_app_id", "") or ""
+                if _app_id_fb:
+                    has_ui = True
+                    logger.debug(
+                        "[MCPApp] Fallback: tool %s has app_id=%s but no _ui_metadata",
+                        tool_name,
+                        _app_id_fb,
+                    )
+
+            # Build observe-level ui_metadata for MCP tools with UI
+            _observe_ui_meta: dict | None = None
+            if tool_instance and has_ui:
+                _raw_ui = getattr(tool_instance, "ui_metadata", None) or {}
+                _o_app_id = (
+                    getattr(tool_instance, "_last_app_id", "")
+                    or getattr(tool_instance, "_app_id", "")
+                    or ""
+                )
+                _o_server = getattr(tool_instance, "_server_name", "") or ""
+                _observe_ui_meta = {
+                    "resource_uri": _raw_ui.get("resourceUri", ""),
+                    "server_name": _o_server,
+                    "app_id": _o_app_id,
+                    "title": _raw_ui.get("title", ""),
+                }
+
             yield AgentObserveEvent(
                 tool_name=tool_name,
                 result=sse_result,
                 duration_ms=int((end_time - start_time) * 1000),
                 call_id=call_id,
                 tool_execution_id=tool_part.tool_execution_id,
+                ui_metadata=_observe_ui_meta,
             )
-
-            # Emit MCP App result event if the tool declares an interactive UI
-            tool_instance = getattr(tool_def, "_tool_instance", None)
-            has_ui = getattr(tool_instance, "has_ui", False) if tool_instance else False
-
-            # Fallback: for mcp__ tools without _ui_metadata, try DB lookup
-            if (
-                not has_ui
-                and tool_name.startswith("mcp__")
-                and tool_instance
-            ):
-                _app_id_fb = getattr(tool_instance, "_app_id", "") or ""
-                if _app_id_fb:
-                    has_ui = True
-                    logger.debug(
-                        "[MCPApp] Fallback: tool %s has app_id=%s but no _ui_metadata",
-                        tool_name, _app_id_fb,
-                    )
 
             if tool_instance and has_ui:
                 ui_meta = getattr(tool_instance, "ui_metadata", None) or {}
@@ -1268,7 +1283,7 @@ class SessionProcessor:
                 )
                 # Generate a synthetic app_id from tool name when no DB record
                 if not app_id:
-                    app_id = f"auto-{tool_name}"
+                    app_id = f"_synthetic_{tool_name}"
                 # Fetch live HTML from MCP server via resources/read
                 resource_html = ""
                 fetch_fn = getattr(tool_instance, "fetch_resource_html", None)
@@ -1278,16 +1293,18 @@ class SessionProcessor:
                     except Exception as fetch_err:
                         logger.warning(
                             "[MCPApp] fetch_resource_html failed for %s: %s",
-                            tool_name, fetch_err,
+                            tool_name,
+                            fetch_err,
                         )
                 if not resource_html:
-                    # Fallback to cached inline HTML (register_app path)
+                    # Fallback to cached inline HTML
                     resource_html = getattr(tool_instance, "_last_html", "") or ""
                 logger.debug(
-                    "[MCPApp] Emitting event: tool=%s, app_id=%s, "
-                    "resource_uri=%s, html_len=%d",
-                    tool_name, app_id,
-                    ui_meta.get("resourceUri", ""), len(resource_html),
+                    "[MCPApp] Emitting event: tool=%s, app_id=%s, resource_uri=%s, html_len=%d",
+                    tool_name,
+                    app_id,
+                    ui_meta.get("resourceUri", ""),
+                    len(resource_html),
                 )
                 _server_name = getattr(tool_instance, "_server_name", "") or ""
                 _project_id = (self._langfuse_context or {}).get("project_id", "")
@@ -1421,9 +1438,9 @@ class SessionProcessor:
                 except Exception as task_err:
                     logger.error(f"Task event emission failed: {task_err}", exc_info=True)
 
-            # Emit pending SSE events from register_app / register_mcp_server tools
+            # Emit pending SSE events from register_mcp_server tool
             if (
-                tool_name in ("register_app", "register_mcp_server")
+                tool_name == "register_mcp_server"
                 and tool_instance
                 and hasattr(tool_instance, "consume_pending_events")
             ):

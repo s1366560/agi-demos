@@ -131,6 +131,21 @@ class SandboxHealthCheckError(SandboxError):
         self.retryable = True
 
 
+class SandboxLockTimeoutError(SandboxError):
+    """Raised when a distributed lock cannot be acquired within timeout."""
+
+    def __init__(
+        self,
+        message: str,
+        project_id: Optional[str] = None,
+        timeout_seconds: Optional[float] = None,
+    ):
+        super().__init__(message, None, "acquire_lock")
+        self.project_id = project_id
+        self.timeout_seconds = timeout_seconds
+        self.retryable = True
+
+
 # Retryable error check
 def is_retryable_error(error: Exception) -> bool:
     """Check if an error is retryable.

@@ -130,7 +130,7 @@ async def list_mcp_apps(
 
 # === Direct Proxy Endpoints (must be before /{app_id} routes) ===
 # These endpoints don't require a DB app record.  They are used for
-# auto-discovered MCP Apps with synthetic app_ids (e.g. ``auto-hello``).
+# auto-discovered MCP Apps with synthetic app_ids (e.g. ``_synthetic_hello``).
 
 
 class MCPDirectToolCallRequest(BaseModel):
@@ -152,7 +152,7 @@ async def proxy_tool_call_direct(
     """Proxy a tool call directly to a sandbox MCP server (no DB lookup).
 
     Used when the MCP App was auto-discovered during an agent session
-    and has no persistent DB record (synthetic app_id like ``auto-<tool>``).
+    and has no persistent DB record (synthetic app_id like ``_synthetic_<tool>``).
     """
     try:
         container = get_container_with_db(request, db)
@@ -171,7 +171,10 @@ async def proxy_tool_call_direct(
     except Exception as e:
         logger.error(
             "Direct tool call proxy failed: project=%s, server=%s, tool=%s, err=%s",
-            body.project_id, body.server_name, body.tool_name, e,
+            body.project_id,
+            body.server_name,
+            body.tool_name,
+            e,
         )
         return MCPAppToolCallResponse(
             content=[{"type": "text", "text": f"Error: {e!s}"}],
@@ -259,6 +262,10 @@ async def proxy_tool_call(
 
     This endpoint is called by the AppBridge when the app needs to
     invoke tools on its server (bidirectional communication).
+
+    TODO(SEP-1865): Enforce tool visibility - reject calls to tools
+    where _meta.ui.visibility does not include "app". Requires caching
+    the server's tools/list result to avoid per-call latency.
     """
     service = _get_mcp_app_service(request, db)
     app = await service.get_app(app_id)
@@ -284,10 +291,12 @@ async def proxy_tool_call(
         logger.error("Tool call proxy failed: app=%s, tool=%s, err=%s", app_id, body.tool_name, e)
         # SEP-1865: Use JSON-RPC -32000 error code for tool call proxy failures
         return MCPAppToolCallResponse(
-            content=[{
-                "type": "text",
-                "text": f"Error: {e!s}",
-            }],
+            content=[
+                {
+                    "type": "text",
+                    "text": f"Error: {e!s}",
+                }
+            ],
             is_error=True,
             error_message=str(e),
             error_code=-32000,
@@ -386,7 +395,7 @@ async def proxy_resource_read(
     """Proxy a resources/read request to the appropriate MCP server.
 
     Resolution order:
-    1. If URI matches a register_app record -> serve from DB
+    1. If URI matches a registered app record -> serve from DB
     2. Otherwise -> proxy to sandbox MCP server via WebSocket
     """
     service = _get_mcp_app_service(request, db)

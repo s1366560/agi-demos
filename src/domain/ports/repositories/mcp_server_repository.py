@@ -7,7 +7,10 @@ following the Repository pattern.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
+
+if TYPE_CHECKING:
+    from src.domain.model.mcp.server import MCPServer
 
 
 class MCPServerRepositoryPort(ABC):
@@ -48,7 +51,7 @@ class MCPServerRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_by_id(self, server_id: str) -> Optional[dict]:
+    async def get_by_id(self, server_id: str) -> Optional["MCPServer"]:
         """
         Get an MCP server by its ID.
 
@@ -56,12 +59,12 @@ class MCPServerRepositoryPort(ABC):
             server_id: Server ID
 
         Returns:
-            Server data dictionary if found, None otherwise
+            MCPServer entity if found, None otherwise
         """
         pass
 
     @abstractmethod
-    async def get_by_name(self, project_id: str, name: str) -> Optional[dict]:
+    async def get_by_name(self, project_id: str, name: str) -> Optional["MCPServer"]:
         """
         Get an MCP server by name within a project.
 
@@ -70,7 +73,7 @@ class MCPServerRepositoryPort(ABC):
             name: Server name
 
         Returns:
-            Server data dictionary if found, None otherwise
+            MCPServer entity if found, None otherwise
         """
         pass
 
@@ -79,7 +82,7 @@ class MCPServerRepositoryPort(ABC):
         self,
         project_id: str,
         enabled_only: bool = False,
-    ) -> List[dict]:
+    ) -> List["MCPServer"]:
         """
         List all MCP servers for a project.
 
@@ -88,7 +91,7 @@ class MCPServerRepositoryPort(ABC):
             enabled_only: If True, only return enabled servers
 
         Returns:
-            List of server data dictionaries
+            List of MCPServer entities
         """
         pass
 
@@ -97,7 +100,7 @@ class MCPServerRepositoryPort(ABC):
         self,
         tenant_id: str,
         enabled_only: bool = False,
-    ) -> List[dict]:
+    ) -> List["MCPServer"]:
         """
         List all MCP servers for a tenant (across all projects).
 
@@ -106,7 +109,7 @@ class MCPServerRepositoryPort(ABC):
             enabled_only: If True, only return enabled servers
 
         Returns:
-            List of server data dictionaries
+            List of MCPServer entities
         """
         pass
 
@@ -142,6 +145,7 @@ class MCPServerRepositoryPort(ABC):
         server_id: str,
         tools: List[dict],
         last_sync_at: datetime,
+        sync_error: Optional[str] = None,
     ) -> bool:
         """
         Update the discovered tools for an MCP server.
@@ -150,6 +154,7 @@ class MCPServerRepositoryPort(ABC):
             server_id: Server ID
             tools: List of tool definitions
             last_sync_at: Timestamp of last sync
+            sync_error: Optional error message from last sync attempt
 
         Returns:
             True if updated successfully, False if server not found
@@ -174,7 +179,7 @@ class MCPServerRepositoryPort(ABC):
         self,
         tenant_id: str,
         project_id: Optional[str] = None,
-    ) -> List[dict]:
+    ) -> List["MCPServer"]:
         """
         Get all enabled MCP servers.
 
@@ -183,6 +188,6 @@ class MCPServerRepositoryPort(ABC):
             project_id: Optional project ID to filter by
 
         Returns:
-            List of enabled server data dictionaries
+            List of enabled MCPServer entities
         """
         pass

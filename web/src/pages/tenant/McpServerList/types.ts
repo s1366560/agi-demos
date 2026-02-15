@@ -19,6 +19,8 @@ export interface StatsCardProps {
   title: string;
   value: number | string;
   icon: string;
+  iconBgColor?: string;
   iconColor?: string;
   valueColor?: string;
+  subtitle?: string;
 }

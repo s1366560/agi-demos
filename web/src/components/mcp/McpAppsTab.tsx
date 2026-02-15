@@ -5,9 +5,9 @@
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 
-import { message, Popconfirm, Tag, Tooltip, Input, Spin } from 'antd';
+import { message, Popconfirm, Tag, Tooltip, Input, Spin, Badge } from 'antd';
 import {
-  AppWindow,
+  LayoutGrid,
   Trash2,
   RefreshCw,
   ExternalLink,
@@ -19,6 +19,7 @@ import {
   Ban,
   Search,
   RotateCcw,
+  Sparkles,
 } from 'lucide-react';
 
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -87,113 +88,122 @@ const McpAppCard: React.FC<McpAppCardProps> = ({
   /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
-    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 hover:shadow-md transition-shadow">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center flex-shrink-0">
-            <AppWindow size={16} className="text-violet-600 dark:text-violet-400" />
+    <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 hover:shadow-md transition-shadow">
+      <div className="p-4">
+        {/* App Info - Compact */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+              isAgentDeveloped 
+                ? 'bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400' 
+                : 'bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400'
+            }`}>
+              {isAgentDeveloped ? <Sparkles size={16} /> : <LayoutGrid size={16} />}
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                {title}
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                {app.server_name}
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <h3 className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
-              {title}
-            </h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
-              {app.server_name} / {app.tool_name}
+          <Tag 
+            color={statusCfg.color} 
+            className="text-xs flex-shrink-0 m-0"
+            style={{ margin: 0 }}
+          >
+            {statusCfg.label}
+          </Tag>
+        </div>
+
+        {/* Resource URI - Compact */}
+        <div className="mb-3 p-2 bg-slate-50 dark:bg-slate-900/50 rounded border border-slate-100 dark:border-slate-800">
+          <code className="text-xs text-slate-600 dark:text-slate-400 break-all font-mono">
+            {app.ui_metadata?.resourceUri || 'No resource URI'}
+          </code>
+        </div>
+
+        {/* Error message */}
+        {app.error_message && (
+          <div className="mb-3 p-2 bg-red-50 dark:bg-red-950/20 rounded border border-red-100 dark:border-red-800/30">
+            <p className="text-xs text-red-600 dark:text-red-400 line-clamp-2">{app.error_message}</p>
+            <button
+              type="button"
+              onClick={() => onRetry(app.id)}
+              disabled={retrying.has(app.id)}
+              className="mt-1.5 flex items-center gap-1 px-2 py-1 text-xs rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 disabled:opacity-50 transition-colors"
+            >
+              {retrying.has(app.id) ? (
+                <Loader2 size={10} className="animate-spin" />
+              ) : (
+                <RotateCcw size={10} />
+              )}
+              Retry
+            </button>
+          </div>
+        )}
+
+        {/* Loading timeout hint */}
+        {app.status === 'loading' && loadingTimeout && (
+          <div className="mb-3 p-2 bg-amber-50 dark:bg-amber-950/20 rounded border border-amber-100 dark:border-amber-800/30">
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              Taking longer than expected. Try refreshing.
             </p>
           </div>
-        </div>
-        <Tag color={statusCfg.color} className="flex items-center gap-1 text-xs flex-shrink-0">
-          {statusCfg.icon}
-          {statusCfg.label}
-        </Tag>
-      </div>
-
-      {/* Source badge */}
-      <div className="flex items-center gap-2 mb-3">
-        <Tooltip title={isAgentDeveloped ? 'Created by Agent in sandbox' : 'Added by user'}>
-          <Tag
-            className="flex items-center gap-1 text-xs"
-            color={isAgentDeveloped ? 'purple' : 'cyan'}
-          >
-            {isAgentDeveloped ? <Bot size={10} /> : <User size={10} />}
-            {isAgentDeveloped ? 'Agent Developed' : 'User Added'}
-          </Tag>
-        </Tooltip>
-        {app.has_resource && app.resource_size_bytes && (
-          <span className="text-xs text-slate-400">
-            {(app.resource_size_bytes / 1024).toFixed(1)} KB
-          </span>
         )}
-      </div>
 
-      {/* Resource URI */}
-      <div className="mb-3 p-2 bg-slate-50 dark:bg-slate-900/50 rounded-md">
-        <code className="text-xs text-slate-600 dark:text-slate-400 break-all">
-          {app.ui_metadata?.resourceUri || 'No resource URI'}
-        </code>
-      </div>
-
-      {/* Error message with retry */}
-      {app.error_message && (
-        <div className="mb-3 p-2 bg-red-50 dark:bg-red-950/20 rounded-md border border-red-200/60 dark:border-red-800/30">
-          <p className="text-xs text-red-600 dark:text-red-400 line-clamp-2">{app.error_message}</p>
-          <button
-            type="button"
-            onClick={() => onRetry(app.id)}
-            disabled={retrying.has(app.id)}
-            className="mt-1.5 flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 disabled:opacity-50 transition-colors"
-          >
-            {retrying.has(app.id) ? (
-              <Loader2 size={10} className="animate-spin" />
-            ) : (
-              <RotateCcw size={10} />
+        {/* Actions - Compact */}
+        <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-700/50">
+          <div className="flex items-center gap-2">
+            <Tooltip title={isAgentDeveloped ? 'Created by Agent' : 'Added by user'}>
+              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs ${
+                isAgentDeveloped 
+                  ? 'text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20' 
+                  : 'text-cyan-600 dark:text-cyan-400 bg-cyan-50 dark:bg-cyan-900/20'
+              }`}>
+                {isAgentDeveloped ? <Bot size={10} /> : <User size={10} />}
+                {isAgentDeveloped ? 'Agent' : 'User'}
+              </span>
+            </Tooltip>
+            {app.has_resource && app.resource_size_bytes && (
+              <span className="text-xs text-slate-400 dark:text-slate-500">
+                {(app.resource_size_bytes / 1024).toFixed(1)} KB
+              </span>
             )}
-            Retry
-          </button>
-        </div>
-      )}
-
-      {/* Loading timeout hint */}
-      {app.status === 'loading' && loadingTimeout && (
-        <div className="mb-3 p-2 bg-yellow-50 dark:bg-yellow-950/20 rounded-md border border-yellow-200/60 dark:border-yellow-800/30">
-          <p className="text-xs text-yellow-700 dark:text-yellow-300">
-            Taking longer than expected. Try refreshing the list.
-          </p>
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex items-center gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
-        {app.status === 'ready' && (
-          <button
-            type="button"
-            onClick={() => onOpenInCanvas(app)}
-            className="flex items-center gap-1 px-2 py-1 text-xs rounded-md bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors"
-          >
-            <ExternalLink size={12} />
-            Open in Canvas
-          </button>
-        )}
-        <div className="flex-1" />
-        <Popconfirm
-          title="Delete this MCP App?"
-          onConfirm={() => onDelete(app.id)}
-          okText="Delete"
-          cancelText="Cancel"
-        >
-          <button
-            type="button"
-            disabled={deleting.has(app.id)}
-            className="p-1.5 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 transition-colors disabled:opacity-50"
-          >
-            {deleting.has(app.id) ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <Trash2 size={14} />
+          </div>
+          <div className="flex items-center gap-1">
+            {app.status === 'ready' && (
+              <button
+                type="button"
+                onClick={() => onOpenInCanvas(app)}
+                className="flex items-center gap-1 px-2 py-1 text-xs rounded text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors"
+              >
+                <ExternalLink size={12} />
+                Open
+              </button>
             )}
-          </button>
-        </Popconfirm>
+            <Popconfirm
+              title="Delete this MCP App?"
+              onConfirm={() => onDelete(app.id)}
+              okText="Delete"
+              cancelText="Cancel"
+            >
+              <button
+                type="button"
+                disabled={deleting.has(app.id)}
+                className="p-1.5 rounded text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                {deleting.has(app.id) ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Trash2 size={14} />
+                )}
+              </button>
+            </Popconfirm>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -294,48 +304,70 @@ export const McpAppsTab: React.FC = () => {
     );
   }
 
-  return (
-    <div className="space-y-6">
-      {/* Toolbar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <AppWindow size={18} className="text-violet-500" />
-          <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            {appList.length} app{appList.length !== 1 ? 's' : ''}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={handleRefresh}
-          className="flex items-center gap-1 px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-        >
-          <RefreshCw size={12} />
-          Refresh
-        </button>
-      </div>
+  // Status counts
+  const statusCounts = useMemo(() => {
+    const counts: Record<MCPAppStatus, number> = {
+      discovered: 0, loading: 0, ready: 0, error: 0, disabled: 0
+    };
+    Object.values(apps).forEach(app => {
+      counts[app.status]++;
+    });
+    return counts;
+  }, [apps]);
 
-      {/* Search (when many apps) */}
-      {Object.keys(apps).length > 3 && (
-        <Input
-          placeholder="Search apps..."
-          prefix={<Search size={14} className="text-slate-400" />}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          size="small"
-          allowClear
-        />
-      )}
+  return (
+    <div className="space-y-5">
+      {/* Header Stats */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+            <div className="w-8 h-8 rounded-lg bg-violet-50 dark:bg-violet-900/20 flex items-center justify-center">
+              <LayoutGrid size={16} className="text-violet-500" />
+            </div>
+            <span>
+              <span className="font-semibold text-slate-900 dark:text-white">{appList.length}</span> apps
+            </span>
+          </div>
+          {statusCounts.ready > 0 && (
+            <Badge count={statusCounts.ready} color="green">
+              <span className="text-xs text-slate-500 dark:text-slate-400 px-2 py-1 bg-green-50 dark:bg-green-900/20 rounded-full">Ready</span>
+            </Badge>
+          )}
+          {statusCounts.error > 0 && (
+            <Badge count={statusCounts.error} color="red">
+              <span className="text-xs text-slate-500 dark:text-slate-400 px-2 py-1 bg-red-50 dark:bg-red-900/20 rounded-full">Errors</span>
+            </Badge>
+          )}
+        </div>
+        
+        <div className="flex items-center gap-3">
+          {Object.keys(apps).length > 5 && (
+            <Input
+              placeholder="Search apps..."
+              prefix={<Search size={14} className="text-slate-400" />}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-48"
+              allowClear
+            />
+          )}
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-400 transition-colors"
+          >
+            <RefreshCw size={14} />
+            Refresh
+          </button>
+        </div>
+      </div>
 
       {/* Grid */}
       {appList.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <span className="material-symbols-outlined text-5xl text-slate-300 dark:text-slate-600 mb-4">
-            widgets
-          </span>
-          <p className="text-slate-500 dark:text-slate-400">
-            {Object.keys(apps).length === 0
-              ? 'No MCP Apps discovered yet. Apps are auto-detected when MCP tools declare UI resources.'
-              : 'No apps match your search.'}
+        <div className="flex flex-col items-center justify-center py-12 text-center bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 border-dashed">
+          <LayoutGrid size={32} className="text-slate-300 dark:text-slate-500 mb-3" />
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            No MCP Apps discovered yet
           </p>
         </div>
       ) : (

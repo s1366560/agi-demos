@@ -24,6 +24,7 @@ from sqlalchemy.exc import IntegrityError
 
 from src.application.services.sandbox_profile import SandboxProfileType
 from src.application.services.sandbox_profile import get_profile as get_sandbox_profile
+from src.domain.model.sandbox.exceptions import SandboxLockTimeoutError
 from src.domain.model.sandbox.project_sandbox import ProjectSandbox, ProjectSandboxStatus
 from src.domain.ports.repositories.project_sandbox_repository import ProjectSandboxRepository
 from src.domain.ports.services.distributed_lock_port import DistributedLockPort
@@ -209,14 +210,14 @@ class ProjectSandboxLifecycleService:
                     profile=profile,
                     config_override=config_override,
                 )
-            except IntegrityError as e:
-                # Unique constraint violation - another worker created the sandbox
+            except (IntegrityError, SandboxLockTimeoutError) as e:
+                # Unique constraint violation or lock timeout - retry
                 logger.info(
                     f"Concurrent sandbox creation detected for project {project_id} "
                     f"(attempt {attempt + 1}/{max_retries}), retrying..."
                 )
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(0.2 * (attempt + 1))  # Exponential backoff
+                    await asyncio.sleep(0.2 * (2**attempt))
                     continue
                 # Final attempt failed, try to return existing
                 existing = await self._repository.find_by_project(project_id)
@@ -288,10 +289,10 @@ class ProjectSandboxLifecycleService:
                             return await self._get_sandbox_info(existing)
                         # Created but not usable, fall through to handle
                     # Lock not acquired and no existing sandbox, retry
-                    raise IntegrityError(
-                        statement="distributed_lock",
-                        params={},
-                        orig=Exception("Could not acquire distributed lock"),
+                    raise SandboxLockTimeoutError(
+                        message=f"Could not acquire lock for project {project_id}",
+                        project_id=project_id,
+                        timeout_seconds=30.0,
                     )
 
                 # Lock acquired, proceed with double-check
@@ -597,12 +598,17 @@ class ProjectSandboxLifecycleService:
         )
 
         results = []
-        for association in associations:
-            try:
-                info = await self._get_sandbox_info(association)
-                results.append(info)
-            except Exception as e:
-                logger.warning(f"Failed to get info for sandbox {association.sandbox_id}: {e}")
+        if not associations:
+            return results
+
+        # Parallelize info retrieval
+        tasks = [self._get_sandbox_info(a) for a in associations]
+        gathered = await asyncio.gather(*tasks, return_exceptions=True)
+        for association, result in zip(associations, gathered):
+            if isinstance(result, Exception):
+                logger.warning(f"Failed to get info for sandbox {association.sandbox_id}: {result}")
+            else:
+                results.append(result)
 
         return results
 
@@ -649,38 +655,41 @@ class ProjectSandboxLifecycleService:
         Returns:
             Updated SandboxInfo
         """
-        association = await self._repository.find_by_project(project_id)
-        if not association:
-            raise SandboxNotFoundError(
-                message=f"No sandbox found for project {project_id}",
-                project_id=project_id,
-            )
+        # Acquire project lock to prevent concurrent status updates
+        project_lock = await self._get_project_lock(project_id)
+        async with project_lock:
+            association = await self._repository.find_by_project(project_id)
+            if not association:
+                raise SandboxNotFoundError(
+                    message=f"No sandbox found for project {project_id}",
+                    project_id=project_id,
+                )
 
-        # Get actual container status
-        instance = await self._adapter.get_sandbox(association.sandbox_id)
+            # Get actual container status
+            instance = await self._adapter.get_sandbox(association.sandbox_id)
 
-        if not instance:
-            # Container doesn't exist but association does
-            if association.status not in (
-                ProjectSandboxStatus.TERMINATED,
-                ProjectSandboxStatus.ERROR,
-            ):
-                association.mark_error("Container not found")
+            if not instance:
+                # Container doesn't exist but association does
+                if association.status not in (
+                    ProjectSandboxStatus.TERMINATED,
+                    ProjectSandboxStatus.ERROR,
+                ):
+                    association.mark_error("Container not found")
+                    await self._repository.save(association)
+            else:
+                # Update status based on container state
+                container_status = instance.status
+
+                if container_status == SandboxStatus.RUNNING:
+                    association.mark_healthy()
+                elif container_status == SandboxStatus.STOPPED:
+                    association.mark_stopped()
+                elif container_status == SandboxStatus.ERROR:
+                    association.mark_error("Container in error state")
+
                 await self._repository.save(association)
-        else:
-            # Update status based on container state
-            container_status = instance.status
 
-            if container_status == SandboxStatus.RUNNING:
-                association.mark_healthy()
-            elif container_status == SandboxStatus.STOPPED:
-                association.mark_stopped()
-            elif container_status == SandboxStatus.ERROR:
-                association.mark_error("Container in error state")
-
-            await self._repository.save(association)
-
-        return await self._get_sandbox_info(association)
+            return await self._get_sandbox_info(association)
 
     # -------------------------------------------------------------------------
     # Private helper methods

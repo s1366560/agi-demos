@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My MCP App</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    :root {
+      --bg: var(--color-background-primary, #ffffff);
+      --text: var(--color-text-primary, #1a1a1a);
+      --text-secondary: var(--color-text-secondary, #666666);
+      --border: var(--color-border-primary, #e0e0e0);
+      --accent: var(--color-accent-primary, #0066cc);
+      --radius: var(--border-radius-md, 8px);
+      --font: var(--font-sans, system-ui, sans-serif);
+    }
+    
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: var(--color-background-primary, #1a1a1a);
+        --text: var(--color-text-primary, #f0f0f0);
+        --text-secondary: var(--color-text-secondary, #a0a0a0);
+        --border: var(--color-border-primary, #333333);
+      }
+    }
+    
+    html.dark {
+      --bg: var(--color-background-primary, #1a1a1a);
+      --text: var(--color-text-primary, #f0f0f0);
+      --text-secondary: var(--color-text-secondary, #a0a0a0);
+      --border: var(--color-border-primary, #333333);
+    }
+    
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    
+    .card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    
+    h1 {
+      font-size: 24px;
+      margin-bottom: 16px;
+    }
+    
+    p {
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+    
+    .data-display {
+      background: var(--color-background-secondary, #f5f5f5);
+      border-radius: var(--radius);
+      padding: 16px;
+      font-family: var(--font-mono, monospace);
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    
+    .button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: var(--radius);
+      cursor: pointer;
+      font-size: 14px;
+      transition: opacity 0.2s;
+    }
+    
+    .button:hover {
+      opacity: 0.9;
+    }
+    
+    .loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      color: var(--text-secondary);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>My MCP App</h1>
+      <p>Waiting for tool input...</p>
+      <div id="content" class="data-display">
+        No data received yet.
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { App } from "@modelcontextprotocol/ext-apps";
+    
+    // Initialize app
+    const app = new App({
+      name: "My MCP App",
+      version: "1.0.0"
+    });
+    
+    // DOM elements
+    const contentEl = document.getElementById("content");
+    const titleEl = document.querySelector("h1");
+    const descEl = document.querySelector("p");
+    
+    // ============================================
+    // HANDLERS - Register BEFORE connect()
+    // ============================================
+    
+    // Called when tool is invoked with input
+    app.ontoolinput = (params) => {
+      console.log("Tool input received:", params);
+      
+      const { arguments: args } = params;
+      
+      // Update UI with tool arguments
+      descEl.textContent = "Data received from tool call:";
+      contentEl.textContent = JSON.stringify(args, null, 2);
+    };
+    
+    // Called when tool execution completes
+    app.ontoolresult = (result) => {
+      console.log("Tool result received:", result);
+      
+      // Update UI with result data
+      const data = result.content?.[0]?.text;
+      if (data) {
+        try {
+          const parsed = JSON.parse(data);
+          contentEl.textContent = JSON.stringify(parsed, null, 2);
+        } catch {
+          contentEl.textContent = data;
+        }
+      }
+    };
+    
+    // Called when host context changes (theme, display mode, etc.)
+    app.onhostcontextchanged = (ctx) => {
+      console.log("Host context changed:", ctx);
+      
+      // Apply theme
+      if (ctx.theme) {
+        document.documentElement.className = ctx.theme;
+      }
+      
+      // Handle safe area insets if present
+      if (ctx.safeAreaInsets) {
+        const { top, right, bottom, left } = ctx.safeAreaInsets;
+        document.body.style.padding = `${top}px ${right}px ${bottom}px ${left}px`;
+      }
+    };
+    
+    // Called when app is being torn down
+    app.onteardown = async () => {
+      console.log("App tearing down");
+      return {};  // Return any final state
+    };
+    
+    // ============================================
+    // CONNECT - After all handlers registered
+    // ============================================
+    
+    await app.connect();
+    console.log("App connected successfully");
+  </script>
+</body>
+</html>

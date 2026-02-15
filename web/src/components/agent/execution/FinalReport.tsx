@@ -8,8 +8,8 @@ import { useState, useEffect } from 'react';
 
 import { formatDateTime } from '@/utils/date';
 
-import { MARKDOWN_PROSE_CLASSES } from '../styles';
 import { MaterialIcon } from '../shared';
+import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 export interface FinalReportProps {
   /** Report content (markdown or plain text) */

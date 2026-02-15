@@ -3,6 +3,7 @@
 Manages dynamic registration of Sandbox MCP tools to Agent tool context.
 """
 
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -299,7 +300,6 @@ class SandboxToolRegistry:
                 return None
 
             # Parse JSON (stored as str(dict) format)
-            import json
             reg_data = json.loads(data)
 
             return SandboxToolRegistration(

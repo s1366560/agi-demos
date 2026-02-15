@@ -559,35 +559,19 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create todo tools: {e}")
 
-    # 10. Add RegisterAppTool (register interactive HTML apps in Canvas)
+    # 10. Add RegisterMCPServerTool (register full MCP servers built in sandbox)
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as app_session_factory,
         )
-        from src.infrastructure.agent.tools.register_app import RegisterAppTool
+        from src.infrastructure.agent.tools.register_mcp_server import RegisterMCPServerTool
 
-        register_app_tool = RegisterAppTool(
-            tenant_id=tenant_id,
-            project_id=project_id,
-            session_factory=app_session_factory,
-            sandbox_adapter=_mcp_sandbox_adapter,
-        )
-        # Set sandbox_id from loaded sandbox tools
+        # Resolve sandbox_id from loaded sandbox tools
         sandbox_id_for_tools = None
         for tool in tools.values():
             if hasattr(tool, "sandbox_id") and tool.sandbox_id:
                 sandbox_id_for_tools = tool.sandbox_id
-                register_app_tool.set_sandbox_id(sandbox_id_for_tools)
                 break
-        tools["register_app"] = register_app_tool
-        logger.info(f"Agent Worker: RegisterAppTool added for project {project_id}")
-    except Exception as e:
-        logger.warning(f"Agent Worker: Failed to create RegisterAppTool: {e}")
-        sandbox_id_for_tools = None
-
-    # 11. Add RegisterMCPServerTool (register full MCP servers built in sandbox)
-    try:
-        from src.infrastructure.agent.tools.register_mcp_server import RegisterMCPServerTool
 
         register_server_tool = RegisterMCPServerTool(
             tenant_id=tenant_id,
@@ -787,14 +771,12 @@ async def _load_project_sandbox_tools(
             )
 
             # Resolve MCPApp IDs for sandbox MCP tools so processor can emit app events.
-            # This handles both tools that declare _meta.ui AND tools registered via
-            # register_app (which uses different naming). We fetch ALL project apps
+            # This handles tools that declare _meta.ui. We fetch ALL project apps
             # from DB and fuzzy-match against all adapters.
             from src.infrastructure.mcp.sandbox_tool_adapter import SandboxMCPServerToolAdapter
 
             all_adapters = [
-                t for t in user_mcp_tools.values()
-                if isinstance(t, SandboxMCPServerToolAdapter)
+                t for t in user_mcp_tools.values() if isinstance(t, SandboxMCPServerToolAdapter)
             ]
             if all_adapters:
                 try:
@@ -819,16 +801,17 @@ async def _load_project_sandbox_tools(
                                 if not adapter._ui_metadata and matched_app.ui_metadata:
                                     adapter._ui_metadata = matched_app.ui_metadata.to_dict()
                                 logger.info(
-                                    "[AgentWorker] Resolved MCPApp %s for tool %s "
-                                    "(ui_metadata=%s)",
-                                    matched_app.id, adapter.name,
+                                    "[AgentWorker] Resolved MCPApp %s for tool %s (ui_metadata=%s)",
+                                    matched_app.id,
+                                    adapter.name,
                                     adapter._ui_metadata,
                                 )
                             else:
                                 logger.warning(
                                     "[AgentWorker] No MCPApp match for tool %s "
                                     "(server=%s, original=%s, has _ui_metadata=%s)",
-                                    adapter.name, adapter._server_name,
+                                    adapter.name,
+                                    adapter._server_name,
                                     adapter._original_tool_name,
                                     adapter._ui_metadata is not None,
                                 )
@@ -987,13 +970,13 @@ async def _auto_restore_mcp_servers(
         logger.info(
             f"[AgentWorker] Auto-restoring {len(servers_to_restore)} MCP servers "
             f"for project {project_id}: "
-            f"{[s['name'] for s in servers_to_restore]}"
+            f"{[s.name for s in servers_to_restore]}"
         )
 
         for server in servers_to_restore:
-            server_name = server["name"]
-            server_type = server.get("server_type", "stdio")
-            transport_config = server.get("transport_config", {})
+            server_name = server.name
+            server_type = server.server_type or "stdio"
+            transport_config = server.transport_config or {}
 
             try:
                 config_json = json.dumps(transport_config)

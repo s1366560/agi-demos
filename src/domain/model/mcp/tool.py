@@ -76,6 +76,11 @@ class MCPToolSchema:
         meta = data.get("_meta")
         if meta and isinstance(meta, dict):
             ui_metadata = meta.get("ui")
+            # SEP-1865: Fallback for deprecated flat format _meta["ui/resourceUri"]
+            if not ui_metadata:
+                deprecated_uri = meta.get("ui/resourceUri")
+                if deprecated_uri:
+                    ui_metadata = {"resourceUri": deprecated_uri}
         return cls(
             name=data.get("name", ""),
             description=data.get("description"),

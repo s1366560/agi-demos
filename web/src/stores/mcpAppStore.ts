@@ -10,8 +10,8 @@ import { devtools } from 'zustand/middleware';
 import { useShallow } from 'zustand/react/shallow';
 
 import { mcpAppAPI } from '@/services/mcpAppService';
-import { getErrorMessage } from '@/types/common';
 
+import { getErrorMessage } from '@/types/common';
 import type { MCPApp, MCPAppResource, MCPAppToolCallResponse } from '@/types/mcpApp';
 
 interface MCPAppState {
@@ -57,7 +57,17 @@ export const useMCPAppStore = create<MCPAppState>()(
           for (const app of appsList) {
             apps[app.id] = app;
           }
-          set({ apps, loading: false });
+          // Prune stale resources/cache entries for apps no longer in backend
+          const prev = get();
+          const resources = { ...prev.resources };
+          const resourceCachedAt = { ...prev.resourceCachedAt };
+          for (const id of Object.keys(resources)) {
+            if (!apps[id]) {
+              delete resources[id];
+              delete resourceCachedAt[id];
+            }
+          }
+          set({ apps, resources, resourceCachedAt, loading: false });
         } catch (err) {
           set({ error: getErrorMessage(err), loading: false });
         }

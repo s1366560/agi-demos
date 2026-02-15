@@ -29,9 +29,10 @@ import {
 import { useTemplateStore, useTemplateActions } from '@/stores/templateStore';
 import { useCurrentTenant } from '@/stores/tenant';
 
+import type { PromptTemplateData } from '@/services/templateService';
+
 import { VariableInputModal } from './VariableInputModal';
 
-import type { PromptTemplateData } from '@/services/templateService';
 
 export interface PromptTemplate {
   id: string;

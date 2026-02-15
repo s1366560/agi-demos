@@ -9,7 +9,6 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from src.domain.model.mcp.tool import MCPToolSchema
 from src.domain.model.mcp.transport import TransportConfig, TransportType
 
 
@@ -170,12 +169,20 @@ class MCPServer:
     name: str
     project_id: Optional[str] = None
     description: Optional[str] = None
-    config: Optional[MCPServerConfig] = None
-    status: MCPServerStatus = field(default_factory=MCPServerStatus.disconnected_status)
-    discovered_tools: List[MCPToolSchema] = field(default_factory=list)
+
+    # Flat DB-column fields used by repository and routers
+    server_type: Optional[str] = None
+    transport_config: Optional[Dict[str, Any]] = None
+    enabled: bool = True
+    discovered_tools: List[Any] = field(default_factory=list)
+    sync_error: Optional[str] = None
     last_sync_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+
+    # Rich typed fields (optional, for higher-level consumers)
+    config: Optional[MCPServerConfig] = None
+    status: MCPServerStatus = field(default_factory=MCPServerStatus.disconnected_status)
     workflow_id: Optional[str] = None  # Temporal workflow ID if managed by Temporal
 
     def update_status(self, new_status: MCPServerStatus) -> None:
@@ -184,7 +191,7 @@ class MCPServer:
 
     def update_tools(
         self,
-        tools: List[MCPToolSchema],
+        tools: List[Any],
         sync_time: Optional[datetime] = None,
     ) -> None:
         """Update discovered tools and sync timestamp."""
@@ -209,6 +216,11 @@ class MCPServer:
             "project_id": self.project_id,
             "name": self.name,
             "description": self.description,
+            "server_type": self.server_type,
+            "transport_config": self.transport_config,
+            "enabled": self.enabled,
+            "discovered_tools": self.discovered_tools,
+            "sync_error": self.sync_error,
             "status": self.status.status.value,
             "connected": self.status.connected,
             "tool_count": self.tool_count,
@@ -216,5 +228,6 @@ class MCPServer:
             "error": self.status.error,
             "last_sync_at": self.last_sync_at.isoformat() if self.last_sync_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "workflow_id": self.workflow_id,
         }

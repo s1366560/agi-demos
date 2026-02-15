@@ -315,17 +315,17 @@ export const useSandboxStore = create<SandboxState>()(
 
           // Extract text content from result
           let content = '';
-          if (result.content && result.content.length > 0) {
+          if (result?.content && Array.isArray(result.content) && result.content.length > 0) {
             content = result.content
-              .map((c) => c.text || '')
+              .map((c: any) => (c && typeof c.text === 'string' ? c.text : ''))
               .filter(Boolean)
               .join('\n');
           }
 
           return {
-            success: !result.is_error,
+            success: !result?.is_error,
             content,
-            isError: result.is_error,
+            isError: result?.is_error ?? true,
           };
         } catch (error) {
           logger.error('[SandboxStore] Tool execution failed:', error);

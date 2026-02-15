@@ -560,8 +560,14 @@ class TestHealthCheck:
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_health_check_returns_false_for_unhealthy(self, service, mock_adapter):
-        """Should return False when sandbox is unhealthy."""
+    async def test_health_check_returns_false_for_unhealthy(self, mock_repository, mock_adapter, mock_lock):
+        """Should return False when sandbox is unhealthy and auto_recover is disabled."""
+        service = UnifiedSandboxService(
+            repository=mock_repository,
+            sandbox_adapter=mock_adapter,
+            distributed_lock=mock_lock,
+            auto_recover=False,
+        )
         mock_adapter.health_check.return_value = False
 
         result = await service.health_check(project_id="proj-123")

@@ -4,8 +4,9 @@
 
 import { memo } from 'react';
 
-import { Bot, Plus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+import { Bot, Plus } from 'lucide-react';
 
 interface SubAgentEmptyStateProps {
   hasFilters: boolean;

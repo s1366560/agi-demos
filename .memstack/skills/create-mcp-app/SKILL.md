@@ -1,6 +1,6 @@
 ---
 name: create-mcp-app
-description: This skill should be used when the user asks to "create an MCP App", "add a UI to an MCP tool", "build an interactive MCP View", "scaffold an MCP App", "build a dashboard", "create a visualization", "create an interactive form", "register an app", or needs guidance on MCP Apps SDK patterns, UI-resource registration, MCP App lifecycle, host integration, or using register_app / register_mcp_server tools. Provides comprehensive guidance for building MCP Apps with interactive UIs.
+description: This skill should be used when the user asks to "create an MCP App", "add a UI to an MCP tool", "build an interactive MCP View", "scaffold an MCP App", "build a dashboard", "create a visualization", "create an interactive form", "register an app", or needs guidance on MCP Apps SDK patterns, UI-resource registration, MCP App lifecycle, host integration, or using the register_mcp_server tool. Provides comprehensive guidance for building MCP Apps with interactive UIs.
 ---
 
 # Create MCP App
@@ -345,64 +345,7 @@ await app.sendLog({ level: "error", data: { error: err.message } });
 
 When building apps within the MemStack sandbox, use these platform-specific tools to register and display apps in the Canvas panel.
 
-### Path A: Simple HTML Apps (register_app)
-
-For self-contained HTML apps that don't need a running MCP server (charts, dashboards, forms, visualizations):
-
-```
-Tool: register_app
-Parameters:
-  - title: Display name (e.g., "Sales Dashboard")
-  - html_content: Complete HTML document string
-  - description: Brief description of the app
-  - file_path: Alternative to html_content - path to HTML file in sandbox
-  - mcp_server_name: (Optional) Actual MCP server name if backed by one (e.g., "mcp-hello-app")
-  - mcp_tool_name: (Optional) Actual MCP tool name if backed by one (e.g., "hello")
-```
-
-**IMPORTANT**: If the app is backed by an MCP server tool, ALWAYS pass `mcp_server_name` and `mcp_tool_name` so the platform can link the app to the tool. This enables auto-opening the Canvas when the MCP tool is called later.
-
-**Example - Inline HTML:**
-```
-register_app(
-  title="Revenue Chart",
-  html_content="<!DOCTYPE html><html><head><script src='https://cdn.jsdelivr.net/npm/chart.js'></script></head><body><canvas id='chart'></canvas><script>/* chart code */</script></body></html>",
-  description="Interactive revenue chart with monthly breakdown"
-)
-```
-
-**Example - From file:**
-```
-# First create the HTML file in sandbox
-bash: echo '<!DOCTYPE html>...' > /workspace/dashboard.html
-
-# Then register it
-register_app(
-  title="Dashboard",
-  file_path="/workspace/dashboard.html",
-  description="Project analytics dashboard"
-)
-```
-
-**The HTML can receive data via postMessage:**
-```html
-<script>
-window.addEventListener('message', (event) => {
-  if (event.data?.type === 'ui/toolResult') {
-    const result = event.data.toolResult;
-    // Use result data to populate the UI
-  }
-});
-</script>
-```
-
-**Use register_app when:**
-- Building simple visualizations (charts, graphs, tables)
-- Creating forms or dashboards
-- The app doesn't need to call back to a server
-- You want immediate rendering without server setup
-
-### Path B: Full MCP Server Apps (register_mcp_server)
+### Registering MCP Server Apps (register_mcp_server)
 
 For apps that need bidirectional communication with a running MCP server:
 

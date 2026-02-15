@@ -305,9 +305,9 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
         # and we need to rollback before we can execute any new SQL
         try:
             await self._session.rollback()
-        except Exception:
-            # Ignore rollback errors - transaction might already be clean
-            pass
+        except Exception as e:
+            # Rollback errors are expected if transaction is already clean
+            logger.debug(f"Pre-lock rollback for {project_id}: {e}")
 
         if blocking:
             # pg_advisory_lock blocks until lock is acquired
@@ -329,13 +329,13 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
                 # before any further operations on this session
                 try:
                     await self._session.rollback()
-                except Exception:
-                    pass
+                except Exception as rb_err:
+                    logger.debug(f"Post-lock-failure rollback for {project_id}: {rb_err}")
                 # Reset lock timeout to default (0 = no timeout) on failure
                 try:
                     await self._session.execute(text("SET SESSION lock_timeout = '0'"))
-                except Exception:
-                    pass
+                except Exception as lt_err:
+                    logger.debug(f"Lock timeout reset failed for {project_id}: {lt_err}")
                 return False
         else:
             # pg_try_advisory_lock returns immediately
@@ -361,9 +361,8 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
             # If a previous operation failed, the transaction is in an aborted state
             try:
                 await self._session.rollback()
-            except Exception:
-                # Ignore rollback errors - transaction might already be clean
-                pass
+            except Exception as e:
+                logger.debug(f"Pre-unlock rollback for {project_id}: {e}")
 
             await self._session.execute(
                 text("SELECT pg_advisory_unlock(:lock_id)"),
@@ -372,8 +371,8 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
             # Reset lock timeout to default (0 = no timeout)
             try:
                 await self._session.execute(text("SET SESSION lock_timeout = '0'"))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Lock timeout reset failed for {project_id}: {e}")
         except Exception as e:
             logger.warning(f"Failed to release advisory lock for {project_id}: {e}")
 
@@ -417,5 +416,5 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
         try:
             yield lock_acquired
         finally:
-            # Lock is auto-released on transaction end
-            pass
+            if lock_acquired:
+                await self.release_project_lock(project_id)

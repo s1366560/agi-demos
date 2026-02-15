@@ -507,7 +507,7 @@ class ProjectReActAgent:
             # Count expected MCP tools from DB
             db_tool_count = 0
             for server in servers:
-                discovered = server.get("discovered_tools") or []
+                discovered = server.discovered_tools or []
                 db_tool_count += len(discovered)
 
             # Count current MCP tools in agent

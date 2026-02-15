@@ -40,9 +40,7 @@ class MCPAppRepositoryPort(Protocol):
         ...
 
     @abstractmethod
-    async def find_by_server_and_tool(
-        self, server_id: str, tool_name: str
-    ) -> Optional[MCPApp]:
+    async def find_by_server_and_tool(self, server_id: str, tool_name: str) -> Optional[MCPApp]:
         """Find an MCP App by its server and tool name combination.
 
         Args:
@@ -102,5 +100,19 @@ class MCPAppRepositoryPort(Protocol):
 
         Returns:
             Number of apps deleted.
+        """
+        ...
+
+    @abstractmethod
+    async def disable_by_server(self, server_id: str) -> int:
+        """Disable all MCP Apps for a server.
+
+        Called when a server is disabled to mark its apps as unreachable.
+
+        Args:
+            server_id: The MCP server ID.
+
+        Returns:
+            Number of apps disabled.
         """
         ...

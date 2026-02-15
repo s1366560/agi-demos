@@ -15,8 +15,18 @@ from urllib.parse import parse_qs
 
 import aiohttp
 from aiohttp import web
+from aiohttp.web_log import AccessLogger
 
 logger = logging.getLogger(__name__)
+
+
+class _HealthFilterAccessLogger(AccessLogger):
+    """Suppress access logs for /health endpoint to reduce noise."""
+
+    def log(self, request, response, req_time):
+        if request.path == "/health":
+            return
+        super().log(request, response, req_time)
 
 
 @dataclass
@@ -124,7 +134,11 @@ class MCPWebSocketServer:
         self._app.router.add_get("/", self._handle_websocket)
         self._app.router.add_get("/health", self._handle_health)
 
-        self._runner = web.AppRunner(self._app)
+        self._runner = web.AppRunner(
+            self._app,
+            access_log=logging.getLogger("aiohttp.access"),
+            access_log_class=_HealthFilterAccessLogger,
+        )
         await self._runner.setup()
 
         self._site = web.TCPSite(self._runner, self.host, self.port)
@@ -486,7 +500,7 @@ class MCPWebSocketServer:
 
     async def _handle_call_tool(self, params: dict) -> dict:
         """Handle tools/call request."""
-        import time
+        import time as _time
 
         tool_name = params.get("name")
         arguments = params.get("arguments", {})
@@ -504,14 +518,36 @@ class MCPWebSocketServer:
             }
 
         tool = self._tools[tool_name]
-        start_time = time.time()
+        start_time = _time.time()
+
+        # Defense-in-depth: max timeout at WebSocket level (tool max 600s + 60s buffer)
+        max_tool_timeout = 660
 
         try:
             # Inject workspace_dir into arguments for file tools
             arguments["_workspace_dir"] = self.workspace_dir
-            result = await tool.handler(**arguments)
+            try:
+                result = await asyncio.wait_for(
+                    tool.handler(**arguments), timeout=max_tool_timeout,
+                )
+            except asyncio.TimeoutError:
+                elapsed_ms = (_time.time() - start_time) * 1000
+                logger.error(
+                    f"[MCP] tools/call TIMEOUT - tool={tool_name} "
+                    f"elapsed={elapsed_ms:.1f}ms (limit={max_tool_timeout}s)"
+                )
+                return {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"Error: Tool '{tool_name}' timed out after "
+                            f"{max_tool_timeout}s (server-level safety limit)",
+                        }
+                    ],
+                    "isError": True,
+                }
 
-            elapsed_ms = (time.time() - start_time) * 1000
+            elapsed_ms = (_time.time() - start_time) * 1000
 
             # Normalize result to MCP format
             if isinstance(result, str):
@@ -545,7 +581,7 @@ class MCPWebSocketServer:
             return response
 
         except Exception as e:
-            elapsed_ms = (time.time() - start_time) * 1000
+            elapsed_ms = (_time.time() - start_time) * 1000
             logger.error(
                 f"[MCP] tools/call EXCEPTION - tool={tool_name} elapsed={elapsed_ms:.1f}ms error={e}",
                 exc_info=True,

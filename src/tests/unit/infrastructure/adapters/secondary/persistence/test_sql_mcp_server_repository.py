@@ -39,9 +39,7 @@ async def test_tenant_db(db_session: AsyncSession) -> DBTenant:
 
 
 @pytest.fixture
-async def test_project_db(
-    db_session: AsyncSession, test_tenant_db: DBTenant
-) -> DBProject:
+async def test_project_db(db_session: AsyncSession, test_tenant_db: DBTenant) -> DBProject:
     """Create a test project in the database."""
     project = DBProject(
         id="project-test-1",
@@ -88,9 +86,9 @@ class TestSqlMCPServerRepositoryCreate:
 
         server = await v2_mcp_repo.get_by_id(server_id)
         assert server is not None
-        assert server["name"] == "Test Server"
-        assert server["server_type"] == "stdio"
-        assert server["project_id"] == PROJECT_ID
+        assert server.name == "Test Server"
+        assert server.server_type == "stdio"
+        assert server.project_id == PROJECT_ID
 
 
 class TestSqlMCPServerRepositoryGet:
@@ -110,8 +108,8 @@ class TestSqlMCPServerRepositoryGet:
 
         server = await v2_mcp_repo.get_by_id(server_id)
         assert server is not None
-        assert server["id"] == server_id
-        assert server["name"] == "Get By ID Test"
+        assert server.id == server_id
+        assert server.name == "Get By ID Test"
 
     @pytest.mark.asyncio
     async def test_get_by_id_not_found(self, v2_mcp_repo: SqlMCPServerRepository):
@@ -133,7 +131,7 @@ class TestSqlMCPServerRepositoryGet:
 
         server = await v2_mcp_repo.get_by_name(PROJECT_ID, "Unique Server Name")
         assert server is not None
-        assert server["name"] == "Unique Server Name"
+        assert server.name == "Unique Server Name"
 
     @pytest.mark.asyncio
     async def test_get_by_name_not_found(self, v2_mcp_repo: SqlMCPServerRepository):
@@ -185,7 +183,7 @@ class TestSqlMCPServerRepositoryList:
 
         servers = await v2_mcp_repo.list_by_tenant(TENANT_ID, enabled_only=True)
         assert len(servers) == 1
-        assert servers[0]["name"] == "Enabled Server"
+        assert servers[0].name == "Enabled Server"
 
     @pytest.mark.asyncio
     async def test_list_by_project(self, v2_mcp_repo: SqlMCPServerRepository):
@@ -228,8 +226,8 @@ class TestSqlMCPServerRepositoryUpdate:
         assert result is True
 
         server = await v2_mcp_repo.get_by_id(server_id)
-        assert server["name"] == "Updated Name"
-        assert server["description"] == "Updated description"
+        assert server.name == "Updated Name"
+        assert server.description == "Updated description"
 
     @pytest.mark.asyncio
     async def test_update_nonexistent_server(self, v2_mcp_repo: SqlMCPServerRepository):
@@ -259,8 +257,8 @@ class TestSqlMCPServerRepositoryUpdate:
         assert result is True
 
         server = await v2_mcp_repo.get_by_id(server_id)
-        assert len(server["discovered_tools"]) == 2
-        assert server["discovered_tools"][0]["name"] == "tool1"
+        assert len(server.discovered_tools) == 2
+        assert server.discovered_tools[0]["name"] == "tool1"
 
 
 class TestSqlMCPServerRepositoryDelete:
@@ -343,4 +341,4 @@ class TestSqlMCPServerRepositoryGetEnabledServers:
 
         servers = await v2_mcp_repo.get_enabled_servers(TENANT_ID, project_id=PROJECT_ID)
         assert len(servers) == 1
-        assert servers[0]["name"] == "Project Enabled"
+        assert servers[0].name == "Project Enabled"

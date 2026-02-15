@@ -7,8 +7,7 @@
 
 import axios, { AxiosRequestConfig } from 'axios';
 
-import { getAuthToken } from '@/utils/tokenResolver';
-import { clearAuthState } from '@/utils/tokenResolver';
+import { getAuthToken , clearAuthState } from '@/utils/tokenResolver';
 
 import { parseAxiosError } from './ApiError';
 

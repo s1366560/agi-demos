@@ -143,6 +143,7 @@ class AgentObserveEvent(AgentDomainEvent):
     call_id: Optional[str] = None
     status: str = "completed"
     tool_execution_id: Optional[str] = None  # New field for act/observe matching
+    ui_metadata: Optional[Dict[str, Any]] = None  # MCP App UI metadata (resourceUri, etc.)
 
 
 # === Text Events ===

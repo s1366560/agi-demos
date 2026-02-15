@@ -5,6 +5,8 @@
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Input, Tag, Empty, Spin, App } from 'antd';
 import {
   Search,
@@ -14,7 +16,6 @@ import {
   Shield,
   Bot,
 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
 import { subagentTemplateService } from '../../services/subagentTemplateService';
 

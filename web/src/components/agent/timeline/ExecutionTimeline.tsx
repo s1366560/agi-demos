@@ -42,6 +42,12 @@ export interface TimelineStep {
   isError?: boolean;
   duration?: number;
   timestamp?: number;
+  mcpUiMetadata?: {
+    resource_uri?: string;
+    server_name?: string;
+    app_id?: string;
+    title?: string;
+  };
 }
 
 interface ExecutionTimelineProps {
@@ -245,7 +251,7 @@ const TimelineStepItem = memo<{
         </button>
 
         {/* MCP App "Open App" button - visible without expanding */}
-        {(step.toolName.startsWith('mcp__') || step.toolName === 'register_app') &&
+        {step.toolName.startsWith('mcp__') &&
           step.status === 'success' && !step.isError && (
           <button
             type="button"
@@ -253,6 +259,7 @@ const TimelineStepItem = memo<{
               e.stopPropagation();
               const canvasState = useCanvasStore.getState();
               const mcpState = useMCPAppStore.getState();
+              const ui = step.mcpUiMetadata;
 
               // Priority 1: Find existing tab for this tool
               const existingMcpTab = canvasState.tabs.find(
@@ -264,7 +271,27 @@ const TimelineStepItem = memo<{
                 return;
               }
 
-              // Priority 2: Look up app from store
+              // Priority 2: Use UI metadata from observe event (persisted with events)
+              if (ui?.resource_uri) {
+                const currentProjectId = useProjectStore.getState().currentProject?.id || '';
+                const tabId = `mcp-app-${ui.resource_uri}`;
+                canvasState.openTab({
+                  id: tabId,
+                  title: ui.title || getToolLabel(step.toolName),
+                  type: 'mcp-app' as const,
+                  content: '',
+                  mcpResourceUri: ui.resource_uri,
+                  mcpToolName: step.toolName,
+                  mcpProjectId: currentProjectId,
+                  mcpAppToolResult: step.output,
+                  mcpServerName: ui.server_name,
+                  mcpAppId: ui.app_id,
+                });
+                useLayoutModeStore.getState().setMode('canvas');
+                return;
+              }
+
+              // Priority 3: Look up app from store
               let apps = mcpState.apps;
               const currentProjectId = useProjectStore.getState().currentProject?.id || '';
 
@@ -276,7 +303,7 @@ const TimelineStepItem = memo<{
                   a.tool_name === step.toolName,
               );
 
-              // Priority 3: If no match in store, fetch from API
+              // Priority 4: If no match in store, fetch from API
               if (!match && currentProjectId) {
                 try {
                   await mcpState.fetchApps(currentProjectId);
@@ -303,9 +330,10 @@ const TimelineStepItem = memo<{
                 type: 'mcp-app' as const,
                 content: '',
                 mcpResourceUri: resourceUri,
-                mcpToolName: match?.tool_name || step.toolName,
+                mcpToolName: step.toolName,
                 mcpProjectId: currentProjectId,
                 mcpAppToolResult: step.output,
+                mcpAppUiMetadata: match?.ui_metadata as Record<string, unknown> | undefined,
                 mcpServerName: match?.server_name,
                 mcpAppId: match?.id,
               });

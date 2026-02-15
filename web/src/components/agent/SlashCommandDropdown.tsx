@@ -7,8 +7,9 @@
 
 import { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef, memo } from 'react';
 
-import { Zap, Hash, Brain, Sparkles } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+import { Zap, Hash, Brain, Sparkles } from 'lucide-react';
 
 import { skillAPI } from '@/services/skillService';
 

@@ -40,12 +40,12 @@ import {
   downloadConversationPdf,
 } from '../../utils/exportConversation';
 
-import { ConversationCompareView } from './comparison/ConversationCompareView';
-import { ConversationPickerModal } from './comparison/ConversationPickerModal';
 import { CanvasPanel } from './canvas/CanvasPanel';
 import { ChatSearch } from './chat/ChatSearch';
 import { OnboardingTour } from './chat/OnboardingTour';
 import { ShortcutOverlay } from './chat/ShortcutOverlay';
+import { ConversationCompareView } from './comparison/ConversationCompareView';
+import { ConversationPickerModal } from './comparison/ConversationPickerModal';
 import { EmptyState } from './EmptyState';
 import { LayoutModeSelector } from './layout/LayoutModeSelector';
 import { Resizer } from './Resizer';

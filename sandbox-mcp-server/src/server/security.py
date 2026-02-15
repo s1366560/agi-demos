@@ -3,14 +3,13 @@
 Provides token-based authentication and session timeout management.
 """
 
-import hashlib
-import secrets
-import time
-import threading
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Set
-
+import asyncio
 import logging
+import secrets
+import threading
+import time
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -173,7 +172,7 @@ class SessionTimeoutManager:
         self.max_sessions = max_sessions
         self._sessions: Dict[str, float] = {}  # session_id -> last activity
         self._lock = threading.Lock()
-        self._autocleanup_task: Optional[threading.Thread] = None
+        self._autocleanup_task: Optional[asyncio.Task] = None
         self._autocleanup_running = False
         self._autocleanup_interval = autocleanup_interval
 
@@ -293,29 +292,26 @@ class SessionTimeoutManager:
             return list(self._sessions.keys())
 
     def start_autocleanup(self) -> None:
-        """Start automatic cleanup of expired sessions in background thread."""
+        """Start automatic cleanup of expired sessions as an asyncio task."""
         if self._autocleanup_running:
             return
 
         self._autocleanup_running = True
 
-        def cleanup_loop():
+        async def cleanup_loop():
             while self._autocleanup_running:
-                time.sleep(self._autocleanup_interval)
+                await asyncio.sleep(self._autocleanup_interval)
                 if self._autocleanup_running:
                     self.cleanup_expired()
 
-        self._autocleanup_task = threading.Thread(
-            target=cleanup_loop, daemon=True, name="SessionAutocleanup"
-        )
-        self._autocleanup_task.start()
+        self._autocleanup_task = asyncio.ensure_future(cleanup_loop())
         logger.info("Started session autocleanup")
 
     def stop_autocleanup(self) -> None:
         """Stop automatic cleanup background task."""
         self._autocleanup_running = False
         if self._autocleanup_task:
-            self._autocleanup_task.join(timeout=2)
+            self._autocleanup_task.cancel()
             self._autocleanup_task = None
             logger.info("Stopped session autocleanup")
 

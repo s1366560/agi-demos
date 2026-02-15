@@ -80,14 +80,14 @@ describe('McpServerList Page', () => {
     it('should render page title and subtitle', async () => {
       await renderPage();
       expect(screen.getByText('MCP Servers')).toBeInTheDocument();
-      expect(screen.getByText(/Manage your Model Context Protocol/)).toBeInTheDocument();
+      expect(screen.getByText(/Manage Model Context Protocol servers, tools, and applications/)).toBeInTheDocument();
     });
 
     it('should render stats cards with correct values', async () => {
       await renderPage();
-      expect(screen.getByText('Total Servers')).toBeInTheDocument();
-      expect(screen.getByText('Enabled')).toBeInTheDocument();
-      expect(screen.getByText('Total Tools')).toBeInTheDocument();
+      expect(screen.getByText('Total')).toBeInTheDocument();
+      expect(screen.getByText('Active')).toBeInTheDocument();
+      expect(screen.getByText('Tool Count')).toBeInTheDocument();
       expect(screen.getByText('By Type')).toBeInTheDocument();
     });
 
@@ -98,8 +98,8 @@ describe('McpServerList Page', () => {
       expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByText('1').length).toBeGreaterThanOrEqual(1);
       expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText('stdio: 1')).toBeInTheDocument();
-      expect(screen.getByText('sse: 1')).toBeInTheDocument();
+      expect(screen.getByText('STDIO')).toBeInTheDocument();
+      expect(screen.getByText('SSE')).toBeInTheDocument();
     });
 
     it('should show zero stats when no servers', async () => {

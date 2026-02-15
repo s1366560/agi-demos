@@ -143,8 +143,11 @@ class MCPToolsCacheEntry:
 _agent_session_pool: Dict[str, AgentSessionContext] = {}
 _agent_session_pool_lock = asyncio.Lock()
 
-# Tool Definitions Cache - converted ToolDefinition objects
-_tool_definitions_cache: Dict[str, List[Any]] = {}
+# Tool Definitions Cache - converted ToolDefinition objects with TTL
+# Stores (definitions, cached_at) tuples for TTL expiry
+_TOOL_DEFINITIONS_TTL_SECONDS = 300  # 5 minutes, aligned with MCP tools TTL
+_TOOL_DEFINITIONS_MAX_ENTRIES = 100  # LRU-like cap to prevent unbounded growth
+_tool_definitions_cache: Dict[str, tuple] = {}  # hash -> (List[ToolDef], float)
 _tool_definitions_cache_lock = asyncio.Lock()
 
 # MCP Tools Cache - tools loaded from MCP workflows with TTL
@@ -288,9 +291,15 @@ async def get_or_create_tool_definitions(
         tools_hash = compute_tools_hash(tools)
 
     async with _tool_definitions_cache_lock:
-        if tools_hash in _tool_definitions_cache:
-            logger.debug(f"Agent Session Pool: Tool definitions cache hit for {tools_hash}")
-            return _tool_definitions_cache[tools_hash]
+        entry = _tool_definitions_cache.get(tools_hash)
+        if entry is not None:
+            definitions, cached_at = entry
+            if time.time() - cached_at < _TOOL_DEFINITIONS_TTL_SECONDS:
+                logger.debug(f"Agent Session Pool: Tool definitions cache hit for {tools_hash}")
+                return definitions
+            else:
+                del _tool_definitions_cache[tools_hash]
+                logger.debug(f"Agent Session Pool: Tool definitions cache expired for {tools_hash}")
 
         # Cache miss - convert tools
         logger.info(f"Agent Session Pool: Converting {len(tools)} tools (hash={tools_hash})")
@@ -303,9 +312,13 @@ async def get_or_create_tool_definitions(
         elapsed_ms = (time.time() - start_time) * 1000
         logger.info(f"Agent Session Pool: Tool conversion took {elapsed_ms:.1f}ms")
 
-        _tool_definitions_cache[tools_hash] = definitions
-        return definitions
+        # Evict oldest entries if cache is full
+        if len(_tool_definitions_cache) >= _TOOL_DEFINITIONS_MAX_ENTRIES:
+            oldest_key = min(_tool_definitions_cache, key=lambda k: _tool_definitions_cache[k][1])
+            del _tool_definitions_cache[oldest_key]
 
+        _tool_definitions_cache[tools_hash] = (definitions, time.time())
+        return definitions
 
 
 def invalidate_tool_definitions_cache(tools_hash: Optional[str] = None) -> int:
@@ -390,13 +403,17 @@ async def update_mcp_tools_cache(
 
 
 def invalidate_mcp_tools_cache(tenant_id: Optional[str] = None) -> int:
-    """Invalidate MCP tools cache.
+    """Invalidate MCP tools cache and cascade to dependent caches.
+
+    When MCP tools change (server create/delete/enable/disable/sync),
+    the tool definitions cache must also be cleared since it holds
+    converted ToolDefinition objects derived from MCP tools.
 
     Args:
         tenant_id: Specific tenant to invalidate, or None for all
 
     Returns:
-        Number of entries invalidated
+        Number of MCP tools entries invalidated
     """
     global _mcp_tools_cache
 
@@ -404,12 +421,26 @@ def invalidate_mcp_tools_cache(tenant_id: Optional[str] = None) -> int:
         if tenant_id in _mcp_tools_cache:
             del _mcp_tools_cache[tenant_id]
             logger.info(f"Agent Session Pool: MCP tools cache invalidated for {tenant_id}")
+            # Cascade: clear tool definitions cache since MCP tools changed
+            td_count = invalidate_tool_definitions_cache()
+            if td_count:
+                logger.info(
+                    f"Agent Session Pool: Cascaded tool definitions cache clear "
+                    f"({td_count} entries) due to MCP tools change for {tenant_id}"
+                )
             return 1
         return 0
     else:
         count = len(_mcp_tools_cache)
         _mcp_tools_cache.clear()
         logger.info(f"Agent Session Pool: All MCP tools cache cleared ({count} entries)")
+        # Cascade: clear all tool definitions
+        td_count = invalidate_tool_definitions_cache()
+        if td_count:
+            logger.info(
+                f"Agent Session Pool: Cascaded tool definitions cache clear "
+                f"({td_count} entries) due to full MCP tools invalidation"
+            )
         return count
 
 

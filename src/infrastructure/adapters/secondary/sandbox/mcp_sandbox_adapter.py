@@ -23,6 +23,7 @@ from src.domain.ports.services.sandbox_port import (
     SandboxInstance,
     SandboxNotFoundError,
     SandboxPort,
+    SandboxResourceError,
     SandboxStatus,
 )
 from src.infrastructure.adapters.secondary.sandbox.constants import (
@@ -180,8 +181,12 @@ class MCPSandboxAdapter(SandboxPort):
         """Check if a port is available on the host.
 
         Performs two checks:
-        1. Checks if port is already in use by existing Docker containers
+        1. Checks if port is already tracked as in use
         2. Attempts to bind to the port to verify it's free
+
+        Note: Docker container port check is intentionally omitted here
+        because it requires a blocking API call. In-memory tracking via
+        _used_ports is sufficient when combined with socket bind check.
 
         Args:
             port: The port number to check
@@ -192,21 +197,6 @@ class MCPSandboxAdapter(SandboxPort):
         # Check if port is in our tracking set
         if port in self._used_ports:
             return False
-
-        # Check if port is used by existing Docker containers
-        try:
-            containers = self._docker.containers.list(all=True)
-            for container in containers:
-                # Check container port mappings
-                ports = container.ports or {}
-                for port_mappings in ports.values():
-                    if port_mappings:
-                        for mapping in port_mappings:
-                            host_port = mapping.get("HostPort")
-                            if host_port and int(host_port) == port:
-                                return False
-        except Exception as e:
-            logger.warning(f"Error checking Docker container ports: {e}")
 
         # Try to bind to the port to verify it's free
         try:
@@ -274,6 +264,14 @@ class MCPSandboxAdapter(SandboxPort):
             MCPSandboxInstance with MCP endpoint
         """
         config = config or SandboxConfig(image=self._mcp_image)
+
+        # Enforce resource limits
+        if not self.can_create_sandbox():
+            raise SandboxResourceError(
+                f"Cannot create sandbox: concurrent limit reached "
+                f"({self.active_count}/{self._max_concurrent_sandboxes})"
+            )
+
         # Use provided sandbox_id or generate a new one
         sandbox_id = sandbox_id or f"mcp-sandbox-{uuid.uuid4().hex[:12]}"
 
@@ -790,9 +788,12 @@ class MCPSandboxAdapter(SandboxPort):
 
         except NotFound:
             # Container doesn't exist in Docker either
+            logger.debug(f"Sandbox {sandbox_id} not found in Docker")
             return None
         except Exception as e:
-            logger.warning(f"Error recovering sandbox {sandbox_id} from Docker: {e}")
+            logger.warning(
+                f"Error recovering sandbox {sandbox_id} from Docker: {type(e).__name__}: {e}"
+            )
             return None
 
     async def terminate_sandbox(self, sandbox_id: str) -> bool:
@@ -1762,9 +1763,10 @@ class MCPSandboxAdapter(SandboxPort):
         Args:
             sandbox_id: Sandbox identifier
         """
-        instance = self._active_sandboxes.get(sandbox_id)
-        if instance:
-            instance.last_activity_at = datetime.now()
+        async with self._lock:
+            instance = self._active_sandboxes.get(sandbox_id)
+            if instance:
+                instance.last_activity_at = datetime.now()
 
     def get_idle_time(self, sandbox_id: str) -> timedelta:
         """
@@ -2010,6 +2012,10 @@ class MCPSandboxAdapter(SandboxPort):
         ]
         old_ports = [p for p in old_ports if p is not None]
 
+        # Release old ports before rebuild to prevent port leaks
+        async with self._lock:
+            self._release_ports_unsafe(old_ports)
+
         # Clean up the old instance
         await self.disconnect_mcp(original_sandbox_id)
 
@@ -2104,7 +2110,16 @@ class MCPSandboxAdapter(SandboxPort):
             # Container might be created but fail to start (e.g., port conflicts)
             max_wait = 10  # Wait up to 10 seconds for container to be running
             for wait_attempt in range(max_wait):
-                new_container.reload()  # Refresh container status
+                try:
+                    await asyncio.wait_for(
+                        loop.run_in_executor(None, new_container.reload),
+                        timeout=5.0,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        f"Container reload timed out for {original_sandbox_id} "
+                        f"(attempt {wait_attempt + 1}/{max_wait})"
+                    )
                 if new_container.status == "running":
                     break
                 if wait_attempt < max_wait - 1:
@@ -2180,9 +2195,13 @@ class MCPSandboxAdapter(SandboxPort):
                 f"(MCP: {actual_mcp_port}, Desktop: {actual_desktop_port}, Terminal: {actual_terminal_port})"
             )
 
-            # Update tracking with original ID
+            # Update tracking with original ID and re-track allocated ports
             async with self._lock:
                 self._active_sandboxes[original_sandbox_id] = new_instance
+                new_ports = [actual_mcp_port, actual_desktop_port, actual_terminal_port]
+                for p in new_ports:
+                    if p is not None:
+                        self._used_ports.add(p)
 
             return new_instance
 
@@ -2322,8 +2341,9 @@ class MCPSandboxAdapter(SandboxPort):
         # Update activity before tool call
         await self.update_activity(sandbox_id)
 
-        # Refresh instance reference after potential rebuild
-        instance = self._active_sandboxes.get(sandbox_id)
+        # Refresh instance reference after potential rebuild (under lock for safety)
+        async with self._lock:
+            instance = self._active_sandboxes.get(sandbox_id)
         if not instance:
             raise SandboxNotFoundError(
                 message=f"Sandbox not found: {sandbox_id}",

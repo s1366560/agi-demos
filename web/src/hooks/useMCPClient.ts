@@ -10,9 +10,10 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 
+import { useAuthStore } from '@/stores/auth';
+
 import { BrowserWebSocketTransport } from '@/services/mcp/BrowserWebSocketTransport';
 import { getWebSocketProtocol, getApiHost, getApiBasePath } from '@/services/sandboxWebSocketUtils';
-import { useAuthStore } from '@/stores/auth';
 
 export interface UseMCPClientOptions {
   /** Project ID to connect to */
@@ -87,14 +88,7 @@ export function useMCPClient({
         { capabilities: {} },
       );
 
-      // Connect establishes WS + performs MCP initialize handshake
-      await mcpClient.connect(transport);
-
-      clientRef.current = mcpClient;
-      setClient(mcpClient);
-      setStatus('connected');
-
-      // Handle disconnect
+      // Set onclose BEFORE connect to avoid missing early disconnects
       transport.onclose = () => {
         if (clientRef.current === mcpClient) {
           clientRef.current = null;
@@ -102,6 +96,20 @@ export function useMCPClient({
           setStatus('disconnected');
         }
       };
+
+      // Connect establishes WS + performs MCP initialize handshake.
+      // Wrap in a race with a timeout to avoid hanging on slow handshakes.
+      const CONNECT_TIMEOUT_MS = 20_000;
+      await Promise.race([
+        mcpClient.connect(transport),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('MCP connect timeout')), CONNECT_TIMEOUT_MS),
+        ),
+      ]);
+
+      clientRef.current = mcpClient;
+      setClient(mcpClient);
+      setStatus('connected');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);

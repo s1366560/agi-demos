@@ -6,8 +6,8 @@
  * MCP servers via backend WebSocket proxy.
  */
 
-import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import type { Transport, TransportSendOptions } from '@modelcontextprotocol/sdk/shared/transport.js';
+import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 
 export interface BrowserWebSocketTransportOptions {
   /** WebSocket URL to connect to */
@@ -47,19 +47,31 @@ export class BrowserWebSocketTransport implements Transport {
 
   async start(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
+      let settled = false;
       const ws = new WebSocket(this.url);
       const timeout = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        // Clean up event handlers to prevent memory leaks
+        ws.onopen = null;
+        ws.onerror = null;
+        ws.onmessage = null;
+        ws.onclose = null;
         ws.close();
         reject(new Error(`WebSocket connection timeout after ${this.connectTimeout}ms`));
       }, this.connectTimeout);
 
       ws.onopen = () => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
         this.ws = ws;
         resolve();
       };
 
       ws.onerror = (event) => {
+        if (settled) return;
+        settled = true;
         clearTimeout(timeout);
         const error = new Error(`WebSocket connection failed: ${this.url}`);
         this.onerror?.(error);
@@ -95,6 +107,10 @@ export class BrowserWebSocketTransport implements Transport {
     const ws = this.ws;
     if (ws) {
       this.ws = null;
+      ws.onopen = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      ws.onclose = null;
       ws.close(1000, 'Client closed');
     }
   }

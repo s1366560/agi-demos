@@ -7,7 +7,9 @@ Supports both cloud sandboxes (Docker containers) and local sandboxes
 (user's machine via WebSocket tunnel).
 """
 
+import json
 import logging
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
@@ -342,8 +344,6 @@ class SandboxOrchestrator:
         Returns:
             CommandResult with exit code, stdout, stderr, and timing
         """
-        import time
-
         start_time = time.time()
         adapter = self._get_adapter_for_sandbox(sandbox_id)
 
@@ -386,8 +386,6 @@ class SandboxOrchestrator:
             return DesktopStatus(running=False, url=None, display="", resolution="", port=0)
 
         try:
-            import json
-
             text_content = content_list[0].get("text", "{}")
             data = json.loads(text_content)
             # If success is True, consider desktop as running
@@ -416,8 +414,6 @@ class SandboxOrchestrator:
             return TerminalStatus(running=False, url=None, port=0)
 
         try:
-            import json
-
             text_content = content_list[0].get("text", "{}")
             logger.debug(f"Terminal result text: {text_content}")
             data = json.loads(text_content)

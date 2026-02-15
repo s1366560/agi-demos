@@ -7,9 +7,16 @@
 
 export type MCPAppDisplayMode = 'inline' | 'fullscreen' | 'pip';
 
+export interface MCPAppUIPermissions {
+  camera?: Record<string, never>;
+  microphone?: Record<string, never>;
+  geolocation?: Record<string, never>;
+  clipboardWrite?: Record<string, never>;
+}
+
 export interface MCPAppUIMetadata {
   resourceUri: string;
-  permissions?: string[];
+  permissions?: MCPAppUIPermissions;
   csp?: {
     connectDomains?: string[];
     resourceDomains?: string[];

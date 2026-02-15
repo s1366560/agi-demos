@@ -2073,6 +2073,12 @@ export interface ObserveEvent extends BaseTimelineEvent {
   toolOutput?: string; // May be undefined if result is not a string or empty
   isError: boolean;
   execution_id?: string; // New: matches act event's execution_id
+  mcpUiMetadata?: {
+    resource_uri?: string;
+    server_name?: string;
+    app_id?: string;
+    title?: string;
+  };
 }
 
 /**

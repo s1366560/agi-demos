@@ -229,6 +229,17 @@ export function sseEventToTimeline(
       // as this caused false positives for valid tool outputs
       const isError = !!data.error;
 
+      // Extract MCP App UI metadata if present (for timeline "Open App")
+      const rawUiMeta = (data as any).ui_metadata;
+      const mcpUiMetadata = rawUiMeta && typeof rawUiMeta === 'object'
+        ? {
+            resource_uri: rawUiMeta.resource_uri || undefined,
+            server_name: rawUiMeta.server_name || undefined,
+            app_id: rawUiMeta.app_id || undefined,
+            title: rawUiMeta.title || undefined,
+          }
+        : undefined;
+
       return {
         id: generateTimelineEventId('observe'),
         type: 'observe',
@@ -239,6 +250,7 @@ export function sseEventToTimeline(
         execution_id: data.tool_execution_id ?? data.execution_id,
         toolOutput: observationValue,
         isError,
+        mcpUiMetadata,
       };
     }
 

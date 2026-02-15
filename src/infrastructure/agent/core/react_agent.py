@@ -520,9 +520,19 @@ class ReActAgent:
 
         # Convert tool definitions to dict format - use current tools (hot-plug support)
         _, current_tool_definitions = self._get_current_tools()
-        tool_defs = [
-            {"name": t.name, "description": t.description} for t in current_tool_definitions
-        ]
+        # When a forced skill is active, exclude skill_loader from tool list
+        # to prevent the LLM from calling it and loading a different skill.
+        if force_execution and matched_skill:
+            tool_defs = [
+                {"name": t.name, "description": t.description}
+                for t in current_tool_definitions
+                if t.name != "skill_loader"
+            ]
+        else:
+            tool_defs = [
+                {"name": t.name, "description": t.description}
+                for t in current_tool_definitions
+            ]
 
         # Convert SubAgents to dict format for PromptContext (SubAgent-as-Tool mode)
         subagents_data = None
@@ -904,6 +914,12 @@ class ReActAgent:
         # Determine tools to use - hot-plug support: fetch current tools
         current_raw_tools, current_tool_definitions = self._get_current_tools()
         tools_to_use = list(current_tool_definitions)
+
+        # When a forced skill is active, remove skill_loader from the tool list
+        # to prevent the LLM from loading a different skill instead of following
+        # the already-injected mandatory skill instructions.
+        if is_forced and matched_skill:
+            tools_to_use = [t for t in tools_to_use if t.name != "skill_loader"]
 
         # Inject delegate_to_subagent tool when SubAgent-as-Tool mode is enabled
         if self.subagents and self._enable_subagent_as_tool:

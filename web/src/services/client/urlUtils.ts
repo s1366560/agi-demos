@@ -11,8 +11,9 @@
  * 4. Use apiFetch for fetch-based requests (SSE, etc.)
  */
 
-import { parseResponseError } from './ApiError';
 import { getAuthToken, clearAuthState } from '@/utils/tokenResolver';
+
+import { parseResponseError } from './ApiError';
 
 /**
  * Retry configuration for apiFetch

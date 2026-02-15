@@ -8,6 +8,7 @@
 """
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -276,7 +277,6 @@ class SandboxHealthService:
                 if desktop_result and not desktop_result.get("is_error"):
                     content = desktop_result.get("content", [])
                     if content:
-                        import json
                         data = json.loads(content[0].get("text", "{}"))
                         result["desktop"] = data.get("running", False)
             except Exception:
@@ -292,7 +292,6 @@ class SandboxHealthService:
                 if terminal_result and not terminal_result.get("is_error"):
                     content = terminal_result.get("content", [])
                     if content:
-                        import json
                         data = json.loads(content[0].get("text", "{}"))
                         result["terminal"] = data.get("running", False)
             except Exception:

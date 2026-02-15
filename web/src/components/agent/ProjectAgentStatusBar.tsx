@@ -52,8 +52,9 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import { LazyTooltip, LazyPopconfirm, message } from '@/components/ui/lazyAntd';
 import { useAgentV3Store } from '@/stores/agentV3';
+
+import { LazyTooltip, LazyPopconfirm, message } from '@/components/ui/lazyAntd';
 
 import {
   useUnifiedAgentStatus,

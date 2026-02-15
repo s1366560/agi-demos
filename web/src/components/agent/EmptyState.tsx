@@ -29,8 +29,8 @@ import {
 import { LazyButton } from '@/components/ui/lazyAntd';
 
 import { ProjectContextCard } from './chat/ProjectContextCard';
-import { TrendingEntities } from './chat/TrendingEntities';
 import { RecentSkills } from './chat/RecentSkills';
+import { TrendingEntities } from './chat/TrendingEntities';
 
 interface EmptyStateProps {
   onNewConversation: () => void;

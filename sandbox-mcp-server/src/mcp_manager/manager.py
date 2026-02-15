@@ -294,7 +294,30 @@ class MCPServerManager:
 
         except Exception as e:
             logger.error(f"Failed to start MCP server '{name}': {e}")
-            return {"success": False, "error": str(e)}
+            error_msg = str(e)
+            stderr_text = await self._capture_server_stderr(name)
+            if stderr_text:
+                error_msg = f"{error_msg}\n--- Server stderr ---\n{stderr_text}"
+            return {"success": False, "error": error_msg}
+
+    async def _capture_server_stderr(self, name: str) -> str:
+        """Read available stderr from a managed server process.
+
+        Useful for diagnosing why a server failed to start or crashed.
+        Returns up to 2000 chars of stderr, or empty string if unavailable.
+        """
+        server = self._tracker.get_server(name)
+        if not server or not server.process or not server.process.stderr:
+            return ""
+        try:
+            stderr_bytes = await asyncio.wait_for(
+                server.process.stderr.read(4096), timeout=2,
+            )
+            if stderr_bytes:
+                return stderr_bytes.decode("utf-8", errors="replace")[:2000]
+        except (asyncio.TimeoutError, Exception):
+            pass
+        return ""
 
     async def stop_server(self, name: str) -> Dict[str, Any]:
         """Stop a running MCP server.
@@ -545,7 +568,14 @@ class MCPServerManager:
                 "initialize",
                 {
                     "protocolVersion": "2024-11-05",
-                    "capabilities": {},
+                    "capabilities": {
+                        "roots": {"listChanged": True},
+                        "extensions": {
+                            "io.modelcontextprotocol/ui": {
+                                "mimeTypes": ["text/html;profile=mcp-app"],
+                            },
+                        },
+                    },
                     "clientInfo": {"name": "sandbox-mcp-manager", "version": "1.0.0"},
                 },
                 timeout=MCP_INIT_TIMEOUT,
@@ -557,6 +587,12 @@ class MCPServerManager:
             await self._send_stdio_notification(server.name, "notifications/initialized")
 
         except Exception as e:
+            stderr_text = await self._capture_server_stderr(server.name)
+            if stderr_text:
+                raise RuntimeError(
+                    f"Failed to initialize MCP for '{server.name}': {e}\n"
+                    f"--- Server stderr ---\n{stderr_text}"
+                ) from e
             logger.error(f"Failed to initialize MCP for '{server.name}': {e}")
             raise
 
@@ -625,9 +661,20 @@ class MCPServerManager:
         if not conn:
             return
 
+        # Idle timeout: if no data for 300s, assume server hung
+        idle_timeout = 300
+
         try:
             while True:
-                line = await conn.stdout.readline()
+                try:
+                    line = await asyncio.wait_for(
+                        conn.stdout.readline(), timeout=idle_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        f"Stdio reader for '{name}' idle for {idle_timeout}s, stopping"
+                    )
+                    break
                 if not line:
                     break  # EOF - process exited
 
@@ -802,7 +849,14 @@ class MCPServerManager:
                 "initialize",
                 {
                     "protocolVersion": "2024-11-05",
-                    "capabilities": {},
+                    "capabilities": {
+                        "roots": {"listChanged": True},
+                        "extensions": {
+                            "io.modelcontextprotocol/ui": {
+                                "mimeTypes": ["text/html;profile=mcp-app"],
+                            },
+                        },
+                    },
                     "clientInfo": {"name": "sandbox-mcp-manager", "version": "1.0.0"},
                 },
                 timeout=MCP_INIT_TIMEOUT,
@@ -835,8 +889,13 @@ class MCPServerManager:
                 pass  # Notifications are best-effort
 
         except Exception as e:
+            stderr_text = await self._capture_server_stderr(server.name)
+            if stderr_text:
+                raise RuntimeError(
+                    f"Failed to initialize network MCP for '{server.name}': {e}\n"
+                    f"--- Server stderr ---\n{stderr_text}"
+                ) from e
             logger.error(f"Failed to initialize network MCP for '{server.name}': {e}")
-            # Re-raise so caller knows init failed
             raise
 
     # -- WebSocket protocol methods --
@@ -870,7 +929,14 @@ class MCPServerManager:
                 "method": "initialize",
                 "params": {
                     "protocolVersion": "2024-11-05",
-                    "capabilities": {},
+                    "capabilities": {
+                        "roots": {"listChanged": True},
+                        "extensions": {
+                            "io.modelcontextprotocol/ui": {
+                                "mimeTypes": ["text/html;profile=mcp-app"],
+                            },
+                        },
+                    },
                     "clientInfo": {"name": "sandbox-mcp-manager", "version": "1.0.0"},
                 },
             })
@@ -892,6 +958,12 @@ class MCPServerManager:
         except Exception as e:
             await session.close()
             self._ws_connections.pop(server.name, None)
+            stderr_text = await self._capture_server_stderr(server.name)
+            if stderr_text:
+                raise RuntimeError(
+                    f"Failed to init WebSocket MCP for '{server.name}': {e}\n"
+                    f"--- Server stderr ---\n{stderr_text}"
+                ) from e
             logger.warning(f"Failed to init WebSocket MCP for '{server.name}': {e}")
             raise
 
@@ -1024,7 +1096,14 @@ class MCPServerManager:
                     "method": "initialize",
                     "params": {
                         "protocolVersion": "2024-11-05",
-                        "capabilities": {},
+                        "capabilities": {
+                            "roots": {"listChanged": True},
+                            "extensions": {
+                                "io.modelcontextprotocol/ui": {
+                                    "mimeTypes": ["text/html;profile=mcp-app"],
+                                },
+                            },
+                        },
                         "clientInfo": {
                             "name": "sandbox-mcp-manager",
                             "version": "1.0.0",
@@ -1067,40 +1146,43 @@ class MCPServerManager:
         self, resp, server: ManagedServer, timeout: int = 10
     ) -> str:
         """Read the 'endpoint' event from an SSE stream to get the messages URL."""
-        deadline = asyncio.get_event_loop().time() + timeout
         event_type = ""
 
-        async for line_bytes in resp.content:
-            if asyncio.get_event_loop().time() > deadline:
-                raise RuntimeError(
-                    f"Timeout waiting for 'endpoint' event from SSE server "
-                    f"'{server.name}' at {server.url}"
-                )
+        async def _read_endpoint_inner() -> str:
+            nonlocal event_type
+            async for line_bytes in resp.content:
+                line = line_bytes.decode("utf-8").rstrip("\n").rstrip("\r")
 
-            line = line_bytes.decode("utf-8").rstrip("\n").rstrip("\r")
+                if not line:
+                    event_type = ""
+                    continue
+                if line.startswith(":"):
+                    continue
+                if line.startswith("event: "):
+                    event_type = line[7:].strip()
+                    continue
+                if line.startswith("data: ") and event_type == "endpoint":
+                    messages_path = line[6:].strip()
+                    # Resolve relative path to absolute URL
+                    if messages_path.startswith("/"):
+                        from urllib.parse import urlparse
 
-            if not line:
-                event_type = ""
-                continue
-            if line.startswith(":"):
-                continue
-            if line.startswith("event: "):
-                event_type = line[7:].strip()
-                continue
-            if line.startswith("data: ") and event_type == "endpoint":
-                messages_path = line[6:].strip()
-                # Resolve relative path to absolute URL
-                if messages_path.startswith("/"):
-                    from urllib.parse import urlparse
+                        parsed = urlparse(server.url)
+                        return f"{parsed.scheme}://{parsed.netloc}{messages_path}"
+                    return messages_path
 
-                    parsed = urlparse(server.url)
-                    return f"{parsed.scheme}://{parsed.netloc}{messages_path}"
-                return messages_path
+            raise RuntimeError(
+                f"SSE stream from '{server.name}' closed without sending "
+                f"'endpoint' event"
+            )
 
-        raise RuntimeError(
-            f"SSE stream from '{server.name}' closed without sending "
-            f"'endpoint' event"
-        )
+        try:
+            return await asyncio.wait_for(_read_endpoint_inner(), timeout=timeout)
+        except asyncio.TimeoutError:
+            raise RuntimeError(
+                f"Timeout waiting for 'endpoint' event from SSE server "
+                f"'{server.name}' at {server.url}"
+            )
 
     async def _read_sse_stream(self, server_name: str, resp) -> None:
         """Background task: read JSON-RPC responses from a legacy SSE stream."""

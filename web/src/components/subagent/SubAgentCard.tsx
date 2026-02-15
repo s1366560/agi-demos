@@ -5,6 +5,8 @@
 
 import { memo, useCallback, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Popconfirm, Switch, Tooltip } from 'antd';
 import {
   MoreHorizontal,
@@ -23,7 +25,6 @@ import {
   Database,
   Download,
 } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
 import type { SubAgentResponse } from '../../types/agent';
 

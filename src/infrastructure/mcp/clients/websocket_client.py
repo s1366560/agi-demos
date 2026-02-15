@@ -206,20 +206,20 @@ class MCPWebSocketClient:
                 )
                 return True
 
-            logger.error("MCP initialize request failed")
+            logger.error("MCP initialize request returned no result (likely timed out)")
             await self.disconnect()
             return False
 
         except asyncio.TimeoutError:
-            logger.error(f"MCP WebSocket connection timeout after {timeout}s")
+            logger.error(f"MCP WebSocket connection timeout after {timeout}s to {self.url}")
             await self.disconnect()
             return False
         except aiohttp.WSServerHandshakeError as e:
-            logger.error(f"WebSocket handshake failed: {e}")
+            logger.error(f"WebSocket handshake failed for {self.url}: {e}")
             await self.disconnect()
             return False
         except Exception as e:
-            logger.exception(f"Error connecting to MCP WebSocket: {e}")
+            logger.exception(f"Error connecting to MCP WebSocket {self.url}: {e}")
             await self.disconnect()
             return False
 
@@ -512,7 +512,8 @@ class MCPWebSocketClient:
         except asyncio.TimeoutError:
             async with self._lock:
                 self._pending_requests.pop(request_id, None)
-            logger.error(f"MCP request '{method}' timed out after {timeout}s")
+            error_msg = f"MCP request '{method}' timed out after {timeout}s (url={self.url})"
+            logger.error(error_msg)
             return None
         except (ConnectionError, ConnectionResetError, RuntimeError) as e:
             async with self._lock:

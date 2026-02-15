@@ -20,11 +20,24 @@ import React, { useMemo, useCallback, useState, useRef, useEffect, useImperative
 import { Alert, Button, Spin } from 'antd';
 import { RefreshCw } from 'lucide-react';
 
-import { useMCPClient } from '@/hooks/useMCPClient';
-import { mcpAppAPI } from '@/services/mcpAppService';
+import { useProjectStore } from '@/stores/project';
 import { useThemeStore } from '@/stores/theme';
 
+import { mcpAppAPI } from '@/services/mcpAppService';
+
+import { useMCPClient } from '@/hooks/useMCPClient';
+
+import { ErrorBoundary } from '@/components/common/ErrorBoundary';
+
+import { buildHostStyles } from './hostStyles';
+
 import type { MCPAppUIMetadata } from '@/types/mcpApp';
+
+/**
+ * Prefix for synthetic (auto-discovered) MCP App IDs that have no DB record.
+ * Uses a non-colliding prefix to avoid clashing with real UUID-based app IDs.
+ */
+export const SYNTHETIC_APP_ID_PREFIX = '_synthetic_';
 
 // Lazy import to avoid pulling @mcp-ui/client into the main bundle
 // when MCP Apps are not used.
@@ -50,6 +63,8 @@ export interface StandardMCPAppRendererProps {
   toolInput?: Record<string, unknown>;
   /** Tool execution result (loosely typed - cast to CallToolResult internally) */
   toolResult?: unknown;
+  /** Whether tool execution was cancelled (SEP-1865 ui/notifications/tool-cancelled) */
+  toolCancelled?: boolean;
   /** Project ID for backend proxy calls */
   projectId?: string;
   /** MCP server name (for proxy routing) */
@@ -84,6 +99,7 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
   html,
   toolInput,
   toolResult,
+  toolCancelled,
   projectId,
   serverName,
   appId,
@@ -93,6 +109,10 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
   onSizeChanged,
   height = '100%',
 }, ref) => {
+  // Fall back to current project from store when prop is not provided
+  const storeProjectId = useProjectStore((state) => state.currentProject?.id);
+  const effectiveProjectId = projectId || storeProjectId;
+
   const [error, setError] = useState<string | null>(null);
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({
     width: 0,
@@ -105,11 +125,11 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
 
   // Mode A: Direct WebSocket MCP client (low-latency, 2-hop)
   const { client: mcpClient, status: mcpStatus } = useMCPClient({
-    projectId,
-    enabled: !!projectId && !!serverName,
+    projectId: effectiveProjectId,
+    enabled: !!effectiveProjectId && !!serverName,
   });
   const useDirectClient = mcpClient !== null && mcpStatus === 'connected';
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const appRendererRef = useRef<any>(null);
   const computedTheme = useThemeStore((s) => s.computedTheme);
 
@@ -164,60 +184,66 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
     () => ({
       url: getSandboxProxyUrl(),
       permissions: 'allow-scripts allow-same-origin allow-forms',
-      // Forward CSP metadata to sandbox proxy for enforcement on inner iframe
+      // Forward CSP and permissions metadata to sandbox proxy for enforcement
       ...(uiMetadata?.csp ? { csp: uiMetadata.csp } : {}),
+      ...(uiMetadata?.permissions ? { appPermissions: uiMetadata.permissions } : {}),
     }),
-    [uiMetadata?.csp],
+    [uiMetadata?.csp, uiMetadata?.permissions],
   );
 
-  // Host context per SEP-1865: theme, styles, dimensions
+  // SEP-1865 host styles: map Ant Design tokens to standardized CSS variables
+  const hostStyles = useMemo(() => buildHostStyles(computedTheme), [computedTheme]);
+
+  // Host context per SEP-1865: theme, styles, dimensions, display modes
   // Only provided after app initialization to avoid "Not connected" errors
-  // from @mcp-ui/client's internal setHostContext → notification call.
+  // from @mcp-ui/client's internal setHostContext -> notification call.
+  // When hostContext prop changes, @mcp-ui/client sends ui/notifications/host-context-changed.
   const hostContext = useMemo(
     () =>
       appInitialized
         ? {
             theme: computedTheme as 'light' | 'dark',
+            styles: hostStyles,
             platform: 'web' as const,
             userAgent: 'memstack',
+            displayMode: 'inline' as const,
+            availableDisplayModes: ['inline'],
+            locale: navigator.language,
+            timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
             containerDimensions:
               containerSize.width > 0
-                ? {
-                    width: containerSize.width,
-                    height: containerSize.height,
-                    mode: 'flexible' as const,
-                  }
+                ? { width: containerSize.width, maxHeight: containerSize.height }
                 : undefined,
           }
         : undefined,
-    [appInitialized, computedTheme, containerSize.width, containerSize.height],
+    [appInitialized, computedTheme, hostStyles, containerSize.width, containerSize.height],
   );
 
   // Handler for resources/read requests (when html prop is not provided)
   const handleReadResource = useCallback(
     async (params: { uri: string }) => {
-      if (!projectId) {
+      if (!effectiveProjectId) {
         throw new Error('projectId required for resource fetching');
       }
-      const result = await mcpAppAPI.readResource(params.uri, projectId, serverName);
+      const result = await mcpAppAPI.readResource(params.uri, effectiveProjectId, serverName);
       return result;
     },
-    [projectId, serverName],
+    [effectiveProjectId, serverName],
   );
 
   // Handler for tool calls from the guest app back to its MCP server
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const handleCallTool = useCallback(
     async (params: { name: string; arguments?: Record<string, unknown> }): Promise<any> => {
-      if (!projectId) {
+      if (!effectiveProjectId) {
         throw new Error('projectId required for tool calls');
       }
 
       // For synthetic auto-discovered apps (no DB record), use the direct proxy
       // endpoint that routes by project_id + server_name without DB lookup.
-      if (appId?.startsWith('auto-') && serverName) {
+      if (appId?.startsWith(SYNTHETIC_APP_ID_PREFIX) && serverName) {
         const result = await mcpAppAPI.proxyToolCallDirect({
-          project_id: projectId,
+          project_id: effectiveProjectId,
           server_name: serverName,
           tool_name: params.name,
           arguments: params.arguments || {},
@@ -241,13 +267,13 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
       }
 
       // Fallback: find the app by server/tool name
-      const apps = await mcpAppAPI.list(projectId);
+      const apps = await mcpAppAPI.list(effectiveProjectId);
       const app = apps.find((a) => a.server_name === serverName || a.tool_name === toolName);
       if (!app) {
         // Last resort: try direct proxy if we have a serverName
         if (serverName) {
           const result = await mcpAppAPI.proxyToolCallDirect({
-            project_id: projectId,
+            project_id: effectiveProjectId,
             server_name: serverName,
             tool_name: params.name,
             arguments: params.arguments || {},
@@ -271,28 +297,28 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
         isError: result.is_error,
       };
     },
-    [projectId, serverName, toolName, appId],
+    [effectiveProjectId, serverName, toolName, appId],
   );
 
   // Handler for resources/list requests from the guest app
   const handleListResources = useCallback(
     async () => {
-      if (!projectId) {
+      if (!effectiveProjectId) {
         return { resources: [] };
       }
       try {
-        return await mcpAppAPI.listResources(projectId, serverName);
+        return await mcpAppAPI.listResources(effectiveProjectId, serverName);
       } catch {
         return { resources: [] };
       }
     },
-    [projectId, serverName],
+    [effectiveProjectId, serverName],
   );
 
   // Handler for ui/message from the app (SEP-1865 section: MCP Apps Specific Messages)
   // Also handles ui/update-model-context if the app sends context via the message channel.
   const handleMessage = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     async (params: any) => {
       // Route ui/update-model-context
       if (params?.method === 'ui/update-model-context' && params?.context) {
@@ -313,7 +339,7 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
 
   // Handler for ui/notifications/size-changed from the app (SEP-1865)
   const handleSizeChanged = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (params: any) => {
       onSizeChanged?.({ width: params?.width, height: params?.height });
     },
@@ -373,40 +399,44 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
 
   return (
     <div ref={containerRef} style={{ height, width: '100%', position: 'relative', ...borderStyle }}>
-      <React.Suspense
-        fallback={
-          <div className="flex items-center justify-center" style={{ height }}>
-            <Spin tip="Loading MCP App...">
-              <div style={{ minHeight: 100 }} />
-            </Spin>
-          </div>
-        }
-      >
-        <LazyAppRenderer
+      <ErrorBoundary context="MCP App" showHomeButton={false}>
+        <React.Suspense
+          fallback={
+            <div className="flex items-center justify-center" style={{ height }}>
+              <Spin tip="Loading MCP App...">
+                <div style={{ minHeight: 100 }} />
+              </Spin>
+            </div>
+          }
+        >
+          <LazyAppRenderer
+          // Force re-mount when connection mode changes to avoid stale handlers
+          key={useDirectClient ? 'mode-a-ws' : 'mode-b-http'}
           ref={appRendererRef}
           toolName={toolName}
           sandbox={sandboxConfig}
           html={effectiveHtml}
           toolResourceUri={effectiveUri}
           toolInput={toolInput}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          toolCancelled={toolCancelled}
+           
           toolResult={toolResult as any}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           hostContext={hostContext as any}
           // Mode A: pass MCP client for direct WS communication
           // Mode B fallback: use HTTP callback handlers
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           client={useDirectClient ? mcpClient as any : undefined}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           onReadResource={!useDirectClient && effectiveUri ? handleReadResource as any : undefined}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           onCallTool={!useDirectClient ? handleCallTool as any : undefined}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           onListResources={!useDirectClient ? handleListResources as any : undefined}
           // Host-specific handlers (always needed regardless of mode)
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           onMessage={handleMessage as any}
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           onSizeChanged={handleSizeChanged as any}
           onError={handleError}
           onOpenLink={async ({ url }) => {
@@ -414,7 +444,8 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
             return {};
           }}
         />
-      </React.Suspense>
+        </React.Suspense>
+      </ErrorBoundary>
     </div>
   );
 });

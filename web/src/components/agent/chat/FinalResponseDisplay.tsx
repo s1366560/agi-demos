@@ -9,14 +9,15 @@
 import { useState } from 'react';
 
 import ReactMarkdown from 'react-markdown';
+import type { Components } from 'react-markdown';
 
 import { formatDateOnly } from '@/utils/date';
 
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
+
 import { CodeBlock } from './CodeBlock';
 import { useMarkdownPlugins } from './markdownPlugins';
 
-import type { Components } from 'react-markdown';
 
 const MARKDOWN_COMPONENTS: Components = {
   pre: ({ children, ...props }) => <CodeBlock {...props}>{children}</CodeBlock>,

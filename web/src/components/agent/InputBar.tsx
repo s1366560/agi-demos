@@ -33,6 +33,7 @@ import {
   ListChecks,
 } from 'lucide-react';
 
+import type { MentionItem } from '@/services/mentionService';
 import type { FileMetadata } from '@/services/sandboxUploadService';
 
 import { LazyButton, LazyTooltip } from '@/components/ui/lazyAntd';
@@ -43,12 +44,11 @@ import { VoiceWaveform } from './chat/VoiceWaveform';
 import { useFileUpload, type PendingAttachment } from './FileUploader';
 import { SlashCommandDropdown } from './SlashCommandDropdown';
 
-import type { MentionItem } from '@/services/mentionService';
 
 import type { SkillResponse } from '@/types/agent';
 
-import type { SlashCommandDropdownHandle } from './SlashCommandDropdown';
 import type { MentionPopoverHandle } from './chat/MentionPopover';
+import type { SlashCommandDropdownHandle } from './SlashCommandDropdown';
 
 interface InputBarProps {
   onSend: (content: string, fileMetadata?: FileMetadata[], forcedSkillName?: string) => void;

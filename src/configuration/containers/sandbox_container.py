@@ -123,7 +123,9 @@ class SandboxContainer:
         from src.infrastructure.mcp.resource_resolver import MCPAppResourceResolver
 
         app_repo = SqlMCPAppRepository(self._db)
+        # Use factory callable to break circular dependency:
+        # MCPAppService -> ResourceResolver -> SandboxMCPServerManager -> MCPAppService
         resource_resolver = MCPAppResourceResolver(
-            sandbox_mcp_server_manager=None,  # Lazy: avoids circular dep
+            manager_factory=lambda: self.sandbox_mcp_server_manager(),
         )
         return MCPAppService(app_repo=app_repo, resource_resolver=resource_resolver)

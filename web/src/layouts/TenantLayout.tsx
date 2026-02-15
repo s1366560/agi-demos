@@ -28,11 +28,11 @@ import { useTenantStore } from '@/stores/tenant';
 
 import { TenantCreateModal } from '@/pages/tenant/TenantCreate';
 
-import { MobileSidebarDrawer } from '@/components/agent/chat/MobileSidebarDrawer';
 import { BackgroundSubAgentPanel } from '@/components/agent/BackgroundSubAgentPanel';
+import { MobileSidebarDrawer } from '@/components/agent/chat/MobileSidebarDrawer';
 import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
-import TenantHeader from '@/components/layout/TenantHeader';
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
+import TenantHeader from '@/components/layout/TenantHeader';
 
 // HTTP status codes for error handling
 const HTTP_STATUS = {
@@ -239,7 +239,7 @@ export const TenantLayout: React.FC = memo(() => {
   const NON_AGENT_SUBPATHS = [
     'overview', 'tasks', 'agents', 'projects', 'users', 'providers',
     'analytics', 'billing', 'settings', 'patterns', 'subagents', 'skills',
-    'profile',
+    'profile', 'mcp-servers',
   ];
   const pathSegments = location.pathname.replace(basePath, '').split('/').filter(Boolean);
   const isAgentWorkspacePath =

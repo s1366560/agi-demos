@@ -5,9 +5,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { useTranslation } from 'react-i18next';
+
 import { Dropdown, message, Spin } from 'antd';
 import { ChevronDown, Copy, Plus } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
 import { SubAgentEmptyState } from '../../components/subagent/SubAgentEmptyState';
 import { SubAgentFilters } from '../../components/subagent/SubAgentFilters';

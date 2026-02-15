@@ -4,8 +4,9 @@
 
 import { memo } from 'react';
 
-import { Bot, CheckCircle2, TrendingUp, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+import { Bot, CheckCircle2, TrendingUp, Zap } from 'lucide-react';
 
 interface StatsCardProps {
   title: string;

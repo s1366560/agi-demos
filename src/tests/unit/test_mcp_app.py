@@ -21,14 +21,14 @@ class TestMCPAppUIMetadata:
     def test_create_with_defaults(self):
         meta = MCPAppUIMetadata(resource_uri="ui://server/app.html")
         assert meta.resource_uri == "ui://server/app.html"
-        assert meta.permissions == []
+        assert meta.permissions == {}
         assert meta.csp == {}
         assert meta.title is None
 
     def test_create_with_all_fields(self):
         meta = MCPAppUIMetadata(
             resource_uri="ui://myserver/dashboard.html",
-            permissions=["camera", "microphone"],
+            permissions={"camera": {}, "microphone": {}},
             csp={"connect-src": ["https://api.example.com"]},
             title="Sales Dashboard",
         )
@@ -56,8 +56,24 @@ class TestMCPAppUIMetadata:
         }
         meta = MCPAppUIMetadata.from_dict(data)
         assert meta.resource_uri == "ui://server/app.html"
-        assert meta.permissions == ["camera"]
+        # Legacy array format normalized to spec object format
+        assert meta.permissions == {"camera": {}}
         assert meta.title == "App"
+
+    def test_from_dict_spec_permissions_format(self):
+        """Spec object format passes through unchanged."""
+        data = {
+            "resourceUri": "ui://server/app.html",
+            "permissions": {"camera": {}, "clipboardWrite": {}},
+        }
+        meta = MCPAppUIMetadata.from_dict(data)
+        assert meta.permissions == {"camera": {}, "clipboardWrite": {}}
+
+    def test_from_dict_deprecated_uri_format(self):
+        """SEP-1865: Deprecated flat _meta['ui/resourceUri'] not handled here."""
+        data = {"resourceUri": "mcp-app://my-server/app"}
+        meta = MCPAppUIMetadata.from_dict(data)
+        assert meta.resource_uri == "mcp-app://my-server/app"
 
 
 @pytest.mark.unit

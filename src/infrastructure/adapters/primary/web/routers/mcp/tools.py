@@ -47,11 +47,11 @@ async def list_all_mcp_tools(
 
     all_tools = []
     for server in servers:
-        for tool in server["discovered_tools"]:
+        for tool in server.discovered_tools:
             all_tools.append(
                 MCPToolResponse(
-                    server_id=server["id"],
-                    server_name=server["name"],
+                    server_id=server.id,
+                    server_name=server.name,
                     name=tool.get("name", "unknown"),
                     description=tool.get("description", ""),
                     input_schema=tool.get("inputSchema", {}),
@@ -99,16 +99,16 @@ async def call_mcp_tool(
             detail=f"MCP server not found: {request_data.server_id}",
         )
 
-    if server["tenant_id"] != tenant_id:
+    if server.tenant_id != tenant_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied",
         )
 
-    if not server["enabled"]:
+    if not server.enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"MCP server '{server.get('name', request_data.server_id)}' is disabled",
+            detail=f"MCP server '{server.name}' is disabled",
         )
 
     try:
@@ -116,8 +116,8 @@ async def call_mcp_tool(
         start_time = time.time()
 
         async with MCPClient(
-            server_type=server["server_type"],
-            transport_config=server["transport_config"],
+            server_type=server.server_type,
+            transport_config=server.transport_config,
         ) as client:
             result = await client.call_tool(
                 tool_name=request_data.tool_name,

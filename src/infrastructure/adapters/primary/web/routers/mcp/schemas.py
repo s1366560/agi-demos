@@ -6,7 +6,7 @@ Pydantic models for MCP server management and tool operations.
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 MCPServerTypeValues = Literal["stdio", "sse", "http", "websocket"]
 
@@ -65,6 +65,8 @@ class MCPServerUpdate(BaseModel):
 
 class MCPServerResponse(BaseModel):
     """Schema for MCP server response."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: str
     tenant_id: str

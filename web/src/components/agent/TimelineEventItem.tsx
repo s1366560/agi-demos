@@ -15,12 +15,13 @@
 import { memo, lazy, Suspense, useState, useCallback } from 'react';
 
 import { useTranslation } from 'react-i18next';
+
 import { Loader2, PanelRight } from 'lucide-react';
 
 import { useAgentV3Store } from '../../stores/agentV3';
-import { useSandboxStore } from '../../stores/sandbox';
 import { useCanvasStore, type CanvasContentType } from '../../stores/canvasStore';
 import { useLayoutModeStore } from '../../stores/layoutMode';
+import { useSandboxStore } from '../../stores/sandbox';
 import { formatDistanceToNowCN, formatReadableTime, formatDateTime } from '../../utils/date';
 
 import { AssistantMessage } from './chat/AssistantMessage';

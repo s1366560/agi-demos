@@ -18,7 +18,7 @@ import base64
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from sqlalchemy.exc import IntegrityError
 
@@ -27,6 +27,7 @@ from src.application.services.sandbox_profile import (
     get_profile as get_sandbox_profile,
 )
 from src.domain.model.sandbox.constants import DEFAULT_SANDBOX_IMAGE
+from src.domain.model.sandbox.exceptions import SandboxLockTimeoutError
 from src.domain.model.sandbox.project_sandbox import (
     ProjectSandbox,
     ProjectSandboxStatus,
@@ -44,6 +45,11 @@ from src.domain.ports.services.sandbox_resource_port import (
     SandboxInfo,
     SandboxResourcePort,
 )
+
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
+        MCPSandboxAdapter,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +85,7 @@ class UnifiedSandboxService(SandboxResourcePort):
     def __init__(
         self,
         repository: ProjectSandboxRepository,
-        sandbox_adapter: Any,  # MCPSandboxAdapter or compatible
+        sandbox_adapter: "MCPSandboxAdapter",
         distributed_lock: Optional[DistributedLockPort] = None,
         default_profile: SandboxProfileType = SandboxProfileType.STANDARD,
         health_check_interval_seconds: int = 60,
@@ -111,11 +117,25 @@ class UnifiedSandboxService(SandboxResourcePort):
         # Per-project locks for in-process concurrency control
         self._project_locks: Dict[str, asyncio.Lock] = {}
         self._locks_lock = asyncio.Lock()
+        self._max_project_locks = 500  # Prevent unbounded growth
+        # Debounce access time persistence (at most once per 60s per project)
+        self._last_access_save: Dict[str, datetime] = {}
 
     async def _get_project_lock(self, project_id: str) -> asyncio.Lock:
         """Get or create a lock for a specific project."""
         async with self._locks_lock:
             if project_id not in self._project_locks:
+                # Evict oldest entries if at capacity
+                if len(self._project_locks) >= self._max_project_locks:
+                    # Remove locks that are not currently held
+                    to_remove = []
+                    for pid, lock in self._project_locks.items():
+                        if not lock.locked():
+                            to_remove.append(pid)
+                        if len(self._project_locks) - len(to_remove) < self._max_project_locks:
+                            break
+                    for pid in to_remove:
+                        del self._project_locks[pid]
                 self._project_locks[project_id] = asyncio.Lock()
             return self._project_locks[project_id]
 
@@ -123,6 +143,15 @@ class UnifiedSandboxService(SandboxResourcePort):
         """Clean up the lock for a project."""
         async with self._locks_lock:
             self._project_locks.pop(project_id, None)
+
+    def _should_save_access(self, project_id: str) -> bool:
+        """Check if access time should be persisted (debounce to once per 60s)."""
+        now = datetime.now(timezone.utc)
+        last = self._last_access_save.get(project_id)
+        if last is None or (now - last).total_seconds() >= 60:
+            self._last_access_save[project_id] = now
+            return True
+        return False
 
     # -------------------------------------------------------------------------
     # Core API Methods (6 methods)
@@ -164,13 +193,13 @@ class UnifiedSandboxService(SandboxResourcePort):
                     profile=profile,
                     config_override=config_override,
                 )
-            except IntegrityError:
+            except (IntegrityError, SandboxLockTimeoutError):
                 logger.info(
                     f"Concurrent creation detected for project {project_id} "
                     f"(attempt {attempt + 1}/{max_retries}), retrying..."
                 )
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(0.2 * (attempt + 1))
+                    await asyncio.sleep(0.2 * (2**attempt))
                     continue
                 # Final attempt - try to return existing
                 existing = await self._repository.find_by_project(project_id)
@@ -214,9 +243,10 @@ class UnifiedSandboxService(SandboxResourcePort):
                 operation="execute_tool",
             )
 
-        # Update access time
-        association.mark_accessed()
-        await self._repository.save(association)
+        # Update access time (debounced to reduce DB writes)
+        if self._should_save_access(project_id):
+            association.mark_accessed()
+            await self._repository.save(association)
 
         # Execute tool via adapter
         return await self._adapter.call_tool(
@@ -282,15 +312,15 @@ class UnifiedSandboxService(SandboxResourcePort):
             if delete_association:
                 await self._repository.delete(association.id)
 
-            # Clean up project lock
-            await self._cleanup_project_lock(project_id)
-
             logger.info(f"Terminated sandbox for project {project_id}")
             return True
 
         except Exception as e:
             logger.error(f"Failed to terminate sandbox for project {project_id}: {e}")
             return False
+        finally:
+            # Always clean up project lock, even on failure
+            await self._cleanup_project_lock(project_id)
 
     async def get_status(self, project_id: str) -> Optional[SandboxInfo]:
         """Get sandbox status for a project.
@@ -309,6 +339,9 @@ class UnifiedSandboxService(SandboxResourcePort):
 
     async def health_check(self, project_id: str) -> bool:
         """Perform health check on project's sandbox.
+
+        If auto_recover is enabled and sandbox is unhealthy, attempts to
+        recreate the sandbox automatically.
 
         Args:
             project_id: The project ID
@@ -330,11 +363,26 @@ class UnifiedSandboxService(SandboxResourcePort):
 
             if healthy:
                 association.mark_healthy()
-            else:
-                association.mark_unhealthy("Health check failed")
+                await self._repository.save(association)
+                return True
 
+            # Unhealthy - attempt auto-recovery if enabled
+            association.mark_unhealthy("Health check failed")
             await self._repository.save(association)
-            return healthy
+
+            if self._auto_recover:
+                logger.info(
+                    f"Auto-recovering unhealthy sandbox for project {project_id}"
+                )
+                try:
+                    await self._recreate_sandbox(association)
+                    return True
+                except Exception as recover_err:
+                    logger.error(
+                        f"Auto-recovery failed for project {project_id}: {recover_err}"
+                    )
+
+            return False
 
         except Exception as e:
             logger.error(f"Health check error for project {project_id}: {e}")
@@ -366,11 +414,9 @@ class UnifiedSandboxService(SandboxResourcePort):
 
         # Check if sandbox is actually usable
         if association.is_usable():
-            container_exists = await self._adapter.container_exists(
-                association.sandbox_id
-            )
-            if container_exists:
-                return association.sandbox_id
+            # Trust DB status - skip expensive Docker API check
+            # Health checks will detect dead containers periodically
+            return association.sandbox_id
 
         return None
 
@@ -418,9 +464,18 @@ class UnifiedSandboxService(SandboxResourcePort):
             True if sync succeeded, False otherwise
         """
         try:
-            # Decode base64 content
-            content_bytes = base64.b64decode(content_base64)
-            content_str = content_bytes.decode("utf-8")
+            # Decode and validate base64 content
+            try:
+                content_bytes = base64.b64decode(content_base64, validate=True)
+            except Exception:
+                logger.error(f"Invalid base64 content for file {filename}")
+                return False
+
+            try:
+                content_str = content_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                logger.error(f"File {filename} content is not valid UTF-8")
+                return False
 
             # Get tenant_id from association
             association = await self._repository.find_by_project(project_id)
@@ -505,7 +560,7 @@ class UnifiedSandboxService(SandboxResourcePort):
                 if use_redis_lock:
                     lock_handle = await self._distributed_lock.acquire(
                         key=lock_key,
-                        ttl=120,
+                        ttl=60,
                         blocking=True,
                         timeout=30.0,
                     )
@@ -523,10 +578,10 @@ class UnifiedSandboxService(SandboxResourcePort):
                         existing.mark_accessed()
                         await self._repository.save(existing)
                         return await self._build_sandbox_info(existing)
-                    raise IntegrityError(
-                        statement="distributed_lock",
-                        params={},
-                        orig=Exception("Could not acquire distributed lock"),
+                    raise SandboxLockTimeoutError(
+                        message=f"Could not acquire lock for project {project_id}",
+                        project_id=project_id,
+                        timeout_seconds=30.0,
                     )
 
                 # Double-check after acquiring lock
@@ -598,11 +653,22 @@ class UnifiedSandboxService(SandboxResourcePort):
             association.mark_healthy()
             await self._repository.save(association)
 
-            # Connect MCP
+            # Connect MCP - treat failure as creation failure (3.1)
             try:
                 await self._adapter.connect_mcp(instance.id)
             except Exception as e:
-                logger.warning(f"Failed to connect MCP for {instance.id}: {e}")
+                logger.error(
+                    f"MCP connection failed for {instance.id}, "
+                    f"marking sandbox as ERROR: {e}"
+                )
+                association.mark_error(f"MCP connection failed: {e}")
+                await self._repository.save(association)
+                # Attempt to clean up the container
+                try:
+                    await self._adapter.terminate_sandbox(instance.id)
+                except Exception:
+                    pass
+                raise RuntimeError(f"MCP connection failed for sandbox {instance.id}: {e}")
 
             logger.info(f"Created sandbox {instance.id} for project {project_id}")
             return await self._build_sandbox_info(association)
@@ -611,6 +677,15 @@ class UnifiedSandboxService(SandboxResourcePort):
             logger.error(f"Failed to create sandbox for project {project_id}: {e}")
             association.mark_error(str(e))
             await self._repository.save(association)
+            # Clean up container if it was created (1.3)
+            if association.sandbox_id and association.sandbox_id != sandbox_id:
+                try:
+                    await self._adapter.terminate_sandbox(association.sandbox_id)
+                except Exception:
+                    logger.warning(
+                        f"Failed to cleanup container {association.sandbox_id} "
+                        f"after creation failure"
+                    )
             raise
 
     async def _recreate_sandbox(self, association: ProjectSandbox) -> SandboxInfo:

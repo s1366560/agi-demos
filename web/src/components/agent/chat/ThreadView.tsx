@@ -3,11 +3,12 @@
  */
 import { memo, useState, useEffect } from 'react';
 
-import { getAuthToken } from '@/utils/tokenResolver';
 
 import { useTranslation } from 'react-i18next';
 
 import { MessageSquare, ChevronDown, ChevronRight, Send, Loader2 } from 'lucide-react';
+
+import { getAuthToken } from '@/utils/tokenResolver';
 
 interface ThreadReply {
   id: string;

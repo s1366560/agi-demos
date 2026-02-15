@@ -11,6 +11,7 @@
  */
 
 import ReactMarkdown from 'react-markdown';
+import type { Components } from 'react-markdown';
 
 import {
   MARKDOWN_PROSE_CLASSES,
@@ -22,7 +23,6 @@ import { CodeBlock } from './CodeBlock';
 import { FinalResponseDisplay } from './FinalResponseDisplay';
 import { useMarkdownPlugins } from './markdownPlugins';
 
-import type { Components } from 'react-markdown';
 
 const MARKDOWN_COMPONENTS: Components = {
   pre: ({ children, ...props }) => <CodeBlock {...props}>{children}</CodeBlock>,

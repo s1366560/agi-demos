@@ -10,6 +10,7 @@ from typing import List, Optional
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.model.mcp.server import MCPServer
 from src.domain.ports.repositories.mcp_server_repository import MCPServerRepositoryPort
 from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 from src.infrastructure.adapters.secondary.persistence.models import MCPServer as DBMCPServer
@@ -17,12 +18,9 @@ from src.infrastructure.adapters.secondary.persistence.models import MCPServer a
 logger = logging.getLogger(__name__)
 
 
-class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerRepositoryPort):
+class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRepositoryPort):
     """
     V2 SQLAlchemy implementation of MCPServerRepository using BaseRepository.
-
-    Note: This repository uses dict as the domain type since MCPServer
-    is represented as a dictionary in the current architecture.
     """
 
     _model_class = DBMCPServer
@@ -68,7 +66,7 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
         )
         return server_id
 
-    async def get_by_id(self, server_id: str) -> Optional[dict]:
+    async def get_by_id(self, server_id: str) -> Optional[MCPServer]:
         """Get an MCP server by its ID."""
         query = select(DBMCPServer).where(DBMCPServer.id == server_id)
         result = await self._session.execute(query)
@@ -76,7 +74,7 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
 
         return self._to_domain(db_server) if db_server else None
 
-    async def get_by_name(self, project_id: str, name: str) -> Optional[dict]:
+    async def get_by_name(self, project_id: str, name: str) -> Optional[MCPServer]:
         """Get an MCP server by name within a project."""
         query = select(DBMCPServer).where(
             DBMCPServer.project_id == project_id,
@@ -91,7 +89,7 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
         self,
         project_id: str,
         enabled_only: bool = False,
-    ) -> List[dict]:
+    ) -> List[MCPServer]:
         """List all MCP servers for a project."""
         query = select(DBMCPServer).where(DBMCPServer.project_id == project_id)
 
@@ -107,7 +105,7 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
         self,
         tenant_id: str,
         enabled_only: bool = False,
-    ) -> List[dict]:
+    ) -> List[MCPServer]:
         """List all MCP servers for a tenant (across all projects)."""
         query = select(DBMCPServer).where(DBMCPServer.tenant_id == tenant_id)
 
@@ -193,7 +191,7 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
         self,
         tenant_id: str,
         project_id: Optional[str] = None,
-    ) -> List[dict]:
+    ) -> List[MCPServer]:
         """Get all enabled MCP servers, optionally filtered by project."""
         if project_id:
             return await self.list_by_project(project_id, enabled_only=True)
@@ -201,57 +199,53 @@ class SqlMCPServerRepository(BaseRepository[dict, DBMCPServer], MCPServerReposit
 
     # === Conversion methods ===
 
-    def _to_domain(self, db_server: Optional[DBMCPServer]) -> Optional[dict]:
-        """Convert database model to dictionary."""
+    def _to_domain(self, db_server: Optional[DBMCPServer]) -> Optional[MCPServer]:
+        """Convert database model to MCPServer domain entity."""
         if db_server is None:
             return None
 
-        return {
-            "id": db_server.id,
-            "tenant_id": db_server.tenant_id,
-            "project_id": db_server.project_id,
-            "name": db_server.name,
-            "description": db_server.description,
-            "server_type": db_server.server_type,
-            "transport_config": db_server.transport_config,
-            "enabled": db_server.enabled,
-            "discovered_tools": db_server.discovered_tools,
-            "sync_error": db_server.sync_error,
-            "last_sync_at": db_server.last_sync_at,
-            "created_at": db_server.created_at,
-            "updated_at": db_server.updated_at,
-        }
-
-    def _to_db(self, domain_entity: dict) -> DBMCPServer:
-        """Convert dictionary to database model."""
-        return DBMCPServer(
-            id=domain_entity.get("id"),
-            tenant_id=domain_entity.get("tenant_id"),
-            project_id=domain_entity.get("project_id"),
-            name=domain_entity.get("name"),
-            description=domain_entity.get("description"),
-            server_type=domain_entity.get("server_type"),
-            transport_config=domain_entity.get("transport_config", {}),
-            enabled=domain_entity.get("enabled", True),
-            discovered_tools=domain_entity.get("discovered_tools", []),
-            last_sync_at=domain_entity.get("last_sync_at"),
-            created_at=domain_entity.get("created_at"),
-            updated_at=domain_entity.get("updated_at"),
+        return MCPServer(
+            id=db_server.id,
+            tenant_id=db_server.tenant_id,
+            project_id=db_server.project_id,
+            name=db_server.name,
+            description=db_server.description,
+            server_type=db_server.server_type,
+            transport_config=db_server.transport_config,
+            enabled=db_server.enabled,
+            discovered_tools=db_server.discovered_tools or [],
+            sync_error=db_server.sync_error,
+            last_sync_at=db_server.last_sync_at,
+            created_at=db_server.created_at,
+            updated_at=db_server.updated_at,
         )
 
-    def _update_fields(self, db_model: DBMCPServer, domain_entity: dict) -> None:
-        """Update database model fields from dictionary."""
-        if "name" in domain_entity:
-            db_model.name = domain_entity["name"]
-        if "description" in domain_entity:
-            db_model.description = domain_entity["description"]
-        if "server_type" in domain_entity:
-            db_model.server_type = domain_entity["server_type"]
-        if "transport_config" in domain_entity:
-            db_model.transport_config = domain_entity["transport_config"]
-        if "enabled" in domain_entity:
-            db_model.enabled = domain_entity["enabled"]
-        if "discovered_tools" in domain_entity:
-            db_model.discovered_tools = domain_entity["discovered_tools"]
-        if "last_sync_at" in domain_entity:
-            db_model.last_sync_at = domain_entity["last_sync_at"]
+    def _to_db(self, entity: MCPServer) -> DBMCPServer:
+        """Convert MCPServer domain entity to database model."""
+        return DBMCPServer(
+            id=entity.id,
+            tenant_id=entity.tenant_id,
+            project_id=entity.project_id,
+            name=entity.name,
+            description=entity.description,
+            server_type=entity.server_type,
+            transport_config=entity.transport_config or {},
+            enabled=entity.enabled,
+            discovered_tools=entity.discovered_tools or [],
+            last_sync_at=entity.last_sync_at,
+            created_at=entity.created_at,
+            updated_at=entity.updated_at,
+        )
+
+    def _update_fields(self, db_model: DBMCPServer, entity: MCPServer) -> None:
+        """Update database model fields from MCPServer entity."""
+        db_model.name = entity.name
+        db_model.description = entity.description
+        if entity.server_type is not None:
+            db_model.server_type = entity.server_type
+        if entity.transport_config is not None:
+            db_model.transport_config = entity.transport_config
+        db_model.enabled = entity.enabled
+        db_model.discovered_tools = entity.discovered_tools
+        if entity.last_sync_at is not None:
+            db_model.last_sync_at = entity.last_sync_at

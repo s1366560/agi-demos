@@ -237,9 +237,12 @@ class MCPConnector:
             return result
 
         except asyncio.TimeoutError:
-            raise RuntimeError(f"Tool call {tool_name} timed out after {timeout}s")
+            raise RuntimeError(
+                f"Tool call '{tool_name}' timed out after {timeout}s "
+                f"(sandbox={instance.id})"
+            )
         except Exception as e:
-            raise RuntimeError(f"Tool call {tool_name} failed: {e}") from e
+            raise RuntimeError(f"Tool call '{tool_name}' failed: {e}") from e
 
     async def _refresh_tools(self, instance: MCPSandboxInstance) -> None:
         """Refresh tool cache from MCP server."""

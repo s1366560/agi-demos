@@ -7,8 +7,9 @@
 
 import React, { memo } from 'react';
 
-import { ArrowUpRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+
+import { ArrowUpRight } from 'lucide-react';
 
 interface SuggestionChipsProps {
   suggestions: string[];

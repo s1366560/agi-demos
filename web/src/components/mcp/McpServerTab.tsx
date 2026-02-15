@@ -5,7 +5,9 @@
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 
-import { message, Select, Empty, Spin, Input } from 'antd';
+import { message, Select, Spin, Input, Tooltip } from 'antd';
+import { Plus, RefreshCw, Search, Filter, Server, AlertCircle } from 'lucide-react';
+
 
 import { useMCPStore } from '@/stores/mcp';
 import { useProjectStore } from '@/stores/project';
@@ -16,7 +18,7 @@ import { McpToolsDrawer } from './McpToolsDrawer';
 
 import type { MCPServerResponse, MCPServerType } from '@/types/agent';
 
-const { Search } = Input;
+const { Search: AntSearch } = Input;
 
 export const McpServerTab: React.FC = () => {
   const [search, setSearch] = useState('');
@@ -148,85 +150,161 @@ export const McpServerTab: React.FC = () => {
     listServers(projectId ? { project_id: projectId } : {});
   }, [listServers, currentProject]);
 
+  // Error count for badge
+  const errorCount = useMemo(() => 
+    servers.filter(s => s.sync_error).length, 
+    [servers]
+  );
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Toolbar */}
-      <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
-        <div className="flex flex-col sm:flex-row gap-4">
-          <div className="flex-1">
-            <Search
-              placeholder="Search servers..."
+      <div className="bg-white dark:bg-slate-800 rounded-xl p-4 border border-slate-200 dark:border-slate-700 shadow-sm">
+        <div className="flex flex-col lg:flex-row gap-4">
+          {/* Search */}
+          <div className="flex-1 min-w-0">
+            <AntSearch
+              placeholder="Search servers by name or description..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               allowClear
+              prefix={<Search size={16} className="text-slate-400" />}
+              className="w-full"
             />
           </div>
-          <Select
-            value={enabledFilter}
-            onChange={setEnabledFilter}
-            className="w-full sm:w-36"
-            options={[
-              { label: 'All', value: 'all' },
-              { label: 'Enabled', value: 'enabled' },
-              { label: 'Disabled', value: 'disabled' },
-            ]}
-          />
-          <Select
-            value={typeFilter}
-            onChange={setTypeFilter}
-            className="w-full sm:w-36"
-            options={[
-              { label: 'All Types', value: 'all' },
-              { label: 'STDIO', value: 'stdio' },
-              { label: 'SSE', value: 'sse' },
-              { label: 'HTTP', value: 'http' },
-              { label: 'WebSocket', value: 'websocket' },
-            ]}
-          />
+          
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex items-center gap-2">
+              <Filter size={16} className="text-slate-400 flex-shrink-0" />
+              <Select
+                value={enabledFilter}
+                onChange={setEnabledFilter}
+                className="w-32"
+                size="middle"
+                options={[
+                  { label: 'All Status', value: 'all' },
+                  { label: 'Enabled', value: 'enabled' },
+                  { label: 'Disabled', value: 'disabled' },
+                ]}
+              />
+            </div>
+            <Select
+              value={typeFilter}
+              onChange={setTypeFilter}
+              className="w-36"
+              size="middle"
+              placeholder="Type"
+              options={[
+                { label: 'All Types', value: 'all' },
+                { label: 'STDIO', value: 'stdio' },
+                { label: 'SSE', value: 'sse' },
+                { label: 'HTTP', value: 'http' },
+                { label: 'WebSocket', value: 'websocket' },
+              ]}
+            />
+          </div>
+          
+          {/* Actions */}
           <div className="flex gap-2">
-            <button
-              onClick={handleRefresh}
-              className="inline-flex items-center justify-center px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700"
-              aria-label="refresh"
-            >
-              <span className="material-symbols-outlined">refresh</span>
-            </button>
+            <Tooltip title="Refresh list">
+              <button
+                onClick={handleRefresh}
+                disabled={isLoading}
+                className="inline-flex items-center justify-center px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 disabled:opacity-50 transition-colors"
+                aria-label="refresh"
+              >
+                <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+              </button>
+            </Tooltip>
             <button
               onClick={handleCreate}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors shadow-sm hover:shadow font-medium"
             >
-              <span className="material-symbols-outlined text-lg">add</span>
-              Create
+              <Plus size={18} />
+              <span>Create Server</span>
             </button>
           </div>
         </div>
+        
+        {/* Filter summary */}
+        {(search || enabledFilter !== 'all' || typeFilter !== 'all') && (
+          <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/50">
+            <span className="text-xs text-slate-500 dark:text-slate-400">
+              Showing {filteredServers.length} of {servers.length} servers
+            </span>
+            {(search || enabledFilter !== 'all' || typeFilter !== 'all') && (
+              <button
+                onClick={() => {
+                  setSearch('');
+                  setEnabledFilter('all');
+                  setTypeFilter('all');
+                }}
+                className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
+      {/* Error Banner */}
+      {errorCount > 0 && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl">
+          <AlertCircle size={18} className="text-amber-500 flex-shrink-0" />
+          <p className="text-sm text-amber-800 dark:text-amber-300">
+            {errorCount} server{errorCount > 1 ? 's have' : ' has'} sync errors. Check the server cards for details.
+          </p>
+        </div>
+      )}
+
       {/* Content */}
-      {isLoading ? (
-        <div className="flex justify-center py-12">
+      {isLoading && servers.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16">
           <Spin size="large" />
+          <p className="text-sm text-slate-400 mt-4">Loading servers...</p>
         </div>
       ) : servers.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <span className="material-symbols-outlined text-5xl text-slate-300 dark:text-slate-600 mb-4">
-            dns
-          </span>
-          <p className="text-slate-500 dark:text-slate-400 mb-4">
-            No MCP servers configured. Create your first server to get started.
+        <div className="flex flex-col items-center justify-center py-16 text-center bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-dashed">
+          <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center mb-4">
+            <Server size={28} className="text-slate-300 dark:text-slate-500" />
+          </div>
+          <h3 className="text-base font-semibold text-slate-900 dark:text-white mb-1">
+            No MCP servers configured
+          </h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 max-w-sm">
+            Create your first MCP server to enable powerful tools and capabilities
           </p>
           <button
             onClick={handleCreate}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors shadow-sm"
           >
-            <span className="material-symbols-outlined text-lg">add</span>
+            <Plus size={18} />
             Create Server
           </button>
         </div>
       ) : filteredServers.length === 0 ? (
-        <Empty description="No servers match your filters." className="py-12" />
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center mb-3">
+            <Search size={20} className="text-slate-300 dark:text-slate-500" />
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            No servers match your search criteria.
+          </p>
+          <button
+            onClick={() => {
+              setSearch('');
+              setEnabledFilter('all');
+              setTypeFilter('all');
+            }}
+            className="mt-2 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400"
+          >
+            Clear all filters
+          </button>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {filteredServers.map((server) => (
             <McpServerCard
               key={server.id}

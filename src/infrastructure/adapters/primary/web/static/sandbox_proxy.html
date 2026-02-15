@@ -149,6 +149,23 @@
         method: PROXY_READY,
         params: {}
       }, EXPECTED_HOST_ORIGIN);
+
+      // GAP-12: CSP audit logging (SEP-1865 recommends logging CSP configs)
+      // Listen for CSP violations inside the inner iframe and relay to host as log messages.
+      window.addEventListener("securitypolicyviolation", function(e) {
+        window.parent.postMessage({
+          method: "notifications/message",
+          params: {
+            level: "warning",
+            data: {
+              type: "csp-violation",
+              blockedURI: e.blockedURI || "",
+              violatedDirective: e.violatedDirective || "",
+              originalPolicy: e.originalPolicy || ""
+            }
+          }
+        }, EXPECTED_HOST_ORIGIN);
+      });
     </script>
   </body>
 </html>

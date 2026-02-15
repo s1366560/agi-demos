@@ -169,28 +169,43 @@ class MCPSubprocessClient:
                 return True
 
             logger.error(f"MCP initialize request failed. Response: {result}")
-            # Try to read stderr for more info
-            if self._proc and self._proc.stderr:
-                try:
-                    stderr_data = await asyncio.wait_for(self._proc.stderr.read(4096), timeout=1)
-                    if stderr_data:
-                        logger.error(f"MCP subprocess stderr: {stderr_data.decode()}")
-                except asyncio.TimeoutError:
-                    pass
+            stderr_text = await self._read_stderr()
+            if stderr_text:
+                logger.error(f"MCP subprocess stderr:\n{stderr_text}")
             await self.disconnect()
             return False
 
         except asyncio.TimeoutError:
-            logger.error(f"MCP connection timeout after {timeout}s")
+            stderr_text = await self._read_stderr()
+            logger.error(
+                f"MCP connection timeout after {timeout}s for '{self.command} {' '.join(self.args)}'"
+                + (f"\nStderr: {stderr_text}" if stderr_text else "")
+            )
             await self.disconnect()
             return False
         except FileNotFoundError:
             logger.error(f"Command not found: {self.command}")
             return False
         except Exception as e:
-            logger.exception(f"Error connecting to MCP subprocess: {e}")
+            stderr_text = await self._read_stderr()
+            logger.exception(
+                f"Error connecting to MCP subprocess: {e}"
+                + (f"\nStderr: {stderr_text}" if stderr_text else "")
+            )
             await self.disconnect()
             return False
+
+    async def _read_stderr(self) -> str:
+        """Read available stderr from the subprocess. Returns up to 2000 chars."""
+        if not self._proc or not self._proc.stderr:
+            return ""
+        try:
+            data = await asyncio.wait_for(self._proc.stderr.read(4096), timeout=2)
+            if data:
+                return data.decode("utf-8", errors="replace")[:2000]
+        except (asyncio.TimeoutError, Exception):
+            pass
+        return ""
 
     async def disconnect(self) -> None:
         """Close the subprocess."""
@@ -324,7 +339,11 @@ class MCPSubprocessClient:
                     return json.loads(response_str)
 
             except asyncio.TimeoutError:
-                logger.error(f"MCP request '{method}' timed out after {timeout}s")
+                stderr_text = await self._read_stderr()
+                logger.error(
+                    f"MCP request '{method}' timed out after {timeout}s"
+                    + (f"\nStderr: {stderr_text}" if stderr_text else "")
+                )
             except json.JSONDecodeError as e:
                 logger.error(f"MCP response parse error: {e}")
             except Exception as e:

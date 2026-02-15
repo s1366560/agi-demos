@@ -36,7 +36,8 @@ class MCPAppUIMetadata:
 
     Attributes:
         resource_uri: The ui:// URI pointing to the app's HTML resource.
-        permissions: Requested iframe permissions (e.g., camera, microphone).
+        permissions: Requested iframe permissions per SEP-1865 spec format
+            ({camera: {}, microphone: {}, geolocation: {}, clipboardWrite: {}}).
         csp: Content Security Policy directives for the app.
         title: Display title for the app.
         visibility: Who can access this tool - ["model", "app"] (default both).
@@ -45,7 +46,7 @@ class MCPAppUIMetadata:
     """
 
     resource_uri: str
-    permissions: List[str] = field(default_factory=list)
+    permissions: Any = field(default_factory=dict)
     csp: Dict[str, List[str]] = field(default_factory=dict)
     title: Optional[str] = None
     visibility: List[str] = field(default_factory=lambda: ["model", "app"])
@@ -73,11 +74,31 @@ class MCPAppUIMetadata:
         return result
 
     @classmethod
+    def _normalize_permissions(cls, raw: Any) -> Dict[str, Any]:
+        """Normalize permissions to spec format {camera: {}, microphone: {}, ...}.
+
+        Accepts both legacy array format ["camera", "microphone"] and
+        spec object format {camera: {}, microphone: {}}.
+        """
+        if isinstance(raw, dict):
+            return raw
+        if isinstance(raw, list):
+            mapping = {
+                "camera": "camera",
+                "microphone": "microphone",
+                "geolocation": "geolocation",
+                "clipboard-write": "clipboardWrite",
+                "clipboardWrite": "clipboardWrite",
+            }
+            return {mapping.get(p, p): {} for p in raw if p}
+        return {}
+
+    @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "MCPAppUIMetadata":
         """Create from dictionary (MCP protocol format)."""
         return cls(
             resource_uri=data.get("resourceUri", ""),
-            permissions=data.get("permissions", []),
+            permissions=cls._normalize_permissions(data.get("permissions", {})),
             csp=data.get("csp", {}),
             title=data.get("title"),
             visibility=data.get("visibility", ["model", "app"]),

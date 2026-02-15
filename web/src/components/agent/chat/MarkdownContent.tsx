@@ -16,12 +16,13 @@
 import { memo, useMemo } from 'react';
 
 import ReactMarkdown from 'react-markdown';
+import type { Components } from 'react-markdown';
 
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
+
 import { CodeBlock } from './CodeBlock';
 import { useMarkdownPlugins } from './markdownPlugins';
 
-import type { Components } from 'react-markdown';
 
 export interface MarkdownContentProps {
   /** Markdown content to render */

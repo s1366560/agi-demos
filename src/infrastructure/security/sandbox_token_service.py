@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 # Default token TTL in seconds (5 minutes)
 DEFAULT_TOKEN_TTL = 300
+# Maximum number of tokens to keep in memory
+MAX_TOKEN_STORE_SIZE = 10000
 
 
 @dataclass(frozen=True)
@@ -124,6 +126,10 @@ class SandboxTokenService:
 
         # Full token: random_part.signature
         token = f"{random_part}.{signature}"
+
+        # Evict expired tokens if store is getting large
+        if len(self._tokens) >= MAX_TOKEN_STORE_SIZE:
+            self.cleanup_expired()
 
         # Store token metadata (for validation and revocation)
         self._tokens[token] = {
@@ -271,7 +277,7 @@ class SandboxTokenService:
             self._secret_key,
             data.encode(),
             hashlib.sha256,
-        ).hexdigest()[:32]  # Use first 32 chars for shorter tokens
+        ).hexdigest()  # Full SHA256 for security
 
     def get_active_token_count(self, project_id: Optional[str] = None) -> int:
         """Get count of active (non-expired) tokens.

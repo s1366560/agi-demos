@@ -6,6 +6,7 @@ Provides secure command execution within the sandbox environment.
 import asyncio
 import logging
 import os
+import signal
 from typing import Any, Dict, Optional
 
 from src.server.websocket_server import MCPTool
@@ -118,6 +119,7 @@ async def execute_bash(
             stderr=asyncio.subprocess.PIPE,
             cwd=cwd,
             env=sanitized_env,
+            start_new_session=True,  # Own process group so we can kill all children
         )
 
         try:
@@ -126,7 +128,11 @@ async def execute_bash(
                 timeout=timeout,
             )
         except asyncio.TimeoutError:
-            process.kill()
+            # Kill entire process group (shell + all children including backgrounded)
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                process.kill()
             await process.wait()
             return {
                 "content": [

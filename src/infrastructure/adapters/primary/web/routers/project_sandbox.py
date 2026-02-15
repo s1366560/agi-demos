@@ -12,9 +12,11 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket
-from fastapi import WebSocketDisconnect
+from fastapi import WebSocketDisconnect, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import and_, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.project_sandbox_lifecycle_service import (
     ProjectSandboxLifecycleService,
@@ -35,7 +37,7 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
     get_current_user_from_desktop_proxy,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
     MCPSandboxAdapter,
 )
@@ -43,6 +45,31 @@ from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/projects", tags=["project-sandbox"])
+
+
+# ============================================================================
+# Authorization Helper
+# ============================================================================
+
+
+async def verify_project_access(
+    project_id: str,
+    user: User,
+    db: AsyncSession,
+    required_roles: Optional[List[str]] = None,
+) -> None:
+    """Verify user has access to the project. Raises 403 if not."""
+    query = select(UserProject).where(
+        and_(UserProject.user_id == user.id, UserProject.project_id == project_id)
+    )
+    if required_roles:
+        query = query.where(UserProject.role.in_(required_roles))
+    result = await db.execute(query)
+    if not result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied to project",
+        )
 
 
 # ============================================================================
@@ -100,12 +127,20 @@ class EnsureSandboxRequest(BaseModel):
     auto_create: bool = Field(default=True, description="Auto-create sandbox if it doesn't exist")
 
 
+MAX_TOOL_TIMEOUT_SECONDS = 300.0
+
+
 class ExecuteToolRequest(BaseModel):
     """Request to execute a tool in the project's sandbox."""
 
     tool_name: str = Field(..., description="MCP tool name (bash, read, write, etc.)")
     arguments: Dict[str, Any] = Field(default_factory=dict, description="Tool arguments")
-    timeout: float = Field(default=30.0, description="Execution timeout in seconds")
+    timeout: float = Field(
+        default=30.0,
+        ge=1.0,
+        le=MAX_TOOL_TIMEOUT_SECONDS,
+        description=f"Execution timeout in seconds (max {MAX_TOOL_TIMEOUT_SECONDS}s)",
+    )
 
 
 class ExecuteToolResponse(BaseModel):
@@ -270,6 +305,7 @@ def get_orchestrator() -> SandboxOrchestrator:
 async def get_project_sandbox(
     project_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
 ):
     """Get the sandbox for a project.
@@ -277,8 +313,7 @@ async def get_project_sandbox(
     Returns the current sandbox information if it exists.
     Does not create a new sandbox if one doesn't exist.
     """
-    # Verify user has access to project
-    # TODO: Add project membership check
+    await verify_project_access(project_id, current_user, db)
 
     info = await service.get_project_sandbox(project_id)
 
@@ -297,6 +332,7 @@ async def ensure_project_sandbox(
     request: EnsureSandboxRequest,
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
 ):
@@ -305,7 +341,7 @@ async def ensure_project_sandbox(
     Creates a new sandbox if one doesn't exist, or returns the existing one.
     Performs health checks and auto-recovery if needed.
     """
-    # TODO: Verify user has write access to project
+    await verify_project_access(project_id, current_user, db, ["owner", "admin", "member"])
 
     # Parse profile
     profile = None
@@ -374,10 +410,11 @@ async def ensure_project_sandbox(
 async def check_project_sandbox_health(
     project_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
 ):
     """Check the health of a project's sandbox."""
-    # TODO: Verify user has access to project
+    await verify_project_access(project_id, current_user, db)
 
     try:
         healthy = await service.health_check(project_id)
@@ -408,6 +445,7 @@ async def check_project_sandbox_health(
 async def get_project_sandbox_stats(
     project_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
 ):
@@ -415,7 +453,7 @@ async def get_project_sandbox_stats(
 
     Returns CPU, memory, disk, network, and process metrics.
     """
-    # TODO: Verify user has access to project
+    await verify_project_access(project_id, current_user, db)
 
     try:
         info = await service.get_project_sandbox(project_id)
@@ -471,13 +509,14 @@ async def execute_tool_in_project_sandbox(
     project_id: str,
     request: ExecuteToolRequest,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
 ):
     """Execute a tool in the project's sandbox.
 
     Automatically ensures the sandbox is running before execution.
     """
-    # TODO: Verify user has write access to project
+    await verify_project_access(project_id, current_user, db, ["owner", "admin", "member"])
 
     try:
         result = await service.execute_tool(
@@ -502,11 +541,12 @@ async def execute_tool_in_project_sandbox(
 async def restart_project_sandbox(
     project_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
 ):
     """Restart the sandbox for a project."""
-    # TODO: Verify user has admin access to project
+    await verify_project_access(project_id, current_user, db, ["owner", "admin"])
 
     try:
         info = await service.restart_project_sandbox(project_id)
@@ -562,11 +602,12 @@ async def restart_project_sandbox(
 async def terminate_project_sandbox(
     project_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
 ):
     """Terminate the sandbox for a project."""
-    # TODO: Verify user has admin access to project
+    await verify_project_access(project_id, current_user, db, ["owner", "admin"])
 
     try:
         success = await service.terminate_project_sandbox(project_id)
@@ -623,13 +664,14 @@ async def terminate_project_sandbox(
 async def sync_project_sandbox_status(
     project_id: str,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
 ):
     """Synchronize database status with actual container status.
 
     Useful for recovering from inconsistent states.
     """
-    # TODO: Verify user has access to project
+    await verify_project_access(project_id, current_user, db)
 
     try:
         info = await service.sync_sandbox_status(project_id)
@@ -689,7 +731,12 @@ async def cleanup_stale_sandboxes(
 
     Requires admin privileges.
     """
-    # TODO: Verify admin privileges
+    is_admin = any(r.role.name == "admin" for r in current_user.roles)
+    if not is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required",
+        )
 
     terminated = await service.cleanup_stale_sandboxes(
         max_idle_seconds=request.max_idle_seconds,
@@ -877,6 +924,7 @@ async def proxy_project_desktop(
         target_url += f"?{'&'.join(f'{k}={v}' for k, v in other_params.items())}"
     
     try:
+        # verify=False: KasmVNC uses self-signed TLS on localhost container ports
         async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
             headers = {}
             for header in ["accept", "accept-encoding", "accept-language", "cache-control"]:
@@ -1277,12 +1325,19 @@ async def proxy_project_mcp_websocket(
                     msg_type = data.get("type", "")
                     if msg_type == "websocket.disconnect":
                         break
-                    if "text" in data and data["text"]:
+                    if "text" in data and data["text"] and upstream_ws.open:
                         await upstream_ws.send(data["text"])
             except WebSocketDisconnect:
                 logger.debug("MCP proxy: browser disconnected")
             except Exception as e:
                 logger.warning(f"MCP proxy browser->upstream: {type(e).__name__}: {e}")
+            finally:
+                # Signal upstream to close when browser disconnects
+                if upstream_ws.open:
+                    try:
+                        await upstream_ws.close()
+                    except Exception:
+                        pass
 
         async def relay_upstream_to_browser():
             """Forward JSON-RPC messages from MCP server to browser."""
@@ -1294,6 +1349,12 @@ async def proxy_project_mcp_websocket(
                         await websocket.send_bytes(message)
             except Exception as e:
                 logger.warning(f"MCP proxy upstream->browser: {type(e).__name__}: {e}")
+            finally:
+                # Signal browser to close when upstream disconnects
+                try:
+                    await websocket.close(code=1001, reason="Upstream disconnected")
+                except Exception:
+                    pass
 
         browser_task = asyncio.create_task(relay_browser_to_upstream())
         upstream_task = asyncio.create_task(relay_upstream_to_browser())
@@ -1316,6 +1377,7 @@ async def proxy_project_mcp_websocket(
         except Exception:
             pass
     finally:
+        # Ensure both connections are closed
         if upstream_ws:
             try:
                 await upstream_ws.close()
