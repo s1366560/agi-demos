@@ -237,6 +237,7 @@ export function sseEventToTimeline(
             server_name: rawUiMeta.server_name || undefined,
             app_id: rawUiMeta.app_id || undefined,
             title: rawUiMeta.title || undefined,
+            project_id: rawUiMeta.project_id || undefined,
           }
         : undefined;
 

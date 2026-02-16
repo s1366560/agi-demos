@@ -48,6 +48,7 @@ export interface TimelineStep {
     server_name?: string;
     app_id?: string;
     title?: string;
+    project_id?: string;
   };
 }
 
@@ -274,10 +275,10 @@ const TimelineStepItem = memo<{
 
               // Priority 2: Use UI metadata from observe event (persisted with events)
               if (ui?.resource_uri) {
-                // Try to get projectId from project store, fallback to conversation's project_id
+                // Priority: ui.project_id > project store > conversation store
                 const projectStoreId = useProjectStore.getState().currentProject?.id;
                 const conversationProjectId = useAgentV3Store.getState().currentConversation?.project_id;
-                const currentProjectId = projectStoreId || conversationProjectId || '';
+                const currentProjectId = ui.project_id || projectStoreId || conversationProjectId || '';
                 const tabId = `mcp-app-${ui.resource_uri}`;
                 canvasState.openTab({
                   id: tabId,
@@ -297,10 +298,11 @@ const TimelineStepItem = memo<{
 
               // Priority 3: Look up app from store
               let apps = mcpState.apps;
-              // Try to get projectId from project store, fallback to conversation's project_id
+              // Priority: ui.project_id > project store > conversation store
+              const uiProjectId = ui?.project_id;
               const projectStoreId = useProjectStore.getState().currentProject?.id;
               const conversationProjectId = useAgentV3Store.getState().currentConversation?.project_id;
-              const currentProjectId = projectStoreId || conversationProjectId || '';
+              const currentProjectId = uiProjectId || projectStoreId || conversationProjectId || '';
 
               let match = Object.values(apps).find(
                 (a) =>

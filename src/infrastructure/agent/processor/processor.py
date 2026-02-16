@@ -1296,11 +1296,13 @@ class SessionProcessor:
                     or ""
                 )
                 _o_server = getattr(tool_instance, "_server_name", "") or ""
+                _o_project_id = (self._langfuse_context or {}).get("project_id", "")
                 _observe_ui_meta = {
                     "resource_uri": _raw_ui.get("resourceUri", ""),
                     "server_name": _o_server,
                     "app_id": _o_app_id,
                     "title": _raw_ui.get("title", ""),
+                    "project_id": _o_project_id,
                 }
 
             yield AgentObserveEvent(

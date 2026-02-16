@@ -238,6 +238,7 @@ async def get_conversation_messages(
                         "server_name": raw_ui_meta.get("server_name"),
                         "app_id": raw_ui_meta.get("app_id"),
                         "title": raw_ui_meta.get("title"),
+                        "project_id": raw_ui_meta.get("project_id"),
                     }
 
             elif event_type == "work_plan":
