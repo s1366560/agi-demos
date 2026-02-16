@@ -32,6 +32,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
 import { useProjectStore } from '@/stores/project';
+import { useAgentV3Store } from '@/stores/agentV3';
 
 export interface TimelineStep {
   id: string;
@@ -273,7 +274,10 @@ const TimelineStepItem = memo<{
 
               // Priority 2: Use UI metadata from observe event (persisted with events)
               if (ui?.resource_uri) {
-                const currentProjectId = useProjectStore.getState().currentProject?.id || '';
+                // Try to get projectId from project store, fallback to conversation's project_id
+                const projectStoreId = useProjectStore.getState().currentProject?.id;
+                const conversationProjectId = useAgentV3Store.getState().currentConversation?.project_id;
+                const currentProjectId = projectStoreId || conversationProjectId || '';
                 const tabId = `mcp-app-${ui.resource_uri}`;
                 canvasState.openTab({
                   id: tabId,
@@ -293,7 +297,10 @@ const TimelineStepItem = memo<{
 
               // Priority 3: Look up app from store
               let apps = mcpState.apps;
-              const currentProjectId = useProjectStore.getState().currentProject?.id || '';
+              // Try to get projectId from project store, fallback to conversation's project_id
+              const projectStoreId = useProjectStore.getState().currentProject?.id;
+              const conversationProjectId = useAgentV3Store.getState().currentConversation?.project_id;
+              const currentProjectId = projectStoreId || conversationProjectId || '';
 
               let match = Object.values(apps).find(
                 (a) =>

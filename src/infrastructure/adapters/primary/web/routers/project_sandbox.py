@@ -1325,7 +1325,7 @@ async def proxy_project_mcp_websocket(
                     msg_type = data.get("type", "")
                     if msg_type == "websocket.disconnect":
                         break
-                    if "text" in data and data["text"] and upstream_ws.open:
+                    if "text" in data and data["text"]:
                         await upstream_ws.send(data["text"])
             except WebSocketDisconnect:
                 logger.debug("MCP proxy: browser disconnected")
@@ -1333,11 +1333,10 @@ async def proxy_project_mcp_websocket(
                 logger.warning(f"MCP proxy browser->upstream: {type(e).__name__}: {e}")
             finally:
                 # Signal upstream to close when browser disconnects
-                if upstream_ws.open:
-                    try:
-                        await upstream_ws.close()
-                    except Exception:
-                        pass
+                try:
+                    await upstream_ws.close()
+                except Exception:
+                    pass
 
         async def relay_upstream_to_browser():
             """Forward JSON-RPC messages from MCP server to browser."""
