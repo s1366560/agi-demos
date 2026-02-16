@@ -22,6 +22,7 @@ import { RefreshCw } from 'lucide-react';
 
 import { useProjectStore } from '@/stores/project';
 import { useThemeStore } from '@/stores/theme';
+import { useAgentV3Store } from '@/stores/agentV3';
 
 import { mcpAppAPI } from '@/services/mcpAppService';
 
@@ -110,8 +111,10 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
   height = '100%',
 }, ref) => {
   // Fall back to current project from store when prop is not provided
+  // Also try conversation's project_id as a second fallback (for page refresh scenarios)
   const storeProjectId = useProjectStore((state) => state.currentProject?.id);
-  const effectiveProjectId = projectId || storeProjectId;
+  const conversationProjectId = useAgentV3Store((state) => state.currentConversation?.project_id);
+  const effectiveProjectId = projectId || storeProjectId || conversationProjectId;
 
   const [error, setError] = useState<string | null>(null);
   const [containerSize, setContainerSize] = useState<{ width: number; height: number }>({
