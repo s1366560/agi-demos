@@ -28,11 +28,11 @@ import {
   AppWindow,
 } from 'lucide-react';
 
+import { useConversationsStore } from '@/stores/agent/conversationsStore';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
 import { useProjectStore } from '@/stores/project';
-import { useAgentV3Store } from '@/stores/agentV3';
 
 export interface TimelineStep {
   id: string;
@@ -277,7 +277,7 @@ const TimelineStepItem = memo<{
               if (ui?.resource_uri) {
                 // Priority: ui.project_id > project store > conversation store
                 const projectStoreId = useProjectStore.getState().currentProject?.id;
-                const conversationProjectId = useAgentV3Store.getState().currentConversation?.project_id;
+                const conversationProjectId = useConversationsStore.getState().currentConversation?.project_id;
                 const currentProjectId = ui.project_id || projectStoreId || conversationProjectId || '';
                 const tabId = `mcp-app-${ui.resource_uri}`;
                 canvasState.openTab({
@@ -301,7 +301,7 @@ const TimelineStepItem = memo<{
               // Priority: ui.project_id > project store > conversation store
               const uiProjectId = ui?.project_id;
               const projectStoreId = useProjectStore.getState().currentProject?.id;
-              const conversationProjectId = useAgentV3Store.getState().currentConversation?.project_id;
+              const conversationProjectId = useConversationsStore.getState().currentConversation?.project_id;
               const currentProjectId = uiProjectId || projectStoreId || conversationProjectId || '';
 
               let match = Object.values(apps).find(

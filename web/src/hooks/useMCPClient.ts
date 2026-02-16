@@ -298,14 +298,27 @@ export function useMCPClient({
     connect();
   }, [connect, clearTimers, cancelGracePeriod]);
 
+  // Track dependencies in refs to avoid reconnect loops when callback references change
+  const enabledRef = useRef(enabled);
+  const projectIdRef = useRef(projectId);
+  const tokenRef = useRef(token);
+  const connectRef = useRef(connect);
+
+  // Update refs on each render
+  enabledRef.current = enabled;
+  projectIdRef.current = projectId;
+  tokenRef.current = token;
+  connectRef.current = connect;
+
   // Auto-connect when enabled and projectId available
+  // Use stable dependency array to prevent reconnection loops
   useEffect(() => {
-    if (enabled && projectId && token) {
-      connect();
+    if (enabledRef.current && projectIdRef.current && tokenRef.current) {
+      connectRef.current();
     }
 
     return () => {
-      // Cleanup on unmount or dependency change
+      // Cleanup on unmount or when projectId/token/enabled fundamentally changes
       clearTimers();
       cancelGracePeriod();
       if (clientRef.current) {
@@ -313,7 +326,9 @@ export function useMCPClient({
         clientRef.current = null;
       }
     };
-  }, [enabled, projectId, token, connect, clearTimers, cancelGracePeriod]);
+    // Only re-run when projectId/token/enabled identity changes (not connect callback)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, projectId, token]);
 
   return {
     client,

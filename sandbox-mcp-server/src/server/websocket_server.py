@@ -447,6 +447,12 @@ class MCPWebSocketServer:
             return await self._handle_read_resource(params)
         elif method == "resources/list":
             return await self._handle_list_resources(params)
+        elif method == "resources/templates/list":
+            return await self._handle_list_resource_templates(params)
+        elif method == "prompts/list":
+            return await self._handle_list_prompts(params)
+        elif method == "prompts/get":
+            return await self._handle_get_prompt(params)
         elif method == "ping":
             return {}
         else:
@@ -469,6 +475,8 @@ class MCPWebSocketServer:
             "protocolVersion": self._server_info.protocol_version,
             "capabilities": {
                 "tools": {"listChanged": False},
+                "resources": {"subscribe": False, "listChanged": False},
+                "prompts": {},
             },
             "serverInfo": {
                 "name": self._server_info.name,
@@ -636,3 +644,69 @@ class MCPWebSocketServer:
             all_resources.extend(resources)
 
         return {"resources": all_resources}
+
+    async def _handle_list_resource_templates(self, params: dict) -> dict:
+        """Handle resources/templates/list by aggregating from all managed MCP servers."""
+        from src.tools.mcp_management import _get_manager
+
+        manager = _get_manager(self.workspace_dir)
+        all_templates = []
+        for server_info in await manager.list_servers():
+            name = server_info.get("name", "")
+            status = server_info.get("status", "")
+            if status != "running" or not name:
+                continue
+            templates = await manager.list_resource_templates(name)
+            all_templates.extend(templates)
+
+        return {"resourceTemplates": all_templates}
+
+    async def _handle_list_prompts(self, params: dict) -> dict:
+        """Handle prompts/list by aggregating from all managed MCP servers."""
+        from src.tools.mcp_management import _get_manager
+
+        manager = _get_manager(self.workspace_dir)
+        all_prompts = []
+        for server_info in await manager.list_servers():
+            name = server_info.get("name", "")
+            status = server_info.get("status", "")
+            if status != "running" or not name:
+                continue
+            prompts = await manager.list_prompts(name)
+            all_prompts.extend(prompts)
+
+        return {"prompts": all_prompts}
+
+    async def _handle_get_prompt(self, params: dict) -> dict:
+        """Handle prompts/get by routing to the appropriate managed MCP server."""
+        from src.tools.mcp_management import _get_manager
+
+        manager = _get_manager(self.workspace_dir)
+        name = params.get("name", "")
+        arguments = params.get("arguments", {})
+
+        if not name:
+            return {
+                "description": "Error: prompt name is required",
+                "messages": [],
+            }
+
+        # Try to find a server that has this prompt
+        for server_info in await manager.list_servers():
+            server_name = server_info.get("name", "")
+            status = server_info.get("status", "")
+            if status != "running" or not server_name:
+                continue
+
+            # Check if this server has the prompt
+            prompts = await manager.list_prompts(server_name)
+            prompt_names = [p.get("name") for p in prompts]
+            if name in prompt_names:
+                result = await manager.get_prompt(server_name, name, arguments)
+                if result:
+                    return result
+
+        return {
+            "description": f"Prompt '{name}' not found",
+            "messages": [],
+        }

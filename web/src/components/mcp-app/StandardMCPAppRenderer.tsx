@@ -20,9 +20,9 @@ import React, { useMemo, useCallback, useState, useRef, useEffect, useImperative
 import { Alert, Button, Spin } from 'antd';
 import { RefreshCw } from 'lucide-react';
 
+import { useConversationsStore } from '@/stores/agent/conversationsStore';
 import { useProjectStore } from '@/stores/project';
 import { useThemeStore } from '@/stores/theme';
-import { useAgentV3Store } from '@/stores/agentV3';
 
 import { mcpAppAPI } from '@/services/mcpAppService';
 
@@ -113,7 +113,7 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
   // Fall back to current project from store when prop is not provided
   // Also try conversation's project_id as a second fallback (for page refresh scenarios)
   const storeProjectId = useProjectStore((state) => state.currentProject?.id);
-  const conversationProjectId = useAgentV3Store((state) => state.currentConversation?.project_id);
+  const conversationProjectId = useConversationsStore((state) => state.currentConversation?.project_id);
   const effectiveProjectId = projectId || storeProjectId || conversationProjectId;
 
   const [error, setError] = useState<string | null>(null);
@@ -127,37 +127,32 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Mode A: Direct WebSocket MCP client (low-latency, 2-hop)
-  const { client: mcpClient, status: mcpStatus, isInGracePeriod } = useMCPClient({
-    projectId: effectiveProjectId,
-    enabled: !!effectiveProjectId && !!serverName,
-    reconnectionConfig: {
+  // Memoize reconnectionConfig to prevent reconnection loops
+  const mcpClientReconnectionConfig = useMemo(
+    () => ({
       maxAttempts: 5,
       initialDelayMs: 1000,
       maxDelayMs: 30000,
       gracePeriodMs: 3000, // 3 seconds grace period
-    },
+    }),
+    []
+  );
+
+  const { client: mcpClient, status: mcpStatus, isInGracePeriod } = useMCPClient({
+    projectId: effectiveProjectId,
+    enabled: !!effectiveProjectId && !!serverName,
+    reconnectionConfig: mcpClientReconnectionConfig,
   });
 
   // Only use direct client if connected OR in grace period (prevents UI flickering)
   // During grace period, we keep using the last known good state
   const useDirectClient = mcpClient !== null && mcpStatus === 'connected';
 
-  // Track if we've ever been connected to avoid showing mode B during initial connection
-  const [everConnected, setEverConnected] = useState(false);
-
-  useEffect(() => {
-    if (mcpStatus === 'connected') {
-      setEverConnected(true);
-    }
-  }, [mcpStatus]);
-
   // Determine if we should show Mode B (HTTP fallback)
   // Only switch to Mode B if:
   // 1. We're not connected AND not connecting (to avoid interrupting initial connection)
   // 2. We're NOT in grace period
   // 3. Connection has failed completely (status === 'error')
-  // NOTE: We don't use !everConnected alone because that would trigger fallback
-  // during initial connection, causing infinite remount loop
   const isConnecting = mcpStatus === 'connecting';
   const shouldUseFallback = !useDirectClient && !isInGracePeriod && !isConnecting && mcpStatus === 'error';
    
@@ -198,9 +193,10 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
   // from @mcp-ui/client's internal setHostContext -> notification().
   useEffect(() => {
     if (useDirectClient) {
-      // Mode A: MCP client is already connected, initialize immediately
-      setAppInitialized(true);
-      return;
+      // Mode A: MCP client is connected, but add a small delay to ensure
+      // the internal bridge is fully ready before sending hostContext
+      const timer = setTimeout(() => setAppInitialized(true), 300);
+      return () => clearTimeout(timer);
     }
     // Mode B: No direct client, use a short delay for iframe bridge setup
     const timer = setTimeout(() => setAppInitialized(true), 500);
@@ -251,13 +247,33 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
   );
 
   // Handler for resources/read requests (when html prop is not provided)
+  // @mcp-ui/client expects the MCP format { contents: [{ uri, mimeType, text }] }
+  // It will extract the text internally
   const handleReadResource = useCallback(
     async (params: { uri: string }) => {
+      console.log('[StandardMCPAppRenderer] handleReadResource called:', {
+        uri: params.uri,
+        effectiveProjectId,
+        serverName,
+      });
+
       if (!effectiveProjectId) {
-        throw new Error('projectId required for resource fetching');
+        const error = 'projectId required for resource fetching';
+        console.error('[StandardMCPAppRenderer] handleReadResource error:', error);
+        throw new Error(error);
       }
-      const result = await mcpAppAPI.readResource(params.uri, effectiveProjectId, serverName);
-      return result;
+
+      try {
+        const result = await mcpAppAPI.readResource(params.uri, effectiveProjectId, serverName);
+        console.log('[StandardMCPAppRenderer] readResource result:', result);
+
+        // Return the full MCP format - @mcp-ui/client will extract the text
+        // The API returns { contents: [{ uri, mimeType, text }] }
+        return result;
+      } catch (err) {
+        console.error('[StandardMCPAppRenderer] handleReadResource failed:', err);
+        throw err;
+      }
     },
     [effectiveProjectId, serverName],
   );
@@ -415,12 +431,25 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
     setError(err.message);
   }, []);
 
+  // Debug log for props being passed to AppRenderer
+  // MUST be called before any conditional returns to satisfy React hooks rules
+  useEffect(() => {
+    console.log('[StandardMCPAppRenderer] Props for AppRenderer:', {
+      effectiveHtml: effectiveHtml ? `${effectiveHtml.slice(0, 50)}...` : undefined,
+      effectiveUri,
+      effectiveProjectId,
+      serverName,
+      hasOnReadResource: !!effectiveUri, // effectiveUri determines if onReadResource is provided
+      hasClient: !!(effectiveHtml && !shouldUseFallback && mcpClient),
+    });
+  }, [effectiveHtml, effectiveUri, effectiveProjectId, serverName, shouldUseFallback, mcpClient]);
+
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 p-4" style={{ height }}>
         <Alert
           type="error"
-          message="Failed to load MCP App"
+          title="Failed to load MCP App"
           description={error}
           showIcon
         />
@@ -442,7 +471,7 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
       <div className="h-full overflow-auto p-4" style={{ height }}>
         <Alert
           type="info"
-          message={toolName}
+          title={toolName}
           description="This MCP tool does not provide a UI resource. Showing tool result below."
           showIcon
           className="mb-3"
@@ -488,14 +517,20 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
           toolResult={toolResult as any}
 
           hostContext={hostContext as any}
-          // Mode A: pass MCP client for direct WS communication
-          // Mode B fallback: use HTTP callback handlers
+          // IMPORTANT: When we need to fetch a resource (effectiveUri without html),
+          // we must use onReadResource (HTTP API) instead of client (MCP).
+          // The sandbox MCP server returns MCP format { contents: [{ text }] }
+          // which @mcp-ui/client doesn't parse correctly.
+          // Only pass client when we already have the HTML (no resource fetch needed).
+          client={effectiveHtml && !shouldUseFallback && mcpClient ? mcpClient as any : undefined}
 
-          client={!shouldUseFallback && mcpClient ? mcpClient as any : undefined}
+          // Always provide onReadResource when URI is available
+          // The backend returns MCP format { contents: [{ text }] }
+          // We extract the HTML text for @mcp-ui/client compatibility
+          onReadResource={effectiveUri ? handleReadResource as any : undefined}
 
-          onReadResource={shouldUseFallback && effectiveUri ? handleReadResource as any : undefined}
-
-          onCallTool={shouldUseFallback ? handleCallTool as any : undefined}
+          // Always provide onCallTool for tool calls from app
+          onCallTool={handleCallTool as any}
 
           onListResources={shouldUseFallback ? handleListResources as any : undefined}
           // Host-specific handlers (always needed regardless of mode)

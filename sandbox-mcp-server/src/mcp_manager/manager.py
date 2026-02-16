@@ -147,6 +147,8 @@ class MCPServerManager:
         self._network_request_id: int = 0
         # Shared aiohttp session for network requests (lazy init)
         self._http_session: Optional[Any] = None
+        # Resource subscription tracking: server_name -> {subscription_id: uri}
+        self._subscriptions: Dict[str, Dict[str, str]] = {}
 
     async def install_server(
         self,
@@ -366,6 +368,9 @@ class MCPServerManager:
         # Clean up tools cache
         self._tools_cache.pop(name, None)
 
+        # Clean up subscriptions
+        self._subscriptions.pop(name, None)
+
         success = await self._tracker.stop_server(name)
         return {"success": success, "name": name}
 
@@ -417,6 +422,29 @@ class MCPServerManager:
             return await self._send_sse_request(server_name, method, params, timeout)
         else:
             return await self._send_network_request(server, method, params, timeout)
+
+    async def _send_notification(
+        self,
+        server_name: str,
+        method: str,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Unified notification dispatcher: routes to stdio, websocket, or HTTP.
+
+        Notifications are one-way messages that don't expect a response.
+        """
+        server = self._tracker.get_server(server_name)
+        if not server:
+            raise ValueError(f"Server '{server_name}' not found")
+
+        if server.server_type == "stdio":
+            await self._send_stdio_notification(server_name, method, params)
+        elif server.server_type == "websocket" and server_name in self._ws_connections:
+            await self._send_ws_notification(server_name, method, params)
+        elif server.server_type == "sse" and server_name in self._sse_connections:
+            await self._send_sse_notification(server_name, method, params)
+        else:
+            await self._send_http_notification(server_name, method, params)
 
     @staticmethod
     def _parse_tools_from_result(result: Dict[str, Any]) -> List["MCPToolInfo"]:
@@ -655,6 +683,230 @@ class MCPServerManager:
             logger.error(f"Error listing resources from '{server_name}': {e}")
             return []
 
+    async def ping(self, server_name: str) -> bool:
+        """Ping a managed MCP server to check if it's responsive.
+
+        Args:
+            server_name: Server name.
+
+        Returns:
+            True if server responds to ping, False otherwise.
+        """
+        server = self._tracker.get_server(server_name)
+        if not server or server.status != ServerStatus.RUNNING:
+            return False
+
+        try:
+            await self._send_request(server_name, "ping")
+            return True
+        except Exception as e:
+            logger.warning(f"Ping failed for '{server_name}': {e}")
+            return False
+
+    async def list_resource_templates(self, server_name: str) -> list:
+        """List resource templates from a managed MCP server via resources/templates/list.
+
+        Args:
+            server_name: Server name.
+
+        Returns:
+            List of resource template descriptors, or empty list on failure.
+        """
+        server = self._tracker.get_server(server_name)
+        if not server or server.status != ServerStatus.RUNNING:
+            return []
+
+        try:
+            result = await self._send_request(server_name, "resources/templates/list")
+            return result.get("resourceTemplates", [])
+        except Exception as e:
+            logger.error(f"Error listing resource templates from '{server_name}': {e}")
+            return []
+
+    async def list_prompts(self, server_name: str) -> list:
+        """List prompts from a managed MCP server via prompts/list.
+
+        Args:
+            server_name: Server name.
+
+        Returns:
+            List of prompt descriptors, or empty list on failure.
+        """
+        server = self._tracker.get_server(server_name)
+        if not server or server.status != ServerStatus.RUNNING:
+            return []
+
+        try:
+            result = await self._send_request(server_name, "prompts/list")
+            return result.get("prompts", [])
+        except Exception as e:
+            logger.error(f"Error listing prompts from '{server_name}': {e}")
+            return []
+
+    async def get_prompt(
+        self,
+        server_name: str,
+        name: str,
+        arguments: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Get a prompt from a managed MCP server via prompts/get.
+
+        Args:
+            server_name: Server name.
+            name: Prompt name.
+            arguments: Optional arguments for the prompt.
+
+        Returns:
+            Prompt response with messages, or None on failure.
+        """
+        server = self._tracker.get_server(server_name)
+        if not server or server.status != ServerStatus.RUNNING:
+            return None
+
+        try:
+            result = await self._send_request(
+                server_name,
+                "prompts/get",
+                {"name": name, "arguments": arguments or {}},
+            )
+            return result
+        except Exception as e:
+            logger.error(f"Error getting prompt '{name}' from '{server_name}': {e}")
+            return None
+
+    async def set_log_level(
+        self,
+        server_name: str,
+        level: str,
+    ) -> bool:
+        """Set the logging level on a managed MCP server via logging/setLevel.
+
+        Args:
+            server_name: Server name.
+            level: Log level (debug, info, notice, warning, error, critical, alert, emergency).
+
+        Returns:
+            True if notification was sent successfully, False otherwise.
+        """
+        server = self._tracker.get_server(server_name)
+        if not server or server.status != ServerStatus.RUNNING:
+            return False
+
+        try:
+            await self._send_notification(
+                server_name,
+                "logging/setLevel",
+                {"level": level},
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error setting log level on '{server_name}': {e}")
+            return False
+
+    async def subscribe_resource(
+        self,
+        server_name: str,
+        uri: str,
+    ) -> Optional[str]:
+        """Subscribe to resource updates on a managed MCP server via resources/subscribe.
+
+        Args:
+            server_name: Server name.
+            uri: Resource URI to subscribe to.
+
+        Returns:
+            Subscription ID if successful, None on failure.
+        """
+        server = self._tracker.get_server(server_name)
+        if not server or server.status != ServerStatus.RUNNING:
+            return None
+
+        try:
+            result = await self._send_request(
+                server_name,
+                "resources/subscribe",
+                {"uri": uri},
+            )
+            subscription_id = result.get("subscriptionId")
+            if not subscription_id:
+                logger.warning(
+                    f"No subscriptionId in response from '{server_name}' for uri '{uri}'"
+                )
+                return None
+
+            # Track subscription internally
+            if server_name not in self._subscriptions:
+                self._subscriptions[server_name] = {}
+            self._subscriptions[server_name][subscription_id] = uri
+
+            logger.info(
+                f"Subscribed to resource '{uri}' on '{server_name}': {subscription_id}"
+            )
+            return subscription_id
+        except Exception as e:
+            logger.error(f"Error subscribing to resource on '{server_name}': {e}")
+            return None
+
+    async def unsubscribe_resource(
+        self,
+        server_name: str,
+        subscription_id: str,
+    ) -> bool:
+        """Unsubscribe from resource updates on a managed MCP server via resources/unsubscribe.
+
+        Args:
+            server_name: Server name.
+            subscription_id: Subscription ID to unsubscribe from.
+
+        Returns:
+            True if successful, False on failure.
+        """
+        server = self._tracker.get_server(server_name)
+        if not server or server.status != ServerStatus.RUNNING:
+            return False
+
+        # Check if subscription exists in our tracking
+        if server_name not in self._subscriptions:
+            return False
+        if subscription_id not in self._subscriptions[server_name]:
+            return False
+
+        try:
+            await self._send_request(
+                server_name,
+                "resources/unsubscribe",
+                {"subscriptionId": subscription_id},
+            )
+
+            # Remove from internal tracking
+            del self._subscriptions[server_name][subscription_id]
+            # Clean up empty server entry
+            if not self._subscriptions[server_name]:
+                del self._subscriptions[server_name]
+
+            logger.info(
+                f"Unsubscribed from resource on '{server_name}': {subscription_id}"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Error unsubscribing from resource on '{server_name}': {e}")
+            return False
+
+    def get_active_subscriptions(self, server_name: str) -> Dict[str, str]:
+        """Get active subscriptions for a server.
+
+        Args:
+            server_name: Server name.
+
+        Returns:
+            Dict mapping subscription_id -> uri for the server.
+            Returns empty dict if server has no subscriptions.
+        """
+        if server_name not in self._subscriptions:
+            return {}
+        # Return a copy to prevent external mutation
+        return dict(self._subscriptions[server_name])
+
     async def shutdown(self) -> None:
         """Shutdown all managed servers."""
         for name in list(self._connections.keys()):
@@ -669,6 +921,8 @@ class MCPServerManager:
         if self._http_session and not self._http_session.closed:
             await self._http_session.close()
             self._http_session = None
+        # Clear all subscriptions
+        self._subscriptions.clear()
         await self._tracker.stop_all()
 
     # -- Stdio protocol methods --
@@ -677,6 +931,16 @@ class MCPServerManager:
         """Initialize MCP JSON-RPC connection over stdio."""
         conn = _StdioConnection(server=server)
         self._connections[server.name] = conn
+
+        # Check if process is still running before attempting initialization
+        if server.process and server.process.returncode is not None:
+            stderr_text = await self._capture_server_stderr(server.name)
+            exit_code = server.process.returncode
+            error_msg = f"MCP server '{server.name}' exited immediately with code {exit_code}"
+            if stderr_text:
+                error_msg = f"{error_msg}\n--- Server stderr ---\n{stderr_text}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
 
         # Start reading responses
         conn._reader_task = asyncio.create_task(self._read_stdio_responses(server.name))
@@ -707,6 +971,16 @@ class MCPServerManager:
             await self._send_stdio_notification(server.name, "notifications/initialized")
 
         except Exception as e:
+            # Check if process exited during initialization
+            if server.process and server.process.returncode is not None:
+                stderr_text = await self._capture_server_stderr(server.name)
+                exit_code = server.process.returncode
+                error_msg = f"MCP server '{server.name}' exited with code {exit_code} during initialization"
+                if stderr_text:
+                    error_msg = f"{error_msg}\n--- Server stderr ---\n{stderr_text}"
+                logger.error(error_msg)
+                raise RuntimeError(error_msg) from e
+
             stderr_text = await self._capture_server_stderr(server.name)
             if stderr_text:
                 raise RuntimeError(
@@ -728,6 +1002,15 @@ class MCPServerManager:
         if not conn:
             raise ValueError(f"No stdio connection for '{name}'")
 
+        server = self._tracker.get_server(name)
+        if server and server.process and server.process.returncode is not None:
+            stderr_text = await self._capture_server_stderr(name)
+            exit_code = server.process.returncode
+            error_msg = f"MCP server '{name}' exited with code {exit_code}"
+            if stderr_text:
+                error_msg = f"{error_msg}\n--- Server stderr ---\n{stderr_text}"
+            raise RuntimeError(error_msg)
+
         request_id = conn.next_id()
         request = {
             "jsonrpc": "2.0",
@@ -746,15 +1029,42 @@ class MCPServerManager:
         await conn.stdin.drain()
 
         try:
-            response = await asyncio.wait_for(future, timeout=timeout)
-            if "error" in response:
-                raise RuntimeError(
-                    f"MCP error: {response['error'].get('message', 'Unknown error')}"
-                )
-            return response.get("result", {})
-        except asyncio.TimeoutError:
+            # Wait for response with periodic process status check
+            start_time = asyncio.get_event_loop().time()
+            check_interval = 0.5  # Check every 500ms
+            while True:
+                try:
+                    remaining = timeout - (asyncio.get_event_loop().time() - start_time)
+                    if remaining <= 0:
+                        raise asyncio.TimeoutError()
+                    response = await asyncio.wait_for(
+                        asyncio.shield(future), timeout=min(check_interval, remaining)
+                    )
+                    # Got response
+                    if "error" in response:
+                        raise RuntimeError(
+                            f"MCP error: {response['error'].get('message', 'Unknown error')}"
+                        )
+                    return response.get("result", {})
+                except asyncio.TimeoutError:
+                    # Check if process exited
+                    if server and server.process and server.process.returncode is not None:
+                        conn._pending.pop(request_id, None)
+                        stderr_text = await self._capture_server_stderr(name)
+                        exit_code = server.process.returncode
+                        error_msg = f"MCP server '{name}' exited with code {exit_code}"
+                        if stderr_text:
+                            error_msg = f"{error_msg}\n--- Server stderr ---\n{stderr_text}"
+                        raise RuntimeError(error_msg)
+                    # Process still running, continue waiting
+                    if asyncio.get_event_loop().time() - start_time >= timeout:
+                        conn._pending.pop(request_id, None)
+                        raise TimeoutError(f"MCP request '{method}' timed out after {timeout}s")
+        except (RuntimeError, TimeoutError):
+            raise
+        except Exception as e:
             conn._pending.pop(request_id, None)
-            raise TimeoutError(f"MCP request '{method}' timed out after {timeout}s")
+            raise
 
     async def _send_stdio_notification(
         self,
@@ -936,6 +1246,57 @@ class MCPServerManager:
         raise last_error or RuntimeError(
             f"Request to MCP server '{server.name}' at {server.url} failed after retries"
         )
+
+    async def _send_http_notification(
+        self,
+        server_name: str,
+        method: str,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Send a JSON-RPC notification via HTTP POST (no response expected)."""
+        import aiohttp
+
+        server = self._tracker.get_server(server_name)
+        if not server or not server.url:
+            raise ValueError(f"No URL configured for network server '{server_name}'")
+
+        notification = {
+            "jsonrpc": "2.0",
+            "method": method,
+        }
+        if params is not None:
+            notification["params"] = params
+
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        session_id = self._session_ids.get(server_name)
+        if session_id:
+            headers["Mcp-Session-Id"] = session_id
+
+        try:
+            session = await self._get_http_session()
+            async with session.post(
+                server.url,
+                json=notification,
+                headers=headers,
+                timeout=aiohttp.ClientTimeout(total=30),
+            ) as resp:
+                if resp.status >= 400:
+                    body = await resp.text()
+                    logger.warning(
+                        f"HTTP {resp.status} from '{server.url}' "
+                        f"for notification '{method}': {body[:200]}"
+                    )
+                # Store session ID from response
+                new_session_id = resp.headers.get("Mcp-Session-Id")
+                if new_session_id:
+                    self._session_ids[server_name] = new_session_id
+        except aiohttp.ClientError as e:
+            logger.warning(
+                f"HTTP notification to MCP server '{server_name}' failed: {e}"
+            )
 
     async def _read_sse_response(
         self, resp, request_id: int
@@ -1148,6 +1509,26 @@ class MCPServerManager:
 
         await conn.ws.send_json(request)
         return await asyncio.wait_for(future, timeout=timeout)
+
+    async def _send_ws_notification(
+        self,
+        server_name: str,
+        method: str,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Send a JSON-RPC notification over WebSocket (no response expected)."""
+        conn = self._ws_connections.get(server_name)
+        if not conn or not conn.ws:
+            raise RuntimeError(f"No WebSocket connection for '{server_name}'")
+
+        notification: Dict[str, Any] = {
+            "jsonrpc": "2.0",
+            "method": method,
+        }
+        if params is not None:
+            notification["params"] = params
+
+        await conn.ws.send_json(notification)
 
     async def _close_ws_connection(self, server_name: str) -> None:
         """Close a WebSocket connection."""
@@ -1409,6 +1790,42 @@ class MCPServerManager:
             ) from e
 
         return await asyncio.wait_for(future, timeout=timeout)
+
+    async def _send_sse_notification(
+        self,
+        server_name: str,
+        method: str,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Send a JSON-RPC notification via legacy SSE transport (no response expected)."""
+        import aiohttp
+
+        conn = self._sse_connections.get(server_name)
+        if not conn or not conn.messages_url:
+            raise RuntimeError(
+                f"No SSE connection for '{server_name}'. "
+                f"The server may need to be restarted."
+            )
+
+        notification: Dict[str, Any] = {
+            "jsonrpc": "2.0",
+            "method": method,
+        }
+        if params is not None:
+            notification["params"] = params
+
+        async with conn.session.post(
+            conn.messages_url,
+            json=notification,
+            headers={"Content-Type": "application/json"},
+            timeout=aiohttp.ClientTimeout(total=30),
+        ) as resp:
+            if resp.status >= 400:
+                body = await resp.text()
+                logger.warning(
+                    f"HTTP {resp.status} from SSE server '{server_name}' "
+                    f"notification endpoint: {body[:200]}"
+                )
 
     async def _close_sse_connection(self, server_name: str) -> None:
         """Close an SSE connection."""

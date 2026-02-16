@@ -205,6 +205,34 @@ async def execute_mcp_server_call_tool(
     try:
         args = json.loads(arguments) if isinstance(arguments, str) else arguments
         manager = _get_manager(_workspace_dir)
+
+        # Special handling for resources/read proxy
+        if tool_name == "__resources_read__":
+            uri = args.get("uri", "")
+            if not uri:
+                return {
+                    "content": [{"type": "text", "text": "Error: uri is required for resources/read"}],
+                    "isError": True,
+                }
+            result = await manager.read_resource(server_name, uri)
+            if result is None:
+                return {
+                    "content": [{"type": "text", "text": f"Resource not found: {uri}"}],
+                    "isError": True,
+                }
+            return {
+                "content": [{"uri": uri, "mimeType": "text/html;profile=mcp-app", "text": result}],
+                "isError": False,
+            }
+
+        # Special handling for resources/list proxy
+        if tool_name == "__resources_list__":
+            result = await manager.list_resources(server_name)
+            return {
+                "content": result,
+                "isError": False,
+            }
+
         result = await manager.call_tool(server_name, tool_name, args)
         return {
             "content": result.get("content", [{"type": "text", "text": str(result)}]),

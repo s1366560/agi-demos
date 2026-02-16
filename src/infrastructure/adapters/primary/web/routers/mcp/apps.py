@@ -385,6 +385,34 @@ class MCPResourceReadResponse(BaseModel):
     contents: list = Field(default_factory=list)
 
 
+def _extract_server_name_from_uri(uri: str) -> Optional[str]:
+    """Extract server name from MCP app resource URI.
+
+    Supported URI schemes:
+    - ui://server-name/path -> server-name
+    - app://server-name/path -> server-name
+    - mcp-app://server-name/path -> server-name
+
+    Examples:
+    - ui://pick-color/mcp-app.html -> pick-color
+    - app://color-picker -> color-picker
+    - mcp-app://my-server/index.html -> my-server
+    """
+    # List of supported URI scheme prefixes
+    prefixes = ["ui://", "app://", "mcp-app://"]
+
+    for prefix in prefixes:
+        if uri.startswith(prefix):
+            # Remove prefix
+            rest = uri[len(prefix) :]
+            # Extract first path segment as server name
+            if "/" in rest:
+                return rest.split("/")[0]
+            return rest if rest else None
+
+    return None
+
+
 @router.post("/resources/read", response_model=MCPResourceReadResponse)
 async def proxy_resource_read(
     request: Request,
@@ -396,7 +424,10 @@ async def proxy_resource_read(
 
     Resolution order:
     1. If URI matches a registered app record -> serve from DB
-    2. Otherwise -> proxy to sandbox MCP server via WebSocket
+    2. Otherwise -> proxy to sandbox MCP server via mcp_server_call_tool
+
+    The resources/read is proxied through the sandbox management server's
+    mcp_server_call_tool to reach the correct child MCP server.
     """
     service = _get_mcp_app_service(request, db)
 
@@ -414,27 +445,65 @@ async def proxy_resource_read(
                 ]
             )
 
-    # Path 2: Proxy to sandbox MCP server
+    # Path 2: Proxy to sandbox MCP server via mcp_server_call_tool
+    # This routes to the correct child MCP server based on server_name
     try:
+        # Resolve server_name from URI if not provided
+        server_name = body.server_name or _extract_server_name_from_uri(body.uri)
+        if not server_name:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot determine server name from URI: {body.uri}. Provide server_name parameter.",
+            )
+
         container = get_container_with_db(request, db)
         mcp_manager = container.sandbox_mcp_server_manager()
-        result = await mcp_manager.read_resource(
+
+        # Use call_tool with __resources_read__ to proxy to child MCP server
+        # This is the same pattern used by MCPAppResourceResolver.resolve()
+        result = await mcp_manager.call_tool(
             project_id=body.project_id,
-            uri=body.uri,
-            server_name=body.server_name,
-            tenant_id=tenant_id,
+            server_name=server_name,
+            tool_name="__resources_read__",
+            arguments={"uri": body.uri},
         )
-        if not result:
+
+        if result.is_error:
+            error_text = ""
+            for item in result.content:
+                if isinstance(item, dict) and item.get("type") == "text":
+                    error_text = item.get("text", "")
+                    break
+            logger.warning("resources/read proxy error: %s", error_text)
             raise HTTPException(
                 status_code=404,
                 detail=f"Resource not found: {body.uri}",
             )
+
+        # Extract HTML content from response
+        html_content = None
+        for item in result.content:
+            if isinstance(item, dict):
+                # Check for resource content with matching URI
+                if item.get("uri") == body.uri:
+                    html_content = item.get("text", "")
+                    break
+                # Fall back to text content
+                if item.get("type") == "text" and not html_content:
+                    html_content = item.get("text", "")
+
+        if not html_content:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No content found for resource: {body.uri}",
+            )
+
         return MCPResourceReadResponse(
             contents=[
                 {
                     "uri": body.uri,
                     "mimeType": "text/html;profile=mcp-app",
-                    "text": result if isinstance(result, str) else str(result),
+                    "text": html_content,
                 }
             ]
         )
