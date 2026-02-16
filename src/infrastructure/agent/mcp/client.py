@@ -66,6 +66,53 @@ class MCPTransport(ABC):
         """
         pass
 
+    @abstractmethod
+    async def ping(self) -> bool:
+        """
+        Send a ping request to check connection health.
+
+        Returns:
+            True if ping successful, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def set_logging_level(self, level: str) -> bool:
+        """
+        Set the logging level for the MCP server.
+
+        Args:
+            level: Logging level (debug, info, notice, warning, error, critical, alert, emergency)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        pass
+
+    async def list_prompts(self) -> list[dict]:
+        """
+        List all available prompts from the MCP server.
+
+        Returns:
+            List of prompt definitions
+        """
+        # Default implementation - subclasses can override
+        return []
+
+    async def get_prompt(self, prompt_name: str, arguments: dict = None) -> dict:
+        """
+        Get a specific prompt from the MCP server.
+
+        Args:
+            prompt_name: Name of the prompt to retrieve
+            arguments: Optional arguments for the prompt
+
+        Returns:
+            Prompt definition with messages
+        """
+        # Default implementation - subclasses can override
+        raise NotImplementedError("Prompts not supported by this transport")
+
 
 class StdioTransport(MCPTransport):
     """MCP transport using stdio (subprocess communication)."""
@@ -210,6 +257,36 @@ class StdioTransport(MCPTransport):
         params = {"name": tool_name, "arguments": arguments}
         return await self.send_request("tools/call", params)
 
+    async def ping(self) -> bool:
+        """Send a ping request to check connection health."""
+        try:
+            await self.send_request("ping")
+            return True
+        except Exception as e:
+            logger.error(f"Ping failed: {e}")
+            return False
+
+    async def set_logging_level(self, level: str) -> bool:
+        """Set the logging level for the MCP server."""
+        try:
+            await self.send_request("logging/setLevel", {"level": level})
+            return True
+        except Exception as e:
+            logger.error(f"Set logging level failed: {e}")
+            return False
+
+    async def list_prompts(self) -> list[dict]:
+        """List all available prompts from the MCP server."""
+        result = await self.send_request("prompts/list")
+        return result.get("prompts", [])
+
+    async def get_prompt(self, prompt_name: str, arguments: dict = None) -> dict:
+        """Get a specific prompt from the MCP server."""
+        params = {"name": prompt_name}
+        if arguments:
+            params["arguments"] = arguments
+        return await self.send_request("prompts/get", params)
+
 
 class HTTPTransport(MCPTransport):
     """MCP transport using HTTP request/response."""
@@ -264,6 +341,36 @@ class HTTPTransport(MCPTransport):
         """Call a tool on the server."""
         params = {"name": tool_name, "arguments": arguments}
         return await self.send_request("tools/call", params)
+
+    async def ping(self) -> bool:
+        """Send a ping request to check connection health."""
+        try:
+            await self.send_request("ping")
+            return True
+        except Exception as e:
+            logger.error(f"Ping failed: {e}")
+            return False
+
+    async def set_logging_level(self, level: str) -> bool:
+        """Set the logging level for the MCP server."""
+        try:
+            await self.send_request("logging/setLevel", {"level": level})
+            return True
+        except Exception as e:
+            logger.error(f"Set logging level failed: {e}")
+            return False
+
+    async def list_prompts(self) -> list[dict]:
+        """List all available prompts from the MCP server."""
+        result = await self.send_request("prompts/list")
+        return result.get("prompts", [])
+
+    async def get_prompt(self, prompt_name: str, arguments: dict = None) -> dict:
+        """Get a specific prompt from the MCP server."""
+        params = {"name": prompt_name}
+        if arguments:
+            params["arguments"] = arguments
+        return await self.send_request("prompts/get", params)
 
 
 class SSETransport(MCPTransport):
@@ -479,6 +586,38 @@ class SSETransport(MCPTransport):
         """Call a tool on the server."""
         params = {"name": tool_name, "arguments": arguments}
         return await self.send_request("tools/call", params)
+
+    async def ping(self) -> bool:
+        """Send a ping request to check connection health."""
+        try:
+            await self.send_request("ping")
+            return True
+        except Exception as e:
+            logger.error(f"Ping failed: {e}")
+            return False
+
+    async def set_logging_level(self, level: str) -> bool:
+        """Set the logging level for the MCP server."""
+        try:
+            await self.send_request("logging/setLevel", {"level": level})
+            return True
+        except Exception as e:
+            logger.error(f"Set logging level failed: {e}")
+            return False
+
+    async def list_prompts(self) -> list[dict]:
+        """List all available prompts from the MCP server."""
+        result = await self.send_request("prompts/list")
+        prompts = result.get("prompts", [])
+        # Convert Pydantic models to dicts if needed
+        return [p.model_dump() if hasattr(p, "model_dump") else p for p in prompts]
+
+    async def get_prompt(self, prompt_name: str, arguments: dict = None) -> dict:
+        """Get a specific prompt from the MCP server."""
+        params = {"name": prompt_name}
+        if arguments:
+            params["arguments"] = arguments
+        return await self.send_request("prompts/get", params)
 
 
 class WebSocketTransport(MCPTransport):
@@ -755,6 +894,36 @@ class WebSocketTransport(MCPTransport):
         params = {"name": tool_name, "arguments": arguments}
         return await self.send_request("tools/call", params)
 
+    async def ping(self) -> bool:
+        """Send a ping request to check connection health."""
+        try:
+            await self.send_request("ping")
+            return True
+        except Exception as e:
+            logger.error(f"Ping failed: {e}")
+            return False
+
+    async def set_logging_level(self, level: str) -> bool:
+        """Set the logging level for the MCP server."""
+        try:
+            await self.send_request("logging/setLevel", {"level": level})
+            return True
+        except Exception as e:
+            logger.error(f"Set logging level failed: {e}")
+            return False
+
+    async def list_prompts(self) -> list[dict]:
+        """List all available prompts from the MCP server."""
+        result = await self.send_request("prompts/list")
+        return result.get("prompts", [])
+
+    async def get_prompt(self, prompt_name: str, arguments: dict = None) -> dict:
+        """Get a specific prompt from the MCP server."""
+        params = {"name": prompt_name}
+        if arguments:
+            params["arguments"] = arguments
+        return await self.send_request("prompts/get", params)
+
 
 class MCPClient:
     """
@@ -776,6 +945,35 @@ class MCPClient:
         self.transport_config = transport_config
         self.transport: Optional[MCPTransport] = None
         self._connected = False
+        self._progress_callback: Optional[callable] = None
+
+    def register_progress_callback(self, callback: callable) -> None:
+        """
+        Register a callback for progress notifications.
+
+        Args:
+            callback: Async function to call with progress updates
+                     Signature: (progress_token, progress, total, message) -> None
+        """
+        self._progress_callback = callback
+
+    async def _handle_progress_notification(self, data: dict) -> None:
+        """
+        Handle incoming progress notification from server.
+
+        Args:
+            data: Progress notification data
+        """
+        if self._progress_callback:
+            try:
+                await self._progress_callback(
+                    progress_token=data.get("progressToken", ""),
+                    progress=data.get("progress", 0.0),
+                    total=data.get("total"),
+                    message=data.get("message"),
+                )
+            except Exception as e:
+                logger.error(f"Error in progress callback: {e}")
 
     async def connect(self) -> None:
         """Establish connection to MCP server."""
@@ -838,15 +1036,83 @@ class MCPClient:
         """
         Check if the MCP server is healthy and responsive.
 
+        Uses ping() for lightweight health checking.
+
         Returns:
             True if server is healthy, False otherwise
         """
         try:
-            await self.list_tools()
-            return True
+            return await self.ping()
         except Exception as e:
             logger.error(f"MCP server health check failed: {e}")
             return False
+
+    async def ping(self) -> bool:
+        """
+        Send a ping request to check connection health.
+
+        This is more efficient than health_check() as it uses
+        the lightweight ping protocol method.
+
+        Returns:
+            True if ping successful, False otherwise
+        """
+        if not self._connected or not self.transport:
+            return False
+
+        return await self.transport.ping()
+
+    async def set_logging_level(self, level: str) -> bool:
+        """
+        Set the logging level for the MCP server.
+
+        Args:
+            level: Logging level (debug, info, notice, warning, error, critical, alert, emergency)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self._connected or not self.transport:
+            return False
+
+        return await self.transport.set_logging_level(level)
+
+    async def list_prompts(self) -> list[dict]:
+        """
+        List all available prompts from the MCP server.
+
+        Returns:
+            List of prompt definitions with name, description, and arguments
+        """
+        if not self._connected or not self.transport:
+            raise RuntimeError("MCP client not connected")
+
+        # Check if transport supports prompts
+        if not hasattr(self.transport, "list_prompts"):
+            logger.debug("Transport does not support prompts")
+            return []
+
+        return await self.transport.list_prompts()
+
+    async def get_prompt(self, prompt_name: str, arguments: dict = None) -> dict:
+        """
+        Get a specific prompt from the MCP server.
+
+        Args:
+            prompt_name: Name of the prompt to retrieve
+            arguments: Optional arguments to fill in the prompt template
+
+        Returns:
+            Prompt definition with messages
+        """
+        if not self._connected or not self.transport:
+            raise RuntimeError("MCP client not connected")
+
+        # Check if transport supports prompts
+        if not hasattr(self.transport, "get_prompt"):
+            raise RuntimeError("Transport does not support prompts")
+
+        return await self.transport.get_prompt(prompt_name, arguments or {})
 
     async def __aenter__(self):
         """Async context manager entry."""

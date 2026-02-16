@@ -14,6 +14,11 @@ from src.infrastructure.agent.mcp.client import MCPClient
 
 logger = logging.getLogger(__name__)
 
+# Valid MCP logging levels as per MCP specification
+VALID_LOGGING_LEVELS = frozenset(
+    ["debug", "info", "notice", "warning", "error", "critical", "alert", "emergency"]
+)
+
 
 class MCPServerRegistry:
     """
@@ -22,8 +27,10 @@ class MCPServerRegistry:
     Features:
     - Server connection pooling
     - Tool metadata caching
-    - Periodic health checks
+    - Periodic health checks using lightweight ping
     - Automatic reconnection on failure
+    - Roots management for directory access
+    - Logging level control
     """
 
     def __init__(
@@ -52,6 +59,12 @@ class MCPServerRegistry:
 
         # Health status: server_id -> (is_healthy, last_check_at)
         self._health_status: dict[str, tuple[bool, datetime]] = {}
+
+        # Roots: list of root directories accessible by servers
+        self._roots: list[dict[str, str]] = []
+
+        # Elicitation handler: async callback for elicitation requests
+        self._elicitation_handler: Optional[callable] = None
 
         # Background tasks
         self._health_check_task: Optional[asyncio.Task] = None
@@ -232,7 +245,10 @@ class MCPServerRegistry:
 
     async def health_check(self, server_id: str) -> bool:
         """
-        Check health of a registered server.
+        Check health of a registered server using lightweight ping.
+
+        Uses the ping() method instead of list_tools() for more efficient
+        health checking.
 
         Args:
             server_id: Unique server identifier
@@ -245,7 +261,8 @@ class MCPServerRegistry:
             return False
 
         try:
-            is_healthy = await client.health_check()
+            # Use ping() for lightweight health check
+            is_healthy = await client.ping()
             self._health_status[server_id] = (is_healthy, datetime.now(timezone.utc))
             return is_healthy
         except Exception as e:
@@ -308,8 +325,8 @@ class MCPServerRegistry:
                 await client.disconnect()
                 await client.connect()
 
-                # Verify connection with health check
-                if await client.health_check():
+                # Verify connection with health check using ping
+                if await client.ping():
                     logger.info(f"Successfully reconnected to server {server_id}")
                     self._health_status[server_id] = (True, datetime.now(timezone.utc))
                     return
@@ -321,3 +338,249 @@ class MCPServerRegistry:
             f"Failed to reconnect to server {server_id} after {self.max_reconnect_attempts} attempts"
         )
         self._health_status[server_id] = (False, datetime.now(timezone.utc))
+
+    # =========================================================================
+    # Logging Level Control (Priority 1)
+    # =========================================================================
+
+    async def set_server_logging_level(self, server_id: str, level: str) -> bool:
+        """
+        Set the logging level for a registered MCP server.
+
+        Args:
+            server_id: Unique server identifier
+            level: Logging level (debug, info, notice, warning, error, critical, alert, emergency)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        # Validate logging level
+        if level not in VALID_LOGGING_LEVELS:
+            logger.warning(f"Invalid logging level: {level}")
+            return False
+
+        client = self._clients.get(server_id)
+        if not client:
+            logger.warning(f"Server not registered: {server_id}")
+            return False
+
+        try:
+            result = await client.set_logging_level(level)
+            if result:
+                logger.info(f"Set logging level to {level} for server {server_id}")
+            return result
+        except Exception as e:
+            logger.error(f"Failed to set logging level for server {server_id}: {e}")
+            return False
+
+    # =========================================================================
+    # Roots Management (Priority 1)
+    # =========================================================================
+
+    async def add_root(self, uri: str, name: Optional[str] = None) -> None:
+        """
+        Add a root directory that servers can access.
+
+        Args:
+            uri: URI of the root directory (e.g., file:///workspace)
+            name: Optional human-readable name for the root
+        """
+        # Check if root already exists
+        for root in self._roots:
+            if root["uri"] == uri:
+                return  # Already exists
+
+        root_entry = {"uri": uri}
+        if name:
+            root_entry["name"] = name
+
+        self._roots.append(root_entry)
+        logger.info(f"Added root: {uri}")
+
+    async def remove_root(self, uri: str) -> None:
+        """
+        Remove a root directory.
+
+        Args:
+            uri: URI of the root directory to remove
+        """
+        self._roots = [r for r in self._roots if r["uri"] != uri]
+        logger.info(f"Removed root: {uri}")
+
+    def get_roots(self) -> list[dict[str, str]]:
+        """
+        Get list of configured roots.
+
+        Returns:
+            List of root entries with uri and optional name
+        """
+        return list(self._roots)
+
+    async def notify_roots_list_changed(self) -> None:
+        """
+        Notify all registered servers that the roots list has changed.
+
+        This sends a roots/list_changed notification to all servers.
+        """
+        for server_id, client in self._clients.items():
+            try:
+                if hasattr(client, "send_roots_list_changed"):
+                    await client.send_roots_list_changed()
+                    logger.debug(f"Notified server {server_id} of roots change")
+            except Exception as e:
+                logger.error(f"Failed to notify server {server_id} of roots change: {e}")
+
+    # =========================================================================
+    # Elicitation Support (Priority 3 - MCP -> HITL integration)
+    # =========================================================================
+
+    def set_elicitation_handler(self, handler: callable) -> None:
+        """
+        Set the elicitation request handler.
+
+        The handler is called when an MCP server requests information
+        from the user via the elicitation mechanism.
+
+        Args:
+            handler: Async function with signature:
+                async def handler(
+                    server_id: str,
+                    message: str,
+                    schema: Dict[str, Any]
+                ) -> Dict[str, Any]
+
+                Returns the user's response data matching the schema.
+        """
+        self._elicitation_handler = handler
+        logger.info("Elicitation handler registered")
+
+    async def handle_elicitation_request(
+        self,
+        server_id: str,
+        message: str,
+        requested_schema: dict,
+        timeout_seconds: float = 300.0,
+    ) -> Optional[dict]:
+        """
+        Handle an elicitation request from an MCP server.
+
+        This method is called by the MCP client when the server
+        requests information from the user. It forwards the request
+        to the registered elicitation handler (typically the HITL system).
+
+        Args:
+            server_id: ID of the server making the request
+            message: Human-readable message from the server
+            requested_schema: JSON Schema describing the requested data
+            timeout_seconds: Timeout for the request (default: 5 minutes)
+
+        Returns:
+            User's response data matching the schema, or None if no handler
+        """
+        if not self._elicitation_handler:
+            logger.warning(
+                f"No elicitation handler registered, cannot fulfill request from {server_id}"
+            )
+            return None
+
+        try:
+            logger.info(f"Forwarding elicitation request from server {server_id}")
+
+            # Call the handler with timeout
+            result = await asyncio.wait_for(
+                self._elicitation_handler(server_id, message, requested_schema),
+                timeout=timeout_seconds,
+            )
+
+            logger.info(f"Elicitation request from {server_id} fulfilled")
+            return result
+
+        except asyncio.TimeoutError:
+            logger.error(f"Elicitation request from {server_id} timed out")
+            return None
+        except Exception as e:
+            logger.error(f"Error handling elicitation request from {server_id}: {e}")
+            return None
+
+    # =========================================================================
+    # Prompts API Support (Priority 3)
+    # =========================================================================
+
+    async def get_server_prompts(self, server_id: str) -> list[dict]:
+        """
+        Get list of prompts available from a registered MCP server.
+
+        Args:
+            server_id: Unique server identifier
+
+        Returns:
+            List of prompt definitions with name, description, and arguments
+
+        Raises:
+            ValueError: If server is not registered
+        """
+        client = self._clients.get(server_id)
+        if not client:
+            raise ValueError(f"Server not registered: {server_id}")
+
+        try:
+            # Check if client supports prompts
+            if not hasattr(client, "list_prompts"):
+                logger.debug(f"Server {server_id} does not support prompts")
+                return []
+
+            prompts = await client.list_prompts()
+            logger.debug(f"Retrieved {len(prompts)} prompts from server {server_id}")
+            return prompts
+        except Exception as e:
+            logger.error(f"Failed to get prompts from server {server_id}: {e}")
+            raise
+
+    async def get_server_prompt(
+        self,
+        server_id: str,
+        prompt_name: str,
+        arguments: Optional[dict] = None,
+    ) -> dict:
+        """
+        Get a specific prompt from a registered MCP server.
+
+        Args:
+            server_id: Unique server identifier
+            prompt_name: Name of the prompt to retrieve
+            arguments: Optional arguments to fill in the prompt template
+
+        Returns:
+            Prompt definition with messages
+
+        Raises:
+            ValueError: If server is not registered
+        """
+        client = self._clients.get(server_id)
+        if not client:
+            raise ValueError(f"Server not registered: {server_id}")
+
+        try:
+            prompt = await client.get_prompt(prompt_name, arguments)
+            logger.debug(f"Retrieved prompt {prompt_name} from server {server_id}")
+            return prompt
+        except Exception as e:
+            logger.error(f"Failed to get prompt {prompt_name} from server {server_id}: {e}")
+            raise
+
+    async def get_all_prompts(self) -> dict[str, list[dict]]:
+        """
+        Get prompts from all registered servers.
+
+        Returns:
+            Dictionary mapping server_id to list of prompts
+        """
+        result = {}
+        for server_id in self._clients.keys():
+            try:
+                prompts = await self.get_server_prompts(server_id)
+                result[server_id] = prompts
+            except Exception as e:
+                logger.error(f"Failed to get prompts from server {server_id}: {e}")
+                result[server_id] = []
+        return result

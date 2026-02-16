@@ -24,6 +24,8 @@ __all__ = [
     "AgentArtifactCloseEvent",
     "AgentMCPAppResultEvent",
     "AgentMCPAppRegisteredEvent",
+    "AgentElicitationAskedEvent",
+    "AgentElicitationAnsweredEvent",
     "get_frontend_event_types",
 ]
 
@@ -717,6 +719,69 @@ class AgentToolsUpdatedEvent(AgentDomainEvent):
     tool_names: List[str] = Field(default_factory=list)
     server_name: str = ""
     requires_refresh: bool = True  # Frontend should refresh tool list
+
+
+# =========================================================================
+# Progress Events (long-running operation updates)
+# =========================================================================
+
+
+class AgentProgressEvent(AgentDomainEvent):
+    """Event: Progress update for a long-running tool operation.
+
+    Emitted when MCP tools report progress during execution using the
+    progress notification mechanism defined in the MCP protocol.
+
+    This enables real-time progress tracking in the frontend for operations
+    like file transfers, code generation, or other long-running tasks.
+    """
+
+    event_type: AgentEventType = AgentEventType.PROGRESS
+    tool_name: str
+    progress_token: str  # Unique identifier for tracking this progress
+    progress: float  # Current progress value
+    total: Optional[float] = None  # Total value (if known)
+    message: Optional[str] = None  # Human-readable progress message
+
+
+# =========================================================================
+# MCP Elicitation Events (MCP server -> user information requests)
+# =========================================================================
+
+
+class AgentElicitationAskedEvent(AgentDomainEvent):
+    """Event: MCP server requests information from user via elicitation.
+
+    Emitted when an MCP server needs to request structured information
+    from the user through the agent. This integrates MCP elicitation
+    with the existing HITL (Human-in-the-Loop) system.
+
+    MCP servers use elicitation to request information that wasn't
+    provided in the original tool call, such as API keys, configuration
+    values, or user preferences.
+
+    The requested_schema follows JSON Schema format and describes what
+    information the server is requesting from the user.
+    """
+
+    event_type: AgentEventType = AgentEventType.ELICITATION_ASKED
+    request_id: str
+    server_id: str
+    server_name: str
+    message: str  # Human-readable message from the MCP server
+    requested_schema: Dict[str, Any]  # JSON Schema describing the requested data
+
+
+class AgentElicitationAnsweredEvent(AgentDomainEvent):
+    """Event: User provided response to MCP elicitation request.
+
+    Emitted when the user responds to an elicitation request from an MCP server.
+    The response contains the data requested according to the schema.
+    """
+
+    event_type: AgentEventType = AgentEventType.ELICITATION_ANSWERED
+    request_id: str
+    response: Dict[str, Any]  # User's response matching the requested schema
 
 
 # =========================================================================

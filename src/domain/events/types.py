@@ -196,6 +196,17 @@ class AgentEventType(str, Enum):
     # =========================================================================
     TOOLS_UPDATED = "tools_updated"
 
+    # =========================================================================
+    # Progress events (long-running operation updates)
+    # =========================================================================
+    PROGRESS = "progress"
+
+    # =========================================================================
+    # MCP Elicitation events (MCP server -> user requests)
+    # =========================================================================
+    ELICITATION_ASKED = "elicitation_asked"
+    ELICITATION_ANSWERED = "elicitation_answered"
+
 
 # =============================================================================
 # Event Type Utilities
@@ -229,6 +240,7 @@ HITL_EVENT_TYPES: Set[AgentEventType] = {
     AgentEventType.DECISION_ASKED,
     AgentEventType.ENV_VAR_REQUESTED,
     AgentEventType.PERMISSION_ASKED,
+    AgentEventType.ELICITATION_ASKED,
 }
 
 # Event categories mapping
@@ -256,6 +268,8 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.ENV_VAR_PROVIDED: EventCategory.HITL,
     AgentEventType.PERMISSION_ASKED: EventCategory.HITL,
     AgentEventType.PERMISSION_REPLIED: EventCategory.HITL,
+    AgentEventType.ELICITATION_ASKED: EventCategory.HITL,
+    AgentEventType.ELICITATION_ANSWERED: EventCategory.HITL,
     # Sandbox events
     AgentEventType.SANDBOX_CREATED: EventCategory.SANDBOX,
     AgentEventType.SANDBOX_TERMINATED: EventCategory.SANDBOX,
