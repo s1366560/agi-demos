@@ -119,6 +119,22 @@ class MCPWebSocketClient:
         self._tools: List[MCPToolSchema] = []
         self._connected = False
 
+        # Notification handlers for server-initiated messages
+        self.on_resource_updated: Optional[callable] = None
+        self.on_resource_list_changed: Optional[callable] = None
+        self.on_progress: Optional[callable] = None
+        self.on_cancelled: Optional[callable] = None
+        self.on_prompts_list_changed: Optional[callable] = None
+
+        # Request handlers for server-initiated requests (Phase 2)
+        self.on_sampling_request: Optional[callable] = None
+        self.on_elicitation_request: Optional[callable] = None
+        self.on_roots_list: Optional[callable] = None
+        self.on_roots_list_changed: Optional[callable] = None
+
+        # Client state
+        self._roots: List[Dict[str, Any]] = []
+
     async def __aenter__(self) -> "MCPWebSocketClient":
         """Async context manager entry - connect to server."""
         await self.connect()
@@ -323,6 +339,7 @@ class MCPWebSocketClient:
         request_id = data.get("id")
 
         if request_id is not None and request_id in self._pending_requests:
+            # Response to our request
             future = self._pending_requests.pop(request_id)
 
             if "error" in data:
@@ -334,11 +351,34 @@ class MCPWebSocketClient:
             else:
                 future.set_result(data.get("result", {}))
 
+        elif "method" in data and "id" in data:
+            # This is a request FROM the server (server-initiated)
+            method = data.get("method")
+            params = data.get("params", {})
+            logger.debug(f"Received server request: {method} (id={request_id})")
+
+            # Handle server-initiated requests
+            await self._handle_server_request(request_id, method, params)
+
         elif "method" in data and "id" not in data:
             # This is a notification from server (no response expected)
             method = data.get("method")
+            params = data.get("params", {})
             logger.debug(f"Received server notification: {method}")
-            # Handle server-initiated notifications if needed
+
+            # Dispatch to registered handlers
+            if method == "notifications/resources/updated" and self.on_resource_updated:
+                await self.on_resource_updated(params)
+            elif method == "notifications/resources/list_changed" and self.on_resource_list_changed:
+                await self.on_resource_list_changed(params)
+            elif method == "notifications/progress" and self.on_progress:
+                await self.on_progress(params)
+            elif method == "notifications/cancelled" and self.on_cancelled:
+                await self.on_cancelled(params)
+            elif method == "notifications/prompts/list_changed" and self.on_prompts_list_changed:
+                await self.on_prompts_list_changed(params)
+            elif method == "notifications/roots/list_changed" and self.on_roots_list_changed:
+                await self.on_roots_list_changed(params)
 
         else:
             logger.warning(f"Received unexpected message: {data}")
@@ -368,6 +408,7 @@ class MCPWebSocketClient:
                 for tool in tools_data
             ]
         return []
+
     async def call_tool(
         self,
         name: str,
@@ -412,14 +453,12 @@ class MCPWebSocketClient:
         except Exception as e:
             logger.error(f"Tool call error: {e}")
             return MCPToolResult(
-                content=[{"type": "text", "text": f"Error: {str(e)}"}],
+                content=[{"type": "text", "text": f"Error: {e!s}"}],
                 isError=True,
             )
 
         # _send_request returned None - this means timeout
-        logger.error(
-            f"Tool '{name}' call failed: request timed out"
-        )
+        logger.error(f"Tool '{name}' call failed: request timed out")
         return MCPToolResult(
             content=[
                 {
@@ -451,7 +490,9 @@ class MCPWebSocketClient:
         timeout = timeout or self.timeout
         try:
             result = await self._send_request(
-                "resources/read", {"uri": uri}, timeout=timeout,
+                "resources/read",
+                {"uri": uri},
+                timeout=timeout,
             )
             return result
         except Exception as e:
@@ -470,12 +511,160 @@ class MCPWebSocketClient:
         timeout = timeout or self.timeout
         try:
             result = await self._send_request(
-                "resources/list", {}, timeout=timeout,
+                "resources/list",
+                {},
+                timeout=timeout,
             )
             return result
         except Exception as e:
             logger.error("resources/list error: %s", e)
             return None
+
+    # ========================================================================
+    # MCP Protocol Capabilities (Phase 1)
+    # ========================================================================
+
+    async def ping(self, timeout: Optional[float] = None) -> bool:
+        """Send ping to check connection health.
+
+        Args:
+            timeout: Operation timeout in seconds
+
+        Returns:
+            True if ping successful, False otherwise
+        """
+        timeout = timeout or self.timeout
+        try:
+            result = await self._send_request("ping", {}, timeout=timeout)
+            return result is not None
+        except Exception as e:
+            logger.error(f"Ping failed: {e}")
+            return False
+
+    async def list_prompts(self, timeout: Optional[float] = None) -> List[Dict[str, Any]]:
+        """List available prompt templates.
+
+        Args:
+            timeout: Operation timeout in seconds
+
+        Returns:
+            List of prompt definitions
+        """
+        timeout = timeout or self.timeout
+        try:
+            result = await self._send_request("prompts/list", {}, timeout=timeout)
+            if result:
+                return result.get("prompts", [])
+            return []
+        except Exception as e:
+            logger.error(f"list_prompts error: {e}")
+            return []
+
+    async def get_prompt(
+        self,
+        name: str,
+        arguments: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Get a specific prompt template with arguments.
+
+        Args:
+            name: Prompt name
+            arguments: Prompt arguments
+            timeout: Operation timeout in seconds
+
+        Returns:
+            Prompt definition with messages, or None on error
+        """
+        timeout = timeout or self.timeout
+        try:
+            result = await self._send_request(
+                "prompts/get",
+                {"name": name, "arguments": arguments or {}},
+                timeout=timeout,
+            )
+            return result
+        except Exception as e:
+            logger.error(f"get_prompt error for {name}: {e}")
+            return None
+
+    async def subscribe_resource(
+        self,
+        uri: str,
+        timeout: Optional[float] = None,
+    ) -> bool:
+        """Subscribe to resource update notifications.
+
+        Args:
+            uri: Resource URI to subscribe to
+            timeout: Operation timeout in seconds
+
+        Returns:
+            True if subscription successful, False otherwise
+        """
+        timeout = timeout or self.timeout
+        try:
+            result = await self._send_request(
+                "resources/subscribe",
+                {"uri": uri},
+                timeout=timeout,
+            )
+            return result is not None
+        except Exception as e:
+            logger.error(f"subscribe_resource error for {uri}: {e}")
+            return False
+
+    async def unsubscribe_resource(
+        self,
+        uri: str,
+        timeout: Optional[float] = None,
+    ) -> bool:
+        """Unsubscribe from resource update notifications.
+
+        Args:
+            uri: Resource URI to unsubscribe from
+            timeout: Operation timeout in seconds
+
+        Returns:
+            True if unsubscription successful, False otherwise
+        """
+        timeout = timeout or self.timeout
+        try:
+            result = await self._send_request(
+                "resources/unsubscribe",
+                {"uri": uri},
+                timeout=timeout,
+            )
+            return result is not None
+        except Exception as e:
+            logger.error(f"unsubscribe_resource error for {uri}: {e}")
+            return False
+
+    async def set_logging_level(
+        self,
+        level: str,
+        timeout: Optional[float] = None,
+    ) -> bool:
+        """Set server logging level.
+
+        Args:
+            level: Logging level (debug, info, notice, warning, error, critical, alert, emergency)
+            timeout: Operation timeout in seconds
+
+        Returns:
+            True if successful, False otherwise
+        """
+        timeout = timeout or self.timeout
+        try:
+            result = await self._send_request(
+                "logging/setLevel",
+                {"level": level},
+                timeout=timeout,
+            )
+            return result is not None
+        except Exception as e:
+            logger.error(f"set_logging_level error: {e}")
+            return False
 
     async def _send_request(
         self,
@@ -558,3 +747,165 @@ class MCPWebSocketClient:
             await self._ws.send_json(notification)
         except Exception as e:
             logger.error(f"Notification error: {e}")
+
+    async def _send_response(
+        self,
+        request_id: int,
+        result: Optional[Dict[str, Any]] = None,
+        error: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Send a JSON-RPC response to a server request."""
+        if not self._ws or self._ws.closed:
+            return
+
+        response: Dict[str, Any] = {"jsonrpc": "2.0", "id": request_id}
+
+        if error:
+            response["error"] = error
+        else:
+            response["result"] = result or {}
+
+        try:
+            logger.debug(f"Sending response for request {request_id}")
+            await self._ws.send_json(response)
+        except Exception as e:
+            logger.error(f"Response error: {e}")
+
+    async def _handle_server_request(
+        self, request_id: int, method: str, params: Dict[str, Any]
+    ) -> None:
+        """Handle server-initiated requests."""
+        try:
+            if method == "sampling/createMessage":
+                await self._handle_sampling_request(request_id, params)
+            elif method == "elicitation/create":
+                await self._handle_elicitation_request(request_id, params)
+            elif method == "roots/list":
+                await self._handle_roots_list_request(request_id, params)
+            else:
+                # Unknown method - return error
+                await self._send_response(
+                    request_id,
+                    error={
+                        "code": -32601,
+                        "message": f"Method not found: {method}",
+                    },
+                )
+        except Exception as e:
+            logger.error(f"Error handling server request {method}: {e}")
+            await self._send_response(
+                request_id,
+                error={"code": -32603, "message": f"Internal error: {e!s}"},
+            )
+
+    async def _handle_sampling_request(self, request_id: int, params: Dict[str, Any]) -> None:
+        """Handle sampling/createMessage request from server."""
+        if not self.on_sampling_request:
+            await self._send_response(
+                request_id,
+                error={
+                    "code": -32601,
+                    "message": "Sampling not supported - no handler registered",
+                },
+            )
+            return
+
+        try:
+            result = await self.on_sampling_request(params)
+            await self._send_response(request_id, result=result)
+        except Exception as e:
+            logger.error(f"Sampling handler error: {e}")
+            await self._send_response(
+                request_id,
+                error={"code": -32603, "message": f"Sampling failed: {e!s}"},
+            )
+
+    async def _handle_elicitation_request(self, request_id: int, params: Dict[str, Any]) -> None:
+        """Handle elicitation/create request from server."""
+        if not self.on_elicitation_request:
+            await self._send_response(
+                request_id,
+                error={
+                    "code": -32601,
+                    "message": "Elicitation not supported - no handler registered",
+                },
+            )
+            return
+
+        try:
+            result = await self.on_elicitation_request(params)
+            await self._send_response(request_id, result=result)
+        except Exception as e:
+            logger.error(f"Elicitation handler error: {e}")
+            await self._send_response(
+                request_id,
+                error={"code": -32603, "message": f"Elicitation failed: {e!s}"},
+            )
+
+    async def _handle_roots_list_request(self, request_id: int, params: Dict[str, Any]) -> None:
+        """Handle roots/list request from server."""
+        if self.on_roots_list:
+            try:
+                result = await self.on_roots_list(params)
+                await self._send_response(request_id, result=result)
+            except Exception as e:
+                logger.error(f"Roots list handler error: {e}")
+                await self._send_response(
+                    request_id,
+                    error={"code": -32603, "message": f"Roots list failed: {e!s}"},
+                )
+        else:
+            # Return default empty roots list
+            await self._send_response(request_id, result={"roots": self._roots})
+
+    # ========================================================================
+    # MCP Protocol Capabilities (Phase 2)
+    # ========================================================================
+
+    async def set_roots(self, roots: List[Dict[str, Any]]) -> None:
+        """Set the client's roots and notify the server.
+
+        Args:
+            roots: List of root definitions with 'uri' and optional 'name'
+        """
+        self._roots = roots
+        await self.notify_roots_list_changed()
+
+    async def notify_roots_list_changed(self) -> None:
+        """Notify the server that the roots list has changed."""
+        await self._send_notification("notifications/roots/list_changed", {})
+
+    async def complete(
+        self,
+        ref: Dict[str, Any],
+        argument: Dict[str, Any],
+        context: Optional[Dict[str, Any]] = None,
+        timeout: Optional[float] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Request completion suggestions from the server.
+
+        Args:
+            ref: Reference to the prompt or resource template
+                - For prompts: {"type": "ref/prompt", "name": "prompt_name"}
+                - For resources: {"type": "ref/resource", "uri": "template_uri"}
+            argument: Current argument being completed
+                - {"name": "arg_name", "value": "current_value"}
+            context: Optional context for better suggestions
+            timeout: Operation timeout in seconds
+
+        Returns:
+            Completion result with 'values' list, or None on error
+
+        Reference: https://modelcontextprotocol.io/specification/2025-11-25
+        """
+        timeout = timeout or self.timeout
+        params: Dict[str, Any] = {"ref": ref, "argument": argument}
+        if context:
+            params["context"] = context
+
+        try:
+            result = await self._send_request("completion/complete", params, timeout=timeout)
+            return result
+        except Exception as e:
+            logger.error(f"complete error: {e}")
+            return None

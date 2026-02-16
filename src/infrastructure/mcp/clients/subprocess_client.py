@@ -250,6 +250,7 @@ class MCPSubprocessClient:
                 )
                 for tool in tools_data
             ]
+
     async def call_tool(
         self,
         name: str,
@@ -300,6 +301,27 @@ class MCPSubprocessClient:
     def get_cached_tools(self) -> List[MCPToolSchema]:
         """Get cached tools list (from connection time)."""
         return self._tools
+
+    # ========================================================================
+    # MCP Protocol Capabilities (Phase 1)
+    # ========================================================================
+
+    async def ping(self, timeout: Optional[float] = None) -> bool:
+        """Send ping to check connection health.
+
+        Args:
+            timeout: Operation timeout in seconds
+
+        Returns:
+            True if ping successful, False otherwise
+        """
+        timeout = timeout or self.timeout
+        try:
+            result = await self._send_request("ping", {}, timeout=timeout)
+            return result is not None and "result" in result
+        except Exception as e:
+            logger.error(f"Ping failed: {e}")
+            return False
 
     async def _send_request(
         self,
