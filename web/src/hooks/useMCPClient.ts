@@ -108,7 +108,7 @@ export function useMCPClient({
   const lastConnectedStatusRef = useRef<boolean>(false);
   // Use ref for isInGracePeriod to avoid circular dependency in connect callback
   const isInGracePeriodRef = useRef(false);
-  const isInGracePeriodRef.current = isInGracePeriod;
+  isInGracePeriodRef.current = isInGracePeriod;
 
   const token = useAuthStore((s) => s.token);
 
