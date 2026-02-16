@@ -246,6 +246,10 @@ class ProcessorConfig:
     # LLM Client (optional, provides circuit breaker + rate limiter)
     llm_client: Optional[Any] = None
 
+    # Tool refresh callback (optional, enables dynamic tool loading)
+    # When provided, _refresh_tools() can fetch updated tools at runtime
+    tool_provider: Optional[Callable[[], List["ToolDefinition"]]] = None
+
 
 @dataclass
 class ToolDefinition:
@@ -340,6 +344,10 @@ class SessionProcessor:
         # HITL handler (created lazily when context is available)
         self._hitl_coordinator: Optional[HITLCoordinator] = None
 
+        # Tool provider callback for dynamic tool refresh
+        # When set, _refresh_tools() can update self.tools at runtime
+        self._tool_provider: Optional[Callable[[], List[ToolDefinition]]] = config.tool_provider
+
     @property
     def state(self) -> ProcessorState:
         """Get current processor state."""
@@ -368,6 +376,36 @@ class SessionProcessor:
             )
 
         return self._hitl_coordinator
+
+    def _refresh_tools(self) -> Optional[int]:
+        """Refresh tools from the tool_provider callback.
+
+        Called after register_mcp_server succeeds to load newly registered
+        MCP tools into the current session. This enables immediate access
+        to new tools without restarting the session.
+
+        Returns:
+            Number of tools after refresh, or None if no provider set or error.
+        """
+        if self._tool_provider is None:
+            return None
+
+        try:
+            new_tools = self._tool_provider()
+            if new_tools is None:
+                logger.warning("[Processor] tool_provider returned None, skipping refresh")
+                return None
+
+            # Update tools dict with new tool definitions
+            self.tools = {t.name: t for t in new_tools}
+            logger.info(
+                "[Processor] Refreshed tools from provider: %d tools available", len(self.tools)
+            )
+            return len(self.tools)
+
+        except Exception as e:
+            logger.warning("[Processor] Failed to refresh tools from provider: %s", e)
+            return None
 
     async def process(
         self,
@@ -1449,6 +1487,19 @@ class SessionProcessor:
                         yield event
                 except Exception as reg_err:
                     logger.error(f"{tool_name} event emission failed: {reg_err}")
+
+            # Refresh tools after successful register_mcp_server execution
+            # This enables immediate access to newly registered MCP tools
+            if tool_name == "register_mcp_server":
+                # Check if registration succeeded (no error prefix in output)
+                if isinstance(output_str, str) and not output_str.startswith("Error:"):
+                    logger.info("[Processor] register_mcp_server succeeded, refreshing tools")
+                    self._refresh_tools()
+                else:
+                    logger.debug(
+                        "[Processor] register_mcp_server failed or returned error, "
+                        "skipping tool refresh"
+                    )
 
         except Exception as e:
             logger.error(f"Tool execution error: {e}", exc_info=True)

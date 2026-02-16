@@ -128,8 +128,17 @@ class MCPSandboxAdapter(SandboxPort):
         self._max_memory_mb = max_memory_mb
         self._max_cpu_cores = max_cpu_cores
 
-        # Thread-safe lock for shared state access
-        self._lock = asyncio.Lock()
+        # Fine-grained locks for improved concurrency
+        # Lock for port allocation operations (port counter, used_ports set)
+        self._port_allocation_lock = asyncio.Lock()
+        # Lock for instance access (_active_sandboxes dict operations)
+        # Using asyncio.Lock - callers should not re-acquire in same task
+        self._instance_lock = asyncio.Lock()
+        # Lock for cleanup operations (prevent double cleanup)
+        self._cleanup_lock = asyncio.Lock()
+
+        # Legacy lock - kept for backward compatibility, maps to instance_lock
+        self._lock = self._instance_lock
 
         # Track active sandboxes and port allocation
         self._active_sandboxes: Dict[str, MCPSandboxInstance] = {}
@@ -162,6 +171,33 @@ class MCPSandboxAdapter(SandboxPort):
             default_ttl_seconds=self._health_check_ttl_seconds,
             max_size=1000,
         )
+
+        # Periodic cleanup task management
+        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_interval_seconds = 300.0  # Default: 5 minutes
+
+        # Cleanup statistics
+        self._cleanup_stats = {
+            "total_cleanups": 0,
+            "containers_removed": 0,
+            "last_cleanup_at": None,
+            "errors": 0,
+        }
+
+        # MCP Server health check task management
+        self._health_check_task: Optional[asyncio.Task] = None
+        self._health_check_interval_seconds = 60.0  # Default: 1 minute
+
+        # Health check statistics
+        self._health_check_stats = {
+            "total_checks": 0,
+            "restarts_triggered": 0,
+            "last_check_at": None,
+            "errors": 0,
+        }
+
+        # MCP server configs for restart (key: (sandbox_id, server_name))
+        self._mcp_server_configs: Dict[tuple, Dict[str, Any]] = {}
 
         # URL service for building service URLs
         self._url_service = SandboxUrlService(default_host="localhost", api_base="/api/v1")
@@ -280,7 +316,7 @@ class MCPSandboxAdapter(SandboxPort):
             await self.cleanup_project_containers(project_id)
 
         # Allocate ports for all services with lock protection
-        async with self._lock:
+        async with self._port_allocation_lock:
             host_mcp_port = self._get_next_port_unsafe()
             host_desktop_port = self._get_next_desktop_port_unsafe()
             host_terminal_port = self._get_next_terminal_port_unsafe()
@@ -407,7 +443,7 @@ class MCPSandboxAdapter(SandboxPort):
                 labels=instance_labels,
             )
 
-            async with self._lock:
+            async with self._instance_lock:
                 self._active_sandboxes[sandbox_id] = instance
             logger.info(
                 f"Created MCP sandbox: {sandbox_id} "
@@ -418,7 +454,7 @@ class MCPSandboxAdapter(SandboxPort):
 
         except ImageNotFound:
             # Release allocated ports on failure
-            async with self._lock:
+            async with self._port_allocation_lock:
                 self._release_ports_unsafe([host_mcp_port, host_desktop_port, host_terminal_port])
             logger.error(f"MCP sandbox image not found: {self._mcp_image}")
             raise SandboxConnectionError(
@@ -429,7 +465,7 @@ class MCPSandboxAdapter(SandboxPort):
             )
         except Exception as e:
             # Release allocated ports on failure
-            async with self._lock:
+            async with self._port_allocation_lock:
                 self._release_ports_unsafe([host_mcp_port, host_desktop_port, host_terminal_port])
             logger.error(f"Failed to create MCP sandbox: {e}")
             raise SandboxConnectionError(
@@ -770,8 +806,10 @@ class MCPSandboxAdapter(SandboxPort):
                     labels=labels,
                 )
 
-                async with self._lock:
+                # Use separate locks for instance and port tracking
+                async with self._instance_lock:
                     self._active_sandboxes[sandbox_id] = instance
+                async with self._port_allocation_lock:
                     # Track used ports
                     if mcp_port:
                         self._used_ports.add(mcp_port)
@@ -798,8 +836,8 @@ class MCPSandboxAdapter(SandboxPort):
 
     async def terminate_sandbox(self, sandbox_id: str) -> bool:
         """Terminate a sandbox container with proper cleanup and locking."""
-        # Prevent double cleanup with lock
-        async with self._lock:
+        # Prevent double cleanup with cleanup lock
+        async with self._cleanup_lock:
             if sandbox_id in self._cleanup_in_progress:
                 logger.warning(f"Cleanup already in progress for sandbox: {sandbox_id}")
                 return False
@@ -855,14 +893,18 @@ class MCPSandboxAdapter(SandboxPort):
             except NotFound:
                 logger.warning(f"Container not found for termination: {sandbox_id}")
 
-            # Always update tracking and release ports with lock
-            async with self._lock:
+            # Update instance tracking and release ports
+            # Use instance_lock for _active_sandboxes and port_allocation_lock for ports
+            async with self._instance_lock:
                 if sandbox_id in self._active_sandboxes:
                     self._active_sandboxes[sandbox_id].status = SandboxStatus.TERMINATED
                     self._active_sandboxes[sandbox_id].terminated_at = datetime.now()
                     del self._active_sandboxes[sandbox_id]
-                # Release ports
+            async with self._port_allocation_lock:
                 self._release_ports_unsafe(ports_to_release)
+
+            # Invalidate health check cache for this sandbox
+            await self._last_healthy_at.delete(sandbox_id)
 
             logger.info(f"Terminated MCP sandbox: {sandbox_id}")
             return True
@@ -870,7 +912,7 @@ class MCPSandboxAdapter(SandboxPort):
         except Exception as e:
             logger.error(f"Error terminating sandbox {sandbox_id}: {e}")
             # Ensure cleanup even on error - release ports to prevent leak
-            async with self._lock:
+            async with self._instance_lock:
                 instance = self._active_sandboxes.get(sandbox_id)
                 if instance:
                     ports_to_release = [
@@ -879,12 +921,15 @@ class MCPSandboxAdapter(SandboxPort):
                         instance.terminal_port,
                     ]
                     ports_to_release = [p for p in ports_to_release if p is not None]
-                    self._release_ports_unsafe(ports_to_release)
                     del self._active_sandboxes[sandbox_id]
+            async with self._port_allocation_lock:
+                self._release_ports_unsafe(ports_to_release)
+            # Invalidate health check cache even on error
+            await self._last_healthy_at.delete(sandbox_id)
             return False
         finally:
             # Always remove from cleanup tracking
-            async with self._lock:
+            async with self._cleanup_lock:
                 self._cleanup_in_progress.discard(sandbox_id)
 
     async def container_exists(self, sandbox_id: str) -> bool:
@@ -931,7 +976,7 @@ class MCPSandboxAdapter(SandboxPort):
         if not project_id:
             return None
 
-        async with self._lock:
+        async with self._instance_lock:
             for sandbox_id, instance in self._active_sandboxes.items():
                 if instance.labels.get("memstack.project_id") == project_id:
                     return sandbox_id
@@ -1054,7 +1099,7 @@ class MCPSandboxAdapter(SandboxPort):
                     await loop.run_in_executor(None, lambda c=container: c.remove(force=True))
 
                     # Clean up from internal tracking
-                    async with self._lock:
+                    async with self._instance_lock:
                         if container_name in self._active_sandboxes:
                             instance = self._active_sandboxes[container_name]
                             ports_to_release = [
@@ -1063,8 +1108,9 @@ class MCPSandboxAdapter(SandboxPort):
                                 instance.terminal_port,
                             ]
                             ports_to_release = [p for p in ports_to_release if p is not None]
-                            self._release_ports_unsafe(ports_to_release)
                             del self._active_sandboxes[container_name]
+                    async with self._port_allocation_lock:
+                        self._release_ports_unsafe(ports_to_release)
 
                     terminated_count += 1
                     logger.info(f"Cleaned up container {container_name} for project {project_id}")
@@ -1160,7 +1206,7 @@ class MCPSandboxAdapter(SandboxPort):
         status: Optional[SandboxStatus] = None,
     ) -> List[MCPSandboxInstance]:
         """List all sandbox instances (thread-safe)."""
-        async with self._lock:
+        async with self._instance_lock:
             result = []
             for instance in list(self._active_sandboxes.values()):
                 if status is None or instance.status == status:
@@ -1261,7 +1307,7 @@ class MCPSandboxAdapter(SandboxPort):
                 labels=labels,
             )
 
-            async with self._lock:
+            async with self._instance_lock:
                 self._active_sandboxes[sandbox_id] = instance
                 # Track used ports
                 if mcp_port:
@@ -1308,7 +1354,7 @@ class MCPSandboxAdapter(SandboxPort):
 
             count = 0
             orphans_cleaned = 0
-            async with self._lock:
+            async with self._instance_lock:
                 for container in containers:
                     # Skip already tracked containers
                     if container.name in self._active_sandboxes:
@@ -1479,7 +1525,7 @@ class MCPSandboxAdapter(SandboxPort):
         expired_ids = []
 
         # Get expired IDs with lock protection
-        async with self._lock:
+        async with self._instance_lock:
             for sandbox_id, instance in list(self._active_sandboxes.items()):
                 age = (now - instance.created_at).total_seconds()
                 if age > max_age_seconds:
@@ -1788,7 +1834,7 @@ class MCPSandboxAdapter(SandboxPort):
         Args:
             sandbox_id: Sandbox identifier
         """
-        async with self._lock:
+        async with self._instance_lock:
             instance = self._active_sandboxes.get(sandbox_id)
             if instance:
                 instance.last_activity_at = datetime.now()
@@ -2038,7 +2084,7 @@ class MCPSandboxAdapter(SandboxPort):
         old_ports = [p for p in old_ports if p is not None]
 
         # Release old ports before rebuild to prevent port leaks
-        async with self._lock:
+        async with self._port_allocation_lock:
             self._release_ports_unsafe(old_ports)
 
         # Clean up the old instance
@@ -2221,8 +2267,9 @@ class MCPSandboxAdapter(SandboxPort):
             )
 
             # Update tracking with original ID and re-track allocated ports
-            async with self._lock:
+            async with self._instance_lock:
                 self._active_sandboxes[original_sandbox_id] = new_instance
+            async with self._port_allocation_lock:
                 new_ports = [actual_mcp_port, actual_desktop_port, actual_terminal_port]
                 for p in new_ports:
                     if p is not None:
@@ -2332,7 +2379,7 @@ class MCPSandboxAdapter(SandboxPort):
         sandbox_id: str,
         tool_name: str,
         arguments: Dict[str, Any],
-        timeout: float = 600.0,
+        timeout: float = 60.0,
         max_retries: int = 2,
     ) -> Dict[str, Any]:
         """
@@ -2344,7 +2391,7 @@ class MCPSandboxAdapter(SandboxPort):
             sandbox_id: Sandbox identifier
             tool_name: Name of the tool (read, write, edit, glob, grep, bash)
             arguments: Tool arguments
-            timeout: Execution timeout
+            timeout: Execution timeout (default 60s, use 15-20s for fast-fail operations)
             max_retries: Maximum retry attempts for connection errors
 
         Returns:
@@ -2367,7 +2414,7 @@ class MCPSandboxAdapter(SandboxPort):
         await self.update_activity(sandbox_id)
 
         # Refresh instance reference after potential rebuild (under lock for safety)
-        async with self._lock:
+        async with self._instance_lock:
             instance = self._active_sandboxes.get(sandbox_id)
         if not instance:
             raise SandboxNotFoundError(
@@ -2435,3 +2482,442 @@ class MCPSandboxAdapter(SandboxPort):
                     "content": [{"type": "text", "text": f"Error: {str(e)}"}],
                     "is_error": True,
                 }
+
+    # === Enhanced Orphan Cleanup ===
+
+    async def cleanup_orphans(
+        self,
+        check_db: bool = False,
+        remove_exited: bool = True,
+        max_age_hours: Optional[int] = None,
+    ) -> int:
+        """
+        Clean up orphan sandbox containers with enhanced filtering.
+
+        Identifies and removes containers that:
+        1. Have no project_id label (orphan)
+        2. Have exited/dead status (stale)
+        3. Are not in _active_sandboxes AND not in DB (stale, if check_db=True)
+        4. Are older than max_age_hours (ancient, if specified)
+
+        Args:
+            check_db: If True, check DB for project_sandbox associations
+            remove_exited: If True, remove containers with exited/dead status
+            max_age_hours: If set, remove containers older than this age
+
+        Returns:
+            Number of containers cleaned up
+        """
+        loop = asyncio.get_event_loop()
+
+        try:
+            containers = await loop.run_in_executor(
+                None,
+                lambda: self._docker.containers.list(
+                    all=True,
+                    filters={"label": "memstack.sandbox=true"},
+                ),
+            )
+        except Exception as e:
+            logger.error(f"Failed to list containers for cleanup: {e}")
+            return 0
+
+        containers_to_remove = []
+        now = datetime.now()
+
+        for container in containers:
+            labels = container.labels or {}
+            container_name = container.name or container.id[:12]
+            status = container.status
+
+            # Get project_id from labels
+            project_id = labels.get("memstack.project_id")
+
+            # Check 1: No project_id (orphan)
+            if not project_id:
+                logger.info(
+                    f"Marking orphan container for cleanup: {container_name} "
+                    f"(no project_id, status={status})"
+                )
+                containers_to_remove.append(container)
+                continue
+
+            # Check 2: Exited/dead status (stale)
+            if remove_exited and status in ("exited", "dead"):
+                logger.info(
+                    f"Marking exited container for cleanup: {container_name} "
+                    f"(status={status})"
+                )
+                containers_to_remove.append(container)
+                continue
+
+            # Check 3: Not in _active_sandboxes (potential stale)
+            if container.name not in self._active_sandboxes:
+                # If check_db is enabled, verify DB association
+                if check_db:
+                    try:
+                        from src.infrastructure.adapters.secondary.persistence.database import (
+                            async_session_factory,
+                        )
+                        from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
+                            SqlProjectSandboxRepository,
+                        )
+
+                        async with async_session_factory() as db:
+                            repo = SqlProjectSandboxRepository(db)
+                            assoc = await repo.find_by_project(project_id)
+                            if assoc and assoc.sandbox_id == container.name:
+                                # Container is tracked in DB, don't remove
+                                continue
+                    except Exception as e:
+                        logger.warning(
+                            f"DB check failed for container {container_name}: {e}"
+                        )
+
+                # Not tracked anywhere, mark for removal
+                logger.info(
+                    f"Marking untracked container for cleanup: {container_name} "
+                    f"(project_id={project_id}, not in memory)"
+                )
+                containers_to_remove.append(container)
+                continue
+
+            # Check 4: Age-based cleanup (if max_age_hours specified)
+            if max_age_hours:
+                try:
+                    created_str = container.attrs.get("Created", "")
+                    if created_str:
+                        # Parse Docker timestamp format
+                        created_str = created_str.split(".")[0]  # Remove nanoseconds
+                        created_at = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                        age_hours = (now - created_at.replace(tzinfo=None)).total_seconds() / 3600
+                        if age_hours > max_age_hours:
+                            logger.info(
+                                f"Marking ancient container for cleanup: {container_name} "
+                                f"(age={age_hours:.1f}h > {max_age_hours}h)"
+                            )
+                            containers_to_remove.append(container)
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to parse container creation time: {e}"
+                    )
+
+        # Remove marked containers
+        count = 0
+        for container in containers_to_remove:
+            container_name = container.name or container.id[:12]
+            try:
+                # Stop if running
+                if container.status == "running":
+                    await loop.run_in_executor(
+                        None, lambda c=container: c.stop(timeout=5)
+                    )
+                # Remove container
+                await loop.run_in_executor(None, container.remove)
+                count += 1
+                logger.info(f"Cleaned up orphan container: {container_name}")
+            except Exception as e:
+                logger.warning(
+                    f"Failed to cleanup container {container_name}: {e}"
+                )
+                self._cleanup_stats["errors"] += 1
+
+        # Update stats
+        if count > 0:
+            self._cleanup_stats["total_cleanups"] += 1
+            self._cleanup_stats["containers_removed"] += count
+            self._cleanup_stats["last_cleanup_at"] = datetime.now().isoformat()
+            logger.info(f"Cleaned up {count} orphan container(s)")
+
+        return count
+
+    async def start_periodic_cleanup(
+        self,
+        interval_seconds: float = 300.0,
+    ) -> None:
+        """
+        Start a background task that periodically cleans up orphan containers.
+
+        Args:
+            interval_seconds: Time between cleanup runs (default: 5 minutes)
+        """
+        # Stop any existing cleanup task
+        await self.stop_periodic_cleanup()
+
+        self._cleanup_interval_seconds = interval_seconds
+
+        async def cleanup_loop():
+            while True:
+                try:
+                    await asyncio.sleep(self._cleanup_interval_seconds)
+                    logger.debug("Running periodic orphan cleanup...")
+                    await self.cleanup_orphans(check_db=True)
+                except asyncio.CancelledError:
+                    logger.info("Periodic cleanup task cancelled")
+                    break
+                except Exception as e:
+                    logger.error(f"Periodic cleanup error: {e}")
+
+        self._cleanup_task = asyncio.create_task(cleanup_loop())
+        logger.info(
+            f"Started periodic cleanup task (interval={interval_seconds}s)"
+        )
+
+    async def stop_periodic_cleanup(self) -> None:
+        """Stop the periodic cleanup background task."""
+        if self._cleanup_task is not None:
+            self._cleanup_task.cancel()
+            try:
+                await self._cleanup_task
+            except asyncio.CancelledError:
+                pass
+            self._cleanup_task = None
+            logger.info("Stopped periodic cleanup task")
+
+    async def cleanup_on_startup(self) -> int:
+        """
+        Perform cleanup of orphan containers during adapter startup.
+
+        This should be called once when the adapter initializes to clean up
+        any leftover containers from previous sessions.
+
+        Returns:
+            Number of containers cleaned up
+        """
+        logger.info("Running startup cleanup for orphan containers...")
+
+        # Clean up:
+        # 1. Containers without project_id (orphan)
+        # 2. Exited/dead containers (stale)
+        count = await self.cleanup_orphans(
+            check_db=False,  # Don't check DB on startup (DB might not be ready)
+            remove_exited=True,
+        )
+
+        if count > 0:
+            logger.info(f"Startup cleanup removed {count} orphan container(s)")
+        else:
+            logger.info("Startup cleanup: no orphan containers found")
+
+        return count
+
+    def get_cleanup_stats(self) -> Dict[str, Any]:
+        """
+        Get cleanup statistics.
+
+        Returns:
+            Dict with total_cleanups, containers_removed, last_cleanup_at, errors
+        """
+        return dict(self._cleanup_stats)
+
+    # === MCP Server Health Check ===
+
+    async def start_mcp_server_health_check(
+        self,
+        interval_seconds: float = 60.0,
+    ) -> None:
+        """
+        Start a background task that periodically checks MCP server health.
+
+        Args:
+            interval_seconds: Time between health checks (default: 1 minute)
+        """
+        # Stop any existing health check task
+        await self.stop_mcp_server_health_check()
+
+        self._health_check_interval_seconds = interval_seconds
+
+        async def health_check_loop():
+            while True:
+                try:
+                    await asyncio.sleep(self._health_check_interval_seconds)
+                    await self._run_health_check_cycle()
+                except asyncio.CancelledError:
+                    logger.info("MCP server health check task cancelled")
+                    break
+                except Exception as e:
+                    logger.error(f"MCP server health check error: {e}")
+                    self._health_check_stats["errors"] += 1
+
+        self._health_check_task = asyncio.create_task(health_check_loop())
+        logger.info(
+            f"Started MCP server health check task (interval={interval_seconds}s)"
+        )
+
+    async def stop_mcp_server_health_check(self) -> None:
+        """Stop the MCP server health check background task."""
+        if self._health_check_task is not None:
+            self._health_check_task.cancel()
+            try:
+                await self._health_check_task
+            except asyncio.CancelledError:
+                pass
+            self._health_check_task = None
+            logger.info("Stopped MCP server health check task")
+
+    async def _run_health_check_cycle(self) -> None:
+        """Run a single health check cycle for all active sandboxes."""
+        self._health_check_stats["total_checks"] += 1
+        self._health_check_stats["last_check_at"] = datetime.now().isoformat()
+
+        for sandbox_id, instance in list(self._active_sandboxes.items()):
+            try:
+                await self._check_mcp_servers_health(sandbox_id, auto_restart=True)
+            except Exception as e:
+                logger.warning(f"Health check failed for sandbox {sandbox_id}: {e}")
+
+    async def _check_mcp_servers_health(
+        self,
+        sandbox_id: str,
+        auto_restart: bool = False,
+    ) -> Dict[str, List[str]]:
+        """
+        Check health of MCP servers running in a sandbox.
+
+        Args:
+            sandbox_id: Sandbox container ID
+            auto_restart: If True, automatically restart crashed servers
+
+        Returns:
+            Dict with 'running', 'crashed', 'restarted' lists of server names
+        """
+        instance = self._active_sandboxes.get(sandbox_id)
+        if not instance or not instance.mcp_client:
+            return {"running": [], "crashed": [], "restarted": []}
+
+        result = {"running": [], "crashed": [], "restarted": []}
+
+        try:
+            # Call mcp_server_list to get server status
+            list_result = await instance.mcp_client.call_tool("mcp_server_list", {})
+
+            # Parse response
+            servers = self._parse_mcp_server_list(list_result)
+
+            for server_info in servers:
+                server_name = server_info.get("name", "")
+                status = server_info.get("status", "unknown")
+
+                if status == "running":
+                    result["running"].append(server_name)
+                elif status in ("crashed", "exited", "stopped", "error"):
+                    result["crashed"].append(server_name)
+
+                    if auto_restart:
+                        restarted = await self._restart_crashed_server(
+                            sandbox_id, server_name
+                        )
+                        if restarted:
+                            result["restarted"].append(server_name)
+                            self._health_check_stats["restarts_triggered"] += 1
+
+        except Exception as e:
+            logger.warning(f"Failed to check MCP servers health: {e}")
+
+        return result
+
+    async def _restart_crashed_server(
+        self,
+        sandbox_id: str,
+        server_name: str,
+    ) -> bool:
+        """
+        Restart a crashed MCP server.
+
+        Args:
+            sandbox_id: Sandbox container ID
+            server_name: Name of the crashed server
+
+        Returns:
+            True if restart succeeded, False otherwise
+        """
+        instance = self._active_sandboxes.get(sandbox_id)
+        if not instance or not instance.mcp_client:
+            return False
+
+        # Get stored config
+        config_key = (sandbox_id, server_name)
+        config = self._mcp_server_configs.get(config_key)
+
+        if not config:
+            logger.warning(
+                f"No config stored for server {server_name}, cannot restart"
+            )
+            return False
+
+        try:
+            logger.info(f"Restarting crashed MCP server: {server_name}")
+
+            # Call mcp_server_start
+            start_result = await instance.mcp_client.call_tool(
+                "mcp_server_start",
+                {
+                    "name": server_name,
+                    "server_type": config.get("server_type", "stdio"),
+                    "transport_config": config.get("transport_config", "{}"),
+                },
+            )
+
+            # Check result
+            if start_result.get("isError"):
+                logger.warning(
+                    f"Failed to restart MCP server {server_name}: {start_result}"
+                )
+                return False
+
+            logger.info(f"Successfully restarted MCP server: {server_name}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Error restarting MCP server {server_name}: {e}")
+            return False
+
+    def store_mcp_server_config(
+        self,
+        sandbox_id: str,
+        server_name: str,
+        server_type: str,
+        transport_config: str,
+    ) -> None:
+        """
+        Store MCP server config for potential restart.
+
+        Args:
+            sandbox_id: Sandbox container ID
+            server_name: Name of the server
+            server_type: Type of server (stdio, sse, http, websocket)
+            transport_config: JSON string of transport config
+        """
+        config_key = (sandbox_id, server_name)
+        self._mcp_server_configs[config_key] = {
+            "server_type": server_type,
+            "transport_config": transport_config,
+        }
+        logger.debug(f"Stored config for MCP server {server_name}")
+
+    def _parse_mcp_server_list(self, result: Dict[str, Any]) -> List[Dict]:
+        """Parse server list from mcp_server_list result."""
+        import json
+
+        content = result.get("content", [])
+        for item in content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                text = item.get("text", "")
+                try:
+                    data = json.loads(text)
+                    if isinstance(data, dict) and "servers" in data:
+                        return data["servers"]
+                    if isinstance(data, list):
+                        return data
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        return []
+
+    def get_health_check_stats(self) -> Dict[str, Any]:
+        """
+        Get health check statistics.
+
+        Returns:
+            Dict with total_checks, restarts_triggered, last_check_at, errors
+        """
+        return dict(self._health_check_stats)

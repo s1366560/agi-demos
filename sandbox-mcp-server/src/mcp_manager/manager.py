@@ -22,8 +22,11 @@ logger = logging.getLogger(__name__)
 # Timeout for MCP protocol initialization
 MCP_INIT_TIMEOUT = 30
 
+# Timeout for tool discovery (tools/list) - should be quick
+TOOL_DISCOVER_TIMEOUT = 15
+
 # Timeout for tool calls (default, overridden by tool-specific timeout when available)
-TOOL_CALL_TIMEOUT = 600
+TOOL_CALL_TIMEOUT = 60
 
 
 @dataclass
@@ -300,23 +303,44 @@ class MCPServerManager:
                 error_msg = f"{error_msg}\n--- Server stderr ---\n{stderr_text}"
             return {"success": False, "error": error_msg}
 
+    def _is_process_alive(self, name: str) -> bool:
+        """Check if a server process is actually running.
+
+        This checks the actual process state, not just the tracked status.
+        Returns True if process exists and hasn't exited.
+        """
+        server = self._tracker.get_server(name)
+        if not server or not server.process:
+            return False
+        # Check if process has exited (returncode is set when process ends)
+        return server.process.returncode is None
+
     async def _capture_server_stderr(self, name: str) -> str:
         """Read available stderr from a managed server process.
 
         Useful for diagnosing why a server failed to start or crashed.
         Returns up to 2000 chars of stderr, or empty string if unavailable.
+
+        Note: This uses a short timeout and may return empty if no data
+        is immediately available (process still running with no stderr output).
         """
         server = self._tracker.get_server(name)
         if not server or not server.process or not server.process.stderr:
             return ""
         try:
+            # Try to read stderr with a very short timeout
+            # Use read(n) which may block, so we wrap in wait_for
+            # If process is still running and has no stderr, this will timeout
             stderr_bytes = await asyncio.wait_for(
-                server.process.stderr.read(4096), timeout=2,
+                server.process.stderr.read(4096), timeout=0.5,
             )
             if stderr_bytes:
                 return stderr_bytes.decode("utf-8", errors="replace")[:2000]
-        except (asyncio.TimeoutError, Exception):
-            pass
+        except asyncio.TimeoutError:
+            # No stderr data available within timeout - this is normal for running processes
+            logger.debug(f"No stderr data available for '{name}' within timeout")
+        except Exception as e:
+            logger.debug(f"Could not read stderr for '{name}': {e}")
         return ""
 
     async def stop_server(self, name: str) -> Dict[str, Any]:
@@ -417,6 +441,9 @@ class MCPServerManager:
 
         Returns:
             List of tool definitions.
+
+        Raises:
+            RuntimeError: If server is unresponsive (timeout) with diagnostic info.
         """
         server = self._tracker.get_server(name)
         if not server:
@@ -424,10 +451,55 @@ class MCPServerManager:
         if server.status != ServerStatus.RUNNING:
             raise ValueError(f"Server '{name}' is not running (status: {server.status.value})")
 
-        result = await self._send_request(name, "tools/list")
-        tools = self._parse_tools_from_result(result)
-        self._tools_cache[name] = tools
-        return [t.to_dict() for t in tools]
+        # Check if process is actually alive before attempting request
+        if not self._is_process_alive(name):
+            server.status = ServerStatus.CRASHED
+            server.error = "Process exited unexpectedly"
+            stderr_text = await self._capture_server_stderr(name)
+            if stderr_text:
+                server.error += f"\n--- stderr ---\n{stderr_text[:1000]}"
+            raise RuntimeError(
+                f"MCP server '{name}' process has exited. "
+                f"stderr: {stderr_text[:500] if stderr_text else '(none)'}"
+            )
+
+        try:
+            result = await self._send_request(name, "tools/list", timeout=TOOL_DISCOVER_TIMEOUT)
+            tools = self._parse_tools_from_result(result)
+            self._tools_cache[name] = tools
+            return [t.to_dict() for t in tools]
+
+        except TimeoutError as e:
+            # Server is unresponsive - mark as failed and collect diagnostics
+            server.status = ServerStatus.FAILED
+            server.error = f"Tool discovery timed out after {TOOL_DISCOVER_TIMEOUT}s"
+
+            # Check if process died during the request
+            if not self._is_process_alive(name):
+                server.status = ServerStatus.CRASHED
+                server.error = f"Process died during tool discovery"
+                stderr_text = await self._capture_server_stderr(name)
+                if stderr_text:
+                    server.error += f"\n--- stderr ---\n{stderr_text[:2000]}"
+
+            # Capture stderr for debugging
+            stderr_text = await self._capture_server_stderr(name)
+            if stderr_text:
+                server.error += f"\n--- Server stderr ---\n{stderr_text[:2000]}"
+
+            logger.error(
+                f"MCP server '{name}' unresponsive during tool discovery: {e}\n"
+                f"Process alive: {self._is_process_alive(name)}\n"
+                f"stderr: {stderr_text[:500] if stderr_text else '(none)'}"
+            )
+
+            # Stop the unresponsive server
+            await self.stop_server(name)
+
+            raise RuntimeError(
+                f"MCP server '{name}' is unresponsive and has been stopped. "
+                f"Error: {e}"
+            ) from e
 
     async def call_tool(
         self,
@@ -465,6 +537,23 @@ class MCPServerManager:
                 error_message=f"Server status: {server.status.value}",
             ).to_dict()
 
+        # Check if process is actually alive before attempting request
+        if not self._is_process_alive(server_name):
+            server.status = ServerStatus.CRASHED
+            server.error = "Process exited unexpectedly"
+            stderr_text = await self._capture_server_stderr(server_name)
+            if stderr_text:
+                server.error += f"\n--- stderr ---\n{stderr_text[:1000]}"
+            return MCPCallResult(
+                content=[{
+                    "type": "text",
+                    "text": f"Server '{server_name}' process has exited. "
+                            f"stderr: {stderr_text[:500] if stderr_text else '(none)'}"
+                }],
+                is_error=True,
+                error_message=server.error,
+            ).to_dict()
+
         try:
             # Use tool-specific timeout if available (e.g., bash tool's timeout param)
             tool_timeout = arguments.get("timeout")
@@ -480,6 +569,37 @@ class MCPServerManager:
             content = raw.get("content", [{"type": "text", "text": str(raw)}])
             is_error = raw.get("isError", False)
             return MCPCallResult(content=content, is_error=is_error).to_dict()
+
+        except TimeoutError as e:
+            # Tool call timed out - check if process is still alive
+            logger.warning(f"Tool '{tool_name}' on '{server_name}' timed out after {timeout}s")
+
+            if not self._is_process_alive(server_name):
+                server.status = ServerStatus.CRASHED
+                server.error = f"Process died during tool call: {tool_name}"
+                stderr_text = await self._capture_server_stderr(server_name)
+                if stderr_text:
+                    server.error += f"\n--- stderr ---\n{stderr_text[:1000]}"
+                return MCPCallResult(
+                    content=[{
+                        "type": "text",
+                        "text": f"Server '{server_name}' process died during tool call. "
+                                f"stderr: {stderr_text[:500] if stderr_text else '(none)'}"
+                    }],
+                    is_error=True,
+                    error_message=server.error,
+                ).to_dict()
+
+            return MCPCallResult(
+                content=[{
+                    "type": "text",
+                    "text": f"Tool '{tool_name}' timed out after {timeout}s. "
+                            f"Server is still running but unresponsive."
+                }],
+                is_error=True,
+                error_message=str(e),
+            ).to_dict()
+
         except Exception as e:
             logger.error(f"Error calling tool '{tool_name}' on '{server_name}': {e}")
             return MCPCallResult(

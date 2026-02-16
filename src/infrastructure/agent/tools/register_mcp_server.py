@@ -194,7 +194,7 @@ class RegisterMCPServerTool(AgentTool):
                 sandbox_id=self._sandbox_id,
                 tool_name="mcp_server_discover_tools",
                 arguments={"name": server_name},
-                timeout=30.0,
+                timeout=20.0,  # Fast fail for tool discovery
             )
             if discover_result.get("is_error") or discover_result.get("isError"):
                 error_text = self._extract_error_text(discover_result)
@@ -210,6 +210,25 @@ class RegisterMCPServerTool(AgentTool):
 
             # Step 4: Auto-detect MCP Apps and persist
             app_tools = await self._detect_and_persist_apps(server_name, tools)
+
+            # Step 4.5: Emit tools updated event for real-time frontend update
+            # Namespaced tool names for frontend display
+            namespaced_tool_names = [f"mcp__{server_name}__{name}" for name in tool_names]
+            from src.domain.events.agent_events import AgentToolsUpdatedEvent
+
+            self._pending_events.append(
+                AgentToolsUpdatedEvent(
+                    project_id=self._project_id,
+                    tool_names=namespaced_tool_names,
+                    server_name=server_name,
+                    requires_refresh=True,
+                )
+            )
+            logger.info(
+                "Queued AgentToolsUpdatedEvent for server %s with %d tools",
+                server_name,
+                len(namespaced_tool_names),
+            )
 
             # Step 5: Invalidate agent tool cache so new tools are available
             try:

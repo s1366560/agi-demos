@@ -32,6 +32,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
         sandbox_id: str,
         server_name: str,
         tool_info: Dict[str, Any],
+        cache_ttl_seconds: float = 60.0,
     ):
         """Initialize the adapter.
 
@@ -40,6 +41,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
             sandbox_id: Sandbox container ID.
             server_name: User MCP server name.
             tool_info: Tool definition dict (name, description, input_schema, _meta).
+            cache_ttl_seconds: Cache TTL for resource HTML (default: 60s, 0 to disable).
         """
         self._sandbox_adapter = sandbox_adapter
         self._sandbox_id = sandbox_id
@@ -66,6 +68,16 @@ class SandboxMCPServerToolAdapter(AgentTool):
 
         # MCP App ID (set externally after auto-detection)
         self._app_id: str = ""
+
+        # Resource HTML caching
+        self._cache_ttl_seconds = cache_ttl_seconds
+        self._cached_html: Optional[str] = None
+        self._cache_fetched_at: Optional[float] = None
+        self._cache_stats = {
+            "hits": 0,
+            "misses": 0,
+            "last_fetch_at": None,
+        }
 
     def _generate_tool_name(self) -> str:
         clean_server = self._server_name.replace("-", "_")
@@ -117,19 +129,80 @@ class SandboxMCPServerToolAdapter(AgentTool):
         """Fetch HTML from the MCP server via resources/read.
 
         Returns the live HTML content from the running MCP server,
-        or empty string on failure.
+        using cache if available and not expired.
+
+        Returns:
+            HTML content string, or empty string on failure.
         """
+        import time
+
         uri = self.resource_uri
         if not uri:
             return ""
+
+        # Check cache
+        if self._cache_ttl_seconds > 0 and self._cached_html is not None:
+            cache_age = time.time() - (self._cache_fetched_at or 0)
+            if cache_age < self._cache_ttl_seconds:
+                self._cache_stats["hits"] += 1
+                logger.debug("Resource HTML cache hit for %s (age=%.1fs)", uri, cache_age)
+                return self._cached_html
+
+        # Cache miss or expired - fetch fresh
+        self._cache_stats["misses"] += 1
         try:
             html = await self._sandbox_adapter.read_resource(
                 self._sandbox_id, uri
             )
-            return html or ""
+            html = html or ""
+
+            # Cache successful result
+            if self._cache_ttl_seconds > 0 and html:
+                self._cached_html = html
+                self._cache_fetched_at = time.time()
+
+            self._cache_stats["last_fetch_at"] = time.time()
+            return html
         except Exception as e:
             logger.warning("fetch_resource_html failed for %s: %s", uri, e)
+            # Don't cache errors - allow retry
             return ""
+
+    def invalidate_resource_cache(self) -> None:
+        """Invalidate the cached resource HTML."""
+        self._cached_html = None
+        self._cache_fetched_at = None
+        logger.debug("Resource HTML cache invalidated for %s", self.resource_uri)
+
+    def prefetch_resource_html(self) -> None:
+        """Prefetch resource HTML in the background without blocking.
+
+        Starts an async task to fetch and cache the HTML.
+        Useful for warming the cache before the first request.
+        """
+        import asyncio
+
+        async def _prefetch():
+            try:
+                await self.fetch_resource_html()
+                logger.debug("Prefetched resource HTML for %s", self.resource_uri)
+            except Exception as e:
+                logger.warning("Prefetch failed for %s: %s", self.resource_uri, e)
+
+        # Create background task (fire and forget)
+        try:
+            asyncio.create_task(_prefetch())
+        except RuntimeError:
+            # No event loop available, skip prefetch
+            pass
+
+    def get_cache_stats(self) -> Dict[str, Any]:
+        """Get cache statistics.
+
+        Returns:
+            Dict with hits, misses, last_fetch_at
+        """
+        return dict(self._cache_stats)
 
     def get_parameters_schema(self) -> Dict[str, Any]:
         if not self._input_schema:

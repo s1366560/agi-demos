@@ -191,6 +191,11 @@ class AgentEventType(str, Enum):
     TASK_START = "task_start"
     TASK_COMPLETE = "task_complete"
 
+    # =========================================================================
+    # Tool update events (real-time tool hot-plug)
+    # =========================================================================
+    TOOLS_UPDATED = "tools_updated"
+
 
 # =============================================================================
 # Event Type Utilities
@@ -286,6 +291,8 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
     AgentEventType.TASK_UPDATED: EventCategory.AGENT,
     AgentEventType.TASK_START: EventCategory.AGENT,
     AgentEventType.TASK_COMPLETE: EventCategory.AGENT,
+    # Tool update events
+    AgentEventType.TOOLS_UPDATED: EventCategory.AGENT,
 }
 
 

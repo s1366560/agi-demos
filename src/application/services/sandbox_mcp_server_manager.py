@@ -32,7 +32,7 @@ MCP_INSTALL_TIMEOUT = float(os.environ.get("MCP_INSTALL_TIMEOUT", "120"))
 MCP_START_TIMEOUT = float(os.environ.get("MCP_START_TIMEOUT", "60"))
 MCP_STOP_TIMEOUT = float(os.environ.get("MCP_STOP_TIMEOUT", "30"))
 MCP_CALL_TOOL_TIMEOUT = float(os.environ.get("MCP_CALL_TOOL_TIMEOUT", "60"))
-MCP_DISCOVER_TIMEOUT = float(os.environ.get("MCP_DISCOVER_TIMEOUT", "30"))
+MCP_DISCOVER_TIMEOUT = float(os.environ.get("MCP_DISCOVER_TIMEOUT", "20"))
 
 
 class SandboxMCPServerManager(SandboxMCPServerPort):

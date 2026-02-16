@@ -694,6 +694,32 @@ class AgentTaskCompleteEvent(AgentDomainEvent):
 
 
 # =========================================================================
+# Tool Update Events (real-time tool hot-plug)
+# =========================================================================
+
+
+class AgentToolsUpdatedEvent(AgentDomainEvent):
+    """Event: New tools were registered and are now available.
+
+    Emitted when RegisterMCPServerTool successfully registers new MCP tools,
+    enabling the frontend to immediately update the available tools list
+    without requiring an additional round-trip.
+
+    This event signals that:
+    1. New MCP server was installed and started
+    2. Tools were discovered successfully
+    3. The agent's tool cache was invalidated
+    4. Frontend should refresh its tool list
+    """
+
+    event_type: AgentEventType = AgentEventType.TOOLS_UPDATED
+    project_id: str = ""
+    tool_names: List[str] = Field(default_factory=list)
+    server_name: str = ""
+    requires_refresh: bool = True  # Frontend should refresh tool list
+
+
+# =========================================================================
 # Event Type Utilities
 # =========================================================================
 

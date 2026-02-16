@@ -296,15 +296,7 @@ export const McpAppsTab: React.FC = () => {
     fetchApps(currentProject?.id);
   }, [currentProject?.id, fetchApps]);
 
-  if (loading && Object.keys(apps).length === 0) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Spin tip="Loading MCP Apps..." />
-      </div>
-    );
-  }
-
-  // Status counts
+  // Status counts - must be before any early return to satisfy hooks rules
   const statusCounts = useMemo(() => {
     const counts: Record<MCPAppStatus, number> = {
       discovered: 0, loading: 0, ready: 0, error: 0, disabled: 0
@@ -314,6 +306,14 @@ export const McpAppsTab: React.FC = () => {
     });
     return counts;
   }, [apps]);
+
+  if (loading && Object.keys(apps).length === 0) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Spin tip="Loading MCP Apps..." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">

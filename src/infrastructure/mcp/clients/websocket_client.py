@@ -28,8 +28,8 @@ from src.infrastructure.mcp.clients.subprocess_client import (
 
 logger = logging.getLogger(__name__)
 
-# Default timeout in seconds
-DEFAULT_TIMEOUT = 600
+# Default timeout in seconds (can be overridden per-call)
+DEFAULT_TIMEOUT = 60
 
 
 @dataclass
@@ -105,7 +105,11 @@ class MCPWebSocketClient:
         self._session: Optional[aiohttp.ClientSession] = None
         self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
         self._request_id = 0
-        self._lock = asyncio.Lock()
+        # Lock for request ID generation and pending_requests access
+        # This is a minimal lock - only held during ID generation, not during send
+        self._request_id_lock = asyncio.Lock()
+        # Legacy lock - kept for backward compatibility
+        self._lock = self._request_id_lock
         self._pending_requests: Dict[int, asyncio.Future] = {}
         self._receive_task: Optional[asyncio.Task] = None
         self._cleanup_lock = asyncio.Lock()  # Lock to prevent double cleanup
@@ -481,28 +485,35 @@ class MCPWebSocketClient:
     ) -> Optional[Dict[str, Any]]:
         """Send a JSON-RPC request and wait for response.
 
+        The lock is only held during request ID generation and pending_requests
+        access, not during the actual WebSocket send operation. This improves
+        concurrency by allowing multiple requests to be sent in parallel.
+
         Raises:
             ConnectionError: If the WebSocket connection is closed or lost.
         """
         if not self._ws or self._ws.closed:
             raise ConnectionError(f"WebSocket not connected to {self.url}")
 
-        async with self._lock:
+        # Only hold lock for ID generation and pending_requests access
+        async with self._request_id_lock:
             self._request_id += 1
             request_id = self._request_id
-            request = {
-                "jsonrpc": "2.0",
-                "method": method,
-                "params": params,
-                "id": request_id,
-            }
-
             # Create future for response
             future: asyncio.Future = asyncio.get_event_loop().create_future()
             self._pending_requests[request_id] = future
 
+        # Build request outside of lock
+        request = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+            "id": request_id,
+        }
+
         try:
             logger.debug(f"Sending WebSocket request: {method} (id={request_id})")
+            # Send without holding lock - allows concurrent sends
             await self._ws.send_json(request)
 
             # Wait for response with timeout
@@ -510,13 +521,13 @@ class MCPWebSocketClient:
             return result
 
         except asyncio.TimeoutError:
-            async with self._lock:
+            async with self._request_id_lock:
                 self._pending_requests.pop(request_id, None)
             error_msg = f"MCP request '{method}' timed out after {timeout}s (url={self.url})"
             logger.error(error_msg)
             return None
         except (ConnectionError, ConnectionResetError, RuntimeError) as e:
-            async with self._lock:
+            async with self._request_id_lock:
                 self._pending_requests.pop(request_id, None)
             error_str = str(e)
             if "closed" in error_str.lower() or "connection" in error_str.lower():
@@ -526,7 +537,7 @@ class MCPWebSocketClient:
             logger.error(f"MCP request error: {e}")
             raise
         except Exception as e:
-            async with self._lock:
+            async with self._request_id_lock:
                 self._pending_requests.pop(request_id, None)
             logger.error(f"MCP request error: {e}")
             return None

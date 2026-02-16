@@ -22,7 +22,6 @@ import logging
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-
 from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
 
 from src.domain.events.agent_events import (
@@ -43,7 +42,7 @@ from ..routing.hybrid_router import HybridRouter
 from ..skill import SkillExecutionConfig, SkillExecutionContext, SkillOrchestrator
 from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
 from .skill_executor import SkillExecutor
-from .subagent_router import SubAgentExecutor, SubAgentMatch, SubAgentRouter
+from .subagent_router import SubAgentMatch, SubAgentRouter
 from .tool_converter import convert_tools
 
 if TYPE_CHECKING:
@@ -307,10 +306,14 @@ class ReActAgent:
         from ..subagent.task_decomposer import TaskDecomposer
 
         agent_names = [sa.name for sa in self.subagents] if self.subagents else []
-        self._task_decomposer = TaskDecomposer(
-            llm_client=llm_client,
-            available_agent_names=agent_names,
-        ) if llm_client and self.subagents else None
+        self._task_decomposer = (
+            TaskDecomposer(
+                llm_client=llm_client,
+                available_agent_names=agent_names,
+            )
+            if llm_client and self.subagents
+            else None
+        )
 
         # Result aggregator for multi-SubAgent result merging
         from ..subagent.result_aggregator import ResultAggregator
@@ -439,8 +442,7 @@ class ReActAgent:
         if conversation_context:
             recent = conversation_context[-3:]
             context_str = "\n".join(
-                f"{m.get('role', 'user')}: {m.get('content', '')[:200]}"
-                for m in recent
+                f"{m.get('role', 'user')}: {m.get('content', '')[:200]}" for m in recent
             )
 
         result = await self._subagent_orchestrator.match_async(
@@ -530,8 +532,7 @@ class ReActAgent:
             ]
         else:
             tool_defs = [
-                {"name": t.name, "description": t.description}
-                for t in current_tool_definitions
+                {"name": t.name, "description": t.description} for t in current_tool_definitions
             ]
 
         # Convert SubAgents to dict format for PromptContext (SubAgent-as-Tool mode)
@@ -649,9 +650,7 @@ class ReActAgent:
         # decide via the delegate_to_subagent tool in the ReAct loop.
         # When False, use legacy pre-routing with keyword/LLM hybrid matching.
         if not self._enable_subagent_as_tool:
-            subagent_match = await self._match_subagent_async(
-                user_message, conversation_context
-            )
+            subagent_match = await self._match_subagent_async(user_message, conversation_context)
             active_subagent = subagent_match.subagent
 
             if active_subagent:
@@ -682,12 +681,9 @@ class ReActAgent:
 
                         if decomposition.is_decomposed:
                             # Check if tasks form a chain (linear dependencies)
-                            has_chain = any(
-                                st.dependencies for st in decomposition.subtasks
-                            )
+                            has_chain = any(st.dependencies for st in decomposition.subtasks)
                             all_linear = has_chain and all(
-                                len(st.dependencies) <= 1
-                                for st in decomposition.subtasks
+                                len(st.dependencies) <= 1 for st in decomposition.subtasks
                             )
 
                             if all_linear and has_chain:
@@ -804,8 +800,10 @@ class ReActAgent:
                     )
 
         # Determine agent mode: plan mode overrides default
-        effective_mode = "plan" if plan_mode else (
-            self.agent_mode if self.agent_mode in ["build", "plan"] else "build"
+        effective_mode = (
+            "plan"
+            if plan_mode
+            else (self.agent_mode if self.agent_mode in ["build", "plan"] else "build")
         )
 
         # Set permission manager mode to enforce tool restrictions
@@ -929,16 +927,12 @@ class ReActAgent:
             if enabled_subagents:
                 subagent_map = {sa.name: sa for sa in enabled_subagents}
                 subagent_descriptions = {
-                    sa.name: (
-                        sa.trigger.description if sa.trigger else sa.display_name
-                    )
+                    sa.name: (sa.trigger.description if sa.trigger else sa.display_name)
                     for sa in enabled_subagents
                 }
 
                 # Create delegation callback that captures stream-scoped context
-                async def _delegate_callback(
-                    subagent_name: str, task: str
-                ) -> str:
+                async def _delegate_callback(subagent_name: str, task: str) -> str:
                     target = subagent_map.get(subagent_name)
                     if not target:
                         return f"SubAgent '{subagent_name}' not found"
@@ -1014,6 +1008,36 @@ class ReActAgent:
 
         # Use main agent config (SubAgent path returns early above)
         config = self.config
+
+        # For dynamic tools mode, create config with tool_provider callback
+        # This enables the processor to refresh tools after register_mcp_server
+        if self._use_dynamic_tools and self._tool_provider is not None:
+            # Create a wrapper that converts raw tools to ToolDefinitions
+            def _tool_provider_wrapper() -> List[ToolDefinition]:
+                _, tool_defs = self._get_current_tools()
+                return list(tool_defs)
+
+            # Create config copy with tool_provider
+            config = ProcessorConfig(
+                model=config.model,
+                api_key=config.api_key,
+                base_url=config.base_url,
+                temperature=config.temperature,
+                max_tokens=config.max_tokens,
+                max_steps=config.max_steps,
+                max_tool_calls_per_step=config.max_tool_calls_per_step,
+                doom_loop_threshold=config.doom_loop_threshold,
+                max_attempts=config.max_attempts,
+                initial_delay_ms=config.initial_delay_ms,
+                permission_timeout=config.permission_timeout,
+                continue_on_deny=config.continue_on_deny,
+                context_limit=config.context_limit,
+                llm_client=config.llm_client,
+                tool_provider=_tool_provider_wrapper,
+            )
+            logger.debug(
+                "[ReActAgent] Created processor config with tool_provider for dynamic tools"
+            )
 
         # Create processor with artifact service for rich output handling
         processor = SessionProcessor(

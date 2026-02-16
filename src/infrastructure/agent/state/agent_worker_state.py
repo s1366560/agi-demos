@@ -21,7 +21,7 @@ import asyncio
 import logging
 import os
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import redis.asyncio as redis
 
@@ -99,6 +99,8 @@ __all__ = [
     "set_hitl_response_listener",
     "get_hitl_response_listener",
     "get_session_registry",
+    # Tool Discovery with Retry
+    "discover_tools_with_retry",
 ]
 
 # Global state for agent worker
@@ -827,6 +829,101 @@ async def _load_project_sandbox_tools(
     return tools
 
 
+async def _discover_single_server_tools(
+    sandbox_adapter: Any,
+    sandbox_id: str,
+    server_name: str,
+) -> List[Dict[str, Any]]:
+    """Discover tools from a single MCP server.
+
+    This is a helper function for parallel discovery. It handles errors
+    gracefully and returns an empty list on failure.
+
+    Args:
+        sandbox_adapter: MCPSandboxAdapter instance.
+        sandbox_id: Sandbox container ID.
+        server_name: Name of the MCP server to discover tools from.
+
+    Returns:
+        List of tool info dictionaries, or empty list on error.
+    """
+    try:
+        discover_result = await sandbox_adapter.call_tool(
+            sandbox_id=sandbox_id,
+            tool_name="mcp_server_discover_tools",
+            arguments={"name": server_name},
+            timeout=20.0,  # Fast fail for tool discovery
+        )
+
+        if discover_result.get("is_error"):
+            logger.warning(
+                f"[AgentWorker] Failed to discover tools for server {server_name}"
+            )
+            return []
+
+        return _parse_discovered_tools(discover_result.get("content", []))
+
+    except Exception as e:
+        logger.warning(
+            f"[AgentWorker] Error discovering tools for server {server_name}: {e}"
+        )
+        return []
+
+
+async def _discover_tools_for_servers_parallel(
+    sandbox_adapter: Any,
+    sandbox_id: str,
+    servers: List[Dict[str, Any]],
+) -> List[List[Dict[str, Any]]]:
+    """Discover tools from multiple MCP servers in parallel.
+
+    Uses asyncio.gather with return_exceptions=True to ensure that
+    one server failure doesn't block discovery of other servers.
+
+    Args:
+        sandbox_adapter: MCPSandboxAdapter instance.
+        sandbox_id: Sandbox container ID.
+        servers: List of server info dictionaries with 'name' and 'status' keys.
+
+    Returns:
+        List of tool lists, one per server (excluding failed servers).
+    """
+    # Filter to only running servers
+    running_servers = [
+        s for s in servers
+        if s.get("name") and s.get("status") == "running"
+    ]
+
+    if not running_servers:
+        return []
+
+    # Create discovery tasks for all running servers
+    discovery_tasks = [
+        _discover_single_server_tools(
+            sandbox_adapter=sandbox_adapter,
+            sandbox_id=sandbox_id,
+            server_name=server_info["name"],
+        )
+        for server_info in running_servers
+    ]
+
+    # Execute all discoveries in parallel
+    # return_exceptions=True ensures one failure doesn't block others
+    results = await asyncio.gather(*discovery_tasks, return_exceptions=True)
+
+    # Filter out exceptions and empty results, but keep successful ones
+    successful_results = []
+    for i, result in enumerate(results):
+        if isinstance(result, Exception):
+            logger.warning(
+                f"[AgentWorker] Discovery failed for {running_servers[i]['name']}: {result}"
+            )
+        elif isinstance(result, list) and result:
+            successful_results.append(result)
+
+    return successful_results
+
+
 async def _load_user_mcp_server_tools(
     sandbox_adapter: Any,
     sandbox_id: str,
@@ -890,29 +987,23 @@ async def _load_user_mcp_server_tools(
             content = list_result.get("content", [])
             servers = _parse_mcp_server_list(content)
 
-        # For each running server, discover its tools
-        for server_info in servers:
-            server_name = server_info.get("name", "")
-            status = server_info.get("status", "")
-            if not server_name or status != "running":
-                continue
+        # Discover tools from all running servers in parallel
+        discovery_results = await _discover_tools_for_servers_parallel(
+            sandbox_adapter=sandbox_adapter,
+            sandbox_id=sandbox_id,
+            servers=servers,
+        )
 
-            try:
-                discover_result = await sandbox_adapter.call_tool(
-                    sandbox_id=sandbox_id,
-                    tool_name="mcp_server_discover_tools",
-                    arguments={"name": server_name},
-                    timeout=30.0,
-                )
+        # Create adapters for all discovered tools
+        # We need to map back to server names for adapter creation
+        running_servers = [
+            s for s in servers
+            if s.get("name") and s.get("status") == "running"
+        ]
 
-                if discover_result.get("is_error"):
-                    logger.warning(
-                        f"[AgentWorker] Failed to discover tools for server {server_name}"
-                    )
-                    continue
-
-                discovered_tools = _parse_discovered_tools(discover_result.get("content", []))
-
+        for i, discovered_tools in enumerate(discovery_results):
+            if i < len(running_servers):
+                server_name = running_servers[i]["name"]
                 for tool_info in discovered_tools:
                     adapter = SandboxMCPServerToolAdapter(
                         sandbox_adapter=sandbox_adapter,
@@ -921,11 +1012,6 @@ async def _load_user_mcp_server_tools(
                         tool_info=tool_info,
                     )
                     tools[adapter.name] = adapter
-
-            except Exception as e:
-                logger.warning(
-                    f"[AgentWorker] Error discovering tools for server {server_name}: {e}"
-                )
 
     except Exception as e:
         logger.warning(f"[AgentWorker] Error loading user MCP server tools: {e}")
@@ -1623,3 +1709,136 @@ async def wait_for_hitl_response_realtime(
     """
     registry = get_session_registry()
     return await registry.wait_for_response(request_id, timeout=timeout)
+
+
+# ============================================================================
+# Tool Discovery with Retry (exponential backoff)
+# ============================================================================
+
+
+async def discover_tools_with_retry(
+    sandbox_adapter: Any,
+    sandbox_id: str,
+    server_name: str,
+    max_retries: int = 3,
+    base_delay_ms: int = 1000,
+    max_delay_ms: int = 30000,
+    timeout: float = 30.0,
+) -> Optional[Dict[str, Any]]:
+    """
+    Discover MCP server tools with exponential backoff retry.
+
+    Retries on transient errors (connection issues, timeouts) with
+    exponentially increasing delays between attempts.
+
+    Args:
+        sandbox_adapter: MCPSandboxAdapter instance
+        sandbox_id: Sandbox container ID
+        server_name: Name of the MCP server
+        max_retries: Maximum number of retry attempts (default: 3)
+        base_delay_ms: Base delay in milliseconds (default: 1000)
+        max_delay_ms: Maximum delay cap in milliseconds (default: 30000)
+        timeout: Tool call timeout in seconds (default: 30.0)
+
+    Returns:
+        Discovery result dict if successful, None if all retries exhausted
+    """
+    import random
+
+    for attempt in range(max_retries + 1):  # +1 for initial attempt
+        try:
+            result = await sandbox_adapter.call_tool(
+                sandbox_id=sandbox_id,
+                tool_name="mcp_server_discover_tools",
+                arguments={"name": server_name},
+                timeout=timeout,
+            )
+
+            # Check for error
+            if result.get("is_error") or result.get("isError"):
+                # Check if it's a transient error worth retrying
+                error_text = _extract_error_text(result)
+                is_transient = _is_transient_error(error_text)
+
+                if is_transient and attempt < max_retries:
+                    delay_ms = min(base_delay_ms * (2**attempt), max_delay_ms)
+                    # Add jitter (±10%)
+                    jitter = delay_ms * 0.1 * random.random()
+                    actual_delay = (delay_ms + jitter) / 1000  # Convert to seconds
+
+                    logger.warning(
+                        f"[AgentWorker] Tool discovery transient error for '{server_name}' "
+                        f"(attempt {attempt + 1}/{max_retries + 1}): {error_text}. "
+                        f"Retrying in {actual_delay:.2f}s..."
+                    )
+                    await asyncio.sleep(actual_delay)
+                    continue
+                else:
+                    logger.warning(
+                        f"[AgentWorker] Tool discovery failed for '{server_name}' "
+                        f"after {attempt + 1} attempts: {error_text}"
+                    )
+                    return None
+
+            # Success!
+            if attempt > 0:
+                logger.info(
+                    f"[AgentWorker] Tool discovery succeeded for '{server_name}' "
+                    f"on attempt {attempt + 1}"
+                )
+            return result
+
+        except Exception as e:
+            error_text = str(e)
+            is_transient = _is_transient_error(error_text)
+
+            if is_transient and attempt < max_retries:
+                delay_ms = min(base_delay_ms * (2**attempt), max_delay_ms)
+                jitter = delay_ms * 0.1 * random.random()
+                actual_delay = (delay_ms + jitter) / 1000
+
+                logger.warning(
+                    f"[AgentWorker] Tool discovery exception for '{server_name}' "
+                    f"(attempt {attempt + 1}/{max_retries + 1}): {e}. "
+                    f"Retrying in {actual_delay:.2f}s..."
+                )
+                await asyncio.sleep(actual_delay)
+                continue
+            else:
+                logger.error(
+                    f"[AgentWorker] Tool discovery failed for '{server_name}' "
+                    f"after {attempt + 1} attempts: {e}"
+                )
+                return None
+
+    return None
+
+
+def _extract_error_text(result: Dict[str, Any]) -> str:
+    """Extract error text from MCP tool result."""
+    content = result.get("content", [])
+    for item in content:
+        if isinstance(item, dict) and item.get("type") == "text":
+            return item.get("text", "Unknown error")
+    return result.get("error_message", "Unknown error")
+
+
+def _is_transient_error(error_text: str) -> bool:
+    """Check if an error is likely transient and worth retrying."""
+    transient_patterns = [
+        "connection reset",
+        "connection refused",
+        "timeout",
+        "timed out",
+        "network",
+        "temporary",
+        "retry",
+        "unavailable",
+        "ECONNRESET",
+        "ECONNREFUSED",
+        "ETIMEDOUT",
+        "socket",
+        "broken pipe",
+    ]
+    error_lower = error_text.lower()
+    return any(pattern in error_lower for pattern in transient_patterns)
