@@ -153,10 +153,13 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
 
   // Determine if we should show Mode B (HTTP fallback)
   // Only switch to Mode B if:
-  // 1. We're not connected
+  // 1. We're not connected AND not connecting (to avoid interrupting initial connection)
   // 2. We're NOT in grace period
-  // 3. We've never been connected OR connection has failed completely
-  const shouldUseFallback = !useDirectClient && !isInGracePeriod && (!everConnected || mcpStatus === 'error');
+  // 3. Connection has failed completely (status === 'error')
+  // NOTE: We don't use !everConnected alone because that would trigger fallback
+  // during initial connection, causing infinite remount loop
+  const isConnecting = mcpStatus === 'connecting';
+  const shouldUseFallback = !useDirectClient && !isInGracePeriod && !isConnecting && mcpStatus === 'error';
    
   const appRendererRef = useRef<any>(null);
   const computedTheme = useThemeStore((s) => s.computedTheme);
