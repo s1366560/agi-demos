@@ -230,6 +230,15 @@ async def get_conversation_messages(
                 item["toolName"] = data.get("tool_name", "")
                 item["toolOutput"] = data.get("observation", "")
                 item["isError"] = data.get("is_error", False)
+                # Include MCP App UI metadata for "Open App" button in timeline
+                raw_ui_meta = data.get("ui_metadata")
+                if raw_ui_meta and isinstance(raw_ui_meta, dict):
+                    item["mcpUiMetadata"] = {
+                        "resource_uri": raw_ui_meta.get("resource_uri"),
+                        "server_name": raw_ui_meta.get("server_name"),
+                        "app_id": raw_ui_meta.get("app_id"),
+                        "title": raw_ui_meta.get("title"),
+                    }
 
             elif event_type == "work_plan":
                 item["steps"] = data.get("steps", [])
