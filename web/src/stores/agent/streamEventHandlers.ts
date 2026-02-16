@@ -807,7 +807,7 @@ export function createStreamEventHandlers(
       const data = event.data as any;
       const appId = data.app_id || '';
       const htmlContent = data.resource_html || undefined;
-      let resourceUri = data.resource_uri || undefined;
+      const resourceUri = data.resource_uri || undefined;
       const toolName = data.tool_name || '';
       const projectId = data.project_id || '';
       const serverName = data.server_name || '';

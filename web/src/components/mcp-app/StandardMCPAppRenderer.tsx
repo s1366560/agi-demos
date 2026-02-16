@@ -124,11 +124,36 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Mode A: Direct WebSocket MCP client (low-latency, 2-hop)
-  const { client: mcpClient, status: mcpStatus } = useMCPClient({
+  const { client: mcpClient, status: mcpStatus, isInGracePeriod } = useMCPClient({
     projectId: effectiveProjectId,
     enabled: !!effectiveProjectId && !!serverName,
+    reconnectionConfig: {
+      maxAttempts: 5,
+      initialDelayMs: 1000,
+      maxDelayMs: 30000,
+      gracePeriodMs: 3000, // 3 seconds grace period
+    },
   });
+
+  // Only use direct client if connected OR in grace period (prevents UI flickering)
+  // During grace period, we keep using the last known good state
   const useDirectClient = mcpClient !== null && mcpStatus === 'connected';
+
+  // Track if we've ever been connected to avoid showing mode B during initial connection
+  const [everConnected, setEverConnected] = useState(false);
+
+  useEffect(() => {
+    if (mcpStatus === 'connected') {
+      setEverConnected(true);
+    }
+  }, [mcpStatus]);
+
+  // Determine if we should show Mode B (HTTP fallback)
+  // Only switch to Mode B if:
+  // 1. We're not connected
+  // 2. We're NOT in grace period
+  // 3. We've never been connected OR connection has failed completely
+  const shouldUseFallback = !useDirectClient && !isInGracePeriod && (!everConnected || mcpStatus === 'error');
    
   const appRendererRef = useRef<any>(null);
   const computedTheme = useThemeStore((s) => s.computedTheme);
@@ -232,7 +257,7 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
   );
 
   // Handler for tool calls from the guest app back to its MCP server
-   
+
   const handleCallTool = useCallback(
     async (params: { name: string; arguments?: Record<string, unknown> }): Promise<any> => {
       if (!effectiveProjectId) {
@@ -242,6 +267,39 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
       // For synthetic auto-discovered apps (no DB record), use the direct proxy
       // endpoint that routes by project_id + server_name without DB lookup.
       if (appId?.startsWith(SYNTHETIC_APP_ID_PREFIX) && serverName) {
+        // Log warning when using synthetic ID for diagnostics
+        console.warn(
+          `[StandardMCPAppRenderer] Using synthetic app ID "${appId}" for tool call. ` +
+            `Attempting to find real app via server_name="${serverName}" tool_name="${params.name}"`
+        );
+
+        // Try to find real app by server_name + tool_name for better routing
+        try {
+          const apps = await mcpAppAPI.list(effectiveProjectId);
+          const realApp = apps.find(
+            (a) => a.server_name === serverName && a.tool_name === params.name
+          );
+          if (realApp) {
+            console.info(
+              `[StandardMCPAppRenderer] Found real app ID "${realApp.id}" for synthetic "${appId}", using real ID for tool call`
+            );
+            const result = await mcpAppAPI.proxyToolCall(realApp.id, {
+              tool_name: params.name,
+              arguments: params.arguments || {},
+            });
+            return {
+              content: result.content || [],
+              isError: result.is_error,
+            };
+          }
+        } catch (err) {
+          console.warn(
+            `[StandardMCPAppRenderer] Failed to lookup real app for synthetic ID, falling back to direct proxy:`,
+            err
+          );
+        }
+
+        // Fallback to direct proxy if no real app found
         const result = await mcpAppAPI.proxyToolCallDirect({
           project_id: effectiveProjectId,
           server_name: serverName,
@@ -411,7 +469,8 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
         >
           <LazyAppRenderer
           // Force re-mount when connection mode changes to avoid stale handlers
-          key={useDirectClient ? 'mode-a-ws' : 'mode-b-http'}
+          // Use stable key during grace period to prevent UI flickering
+          key={shouldUseFallback ? 'mode-b-http' : 'mode-a-ws'}
           ref={appRendererRef}
           toolName={toolName}
           sandbox={sandboxConfig}
@@ -419,24 +478,24 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
           toolResourceUri={effectiveUri}
           toolInput={toolInput}
           toolCancelled={toolCancelled}
-           
+
           toolResult={toolResult as any}
-           
+
           hostContext={hostContext as any}
           // Mode A: pass MCP client for direct WS communication
           // Mode B fallback: use HTTP callback handlers
-           
-          client={useDirectClient ? mcpClient as any : undefined}
-           
-          onReadResource={!useDirectClient && effectiveUri ? handleReadResource as any : undefined}
-           
-          onCallTool={!useDirectClient ? handleCallTool as any : undefined}
-           
-          onListResources={!useDirectClient ? handleListResources as any : undefined}
+
+          client={!shouldUseFallback && mcpClient ? mcpClient as any : undefined}
+
+          onReadResource={shouldUseFallback && effectiveUri ? handleReadResource as any : undefined}
+
+          onCallTool={shouldUseFallback ? handleCallTool as any : undefined}
+
+          onListResources={shouldUseFallback ? handleListResources as any : undefined}
           // Host-specific handlers (always needed regardless of mode)
-           
+
           onMessage={handleMessage as any}
-           
+
           onSizeChanged={handleSizeChanged as any}
           onError={handleError}
           onOpenLink={async ({ url }) => {

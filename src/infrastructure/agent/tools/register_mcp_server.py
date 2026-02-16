@@ -230,15 +230,24 @@ class RegisterMCPServerTool(AgentTool):
                 len(namespaced_tool_names),
             )
 
-            # Step 5: Invalidate agent tool cache so new tools are available
+            # Step 5: Invalidate all caches for this project so new tools are available
+            # This clears: tools_cache, agent_sessions, tool_definitions, mcp_tools
             try:
                 from src.infrastructure.agent.state.agent_worker_state import (
-                    invalidate_tools_cache,
+                    invalidate_all_caches_for_project,
                 )
-                invalidate_tools_cache(self._project_id)
-                logger.info("Tool cache invalidated for project %s", self._project_id)
+                invalidation_result = invalidate_all_caches_for_project(
+                    project_id=self._project_id,
+                    tenant_id=self._tenant_id,
+                    clear_tool_definitions=True,
+                )
+                logger.info(
+                    "All caches invalidated for project %s: %s",
+                    self._project_id,
+                    invalidation_result["invalidated"],
+                )
             except Exception as cache_err:
-                logger.warning("Failed to invalidate tool cache: %s", cache_err)
+                logger.warning("Failed to invalidate caches: %s", cache_err)
 
             result = (
                 f"MCP server '{server_name}' registered and started successfully.\n"
@@ -311,11 +320,41 @@ class RegisterMCPServerTool(AgentTool):
         from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
             SqlMCPAppRepository,
         )
+        from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
+            SqlMCPServerRepository,
+        )
+
+        # Try to get the MCPServer entity to get its ID
+        server_id = None
+        if self._session_factory:
+            try:
+                async with self._session_factory() as session:
+                    server_repo = SqlMCPServerRepository(session)
+                    # Look up server by name and project
+                    server_entity = await server_repo.get_by_name(
+                        project_id=self._project_id,
+                        name=server_name,
+                    )
+                    if server_entity:
+                        server_id = server_entity.id
+                        logger.debug(
+                            f"Found MCPServer entity for {server_name}: id={server_id}"
+                        )
+            except Exception as e:
+                logger.warning(f"Failed to look up MCPServer entity: {e}")
+
+        # If no server_id found, keep it as None (nullable in DB)
+        # server_name will be used for matching instead
+        if not server_id:
+            logger.debug(
+                f"No MCPServer entity found for {server_name}, "
+                f"persisting MCPApp with server_id=None"
+            )
 
         app = MCPApp(
             project_id=self._project_id,
             tenant_id=self._tenant_id,
-            server_id=None,
+            server_id=server_id,
             server_name=server_name,
             tool_name=tool_name,
             ui_metadata=MCPAppUIMetadata(

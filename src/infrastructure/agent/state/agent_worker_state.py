@@ -90,6 +90,7 @@ __all__ = [
     "get_cached_tools",
     "get_cached_tools_for_project",
     "invalidate_tools_cache",
+    "invalidate_all_caches_for_project",
     "get_or_create_tools",
     # Pool Manager (new 3-tier architecture)
     "set_pool_adapter",
@@ -411,6 +412,7 @@ async def get_or_create_tools(
             sandbox_tools = await _load_project_sandbox_tools(
                 project_id=project_id,
                 tenant_id=tenant_id,
+                redis_client=redis_client,
             )
             if sandbox_tools:
                 tools.update(sandbox_tools)
@@ -593,6 +595,7 @@ async def get_or_create_tools(
 async def _load_project_sandbox_tools(
     project_id: str,
     tenant_id: str,
+    redis_client: Optional[redis.Redis] = None,
 ) -> Dict[str, Any]:
     """Load MCP tools from project's sandbox.
 
@@ -601,6 +604,11 @@ async def _load_project_sandbox_tools(
     sandbox creation is handled by ProjectSandboxLifecycleService.
 
     CRITICAL: This ensures API Server and Agent Worker use the SAME sandbox,
+
+    Args:
+        project_id: Project ID.
+        tenant_id: Tenant ID.
+        redis_client: Optional Redis client for distributed locking during MCP restore.
     preventing the duplicate container bug.
 
     Args:
@@ -764,6 +772,7 @@ async def _load_project_sandbox_tools(
             sandbox_adapter=_mcp_sandbox_adapter,
             sandbox_id=project_sandbox_id,
             project_id=project_id,
+            redis_client=redis_client,
         )
         if user_mcp_tools:
             tools.update(user_mcp_tools)
@@ -856,17 +865,13 @@ async def _discover_single_server_tools(
         )
 
         if discover_result.get("is_error"):
-            logger.warning(
-                f"[AgentWorker] Failed to discover tools for server {server_name}"
-            )
+            logger.warning(f"[AgentWorker] Failed to discover tools for server {server_name}")
             return []
 
         return _parse_discovered_tools(discover_result.get("content", []))
 
     except Exception as e:
-        logger.warning(
-            f"[AgentWorker] Error discovering tools for server {server_name}: {e}"
-        )
+        logger.warning(f"[AgentWorker] Error discovering tools for server {server_name}: {e}")
         return []
 
 
@@ -874,25 +879,30 @@ async def _discover_tools_for_servers_parallel(
     sandbox_adapter: Any,
     sandbox_id: str,
     servers: List[Dict[str, Any]],
+    overall_timeout_seconds: Optional[float] = None,
 ) -> List[List[Dict[str, Any]]]:
     """Discover tools from multiple MCP servers in parallel.
 
     Uses asyncio.gather with return_exceptions=True to ensure that
     one server failure doesn't block discovery of other servers.
 
+    If overall_timeout_seconds is specified, the entire operation will be
+    wrapped with asyncio.wait_for, and partial results will be returned
+    on timeout.
+
     Args:
         sandbox_adapter: MCPSandboxAdapter instance.
         sandbox_id: Sandbox container ID.
         servers: List of server info dictionaries with 'name' and 'status' keys.
+        overall_timeout_seconds: Optional timeout for the entire discovery operation.
+            If specified and timeout occurs, returns whatever results have been
+            collected so far. Default is None (no timeout).
 
     Returns:
-        List of tool lists, one per server (excluding failed servers).
+        List of tool lists, one per server (excluding failed/timed out servers).
     """
     # Filter to only running servers
-    running_servers = [
-        s for s in servers
-        if s.get("name") and s.get("status") == "running"
-    ]
+    running_servers = [s for s in servers if s.get("name") and s.get("status") == "running"]
 
     if not running_servers:
         return []
@@ -909,7 +919,23 @@ async def _discover_tools_for_servers_parallel(
 
     # Execute all discoveries in parallel
     # return_exceptions=True ensures one failure doesn't block others
-    results = await asyncio.gather(*discovery_tasks, return_exceptions=True)
+    if overall_timeout_seconds is not None:
+        # Wrap with timeout - return partial results on timeout
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*discovery_tasks, return_exceptions=True),
+                timeout=overall_timeout_seconds,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"[AgentWorker] Parallel discovery timed out after {overall_timeout_seconds}s "
+                f"for {len(running_servers)} servers, returning empty results"
+            )
+            # On timeout, return empty list (no partial results available)
+            return []
+    else:
+        # No timeout - wait for all to complete
+        results = await asyncio.gather(*discovery_tasks, return_exceptions=True)
 
     # Filter out exceptions and empty results, but keep successful ones
     successful_results = []
@@ -928,6 +954,7 @@ async def _load_user_mcp_server_tools(
     sandbox_adapter: Any,
     sandbox_id: str,
     project_id: str,
+    redis_client: Optional[redis.Redis] = None,
 ) -> Dict[str, Any]:
     """Load user-configured MCP server tools running inside the sandbox.
 
@@ -941,6 +968,7 @@ async def _load_user_mcp_server_tools(
         sandbox_adapter: MCPSandboxAdapter instance.
         sandbox_id: Sandbox container ID.
         project_id: Project ID.
+        redis_client: Optional Redis client for distributed locking during MCP restore.
 
     Returns:
         Dictionary of tool name -> SandboxMCPServerToolAdapter instances.
@@ -974,6 +1002,7 @@ async def _load_user_mcp_server_tools(
             sandbox_id=sandbox_id,
             project_id=project_id,
             running_names=running_names,
+            redis_client=redis_client,
         )
 
         # Re-list if we restored any servers
@@ -996,10 +1025,7 @@ async def _load_user_mcp_server_tools(
 
         # Create adapters for all discovered tools
         # We need to map back to server names for adapter creation
-        running_servers = [
-            s for s in servers
-            if s.get("name") and s.get("status") == "running"
-        ]
+        running_servers = [s for s in servers if s.get("name") and s.get("status") == "running"]
 
         for i, discovered_tools in enumerate(discovery_results):
             if i < len(running_servers):
@@ -1024,14 +1050,32 @@ async def _auto_restore_mcp_servers(
     sandbox_id: str,
     project_id: str,
     running_names: set,
+    redis_client: Optional[redis.Redis] = None,
 ) -> None:
     """Auto-restore enabled MCP servers from DB that aren't running in sandbox.
 
     Called during tool loading to ensure MCP servers survive sandbox restarts.
     Each server is installed and started via the sandbox's management tools.
     Failures are logged but don't block other servers or tool loading.
+
+    Uses distributed lock when redis_client is provided to prevent race conditions
+    when multiple workers attempt to restore the same MCP server simultaneously.
+
+    Args:
+        sandbox_adapter: MCP sandbox adapter for calling tools.
+        sandbox_id: Target sandbox container ID.
+        project_id: Project ID for DB lookup.
+        running_names: Set of MCP server names already running in sandbox.
+        redis_client: Optional Redis client for distributed locking.
+                     If None, falls back to no-lock behavior (backward compatible).
+
+    Lock Behavior:
+        - Lock key format: memstack:lock:mcp_restore:{project_id}:{server_name}
+        - Lock TTL: 60 seconds
+        - Non-blocking: If lock cannot be acquired, skip that server
+        - Double-check: Server is re-checked inside lock before restore
     """
-    import json
+    import uuid
 
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
@@ -1062,54 +1106,146 @@ async def _auto_restore_mcp_servers(
             server_type = server.server_type or "stdio"
             transport_config = server.transport_config or {}
 
-            try:
-                config_json = json.dumps(transport_config)
+            # Use distributed lock if redis_client is available
+            if redis_client is not None:
+                lock_key = f"memstack:lock:mcp_restore:{project_id}:{server_name}"
+                lock_owner = str(uuid.uuid4())
+                lock_ttl = 60
 
-                # Install
-                install_result = await sandbox_adapter.call_tool(
-                    sandbox_id=sandbox_id,
-                    tool_name="mcp_server_install",
-                    arguments={
-                        "name": server_name,
-                        "server_type": server_type,
-                        "transport_config": config_json,
-                    },
-                    timeout=120.0,
-                )
-                if install_result.get("is_error"):
-                    logger.warning(
-                        f"[AgentWorker] Failed to install MCP server '{server_name}': "
-                        f"{install_result}"
+                # Try to acquire lock (non-blocking)
+                acquired = await redis_client.set(lock_key, lock_owner, nx=True, ex=lock_ttl)
+
+                if not acquired:
+                    logger.debug(
+                        f"[AgentWorker] Skip restore '{server_name}': lock held by another worker"
                     )
                     continue
 
-                # Start
-                start_result = await sandbox_adapter.call_tool(
-                    sandbox_id=sandbox_id,
-                    tool_name="mcp_server_start",
-                    arguments={
-                        "name": server_name,
-                        "server_type": server_type,
-                        "transport_config": config_json,
-                    },
-                    timeout=60.0,
-                )
-                if start_result.get("is_error"):
-                    logger.warning(
-                        f"[AgentWorker] Failed to start MCP server '{server_name}': {start_result}"
+                try:
+                    # Double-check: Re-verify server is still not running inside lock
+                    # (another worker may have just restored it)
+                    try:
+                        list_result = await sandbox_adapter.call_tool(
+                            sandbox_id=sandbox_id,
+                            tool_name="mcp_server_list",
+                            arguments={},
+                            timeout=10.0,
+                        )
+                        current_servers = _parse_mcp_server_list(list_result.get("content", []))
+                        current_running = {
+                            s.get("name") for s in current_servers if s.get("status") == "running"
+                        }
+                        if server_name in current_running:
+                            logger.debug(
+                                f"[AgentWorker] Skip restore '{server_name}': "
+                                f"already running (double-check)"
+                            )
+                            continue
+                    except Exception as e:
+                        logger.warning(
+                            f"[AgentWorker] Double-check failed for '{server_name}': {e}"
+                        )
+                        # Continue with restore if double-check fails
+
+                    # Perform restore inside lock
+                    await _restore_single_server(
+                        sandbox_adapter=sandbox_adapter,
+                        sandbox_id=sandbox_id,
+                        server_name=server_name,
+                        server_type=server_type,
+                        transport_config=transport_config,
                     )
-                    continue
 
-                logger.info(
-                    f"[AgentWorker] Auto-restored MCP server '{server_name}' "
-                    f"in sandbox {sandbox_id}"
+                finally:
+                    # Release lock (only if we own it)
+                    try:
+                        current_owner = await redis_client.get(lock_key)
+                        if current_owner == lock_owner:
+                            await redis_client.delete(lock_key)
+                    except Exception as e:
+                        logger.warning(
+                            f"[AgentWorker] Failed to release lock for '{server_name}': {e}"
+                        )
+            else:
+                # Fallback: No lock (backward compatible)
+                await _restore_single_server(
+                    sandbox_adapter=sandbox_adapter,
+                    sandbox_id=sandbox_id,
+                    server_name=server_name,
+                    server_type=server_type,
+                    transport_config=transport_config,
                 )
-
-            except Exception as e:
-                logger.warning(f"[AgentWorker] Error restoring MCP server '{server_name}': {e}")
 
     except Exception as e:
         logger.warning(f"[AgentWorker] Error in auto-restore MCP servers: {e}")
+
+
+async def _restore_single_server(
+    sandbox_adapter: Any,
+    sandbox_id: str,
+    server_name: str,
+    server_type: str,
+    transport_config: dict,
+) -> bool:
+    """Restore a single MCP server by installing and starting it.
+
+    Args:
+        sandbox_adapter: MCP sandbox adapter.
+        sandbox_id: Target sandbox ID.
+        server_name: MCP server name.
+        server_type: Server type (e.g., 'stdio').
+        transport_config: Transport configuration dict.
+
+    Returns:
+        True if restore succeeded, False otherwise.
+    """
+    import json
+
+    try:
+        config_json = json.dumps(transport_config)
+
+        # Install
+        install_result = await sandbox_adapter.call_tool(
+            sandbox_id=sandbox_id,
+            tool_name="mcp_server_install",
+            arguments={
+                "name": server_name,
+                "server_type": server_type,
+                "transport_config": config_json,
+            },
+            timeout=120.0,
+        )
+        if install_result.get("is_error"):
+            logger.warning(
+                f"[AgentWorker] Failed to install MCP server '{server_name}': {install_result}"
+            )
+            return False
+
+        # Start
+        start_result = await sandbox_adapter.call_tool(
+            sandbox_id=sandbox_id,
+            tool_name="mcp_server_start",
+            arguments={
+                "name": server_name,
+                "server_type": server_type,
+                "transport_config": config_json,
+            },
+            timeout=60.0,
+        )
+        if start_result.get("is_error"):
+            logger.warning(
+                f"[AgentWorker] Failed to start MCP server '{server_name}': {start_result}"
+            )
+            return False
+
+        logger.info(
+            f"[AgentWorker] Auto-restored MCP server '{server_name}' in sandbox {sandbox_id}"
+        )
+        return True
+
+    except Exception as e:
+        logger.warning(f"[AgentWorker] Error restoring MCP server '{server_name}': {e}")
+        return False
 
 
 def _parse_mcp_server_list(content: list) -> list:
@@ -1152,9 +1288,11 @@ def _match_adapter_to_app(adapter: Any, apps: list) -> Any:
     """Match a SandboxMCPServerToolAdapter to an MCPApp from DB.
 
     Matching strategy (in priority order):
-    1. Exact server_name + tool_name match
-    2. Normalized server_name + tool_name match (handles hyphens vs underscores)
-    3. Fuzzy server_name match with usability check (resource HTML or ui_metadata)
+    1. Exact server_name + tool_name match (score: 1.0)
+    2. Normalized server_name + tool_name match (score: 0.8)
+       - Handles hyphens vs underscores
+    3. Fuzzy server_name match with usability check (score: 0.5)
+       - Requires resource HTML or ui_metadata
 
     Args:
         adapter: SandboxMCPServerToolAdapter instance
@@ -1163,10 +1301,40 @@ def _match_adapter_to_app(adapter: Any, apps: list) -> Any:
     Returns:
         Matched MCPApp or None
     """
+    matched_app, _ = _match_adapter_to_app_with_score(adapter, apps)
+    return matched_app
+
+
+def _match_adapter_to_app_with_score(adapter: Any, apps: list) -> tuple:
+    """Match a SandboxMCPServerToolAdapter to an MCPApp from DB with confidence score.
+
+    This function returns both the matched app and a confidence score,
+    useful for debugging and logging match attempts.
+
+    Matching strategy (in priority order):
+    1. Exact server_name + tool_name match (score: 1.0)
+    2. Normalized server_name + tool_name match (score: 0.8)
+       - Handles hyphens vs underscores
+    3. Fuzzy server_name match with usability check (score: 0.5)
+       - Requires resource HTML or ui_metadata
+
+    Args:
+        adapter: SandboxMCPServerToolAdapter instance
+        apps: List of MCPApp domain objects from DB
+
+    Returns:
+        Tuple of (matched MCPApp or None, confidence score 0.0-1.0)
+    """
     adapter_server = getattr(adapter, "_server_name", "")
     adapter_tool = getattr(adapter, "_original_tool_name", "")
+
     if not adapter_server:
-        return None
+        logger.debug("MCPApp matching: adapter has no server_name")
+        return None, 0.0
+
+    if not apps:
+        logger.debug(f"MCPApp matching: no apps to match against for {adapter_server}")
+        return None, 0.0
 
     # Normalize for comparison: lowercase, replace hyphens with underscores
     def _norm(s: str) -> str:
@@ -1175,25 +1343,57 @@ def _match_adapter_to_app(adapter: Any, apps: list) -> Any:
     norm_server = _norm(adapter_server)
     norm_tool = _norm(adapter_tool)
 
-    # Priority 1: exact server_name + tool_name
+    # Log match attempt details at debug level
+    logger.debug(
+        f"MCPApp matching: attempting to match adapter "
+        f"(server={adapter_server}, tool={adapter_tool}) against {len(apps)} apps"
+    )
+
+    # Priority 1: exact server_name + tool_name (score: 1.0)
     for app in apps:
         if app.server_name == adapter_server and app.tool_name == adapter_tool:
-            return app
+            logger.debug(
+                f"MCPApp matching: EXACT match found - "
+                f"adapter({adapter_server}/{adapter_tool}) -> app({app.server_name}/{app.tool_name}) "
+                f"[id={app.id}, score=1.0]"
+            )
+            return app, 1.0
 
-    # Priority 2: normalized server_name + tool_name
+    # Priority 2: normalized server_name + tool_name (score: 0.8)
     for app in apps:
         if _norm(app.server_name) == norm_server and _norm(app.tool_name) == norm_tool:
-            return app
+            logger.debug(
+                f"MCPApp matching: NORMALIZED match found - "
+                f"adapter({adapter_server}/{adapter_tool}) -> app({app.server_name}/{app.tool_name}) "
+                f"[id={app.id}, score=0.8]"
+            )
+            return app, 0.8
 
-    # Priority 3: fuzzy server_name match with usability check
+    # Priority 3: fuzzy server_name match with usability check (score: 0.5)
     for app in apps:
         app_norm = _norm(app.server_name)
         if norm_server in app_norm or app_norm in norm_server:
             # Accept apps with resource HTML or ui_metadata (resourceUri-based apps)
             if (app.resource and app.resource.html_content) or app.ui_metadata:
-                return app
+                logger.debug(
+                    f"MCPApp matching: FUZZY match found - "
+                    f"adapter({adapter_server}/{adapter_tool}) -> app({app.server_name}/{app.tool_name}) "
+                    f"[id={app.id}, score=0.5, has_ui=True]"
+                )
+                return app, 0.5
 
-    return None
+    # No match found - log candidates for debugging
+    candidate_info = [
+        f"({app.server_name}/{app.tool_name}, id={app.id})"
+        for app in apps[:5]  # Limit to first 5 for log readability
+    ]
+    logger.warning(
+        f"MCPApp matching: NO MATCH found - "
+        f"adapter(server={adapter_server}, tool={adapter_tool}) "
+        f"candidates=[{', '.join(candidate_info)}]"
+    )
+
+    return None, 0.0
 
 
 def get_cached_tools() -> Dict[str, Dict[str, Any]]:
@@ -1230,6 +1430,90 @@ def invalidate_tools_cache(project_id: Optional[str] = None) -> None:
     else:
         _tools_cache.clear()
         logger.info("Agent Worker: All tool caches invalidated")
+
+
+def invalidate_all_caches_for_project(
+    project_id: str,
+    tenant_id: Optional[str] = None,
+    clear_tool_definitions: bool = True,
+) -> Dict[str, Any]:
+    """Invalidate all caches related to a project.
+
+    This unified function clears all caches that may contain stale data after
+    MCP tools are registered or updated. It should be called after:
+    - register_mcp_server tool execution
+    - MCP server enable/disable/sync operations
+    - Any operation that changes available tools for a project
+
+    Caches invalidated (in order):
+    1. tools_cache[project_id] - Built-in tool instances
+    2. agent_sessions (tenant:project:*) - Session contexts with tool definitions
+    3. tool_definitions_cache (all if clear_tool_definitions=True) - Converted tools
+    4. mcp_tools_cache[tenant_id] - MCP tools from workflows (if tenant_id provided)
+
+    Args:
+        project_id: Project ID to invalidate caches for
+        tenant_id: Optional tenant ID for MCP tools cache invalidation
+        clear_tool_definitions: Whether to clear tool definitions cache (default: True)
+
+    Returns:
+        Dictionary with invalidation summary:
+        {
+            "project_id": str,
+            "tenant_id": Optional[str],
+            "invalidated": {
+                "tools_cache": int,
+                "agent_sessions": int,
+                "tool_definitions": int,
+                "mcp_tools": int,
+            }
+        }
+    """
+    invalidated = {
+        "tools_cache": 0,
+        "agent_sessions": 0,
+        "tool_definitions": 0,
+        "mcp_tools": 0,
+    }
+
+    # 1. Invalidate tools_cache for this project
+    if project_id in _tools_cache:
+        del _tools_cache[project_id]
+        invalidated["tools_cache"] = 1
+        logger.info(f"Agent Worker: tools_cache invalidated for project {project_id}")
+
+    # 2. Invalidate agent sessions for this project
+    # Sessions are keyed by tenant_id:project_id:agent_mode
+    sessions_invalidated = invalidate_agent_session(
+        tenant_id=tenant_id,
+        project_id=project_id,
+    )
+    invalidated["agent_sessions"] = sessions_invalidated
+    if sessions_invalidated > 0:
+        logger.info(
+            f"Agent Worker: Invalidated {sessions_invalidated} agent sessions "
+            f"for project {project_id}"
+        )
+
+    # 3. Invalidate tool definitions cache (if requested)
+    # Tool definitions are keyed by tools_hash, which changes when tools change.
+    # We clear all entries since we can't know which hashes correspond to this project.
+    if clear_tool_definitions:
+        invalidated["tool_definitions"] = invalidate_tool_definitions_cache()
+
+    # 4. Invalidate MCP tools cache for tenant (if tenant_id provided)
+    if tenant_id:
+        invalidated["mcp_tools"] = invalidate_mcp_tools_cache(tenant_id)
+
+    logger.info(
+        f"Agent Worker: Cache invalidation complete for project {project_id}: {invalidated}"
+    )
+
+    return {
+        "project_id": project_id,
+        "tenant_id": tenant_id,
+        "invalidated": invalidated,
+    }
 
 
 # ============================================================================
