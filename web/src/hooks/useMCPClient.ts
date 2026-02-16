@@ -106,6 +106,9 @@ export function useMCPClient({
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gracePeriodTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastConnectedStatusRef = useRef<boolean>(false);
+  // Use ref for isInGracePeriod to avoid circular dependency in connect callback
+  const isInGracePeriodRef = useRef(false);
+  const isInGracePeriodRef.current = isInGracePeriod;
 
   const token = useAuthStore((s) => s.token);
 
@@ -216,7 +219,7 @@ export function useMCPClient({
     connectingRef.current = true;
 
     // Only set connecting status if we're not in grace period
-    if (!isInGracePeriod) {
+    if (!isInGracePeriodRef.current) {
       setStatus('connecting');
     }
     setError(null);
@@ -269,7 +272,7 @@ export function useMCPClient({
       console.error('[useMCPClient] Connection error:', message);
 
       // Only update status if not in grace period
-      if (!isInGracePeriod) {
+      if (!isInGracePeriodRef.current) {
         setError(message);
         setStatus('error');
       }
@@ -282,7 +285,7 @@ export function useMCPClient({
     } finally {
       connectingRef.current = false;
     }
-  }, [projectId, token, isInGracePeriod, startGracePeriod, cancelGracePeriod, scheduleReconnect]);
+  }, [projectId, token, startGracePeriod, cancelGracePeriod, scheduleReconnect]);
 
   /**
    * Manual reconnect function
