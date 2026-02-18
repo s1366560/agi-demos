@@ -148,7 +148,8 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
       });
 
       const timeline = result.current.timeline;
-      expect(timeline[0].sequenceNumber).toBe(1);
+      expect(timeline[0].eventTimeUs).toBeDefined();
+      expect(timeline[0].eventCounter).toBeDefined();
     });
   });
 
@@ -156,6 +157,7 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
     it('should append thought event to timeline during streaming', async () => {
       const { result } = renderHook(() => useAgentV3Store());
 
+      const baseTime = Date.now() * 1000;
       // Start with existing user message in timeline
       act(() => {
         useAgentV3Store.setState({
@@ -164,7 +166,8 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
             {
               id: 'user-1',
               type: 'user_message',
-              sequenceNumber: 1,
+              eventTimeUs: baseTime,
+              eventCounter: 1,
               timestamp: Date.now(),
               content: 'Help me',
               role: 'user',
@@ -342,7 +345,7 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
   });
 
   describe('Sequence Number Management', () => {
-    it('should increment sequence numbers for each appended event', async () => {
+    it('should increment eventTimeUs for each appended event', async () => {
       const { result } = renderHook(() => useAgentV3Store());
 
       act(() => {
@@ -387,17 +390,19 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
       });
 
       const timeline = result.current.timeline;
-      const sequenceNumbers = timeline.map((e) => e.sequenceNumber);
+      const eventTimeUsList = timeline.map((e) => e.eventTimeUs ?? 0);
 
-      // Should have incrementing sequence numbers
-      for (let i = 1; i < sequenceNumbers.length; i++) {
-        expect(sequenceNumbers[i]).toBeGreaterThan(sequenceNumbers[i - 1]);
+      // Should have incrementing eventTimeUs
+      for (let i = 1; i < eventTimeUsList.length; i++) {
+        expect(eventTimeUsList[i]).toBeGreaterThanOrEqual(eventTimeUsList[i - 1]);
       }
     });
 
     it('should continue sequence from existing timeline', async () => {
       const { result } = renderHook(() => useAgentV3Store());
 
+      // Use a fixed old time for existing events to ensure new events are after
+      const oldTime = 1000000000000000; // Fixed past timestamp
       // Start with existing events
       act(() => {
         useAgentV3Store.setState({
@@ -406,16 +411,18 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
             {
               id: 'existing-1',
               type: 'user_message',
-              sequenceNumber: 1,
-              timestamp: Date.now(),
+              eventTimeUs: oldTime,
+              eventCounter: 1,
+              timestamp: Math.floor(oldTime / 1000),
               content: 'Previous',
               role: 'user',
             },
             {
               id: 'existing-2',
               type: 'assistant_message',
-              sequenceNumber: 2,
-              timestamp: Date.now(),
+              eventTimeUs: oldTime + 1000000,
+              eventCounter: 2,
+              timestamp: Math.floor((oldTime + 1000000) / 1000),
               content: 'Response',
               role: 'assistant',
             },
@@ -447,14 +454,16 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
       // Should have 2 user messages now (original + new)
       expect(userMessages.length).toBe(2);
 
-      // The new user message should have sequence number 3
+      // The new user message should have eventTimeUs defined and greater than old events
       const newUserMessage = userMessages[userMessages.length - 1];
-      expect(newUserMessage.sequenceNumber).toBe(3);
+      expect(newUserMessage.eventTimeUs).toBeDefined();
+      expect((newUserMessage.eventTimeUs ?? 0)).toBeGreaterThan(oldTime);
 
-      // The thought event should have sequence number 4
+      // The thought event should also have eventTimeUs defined and greater than old events
       const thoughtEvents = timeline.filter((e) => e.type === 'thought');
       const newThought = thoughtEvents[thoughtEvents.length - 1];
-      expect(newThought.sequenceNumber).toBe(4);
+      expect(newThought.eventTimeUs).toBeDefined();
+      expect((newThought.eventTimeUs ?? 0)).toBeGreaterThan(oldTime);
     });
   });
 

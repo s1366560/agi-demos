@@ -334,8 +334,25 @@ export function createStreamEventHandlers(
       const stack = [...convState.pendingToolsStack];
       stack.pop();
 
+      // FIX: Update activeToolCalls to mark the completed tool
+      // This ensures the tool is visible during fast execution
+      const toolName = event.data.tool_name;
+      const newMap = new Map(convState.activeToolCalls);
+
+      if (toolName && newMap.has(toolName)) {
+        const existingCall = newMap.get(toolName);
+        if (existingCall) {
+          newMap.set(toolName, {
+            ...existingCall,
+            status: 'success',
+            result: event.data.observation,
+          });
+        }
+      }
+
       updateConversationState(handlerConversationId, {
         pendingToolsStack: stack,
+        activeToolCalls: newMap,
         agentState: 'observing',
         timeline: updatedTimeline,
       });

@@ -1231,22 +1231,63 @@ export const useAgentV3Store = create<AgentV3State>()(
                 ...newConvState,
               } as ConversationState);
 
-              // Skip timeline replacement if streaming is active — sendMessage
-              // may have already appended a user message that the API response
-              // doesn't include, so overwriting would cause it to disappear.
-              // Also skip if data hasn't changed to avoid unnecessary re-renders.
+              // FIX: Use incremental merge during streaming to preserve local events
+              // while still incorporating server events.
+              // Previously, we completely skipped timeline updates when streaming,
+              // which caused events to be invisible.
+              // IMPORTANT: Only merge when loading the SAME conversation that's active and streaming.
+              // If loading a different conversation, use the API response directly.
               const isCurrentlyStreaming = state.isStreaming;
+              const isActiveConversation = state.activeConversationId === conversationId;
+
+              let finalTimeline: TimelineEvent[];
+              let finalMessages: Message[];
+
+              if (isCurrentlyStreaming && isActiveConversation && state.timeline.length > 0) {
+                // During streaming of active conversation: merge API events with local events
+                // Use a Map keyed by event ID for deduplication
+                const eventMap = new Map<string, TimelineEvent>();
+
+                // First, add all API events
+                for (const event of mergedTimeline) {
+                  eventMap.set(event.id, event);
+                }
+
+                // Then, add local events (they may override API events with same ID,
+                // or add new events that haven't been persisted yet)
+                for (const event of state.timeline) {
+                  // Only add local event if it's newer than what's in the map
+                  // or if it's not in the map at all
+                  const existing = eventMap.get(event.id);
+                  if (!existing || (event.eventTimeUs ?? 0) >= (existing.eventTimeUs ?? 0)) {
+                    eventMap.set(event.id, event);
+                  }
+                }
+
+                // Convert back to array and sort by eventTimeUs + eventCounter
+                finalTimeline = Array.from(eventMap.values()).sort((a, b) => {
+                  const timeDiff = (a.eventTimeUs ?? 0) - (b.eventTimeUs ?? 0);
+                  if (timeDiff !== 0) return timeDiff;
+                  return (a.eventCounter ?? 0) - (b.eventCounter ?? 0);
+                });
+                finalMessages = timelineToMessages(finalTimeline);
+              } else {
+                // Not streaming, different conversation, or empty local timeline: use API response directly
+                finalTimeline = mergedTimeline;
+                finalMessages = messages;
+              }
+
+              // Check if timeline actually changed to avoid unnecessary re-renders
               const timelineChanged =
-                !isCurrentlyStreaming &&
-                (state.timeline.length !== mergedTimeline.length ||
-                  (mergedTimeline.length > 0 &&
-                    state.timeline[state.timeline.length - 1]?.id !==
-                      mergedTimeline[mergedTimeline.length - 1]?.id));
+                state.timeline.length !== finalTimeline.length ||
+                (finalTimeline.length > 0 &&
+                  state.timeline[state.timeline.length - 1]?.id !==
+                    finalTimeline[finalTimeline.length - 1]?.id);
 
               return {
                 conversationStates: newStates,
                 ...(timelineChanged
-                  ? { timeline: mergedTimeline, messages: messages }
+                  ? { timeline: finalTimeline, messages: finalMessages }
                   : {}),
                 isLoadingHistory: false,
                 hasEarlier: response.has_more ?? false,

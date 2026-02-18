@@ -139,14 +139,16 @@ describe('agentV3 Store - Timeline Field', () => {
     it('should clear timeline when loading new conversation', async () => {
       const { result } = renderHook(() => useAgentV3Store());
 
-      // Set initial timeline
+      // Set initial timeline (from a previous conversation)
       act(() => {
         useAgentV3Store.setState({
+          activeConversationId: 'old-conv',  // Different from what we'll load
           timeline: [
             {
               id: 'old-1',
               type: 'user_message',
-              sequenceNumber: 1,
+              eventTimeUs: Date.now() * 1000,
+              eventCounter: 1,
               timestamp: Date.now(),
               content: 'Old message',
               role: 'user',
@@ -165,11 +167,15 @@ describe('agentV3 Store - Timeline Field', () => {
         timeline: [],
         total: 0,
         has_more: false,
-        first_sequence: null,
-        last_sequence: null,
+        first_time_us: null,
+        first_counter: null,
+        last_time_us: null,
+        last_counter: null,
       });
 
       await act(async () => {
+        // Need to set activeConversationId to match what we're loading
+        useAgentV3Store.setState({ activeConversationId: 'conv-456' });
         await result.current.loadMessages('conv-456', 'proj-123');
       });
 
@@ -379,15 +385,17 @@ describe('agentV3 Store - Timeline Field', () => {
   });
 
   describe('loadMessages - Timeline Sorting', () => {
-    it('should sort timeline by sequence number even if API returns unsorted', async () => {
+    it('should sort timeline by eventTimeUs even if API returns unsorted', async () => {
       const { result } = renderHook(() => useAgentV3Store());
 
+      const baseTime = Date.now() * 1000;
       // Mock API returning unsorted timeline (simulating potential backend issue)
       const unsortedTimeline: TimelineEvent[] = [
         {
           id: 'assistant-2',
           type: 'assistant_message',
-          sequenceNumber: 3,
+          eventTimeUs: baseTime + 2000000,  // 3rd
+          eventCounter: 3,
           timestamp: Date.now() + 2000,
           content: 'Second response',
           role: 'assistant',
@@ -395,7 +403,8 @@ describe('agentV3 Store - Timeline Field', () => {
         {
           id: 'user-1',
           type: 'user_message',
-          sequenceNumber: 1,
+          eventTimeUs: baseTime,  // 1st
+          eventCounter: 1,
           timestamp: Date.now(),
           content: 'First message',
           role: 'user',
@@ -403,7 +412,8 @@ describe('agentV3 Store - Timeline Field', () => {
         {
           id: 'assistant-1',
           type: 'assistant_message',
-          sequenceNumber: 2,
+          eventTimeUs: baseTime + 1000000,  // 2nd
+          eventCounter: 2,
           timestamp: Date.now() + 1000,
           content: 'First response',
           role: 'assistant',
@@ -417,8 +427,10 @@ describe('agentV3 Store - Timeline Field', () => {
         timeline: unsortedTimeline,
         total: 3,
         has_more: false,
-        first_sequence: 1,
-        last_sequence: 3,
+        first_time_us: baseTime,
+        first_counter: 1,
+        last_time_us: baseTime + 2000000,
+        last_counter: 3,
       });
 
       await act(async () => {
@@ -426,11 +438,11 @@ describe('agentV3 Store - Timeline Field', () => {
         await result.current.loadMessages('conv-123', 'proj-123');
       });
 
-      // Timeline should be sorted by sequence number
+      // Timeline should be sorted by eventTimeUs
       expect(result.current.timeline.length).toBe(3);
-      expect(result.current.timeline[0].sequenceNumber).toBe(1);
-      expect(result.current.timeline[1].sequenceNumber).toBe(2);
-      expect(result.current.timeline[2].sequenceNumber).toBe(3);
+      expect(result.current.timeline[0].eventCounter).toBe(1);
+      expect(result.current.timeline[1].eventCounter).toBe(2);
+      expect(result.current.timeline[2].eventCounter).toBe(3);
       expect(result.current.timeline[0].type).toBe('user_message');
       expect(result.current.timeline[1].type).toBe('assistant_message');
       expect(result.current.timeline[2].type).toBe('assistant_message');
@@ -439,12 +451,14 @@ describe('agentV3 Store - Timeline Field', () => {
     it('should maintain sort order when loading earlier messages', async () => {
       const { result } = renderHook(() => useAgentV3Store());
 
+      const baseTime = Date.now() * 1000;
       // Set initial state with some timeline events
       const existingTimeline: TimelineEvent[] = [
         {
           id: 'user-3',
           type: 'user_message',
-          sequenceNumber: 5,
+          eventTimeUs: baseTime + 5000000,
+          eventCounter: 5,
           timestamp: Date.now(),
           content: 'Latest message',
           role: 'user',
@@ -452,7 +466,8 @@ describe('agentV3 Store - Timeline Field', () => {
         {
           id: 'assistant-3',
           type: 'assistant_message',
-          sequenceNumber: 6,
+          eventTimeUs: baseTime + 6000000,
+          eventCounter: 6,
           timestamp: Date.now() + 1000,
           content: 'Latest response',
           role: 'assistant',
@@ -463,7 +478,8 @@ describe('agentV3 Store - Timeline Field', () => {
         useAgentV3Store.setState({
           activeConversationId: 'conv-123',
           timeline: existingTimeline,
-          earliestLoadedSequence: 5,
+          earliestTimeUs: baseTime + 5000000,
+          earliestCounter: 5,
         });
       });
 
@@ -472,7 +488,8 @@ describe('agentV3 Store - Timeline Field', () => {
         {
           id: 'user-1',
           type: 'user_message',
-          sequenceNumber: 1,
+          eventTimeUs: baseTime + 1000000,
+          eventCounter: 1,
           timestamp: Date.now() - 2000,
           content: 'First message',
           role: 'user',
@@ -480,7 +497,8 @@ describe('agentV3 Store - Timeline Field', () => {
         {
           id: 'assistant-1',
           type: 'assistant_message',
-          sequenceNumber: 2,
+          eventTimeUs: baseTime + 2000000,
+          eventCounter: 2,
           timestamp: Date.now() - 1000,
           content: 'First response',
           role: 'assistant',
@@ -494,8 +512,10 @@ describe('agentV3 Store - Timeline Field', () => {
         timeline: earlierTimeline,
         total: 2,
         has_more: false,
-        first_sequence: 1,
-        last_sequence: 2,
+        first_time_us: baseTime + 1000000,
+        first_counter: 1,
+        last_time_us: baseTime + 2000000,
+        last_counter: 2,
       });
 
       await act(async () => {
@@ -504,10 +524,10 @@ describe('agentV3 Store - Timeline Field', () => {
 
       // Combined timeline should be sorted
       expect(result.current.timeline.length).toBe(4);
-      expect(result.current.timeline[0].sequenceNumber).toBe(1);
-      expect(result.current.timeline[1].sequenceNumber).toBe(2);
-      expect(result.current.timeline[2].sequenceNumber).toBe(5);
-      expect(result.current.timeline[3].sequenceNumber).toBe(6);
+      expect(result.current.timeline[0].eventCounter).toBe(1);
+      expect(result.current.timeline[1].eventCounter).toBe(2);
+      expect(result.current.timeline[2].eventCounter).toBe(5);
+      expect(result.current.timeline[3].eventCounter).toBe(6);
     });
   });
 });
