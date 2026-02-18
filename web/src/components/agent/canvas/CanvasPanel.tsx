@@ -155,6 +155,100 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: (tabId: string) => void }>(({ onB
 });
 CanvasTabBar.displayName = 'CanvasTabBar';
 
+/**
+ * IsolatedPreviewFrame - Renders HTML content in a strictly isolated iframe
+ *
+ * Uses srcDoc with CSS reset for complete style isolation, preventing
+ * CSS leakage (keyframes, font-face, custom properties) from the parent page.
+ */
+const IsolatedPreviewFrame = memo<{ content: string; title: string }>(({ content, title }) => {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  // Wrap content with CSS isolation
+  const isolatedContent = useMemo(() => {
+    const htmlContent = content.trim();
+
+    // If content is already a full HTML document, inject isolation styles
+    if (htmlContent.startsWith('<!DOCTYPE') || htmlContent.startsWith('<html')) {
+      return htmlContent.replace(
+        /<head>/i,
+        `<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    /* CSS isolation reset - prevents parent style leakage */
+    *, *::before, *::after {
+      all: unset;
+      box-sizing: border-box;
+    }
+    html, body {
+      display: block;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: auto;
+      background: white;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: black;
+    }
+    /* Re-enable essential styles */
+    div, span, p, h1, h2, h3, h4, h5, h6 { display: block; }
+    button { display: inline-block; cursor: pointer; }
+    input, textarea, select { display: inline-block; }
+    canvas { display: inline-block; }
+  </style>`
+      );
+    }
+
+    // Wrap fragment in full HTML document with isolation
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    /* CSS isolation reset - prevents parent style leakage */
+    *, *::before, *::after {
+      all: unset;
+      box-sizing: border-box;
+    }
+    html, body {
+      display: block;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: auto;
+      background: white;
+      font-family: system-ui, -apple-system, sans-serif;
+      color: black;
+    }
+    /* Re-enable essential styles */
+    div, span, p, h1, h2, h3, h4, h5, h6 { display: block; }
+    button { display: inline-block; cursor: pointer; }
+    input, textarea, select { display: inline-block; }
+    canvas { display: inline-block; }
+  </style>
+</head>
+<body>
+${htmlContent}
+</body>
+</html>`;
+  }, [content]);
+
+  return (
+    <iframe
+      ref={iframeRef}
+      srcDoc={isolatedContent}
+      sandbox="allow-scripts"
+      className="w-full h-full border-0 bg-white rounded-b-lg"
+      title={title}
+    />
+  );
+});
+IsolatedPreviewFrame.displayName = 'IsolatedPreviewFrame';
+
 // Content area for a single tab
 const CanvasContent = memo<{
   tab: CanvasTab;
@@ -199,12 +293,7 @@ const CanvasContent = memo<{
       );
     case 'preview':
       return (
-        <iframe
-          srcDoc={tab.content}
-          sandbox="allow-scripts"
-          className="w-full h-full border-0 bg-white rounded-b-lg"
-          title={tab.title}
-        />
+        <IsolatedPreviewFrame content={tab.content} title={tab.title} />
       );
     case 'data':
       return (
