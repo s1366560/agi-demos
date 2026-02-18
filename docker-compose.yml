@@ -73,9 +73,9 @@ services:
           cpus: '0.5'
           memory: 1G
 
-  # PostgreSQL for metadata
+  # PostgreSQL for metadata with pgvector extension
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:pg16
     container_name: memstack-postgres
     ports:
       - "5432:5432"
@@ -85,6 +85,8 @@ services:
       - POSTGRES_PASSWORD=your_password_here
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Initialize pgvector extension on first startup
+      - ./scripts/db/init_pgvector.sql:/docker-entrypoint-initdb.d/01-init_pgvector.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s

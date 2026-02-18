@@ -31,8 +31,9 @@ import {
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useSandboxStore } from '@/stores/sandbox';
+
 import { artifactService } from '@/services/artifactService';
-import { getErrorMessage } from '@/types/common';
+
 
 import { CodeBlock as SharedCodeBlock } from '../chat/CodeBlock';
 import { useMarkdownPlugins, safeMarkdownComponents } from '../chat/markdownPlugins';
@@ -42,6 +43,8 @@ import { SaveTemplateModal } from '../chat/SaveTemplateModal';
 // Import types without type qualifier
 import { InlineHITLCard } from '../InlineHITLCard';
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
+
+import { getErrorMessage } from '@/types/common';
 
 import type {
   UserMessageProps,

@@ -358,6 +358,62 @@ class ProjectReActAgent:
             # Store artifact_service for use in ReActAgent
             self._artifact_service = artifact_service
 
+            # Memory services: recall preprocessor + capture postprocessor + flush
+            memory_recall = None
+            memory_capture = None
+            memory_flush = None
+            try:
+                from src.infrastructure.agent.memory.capture import MemoryCapturePostprocessor
+                from src.infrastructure.agent.memory.recall import MemoryRecallPreprocessor
+                from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
+                from src.infrastructure.memory.chunk_search import ChunkHybridSearch
+
+                # Session factory for on-demand DB access (shared by all memory services)
+                session_factory = None
+                try:
+                    from src.infrastructure.adapters.secondary.persistence.database import (
+                        async_session_factory,
+                    )
+
+                    session_factory = async_session_factory
+                except Exception:
+                    pass
+
+                embedding_service = getattr(graph_service, "embedder", None)
+                if embedding_service and redis_client:
+                    cached_embedding = CachedEmbeddingService(embedding_service, redis_client)
+                    chunk_search = ChunkHybridSearch(cached_embedding, session_factory)
+                    memory_recall = MemoryRecallPreprocessor(
+                        chunk_search=chunk_search,
+                        graph_search=graph_service,
+                    )
+                    logger.info(f"ProjectReActAgent[{self.project_key}]: Memory recall enabled")
+
+                # LLM-driven capture (requires llm_client, works without chunk_repo/embedding)
+                if llm_client:
+                    cached_emb = (
+                        CachedEmbeddingService(embedding_service, redis_client)
+                        if embedding_service and redis_client
+                        else None
+                    )
+                    memory_capture = MemoryCapturePostprocessor(
+                        llm_client=llm_client,
+                        session_factory=session_factory,
+                        embedding_service=cached_emb,
+                    )
+                    logger.info(f"ProjectReActAgent[{self.project_key}]: Memory capture enabled")
+
+                    # Pre-compaction flush shares LLM + session_factory
+                    from src.infrastructure.agent.memory.flush import MemoryFlushService
+
+                    memory_flush = MemoryFlushService(
+                        llm_client=llm_client,
+                        embedding_service=cached_emb,
+                        session_factory=session_factory,
+                    )
+            except Exception as e:
+                logger.debug(f"Memory services not available: {e}")
+
             # Get or create agent session (caches tool definitions, router, etc.)
             self._session_context = await get_or_create_agent_session(
                 tenant_id=self.config.tenant_id,
@@ -409,6 +465,10 @@ class ProjectReActAgent:
                 llm_client=llm_client,  # Pass cached LiteLLMClient
                 resource_sync_service=self._session_context.resource_sync_service,
                 graph_service=graph_service,  # Pass graph service for SubAgent memory sharing
+                # Memory auto-recall / auto-capture / pre-compaction flush
+                memory_recall=memory_recall,
+                memory_capture=memory_capture,
+                memory_flush=memory_flush,
                 # Use cached components from session pool
                 _cached_tool_definitions=self._session_context.tool_definitions,
                 _cached_system_prompt_manager=self._session_context.system_prompt_manager,

@@ -785,6 +785,28 @@ class AgentElicitationAnsweredEvent(AgentDomainEvent):
 
 
 # =========================================================================
+# Memory Events (auto-recall / auto-capture)
+# =========================================================================
+
+
+class AgentMemoryRecalledEvent(AgentDomainEvent):
+    """Emitted when memories are recalled for context injection."""
+
+    event_type: AgentEventType = AgentEventType.MEMORY_RECALLED
+    memories: List[Dict[str, Any]]
+    count: int
+    search_ms: int
+
+
+class AgentMemoryCapturedEvent(AgentDomainEvent):
+    """Emitted when new memories are captured from conversation."""
+
+    event_type: AgentEventType = AgentEventType.MEMORY_CAPTURED
+    captured_count: int
+    categories: List[str]
+
+
+# =========================================================================
 # Event Type Utilities
 # =========================================================================
 
@@ -843,6 +865,8 @@ def get_event_type_docstring() -> str:
         AgentArtifactOpenEvent,
         AgentArtifactUpdateEvent,
         AgentArtifactCloseEvent,
+        AgentMemoryRecalledEvent,
+        AgentMemoryCapturedEvent,
     ]:
         docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")
 

@@ -69,6 +69,9 @@ class PromptContext:
     conversation_history_length: int = 0
     user_query: str = ""
 
+    # Memory context (auto-recalled relevant memories)
+    memory_context: Optional[str] = None
+
     # Execution state
     current_step: int = 1
     max_steps: int = 50
@@ -156,15 +159,18 @@ class SystemPromptManager:
         sections: List[str] = []
 
         # Check if we have a forced skill (highest priority injection)
-        is_forced_skill = (
-            context.matched_skill
-            and context.matched_skill.get("force_execution", False)
+        is_forced_skill = context.matched_skill and context.matched_skill.get(
+            "force_execution", False
         )
 
         # 2. Base system prompt (model-specific)
         base_prompt = await self._load_base_prompt(context.model_provider)
         if base_prompt:
             sections.append(base_prompt)
+
+        # 2.5. Recalled memory context (auto-recall from memory index)
+        if context.memory_context:
+            sections.append(context.memory_context)
 
         # 3. Forced skill injection (immediately after base prompt for maximum attention)
         if is_forced_skill:
@@ -302,7 +308,8 @@ Use these tools to search memories, query the knowledge graph, create memories, 
 
         # Add Canvas hint when MCP tools are present
         mcp_tools = [
-            t.get("name", "") for t in context.tool_definitions
+            t.get("name", "")
+            for t in context.tool_definitions
             if t.get("name", "").startswith("mcp__")
         ]
         if mcp_tools:
@@ -310,6 +317,14 @@ Use these tools to search memories, query the knowledge graph, create memories, 
             section += f"""
 
 NOTE: The following MCP server tools may have interactive UIs that auto-render in Canvas when called: {names}. If these tools declare _meta.ui, their UI opens automatically."""
+
+        # Add memory recall guidance when memory_search tool is available
+        has_memory_search = any(t.get("name") == "memory_search" for t in context.tool_definitions)
+        if has_memory_search:
+            section += """
+
+## Memory Recall
+Before answering questions about prior work, decisions, user preferences, people, or any previously stored information: call memory_search first. Use memory_get to retrieve full content when needed. Include Source citations when referencing memories."""
 
         return section
 
@@ -429,7 +444,7 @@ Description: {description}"""
                 content += f"""
 
 === SKILL INSTRUCTIONS (follow these precisely) ===
-{skill['prompt_template']}
+{skill["prompt_template"]}
 === END SKILL INSTRUCTIONS ==="""
             content += "\n</mandatory-skill>"
         else:

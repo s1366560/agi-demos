@@ -93,6 +93,7 @@ async def initialize_database():
     Initialize database schema.
 
     This function creates all tables defined in SQLAlchemy models.
+    Also enables required PostgreSQL extensions (pgvector).
     """
     # Import attachment model to ensure its table is created
     # (Models must be imported before create_all is called)
@@ -101,6 +102,11 @@ async def initialize_database():
 
     logger.info("Initializing database schema...")
     async with engine.begin() as conn:
+        # Enable pgvector extension for vector similarity search
+        logger.info("Enabling pgvector extension...")
+        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        logger.info("✅ pgvector extension enabled")
+
         await conn.run_sync(Base.metadata.create_all)
     logger.info("✅ Database schema initialized")
 

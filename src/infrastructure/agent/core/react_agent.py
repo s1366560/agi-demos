@@ -138,6 +138,10 @@ class ReActAgent:
         _cached_subagent_router: Optional[Any] = None,
         # Plan Mode detection
         plan_detector: Optional[PlanDetector] = None,
+        # Memory auto-recall / auto-capture preprocessors
+        memory_recall: Optional[Any] = None,
+        memory_capture: Optional[Any] = None,
+        memory_flush: Optional[Any] = None,
     ):
         """
         Initialize ReAct Agent.
@@ -203,6 +207,11 @@ class ReActAgent:
         self._resource_sync_service = resource_sync_service  # Skill resource sync
         self._graph_service = graph_service  # Graph service for SubAgent memory sharing
         self._plan_detector = plan_detector or PlanDetector()
+
+        # Memory auto-recall / auto-capture (optional, injected from DI)
+        self._memory_recall = memory_recall
+        self._memory_capture = memory_capture
+        self._memory_flush = memory_flush
 
         # System Prompt Manager - use cached singleton if provided
         if _cached_system_prompt_manager is not None:
@@ -463,6 +472,44 @@ class ReActAgent:
         else:
             return SubAgentMatch(subagent=None, confidence=0.0, match_reason=result.match_reason)
 
+    async def _background_index_conversation(
+        self,
+        messages: list[dict],
+        project_id: str,
+        conversation_id: str,
+    ) -> None:
+        """Index conversation messages as searchable chunks (fire-and-forget)."""
+        try:
+            if not self._memory_capture or not hasattr(self._memory_capture, "_session_factory"):
+                return
+            session_factory = self._memory_capture._session_factory
+            if session_factory is None:
+                return
+
+            from src.infrastructure.adapters.secondary.persistence.sql_chunk_repository import (
+                SqlChunkRepository,
+            )
+
+            session = session_factory()
+            try:
+                chunk_repo = SqlChunkRepository(session)
+                embedding_svc = self._memory_capture._embedding
+
+                from src.application.services.memory_index_service import MemoryIndexService
+
+                index_svc = MemoryIndexService(chunk_repo, embedding_svc)
+                indexed = await index_svc.index_conversation(conversation_id, messages, project_id)
+                if indexed > 0:
+                    await session.commit()
+                    logger.info(
+                        f"[ReActAgent] Indexed {indexed} conversation chunks "
+                        f"(conversation={conversation_id})"
+                    )
+            finally:
+                await session.close()
+        except Exception as e:
+            logger.debug(f"[ReActAgent] Background conversation indexing failed: {e}")
+
     async def _build_system_prompt(
         self,
         user_query: str,
@@ -474,6 +521,7 @@ class ReActAgent:
         project_id: str = "",
         tenant_id: str = "",
         force_execution: bool = False,
+        memory_context: Optional[str] = None,
     ) -> str:
         """
         Build system prompt for the agent using SystemPromptManager.
@@ -566,6 +614,7 @@ class ReActAgent:
             user_query=user_query,
             current_step=current_step,
             max_steps=self.max_steps,
+            memory_context=memory_context,
         )
 
         # Use SystemPromptManager to build the prompt
@@ -816,6 +865,22 @@ class ReActAgent:
 
         # Build system prompt
         # Inject skill into prompt: mandatory for forced, recommendation for matched
+        # Auto-recall memory context if preprocessor is available
+        memory_context = None
+        if self._memory_recall:
+            try:
+                memory_context = await self._memory_recall.recall(user_message, project_id)
+                if memory_context and self._memory_recall.last_results:
+                    from src.domain.events.agent_events import AgentMemoryRecalledEvent
+
+                    yield AgentMemoryRecalledEvent(
+                        memories=self._memory_recall.last_results,
+                        count=len(self._memory_recall.last_results),
+                        search_ms=self._memory_recall.last_search_ms,
+                    ).to_event_dict()
+            except Exception as e:
+                logger.warning(f"[ReActAgent] Memory recall failed: {e}")
+
         system_prompt = await self._build_system_prompt(
             user_message,
             conversation_context,
@@ -826,6 +891,7 @@ class ReActAgent:
             project_id=project_id,
             tenant_id=tenant_id,
             force_execution=is_forced,
+            memory_context=memory_context,
         )
 
         # Build context using ContextFacade - replaces inline message building
@@ -887,6 +953,23 @@ class ReActAgent:
                     },
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
+
+            # Pre-compaction memory flush: extract durable memories from
+            # compressed-away messages before they are lost
+            if self._memory_flush and conversation_context:
+                try:
+                    flushed = await self._memory_flush.flush(
+                        conversation_context, project_id, conversation_id
+                    )
+                    if flushed > 0:
+                        from src.domain.events.agent_events import AgentMemoryCapturedEvent
+
+                        yield AgentMemoryCapturedEvent(
+                            captured_count=flushed,
+                            categories=["flush"],
+                        ).to_event_dict()
+                except Exception as e:
+                    logger.warning(f"[ReActAgent] Pre-compaction flush failed: {e}")
 
         # Emit initial context_status with token estimation from context build
         compression_level = context_result.metadata.get("compression_level", "none")
@@ -1083,6 +1166,38 @@ class ReActAgent:
                             )
 
                     yield event
+
+            # Auto-capture important user messages for memory indexing
+            if self._memory_capture and success:
+                try:
+                    captured = await self._memory_capture.capture(
+                        user_message=user_message,
+                        assistant_response=final_content or "",
+                        project_id=project_id,
+                        conversation_id=conversation_id or "unknown",
+                    )
+                    if captured > 0:
+                        from src.domain.events.agent_events import AgentMemoryCapturedEvent
+
+                        yield AgentMemoryCapturedEvent(
+                            captured_count=captured,
+                            categories=self._memory_capture.last_categories,
+                        ).to_event_dict()
+                except Exception as e:
+                    logger.warning(f"[ReActAgent] Memory capture failed: {e}")
+
+            # Async conversation indexing (fire-and-forget)
+            if conversation_id and conversation_context and success:
+                try:
+                    import asyncio
+
+                    asyncio.create_task(
+                        self._background_index_conversation(
+                            conversation_context, project_id, conversation_id
+                        )
+                    )
+                except Exception as e:
+                    logger.debug(f"[ReActAgent] Conversation indexing skipped: {e}")
 
             # Yield final complete event
             yield {

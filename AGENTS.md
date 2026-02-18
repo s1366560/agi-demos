@@ -317,6 +317,8 @@ When a tool needs to emit custom SSE events to the frontend:
 - `LOG_LEVEL` env var controls the level (default: INFO)
 - Ray Actor code runs in Docker containers with their own code copy -- local code
   changes are NOT reflected until the actor image is rebuilt
+- **Development Mode**: Use `make ray-up-dev` to start Ray with live code reloading via volume mounts
+- Use `make ray-reload` to restart Ray services after code changes (faster than rebuild)
 - Use `docker logs memstack-ray-worker` or Ray worker log files for actor-side debugging
 
 ## MCP & Sandbox 系统 / MCP & Sandbox System
@@ -869,4 +871,4 @@ curl -N http://localhost:8000/api/v1/agent/chat \
 | **ToolDefinition wrapping** | `processor.tools[name]` is a `ToolDefinition`, NOT the original tool. Use `tool_def._tool_instance` to access tool-specific methods like `consume_pending_events()` |
 | **Tool event pattern** | Tools emit side-effect events via `_pending_events` list + `consume_pending_events()`. The processor must explicitly consume and yield them after `tool_def.execute()` |
 | **Logging** | `main.py` has `logging.basicConfig()`. Without it, all `src.*` loggers silently discard output. `LOG_LEVEL` env var controls level |
-| **Ray Actor code** | Runs in Docker containers with baked-in images. Local code changes require image rebuild to take effect in actors |
+| **Ray Actor code** | Runs in Docker containers with baked-in images. Local code changes require image rebuild to take effect in actors. **Dev mode**: Use `make ray-up-dev` for live code reloading |

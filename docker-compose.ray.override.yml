@@ -1,0 +1,64 @@
+# =============================================================================
+# Ray Development Override Configuration
+# =============================================================================
+# This file provides development overrides for Ray services to enable:
+# - Live code reloading via volume mounts
+# - Hot reloading for faster development cycles
+# - Local code changes reflected immediately without rebuilding images
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.ray.yml \
+#                  -f docker-compose.ray.override.yml up -d ray-head ray-worker
+#
+# Or use the Makefile:
+#   make ray-up-dev    # Start Ray in development mode
+#   make ray-reload    # Reload Ray services after code changes
+# =============================================================================
+
+services:
+  ray-head:
+    volumes:
+      # Mount source code for live reloading
+      - ./src:/app/src:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      # Mount logs directory for debugging
+      - ./logs:/app/logs
+    # Override command to enable development mode with auto-reload
+    command: >
+      bash -c "
+        pip install -e . --quiet 2>/dev/null || true &&
+        ray start --head
+        --port=6379
+        --dashboard-host=0.0.0.0
+        --dashboard-port=8265
+        --ray-client-server-port=10001
+        --object-store-memory=1073741824
+        --memory=4294967296
+        --disable-usage-stats
+        --block
+      "
+    # Add development labels
+    labels:
+      - "memstack.environment=development"
+      - "memstack.hotreload=true"
+
+  ray-worker:
+    volumes:
+      # Mount source code for live reloading
+      - ./src:/app/src:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      # Mount logs directory for debugging
+      - ./logs:/app/logs
+    # Override command to reinstall package on start
+    command: >
+      bash -c "
+        pip install -e . --quiet 2>/dev/null || true &&
+        ray start --address=ray-head:6379
+        --object-store-memory=1073741824
+        --memory=4294967296
+        --block
+      "
+    # Add development labels
+    labels:
+      - "memstack.environment=development"
+      - "memstack.hotreload=true"

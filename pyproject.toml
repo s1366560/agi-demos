@@ -32,6 +32,7 @@ dependencies = [
     "openai>=2.8.0",
     "aiosqlite>=0.22.1",
     "psycopg2-binary>=2.9.11",
+    "pgvector>=0.3.0",
     # ZhipuAI (Z.AI) official SDK
     "zai-sdk>=0.2.0",
     # LiteLLM for multi-provider LLM support (1.81+ for zai provider)

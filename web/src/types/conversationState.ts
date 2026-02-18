@@ -17,6 +17,7 @@ import type {
   EnvVarRequestedEventData,
   PermissionAskedEventData,
   DoomLoopDetectedEventData,
+  MemoryRecalledEventData,
 } from './agent';
 // Re-export CostUpdateEventData for consumers that need to map to CostTrackingState
 export type { CostUpdateEventData } from './agent';
@@ -159,6 +160,10 @@ export interface ConversationState {
   /** Context injected by MCP Apps via ui/update-model-context.
    * Included in next LLM call to inform the model of app state. */
   appModelContext: Record<string, unknown> | null;
+
+  // ===== Memory Context =====
+  /** Recalled memories for current agent turn */
+  recalledMemories: MemoryRecalledEventData['memories'] | null;
 }
 
 /**
@@ -208,6 +213,9 @@ export function createDefaultConversationState(): ConversationState {
 
     // MCP App context
     appModelContext: null,
+
+    // Memory context
+    recalledMemories: null,
   };
 }
 

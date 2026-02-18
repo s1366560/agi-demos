@@ -12,7 +12,7 @@
  * - Empty state with guidance
  */
 
-import { memo, useState, useCallback, useRef, useMemo } from 'react';
+import { memo, useState, useCallback, useRef, useMemo, useEffect } from 'react';
 
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
@@ -158,90 +158,56 @@ CanvasTabBar.displayName = 'CanvasTabBar';
 /**
  * IsolatedPreviewFrame - Renders HTML content in a strictly isolated iframe
  *
- * Uses srcDoc with CSS reset for complete style isolation, preventing
- * CSS leakage (keyframes, font-face, custom properties) from the parent page.
+ * Uses Blob URL with unique origin for complete style isolation, preventing
+ * any CSS leakage from or to the parent page.
  */
 const IsolatedPreviewFrame = memo<{ content: string; title: string }>(({ content, title }) => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
 
-  // Wrap content with CSS isolation
-  const isolatedContent = useMemo(() => {
+  useEffect(() => {
     const htmlContent = content.trim();
 
-    // If content is already a full HTML document, inject isolation styles
-    if (htmlContent.startsWith('<!DOCTYPE') || htmlContent.startsWith('<html')) {
-      return htmlContent.replace(
-        /<head>/i,
-        `<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    /* CSS isolation reset - prevents parent style leakage */
-    *, *::before, *::after {
-      all: unset;
-      box-sizing: border-box;
-    }
-    html, body {
-      display: block;
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      overflow: auto;
-      background: white;
-      font-family: system-ui, -apple-system, sans-serif;
-      color: black;
-    }
-    /* Re-enable essential styles */
-    div, span, p, h1, h2, h3, h4, h5, h6 { display: block; }
-    button { display: inline-block; cursor: pointer; }
-    input, textarea, select { display: inline-block; }
-    canvas { display: inline-block; }
-  </style>`
-      );
-    }
-
-    // Wrap fragment in full HTML document with isolation
-    return `<!DOCTYPE html>
+    // Wrap in full HTML document with isolation
+    const wrappedContent = htmlContent.startsWith('<!DOCTYPE') || htmlContent.startsWith('<html')
+      ? htmlContent
+      : `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
-    /* CSS isolation reset - prevents parent style leakage */
-    *, *::before, *::after {
-      all: unset;
-      box-sizing: border-box;
-    }
-    html, body {
-      display: block;
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      overflow: auto;
-      background: white;
-      font-family: system-ui, -apple-system, sans-serif;
-      color: black;
-    }
-    /* Re-enable essential styles */
-    div, span, p, h1, h2, h3, h4, h5, h6 { display: block; }
-    button { display: inline-block; cursor: pointer; }
-    input, textarea, select { display: inline-block; }
-    canvas { display: inline-block; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
   </style>
 </head>
 <body>
 ${htmlContent}
 </body>
 </html>`;
+
+    // Create blob URL for complete isolation (unique origin)
+    const blob = new Blob([wrappedContent], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    setBlobUrl(url);
+
+    return () => {
+      URL.revokeObjectURL(url);
+    };
   }, [content]);
+
+  if (!blobUrl) {
+    return (
+      <div className="w-full h-full flex items-center justify-center bg-white rounded-b-lg">
+        <div className="text-slate-400">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <iframe
       ref={iframeRef}
-      srcDoc={isolatedContent}
-      sandbox="allow-scripts"
+      src={blobUrl}
+      sandbox="allow-scripts allow-same-origin"
       className="w-full h-full border-0 bg-white rounded-b-lg"
       title={title}
     />

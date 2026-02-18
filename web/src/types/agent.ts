@@ -383,7 +383,10 @@ export type AgentEventType =
   | 'task_complete' // Agent finished a task
   // MCP App events
   | 'mcp_app_result' // MCP tool with UI returned result + HTML
-  | 'mcp_app_registered'; // New MCP App auto-detected
+  | 'mcp_app_registered' // New MCP App auto-detected
+  // Memory events (auto-recall / auto-capture)
+  | 'memory_recalled' // Memories recalled for context injection
+  | 'memory_captured'; // New memories captured from conversation
 
 /**
  * Base SSE event from agent
@@ -791,6 +794,28 @@ export interface TextEndEventData {
 }
 
 /**
+ * Memory recalled event data (auto-recall)
+ */
+export interface MemoryRecalledEventData {
+  memories: Array<{
+    content: string;
+    score: number;
+    source: string;
+    category: string;
+  }>;
+  count: number;
+  search_ms: number;
+}
+
+/**
+ * Memory captured event data (auto-capture)
+ */
+export interface MemoryCapturedEventData {
+  captured_count: number;
+  categories: string[];
+}
+
+/**
  * Create conversation request
  */
 export interface CreateConversationRequest {
@@ -1036,6 +1061,9 @@ export interface AgentStreamHandler {
   // MCP App handlers
   onMCPAppResult?: (event: AgentEvent<Record<string, unknown>>) => void;
   onMCPAppRegistered?: (event: AgentEvent<Record<string, unknown>>) => void;
+  // Memory handlers (auto-recall / auto-capture)
+  onMemoryRecalled?: (event: AgentEvent<MemoryRecalledEventData>) => void;
+  onMemoryCaptured?: (event: AgentEvent<MemoryCapturedEventData>) => void;
   // Terminal handlers
   onComplete?: (event: AgentEvent<CompleteEventData>) => void;
   onError?: (event: AgentEvent<ErrorEventData>) => void;
@@ -2008,7 +2036,10 @@ export type TimelineEventType =
   | 'background_launched'
   // Task timeline event types
   | 'task_start'
-  | 'task_complete';
+  | 'task_complete'
+  // Memory event types
+  | 'memory_recalled'
+  | 'memory_captured';
 
 /**
  * Base timeline event (all events share these fields)
@@ -2114,6 +2145,23 @@ export interface TaskCompleteTimelineEvent extends BaseTimelineEvent {
   status: string;
   orderIndex: number;
   totalTasks: number;
+}
+
+// ============================================
+// Memory Timeline Event Interfaces
+// ============================================
+
+export interface MemoryRecalledTimelineEvent extends BaseTimelineEvent {
+  type: 'memory_recalled';
+  memories: MemoryRecalledEventData['memories'];
+  count: number;
+  searchMs: number;
+}
+
+export interface MemoryCapturedTimelineEvent extends BaseTimelineEvent {
+  type: 'memory_captured';
+  capturedCount: number;
+  categories: string[];
 }
 
 /**
@@ -2318,7 +2366,10 @@ export type TimelineEvent =
   | BackgroundLaunchedTimelineEvent
   // Task timeline events
   | TaskStartTimelineEvent
-  | TaskCompleteTimelineEvent;
+  | TaskCompleteTimelineEvent
+  // Memory events
+  | MemoryRecalledTimelineEvent
+  | MemoryCapturedTimelineEvent;
 
 // ============================================
 // SubAgent Timeline Event Interfaces (L3 layer)

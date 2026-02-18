@@ -118,6 +118,12 @@ class AgentEventType(str, Enum):
     CONTEXT_SUMMARY_GENERATED = "context_summary_generated"
 
     # =========================================================================
+    # Memory events (auto-recall / auto-capture)
+    # =========================================================================
+    MEMORY_RECALLED = "memory_recalled"
+    MEMORY_CAPTURED = "memory_captured"
+
+    # =========================================================================
     # Pattern events
     # =========================================================================
     PATTERN_MATCH = "pattern_match"

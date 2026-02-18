@@ -29,6 +29,8 @@ import type {
   ArtifactErrorEventData,
   ArtifactCreatedEvent,
   TimelineEvent,
+  MemoryRecalledEventData,
+  MemoryCapturedEventData,
 } from '../../types/agent';
 import type { ConversationState, CostTrackingState } from '../../types/conversationState';
 import type { AdditionalAgentHandlers } from '../agentV3';
@@ -914,6 +916,28 @@ export function createStreamEventHandlers(
           status: 'discovered',
           has_resource: false,
         });
+      });
+    },
+
+    // Memory recall/capture handlers
+    onMemoryRecalled: (event: AgentEvent<MemoryRecalledEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        recalledMemories: event.data?.memories ?? null,
+        timeline: updatedTimeline,
+      });
+    },
+
+    onMemoryCaptured: (event: AgentEvent<MemoryCapturedEventData>) => {
+      const { updateConversationState, getConversationState } = get();
+      const convState = getConversationState(handlerConversationId);
+      if (!convState) return;
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
       });
     },
 

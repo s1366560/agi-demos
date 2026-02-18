@@ -589,6 +589,32 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create RegisterMCPServerTool: {e}")
 
+    # 11. Add Memory Tools (memory_search + memory_get)
+    try:
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory as mem_session_factory,
+        )
+        from src.infrastructure.agent.tools.memory_tools import MemoryGetTool, MemorySearchTool
+        from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
+        from src.infrastructure.memory.chunk_search import ChunkHybridSearch
+
+        embedding_service = getattr(graph_service, "embedder", None)
+        if embedding_service and redis_client:
+            cached_emb = CachedEmbeddingService(embedding_service, redis_client)
+            chunk_search = ChunkHybridSearch(cached_emb, mem_session_factory)
+            tools["memory_search"] = MemorySearchTool(
+                chunk_search=chunk_search,
+                graph_service=graph_service,
+                project_id=project_id,
+            )
+            tools["memory_get"] = MemoryGetTool(
+                session_factory=mem_session_factory,
+                project_id=project_id,
+            )
+            logger.info(f"Agent Worker: Memory tools added for project {project_id}")
+    except Exception as e:
+        logger.debug(f"Agent Worker: Memory tools not available: {e}")
+
     return tools
 
 

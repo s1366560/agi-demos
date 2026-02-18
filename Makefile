@@ -20,7 +20,7 @@
 .PHONY: help install update clean init reset fresh restart
 .PHONY: obs-start obs-stop obs-status obs-logs obs-ui
 .PHONY: sandbox-build sandbox-run sandbox-stop sandbox-restart sandbox-status sandbox-logs sandbox-shell sandbox-clean sandbox-reset sandbox-test
-.PHONY: ray-up ray-down agent-actor-up
+.PHONY: ray-up ray-up-dev ray-down ray-reload agent-actor-up
 
 # =============================================================================
 # Default Target
@@ -28,10 +28,12 @@
 
 COMPOSE_BASE ?= docker-compose.yml
 COMPOSE_RAY ?= docker-compose.ray.yml
+COMPOSE_RAY_DEV ?= docker-compose.ray.override.yml
 COMPOSE_ACTOR ?= docker-compose.agent-actor.yml
 COMPOSE_OBS ?= docker-compose.observability.yml
 COMPOSE_CMD ?= docker compose -f $(COMPOSE_BASE)
 COMPOSE_ALL ?= docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_RAY) -f $(COMPOSE_ACTOR)
+COMPOSE_RAY_DEV_CMD ?= docker compose -f $(COMPOSE_BASE) -f $(COMPOSE_RAY) -f $(COMPOSE_RAY_DEV)
 
 help: ## Show this help message
 	@echo "MemStack Development Commands"
@@ -51,8 +53,11 @@ help: ## Show this help message
 	@echo "  logs           - View all service logs"
 	@echo ""
 	@echo " Ray Actors:"
-	@echo "  ray-up         - Start Ray cluster"
+	@echo "  ray-up         - Start Ray cluster (production)"
+	@echo "  ray-up-dev     - Start Ray cluster (development with hot reload)"
 	@echo "  ray-down       - Stop Ray cluster"
+	@echo "  ray-reload     - Reload Ray services after code changes"
+	@echo "  ray-rebuild    - Rebuild Ray images"
 	@echo "  agent-actor-up - Start agent actor worker"
 	@echo ""
 	@echo " Testing & Quality:"
@@ -101,8 +106,11 @@ help-full: ## Show all available commands
 	@echo "  logs             - View all logs (alias: dev-logs)"
 	@echo ""
 	@echo " Ray Actors:"
-	@echo "  ray-up           - Start Ray cluster"
+	@echo "  ray-up           - Start Ray cluster (production)"
+	@echo "  ray-up-dev       - Start Ray cluster (development with hot reload)"
 	@echo "  ray-down         - Stop Ray cluster"
+	@echo "  ray-reload       - Reload Ray services after code changes"
+	@echo "  ray-rebuild      - Rebuild Ray images"
 	@echo "  agent-actor-up   - Start agent actor worker"
 	@echo ""
 	@echo " Testing:"
@@ -336,8 +344,8 @@ dev-web-stop: ## Stop web development server (kill process on port 3000)
 		echo "  No web server running on port 3000"; \
 	fi
 
-dev-infra: ## Start infrastructure services only
-	@echo " Starting infrastructure services..."
+dev-infra: ## Start infrastructure services only (production mode)
+	@echo " Starting infrastructure services (production mode)..."
 	@$(COMPOSE_ALL) up -d neo4j postgres redis minio minio-setup ray-head ray-worker agent-actor-worker
 	@echo " Infrastructure services started"
 	@echo "   Neo4j: http://localhost:7474"
@@ -345,6 +353,26 @@ dev-infra: ## Start infrastructure services only
 	@echo "   Redis: localhost:6379"
 	@echo "   MinIO: http://localhost:9000 (console: http://localhost:9001)"
 	@echo "   Ray Dashboard: http://localhost:8265"
+	@echo ""
+	@echo " Start observability stack with: make obs-start"
+	@echo " Note: For development with hot reload, use: make dev-infra-dev"
+
+dev-infra-dev: ## Start infrastructure with Ray in development mode (live code reload)
+	@echo " Starting infrastructure services with Ray development mode..."
+	@echo "   Ray services will use local code with hot reload"
+	@$(COMPOSE_CMD) up -d neo4j postgres redis minio minio-setup
+	@$(COMPOSE_RAY_DEV_CMD) up -d ray-head ray-worker
+	@$(COMPOSE_ALL) up -d agent-actor-worker
+	@echo " Infrastructure services started"
+	@echo "   Neo4j: http://localhost:7474"
+	@echo "   Postgres: localhost:5432"
+	@echo "   Redis: localhost:6379"
+	@echo "   MinIO: http://localhost:9000 (console: http://localhost:9001)"
+	@echo "   Ray Dashboard: http://localhost:8265"
+	@echo ""
+	@echo " Ray Development Mode:"
+	@echo "   - Code changes are reflected immediately (no rebuild needed)"
+	@echo "   - Use 'make ray-reload' to restart Ray services if needed"
 	@echo ""
 	@echo " Start observability stack with: make obs-start"
 
@@ -490,14 +518,18 @@ hooks-uninstall: ## Uninstall git hooks (restore default hooks path)
 
 db-init: ## Initialize database (create if not exists)
 	@echo "  Initializing database..."
+	@echo " Enabling pgvector extension..."
+	@docker compose exec -T postgres psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null || true
 	@if docker compose exec -T postgres psql -U postgres -lqt | grep -q memstack; then \
 		echo " Database 'memstack' already exists"; \
 	else \
 		echo "Creating database 'memstack'..."; \
 		docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE memstack;"; \
+		echo " Enabling pgvector extension in memstack database..."; \
+		docker compose exec -T postgres psql -U postgres -d memstack -c "CREATE EXTENSION IF NOT EXISTS vector;" 2>/dev/null || true; \
 		echo " Database created"; \
 	fi
-	@echo " Database ready (Run 'make db-schema' to initialize schema)"
+	@echo " Database ready (Run 'make db-schema' or 'make db-migrate' to initialize schema)"
 
 db-reset: ## Reset database (WARNING: deletes all data)
 	@echo "  WARNING: This will delete all data!"
@@ -508,6 +540,8 @@ db-reset: ## Reset database (WARNING: deletes all data)
 		docker compose exec -T postgres psql -U postgres -c "DROP DATABASE IF EXISTS memstack;"; \
 		echo " Creating new database..."; \
 		docker compose exec -T postgres psql -U postgres -c "CREATE DATABASE memstack;"; \
+		echo " Enabling pgvector extension..."; \
+		docker compose exec -T postgres psql -U postgres -d memstack -c "CREATE EXTENSION IF NOT EXISTS vector;"; \
 		echo " Initializing schema..."; \
 		$(MAKE) db-schema; \
 		echo " Database reset completed"; \
@@ -578,15 +612,40 @@ docker-down: ## Stop all Docker services
 	@$(COMPOSE_ALL) down
 	@echo " Docker services stopped"
 
-ray-up: ## Start Ray cluster
-	@echo " Starting Ray cluster..."
+ray-up: ## Start Ray cluster (production mode - uses built images)
+	@echo " Starting Ray cluster (production mode)..."
 	@$(COMPOSE_ALL) up -d ray-head ray-worker
 	@echo " Ray cluster started"
 	@echo "   Ray Dashboard: http://localhost:8265"
 
+ray-up-dev: ## Start Ray cluster in development mode (with live code reloading)
+	@echo " Starting Ray cluster in development mode..."
+	@echo "   - Local code changes will be reflected immediately"
+	@echo "   - No need to rebuild images during development"
+	@$(COMPOSE_RAY_DEV_CMD) up -d ray-head ray-worker
+	@echo " Ray cluster started (development mode)"
+	@echo "   Ray Dashboard: http://localhost:8265"
+	@echo "   Tip: Use 'make ray-reload' to restart services after code changes"
+
+ray-reload: ## Reload Ray services to pick up code changes (faster than rebuild)
+	@echo " Reloading Ray services..."
+	@$(COMPOSE_RAY_DEV_CMD) restart ray-head ray-worker
+	@echo " Ray services reloaded"
+	@echo "   Current code changes are now active"
+
+ray-rebuild: ## Rebuild Ray images (use when dependencies change)
+	@echo " Rebuilding Ray images..."
+	@$(COMPOSE_ALL) build --no-cache ray-head ray-worker
+	@echo " Ray images rebuilt"
+	@echo "   Start with: make ray-up or make ray-up-dev"
+
+ray-logs: ## Show Ray service logs
+	@$(COMPOSE_ALL) logs -f ray-head ray-worker
+
 ray-down: ## Stop Ray cluster
 	@echo " Stopping Ray cluster..."
 	@$(COMPOSE_ALL) stop ray-head ray-worker 2>/dev/null || true
+	@$(COMPOSE_RAY_DEV_CMD) stop ray-head ray-worker 2>/dev/null || true
 	@echo " Ray cluster stopped"
 
 agent-actor-up: ## Start agent actor worker

@@ -18,6 +18,11 @@ from sqlalchemy import (
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
+try:
+    from pgvector.sqlalchemy import Vector
+except ImportError:
+    Vector = None
+
 from src.domain.model.enums import DataStatus, ProcessingStatus
 
 
@@ -1484,4 +1489,48 @@ class MCPAppModel(Base):
     __table_args__ = (
         UniqueConstraint("project_id", "server_name", "tool_name", name="uq_mcp_app_project_server_tool"),
         Index("ix_mcp_apps_project_status", "project_id", "status"),
+    )
+
+
+class MemoryChunk(Base):
+    """Chunked memory content for hybrid search (pgvector + FTS).
+
+    Stores text chunks from memories, conversations, and episodes
+    with vector embeddings and tsvector for full-text search.
+    """
+
+    __tablename__ = "memory_chunks"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.id"), nullable=False
+    )
+    source_type: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # memory, conversation, episode
+    source_id: Mapped[str] = mapped_column(String, nullable=False)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    embedding: Mapped[Optional[list]] = mapped_column(
+        Vector(1024) if Vector else JSON, nullable=True
+    )
+    metadata_: Mapped[dict] = mapped_column(
+        "metadata", JSON, default=dict
+    )
+    importance: Mapped[float] = mapped_column(Float, default=0.5)
+    category: Mapped[str] = mapped_column(
+        String(20), default="other"
+    )  # preference, fact, decision, entity, other
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    project: Mapped["Project"] = relationship(foreign_keys=[project_id])
+
+    __table_args__ = (
+        Index("ix_chunks_project_source", "project_id", "source_type"),
+        Index("ix_chunks_content_hash", "content_hash"),
     )

@@ -47,6 +47,7 @@ import { ThinkingBlock } from './chat/ThinkingBlock';
 import { MessageBubble } from './MessageBubble';
 import { MARKDOWN_PROSE_CLASSES } from './styles';
 import { ExecutionTimeline } from './timeline/ExecutionTimeline';
+import { MemoryRecalledStep, MemoryCapturedStep } from './timeline/MemoryRecalledStep';
 import { SubAgentTimeline } from './timeline/SubAgentTimeline';
 
 import type { TimelineStep } from './timeline/ExecutionTimeline';
@@ -1330,6 +1331,36 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                     );
                   }
                   const { event, index } = item;
+
+                  // Memory events: render as compact timeline steps
+                  if (event.type === 'memory_recalled' || event.type === 'memory_captured') {
+                    return (
+                      <div
+                        key={event.id || `event-${index}`}
+                        data-index={virtualRow.index}
+                        ref={virtualizer.measureElement}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        <div className="flex items-start gap-3 mb-1.5">
+                          <div className="w-8 shrink-0" />
+                          <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+                            {event.type === 'memory_recalled' ? (
+                              <MemoryRecalledStep event={event as any} />
+                            ) : (
+                              <MemoryCapturedStep event={event as any} />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
                   const isFocused = focusedMsgIndex === virtualRow.index;
                   return (
                     <div

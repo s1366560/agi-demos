@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
@@ -28,6 +28,34 @@ from src.infrastructure.adapters.secondary.persistence.models import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def _background_index_memory(
+    memory_id: str,
+    content: str,
+    project_id: str,
+    category: str = "other",
+) -> None:
+    """Index a memory's content as chunks in the background."""
+    try:
+        from src.application.services.memory_index_service import MemoryIndexService
+        from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+        from src.infrastructure.adapters.secondary.persistence.sql_chunk_repository import (
+            SqlChunkRepository,
+        )
+
+        async with async_session_factory() as session:
+            chunk_repo = SqlChunkRepository(session)
+            # Use basic embedding (no Redis cache in background task for simplicity)
+            from src.infrastructure.llm.embedding_service import EmbeddingService
+
+            embedding_service = EmbeddingService()
+            index_service = MemoryIndexService(chunk_repo, embedding_service)
+            count = await index_service.index_memory(memory_id, content, project_id, category)
+            await session.commit()
+            logger.info(f"Background indexed memory {memory_id}: {count} chunks")
+    except Exception as e:
+        logger.warning(f"Background memory indexing failed for {memory_id}: {e}")
 
 router = APIRouter(prefix="/api/v1", tags=["memories"])
 
@@ -184,6 +212,7 @@ async def extract_relationships(
 async def create_memory(
     memory_data: MemoryCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     graphiti_client=Depends(get_graphiti_client),
@@ -350,10 +379,18 @@ async def create_memory(
             #
             # Mark memory as failed so user knows processing didn't start
             memory.processing_status = "FAILED"
-            memory.processing_error = f"Failed to queue for processing: {str(e)}"
+            memory.processing_error = f"Failed to queue for processing: {e!s}"
 
         await db.commit()
         await db.refresh(memory)
+
+        # Auto-index memory content as chunks (non-blocking)
+        background_tasks.add_task(
+            _background_index_memory,
+            memory_id=memory.id,
+            content=memory_data.content,
+            project_id=project_id,
+        )
 
         return MemoryResponse.from_orm(memory)
     except HTTPException:
@@ -788,7 +825,7 @@ async def update_memory(
             # content update to succeed even if reprocessing fails. This is better
             # than rolling back the content changes.
             memory.processing_status = "FAILED"
-            memory.processing_error = f"Reprocessing failed: {str(e)}"
+            memory.processing_error = f"Reprocessing failed: {e!s}"
             logger.error(
                 f"Failed to trigger reprocessing for memory {memory.id}: {e}. "
                 "Content was updated but knowledge graph won't reflect changes.",

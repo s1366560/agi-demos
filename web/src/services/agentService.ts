@@ -119,6 +119,8 @@ import type {
   TaskUpdatedEventData,
   TaskStartEventData,
   TaskCompleteEventData,
+  MemoryRecalledEventData,
+  MemoryCapturedEventData,
 } from '../types/agent';
 
 // Use centralized HTTP client for REST API calls
@@ -938,6 +940,13 @@ class AgentServiceImpl implements AgentService {
         break;
       case 'mcp_app_registered':
         handler.onMCPAppRegistered?.(event as AgentEvent<Record<string, unknown>>);
+        break;
+      // Memory events (auto-recall / auto-capture)
+      case 'memory_recalled':
+        handler.onMemoryRecalled?.(event as AgentEvent<MemoryRecalledEventData>);
+        break;
+      case 'memory_captured':
+        handler.onMemoryCaptured?.(event as AgentEvent<MemoryCapturedEventData>);
         break;
     }
   }

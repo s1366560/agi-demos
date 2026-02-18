@@ -62,6 +62,8 @@ import type {
   BackgroundLaunchedEventData,
   TaskStartEventData,
   TaskCompleteEventData,
+  MemoryRecalledEventData,
+  MemoryCapturedEventData,
 } from '../types/agent';
 import type { EventEnvelope } from '../types/generated/eventEnvelope';
 
@@ -787,6 +789,34 @@ export function sseEventToTimeline(
     case 'skill_tool_result':
     case 'skill_execution_complete':
     case 'skill_fallback':
+    case 'memory_recalled': {
+      const data = event.data as unknown as MemoryRecalledEventData;
+      return {
+        id: generateTimelineEventId('memory_recalled'),
+        type: 'memory_recalled' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        memories: data.memories ?? [],
+        count: data.count ?? 0,
+        searchMs: data.search_ms ?? 0,
+      };
+    }
+
+    case 'memory_captured': {
+      const data = event.data as unknown as MemoryCapturedEventData;
+      return {
+        id: generateTimelineEventId('memory_captured'),
+        type: 'memory_captured' as const,
+        eventTimeUs,
+        eventCounter,
+        timestamp,
+        capturedCount: data.captured_count ?? 0,
+        categories: data.categories ?? [],
+      };
+    }
+
+    // Events that don't need timeline representation
     case 'pattern_match':
     case 'context_compressed':
     case 'context_status':
