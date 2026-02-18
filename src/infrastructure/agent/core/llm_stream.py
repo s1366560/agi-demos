@@ -545,7 +545,7 @@ class LLMStream:
         kwargs["messages"] = messages
 
         # Clamp max_tokens to model-specific limits
-        from src.infrastructure.llm.litellm.litellm_client import _clamp_max_tokens
+        from src.infrastructure.llm.model_registry import clamp_max_tokens as _clamp_max_tokens
 
         if "max_tokens" in kwargs:
             kwargs["max_tokens"] = _clamp_max_tokens(kwargs["model"], kwargs["max_tokens"])

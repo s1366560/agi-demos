@@ -71,30 +71,39 @@ async def create_native_graph_adapter(
 
 
 async def _create_embedding_service(settings, tenant_id: Optional[str] = None):
-    """
-    Create embedding service based on provider configuration.
+    """Create embedding service, preferring DB-resolved provider config.
 
-    Uses LiteLLM for all embedding operations.
-
-    Args:
-        settings: Application settings
-        tenant_id: Optional tenant ID for provider resolution
-
-    Returns:
-        Configured EmbeddingService instance
+    Falls back to ``.env``-based ``LiteLLMEmbedderConfig`` when the database
+    has no active provider (e.g. first-run before ``make db-init``).
     """
     from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
+
+    # --- Try DB resolution first ----------------------------------------
+    if settings.use_db_provider_resolution:
+        try:
+            from src.infrastructure.llm.provider_factory import get_ai_service_factory
+
+            factory = get_ai_service_factory()
+            provider_config = await factory.resolve_provider(tenant_id)
+            embedding_service = factory.create_embedding_service(provider_config)
+            logger.info(
+                f"EmbeddingService created from DB provider: "
+                f"{provider_config.provider_type}, "
+                f"model={provider_config.embedding_model}"
+            )
+            return embedding_service
+        except Exception as e:
+            logger.warning(f"DB provider resolution failed, falling back to .env: {e}")
+
+    # --- Fallback: build from .env settings -----------------------------
     from src.infrastructure.llm.litellm.litellm_embedder import (
         LiteLLMEmbedder,
         LiteLLMEmbedderConfig,
     )
 
     provider = settings.llm_provider.strip().lower()
-
-    # Determine embedding dimension and model based on provider
     embedding_dim = EMBEDDING_DIMS.get(provider, 1024)
 
-    # Get embedding model and API key for provider
     if provider == "qwen":
         embedding_model = settings.qwen_embedding_model or "text-embedding-v3"
         api_key = settings.qwen_api_key
@@ -116,7 +125,6 @@ async def _create_embedding_service(settings, tenant_id: Optional[str] = None):
         api_key = settings.zai_api_key or settings.zhipu_api_key
         base_url = settings.zai_base_url or settings.zhipu_base_url
     elif provider == "deepseek":
-        # Deepseek doesn't have embedding API, use Qwen as fallback
         embedding_model = settings.qwen_embedding_model or "text-embedding-v3"
         api_key = settings.qwen_api_key
         base_url = settings.qwen_base_url
@@ -126,24 +134,21 @@ async def _create_embedding_service(settings, tenant_id: Optional[str] = None):
         api_key = getattr(settings, "cohere_api_key", None)
         base_url = None
     else:
-        # Default to Qwen for unknown providers
         embedding_model = settings.qwen_embedding_model or "text-embedding-v3"
         api_key = settings.qwen_api_key
         base_url = settings.qwen_base_url
 
-    # Create LiteLLM embedder config
     from src.domain.llm_providers.models import ProviderType
 
-    # Map provider string to ProviderType
     provider_type_map = {
         "qwen": ProviderType.QWEN,
         "openai": ProviderType.OPENAI,
         "gemini": ProviderType.GEMINI,
         "zai": ProviderType.ZAI,
         "zhipu": ProviderType.ZAI,
-        "deepseek": ProviderType.QWEN,  # Uses Qwen for embedding
+        "deepseek": ProviderType.QWEN,
         "cohere": ProviderType.COHERE,
-        "anthropic": ProviderType.QWEN,  # Uses Qwen for embedding
+        "anthropic": ProviderType.QWEN,
     }
 
     config = LiteLLMEmbedderConfig(
@@ -154,49 +159,60 @@ async def _create_embedding_service(settings, tenant_id: Optional[str] = None):
         provider_type=provider_type_map.get(provider, ProviderType.QWEN),
     )
     embedder = LiteLLMEmbedder(config=config)
-
-    # Create EmbeddingService wrapper
     embedding_service = EmbeddingService(embedder=embedder)
 
     logger.info(
-        f"EmbeddingService created with LiteLLM: provider={provider}, model={embedding_model}, dim={embedding_dim}"
+        f"EmbeddingService created from .env: provider={provider}, "
+        f"model={embedding_model}, dim={embedding_dim}"
     )
     return embedding_service
 
 
 def create_llm_client(tenant_id: Optional[str] = None) -> LLMClient:
-    """
-    Create a unified LLM client backed by LiteLLM.
+    """Create a unified LLM client, preferring DB-resolved provider config.
 
-    This function returns a UnifiedLLMClient adapter that wraps
-    LiteLLMClient, providing unified multi-provider support through
-    the domain's standard LLMClient interface.
-
-    Args:
-        tenant_id: Optional tenant ID for multi-tenant provider resolution
-
-    Returns:
-        Unified LLM client backed by LiteLLM
+    Falls back to ``.env``-based config when DB has no active provider.
     """
     from src.infrastructure.llm.litellm.litellm_client import create_litellm_client
     from src.infrastructure.llm.litellm.unified_llm_client import UnifiedLLMClient
 
     settings = get_settings()
+
+    # --- Try DB resolution first ----------------------------------------
+    if settings.use_db_provider_resolution:
+        try:
+            from src.infrastructure.llm.provider_factory import get_ai_service_factory
+
+            factory = get_ai_service_factory()
+            # resolve_provider is async; use sync wrapper for backward compat
+            import asyncio
+
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                # Already in an async context -- caller should use async path
+                pass
+            else:
+                provider_config = asyncio.run(factory.resolve_provider(tenant_id))
+                client = factory.create_unified_llm_client(provider_config)
+                logger.info(
+                    f"LLM client created from DB: {provider_config.provider_type}, "
+                    f"model={provider_config.llm_model}"
+                )
+                return client
+        except Exception as e:
+            logger.warning(f"DB provider resolution failed for LLM, falling back to .env: {e}")
+
+    # --- Fallback: build from .env settings -----------------------------
     provider = settings.llm_provider.strip().lower()
-
-    # Build ProviderConfig from settings
     provider_config = _build_provider_config_from_settings(settings, provider)
-
-    # Create LiteLLM client
     litellm_client = create_litellm_client(provider_config)
 
-    logger.info(f"Creating unified LLM client via LiteLLM adapter (provider: {provider})")
-
-    # Return wrapped adapter
-    return UnifiedLLMClient(
-        litellm_client=litellm_client,
-        temperature=0.7,
-    )
+    logger.info(f"LLM client created from .env (provider: {provider})")
+    return UnifiedLLMClient(litellm_client=litellm_client, temperature=0.7)
 
 
 # Deprecated: Use create_llm_client instead
@@ -243,6 +259,7 @@ def _build_provider_config_from_settings(settings, provider: str):
             "model": settings.qwen_model,
             "small_model": getattr(settings, "qwen_small_model", None),
             "base_url": settings.qwen_base_url,
+            "embedding_model": getattr(settings, "qwen_embedding_model", None),
         },
         "openai": {
             "provider_type": ProviderType.OPENAI,
@@ -250,6 +267,7 @@ def _build_provider_config_from_settings(settings, provider: str):
             "model": settings.openai_model,
             "small_model": getattr(settings, "openai_small_model", None),
             "base_url": settings.openai_base_url,
+            "embedding_model": getattr(settings, "openai_embedding_model", None),
         },
         "gemini": {
             "provider_type": ProviderType.GEMINI,
@@ -257,6 +275,7 @@ def _build_provider_config_from_settings(settings, provider: str):
             "model": settings.gemini_model,
             "small_model": getattr(settings, "gemini_small_model", None),
             "base_url": None,
+            "embedding_model": getattr(settings, "gemini_embedding_model", None),
         },
         "zai": {
             "provider_type": ProviderType.ZAI,
@@ -264,6 +283,11 @@ def _build_provider_config_from_settings(settings, provider: str):
             "model": settings.zai_model or settings.zhipu_model,
             "small_model": getattr(settings, "zai_small_model", None),
             "base_url": settings.zai_base_url or settings.zhipu_base_url,
+            "embedding_model": getattr(
+                settings,
+                "zai_embedding_model",
+                getattr(settings, "zhipu_embedding_model", None),
+            ),
         },
         "zhipu": {
             "provider_type": ProviderType.ZAI,
@@ -271,6 +295,11 @@ def _build_provider_config_from_settings(settings, provider: str):
             "model": settings.zai_model or settings.zhipu_model,
             "small_model": getattr(settings, "zai_small_model", None),
             "base_url": settings.zai_base_url or settings.zhipu_base_url,
+            "embedding_model": getattr(
+                settings,
+                "zai_embedding_model",
+                getattr(settings, "zhipu_embedding_model", None),
+            ),
         },
         "deepseek": {
             "provider_type": ProviderType.DEEPSEEK,
@@ -278,6 +307,7 @@ def _build_provider_config_from_settings(settings, provider: str):
             "model": settings.deepseek_model,
             "small_model": getattr(settings, "deepseek_small_model", None),
             "base_url": settings.deepseek_base_url,
+            "embedding_model": getattr(settings, "qwen_embedding_model", None),
         },
         "anthropic": {
             "provider_type": ProviderType.ANTHROPIC,
@@ -285,6 +315,7 @@ def _build_provider_config_from_settings(settings, provider: str):
             "model": getattr(settings, "anthropic_model", "claude-3-sonnet-20240229"),
             "small_model": getattr(settings, "anthropic_small_model", None),
             "base_url": getattr(settings, "anthropic_base_url", None),
+            "embedding_model": getattr(settings, "qwen_embedding_model", None),
         },
     }
 
@@ -308,6 +339,7 @@ def _build_provider_config_from_settings(settings, provider: str):
         api_key_encrypted=api_key_encrypted,
         llm_model=config["model"] or "gpt-4",
         llm_small_model=config["small_model"],
+        embedding_model=config.get("embedding_model"),
         base_url=config["base_url"],
         is_active=True,
         is_default=True,

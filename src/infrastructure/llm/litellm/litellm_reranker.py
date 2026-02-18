@@ -16,7 +16,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from src.domain.llm_providers.base import BaseReranker
 from src.domain.llm_providers.llm_types import RateLimitError
@@ -94,50 +94,21 @@ class LiteLLMReranker(BaseReranker):
 
         self._use_native_rerank = self._provider_type in NATIVE_RERANK_PROVIDERS
 
-        # Configure LiteLLM
-        self._configure_litellm()
+        logger.debug(
+            f"LiteLLM reranker initialized: provider={self._provider_type}, "
+            f"model={self._model}, native={self._use_native_rerank}"
+        )
 
     def _get_default_model(self, provider_type: ProviderType) -> str:
         """Get default rerank model for provider."""
         return DEFAULT_RERANK_MODELS.get(provider_type, "gpt-4o-mini")
 
     def _configure_litellm(self):
-        """Configure LiteLLM with provider credentials."""
-        import os
+        """No-op. Kept for backward compatibility.
 
-        if not self._api_key:
-            logger.warning("No API key provided for reranker")
-            return
-
-        provider_type = self._provider_type.value if self._provider_type else "openai"
-
-        # Set environment variable for this provider type
-        if provider_type == "openai":
-            os.environ["OPENAI_API_KEY"] = self._api_key
-            if self._base_url:
-                os.environ["OPENAI_API_BASE"] = self._base_url
-        elif provider_type == "cohere":
-            os.environ["COHERE_API_KEY"] = self._api_key
-        elif provider_type == "qwen":
-            os.environ["DASHSCOPE_API_KEY"] = self._api_key
-            if self._base_url:
-                os.environ["OPENAI_BASE_URL"] = self._base_url
-        elif provider_type == "gemini":
-            os.environ["GOOGLE_API_KEY"] = self._api_key
-        elif provider_type == "zai":
-            os.environ["ZAI_API_KEY"] = self._api_key
-            if self._base_url:
-                os.environ["ZAI_API_BASE"] = self._base_url
-        elif provider_type == "deepseek":
-            os.environ["DEEPSEEK_API_KEY"] = self._api_key
-            if self._base_url:
-                os.environ["DEEPSEEK_API_BASE"] = self._base_url
-        elif provider_type == "anthropic":
-            os.environ["ANTHROPIC_API_KEY"] = self._api_key
-        elif provider_type == "mistral":
-            os.environ["MISTRAL_API_KEY"] = self._api_key
-
-        logger.debug(f"Configured LiteLLM reranker for provider: {provider_type}")
+        API key is now passed per-request via the ``api_key`` parameter
+        instead of polluting ``os.environ``.
+        """
 
     async def rank(
         self,
@@ -204,7 +175,8 @@ class LiteLLMReranker(BaseReranker):
                 "documents": passages,
                 "top_n": top_n,
             }
-            # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
+            if self._api_key:
+                rerank_kwargs["api_key"] = self._api_key
             if self._base_url:
                 rerank_kwargs["api_base"] = self._base_url
 
@@ -277,7 +249,8 @@ class LiteLLMReranker(BaseReranker):
                 "temperature": 0,
                 "response_format": {"type": "json_object"},
             }
-            # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
+            if self._api_key:
+                completion_kwargs["api_key"] = self._api_key
             if self._base_url:
                 completion_kwargs["api_base"] = self._base_url
 

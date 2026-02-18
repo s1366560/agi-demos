@@ -1,0 +1,151 @@
+"""Unified AI Service Factory.
+
+Creates LLM clients, embedders, and rerankers from database-resolved
+provider configuration. This is the single entry point that replaces
+the scattered creation logic in ``factories.py``.
+
+All services share the same ``ProviderConfig`` resolved via
+``ProviderResolutionService``, ensuring consistent API key usage and
+multi-tenant isolation.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+from src.application.services.provider_resolution_service import (
+    ProviderResolutionService,
+    get_provider_resolution_service,
+)
+from src.domain.llm_providers.models import ProviderConfig
+
+logger = logging.getLogger(__name__)
+
+
+class AIServiceFactory:
+    """Create AI services (LLM, embedding, rerank) from DB provider config.
+
+    Usage::
+
+        factory = AIServiceFactory()
+        provider = await factory.resolve_provider(tenant_id)
+        llm = factory.create_llm_client(provider)
+        embedder = factory.create_embedder(provider)
+        reranker = factory.create_reranker(provider)
+    """
+
+    def __init__(
+        self,
+        resolution_service: Optional[ProviderResolutionService] = None,
+    ) -> None:
+        self._resolution = resolution_service or get_provider_resolution_service()
+
+    async def resolve_provider(
+        self,
+        tenant_id: Optional[str] = None,
+    ) -> ProviderConfig:
+        """Resolve the active provider config from the database."""
+        return await self._resolution.resolve_provider(tenant_id)
+
+    # ------------------------------------------------------------------
+    # LLM Client
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def create_llm_client(
+        provider_config: ProviderConfig,
+        cache: Optional[bool] = None,
+    ):
+        """Create a ``LiteLLMClient`` from a resolved provider config.
+
+        Returns:
+            Configured ``LiteLLMClient`` instance.
+        """
+        from src.infrastructure.llm.litellm.litellm_client import create_litellm_client
+
+        return create_litellm_client(provider_config, cache=cache)
+
+    @staticmethod
+    def create_unified_llm_client(
+        provider_config: ProviderConfig,
+        temperature: float = 0.7,
+    ):
+        """Create a ``UnifiedLLMClient`` that wraps LiteLLMClient.
+
+        Returns:
+            ``UnifiedLLMClient`` with the domain ``LLMClient`` interface.
+        """
+        from src.infrastructure.llm.litellm.litellm_client import create_litellm_client
+        from src.infrastructure.llm.litellm.unified_llm_client import UnifiedLLMClient
+
+        litellm_client = create_litellm_client(provider_config)
+        return UnifiedLLMClient(litellm_client=litellm_client, temperature=temperature)
+
+    # ------------------------------------------------------------------
+    # Embedder
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def create_embedder(
+        provider_config: ProviderConfig,
+        embedding_dim: Optional[int] = None,
+    ):
+        """Create a ``LiteLLMEmbedder`` from a resolved provider config.
+
+        The embedder uses ``ProviderConfig.embedding_model`` (falls back to
+        the provider's default if not set) and passes the decrypted API key
+        per-request — no global ``os.environ`` mutation.
+
+        Returns:
+            Configured ``LiteLLMEmbedder`` instance.
+        """
+        from src.infrastructure.llm.litellm.litellm_embedder import LiteLLMEmbedder
+
+        return LiteLLMEmbedder(config=provider_config, embedding_dim=embedding_dim)
+
+    @staticmethod
+    def create_embedding_service(
+        provider_config: ProviderConfig,
+        embedding_dim: Optional[int] = None,
+    ):
+        """Create an ``EmbeddingService`` wrapping a LiteLLM embedder.
+
+        Returns:
+            ``EmbeddingService`` with the unified graph embedding interface.
+        """
+        from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
+        from src.infrastructure.llm.litellm.litellm_embedder import LiteLLMEmbedder
+
+        embedder = LiteLLMEmbedder(config=provider_config, embedding_dim=embedding_dim)
+        return EmbeddingService(embedder=embedder)
+
+    # ------------------------------------------------------------------
+    # Reranker
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def create_reranker(
+        provider_config: ProviderConfig,
+    ):
+        """Create a ``LiteLLMReranker`` from a resolved provider config.
+
+        Returns:
+            Configured ``LiteLLMReranker`` instance.
+        """
+        from src.infrastructure.llm.litellm.litellm_reranker import LiteLLMReranker
+
+        return LiteLLMReranker(config=provider_config)
+
+
+# Module-level convenience ------------------------------------------------
+
+_factory: Optional[AIServiceFactory] = None
+
+
+def get_ai_service_factory() -> AIServiceFactory:
+    """Return the module-level ``AIServiceFactory`` singleton."""
+    global _factory
+    if _factory is None:
+        _factory = AIServiceFactory()
+    return _factory

@@ -19,6 +19,9 @@ from src.domain.llm_providers.llm_types import (
     RateLimitError,
 )
 from src.domain.llm_providers.models import ProviderConfig
+from src.infrastructure.llm.model_registry import (
+    clamp_max_tokens as _clamp_max_tokens,
+)
 from src.infrastructure.llm.resilience import (
     get_circuit_breaker_registry,
     get_provider_rate_limiter,
@@ -26,96 +29,6 @@ from src.infrastructure.llm.resilience import (
 from src.infrastructure.security.encryption_service import get_encryption_service
 
 logger = logging.getLogger(__name__)
-
-# Known max output token limits per model family.
-# Used to clamp max_tokens before sending to the provider.
-_MODEL_MAX_OUTPUT_TOKENS: dict[str, int] = {
-    # Qwen / Dashscope
-    "qwen-max": 8192,
-    "qwen-plus": 8192,
-    "qwen-turbo": 8192,
-    "qwen-long": 8192,
-    "qwen-vl-max": 8192,
-    "qwen-vl-plus": 8192,
-    # Deepseek
-    "deepseek-chat": 8192,
-    "deepseek-coder": 8192,
-    "deepseek-reasoner": 8192,
-    # ZhipuAI
-    "glm-4": 4096,
-    "glm-4-flash": 4096,
-    # Kimi / Moonshot
-    "moonshot-v1-8k": 8192,
-    "moonshot-v1-32k": 8192,
-    "moonshot-v1-128k": 8192,
-}
-
-# Known context window sizes (total input + output) per model.
-# Used to set max_context_tokens for the compression engine.
-_MODEL_CONTEXT_WINDOW: dict[str, int] = {
-    # Qwen / Dashscope
-    "qwen-max": 32768,
-    "qwen-plus": 131072,
-    "qwen-turbo": 131072,
-    "qwen-long": 1000000,
-    "qwen-vl-max": 32768,
-    "qwen-vl-plus": 32768,
-    # Deepseek
-    "deepseek-chat": 65536,
-    "deepseek-coder": 65536,
-    "deepseek-reasoner": 65536,
-    # ZhipuAI
-    "glm-4": 128000,
-    "glm-4-flash": 128000,
-    # Kimi / Moonshot
-    "moonshot-v1-8k": 8192,
-    "moonshot-v1-32k": 32768,
-    "moonshot-v1-128k": 131072,
-    # OpenAI
-    "gpt-4o": 128000,
-    "gpt-4o-mini": 128000,
-    "gpt-4-turbo": 128000,
-    "gpt-4": 8192,
-    # Anthropic
-    "claude-3-5-sonnet-20241022": 200000,
-    "claude-3-5-haiku-20241022": 200000,
-    "claude-3-opus-20240229": 200000,
-    # Gemini
-    "gemini-1.5-pro": 2097152,
-    "gemini-1.5-flash": 1048576,
-    "gemini-2.0-flash": 1048576,
-}
-
-_DEFAULT_CONTEXT_WINDOW = 128000
-
-
-def _strip_provider_prefix(model: str) -> str:
-    """Strip provider prefix (e.g. 'dashscope/qwen-max' -> 'qwen-max')."""
-    return model.split("/", 1)[-1] if "/" in model else model
-
-
-def _clamp_max_tokens(model: str, max_tokens: int) -> int:
-    """Clamp max_tokens to model-specific limits.
-
-    Strips provider prefix (e.g. 'dashscope/qwen-max' -> 'qwen-max') before
-    lookup. Returns original value if no known limit exists.
-    """
-    bare_model = _strip_provider_prefix(model)
-    limit = _MODEL_MAX_OUTPUT_TOKENS.get(bare_model)
-    if limit and max_tokens > limit:
-        logger.debug(f"Clamping max_tokens {max_tokens} -> {limit} for model {model}")
-        return limit
-    return max_tokens
-
-
-def get_model_context_window(model: str) -> int:
-    """Get the context window size for a model.
-
-    Returns the known context window (input + output tokens) or the default
-    (128000) if the model is not in the lookup table.
-    """
-    bare_model = _strip_provider_prefix(model)
-    return _MODEL_CONTEXT_WINDOW.get(bare_model, _DEFAULT_CONTEXT_WINDOW)
 
 
 class LiteLLMClient(LLMClient):

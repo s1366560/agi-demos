@@ -17,7 +17,7 @@ Supported Providers:
 
 import logging
 from dataclasses import dataclass
-from typing import Iterable, List, Optional
+from typing import Any, Iterable, List, Optional
 
 from src.domain.llm_providers.base import BaseEmbedder
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
@@ -127,8 +127,10 @@ class LiteLLMEmbedder(BaseEmbedder):
             encryption_service = get_encryption_service()
             self._api_key = encryption_service.decrypt(config.api_key_encrypted)
 
-        # Configure LiteLLM for embeddings
-        self._configure_litellm()
+        logger.debug(
+            f"LiteLLM embedder initialized: provider={self._provider_type}, "
+            f"model={self._embedding_model}, dim={self._embedding_dim}"
+        )
 
     def _get_default_model(self, provider_type: ProviderType) -> str:
         """Get default embedding model for provider."""
@@ -154,47 +156,11 @@ class LiteLLMEmbedder(BaseEmbedder):
         return self._embedding_dim
 
     def _configure_litellm(self):
-        """Configure LiteLLM with provider credentials."""
-        import os
+        """No-op. Kept for backward compatibility.
 
-        if not self._api_key:
-            logger.warning("No API key provided for embedding")
-            return
-
-        provider_type = self._provider_type.value if self._provider_type else "openai"
-
-        # Set environment variable for this provider type
-        if provider_type == "openai":
-            os.environ["OPENAI_API_KEY"] = self._api_key
-            if self._base_url:
-                os.environ["OPENAI_API_BASE"] = self._base_url
-        elif provider_type == "qwen":
-            os.environ["DASHSCOPE_API_KEY"] = self._api_key
-            if self._base_url:
-                os.environ["OPENAI_BASE_URL"] = self._base_url
-        elif provider_type == "gemini":
-            os.environ["GOOGLE_API_KEY"] = self._api_key
-            os.environ["GEMINI_API_KEY"] = self._api_key
-        elif provider_type == "zai":
-            os.environ["ZAI_API_KEY"] = self._api_key
-            if self._base_url:
-                os.environ["ZAI_API_BASE"] = self._base_url
-        elif provider_type == "deepseek":
-            os.environ["DEEPSEEK_API_KEY"] = self._api_key
-            if self._base_url:
-                os.environ["DEEPSEEK_API_BASE"] = self._base_url
-        elif provider_type == "cohere":
-            os.environ["COHERE_API_KEY"] = self._api_key
-        elif provider_type == "mistral":
-            os.environ["MISTRAL_API_KEY"] = self._api_key
-        elif provider_type == "anthropic":
-            os.environ["ANTHROPIC_API_KEY"] = self._api_key
-        elif provider_type == "azure_openai":
-            os.environ["AZURE_API_KEY"] = self._api_key
-            if self._base_url:
-                os.environ["AZURE_API_BASE"] = self._base_url
-
-        logger.debug(f"Configured LiteLLM embedder for provider: {provider_type}")
+        API key is now passed per-request via the ``api_key`` parameter to
+        ``litellm.aembedding()`` instead of polluting ``os.environ``.
+        """
 
     def _get_litellm_model_name(self) -> str:
         """Get model name in LiteLLM format."""
@@ -274,6 +240,9 @@ class LiteLLMEmbedder(BaseEmbedder):
                 "model": model,
                 "input": texts,
             }
+            # Pass api_key directly (no env var pollution)
+            if self._api_key:
+                embedding_kwargs["api_key"] = self._api_key
             # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
             if self._base_url:
                 embedding_kwargs["api_base"] = self._base_url
@@ -336,10 +305,16 @@ class LiteLLMEmbedder(BaseEmbedder):
 
         # Call LiteLLM embedding with batch
         try:
-            response = await litellm.aembedding(
-                model=model,
-                input=input_data_list,
-            )
+            batch_kwargs: dict[str, Any] = {
+                "model": model,
+                "input": input_data_list,
+            }
+            if self._api_key:
+                batch_kwargs["api_key"] = self._api_key
+            if self._base_url:
+                batch_kwargs["api_base"] = self._base_url
+
+            response = await litellm.aembedding(**batch_kwargs)
 
             embeddings = [item.embedding for item in response.data]
 
