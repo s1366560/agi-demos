@@ -429,11 +429,19 @@ class ProjectReActAgent:
             # Build context window config from application settings
             from src.configuration.config import get_settings
             from src.infrastructure.agent.context.window_manager import ContextWindowConfig
+            from src.infrastructure.llm.litellm.litellm_client import (
+                _clamp_max_tokens,
+                get_model_context_window,
+            )
 
             app_settings = get_settings()
+            model_context_window = get_model_context_window(provider_config.llm_model)
+            clamped_max_tokens = _clamp_max_tokens(
+                provider_config.llm_model, self.config.max_tokens
+            )
             context_window_config = ContextWindowConfig(
-                max_context_tokens=128000,
-                max_output_tokens=self.config.max_tokens,
+                max_context_tokens=model_context_window,
+                max_output_tokens=clamped_max_tokens,
                 l1_trigger_pct=app_settings.compression_l1_trigger_pct,
                 l2_trigger_pct=app_settings.compression_l2_trigger_pct,
                 l3_trigger_pct=app_settings.compression_l3_trigger_pct,

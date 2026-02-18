@@ -50,6 +50,49 @@ _MODEL_MAX_OUTPUT_TOKENS: dict[str, int] = {
     "moonshot-v1-128k": 8192,
 }
 
+# Known context window sizes (total input + output) per model.
+# Used to set max_context_tokens for the compression engine.
+_MODEL_CONTEXT_WINDOW: dict[str, int] = {
+    # Qwen / Dashscope
+    "qwen-max": 32768,
+    "qwen-plus": 131072,
+    "qwen-turbo": 131072,
+    "qwen-long": 1000000,
+    "qwen-vl-max": 32768,
+    "qwen-vl-plus": 32768,
+    # Deepseek
+    "deepseek-chat": 65536,
+    "deepseek-coder": 65536,
+    "deepseek-reasoner": 65536,
+    # ZhipuAI
+    "glm-4": 128000,
+    "glm-4-flash": 128000,
+    # Kimi / Moonshot
+    "moonshot-v1-8k": 8192,
+    "moonshot-v1-32k": 32768,
+    "moonshot-v1-128k": 131072,
+    # OpenAI
+    "gpt-4o": 128000,
+    "gpt-4o-mini": 128000,
+    "gpt-4-turbo": 128000,
+    "gpt-4": 8192,
+    # Anthropic
+    "claude-3-5-sonnet-20241022": 200000,
+    "claude-3-5-haiku-20241022": 200000,
+    "claude-3-opus-20240229": 200000,
+    # Gemini
+    "gemini-1.5-pro": 2097152,
+    "gemini-1.5-flash": 1048576,
+    "gemini-2.0-flash": 1048576,
+}
+
+_DEFAULT_CONTEXT_WINDOW = 128000
+
+
+def _strip_provider_prefix(model: str) -> str:
+    """Strip provider prefix (e.g. 'dashscope/qwen-max' -> 'qwen-max')."""
+    return model.split("/", 1)[-1] if "/" in model else model
+
 
 def _clamp_max_tokens(model: str, max_tokens: int) -> int:
     """Clamp max_tokens to model-specific limits.
@@ -57,12 +100,22 @@ def _clamp_max_tokens(model: str, max_tokens: int) -> int:
     Strips provider prefix (e.g. 'dashscope/qwen-max' -> 'qwen-max') before
     lookup. Returns original value if no known limit exists.
     """
-    bare_model = model.split("/", 1)[-1] if "/" in model else model
+    bare_model = _strip_provider_prefix(model)
     limit = _MODEL_MAX_OUTPUT_TOKENS.get(bare_model)
     if limit and max_tokens > limit:
         logger.debug(f"Clamping max_tokens {max_tokens} -> {limit} for model {model}")
         return limit
     return max_tokens
+
+
+def get_model_context_window(model: str) -> int:
+    """Get the context window size for a model.
+
+    Returns the known context window (input + output tokens) or the default
+    (128000) if the model is not in the lookup table.
+    """
+    bare_model = _strip_provider_prefix(model)
+    return _MODEL_CONTEXT_WINDOW.get(bare_model, _DEFAULT_CONTEXT_WINDOW)
 
 
 class LiteLLMClient(LLMClient):
@@ -194,6 +247,27 @@ class LiteLLMClient(LLMClient):
         kwargs["num_retries"] = settings.llm_max_retries
         return kwargs
 
+    @staticmethod
+    def _is_client_error(e: Exception) -> bool:
+        """Check if an exception is a client-side error (400-level).
+
+        Client errors (invalid params, input too long, etc.) should NOT trip
+        the circuit breaker because the provider is healthy — the request
+        was simply invalid.
+        """
+        error_str = str(e).lower()
+        client_indicators = [
+            "invalidparameter",
+            "invalid_parameter",
+            "invalid parameter",
+            "bad request",
+            "400",
+            "invalid_request_error",
+            "context_length_exceeded",
+            "content_policy_violation",
+        ]
+        return any(indicator in error_str for indicator in client_indicators)
+
     async def _execute_with_resilience(self, coro_factory):
         """Execute an LLM call with circuit breaker and rate limiter.
 
@@ -220,7 +294,8 @@ class LiteLLMClient(LLMClient):
             circuit_breaker.record_success()
             return result
         except Exception as e:
-            circuit_breaker.record_failure()
+            if not self._is_client_error(e):
+                circuit_breaker.record_failure()
             error_message = str(e).lower()
             if any(
                 kw in error_message
@@ -400,7 +475,8 @@ class LiteLLMClient(LLMClient):
                     yield chunk
             circuit_breaker.record_success()
         except Exception as e:
-            circuit_breaker.record_failure()
+            if not self._is_client_error(e):
+                circuit_breaker.record_failure()
             error_message = str(e).lower()
             if any(
                 kw in error_message
