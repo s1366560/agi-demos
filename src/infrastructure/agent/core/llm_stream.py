@@ -438,9 +438,7 @@ class LLMStream:
                     yield event
             else:
                 # Fallback: direct litellm calls with basic rate limiting
-                async for event in self._generate_direct(
-                    messages, request_id, langfuse_context
-                ):
+                async for event in self._generate_direct(messages, request_id, langfuse_context):
                     yield event
 
             elapsed = time.time() - start_time
@@ -545,6 +543,12 @@ class LLMStream:
         # Prepare kwargs
         kwargs = self.config.to_litellm_kwargs()
         kwargs["messages"] = messages
+
+        # Clamp max_tokens to model-specific limits
+        from src.infrastructure.llm.litellm.litellm_client import _clamp_max_tokens
+
+        if "max_tokens" in kwargs:
+            kwargs["max_tokens"] = _clamp_max_tokens(kwargs["model"], kwargs["max_tokens"])
 
         # Inject Langfuse metadata if provided
         if langfuse_context:

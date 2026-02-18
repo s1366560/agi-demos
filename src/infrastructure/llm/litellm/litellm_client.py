@@ -27,6 +27,43 @@ from src.infrastructure.security.encryption_service import get_encryption_servic
 
 logger = logging.getLogger(__name__)
 
+# Known max output token limits per model family.
+# Used to clamp max_tokens before sending to the provider.
+_MODEL_MAX_OUTPUT_TOKENS: dict[str, int] = {
+    # Qwen / Dashscope
+    "qwen-max": 8192,
+    "qwen-plus": 8192,
+    "qwen-turbo": 8192,
+    "qwen-long": 8192,
+    "qwen-vl-max": 8192,
+    "qwen-vl-plus": 8192,
+    # Deepseek
+    "deepseek-chat": 8192,
+    "deepseek-coder": 8192,
+    "deepseek-reasoner": 8192,
+    # ZhipuAI
+    "glm-4": 4096,
+    "glm-4-flash": 4096,
+    # Kimi / Moonshot
+    "moonshot-v1-8k": 8192,
+    "moonshot-v1-32k": 8192,
+    "moonshot-v1-128k": 8192,
+}
+
+
+def _clamp_max_tokens(model: str, max_tokens: int) -> int:
+    """Clamp max_tokens to model-specific limits.
+
+    Strips provider prefix (e.g. 'dashscope/qwen-max' -> 'qwen-max') before
+    lookup. Returns original value if no known limit exists.
+    """
+    bare_model = model.split("/", 1)[-1] if "/" in model else model
+    limit = _MODEL_MAX_OUTPUT_TOKENS.get(bare_model)
+    if limit and max_tokens > limit:
+        logger.debug(f"Clamping max_tokens {max_tokens} -> {limit} for model {model}")
+        return limit
+    return max_tokens
+
 
 class LiteLLMClient(LLMClient):
     """
@@ -135,7 +172,7 @@ class LiteLLMClient(LLMClient):
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": messages,
-            "max_tokens": max_tokens,
+            "max_tokens": _clamp_max_tokens(model, max_tokens),
             "temperature": self.temperature if temperature is None else temperature,
             "api_key": self._api_key,
             **extra,
