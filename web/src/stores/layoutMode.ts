@@ -65,7 +65,16 @@ export const useLayoutModeStore = create<LayoutModeState>()(
 
         setRightPanelTab: (tab) => set({ rightPanelTab: tab }),
       }),
-      { name: 'layout-mode-store' }
+      {
+        name: 'layout-mode-store',
+        // Don't persist splitRatio - it should always use mode defaults
+        // Users can still adjust it during session, but it resets on reload
+        partialize: (state) => ({
+          mode: state.mode,
+          chatPanelVisible: state.chatPanelVisible,
+          rightPanelTab: state.rightPanelTab,
+        }),
+      }
     ),
     { name: 'layout-mode' }
   )
