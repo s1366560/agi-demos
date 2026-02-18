@@ -761,7 +761,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
       >
         <div className="flex-1 flex min-h-0 overflow-hidden mobile-stack">
           {/* Left: Chat */}
-          <div className="h-full overflow-hidden flex flex-col mobile-full" style={{ width: leftPercent }}>
+          <div
+            className="h-full overflow-hidden flex flex-col transition-[width] duration-200 ease-out mobile-full"
+            style={{ width: leftPercent, minWidth: '280px' }}
+          >
             {chatColumn}
           </div>
 
@@ -776,8 +779,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
 
           {/* Right: Canvas Panel */}
           <div
-            className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 mobile-full"
-            style={{ width: rightPercent }}
+            className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 transition-[width] duration-200 ease-out mobile-full"
+            style={{ width: rightPercent, minWidth: '320px' }}
           >
             <CanvasPanel
               onSendPrompt={(prompt) => handleSend(prompt)}

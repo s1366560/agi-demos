@@ -185,7 +185,7 @@ const CanvasContent = memo<{
   switch (tab.type) {
     case 'code':
       return (
-        <div className="h-full overflow-auto bg-slate-900">
+        <div className="h-full overflow-auto bg-slate-900 rounded-b-lg">
           <pre className="p-4 text-sm font-mono text-slate-200 whitespace-pre-wrap break-words leading-relaxed">
             <code>{tab.content}</code>
           </pre>
@@ -193,7 +193,7 @@ const CanvasContent = memo<{
       );
     case 'markdown':
       return (
-          <div className={`h-full overflow-auto p-6 ${MARKDOWN_PROSE_CLASSES}`}>
+          <div className={`h-full overflow-auto p-6 bg-white dark:bg-slate-900 rounded-b-lg ${MARKDOWN_PROSE_CLASSES}`}>
             <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{tab.content}</ReactMarkdown>
           </div>
       );
@@ -202,13 +202,13 @@ const CanvasContent = memo<{
         <iframe
           srcDoc={tab.content}
           sandbox="allow-scripts"
-          className="w-full h-full border-0 bg-white"
+          className="w-full h-full border-0 bg-white rounded-b-lg"
           title={tab.title}
         />
       );
     case 'data':
       return (
-        <div className="h-full overflow-auto p-4">
+        <div className="h-full overflow-auto p-4 bg-white dark:bg-slate-900 rounded-b-lg">
           <pre className="text-sm font-mono text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
             {tab.content}
           </pre>
@@ -565,7 +565,7 @@ export const CanvasPanel = memo<{
     }, [onSendPrompt, activeTab]);
 
     return (
-      <div className="h-full flex flex-col bg-white dark:bg-slate-900 overflow-hidden">
+      <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-950/50 overflow-hidden">
         <CanvasTabBar onBeforeCloseTab={handleBeforeCloseTab} />
         {activeTab ? (
           <>
@@ -579,7 +579,7 @@ export const CanvasPanel = memo<{
               content={activeTab.content}
               onSendPrompt={onSendPrompt}
             />
-            <div ref={contentRef} className="flex-1 min-h-0 overflow-hidden relative">
+            <div ref={contentRef} className="flex-1 min-h-0 overflow-hidden relative bg-white dark:bg-slate-900">
               <CanvasContent
                 tab={activeTab}
                 editMode={editMode}

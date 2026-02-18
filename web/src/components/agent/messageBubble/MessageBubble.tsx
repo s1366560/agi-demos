@@ -25,11 +25,14 @@ import {
   Lightbulb,
   FileOutput,
   PanelRight,
+  RefreshCw,
 } from 'lucide-react';
 
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
 import { useSandboxStore } from '@/stores/sandbox';
+import { artifactService } from '@/services/artifactService';
+import { getErrorMessage } from '@/types/common';
 
 import { CodeBlock as SharedCodeBlock } from '../chat/CodeBlock';
 import { useMarkdownPlugins, safeMarkdownComponents } from '../chat/markdownPlugins';
@@ -706,12 +709,16 @@ TextEnd.displayName = 'MessageBubble.TextEnd';
 const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
+  const [refreshingUrl, setRefreshingUrl] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [currentUrl, setCurrentUrl] = useState<string | null>(null);
   const { t } = useTranslation();
 
   // Subscribe to sandbox store for live URL updates (artifact_ready event)
   const storeArtifact = useSandboxStore((state) => state.artifacts.get(event.artifactId));
-  const artifactUrl = storeArtifact?.url || event.url;
-  const artifactPreviewUrl = storeArtifact?.previewUrl || event.previewUrl;
+  // Priority: refreshed URL > store URL > event URL
+  const artifactUrl = currentUrl || storeArtifact?.url || event.url;
+  const artifactPreviewUrl = currentUrl || storeArtifact?.previewUrl || event.previewUrl;
   const artifactError = storeArtifact?.errorMessage || event.error;
   const artifactStatus = storeArtifact?.status || (event.url ? 'ready' : artifactError ? 'error' : 'uploading');
 
@@ -720,19 +727,53 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
 
   const canOpenInCanvas = ['code', 'document', 'data'].includes(event.category);
 
-  const handleOpenInCanvas = () => {
-    const ext = event.filename.split('.').pop() || '';
-    const type = event.category === 'code' ? 'code' as const
-      : event.category === 'data' ? 'data' as const
-      : 'markdown' as const;
-    canvasOpenTab({
-      id: event.artifactId,
-      title: event.filename,
-      type,
-      content: t('agent.canvas.loadingContent', 'Loading content...'),
-      language: ext,
-    });
-    setLayoutMode('canvas');
+  // Refresh expired URL
+  const handleRefreshUrl = async () => {
+    setRefreshingUrl(true);
+    setRefreshError(null);
+    try {
+      const newUrl = await artifactService.refreshUrl(event.artifactId);
+      setCurrentUrl(newUrl);
+      setImageError(false);
+      setImageLoaded(false);
+    } catch (err) {
+      setRefreshError(getErrorMessage(err));
+    } finally {
+      setRefreshingUrl(false);
+    }
+  };
+
+  const handleOpenInCanvas = async () => {
+    const url = artifactUrl || artifactPreviewUrl;
+    if (!url) return;
+
+    try {
+      // Fetch content from the artifact URL
+      const response = await fetch(url);
+      const content = await response.text();
+
+      // Determine canvas content type from artifact category
+      const typeMap: Record<string, 'code' | 'markdown' | 'data'> = {
+        code: 'code',
+        document: 'markdown',
+        data: 'data',
+      };
+      const contentType = typeMap[event.category] || 'code';
+      const ext = event.filename.split('.').pop()?.toLowerCase();
+
+      canvasOpenTab({
+        id: event.artifactId,
+        title: event.filename,
+        type: contentType,
+        content,
+        language: ext,
+        artifactId: event.artifactId,
+        artifactUrl: url,
+      });
+      setLayoutMode('canvas');
+    } catch {
+      // Silently fail - user can still download the file directly
+    }
   };
 
   const getCategoryIcon = (category: string) => {
@@ -807,6 +848,33 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
             </div>
           )}
 
+          {/* Image Load Error with Refresh Option */}
+          {isImage && imageError && (
+            <div className="mb-3 p-4 rounded-lg border border-red-200/50 dark:border-red-800/30 bg-red-50/50 dark:bg-red-900/20">
+              <div className="flex items-center gap-2 text-red-600 dark:text-red-400 mb-2">
+                <XCircle size={16} />
+                <span className="text-sm font-medium">
+                  {t('agent.messageBubble.imageLoadFailed', 'Failed to load image')}
+                </span>
+              </div>
+              {refreshError && (
+                <p className="text-xs text-red-500 dark:text-red-400 mb-2">{refreshError}</p>
+              )}
+              <button
+                type="button"
+                onClick={handleRefreshUrl}
+                disabled={refreshingUrl}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-red-100 dark:bg-red-800/50 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors disabled:opacity-50"
+              >
+                <RefreshCw size={12} className={refreshingUrl ? 'animate-spin' : ''} />
+                {refreshingUrl
+                  ? t('agent.messageBubble.refreshing', 'Refreshing...')
+                  : t('agent.messageBubble.refreshLink', 'Refresh Link')
+                }
+              </button>
+            </div>
+          )}
+
           {/* File Info */}
           <div className="flex items-center gap-3 text-sm bg-white/60 dark:bg-slate-800/40 rounded-lg p-3 border border-emerald-100 dark:border-emerald-800/20">
             <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -852,6 +920,26 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
               <span className="flex items-center gap-1 text-xs text-red-500 dark:text-red-400">
                 <XCircle size={14} />
                 {artifactError || t('agent.messageBubble.uploadFailed', 'Upload failed')}
+              </span>
+            )}
+            {/* Refresh button for expired/failed URLs */}
+            {((isImage && imageError) || (!url && artifactStatus === 'error')) && (
+              <button
+                type="button"
+                onClick={handleRefreshUrl}
+                disabled={refreshingUrl}
+                className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors font-medium disabled:opacity-50"
+              >
+                <RefreshCw size={14} className={refreshingUrl ? 'animate-spin' : ''} />
+                {refreshingUrl
+                  ? t('agent.messageBubble.refreshing', 'Refreshing...')
+                  : t('agent.messageBubble.refreshLink', 'Refresh')
+                }
+              </button>
+            )}
+            {refreshError && !imageError && (
+              <span className="text-xs text-red-500 dark:text-red-400">
+                {refreshError}
               </span>
             )}
           </div>

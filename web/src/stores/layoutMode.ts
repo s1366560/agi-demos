@@ -38,7 +38,7 @@ const MODE_DEFAULTS: Record<LayoutMode, { splitRatio: number; rightPanelTab: 'pl
   chat: { splitRatio: 1, rightPanelTab: 'plan' },
   task: { splitRatio: 0.5, rightPanelTab: 'plan' },
   code: { splitRatio: 0.5, rightPanelTab: 'terminal' },
-  canvas: { splitRatio: 0.5, rightPanelTab: 'plan' },
+  canvas: { splitRatio: 0.35, rightPanelTab: 'plan' },
 };
 
 export const useLayoutModeStore = create<LayoutModeState>()(
