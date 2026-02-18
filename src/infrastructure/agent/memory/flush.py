@@ -190,6 +190,15 @@ class MemoryFlushService:
                 max_tokens=1024,
             )
             text = response.get("content", "") if isinstance(response, dict) else str(response)
+
+            # Log memory flush cost
+            usage = response.get("usage") if isinstance(response, dict) else None
+            if usage:
+                logger.debug(
+                    f"Memory flush LLM cost: "
+                    f"in={usage.get('input_tokens', 0)}, "
+                    f"out={usage.get('output_tokens', 0)}"
+                )
             text = text.strip()
             if text.startswith("```"):
                 text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()

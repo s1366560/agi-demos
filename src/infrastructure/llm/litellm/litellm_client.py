@@ -65,66 +65,132 @@ class LiteLLMClient(LLMClient):
         self.provider_config = provider_config
         self.encryption_service = get_encryption_service()
 
-        # Set LiteLLM environment variable for this provider
-        self._configure_litellm()
-
-    def _configure_litellm(self):
-        """Configure LiteLLM with provider credentials."""
-        import os
-
-        # Decrypt API key
-        api_key = self.config.api_key or self.encryption_service.decrypt(
+        # Decrypt and store API key for per-request passing (multi-tenant safe)
+        self._api_key = self.config.api_key or self.encryption_service.decrypt(
             self.provider_config.api_key_encrypted
         )
 
-        # Set environment variable for this provider type
-        provider_type = self.provider_config.provider_type.value
-        if provider_type == "openai":
-            os.environ["OPENAI_API_KEY"] = api_key
-        elif provider_type == "qwen":
-            os.environ["DASHSCOPE_API_KEY"] = api_key
-            # For Qwen, we might need to tell LiteLLM to check Dashscope
-            # But normally env var is enough.
-        elif provider_type == "gemini":
-            os.environ["GOOGLE_API_KEY"] = api_key
-            os.environ["GEMINI_API_KEY"] = api_key  # Some versions might use this
-        elif provider_type == "anthropic":
-            os.environ["ANTHROPIC_API_KEY"] = api_key
-        elif provider_type == "groq":
-            os.environ["GROQ_API_KEY"] = api_key
-        elif provider_type == "mistral":
-            os.environ["MISTRAL_API_KEY"] = api_key
-        elif provider_type == "deepseek":
-            os.environ["DEEPSEEK_API_KEY"] = api_key
-        elif provider_type == "zai":
-            # ZhipuAI uses OpenAI-compatible API, so we set OPENAI env vars
-            os.environ["ZAI_API_KEY"] = api_key
-            # Store for use in generate_stream
-            self._zai_api_key = api_key
-            self._zai_base_url = (
-                self.provider_config.base_url or "https://open.bigmodel.cn/api/paas/v4"
-            )
-        elif provider_type == "kimi":
-            # Moonshot AI (Kimi) uses OpenAI-compatible API
-            os.environ["KIMI_API_KEY"] = api_key
-            self._kimi_api_key = api_key
-            self._kimi_base_url = self.provider_config.base_url or "https://api.moonshot.cn/v1"
-        # Add more providers as needed
+        # Resolve base URL for this provider
+        self._api_base = self._resolve_api_base()
 
-        # Set base URL if provided
-        if self.provider_config.base_url:
-            if provider_type == "openai":
-                os.environ["OPENAI_API_BASE"] = self.provider_config.base_url
-            elif provider_type == "qwen":
-                os.environ["OPENAI_BASE_URL"] = self.provider_config.base_url
-            elif provider_type == "deepseek":
-                os.environ["DEEPSEEK_API_BASE"] = self.provider_config.base_url
-            elif provider_type == "kimi":
-                os.environ["OPENAI_API_BASE"] = self.provider_config.base_url
-            # ZAI and KIMI base URLs are handled above
-            # Customize base URL per provider type
+        # Set LiteLLM environment variable for this provider (fallback)
+        self._configure_litellm()
+
+    def _resolve_api_base(self) -> str | None:
+        """Resolve the API base URL for this provider."""
+        provider_type = self.provider_config.provider_type.value
+        if provider_type == "zai":
+            return self.provider_config.base_url or "https://open.bigmodel.cn/api/paas/v4"
+        elif provider_type == "kimi":
+            return self.provider_config.base_url or "https://api.moonshot.cn/v1"
+        elif self.provider_config.base_url:
+            return self.provider_config.base_url
+        return None
+
+    def _configure_litellm(self):
+        """Configure LiteLLM environment variables as fallback.
+
+        NOTE: Per-request api_key is passed directly in completion_kwargs
+        for multi-tenant safety. Env vars remain as fallback only.
+        """
+        import os
+
+        api_key = self._api_key
+        provider_type = self.provider_config.provider_type.value
+
+        # Set env vars as fallback (some LiteLLM codepaths may still check them)
+        env_key_map = {
+            "openai": "OPENAI_API_KEY",
+            "qwen": "DASHSCOPE_API_KEY",
+            "gemini": "GOOGLE_API_KEY",
+            "anthropic": "ANTHROPIC_API_KEY",
+            "groq": "GROQ_API_KEY",
+            "mistral": "MISTRAL_API_KEY",
+            "deepseek": "DEEPSEEK_API_KEY",
+            "zai": "ZAI_API_KEY",
+            "kimi": "KIMI_API_KEY",
+        }
+        env_var = env_key_map.get(provider_type)
+        if env_var:
+            os.environ[env_var] = api_key
+        if provider_type == "gemini":
+            os.environ["GEMINI_API_KEY"] = api_key
 
         logger.debug(f"Configured LiteLLM for provider: {provider_type}")
+
+    def _build_completion_kwargs(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        max_tokens: int,
+        temperature: float | None = None,
+        langfuse_context: dict[str, Any] | None = None,
+        **extra: Any,
+    ) -> dict[str, Any]:
+        """Build common completion kwargs for LiteLLM calls.
+
+        Centralizes api_key, api_base, temperature, retries, and
+        langfuse metadata — previously duplicated across 3 methods.
+        """
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": self.temperature if temperature is None else temperature,
+            "api_key": self._api_key,
+            **extra,
+        }
+        if self._api_base:
+            kwargs["api_base"] = self._api_base
+
+        if langfuse_context:
+            langfuse_metadata = {
+                "trace_name": langfuse_context.get("trace_name", "llm_call"),
+                "trace_id": langfuse_context.get("trace_id"),
+                "tags": langfuse_context.get("tags", []),
+            }
+            if langfuse_context.get("extra"):
+                langfuse_metadata.update(langfuse_context["extra"])
+            kwargs["metadata"] = langfuse_metadata
+
+        settings = get_settings()
+        kwargs["num_retries"] = settings.llm_max_retries
+        return kwargs
+
+    async def _execute_with_resilience(self, coro_factory):
+        """Execute an LLM call with circuit breaker and rate limiter.
+
+        Args:
+            coro_factory: A callable that returns an awaitable (the LiteLLM call).
+
+        Returns:
+            The response from LiteLLM.
+        """
+        rate_limiter = get_provider_rate_limiter()
+        circuit_breaker_registry = get_circuit_breaker_registry()
+        provider_type = self.provider_config.provider_type
+        circuit_breaker = circuit_breaker_registry.get(provider_type)
+
+        if not circuit_breaker.can_execute():
+            raise RateLimitError(
+                f"Circuit breaker open for {provider_type.value}, "
+                f"provider is temporarily unavailable"
+            )
+
+        try:
+            async with await rate_limiter.acquire(provider_type):
+                result = await coro_factory()
+            circuit_breaker.record_success()
+            return result
+        except Exception as e:
+            circuit_breaker.record_failure()
+            error_message = str(e).lower()
+            if any(
+                kw in error_message
+                for kw in ["rate limit", "quota", "throttling", "request denied", "429"]
+            ):
+                raise RateLimitError(f"Rate limit error: {e}")
+            raise
 
     @staticmethod
     def _convert_message(m: Any) -> dict[str, Any]:
@@ -155,6 +221,8 @@ class LiteLLMClient(LLMClient):
         tools: list[dict[str, Any]] | None = None,
         temperature: float | None = None,
         max_tokens: int = 4096,
+        model_size: ModelSize = ModelSize.medium,
+        langfuse_context: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """
@@ -165,6 +233,8 @@ class LiteLLMClient(LLMClient):
             tools: Optional tool definitions for function calling
             temperature: Sampling temperature (defaults to client temperature)
             max_tokens: Maximum tokens to generate
+            model_size: Which model to use (small or medium)
+            langfuse_context: Optional context for Langfuse tracing
             **kwargs: Additional LiteLLM parameters
 
         Returns:
@@ -177,56 +247,34 @@ class LiteLLMClient(LLMClient):
                 return obj.get(key, default)
             return getattr(obj, key, default)
 
-        # Convert messages to LiteLLM format
         litellm_messages = [self._convert_message(m) for m in messages]
+        model = self._get_model_for_size(model_size)
+        effective_temp = self.temperature if temperature is None else temperature
 
-        # Use _get_model_for_size to get properly prefixed model name
-        model = self._get_model_for_size(ModelSize.medium)
+        # Check response cache (only for non-tool, deterministic calls)
+        if self.cache and not tools and effective_temp == 0:
+            from src.infrastructure.llm.cache import get_response_cache
 
-        completion_kwargs: dict[str, Any] = {
-            "model": model,
-            "messages": litellm_messages,
-            "max_tokens": max_tokens,
-            "temperature": self.temperature if temperature is None else temperature,
-            "stream": False,
+            cache = get_response_cache()
+            cached = await cache.get(litellm_messages, model=model, temperature=effective_temp)
+            if cached is not None:
+                return cached
+
+        completion_kwargs = self._build_completion_kwargs(
+            model=model,
+            messages=litellm_messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            langfuse_context=langfuse_context,
+            stream=False,
             **kwargs,
-        }
-
+        )
         if tools:
             completion_kwargs["tools"] = tools
 
-        # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
-        if hasattr(self, "_zai_base_url") and self._zai_base_url:
-            completion_kwargs["api_base"] = self._zai_base_url
-        elif hasattr(self, "_kimi_base_url") and self._kimi_base_url:
-            completion_kwargs["api_base"] = self._kimi_base_url
-        elif self.provider_config.base_url:
-            # For all other providers with custom base_url
-            completion_kwargs["api_base"] = self.provider_config.base_url
-
-        # Add max retries from settings
-        settings = get_settings()
-        completion_kwargs["num_retries"] = settings.llm_max_retries
-
-        # Use per-provider rate limiting and circuit breaker
-        rate_limiter = get_provider_rate_limiter()
-        circuit_breaker_registry = get_circuit_breaker_registry()
-        provider_type = self.provider_config.provider_type
-        circuit_breaker = circuit_breaker_registry.get(provider_type)
-
-        # Check circuit breaker before making request
-        if not circuit_breaker.can_execute():
-            raise RateLimitError(
-                f"Circuit breaker open for {provider_type.value}, provider is temporarily unavailable"
-            )
-
-        try:
-            async with await rate_limiter.acquire(provider_type):
-                response = await litellm.acompletion(**completion_kwargs)
-            circuit_breaker.record_success()
-        except Exception:
-            circuit_breaker.record_failure()
-            raise
+        response = await self._execute_with_resilience(
+            lambda: litellm.acompletion(**completion_kwargs)
+        )
 
         if not response.choices:
             raise ValueError("No choices in response")
@@ -238,11 +286,29 @@ class LiteLLMClient(LLMClient):
         tool_calls = _get_attr(message, "tool_calls", None)
         finish_reason = _get_attr(choice, "finish_reason", None)
 
-        return {
+        result = {
             "content": content,
             "tool_calls": tool_calls or [],
             "finish_reason": finish_reason,
         }
+
+        # Include usage data for cost tracking
+        if hasattr(response, "usage") and response.usage:
+            usage = response.usage
+            result["usage"] = {
+                "input_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+                "output_tokens": getattr(usage, "completion_tokens", 0) or 0,
+                "total_tokens": getattr(usage, "total_tokens", 0) or 0,
+            }
+
+        # Store in cache (only for non-tool, deterministic calls)
+        if self.cache and not tools and effective_temp == 0:
+            from src.infrastructure.llm.cache import get_response_cache
+
+            cache = get_response_cache()
+            await cache.set(litellm_messages, result, model=model, temperature=effective_temp)
+
+        return result
 
     async def generate_stream(
         self,
@@ -259,11 +325,7 @@ class LiteLLMClient(LLMClient):
             messages: List of messages (system, user, assistant)
             max_tokens: Maximum tokens in response
             model_size: Which model to use (small or medium)
-            langfuse_context: Optional context for Langfuse tracing containing:
-                - trace_name: Name of the trace
-                - trace_id: Unique trace identifier
-                - tags: List of tags for filtering
-                - extra: Additional metadata dict
+            langfuse_context: Optional context for Langfuse tracing
             **kwargs: Additional arguments for litellm
 
         Yields:
@@ -271,84 +333,43 @@ class LiteLLMClient(LLMClient):
         """
         import litellm
 
-        # Select model based on size
         model = self._get_model_for_size(model_size)
-
-        # Convert Graphiti messages to LiteLLM format
         litellm_messages = [self._convert_message(m) for m in messages]
 
-        # Prepare completion kwargs
-        completion_kwargs = {
-            "model": model,
-            "messages": litellm_messages,
-            "max_tokens": max_tokens,
-            "temperature": self.temperature or 0,
-            "stream": True,
+        completion_kwargs = self._build_completion_kwargs(
+            model=model,
+            messages=litellm_messages,
+            max_tokens=max_tokens,
+            langfuse_context=langfuse_context,
+            stream=True,
             **kwargs,
-        }
+        )
 
-        # Inject Langfuse metadata if provided
-        if langfuse_context:
-            langfuse_metadata = {
-                "trace_name": langfuse_context.get("trace_name", "llm_call"),
-                "trace_id": langfuse_context.get("trace_id"),
-                "tags": langfuse_context.get("tags", []),
-            }
-            if langfuse_context.get("extra"):
-                langfuse_metadata.update(langfuse_context["extra"])
-            completion_kwargs["metadata"] = langfuse_metadata
-
-        # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
-        if hasattr(self, "_zai_base_url") and self._zai_base_url:
-            completion_kwargs["api_base"] = self._zai_base_url
-        elif hasattr(self, "_kimi_base_url") and self._kimi_base_url:
-            completion_kwargs["api_base"] = self._kimi_base_url
-        elif self.provider_config.base_url:
-            # For all other providers with custom base_url
-            completion_kwargs["api_base"] = self.provider_config.base_url
-
-        # Add max retries from settings
-        settings = get_settings()
-        completion_kwargs["num_retries"] = settings.llm_max_retries
-
-        # Use per-provider rate limiting and circuit breaker
         rate_limiter = get_provider_rate_limiter()
         circuit_breaker_registry = get_circuit_breaker_registry()
         provider_type = self.provider_config.provider_type
         circuit_breaker = circuit_breaker_registry.get(provider_type)
 
-        # Check circuit breaker before making request
         if not circuit_breaker.can_execute():
             raise RateLimitError(
-                f"Circuit breaker open for {provider_type.value}, provider is temporarily unavailable"
+                f"Circuit breaker open for {provider_type.value}, "
+                f"provider is temporarily unavailable"
             )
 
         try:
-            # Call LiteLLM with streaming and per-provider concurrency control
             async with await rate_limiter.acquire(provider_type):
                 response = await litellm.acompletion(**completion_kwargs)
-
                 async for chunk in response:
                     yield chunk
-
             circuit_breaker.record_success()
-
         except Exception as e:
             circuit_breaker.record_failure()
             error_message = str(e).lower()
-            # Check for rate limit errors
             if any(
-                keyword in error_message
-                for keyword in [
-                    "rate limit",
-                    "quota",
-                    "throttling",
-                    "request denied",
-                    "429",
-                ]
+                kw in error_message
+                for kw in ["rate limit", "quota", "throttling", "request denied", "429"]
             ):
                 raise RateLimitError(f"Rate limit error: {e}")
-
             logger.error(f"LiteLLM streaming error: {e}")
             raise
 
@@ -361,18 +382,14 @@ class LiteLLMClient(LLMClient):
         langfuse_context: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
-        Generate response using LiteLLM.
+        Generate response using LiteLLM with optional structured output.
 
         Args:
             messages: List of messages (system, user, assistant)
             response_model: Optional Pydantic model for structured output
             max_tokens: Maximum tokens in response
             model_size: Which model to use (small or medium)
-            langfuse_context: Optional context for Langfuse tracing containing:
-                - trace_name: Name of the trace
-                - trace_id: Unique trace identifier
-                - tags: List of tags for filtering
-                - extra: Additional metadata dict
+            langfuse_context: Optional context for Langfuse tracing
 
         Returns:
             Dictionary with response content or parsed structured data
@@ -383,99 +400,41 @@ class LiteLLMClient(LLMClient):
         """
         import litellm
 
-        if not hasattr(litellm, "acompletion"):
-
-            async def _noop_acompletion(**kwargs):
-                return type(
-                    "Resp", (), {"choices": [type("C", (), {"message": {"content": ""}})]}
-                )()
-
-            litellm.acompletion = _noop_acompletion
-
-        # Select model based on size
         model = self._get_model_for_size(model_size)
-
-        # Convert Graphiti messages to LiteLLM format
         litellm_messages = [self._convert_message(m) for m in messages]
 
-        # Prepare completion kwargs
-        kwargs = {
-            "model": model,
-            "messages": litellm_messages,
-            "max_tokens": max_tokens,
-            "temperature": self.temperature or 0,
-        }
-
-        # Inject Langfuse metadata if provided
-        if langfuse_context:
-            langfuse_metadata = {
-                "trace_name": langfuse_context.get("trace_name", "llm_call"),
-                "trace_id": langfuse_context.get("trace_id"),
-                "tags": langfuse_context.get("tags", []),
-            }
-            if langfuse_context.get("extra"):
-                langfuse_metadata.update(langfuse_context["extra"])
-            kwargs["metadata"] = langfuse_metadata
-
-        # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
-        if hasattr(self, "_zai_base_url") and self._zai_base_url:
-            kwargs["api_base"] = self._zai_base_url
-        elif hasattr(self, "_kimi_base_url") and self._kimi_base_url:
-            kwargs["api_base"] = self._kimi_base_url
-        elif self.provider_config.base_url:
-            # For all other providers with custom base_url
-            kwargs["api_base"] = self.provider_config.base_url
+        completion_kwargs = self._build_completion_kwargs(
+            model=model,
+            messages=litellm_messages,
+            max_tokens=max_tokens,
+            langfuse_context=langfuse_context,
+        )
 
         # Add structured output if requested
         if response_model:
-            # Generate JSON schema from Pydantic model
             schema = response_model.model_json_schema()
-            # Add schema to system message
             litellm_messages[0]["content"] += (
                 f"\n\nRespond with a JSON object in the following format:\n\n{schema}"
             )
-            # Some providers support response_format parameter
             try:
-                kwargs["response_format"] = {"type": "json_object"}
+                completion_kwargs["response_format"] = {"type": "json_object"}
             except Exception as e:
                 logger.debug(f"response_format not supported: {e}")
 
-        # Add max retries from settings
-        settings = get_settings()
-        kwargs["num_retries"] = settings.llm_max_retries
-
-        # Use per-provider rate limiting and circuit breaker
-        rate_limiter = get_provider_rate_limiter()
-        circuit_breaker_registry = get_circuit_breaker_registry()
-        provider_type = self.provider_config.provider_type
-        circuit_breaker = circuit_breaker_registry.get(provider_type)
-
-        # Check circuit breaker before making request
-        if not circuit_breaker.can_execute():
-            raise RateLimitError(
-                f"Circuit breaker open for {provider_type.value}, provider is temporarily unavailable"
+        try:
+            response = await self._execute_with_resilience(
+                lambda: litellm.acompletion(**completion_kwargs)
             )
 
-        try:
-            # Call LiteLLM with per-provider concurrency control
-            async with await rate_limiter.acquire(provider_type):
-                response = await litellm.acompletion(**kwargs)
-
-            circuit_breaker.record_success()
-
-            # Extract content
             if not response.choices:
                 raise ValueError("No choices in response")
 
             content = response.choices[0].message["content"]
 
-            # Parse structured output if needed
             if response_model:
                 try:
-                    # Try parsing as JSON
                     import json
 
-                    # Clean up response if needed
                     content = content.strip()
                     if content.startswith("```json"):
                         content = content[7:]
@@ -486,11 +445,8 @@ class LiteLLMClient(LLMClient):
                     content = content.strip()
 
                     parsed_data = json.loads(content)
-
-                    # Validate with Pydantic
                     validated = response_model.model_validate(parsed_data)
                     return validated.model_dump()
-
                 except Exception as e:
                     logger.error(f"Failed to parse/validate JSON: {e}")
                     logger.error(f"Raw output: {content}")
@@ -498,22 +454,9 @@ class LiteLLMClient(LLMClient):
 
             return {"content": content}
 
+        except RateLimitError:
+            raise
         except Exception as e:
-            circuit_breaker.record_failure()
-            error_message = str(e).lower()
-            # Check for rate limit errors
-            if any(
-                keyword in error_message
-                for keyword in [
-                    "rate limit",
-                    "quota",
-                    "throttling",
-                    "request denied",
-                    "429",
-                ]
-            ):
-                raise RateLimitError(f"Rate limit error: {e}")
-
             logger.error(f"LiteLLM error: {e}")
             raise
 

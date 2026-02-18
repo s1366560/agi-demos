@@ -274,10 +274,7 @@ def prune_tool_outputs(
 
 def estimate_tokens(text: str, chars_per_token: float = 4.0) -> int:
     """
-    Estimate token count for text.
-
-    Simple character-based estimation.
-    More accurate tokenization can be added with tiktoken.
+    Estimate token count for text with CJK awareness.
 
     Args:
         text: Text to estimate
@@ -288,7 +285,22 @@ def estimate_tokens(text: str, chars_per_token: float = 4.0) -> int:
     """
     if not text:
         return 0
-    return int(len(text) / chars_per_token)
+
+    import re
+
+    cjk_pattern = re.compile(r"[\u4e00-\u9fff\u3400-\u4dbf\uac00-\ud7af]")
+    cjk_chars = len(cjk_pattern.findall(text))
+    total_chars = len(text)
+    cjk_ratio = cjk_chars / total_chars if total_chars > 0 else 0
+
+    if cjk_ratio > 0.3:
+        effective_ratio = 2.0
+    elif cjk_ratio > 0.1:
+        effective_ratio = 3.0
+    else:
+        effective_ratio = chars_per_token
+
+    return int(total_chars / effective_ratio)
 
 
 def calculate_usable_context(

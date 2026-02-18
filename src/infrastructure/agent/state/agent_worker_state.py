@@ -320,8 +320,9 @@ def clear_state() -> None:
 async def get_or_create_llm_client(provider_config: Any) -> Any:
     """Get or create a cached LLM client.
 
-    This function caches LLM clients by provider:model key to avoid
-    repeated initialization overhead.
+    This function caches LLM clients by provider:model:api_key_hash to ensure
+    multi-tenant isolation. Different tenants with the same provider:model
+    but different API keys get separate client instances.
 
     Args:
         provider_config: Provider configuration object with provider_type and llm_model
@@ -329,6 +330,8 @@ async def get_or_create_llm_client(provider_config: Any) -> Any:
     Returns:
         Cached or newly created LLM client
     """
+    import hashlib
+
     from src.infrastructure.llm.litellm.litellm_client import create_litellm_client
 
     # Get provider type as string (handle both enum and string values)
@@ -337,7 +340,11 @@ async def get_or_create_llm_client(provider_config: Any) -> Any:
         if hasattr(provider_config.provider_type, "value")
         else str(provider_config.provider_type)
     )
-    cache_key = f"{provider_type_str}:{provider_config.llm_model}"
+    # Include API key hash in cache key for multi-tenant isolation
+    api_key_hash = hashlib.sha256((provider_config.api_key_encrypted or "").encode()).hexdigest()[
+        :12
+    ]
+    cache_key = f"{provider_type_str}:{provider_config.llm_model}:{api_key_hash}"
 
     async with _llm_cache_lock:
         if cache_key not in _llm_client_cache:

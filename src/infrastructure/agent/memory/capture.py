@@ -208,6 +208,16 @@ class MemoryCapturePostprocessor:
                 max_tokens=500,
             )
             content = response.get("content", "") if isinstance(response, dict) else str(response)
+
+            # Log memory extraction cost
+            usage = response.get("usage") if isinstance(response, dict) else None
+            if usage:
+                logger.debug(
+                    f"Memory capture LLM cost: "
+                    f"in={usage.get('input_tokens', 0)}, "
+                    f"out={usage.get('output_tokens', 0)}"
+                )
+
             return self._parse_llm_response(content)
         except Exception as e:
             logger.warning(f"LLM memory extraction failed ({type(self._llm_client).__name__}): {e}")

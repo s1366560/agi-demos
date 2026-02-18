@@ -69,6 +69,15 @@ class ModelCost:
     context_over_200k: Optional["ModelCost"] = None  # Pricing for >200k context
 
 
+class BudgetExceededError(Exception):
+    """Raised when a cost budget limit is exceeded."""
+
+    def __init__(self, message: str, current_cost: float, limit: float):
+        super().__init__(message)
+        self.current_cost = current_cost
+        self.limit = limit
+
+
 class CostTracker:
     """
     Real-time cost tracker - Reference: OpenCode session/index.ts:412-463
@@ -79,6 +88,7 @@ class CostTracker:
     - Support for reasoning tokens (o1, o3)
     - Context overflow pricing (>200k tokens)
     - Cumulative tracking across a session
+    - Budget enforcement with per-request and per-session limits
 
     Example:
         tracker = CostTracker()
@@ -246,14 +256,23 @@ class CostTracker:
         output=Decimal("0.60"),
     )
 
-    def __init__(self, context_limit: int = 200000):
+    def __init__(
+        self,
+        context_limit: int = 200000,
+        max_cost_per_request: float = 0,
+        max_cost_per_session: float = 0,
+    ):
         """
         Initialize cost tracker.
 
         Args:
             context_limit: Context size threshold for overflow pricing (default: 200k)
+            max_cost_per_request: Maximum cost per single LLM call (0 = unlimited)
+            max_cost_per_session: Maximum cumulative cost per session (0 = unlimited)
         """
         self.context_limit = context_limit
+        self.max_cost_per_request = Decimal(str(max_cost_per_request))
+        self.max_cost_per_session = Decimal(str(max_cost_per_session))
         self.total_cost = Decimal("0")
         self.total_tokens = TokenUsage()
         self.call_count = 0
@@ -406,8 +425,27 @@ class CostTracker:
         return cost
 
     def _update_totals(self, cost: Decimal, tokens: TokenUsage) -> None:
-        """Update cumulative totals."""
+        """Update cumulative totals and enforce budget limits."""
+        # Enforce per-request limit
+        if self.max_cost_per_request > 0 and cost > self.max_cost_per_request:
+            raise BudgetExceededError(
+                f"Request cost ${float(cost):.6f} exceeds per-request limit "
+                f"${float(self.max_cost_per_request):.6f}",
+                current_cost=float(cost),
+                limit=float(self.max_cost_per_request),
+            )
+
         self.total_cost += cost
+
+        # Enforce per-session limit
+        if self.max_cost_per_session > 0 and self.total_cost > self.max_cost_per_session:
+            raise BudgetExceededError(
+                f"Session cost ${float(self.total_cost):.6f} exceeds session limit "
+                f"${float(self.max_cost_per_session):.6f}",
+                current_cost=float(self.total_cost),
+                limit=float(self.max_cost_per_session),
+            )
+
         self.total_tokens.input += tokens.input
         self.total_tokens.output += tokens.output
         self.total_tokens.reasoning += tokens.reasoning
@@ -476,7 +514,7 @@ class CostTracker:
         }
 
     def reset(self) -> None:
-        """Reset all counters for a new session."""
+        """Reset counters for a new session (budget limits are preserved)."""
         self.total_cost = Decimal("0")
         self.total_tokens = TokenUsage()
         self.call_count = 0

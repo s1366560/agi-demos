@@ -242,6 +242,8 @@ class ProcessorConfig:
 
     # Cost tracking
     context_limit: int = 200000  # Token limit before compaction warning
+    max_cost_per_request: float = 0  # Per-request cost limit (0 = unlimited)
+    max_cost_per_session: float = 0  # Per-session cost limit (0 = unlimited)
 
     # LLM Client (optional, provides circuit breaker + rate limiter)
     llm_client: Optional[Any] = None
@@ -319,7 +321,11 @@ class SessionProcessor:
             max_attempts=config.max_attempts,
             initial_delay_ms=config.initial_delay_ms,
         )
-        self.cost_tracker = CostTracker()
+        self.cost_tracker = CostTracker(
+            context_limit=config.context_limit,
+            max_cost_per_request=config.max_cost_per_request,
+            max_cost_per_session=config.max_cost_per_session,
+        )
 
         # Artifact service for rich output handling
         self._artifact_service = artifact_service
