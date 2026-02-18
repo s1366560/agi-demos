@@ -180,8 +180,11 @@ class LiteLLMClient(LLMClient):
         # Convert messages to LiteLLM format
         litellm_messages = [self._convert_message(m) for m in messages]
 
+        # Use _get_model_for_size to get properly prefixed model name
+        model = self._get_model_for_size(ModelSize.medium)
+
         completion_kwargs: dict[str, Any] = {
-            "model": self.config.model,
+            "model": model,
             "messages": litellm_messages,
             "max_tokens": max_tokens,
             "temperature": self.temperature if temperature is None else temperature,

@@ -125,10 +125,13 @@ class SqlChunkRepository:
         project_id: str,
         limit: int = 10,
     ) -> list[dict]:
-        """Search chunks using PostgreSQL full-text search.
+        """Search chunks using PostgreSQL full-text search with ILIKE fallback.
 
-        Uses plainto_tsquery with 'simple' config for language-agnostic matching.
+        Uses plainto_tsquery with 'simple' config first.
+        Falls back to ILIKE keyword matching for CJK text where tsvector
+        tokenization treats whole phrases as single tokens.
         """
+        # Try tsvector-based search first
         sql = text("""
             SELECT id, content, metadata, created_at, category,
                    source_type, source_id,
@@ -146,6 +149,33 @@ class SqlChunkRepository:
             sql,
             {"query": query, "project_id": project_id, "limit": limit},
         )
+        rows = result.fetchall()
+
+        # Fallback to ILIKE for CJK/short queries where tsvector fails
+        if not rows:
+            keywords = [k.strip() for k in query.split() if len(k.strip()) >= 2]
+            if not keywords:
+                keywords = [query.strip()]
+            # Build OR-based ILIKE conditions for each keyword
+            conditions = " OR ".join(
+                f"content ILIKE :kw{i}" for i in range(len(keywords))
+            )
+            params = {f"kw{i}": f"%{kw}%" for i, kw in enumerate(keywords)}
+            params["project_id"] = project_id
+            params["limit"] = limit
+            fallback_sql = text(f"""
+                SELECT id, content, metadata, created_at, category,
+                       source_type, source_id,
+                       0.5 AS score
+                FROM memory_chunks
+                WHERE project_id = :project_id
+                  AND ({conditions})
+                ORDER BY created_at DESC
+                LIMIT :limit
+            """)
+            result = await self._session.execute(fallback_sql, params)
+            rows = result.fetchall()
+
         return [
             {
                 "id": row.id,
@@ -157,7 +187,7 @@ class SqlChunkRepository:
                 "source_type": row.source_type,
                 "source_id": row.source_id,
             }
-            for row in result.fetchall()
+            for row in rows
         ]
 
     async def find_similar(

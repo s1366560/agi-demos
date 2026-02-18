@@ -89,7 +89,7 @@ class MemoryRecallPreprocessor:
                 graph_results = await self._graph_search.search(
                     query,
                     project_id=project_id,
-                    num_results=max_results,
+                    limit=max_results,
                 )
                 for r in graph_results:
                     content = ""
