@@ -66,6 +66,7 @@ class MemoryFlushService:
         self._embedding = embedding_service
         self._session_factory = session_factory
         self.last_flush_count: int = 0
+        logger.info(f"MemoryFlushService initialized (llm={type(llm_client).__name__})")
 
     async def flush(
         self,
@@ -180,7 +181,7 @@ class MemoryFlushService:
                 msg_count=msg_count,
                 conversation_text=conv_text,
             )
-            response = await self._llm_client.generate_chat(
+            response = await self._llm_client.generate(
                 messages=[
                     {"role": "system", "content": FLUSH_SYSTEM_PROMPT},
                     {"role": "user", "content": user_prompt},
@@ -197,7 +198,7 @@ class MemoryFlushService:
                 return []
             return items
         except Exception as e:
-            logger.debug(f"Memory flush extraction failed: {e}")
+            logger.debug(f"Memory flush extraction failed ({type(self._llm_client).__name__}): {e}")
             return []
 
     async def _get_chunk_repo(self) -> Optional[Any]:

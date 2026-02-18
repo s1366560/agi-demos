@@ -68,6 +68,12 @@ class MemoryCapturePostprocessor:
         self._session_factory = session_factory
         # Populated after capture for event emission
         self.last_categories: list[str] = []
+        logger.info(
+            f"MemoryCapturePostprocessor initialized "
+            f"(llm={type(llm_client).__name__}, "
+            f"embedding={'yes' if embedding_service else 'no'}, "
+            f"session_factory={'yes' if session_factory else 'no'})"
+        )
 
     async def _get_chunk_repo(self) -> Any:
         """Get or create a chunk repository with a fresh DB session."""
@@ -193,15 +199,18 @@ class MemoryCapturePostprocessor:
         )
 
         try:
-            response = await self._llm_client.generate_chat(
-                system_prompt=MEMORY_EXTRACT_SYSTEM_PROMPT,
-                user_message=user_prompt,
+            response = await self._llm_client.generate(
+                messages=[
+                    {"role": "system", "content": MEMORY_EXTRACT_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
                 temperature=0.0,
                 max_tokens=500,
             )
-            return self._parse_llm_response(response.content)
+            content = response.get("content", "") if isinstance(response, dict) else str(response)
+            return self._parse_llm_response(content)
         except Exception as e:
-            logger.warning(f"LLM memory extraction failed: {e}")
+            logger.warning(f"LLM memory extraction failed ({type(self._llm_client).__name__}): {e}")
             return []
 
     def _parse_llm_response(self, content: str) -> list[dict]:
