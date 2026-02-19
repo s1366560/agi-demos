@@ -324,7 +324,11 @@ export const InputBar = memo<InputBarProps>(
         const target = e.currentTarget;
         target.style.height = 'auto';
         const minHeight = 48;
-        const newHeight = Math.max(minHeight, Math.min(target.scrollHeight, 400));
+        // Use parent container's maxHeight for auto-resize limit
+        const parentMaxHeight = target.parentElement?.parentElement 
+          ? parseFloat(getComputedStyle(target.parentElement.parentElement).maxHeight) || 400
+          : 400;
+        const newHeight = Math.max(minHeight, Math.min(target.scrollHeight, parentMaxHeight));
         target.style.height = `${newHeight}px`;
         const value = target.value;
         setContent(value);
@@ -543,7 +547,7 @@ export const InputBar = memo<InputBarProps>(
           )}
 
           {/* Text Area */}
-          <div className="flex-1 min-h-0 px-4 py-3 relative overflow-hidden">
+          <div className="flex-1 min-h-0 px-4 py-3 relative">
             <SlashCommandDropdown
               ref={slashDropdownRef}
               query={slashQuery}
@@ -586,22 +590,24 @@ export const InputBar = memo<InputBarProps>(
                     ? t('agent.inputBar.commandPlaceholder', 'Enter a command...')
                     : t('agent.inputBar.placeholder', "Ask me anything, or type '/' for commands...")
               }
-              rows={2}
+              rows={1}
               data-testid="chat-input"
               className={`
-                w-full h-full resize-none bg-transparent
+                w-full bg-transparent
                 text-slate-800 dark:text-slate-100
                 placeholder:text-slate-400 dark:placeholder:text-slate-500
-                focus:outline-none text-[15px] leading-relaxed min-h-[48px]
-                max-w-full overflow-wrap-break-word whitespace-pre-wrap
-                ${inputMode === 'command' ? 'font-mono' : ''}
+                focus:outline-none text-[15px] leading-relaxed
+                overflow-y-auto overflow-x-hidden
+                scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600
+                scrollbar-track-transparent scrollbar-w-1.5
+                hover:scrollbar-thumb-slate-400 dark:hover:scrollbar-thumb-slate-500
+                ${inputMode === 'command' ? 'font-mono' : 'font-sans'}
               `}
               style={{
-                // Ensure long text wraps and doesn't overflow
-                wordBreak: 'break-word',
-                overflowWrap: 'break-word',
-                whiteSpace: 'pre-wrap',
-                maxWidth: '100%',
+                // Auto-resize with content, scroll when exceeds parent container
+                resize: 'none',
+                minHeight: '48px',
+                maxHeight: 'inherit',
               }}
             />
           </div>
