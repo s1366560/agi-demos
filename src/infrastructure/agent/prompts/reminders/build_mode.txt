@@ -14,10 +14,14 @@ If a task list exists from Plan Mode, follow this workflow:
    - Update status: `todowrite(action="update", todo_id="<id>", todos=[{"status": "in_progress"}])`
    - Perform the work (edit files, run commands, run tests, etc.)
    - Mark complete: `todowrite(action="update", todo_id="<id>", todos=[{"status": "completed"}])`
-3. **Handle Issues**: If a task cannot be completed:
+3. **Evidence Gate (MANDATORY)**:
+   - For execution-required requests, do NOT mark a task complete without relevant tool results.
+   - Do NOT claim "fixed/tested/verified/completed" unless tool output supports it.
+   - If blocked, clearly describe blocker and remaining unverified work.
+4. **Handle Issues**: If a task cannot be completed:
    - Mark it failed: `todowrite(action="update", todo_id="<id>", todos=[{"status": "failed"}])`
    - If new work is discovered: `todowrite(action="add", todos=[{"content": "new task", "priority": "high"}])`
-4. **Summarize**: After completing all tasks, provide a brief summary of what was done
+5. **Summarize**: After completing all tasks, provide a brief summary of what was done
 
 If no task list exists, proceed normally with the user's request.
 </system-reminder>

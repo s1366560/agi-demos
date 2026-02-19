@@ -251,6 +251,22 @@ class TestSystemPromptManager:
         assert "/home/user/project" in prompt
         assert "10" in prompt
 
+    async def test_tool_authenticity_contract_exists_for_all_main_providers(self, manager, context):
+        """Main provider templates should all include the same authenticity contract."""
+        providers = [
+            ModelProvider.DEFAULT,
+            ModelProvider.GEMINI,
+            ModelProvider.QWEN,
+            ModelProvider.ANTHROPIC,
+        ]
+
+        for provider in providers:
+            context.model_provider = provider
+            prompt = await manager.build_system_prompt(context)
+            assert "Tool Authenticity Contract" in prompt
+            assert "No Evidence, No Claim" in prompt
+            assert "Execution-first" in prompt
+
     async def test_max_steps_warning(self, manager, context):
         """Test max steps warning when on last step."""
         context.current_step = 50

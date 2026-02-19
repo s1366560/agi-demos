@@ -53,10 +53,11 @@ CHUNK_SUMMARY_PROMPT = """Summarize the following conversation segment concisely
 
 Priority rules (highest to lowest):
 1. User requirements, constraints, and questions - preserve verbatim when short
-2. Key decisions and conclusions reached
-3. Tool results that affect later reasoning (errors, important data)
-4. Entity names and relationships
-5. Assistant reasoning - compress aggressively, keep only conclusions
+2. Open tasks, unresolved TODOs, blockers, and failures
+3. Most recent verified tool observations (include tool name + key outcome)
+4. Key decisions and conclusions reached
+5. Entity names, IDs, paths, and relationships needed for continuity
+6. Assistant reasoning - compress aggressively, keep only outcomes
 
 {previous_summary_context}
 
@@ -67,15 +68,17 @@ Priority rules (highest to lowest):
 {assistant_text}
 
 Provide a concise summary (under {max_tokens} tokens). Start with user requirements,
-then decisions and outcomes:"""
+then verified observations, then open tasks/blockers. Never present unverified work as completed:"""
 
 DEEP_COMPRESS_PROMPT = """Distill the following conversation context into an ultra-compact summary.
 
 Structure your summary in these sections:
 1. USER GOAL: The user's primary objective and constraints (MUST preserve)
-2. DECISIONS: All critical decisions made so far
-3. STATE: Current task state, what has been done, what remains
-4. CONTEXT: Important entities, relationships, and data
+2. VERIFIED TOOL EVIDENCE: Tool name + key observed result
+3. OPEN TASKS/BLOCKERS: Unfinished work, failures, and pending validation
+4. DECISIONS: All critical decisions made so far
+5. STATE: Current task state, what has been done, what remains
+6. CONTEXT: Important entities, relationships, paths, and IDs
 
 Previous summaries:
 {summaries}
@@ -83,7 +86,8 @@ Previous summaries:
 Recent context:
 {recent_text}
 
-Provide a highly compressed summary that retains all essential information:"""
+Provide a highly compressed summary that retains all essential information.
+Do NOT mark unverified items as completed:"""
 
 
 @dataclass

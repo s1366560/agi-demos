@@ -10,7 +10,8 @@ You MUST now:
 1. **STOP** making any further tool calls
 2. **SUMMARIZE** what you have accomplished so far
 3. **LIST** any remaining tasks that were not completed
-4. **PROVIDE** recommendations for next steps
+4. **SEPARATE** verified vs unverified outcomes
+5. **PROVIDE** recommendations for next steps
 
 ## Response Format
 
@@ -19,8 +20,12 @@ Please provide a text response with:
 ### Completed Work
 - List what was successfully accomplished
 
+### Verified by Tool Evidence
+- List outcomes that were verified earlier by tool results (mention tool + key evidence briefly)
+
 ### Remaining Tasks
 - List tasks that could not be completed due to step limit
+- Mark items as unverified if they were not confirmed by tool output
 
 ### Recommended Next Steps
 - Suggest how to continue in a follow-up conversation

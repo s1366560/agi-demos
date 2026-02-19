@@ -6,6 +6,8 @@ import pytest
 
 from src.infrastructure.agent.context.compaction import ModelLimits
 from src.infrastructure.agent.context.compression_engine import (
+    CHUNK_SUMMARY_PROMPT,
+    DEEP_COMPRESS_PROMPT,
     AdaptiveStrategySelector,
     AdaptiveThresholds,
     ContextCompressionEngine,
@@ -602,3 +604,15 @@ class TestRoleAwareCompression:
         assert result_messages[0]["role"] == "system"
         assert system in result_messages[0]["content"]
         assert "Some summary" in result_messages[0]["content"]
+
+    def test_chunk_summary_prompt_preserves_open_work_and_verified_evidence(self):
+        """Chunk summary prompt should preserve unfinished work and verified observations."""
+        assert "Open tasks, unresolved TODOs, blockers, and failures" in CHUNK_SUMMARY_PROMPT
+        assert "Most recent verified tool observations" in CHUNK_SUMMARY_PROMPT
+        assert "Never present unverified work as completed" in CHUNK_SUMMARY_PROMPT
+
+    def test_deep_compress_prompt_separates_verified_and_unverified(self):
+        """Deep compression prompt should keep verified evidence and open blockers separate."""
+        assert "VERIFIED TOOL EVIDENCE" in DEEP_COMPRESS_PROMPT
+        assert "OPEN TASKS/BLOCKERS" in DEEP_COMPRESS_PROMPT
+        assert "Do NOT mark unverified items as completed" in DEEP_COMPRESS_PROMPT
