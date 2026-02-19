@@ -543,7 +543,7 @@ export const InputBar = memo<InputBarProps>(
           )}
 
           {/* Text Area */}
-          <div className="flex-1 min-h-0 px-4 py-3 relative overflow-visible">
+          <div className="flex-1 min-h-0 px-4 py-3 relative overflow-hidden">
             <SlashCommandDropdown
               ref={slashDropdownRef}
               query={slashQuery}
@@ -593,8 +593,16 @@ export const InputBar = memo<InputBarProps>(
                 text-slate-800 dark:text-slate-100
                 placeholder:text-slate-400 dark:placeholder:text-slate-500
                 focus:outline-none text-[15px] leading-relaxed min-h-[48px]
+                max-w-full overflow-wrap-break-word whitespace-pre-wrap
                 ${inputMode === 'command' ? 'font-mono' : ''}
               `}
+              style={{
+                // Ensure long text wraps and doesn't overflow
+                wordBreak: 'break-word',
+                overflowWrap: 'break-word',
+                whiteSpace: 'pre-wrap',
+                maxWidth: '100%',
+              }}
             />
           </div>
 
