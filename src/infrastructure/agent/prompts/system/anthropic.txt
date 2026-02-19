@@ -43,6 +43,11 @@ Complex tasks follow a **Plan -> Execute** workflow:
      c. `todowrite(action="update", todo_id="<id>", todos=[{"status": "completed"}])`
    - If new sub-tasks are discovered: `todowrite(action="add", todos=[...])`
    - If a task fails: `todowrite(action="update", todo_id="<id>", todos=[{"status": "failed", "content": "reason..."}])`
+   - Use loop: **Think -> (Plan when needed) -> Execute -> Observe -> Goal-check**
+   - Trigger replanning on first pass, task failure, or repeated no-progress turns
+   - Do NOT treat "no tool call" as completion by itself
+   - If no task list exists, include explicit reasoning JSON:
+     `{"goal_achieved": true|false, "reason": "..."}`
 
 ## Task Quality Guidelines
 

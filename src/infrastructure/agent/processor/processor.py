@@ -231,6 +231,7 @@ class ProcessorConfig:
     max_steps: int = 50  # Maximum steps before forcing stop
     max_tool_calls_per_step: int = 10  # Max tool calls per LLM response
     doom_loop_threshold: int = 3  # Consecutive identical calls to trigger
+    max_no_progress_steps: int = 3  # Consecutive no-progress checks before stop
 
     # Retry configuration
     max_attempts: int = 5
@@ -251,6 +252,17 @@ class ProcessorConfig:
     # Tool refresh callback (optional, enables dynamic tool loading)
     # When provided, _refresh_tools() can fetch updated tools at runtime
     tool_provider: Optional[Callable[[], List["ToolDefinition"]]] = None
+
+
+@dataclass
+class GoalCheckResult:
+    """Result of goal completion evaluation."""
+
+    achieved: bool
+    should_stop: bool = False
+    reason: str = ""
+    source: str = "unknown"
+    pending_tasks: int = 0
 
 
 @dataclass
@@ -336,6 +348,7 @@ class SessionProcessor:
         # Session state
         self._state = ProcessorState.IDLE
         self._step_count = 0
+        self._no_progress_steps = 0
         self._current_message: Optional[Message] = None
         self._pending_tool_calls: Dict[str, ToolPart] = {}
         self._pending_tool_args: Dict[str, str] = {}  # call_id -> accumulated raw args
@@ -445,6 +458,7 @@ class SessionProcessor:
         """
         self._abort_event = abort_signal or asyncio.Event()
         self._step_count = 0
+        self._no_progress_steps = 0
         self._langfuse_context = langfuse_context  # Store for use in _process_step
 
         # Emit start event
@@ -489,9 +503,43 @@ class SessionProcessor:
                 # If no stop/compact, determine result from tool calls
                 if result == ProcessorResult.CONTINUE:
                     if had_tool_calls:
+                        self._no_progress_steps = 0
                         result = ProcessorResult.CONTINUE
                     else:
-                        result = ProcessorResult.COMPLETE
+                        goal_check = await self._evaluate_goal_completion(session_id, messages)
+                        if goal_check.achieved:
+                            self._no_progress_steps = 0
+                            yield AgentStatusEvent(
+                                status=f"goal_achieved:{goal_check.source}"
+                            )
+                            result = ProcessorResult.COMPLETE
+                        elif goal_check.should_stop:
+                            yield AgentErrorEvent(
+                                message=goal_check.reason or "Goal cannot be completed",
+                                code="GOAL_NOT_ACHIEVED",
+                            )
+                            self._state = ProcessorState.ERROR
+                            result = ProcessorResult.STOP
+                        else:
+                            self._no_progress_steps += 1
+                            yield AgentStatusEvent(
+                                status=f"goal_pending:{goal_check.source}"
+                            )
+                            if self._no_progress_steps > 1:
+                                yield AgentStatusEvent(status="planning_recheck")
+                            if self._no_progress_steps >= self.config.max_no_progress_steps:
+                                yield AgentErrorEvent(
+                                    message=(
+                                        "Goal not achieved after "
+                                        f"{self._no_progress_steps} no-progress turns. "
+                                        f"{goal_check.reason or 'Replan required.'}"
+                                    ),
+                                    code="GOAL_NOT_ACHIEVED",
+                                )
+                                self._state = ProcessorState.ERROR
+                                result = ProcessorResult.STOP
+                            else:
+                                result = ProcessorResult.CONTINUE
 
                 # If we have pending tool results, add them to messages
                 if result == ProcessorResult.CONTINUE and self._current_message:
@@ -546,6 +594,284 @@ class SessionProcessor:
     def _extract_user_query(self, messages: List[Dict[str, Any]]) -> Optional[str]:
         """Extract the latest user query from messages."""
         return extract_user_query(messages)
+
+    async def _evaluate_goal_completion(
+        self,
+        session_id: str,
+        messages: List[Dict[str, Any]],
+    ) -> GoalCheckResult:
+        """Evaluate whether the current goal is complete."""
+        tasks = await self._load_session_tasks(session_id)
+        if tasks:
+            return self._evaluate_task_goal(tasks)
+        return await self._evaluate_llm_goal(messages)
+
+    async def _load_session_tasks(self, session_id: str) -> List[Dict[str, Any]]:
+        """Load tasks for the session via todoread when available."""
+        todoread_tool = self.tools.get("todoread")
+        if todoread_tool is None:
+            return []
+
+        try:
+            raw_result = await todoread_tool.execute(session_id=session_id)
+        except Exception as exc:
+            logger.warning(f"[Processor] Failed to load tasks via todoread: {exc}")
+            return []
+
+        payload: Dict[str, Any]
+        if isinstance(raw_result, str):
+            try:
+                payload = json.loads(raw_result)
+            except json.JSONDecodeError as exc:
+                logger.warning(f"[Processor] Invalid todoread JSON result: {exc}")
+                return []
+        elif isinstance(raw_result, dict):
+            payload = raw_result
+        else:
+            logger.warning(
+                f"[Processor] Unsupported todoread result type: {type(raw_result).__name__}"
+            )
+            return []
+
+        tasks = payload.get("todos", [])
+        if not isinstance(tasks, list):
+            logger.warning("[Processor] todoread payload missing list field 'todos'")
+            return []
+
+        return [t for t in tasks if isinstance(t, dict)]
+
+    def _evaluate_task_goal(self, tasks: List[Dict[str, Any]]) -> GoalCheckResult:
+        """Evaluate completion from persisted task state."""
+        pending_count = 0
+        failed_count = 0
+
+        for task in tasks:
+            status = str(task.get("status", "")).strip().lower()
+            if status in {"pending", "in_progress"}:
+                pending_count += 1
+            elif status == "failed":
+                failed_count += 1
+            elif status not in {"completed", "cancelled"}:
+                pending_count += 1
+
+        if pending_count > 0:
+            return GoalCheckResult(
+                achieved=False,
+                reason=f"{pending_count} task(s) still in progress",
+                source="tasks",
+                pending_tasks=pending_count,
+            )
+        if failed_count > 0:
+            return GoalCheckResult(
+                achieved=False,
+                should_stop=True,
+                reason=f"{failed_count} task(s) failed",
+                source="tasks",
+            )
+        return GoalCheckResult(
+            achieved=True,
+            reason="All tasks reached terminal success states",
+            source="tasks",
+        )
+
+    async def _evaluate_llm_goal(self, messages: List[Dict[str, Any]]) -> GoalCheckResult:
+        """Evaluate completion using explicit LLM self-check in no-task mode."""
+        fallback = self._evaluate_goal_from_latest_text()
+        if self._llm_client is None:
+            return fallback
+
+        context_summary = self._build_goal_check_context(messages)
+        if not context_summary:
+            return fallback
+
+        try:
+            response = await self._llm_client.generate(
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a strict completion checker. "
+                            "Return ONLY JSON object: "
+                            '{"goal_achieved": boolean, "reason": string}. '
+                            "Use goal_achieved=true only when user objective is fully satisfied."
+                        ),
+                    },
+                    {"role": "user", "content": context_summary},
+                ],
+                temperature=0.0,
+                max_tokens=120,
+            )
+        except Exception as exc:
+            logger.warning(f"[Processor] LLM goal self-check failed: {exc}")
+            return fallback
+
+        content = ""
+        if isinstance(response, dict):
+            content = str(response.get("content", "") or "")
+        elif isinstance(response, str):
+            content = response
+        else:
+            content = str(response)
+
+        parsed = self._extract_goal_json(content)
+        if parsed is None:
+            logger.warning("[Processor] Goal self-check returned non-JSON payload")
+            return fallback
+
+        achieved = parsed.get("goal_achieved")
+        if not isinstance(achieved, bool):
+            logger.warning("[Processor] Goal self-check missing boolean goal_achieved")
+            return fallback
+
+        reason = str(parsed.get("reason", "")).strip()
+        return GoalCheckResult(
+            achieved=achieved,
+            reason=reason or ("Goal achieved" if achieved else "Goal not achieved"),
+            source="llm_self_check",
+        )
+
+    def _evaluate_goal_from_latest_text(self) -> GoalCheckResult:
+        """Fallback goal check from latest assistant text."""
+        if not self._current_message:
+            return GoalCheckResult(
+                achieved=False,
+                reason="No assistant output available for goal check",
+                source="assistant_text",
+            )
+
+        full_text = self._current_message.get_full_text().strip()
+        if not full_text:
+            return GoalCheckResult(
+                achieved=False,
+                reason="Assistant output is empty",
+                source="assistant_text",
+            )
+
+        parsed = self._extract_goal_json(full_text)
+        if parsed and isinstance(parsed.get("goal_achieved"), bool):
+            achieved = bool(parsed["goal_achieved"])
+            reason = str(parsed.get("reason", "")).strip()
+            return GoalCheckResult(
+                achieved=achieved,
+                reason=reason or ("Goal achieved" if achieved else "Goal not achieved"),
+                source="assistant_text",
+            )
+
+        if self._has_explicit_completion_phrase(full_text):
+            return GoalCheckResult(
+                achieved=True,
+                reason="Assistant declared completion in final response",
+                source="assistant_text",
+            )
+
+        return GoalCheckResult(
+            achieved=False,
+            reason="No explicit goal_achieved signal in assistant response",
+            source="assistant_text",
+        )
+
+    def _build_goal_check_context(self, messages: List[Dict[str, Any]]) -> str:
+        """Build a compact context summary for goal self-check."""
+        summary_lines: List[str] = []
+        recent_messages = messages[-8:] if len(messages) > 8 else messages
+        for msg in recent_messages:
+            role = str(msg.get("role", "unknown"))
+            content = msg.get("content", "")
+
+            if isinstance(content, list):
+                text_chunks = []
+                for part in content:
+                    if isinstance(part, dict) and part.get("type") == "text":
+                        text_chunks.append(str(part.get("text", "")))
+                content_text = " ".join(chunk for chunk in text_chunks if chunk).strip()
+            elif isinstance(content, str):
+                content_text = content.strip()
+            else:
+                content_text = str(content).strip() if content else ""
+
+            if content_text:
+                summary_lines.append(f"{role}: {content_text[:400]}")
+
+        if self._current_message:
+            latest_text = self._current_message.get_full_text().strip()
+            if latest_text:
+                summary_lines.append(f"assistant_latest: {latest_text[:400]}")
+
+        return "\n".join(summary_lines)
+
+    def _extract_goal_json(self, text: str) -> Optional[Dict[str, Any]]:
+        """Extract goal-check JSON object from model text."""
+        stripped = text.strip()
+        if not stripped:
+            return None
+
+        try:
+            parsed = json.loads(stripped)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+        start_idx = stripped.find("{")
+        while start_idx >= 0:
+            depth = 0
+            in_string = False
+            escape_next = False
+            for index in range(start_idx, len(stripped)):
+                char = stripped[index]
+
+                if in_string:
+                    if escape_next:
+                        escape_next = False
+                    elif char == "\\":
+                        escape_next = True
+                    elif char == '"':
+                        in_string = False
+                    continue
+
+                if char == '"':
+                    in_string = True
+                elif char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidate = stripped[start_idx : index + 1]
+                        try:
+                            parsed = json.loads(candidate)
+                        except json.JSONDecodeError:
+                            break
+                        if isinstance(parsed, dict):
+                            return parsed
+                        break
+            start_idx = stripped.find("{", start_idx + 1)
+
+        return None
+
+    def _has_explicit_completion_phrase(self, text: str) -> bool:
+        """Conservative completion phrase detection."""
+        lowered = text.strip().lower()
+        if not lowered:
+            return False
+
+        positive_patterns = (
+            r"\bgoal\s+achieved\b",
+            r"\btask\s+completed\b",
+            r"\ball\s+tasks?\s+(?:are\s+)?done\b",
+            r"\bwork\s+(?:is\s+)?complete\b",
+            r"\bsuccessfully\s+completed\b",
+        )
+        negative_patterns = (
+            r"\bnot\s+(?:yet\s+)?done\b",
+            r"\bnot\s+(?:yet\s+)?complete\b",
+            r"\bstill\s+working\b",
+            r"\bin\s+progress\b",
+            r"\bremaining\b",
+        )
+
+        has_positive = any(re.search(pattern, lowered) for pattern in positive_patterns)
+        has_negative = any(re.search(pattern, lowered) for pattern in negative_patterns)
+        return has_positive and not has_negative
 
     async def _generate_suggestions(
         self, messages: List[Dict[str, Any]]
@@ -923,16 +1249,6 @@ class SessionProcessor:
         self._current_message.cost = step_cost
         self._current_message.finish_reason = finish_reason
         self._current_message.completed_at = time.time()
-
-        # Build trace URL if Langfuse context is available
-        trace_url = None
-        if self._langfuse_context:
-            from src.configuration.config import get_settings
-
-            settings = get_settings()
-            if settings.langfuse_enabled and settings.langfuse_host:
-                trace_id = self._langfuse_context.get("conversation_id", session_id)
-                trace_url = f"{settings.langfuse_host}/trace/{trace_id}"
 
         # Emit context status update after step completes.
         # If LLM reported usage (via USAGE event), step_tokens.input is accurate.

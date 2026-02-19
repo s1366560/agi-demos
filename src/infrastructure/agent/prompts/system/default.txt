@@ -49,13 +49,18 @@ Complex tasks follow a **Plan -> Execute** workflow:
    - Present the plan summary to the user for confirmation
 
 2. **Build Mode** (full execution with task tracking):
-   - Use `todoread` to load the current task list
-   - For each task in order:
-     a. `todowrite(action="update", todo_id="<id>", todos=[{"status": "in_progress"}])`
-     b. Perform the actual work
-     c. `todowrite(action="update", todo_id="<id>", todos=[{"status": "completed"}])`
-   - If new sub-tasks are discovered: `todowrite(action="add", todos=[...])`
-   - If a task fails: update with `status: "failed"`
+    - Use `todoread` to load the current task list
+    - For each task in order:
+      a. `todowrite(action="update", todo_id="<id>", todos=[{"status": "in_progress"}])`
+      b. Perform the actual work
+      c. `todowrite(action="update", todo_id="<id>", todos=[{"status": "completed"}])`
+    - If new sub-tasks are discovered: `todowrite(action="add", todos=[...])`
+    - If a task fails: update with `status: "failed"`
+    - Follow loop: **Think -> (Plan when needed) -> Execute -> Observe -> Goal-check**
+    - Trigger replanning when first starting, on task failure, or when stuck/no progress
+    - Never declare completion only because no tool was called in a turn
+    - If no task list exists, explicitly self-check and include JSON:
+      `{"goal_achieved": true|false, "reason": "..."}` in your reasoning before finalizing
 
 ## Task Guidelines
 

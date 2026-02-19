@@ -19,7 +19,9 @@ Extracted from processor.py to reduce complexity and improve testability.
 """
 
 import asyncio
+import json
 import logging
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, AsyncIterator, Dict, List, Optional, Protocol
@@ -31,7 +33,7 @@ from src.domain.events.agent_events import (
     AgentEventType,
     AgentStartEvent,
     AgentStatusEvent,
-
+    AgentThoughtEvent,
 )
 
 logger = logging.getLogger(__name__)
@@ -141,6 +143,7 @@ class LoopConfig:
     enable_work_plan: bool = True
     enable_doom_loop_detection: bool = True
     context_limit: int = 200000
+    max_no_progress_steps: int = 3
 
 
 @dataclass
@@ -166,6 +169,17 @@ class StepResult:
     tokens_used: int = 0
     cost: float = 0.0
     error: Optional[str] = None
+
+
+@dataclass
+class LoopGoalCheck:
+    """Goal evaluation result for the loop."""
+
+    achieved: bool
+    should_stop: bool = False
+    reason: str = ""
+    source: str = "unknown"
+    pending_tasks: int = 0
 
 
 # ============================================================================
@@ -226,6 +240,8 @@ class ReActLoop:
         # Work plan tracking
         self._work_plan: Optional[Dict[str, Any]] = None
         self._current_plan_step: int = 0
+        self._task_statuses: Dict[str, str] = {}
+        self._no_progress_steps: int = 0
 
     @property
     def state(self) -> LoopState:
@@ -260,6 +276,8 @@ class ReActLoop:
         """
         self._step_count = 0
         self._state = LoopState.IDLE
+        self._task_statuses = {}
+        self._no_progress_steps = 0
 
         if self._doom_loop_detector:
             self._doom_loop_detector.reset()
@@ -299,6 +317,7 @@ class ReActLoop:
                 # Process one step
                 step_result = StepResult(result=LoopResult.CONTINUE)
                 had_tool_calls = False
+                last_thought = ""
 
                 async for event in self._process_step(messages, tools, context):
                     yield event
@@ -312,13 +331,53 @@ class ReActLoop:
                     elif event.event_type == AgentEventType.COMPACT_NEEDED:
                         step_result.result = LoopResult.COMPACT
                         break
+                    elif (
+                        event.event_type == AgentEventType.THOUGHT
+                        and isinstance(event, AgentThoughtEvent)
+                        and event.content
+                    ):
+                        last_thought = event.content
+                    elif event.event_type == AgentEventType.TASK_LIST_UPDATED:
+                        self._ingest_task_list_event(event)
+                    elif event.event_type == AgentEventType.TASK_UPDATED:
+                        self._ingest_task_update_event(event)
 
                 # If no stop/compact, determine result from tool calls
                 if step_result.result == LoopResult.CONTINUE:
                     if had_tool_calls:
+                        self._no_progress_steps = 0
                         step_result.result = LoopResult.CONTINUE
                     else:
-                        step_result.result = LoopResult.COMPLETE
+                        goal_check = self._evaluate_goal_state(last_thought)
+                        if goal_check.achieved:
+                            self._no_progress_steps = 0
+                            yield AgentStatusEvent(status=f"goal_achieved:{goal_check.source}")
+                            step_result.result = LoopResult.COMPLETE
+                        elif goal_check.should_stop:
+                            yield AgentErrorEvent(
+                                message=goal_check.reason or "Goal cannot be completed",
+                                code="GOAL_NOT_ACHIEVED",
+                            )
+                            self._state = LoopState.ERROR
+                            step_result.result = LoopResult.STOP
+                        else:
+                            self._no_progress_steps += 1
+                            yield AgentStatusEvent(status=f"goal_pending:{goal_check.source}")
+                            if self._no_progress_steps > 1:
+                                yield AgentStatusEvent(status="planning_recheck")
+                            if self._no_progress_steps >= self._config.max_no_progress_steps:
+                                yield AgentErrorEvent(
+                                    message=(
+                                        "Goal not achieved after "
+                                        f"{self._no_progress_steps} no-progress turns. "
+                                        f"{goal_check.reason or 'Replan required.'}"
+                                    ),
+                                    code="GOAL_NOT_ACHIEVED",
+                                )
+                                self._state = LoopState.ERROR
+                                step_result.result = LoopResult.STOP
+                            else:
+                                step_result.result = LoopResult.CONTINUE
 
                 result = step_result.result
 
@@ -336,6 +395,162 @@ class ReActLoop:
             logger.error(f"ReAct loop error: {e}", exc_info=True)
             yield AgentErrorEvent(message=str(e), code=type(e).__name__)
             self._state = LoopState.ERROR
+
+    def _ingest_task_list_event(self, event: AgentDomainEvent) -> None:
+        """Update task status cache from a task list event."""
+        tasks = getattr(event, "tasks", None)
+        if not isinstance(tasks, list):
+            return
+        for task in tasks:
+            if isinstance(task, dict):
+                task_id = str(task.get("id", "")).strip()
+                status = str(task.get("status", "")).strip().lower()
+                if task_id and status:
+                    self._task_statuses[task_id] = status
+
+    def _ingest_task_update_event(self, event: AgentDomainEvent) -> None:
+        """Update task status cache from a single task update event."""
+        task_id = str(getattr(event, "task_id", "")).strip()
+        status = str(getattr(event, "status", "")).strip().lower()
+        if task_id and status:
+            self._task_statuses[task_id] = status
+
+    def _evaluate_goal_state(self, thought_text: str) -> LoopGoalCheck:
+        """Evaluate completion from tasks first, then explicit self-check text."""
+        task_goal = self._evaluate_task_goal()
+        if task_goal is not None:
+            return task_goal
+        return self._evaluate_thought_goal(thought_text)
+
+    def _evaluate_task_goal(self) -> Optional[LoopGoalCheck]:
+        """Evaluate completion from cached task statuses."""
+        if not self._task_statuses:
+            return None
+
+        statuses = [s.lower() for s in self._task_statuses.values()]
+        pending_count = sum(1 for s in statuses if s in {"pending", "in_progress"})
+        failed_count = sum(1 for s in statuses if s == "failed")
+        unknown_count = sum(1 for s in statuses if s not in {"pending", "in_progress", "completed", "cancelled", "failed"})
+        pending_count += unknown_count
+
+        if pending_count > 0:
+            return LoopGoalCheck(
+                achieved=False,
+                reason=f"{pending_count} task(s) still in progress",
+                source="tasks",
+                pending_tasks=pending_count,
+            )
+        if failed_count > 0:
+            return LoopGoalCheck(
+                achieved=False,
+                should_stop=True,
+                reason=f"{failed_count} task(s) failed",
+                source="tasks",
+            )
+        return LoopGoalCheck(
+            achieved=True,
+            reason="All tasks reached terminal success states",
+            source="tasks",
+        )
+
+    def _evaluate_thought_goal(self, thought_text: str) -> LoopGoalCheck:
+        """Evaluate no-task completion from explicit self-check in thought text."""
+        parsed = self._extract_goal_json(thought_text)
+        if parsed and isinstance(parsed.get("goal_achieved"), bool):
+            achieved = bool(parsed["goal_achieved"])
+            reason = str(parsed.get("reason", "")).strip()
+            return LoopGoalCheck(
+                achieved=achieved,
+                reason=reason or ("Goal achieved" if achieved else "Goal not achieved"),
+                source="thought_self_check",
+            )
+
+        if self._has_explicit_completion_phrase(thought_text):
+            return LoopGoalCheck(
+                achieved=True,
+                reason="Assistant declared completion in thought",
+                source="thought_text",
+            )
+
+        return LoopGoalCheck(
+            achieved=False,
+            reason="No explicit goal_achieved signal in thought",
+            source="thought_self_check",
+        )
+
+    def _extract_goal_json(self, text: str) -> Optional[Dict[str, Any]]:
+        """Extract a JSON object from thought text."""
+        stripped = text.strip()
+        if not stripped:
+            return None
+
+        try:
+            parsed = json.loads(stripped)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+        start_idx = stripped.find("{")
+        while start_idx >= 0:
+            depth = 0
+            in_string = False
+            escape_next = False
+            for index in range(start_idx, len(stripped)):
+                char = stripped[index]
+
+                if in_string:
+                    if escape_next:
+                        escape_next = False
+                    elif char == "\\":
+                        escape_next = True
+                    elif char == '"':
+                        in_string = False
+                    continue
+
+                if char == '"':
+                    in_string = True
+                elif char == "{":
+                    depth += 1
+                elif char == "}":
+                    depth -= 1
+                    if depth == 0:
+                        candidate = stripped[start_idx : index + 1]
+                        try:
+                            parsed = json.loads(candidate)
+                        except json.JSONDecodeError:
+                            break
+                        if isinstance(parsed, dict):
+                            return parsed
+                        break
+            start_idx = stripped.find("{", start_idx + 1)
+
+        return None
+
+    def _has_explicit_completion_phrase(self, text: str) -> bool:
+        """Conservative completion phrase detection."""
+        lowered = text.strip().lower()
+        if not lowered:
+            return False
+
+        positive_patterns = (
+            r"\bgoal\s+achieved\b",
+            r"\btask\s+completed\b",
+            r"\ball\s+tasks?\s+(?:are\s+)?done\b",
+            r"\bwork\s+(?:is\s+)?complete\b",
+            r"\bsuccessfully\s+completed\b",
+        )
+        negative_patterns = (
+            r"\bnot\s+(?:yet\s+)?done\b",
+            r"\bnot\s+(?:yet\s+)?complete\b",
+            r"\bstill\s+working\b",
+            r"\bin\s+progress\b",
+            r"\bremaining\b",
+        )
+
+        has_positive = any(re.search(pattern, lowered) for pattern in positive_patterns)
+        has_negative = any(re.search(pattern, lowered) for pattern in negative_patterns)
+        return has_positive and not has_negative
 
     async def _process_step(
         self,

@@ -44,6 +44,11 @@ You have `todowrite` and `todoread` tools for persistent task management. Tasks 
 
 1. **Plan Mode**: Analyze, explore, then `todowrite(action="replace", todos=[...])` to create the task list. Present plan to user.
 2. **Build Mode**: `todoread` to load tasks. For each: update to `in_progress` -> do work -> update to `completed`. Use `add` for newly discovered tasks.
+   - Use loop: **Think -> (Plan when needed) -> Execute -> Observe -> Goal-check**
+   - Replan on first pass, task failure, or repeated no-progress turns
+   - Do NOT treat "no tool call" as completion by itself
+   - When no task list exists, include explicit reasoning JSON:
+     `{"goal_achieved": true|false, "reason": "..."}`
 
 ## Task Guidelines
 

@@ -37,7 +37,7 @@ from src.infrastructure.agent.core.react_loop import (
 )
 
 
-# Helper to create a thought event (signals LLM responded without tool calls → COMPLETE)
+# Helper to create a thought event used for goal self-check.
 def make_thought(content: str = "Thinking...") -> AgentThoughtEvent:
     return AgentThoughtEvent(content=content)
 
@@ -374,7 +374,7 @@ class TestLoopExecution:
         """Test that run emits start event."""
         # Set up LLM to return completion (no tool calls → COMPLETE)
         loop._llm_invoker.set_events([
-            make_thought("Done")
+            make_thought('{"goal_achieved": true, "reason": "done"}')
         ])
 
         events = []
@@ -386,7 +386,7 @@ class TestLoopExecution:
     async def test_run_emits_complete_event(self, loop, sample_messages, sample_tools, context):
         """Test that run emits complete event on success."""
         loop._llm_invoker.set_events([
-            make_thought("Done")
+            make_thought('{"goal_achieved": true, "reason": "done"}')
         ])
 
         events = []
@@ -441,6 +441,29 @@ class TestLoopExecution:
 
         assert any(
             e.event_type == AgentEventType.ERROR and "aborted" in e.message.lower()
+            for e in events
+        )
+
+    async def test_run_no_progress_goal_false_emits_goal_error(
+        self, sample_messages, sample_tools, context
+    ):
+        """No tool calls + goal_achieved=false should stop with GOAL_NOT_ACHIEVED."""
+        invoker = MockLLMInvoker()
+        invoker.set_events(
+            [make_thought('{"goal_achieved": false, "reason": "work remains"}')]
+        )
+        loop = ReActLoop(
+            llm_invoker=invoker,
+            tool_executor=MockToolExecutor(),
+            config=LoopConfig(max_steps=6, max_no_progress_steps=2),
+        )
+
+        events = []
+        async for event in loop.run(sample_messages, sample_tools, context):
+            events.append(event)
+
+        assert any(
+            e.event_type == AgentEventType.ERROR and e.code == "GOAL_NOT_ACHIEVED"
             for e in events
         )
 
@@ -571,6 +594,31 @@ class TestUserQueryExtraction:
         ]
         query = loop._extract_user_query(messages)
         assert query is None
+
+
+@pytest.mark.unit
+class TestGoalGateHelpers:
+    """Test task/goal helper behavior."""
+
+    def test_task_goal_in_progress_not_complete(self, loop):
+        loop._task_statuses = {"t1": "in_progress", "t2": "completed"}
+        goal = loop._evaluate_goal_state("")
+        assert goal.achieved is False
+        assert goal.source == "tasks"
+        assert goal.pending_tasks == 1
+
+    def test_task_goal_all_completed_is_complete(self, loop):
+        loop._task_statuses = {"t1": "completed", "t2": "cancelled"}
+        goal = loop._evaluate_goal_state("")
+        assert goal.achieved is True
+        assert goal.source == "tasks"
+
+    def test_extract_goal_json_handles_braces_in_string(self, loop):
+        parsed = loop._extract_goal_json(
+            'meta {"goal_achieved": false, "reason": "use } in text"} tail'
+        )
+        assert parsed is not None
+        assert parsed.get("goal_achieved") is False
 
 
 # ============================================================================
