@@ -179,12 +179,12 @@ const TimelineStepItem = memo<{
         : <XCircle size={14} className={statusColor} />;
 
   return (
-    <div className="relative flex gap-2">
+    <div className="relative flex gap-2 mb-0" style={{ minHeight: '24px' }}>
       {/* Timeline line + dot */}
-      <div className="flex flex-col items-center flex-shrink-0">
+      <div className="flex flex-col items-center flex-shrink-0" style={{ width: '24px' }}>
         <div
           className={`
-            w-6 h-6 rounded-full flex items-center justify-center border-2
+            w-6 h-6 rounded-full flex items-center justify-center border-2 flex-shrink-0
             ${step.status === 'running'
               ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/50'
               : step.status === 'success'
@@ -192,6 +192,7 @@ const TimelineStepItem = memo<{
                 : 'border-red-400 bg-red-50 dark:bg-red-950/50'
             }
           `}
+          style={{ minWidth: '24px', minHeight: '24px' }}
         >
           {step.status === 'running' ? (
             <Loader2 size={11} className="text-blue-500 animate-spin" />
@@ -200,12 +201,12 @@ const TimelineStepItem = memo<{
           )}
         </div>
         {!isLast && (
-          <div className="w-px flex-1 min-h-[8px] bg-slate-200 dark:bg-slate-700" />
+          <div className="w-px flex-1 min-h-[16px] bg-slate-200 dark:bg-slate-700 flex-shrink-0" />
         )}
       </div>
 
       {/* Content */}
-      <div className="flex-1 pb-1.5 min-w-0">
+      <div className="flex-1 pb-1.5 min-w-0 flex flex-col">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
@@ -450,7 +451,7 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
 
       {/* Timeline steps */}
       {!collapsed && (
-        <div className="pl-1">
+        <div className="pl-1 pt-0.5" style={{ display: 'flow-root' }}>
           {steps.map((step, i) => (
             <TimelineStepItem
               key={step.id}

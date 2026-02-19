@@ -355,27 +355,29 @@ export const Timeline: React.FC<TimelineProps> = ({ children, timelineRef }) => 
   return (
     <>
       {children || (
-        <div className="relative" ref={timelineRef}>
+        <div className="relative pl-2" ref={timelineRef}>
           {/* Vertical Timeline Line */}
-          <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-slate-200 dark:bg-slate-700" />
+          <div className="absolute left-6 top-2 bottom-2 w-0.5 bg-slate-200 dark:bg-slate-700" style={{ zIndex: 0 }} />
 
           {/* Step Nodes */}
-          {steps.map((step, index) => {
-            const isExpanded = isStepExpanded(step.stepNumber);
-            const isLast = index === steps.length - 1;
-            const isCurrent = currentStepNumber === step.stepNumber;
+          <div className="relative" style={{ zIndex: 1 }}>
+            {steps.map((step, index) => {
+              const isExpanded = isStepExpanded(step.stepNumber);
+              const isLast = index === steps.length - 1;
+              const isCurrent = currentStepNumber === step.stepNumber;
 
-            return (
-              <TimelineNode
-                key={step.stepNumber}
-                step={step}
-                isExpanded={isExpanded}
-                isCurrent={isCurrent}
-                isLast={isLast}
-                onToggle={() => toggleStep(step.stepNumber)}
-              />
-            );
-          })}
+              return (
+                <TimelineNode
+                  key={step.stepNumber}
+                  step={step}
+                  isExpanded={isExpanded}
+                  isCurrent={isCurrent}
+                  isLast={isLast}
+                  onToggle={() => toggleStep(step.stepNumber)}
+                />
+              );
+            })}
+          </div>
         </div>
       )}
     </>
