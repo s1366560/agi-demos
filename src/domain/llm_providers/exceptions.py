@@ -1,0 +1,283 @@
+"""
+LLM Provider Exceptions.
+
+Unified exception hierarchy for LLM provider operations.
+Provides clear categorization of errors for better error handling and observability.
+
+Example:
+    try:
+        response = await llm_client.generate(messages)
+    except RateLimitError:
+        logger.warning("Rate limit exceeded")
+    except ModelError as e:
+        logger.error(f"Model error: {e}")
+    except ProviderError as e:
+        logger.error(f"Provider error: {e}")
+"""
+
+from typing import Any, Optional
+
+
+class LLMError(Exception):
+    """
+    Base exception for all LLM-related errors.
+    
+    All LLM exceptions inherit from this base class.
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        request_id: Optional[str] = None,
+        **kwargs: Any,
+    ):
+        super().__init__(message)
+        self.message = message
+        self.provider = provider
+        self.model = model
+        self.request_id = request_id
+        self.extra = kwargs
+    
+    def to_dict(self) -> dict[str, Any]:
+        """Convert exception to dictionary for logging."""
+        return {
+            "type": self.__class__.__name__,
+            "message": self.message,
+            "provider": self.provider,
+            "model": self.model,
+            "request_id": self.request_id,
+            **self.extra,
+        }
+
+
+class ProviderError(LLMError):
+    """
+    Exception for provider-level errors.
+    
+    Used for errors related to specific LLM providers:
+    - Authentication failures
+    - Configuration errors
+    - Provider unavailable
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        provider: Optional[str] = None,
+        **kwargs: Any,
+    ):
+        super().__init__(message=message, provider=provider, **kwargs)
+
+
+class AuthenticationError(ProviderError):
+    """
+    Exception for authentication failures.
+    
+    Raised when:
+    - Invalid API key
+    - Expired credentials
+    - Missing authentication
+    """
+    
+    pass
+
+
+class RateLimitError(ProviderError):
+    """
+    Exception for rate limit exceeded errors.
+    
+    Raised when:
+    - Provider rate limit hit (429)
+    - Quota exceeded
+    - Throttling in effect
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        provider: Optional[str] = None,
+        retry_after: Optional[int] = None,
+        **kwargs: Any,
+    ):
+        super().__init__(message=message, provider=provider, **kwargs)
+        self.retry_after = retry_after  # Seconds to wait before retry
+
+
+class CircuitBreakerOpenError(ProviderError):
+    """
+    Exception when circuit breaker is open.
+    
+    Raised when:
+    - Provider has too many recent failures
+    - Circuit breaker is in open state
+    - Provider is temporarily unavailable
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        provider: Optional[str] = None,
+        reopen_after: Optional[float] = None,
+        **kwargs: Any,
+    ):
+        super().__init__(message=message, provider=provider, **kwargs)
+        self.reopen_after = reopen_after  # Seconds until circuit breaker half-opens
+
+
+class ProviderUnavailableError(ProviderError):
+    """
+    Exception when provider is unavailable.
+    
+    Raised when:
+    - Provider service is down
+    - Network connectivity issues
+    - Timeout exceeded
+    """
+    
+    pass
+
+
+class ModelError(LLMError):
+    """
+    Exception for model-related errors.
+    
+    Used for errors related to model behavior:
+    - Invalid response format
+    - JSON parsing failures
+    - Content policy violations
+    - Context length exceeded
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        model: Optional[str] = None,
+        response: Optional[Any] = None,
+        **kwargs: Any,
+    ):
+        super().__init__(message=message, model=model, **kwargs)
+        self.response = response
+
+
+class InvalidResponseError(ModelError):
+    """
+    Exception for invalid model responses.
+    
+    Raised when:
+    - Response is empty or malformed
+    - Required fields missing
+    - Unexpected response structure
+    """
+    
+    pass
+
+
+class JSONParseError(ModelError):
+    """
+    Exception for JSON parsing failures.
+    
+    Raised when:
+    - Model returns invalid JSON for structured output
+    - Response cannot be parsed
+    - Schema validation fails
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        raw_response: Optional[str] = None,
+        expected_schema: Optional[str] = None,
+        **kwargs: Any,
+    ):
+        super().__init__(message=message, **kwargs)
+        self.raw_response = raw_response
+        self.expected_schema = expected_schema
+
+
+class ContentPolicyViolationError(ModelError):
+    """
+    Exception for content policy violations.
+    
+    Raised when:
+    - Content filtered by provider
+    - Safety guidelines violation
+    - Blocked content detected
+    """
+    
+    pass
+
+
+class ContextLengthExceededError(ModelError):
+    """
+    Exception when context length exceeds model limits.
+    
+    Raised when:
+    - Input tokens exceed model maximum
+    - Context window overflow
+    """
+    
+    def __init__(
+        self,
+        message: str,
+        model: Optional[str] = None,
+        input_tokens: Optional[int] = None,
+        max_tokens: Optional[int] = None,
+        **kwargs: Any,
+    ):
+        super().__init__(message=message, model=model, **kwargs)
+        self.input_tokens = input_tokens
+        self.max_tokens = max_tokens
+
+
+class ConfigurationError(LLMError):
+    """
+    Exception for configuration errors.
+    
+    Raised when:
+    - Invalid configuration
+    - Missing required settings
+    - Incompatible options
+    """
+    
+    pass
+
+
+class EmbeddingError(LLMError):
+    """
+    Exception for embedding-related errors.
+    
+    Used for errors in embedding generation:
+    - Embedding dimension mismatch
+    - Failed embedding generation
+    - Invalid input for embedding
+    """
+    
+    pass
+
+
+class RerankError(LLMError):
+    """
+    Exception for reranking-related errors.
+    
+    Used for errors in reranking operations:
+    - Failed reranking
+    - Invalid rerank response
+    - Score computation errors
+    """
+    
+    pass
+
+
+class StreamError(LLMError):
+    """
+    Exception for streaming-related errors.
+    
+    Used for errors during streaming:
+    - Stream interrupted
+    - Incomplete response
+    - Stream parsing errors
+    """
+    
+    pass

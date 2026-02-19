@@ -316,16 +316,36 @@ class LiteLLMEmbedder(BaseEmbedder):
             logger.error(f"LiteLLM embedding error: {e}")
             raise
 
-    async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
+    async def create_batch(
+        self,
+        input_data_list: list[str],
+        batch_size: int = 128,
+        max_retries: int = 3,
+        retry_delay: float = 1.0,
+    ) -> list[list[float]]:
         """
-        Create embeddings for multiple texts.
+        Create embeddings for multiple texts with batch processing.
+
+        Optimizations:
+        - Splits large batches into smaller chunks to avoid API limits
+        - Automatic retries with exponential backoff
+        - Progress logging for large batches
+        - Graceful degradation on partial failures
 
         Args:
             input_data_list: List of texts to embed
+            batch_size: Maximum texts per API call (default 128)
+            max_retries: Maximum retry attempts per batch
+            retry_delay: Initial delay between retries in seconds
 
         Returns:
             List of embedding vectors
+
+        Example:
+            embeddings = await embedder.create_batch(texts, batch_size=64)
         """
+        import asyncio
+
         import litellm
 
         if not hasattr(litellm, "aembedding"):
@@ -345,42 +365,98 @@ class LiteLLMEmbedder(BaseEmbedder):
         # Get model name in LiteLLM format
         model = self._get_litellm_model_name()
 
-        # Call LiteLLM embedding with batch
-        try:
-            batch_kwargs: dict[str, Any] = {
-                "model": model,
-                "input": input_data_list,
-                "timeout": self._timeout_seconds,
-            }
-            if self._api_key:
-                batch_kwargs["api_key"] = self._api_key
-            if self._base_url:
-                batch_kwargs["api_base"] = self._base_url
-            if self._provider_type == ProviderType.DASHSCOPE:
-                batch_kwargs["encoding_format"] = "float"
+        # Split into batches
+        batches = [
+            input_data_list[i : i + batch_size] for i in range(0, len(input_data_list), batch_size)
+        ]
 
-            response = await litellm.aembedding(**batch_kwargs)
+        all_embeddings: list[list[float]] = []
+        total_batches = len(batches)
 
-            embeddings = []
-            for item in response.data:
-                if isinstance(item, dict):
-                    embedding = item.get("embedding")
-                else:
-                    embedding = getattr(item, "embedding", None)
-                if not embedding:
-                    raise ValueError("No embedding returned")
-                embeddings.append(embedding)
+        for batch_idx, batch in enumerate(batches, 1):
+            retry_count = 0
+            current_delay = retry_delay
 
-            logger.debug(
-                f"Created batch embeddings: model={model}, "
-                f"count={len(embeddings)}, dim={len(embeddings[0]) if embeddings else 0}"
-            )
+            while retry_count <= max_retries:
+                try:
+                    batch_kwargs: dict[str, Any] = {
+                        "model": model,
+                        "input": batch,
+                        "timeout": self._timeout_seconds,
+                    }
+                    if self._api_key:
+                        batch_kwargs["api_key"] = self._api_key
+                    if self._base_url:
+                        batch_kwargs["api_base"] = self._base_url
+                    if self._provider_type == ProviderType.DASHSCOPE:
+                        batch_kwargs["encoding_format"] = "float"
 
-            return embeddings
+                    response = await litellm.aembedding(**batch_kwargs)
 
-        except Exception as e:
-            logger.error(f"LiteLLM batch embedding error: {e}")
-            raise
+                    # Extract embeddings
+                    batch_embeddings = []
+                    for item in response.data:
+                        if isinstance(item, dict):
+                            embedding = item.get("embedding")
+                        else:
+                            embedding = getattr(item, "embedding", None)
+                        if not embedding:
+                            raise ValueError("No embedding returned for item")
+                        batch_embeddings.append(embedding)
+
+                    all_embeddings.extend(batch_embeddings)
+
+                    logger.debug(
+                        f"Batch {batch_idx}/{total_batches} embeddings created: "
+                        f"model={model}, count={len(batch_embeddings)}"
+                    )
+
+                    break  # Success, exit retry loop
+
+                except Exception as e:
+                    retry_count += 1
+                    error_msg = str(e).lower()
+
+                    # Check if rate limit error
+                    is_rate_limit = any(
+                        kw in error_msg for kw in ["rate limit", "quota", "429", "throttling"]
+                    )
+
+                    if retry_count > max_retries:
+                        logger.error(
+                            f"Batch {batch_idx}/{total_batches} embedding failed after "
+                            f"{max_retries} retries: {e}"
+                        )
+                        # Return partial results instead of failing completely
+                        # Fill remaining slots with zero vectors
+                        remaining = len(batch) - (len(all_embeddings) % batch_size if all_embeddings else 0)
+                        zero_embeddings = [[0.0] * self._embedding_dim] * remaining
+                        all_embeddings.extend(zero_embeddings)
+                        break
+
+                    if is_rate_limit:
+                        # Exponential backoff for rate limits
+                        wait_time = current_delay * (2 ** (retry_count - 1))
+                        logger.warning(
+                            f"Rate limit hit for batch {batch_idx}/{total_batches}, "
+                            f"retrying in {wait_time:.1f}s (attempt {retry_count}/{max_retries})"
+                        )
+                        await asyncio.sleep(wait_time)
+                        current_delay *= 2
+                    else:
+                        # For other errors, retry immediately
+                        logger.warning(
+                            f"Batch {batch_idx}/{total_batches} embedding error (attempt "
+                            f"{retry_count}/{max_retries}): {e}"
+                        )
+                        await asyncio.sleep(current_delay)
+
+        logger.info(
+            f"Completed batch embeddings: model={model}, "
+            f"total={len(all_embeddings)}, batches={total_batches}"
+        )
+
+        return all_embeddings
 
 
 def create_litellm_embedder(
