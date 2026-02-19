@@ -755,24 +755,40 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
       const response = await fetch(url);
       const content = await response.text();
 
-      // Determine canvas content type from artifact category
-      const typeMap: Record<string, 'code' | 'markdown' | 'data'> = {
-        code: 'code',
-        document: 'markdown',
-        data: 'data',
-      };
-      const contentType = typeMap[event.category] || 'code';
-      const ext = event.filename.split('.').pop()?.toLowerCase();
+      // Check if this is HTML content - should use preview mode with iframe
+      const isHtmlFile = event.filename.toLowerCase().endsWith('.html') || 
+                         event.mimeType === 'text/html';
+      
+      if (isHtmlFile) {
+        // HTML files should be rendered in preview mode using iframe
+        canvasOpenTab({
+          id: event.artifactId,
+          title: event.filename,
+          type: 'preview',
+          content,
+          artifactId: event.artifactId,
+          artifactUrl: url,
+        });
+      } else {
+        // Determine canvas content type from artifact category
+        const typeMap: Record<string, 'code' | 'markdown' | 'data'> = {
+          code: 'code',
+          document: 'markdown',
+          data: 'data',
+        };
+        const contentType = typeMap[event.category] || 'code';
+        const ext = event.filename.split('.').pop()?.toLowerCase();
 
-      canvasOpenTab({
-        id: event.artifactId,
-        title: event.filename,
-        type: contentType,
-        content,
-        language: ext,
-        artifactId: event.artifactId,
-        artifactUrl: url,
-      });
+        canvasOpenTab({
+          id: event.artifactId,
+          title: event.filename,
+          type: contentType,
+          content,
+          language: ext,
+          artifactId: event.artifactId,
+          artifactUrl: url,
+        });
+      }
       setLayoutMode('canvas');
     } catch {
       // Silently fail - user can still download the file directly

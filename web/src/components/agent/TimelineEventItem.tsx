@@ -774,33 +774,49 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
       const response = await fetch(url);
       const content = await response.text();
 
-      // Determine canvas content type from artifact category
-      const typeMap: Record<string, CanvasContentType> = {
-        code: 'code',
-        document: 'markdown',
-        data: 'data',
-      };
-      const contentType: CanvasContentType = typeMap[event.category] || 'code';
+      // Check if this is HTML content - should use preview mode with iframe
+      const isHtmlFile = event.filename.toLowerCase().endsWith('.html') || 
+                         event.mimeType === 'text/html';
+      
+      if (isHtmlFile) {
+        // HTML files should be rendered in preview mode using iframe
+        useCanvasStore.getState().openTab({
+          id: event.artifactId,
+          title: event.filename,
+          type: 'preview',
+          content,
+          artifactId: event.artifactId,
+          artifactUrl: url,
+        });
+      } else {
+        // Determine canvas content type from artifact category
+        const typeMap: Record<string, CanvasContentType> = {
+          code: 'code',
+          document: 'markdown',
+          data: 'data',
+        };
+        const contentType: CanvasContentType = typeMap[event.category] || 'code';
 
-      // Extract language from filename extension
-      const ext = event.filename.split('.').pop()?.toLowerCase();
-      const langMap: Record<string, string> = {
-        py: 'python', js: 'javascript', ts: 'typescript', tsx: 'tsx', jsx: 'jsx',
-        rs: 'rust', go: 'go', java: 'java', cpp: 'cpp', c: 'c', rb: 'ruby',
-        php: 'php', sh: 'bash', sql: 'sql', html: 'html', css: 'css',
-        json: 'json', yaml: 'yaml', yml: 'yaml', xml: 'xml', md: 'markdown',
-        toml: 'toml', ini: 'ini', csv: 'csv',
-      };
+        // Extract language from filename extension
+        const ext = event.filename.split('.').pop()?.toLowerCase();
+        const langMap: Record<string, string> = {
+          py: 'python', js: 'javascript', ts: 'typescript', tsx: 'tsx', jsx: 'jsx',
+          rs: 'rust', go: 'go', java: 'java', cpp: 'cpp', c: 'c', rb: 'ruby',
+          php: 'php', sh: 'bash', sql: 'sql', html: 'html', css: 'css',
+          json: 'json', yaml: 'yaml', yml: 'yaml', xml: 'xml', md: 'markdown',
+          toml: 'toml', ini: 'ini', csv: 'csv',
+        };
 
-      useCanvasStore.getState().openTab({
-        id: event.artifactId,
-        title: event.filename,
-        type: contentType,
-        content,
-        language: ext ? langMap[ext] : undefined,
-        artifactId: event.artifactId,
-        artifactUrl: url,
-      });
+        useCanvasStore.getState().openTab({
+          id: event.artifactId,
+          title: event.filename,
+          type: contentType,
+          content,
+          language: ext ? langMap[ext] : undefined,
+          artifactId: event.artifactId,
+          artifactUrl: url,
+        });
+      }
 
       const currentMode = useLayoutModeStore.getState().mode;
       if (currentMode !== 'canvas') {
@@ -809,7 +825,7 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
     } catch {
       // Silently fail — user can still download
     }
-  }, [artifactUrl, artifactPreviewUrl, event.artifactId, event.filename, event.category]);
+  }, [artifactUrl, artifactPreviewUrl, event.artifactId, event.filename, event.category, event.mimeType]);
 
   // Determine icon based on category
   const getCategoryIcon = (category: string) => {
