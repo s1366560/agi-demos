@@ -359,6 +359,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [configJson, setConfigJson] = useState('{}');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -369,6 +372,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     llm_small_model: 'gpt-4o-mini',
     embedding_model: 'text-embedding-3-small',
     reranker_model: '',
+    config: {} as Record<string, any>,
     is_active: true,
     is_default: false,
     use_custom_base_url: false,
@@ -376,6 +380,21 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
   const selectedProvider = PROVIDERS.find((p) => p.value === formData.provider_type);
   const presets = MODEL_PRESETS[formData.provider_type];
+
+  // Fetch models from backend when provider type changes
+  useEffect(() => {
+    if (formData.provider_type && isOpen) {
+      providerAPI
+        .listModels(formData.provider_type)
+        .then((res) => {
+          setFetchedModels(res.models || []);
+        })
+        .catch((err) => {
+          console.error('Failed to fetch models:', err);
+          setFetchedModels([]);
+        });
+    }
+  }, [formData.provider_type, isOpen]);
 
   useEffect(() => {
     if (provider) {
@@ -388,10 +407,12 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         llm_small_model: provider.llm_small_model || '',
         embedding_model: provider.embedding_model || '',
         reranker_model: provider.reranker_model || '',
+        config: provider.config || {},
         is_active: provider.is_active,
         is_default: provider.is_default,
         use_custom_base_url: !!provider.base_url,
       });
+      setConfigJson(JSON.stringify(provider.config || {}, null, 2));
       setCurrentStep('credentials');
     } else {
       setFormData({
@@ -403,10 +424,12 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         llm_small_model: 'gpt-4o-mini',
         embedding_model: 'text-embedding-3-small',
         reranker_model: '',
+        config: {},
         is_active: true,
         is_default: false,
         use_custom_base_url: false,
       });
+      setConfigJson('{}');
       setCurrentStep('provider');
     }
     setError(null);
@@ -440,7 +463,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       // Simulate API test - in real implementation, call backend
       await new Promise((resolve) => setTimeout(resolve, 1500));
       setTestResult({ success: true, message: 'Connection successful! API key is valid.' });
-    } catch (err) {
+    } catch (_err) {
       setTestResult({ success: false, message: 'Connection failed. Please check your API key.' });
     } finally {
       setIsTesting(false);
@@ -450,6 +473,16 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setError(null);
+
+    // Parse and validate config JSON
+    let config = {};
+    try {
+      config = JSON.parse(configJson);
+    } catch (_e) {
+      setError('Invalid JSON in Advanced Configuration');
+      setIsSubmitting(false);
+      return;
+    }
 
     try {
       if (isEditing && provider) {
@@ -461,6 +494,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
           llm_small_model: formData.llm_small_model || undefined,
           embedding_model: formData.embedding_model || undefined,
           reranker_model: formData.reranker_model || undefined,
+          config: config,
           is_active: formData.is_active,
           is_default: formData.is_default,
         };
@@ -478,6 +512,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
           llm_small_model: formData.llm_small_model || undefined,
           embedding_model: formData.embedding_model || undefined,
           reranker_model: formData.reranker_model || undefined,
+          config: config,
           is_active: formData.is_active,
           is_default: formData.is_default,
         };
@@ -851,11 +886,17 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 </div>
                 <input
                   type="text"
+                  list="llm-models-list"
                   value={formData.llm_model}
                   onChange={(e) => setFormData((prev) => ({ ...prev, llm_model: e.target.value }))}
                   placeholder="Or enter custom model name"
                   className="mt-2 w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
+                <datalist id="llm-models-list">
+                  {fetchedModels.map((model) => (
+                    <option key={model} value={model} />
+                  ))}
+                </datalist>
               </div>
 
               {/* Small Model */}
@@ -946,6 +987,36 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Advanced Configuration (JSON) */}
+              <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-primary transition-colors w-full"
+                >
+                  <span className="material-symbols-outlined text-lg transform transition-transform duration-200" style={{ transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                    chevron_right
+                  </span>
+                  Advanced Configuration (JSON)
+                </button>
+                
+                {showAdvanced && (
+                  <div className="mt-4">
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
+                      Override model limits or provider-specific settings. 
+                      Example: <code>{'{ "max_tokens": 8192, "timeout": 60 }'}</code>
+                    </p>
+                    <textarea
+                      value={configJson}
+                      onChange={(e) => setConfigJson(e.target.value)}
+                      className="w-full h-40 p-3 font-mono text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-y"
+                      placeholder="{}"
+                      spellCheck={false}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

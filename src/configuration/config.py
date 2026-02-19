@@ -44,112 +44,10 @@ class Settings(BaseSettings):
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
     redis_password: Optional[str] = Field(default=None, alias="REDIS_PASSWORD")
 
-    # LLM Provider Selection
-    llm_provider: str = Field(
-        default="qwen", alias="LLM_PROVIDER"
-    )  # 'gemini', 'qwen', 'openai', 'deepseek', 'zai', 'kimi', 'anthropic'
-
-    # Database Provider Resolution
-    # When True, resolves LLM providers from database configuration (llm_provider_configs table)
-    # When False, uses environment variables directly
-    # Note: LiteLLM is still used internally as the unified adapter layer
-    use_db_provider_resolution: bool = Field(default=True, alias="USE_DB_PROVIDER_RESOLUTION")
-
-    # Legacy alias for backward compatibility (deprecated, use USE_DB_PROVIDER_RESOLUTION)
-    # TODO: Remove in next major version
-    use_litellm: bool = Field(default=True, alias="USE_LITELLM")
-
     # LLM Provider API Key Encryption
     # 32-byte (256-bit) encryption key as hex string (64 hex characters)
     # Generate with: python -c "import os; print(os.urandom(32).hex())"
     llm_encryption_key: Optional[str] = Field(default=None, alias="LLM_ENCRYPTION_KEY")
-
-    # LLM Provider - Gemini
-    gemini_api_key: Optional[str] = Field(default=None, alias="GEMINI_API_KEY")
-    gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
-    gemini_embedding_model: str = Field(
-        default="text-embedding-004", alias="GEMINI_EMBEDDING_MODEL"
-    )
-    # Gemini doesn't have a dedicated rerank API, uses LLM-based reranking
-    gemini_rerank_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_RERANK_MODEL")
-
-    # LLM Provider - Qwen (通义千问)
-    qwen_api_key: Optional[str] = Field(default=None, alias="DASHSCOPE_API_KEY")
-    qwen_model: str = Field(default="qwen-plus", alias="QWEN_MODEL")
-    qwen_small_model: str = Field(default="qwen-turbo", alias="QWEN_SMALL_MODEL")
-    qwen_embedding_model: str = Field(default="text-embedding-v3", alias="QWEN_EMBEDDING_MODEL")
-    # Qwen has gte-rerank models but may need special API access; uses LLM fallback
-    qwen_rerank_model: str = Field(default="qwen-plus", alias="QWEN_RERANK_MODEL")
-    qwen_base_url: str = Field(
-        default="https://dashscope.aliyuncs.com/compatible-mode/v1",
-        alias="QWEN_BASE_URL",
-    )
-
-    # OpenAI
-    openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
-    openai_base_url: Optional[str] = Field(default=None, alias="OPENAI_BASE_URL")
-    openai_model: str = Field(default="gpt-4o", alias="OPENAI_MODEL")
-    openai_small_model: str = Field(default="gpt-4o-mini", alias="OPENAI_SMALL_MODEL")
-    openai_embedding_model: str = Field(
-        default="text-embedding-3-small", alias="OPENAI_EMBEDDING_MODEL"
-    )
-    # OpenAI doesn't have a dedicated rerank API, uses LLM-based reranking
-    openai_rerank_model: str = Field(default="gpt-4o-mini", alias="OPENAI_RERANK_MODEL")
-
-    # LLM Provider - Deepseek
-    deepseek_api_key: Optional[str] = Field(default=None, alias="DEEPSEEK_API_KEY")
-    deepseek_model: str = Field(default="deepseek-chat", alias="DEEPSEEK_MODEL")
-    deepseek_small_model: str = Field(default="deepseek-coder", alias="DEEPSEEK_SMALL_MODEL")
-    # Deepseek doesn't have a dedicated rerank API, uses LLM-based reranking
-    deepseek_rerank_model: str = Field(default="deepseek-chat", alias="DEEPSEEK_RERANK_MODEL")
-    deepseek_base_url: str = Field(default="https://api.deepseek.com/v1", alias="DEEPSEEK_BASE_URL")
-
-    # LLM Provider - Z.AI (智谱AI) - LiteLLM provider name: zai
-    # ZhipuAI has reranking models; see: https://open.bigmodel.cn/dev/api#rerank
-    zai_api_key: Optional[str] = Field(default=None, alias="ZAI_API_KEY")
-    zai_model: str = Field(default="glm-4.7", alias="ZAI_MODEL")
-    zai_small_model: str = Field(default="glm-4.5-flash", alias="ZAI_SMALL_MODEL")
-    zai_embedding_model: str = Field(default="embedding-3", alias="ZAI_EMBEDDING_MODEL")
-    # Using LLM-based reranking as default; dedicated rerank models available via API
-    zai_rerank_model: str = Field(default="glm-4.5-flash", alias="ZAI_RERANK_MODEL")
-    zai_base_url: Optional[str] = Field(default=None, alias="ZAI_BASE_URL")
-
-    # LLM Provider - ZhipuAI (legacy, for backward compatibility)
-    zhipu_api_key: Optional[str] = Field(default=None, alias="ZHIPU_API_KEY")
-    zhipu_model: str = Field(default="glm-4-plus", alias="ZHIPU_MODEL")
-    zhipu_small_model: str = Field(default="glm-4-flash", alias="ZHIPU_SMALL_MODEL")
-    zhipu_embedding_model: str = Field(default="embedding-3", alias="ZHIPU_EMBEDDING_MODEL")
-    # Using LLM-based reranking as default; dedicated rerank models available via API
-    zhipu_rerank_model: str = Field(default="glm-4-flash", alias="ZHIPU_RERANK_MODEL")
-    zhipu_base_url: str = Field(
-        default="https://open.bigmodel.cn/api/paas/v4", alias="ZHIPU_BASE_URL"
-    )
-
-    # LLM Provider - Kimi (Moonshot AI)
-    # Get key from: https://platform.moonshot.cn/console/api-keys
-    kimi_api_key: Optional[str] = Field(default=None, alias="KIMI_API_KEY")
-    kimi_model: str = Field(default="moonshot-v1-8k", alias="KIMI_MODEL")
-    kimi_small_model: str = Field(default="moonshot-v1-8k", alias="KIMI_SMALL_MODEL")
-    # Moonshot doesn't have embedding API, uses external provider
-    kimi_embedding_model: str = Field(default="", alias="KIMI_EMBEDDING_MODEL")
-    # Kimi doesn't have a dedicated rerank API, uses LLM-based reranking
-    kimi_rerank_model: str = Field(default="moonshot-v1-8k", alias="KIMI_RERANK_MODEL")
-    kimi_base_url: str = Field(default="https://api.moonshot.cn/v1", alias="KIMI_BASE_URL")
-
-    # LLM Provider - Anthropic (Claude)
-    # Get key from: https://console.anthropic.com/settings/keys
-    anthropic_api_key: Optional[str] = Field(default=None, alias="ANTHROPIC_API_KEY")
-    anthropic_model: str = Field(default="claude-sonnet-4-20250514", alias="ANTHROPIC_MODEL")
-    anthropic_small_model: str = Field(
-        default="claude-haiku-4-20250514", alias="ANTHROPIC_SMALL_MODEL"
-    )
-    # Anthropic doesn't have embedding API, uses external provider (e.g., Voyage)
-    anthropic_embedding_model: str = Field(default="", alias="ANTHROPIC_EMBEDDING_MODEL")
-    # Anthropic doesn't have a dedicated rerank API, uses LLM-based reranking
-    anthropic_rerank_model: str = Field(
-        default="claude-haiku-4-20250514", alias="ANTHROPIC_RERANK_MODEL"
-    )
-    anthropic_base_url: Optional[str] = Field(default=None, alias="ANTHROPIC_BASE_URL")
 
     # Web Search Settings (Tavily API)
     tavily_api_key: Optional[str] = Field(default=None, alias="TAVILY_API_KEY")
@@ -415,26 +313,6 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
-
-    @model_validator(mode="after")
-    def auto_select_provider(self) -> "Settings":
-        """Auto-select provider based on available API keys if not explicitly set to a valid one."""
-        # If provider is default (gemini) but no Gemini key, try other providers
-        if self.llm_provider.lower() == "gemini" and not self.gemini_api_key:
-            if self.qwen_api_key:
-                self.llm_provider = "qwen"
-            elif self.openai_api_key:
-                self.llm_provider = "openai"
-            elif self.deepseek_api_key:
-                self.llm_provider = "deepseek"
-            elif self.zai_api_key:
-                self.llm_provider = "zai"
-            elif self.kimi_api_key:
-                self.llm_provider = "kimi"
-            elif self.anthropic_api_key:
-                self.llm_provider = "anthropic"
-
-        return self
 
     @property
     def postgres_url(self) -> str:

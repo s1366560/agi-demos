@@ -85,7 +85,7 @@ async def test_chat():
             execution_repo = SqlAgentExecutionRepository(db)
 
             settings = get_settings()
-            llm = create_llm_client("d06da862-1bb1-44fe-93a0-153f58578e07")  # tenant_id
+            llm = await create_llm_client("d06da862-1bb1-44fe-93a0-153f58578e07")  # tenant_id
 
             from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
                 SqlAgentExecutionEventRepository,

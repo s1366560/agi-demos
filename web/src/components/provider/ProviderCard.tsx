@@ -10,6 +10,7 @@ import {
 export interface ProviderCardProps {
   provider: ProviderConfig;
   onEdit: (provider: ProviderConfig) => void;
+  onAssign: (provider: ProviderConfig) => void;
   onDelete: (providerId: string) => void;
   onCheckHealth: (providerId: string) => void;
   onResetCircuitBreaker: (providerType: string) => void;
@@ -76,6 +77,7 @@ const getCircuitBreakerColor = (state?: CircuitBreakerState) => {
 export const ProviderCard: React.FC<ProviderCardProps> = ({
   provider,
   onEdit,
+  onAssign,
   onDelete,
   onCheckHealth,
   onResetCircuitBreaker,
@@ -209,6 +211,14 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           )}
 
           <div className="flex-1" />
+
+          <button
+            onClick={() => onAssign(provider)}
+            className="p-1.5 text-slate-400 hover:text-blue-500 transition-colors"
+            title="Assign to Tenant"
+          >
+            <span className="material-symbols-outlined text-[18px]">assignment_ind</span>
+          </button>
 
           <button
             onClick={() => onEdit(provider)}

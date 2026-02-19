@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { ProviderCard, ProviderHealthPanel, ProviderConfigModal } from '@/components/provider';
+import { ProviderCard, ProviderHealthPanel, ProviderConfigModal, TenantAssignmentModal } from '@/components/provider';
 
 import { providerAPI } from '../../services/api';
 import { ProviderConfig, ProviderType, SystemResilienceStatus } from '../../types/memory';
@@ -34,6 +34,7 @@ export const ProviderList: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProvider, setEditingProvider] = useState<ProviderConfig | null>(null);
+  const [assigningProvider, setAssigningProvider] = useState<ProviderConfig | null>(null);
   const [checkingHealth, setCheckingHealth] = useState<string | null>(null);
   const [systemStatus, setSystemStatus] = useState<SystemResilienceStatus | null>(null);
   const [resettingCircuitBreaker, setResettingCircuitBreaker] = useState<string | null>(null);
@@ -111,6 +112,10 @@ export const ProviderList: React.FC = () => {
   const handleEdit = (provider: ProviderConfig) => {
     setEditingProvider(provider);
     setIsModalOpen(true);
+  };
+
+  const handleAssign = (provider: ProviderConfig) => {
+    setAssigningProvider(provider);
   };
 
   const handleCreate = () => {
@@ -284,6 +289,7 @@ export const ProviderList: React.FC = () => {
                 key={provider.id}
                 provider={provider}
                 onEdit={handleEdit}
+                onAssign={handleAssign}
                 onDelete={handleDelete}
                 onCheckHealth={handleCheckHealth}
                 onResetCircuitBreaker={handleResetCircuitBreaker}
@@ -479,6 +485,13 @@ export const ProviderList: React.FC = () => {
                           </span>
                         </button>
                         <button
+                          onClick={() => handleAssign(provider)}
+                          className="p-1.5 text-slate-400 hover:text-blue-500 transition-colors"
+                          title="Assign to Tenant"
+                        >
+                          <span className="material-symbols-outlined text-[18px]">assignment_ind</span>
+                        </button>
+                        <button
                           onClick={() => handleEdit(provider)}
                           className="p-1.5 text-slate-400 hover:text-primary transition-colors"
                           title={t('common.edit')}
@@ -523,6 +536,16 @@ export const ProviderList: React.FC = () => {
         onClose={handleModalClose}
         onSuccess={handleModalSuccess}
         provider={editingProvider}
+      />
+
+      <TenantAssignmentModal
+        isOpen={!!assigningProvider}
+        onClose={() => setAssigningProvider(null)}
+        onSuccess={() => {
+          setAssigningProvider(null);
+          // Optional: Show success message
+        }}
+        provider={assigningProvider}
       />
     </div>
   );

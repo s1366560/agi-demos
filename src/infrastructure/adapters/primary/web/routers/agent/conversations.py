@@ -51,7 +51,7 @@ async def create_conversation(
     """Create a new conversation."""
     try:
         container = get_container_with_db(request, db)
-        llm = create_llm_client(tenant_id)
+        llm = await create_llm_client(tenant_id)
         use_case = container.create_conversation_use_case(llm)
         conversation = await use_case.execute(
             project_id=data.project_id,
@@ -116,7 +116,7 @@ async def list_conversations(
         )
 
         container = get_container_with_db(request, db)
-        llm = create_llm_client(tenant_id)
+        llm = await create_llm_client(tenant_id)
         use_case = container.list_conversations_use_case(llm)
         conv_status = ConversationStatus(status) if status else None
 
@@ -162,7 +162,7 @@ async def get_conversation(
     """Get a conversation by ID."""
     try:
         container = get_container_with_db(request, db)
-        llm = create_llm_client(tenant_id)
+        llm = await create_llm_client(tenant_id)
         use_case = container.get_conversation_use_case(llm)
 
         conversation = await use_case.execute(
@@ -200,7 +200,7 @@ async def get_context_status(
     """
     try:
         container = get_container_with_db(request, db)
-        llm = create_llm_client(tenant_id)
+        llm = await create_llm_client(tenant_id)
         use_case = container.get_conversation_use_case(llm)
 
         conversation = await use_case.execute(
@@ -261,7 +261,7 @@ async def delete_conversation(
     """Delete a conversation and all its messages."""
     try:
         container = get_container_with_db(request, db)
-        llm = create_llm_client(tenant_id)
+        llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
 
         conversation = await agent_service.get_conversation(
@@ -299,7 +299,7 @@ async def update_conversation_title(
     """Update conversation title."""
     try:
         container = get_container_with_db(request, db)
-        llm = create_llm_client(tenant_id)
+        llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
 
         conversation = await agent_service.get_conversation(
@@ -361,7 +361,7 @@ async def generate_conversation_title(
     """
     try:
         container = get_container_with_db(request, db)
-        llm = create_llm_client(tenant_id)
+        llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
 
         conversation = await agent_service.get_conversation(
@@ -445,7 +445,7 @@ async def generate_summary(
     """Generate an AI summary of the conversation."""
     try:
         container = get_container_with_db(request, db)
-        llm = create_llm_client(tenant_id)
+        llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
 
         conversation = await agent_service.get_conversation(

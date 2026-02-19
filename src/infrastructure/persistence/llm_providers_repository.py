@@ -78,12 +78,13 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         async with async_session_factory() as session:
             return await operation(session)
 
-    def _orm_to_config(self, orm: LLMProviderORM) -> ProviderConfig:
+    def _orm_to_config(self, orm: LLMProviderORM, tenant_id: str = "default") -> ProviderConfig:
         """Convert ORM model to domain model."""
         return ProviderConfig(
             id=orm.id,
             name=orm.name,
             provider_type=orm.provider_type,
+            tenant_id=tenant_id,
             api_key_encrypted=orm.api_key_encrypted,
             base_url=orm.base_url,
             llm_model=orm.llm_model,
@@ -301,7 +302,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
                 .limit(1)
             )
             orm = result.scalar_one_or_none()
-            return self._orm_to_config(orm) if orm else None
+            return self._orm_to_config(orm, tenant_id=tenant_id) if orm else None
 
         return await self._run_with_session(op)
 

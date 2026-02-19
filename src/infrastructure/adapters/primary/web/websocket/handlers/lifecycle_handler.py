@@ -145,6 +145,8 @@ class StartAgentHandler(WebSocketMessageHandler):
         )
         from src.infrastructure.agent.actor.project_agent_actor import ProjectAgentActor
         from src.infrastructure.agent.actor.types import ProjectAgentActorConfig
+        from src.infrastructure.llm.provider_factory import get_ai_service_factory
+        from src.infrastructure.security.encryption_service import get_encryption_service
 
         project_id = message.get("project_id")
         if not project_id:
@@ -180,13 +182,21 @@ class StartAgentHandler(WebSocketMessageHandler):
                 )
                 return
 
+            # Resolve provider config from DB
+            factory = get_ai_service_factory()
+            provider_config = await factory.resolve_provider(context.tenant_id)
+            
+            # Decrypt API key for the actor
+            encryption_service = get_encryption_service()
+            api_key = encryption_service.decrypt(provider_config.api_key_encrypted)
+
             config = ProjectAgentActorConfig(
                 tenant_id=context.tenant_id,
                 project_id=project_id,
                 agent_mode=agent_mode,
-                model=_get_model_from_settings(settings),
-                api_key=_get_api_key_from_settings(settings),
-                base_url=_get_base_url_from_settings(settings),
+                model=provider_config.llm_model,
+                api_key=api_key,
+                base_url=provider_config.base_url,
                 temperature=0.7,
                 max_tokens=settings.agent_max_tokens,
                 max_steps=settings.agent_max_steps,
@@ -360,13 +370,21 @@ class RestartAgentHandler(WebSocketMessageHandler):
                 ray.kill(existing, no_restart=True)
                 await asyncio.sleep(1)
 
+            # Resolve provider config from DB
+            factory = get_ai_service_factory()
+            provider_config = await factory.resolve_provider(context.tenant_id)
+            
+            # Decrypt API key for the actor
+            encryption_service = get_encryption_service()
+            api_key = encryption_service.decrypt(provider_config.api_key_encrypted)
+
             config = ProjectAgentActorConfig(
                 tenant_id=context.tenant_id,
                 project_id=project_id,
                 agent_mode=agent_mode,
-                model=_get_model_from_settings(settings),
-                api_key=_get_api_key_from_settings(settings),
-                base_url=_get_base_url_from_settings(settings),
+                model=provider_config.llm_model,
+                api_key=api_key,
+                base_url=provider_config.base_url,
                 temperature=0.7,
                 max_tokens=settings.agent_max_tokens,
                 max_steps=settings.agent_max_steps,
@@ -415,47 +433,6 @@ class RestartAgentHandler(WebSocketMessageHandler):
 # =============================================================================
 # Helper Functions
 # =============================================================================
-
-
-def _get_api_key_from_settings(settings) -> str | None:
-    provider = settings.llm_provider.strip().lower()
-    if provider == "openai":
-        return settings.openai_api_key
-    if provider == "qwen":
-        return settings.qwen_api_key
-    if provider == "deepseek":
-        return settings.deepseek_api_key
-    if provider == "gemini":
-        return settings.gemini_api_key
-    if provider == "zai" or provider == "zhipu":
-        return settings.zai_api_key
-    return None
-
-
-def _get_base_url_from_settings(settings) -> str | None:
-    provider = settings.llm_provider.strip().lower()
-    if provider == "openai":
-        return settings.openai_base_url
-    if provider == "qwen":
-        return settings.qwen_base_url
-    if provider == "deepseek":
-        return settings.deepseek_base_url
-    return None
-
-
-def _get_model_from_settings(settings) -> str:
-    provider = settings.llm_provider.strip().lower()
-    if provider == "openai":
-        return settings.openai_model
-    if provider == "qwen":
-        return settings.qwen_model
-    if provider == "deepseek":
-        return settings.deepseek_model
-    if provider == "gemini":
-        return settings.gemini_model
-    if provider == "zai" or provider == "zhipu":
-        return settings.zai_model
-    return "qwen-plus"
 
 
 async def _ensure_sandbox_exists(context: MessageContext, project_id: str) -> Any:

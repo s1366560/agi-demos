@@ -310,10 +310,15 @@ export const providerAPI = {
     return await api.get(`/llm-providers/${id}/usage`, { params });
   },
   assignToTenant: async (id: string, tenantId: string, priority: number = 0): Promise<unknown> => {
-    return await api.post(`/llm-providers/${id}/assign`, { tenant_id: tenantId, priority });
+    return await api.post(`/llm-providers/tenants/${tenantId}/providers/${id}`, null, {
+      params: { priority },
+    });
   },
   unassignFromTenant: async (id: string, tenantId: string): Promise<void> => {
-    await api.delete(`/llm-providers/${id}/assign/${tenantId}`);
+    await api.delete(`/llm-providers/tenants/${tenantId}/providers/${id}`);
+  },
+  getTenantProvider: async (tenantId: string): Promise<ProviderConfig> => {
+    return await api.get(`/llm-providers/tenants/${tenantId}/provider`);
   },
   // System-wide resilience status
   getSystemStatus: async (): Promise<SystemResilienceStatus> => {
@@ -324,6 +329,11 @@ export const providerAPI = {
     providerType: string
   ): Promise<{ message: string; new_state: unknown }> => {
     return await api.post(`/llm-providers/system/reset-circuit-breaker/${providerType}`);
+  },
+  listModels: async (
+    providerType: string
+  ): Promise<{ provider_type: string; models: string[] }> => {
+    return await api.get(`/llm-providers/models/${providerType}`);
   },
 };
 

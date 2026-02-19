@@ -57,7 +57,7 @@ async def get_conversation_messages(
     """
     try:
         container = get_container_with_db(request, db)
-        llm = create_llm_client(tenant_id)
+        llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
 
         conversation = await agent_service.get_conversation(
@@ -450,7 +450,7 @@ async def get_conversation_execution(
     """Get the agent execution history for a conversation."""
     try:
         container = get_container_with_db(request, db)
-        llm = create_llm_client(tenant_id)
+        llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
 
         executions = await agent_service.get_execution_history(

@@ -400,7 +400,7 @@ async def _start_hitl_stream_bridge(
         from src.configuration.factories import create_llm_client
 
         container = context.get_scoped_container()
-        llm = create_llm_client(context.tenant_id)
+        llm = await create_llm_client(context.tenant_id)
         agent_service = container.agent_service(llm)
 
         # Import here to avoid circular imports

@@ -294,6 +294,7 @@ class ProviderConfigBase(BaseModel):
 
     name: str = Field(..., min_length=1, description="Human-readable provider name")
     provider_type: ProviderType = Field(..., description="Provider type (openai, qwen, etc.)")
+    tenant_id: Optional[str] = Field("default", description="Tenant/group ID")
     base_url: Optional[str] = Field(None, description="Custom base URL for API calls")
     llm_model: str = Field(..., min_length=1, description="Primary LLM model")
     llm_small_model: Optional[str] = Field(None, description="Smaller/faster LLM model")

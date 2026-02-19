@@ -6,6 +6,7 @@ from environment variables when no providers are configured in the database.
 """
 
 import logging
+import os
 from typing import Dict, Optional
 
 from sqlalchemy.exc import IntegrityError
@@ -90,7 +91,28 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
     logger.info("Creating default LLM provider from environment...")
 
     # Get the configured provider
-    provider_name = settings.llm_provider.lower()
+    # Fallback to 'gemini' if not set, but try to detect based on API keys first
+    provider_name = os.getenv("LLM_PROVIDER", "").lower()
+    
+    # Auto-detect if not set
+    if not provider_name:
+        if os.getenv("GEMINI_API_KEY"):
+            provider_name = "gemini"
+        elif os.getenv("DASHSCOPE_API_KEY"):
+            provider_name = "qwen"
+        elif os.getenv("OPENAI_API_KEY"):
+            provider_name = "openai"
+        elif os.getenv("DEEPSEEK_API_KEY"):
+            provider_name = "deepseek"
+        elif os.getenv("ZAI_API_KEY") or os.getenv("ZHIPU_API_KEY"):
+            provider_name = "zai"
+        elif os.getenv("KIMI_API_KEY"):
+            provider_name = "kimi"
+        elif os.getenv("ANTHROPIC_API_KEY"):
+            provider_name = "anthropic"
+        else:
+            provider_name = "gemini"  # Default fallback
+
     provider_type = PROVIDER_TYPE_MAP.get(provider_name)
 
     if provider_type is None:
@@ -100,8 +122,8 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
         )
         return False
 
-    # Build provider config from settings
-    provider_config = _build_provider_config(settings, provider_name)
+    # Build provider config from environment variables
+    provider_config = _build_provider_config(provider_name)
 
     if provider_config is None:
         logger.warning(f"Could not build provider config for '{provider_name}': API key not found")
@@ -142,14 +164,12 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
 
 
 def _build_provider_config(
-    settings,  # type: ignore
     provider_name: str,
 ) -> Optional[ProviderConfigCreate]:
     """
-    Build a ProviderConfigCreate from environment settings.
+    Build a ProviderConfigCreate from environment variables.
 
     Args:
-        settings: Application settings
         provider_name: Name of the provider (lowercase)
 
     Returns:
@@ -165,59 +185,58 @@ def _build_provider_config(
     reranker_model = None
     base_url = None
 
-    if provider_name == "gemini" or provider_name == "zhipu" or provider_name == "zai":
-        if provider_name == "gemini":
-            api_key = settings.gemini_api_key
-            llm_model = settings.gemini_model
-            embedding_model = settings.gemini_embedding_model
-            reranker_model = settings.gemini_rerank_model
-        elif provider_name in ("zhipu", "zai"):
-            api_key = settings.zai_api_key or settings.zhipu_api_key
-            llm_model = settings.zai_model or settings.zhipu_model
-            llm_small_model = settings.zai_small_model or settings.zhipu_small_model
-            embedding_model = settings.zai_embedding_model or settings.zhipu_embedding_model
-            reranker_model = settings.zai_rerank_model or settings.zhipu_rerank_model
-            base_url = settings.zai_base_url or settings.zhipu_base_url
+    if provider_name == "gemini":
+        api_key = os.getenv("GEMINI_API_KEY")
+        llm_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        embedding_model = os.getenv("GEMINI_EMBEDDING_MODEL", "text-embedding-004")
+        reranker_model = os.getenv("GEMINI_RERANK_MODEL", "gemini-2.0-flash")
+        
+    elif provider_name in ("zhipu", "zai"):
+        api_key = os.getenv("ZAI_API_KEY") or os.getenv("ZHIPU_API_KEY")
+        llm_model = os.getenv("ZAI_MODEL") or os.getenv("ZHIPU_MODEL", "glm-4-plus")
+        llm_small_model = os.getenv("ZAI_SMALL_MODEL") or os.getenv("ZHIPU_SMALL_MODEL", "glm-4-flash")
+        embedding_model = os.getenv("ZAI_EMBEDDING_MODEL") or os.getenv("ZHIPU_EMBEDDING_MODEL", "embedding-3")
+        reranker_model = os.getenv("ZAI_RERANK_MODEL") or os.getenv("ZHIPU_RERANK_MODEL", "glm-4-flash")
+        base_url = os.getenv("ZAI_BASE_URL") or os.getenv("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
 
     elif provider_name == "qwen":
-        api_key = settings.qwen_api_key
-        llm_model = settings.qwen_model
-        llm_small_model = settings.qwen_small_model
-        embedding_model = settings.qwen_embedding_model
-        reranker_model = settings.qwen_rerank_model
-        base_url = settings.qwen_base_url
+        api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
+        llm_model = os.getenv("QWEN_MODEL", "qwen-plus")
+        llm_small_model = os.getenv("QWEN_SMALL_MODEL", "qwen-turbo")
+        embedding_model = os.getenv("QWEN_EMBEDDING_MODEL", "text-embedding-v3")
+        reranker_model = os.getenv("QWEN_RERANK_MODEL", "qwen-plus")
+        base_url = os.getenv("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 
     elif provider_name == "openai":
-        api_key = settings.openai_api_key
-        llm_model = settings.openai_model
-        llm_small_model = settings.openai_small_model
-        embedding_model = settings.openai_embedding_model
-        reranker_model = settings.openai_rerank_model
-        base_url = settings.openai_base_url
+        api_key = os.getenv("OPENAI_API_KEY")
+        llm_model = os.getenv("OPENAI_MODEL", "gpt-4o")
+        llm_small_model = os.getenv("OPENAI_SMALL_MODEL", "gpt-4o-mini")
+        embedding_model = os.getenv("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+        reranker_model = os.getenv("OPENAI_RERANK_MODEL", "gpt-4o-mini")
+        base_url = os.getenv("OPENAI_BASE_URL")
 
     elif provider_name == "deepseek":
-        api_key = settings.deepseek_api_key
-        llm_model = settings.deepseek_model
-        llm_small_model = settings.deepseek_small_model
-        # Deepseek uses Qwen embeddings by default
-        reranker_model = settings.deepseek_rerank_model
-        base_url = settings.deepseek_base_url
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        llm_model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+        llm_small_model = os.getenv("DEEPSEEK_SMALL_MODEL", "deepseek-coder")
+        reranker_model = os.getenv("DEEPSEEK_RERANK_MODEL", "deepseek-chat")
+        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
 
     elif provider_name in ("kimi", "moonshot"):
-        api_key = settings.kimi_api_key
-        llm_model = settings.kimi_model
-        llm_small_model = settings.kimi_small_model
-        embedding_model = settings.kimi_embedding_model
-        reranker_model = settings.kimi_rerank_model
-        base_url = settings.kimi_base_url
+        api_key = os.getenv("KIMI_API_KEY")
+        llm_model = os.getenv("KIMI_MODEL", "moonshot-v1-8k")
+        llm_small_model = os.getenv("KIMI_SMALL_MODEL", "moonshot-v1-8k")
+        embedding_model = os.getenv("KIMI_EMBEDDING_MODEL", "")
+        reranker_model = os.getenv("KIMI_RERANK_MODEL", "moonshot-v1-8k")
+        base_url = os.getenv("KIMI_BASE_URL", "https://api.moonshot.cn/v1")
 
     elif provider_name in ("anthropic", "claude"):
-        api_key = settings.anthropic_api_key
-        llm_model = settings.anthropic_model
-        llm_small_model = settings.anthropic_small_model
-        embedding_model = settings.anthropic_embedding_model
-        reranker_model = settings.anthropic_rerank_model
-        base_url = settings.anthropic_base_url
+        api_key = os.getenv("ANTHROPIC_API_KEY")
+        llm_model = os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20240620")
+        llm_small_model = os.getenv("ANTHROPIC_SMALL_MODEL", "claude-3-haiku-20240307")
+        embedding_model = os.getenv("ANTHROPIC_EMBEDDING_MODEL", "")
+        reranker_model = os.getenv("ANTHROPIC_RERANK_MODEL", "claude-3-haiku-20240307")
+        base_url = os.getenv("ANTHROPIC_BASE_URL")
 
     # Check if API key is available
     if not api_key:

@@ -38,17 +38,27 @@ class AgentRuntimeBootstrapper:
             ProjectAgentActorConfig,
             ProjectChatRequest,
         )
+        from src.infrastructure.llm.provider_factory import get_ai_service_factory
+        from src.infrastructure.security.encryption_service import get_encryption_service
 
         settings = get_settings()
         agent_mode = "default"
+
+        # Resolve provider config from DB
+        factory = get_ai_service_factory()
+        provider_config = await factory.resolve_provider(conversation.tenant_id)
+        
+        # Decrypt API key for the actor
+        encryption_service = get_encryption_service()
+        api_key = encryption_service.decrypt(provider_config.api_key_encrypted)
 
         config = ProjectAgentActorConfig(
             tenant_id=conversation.tenant_id,
             project_id=conversation.project_id,
             agent_mode=agent_mode,
-            model=self._get_model(settings),
-            api_key=self._get_api_key(settings),
-            base_url=self._get_base_url(settings),
+            model=provider_config.llm_model,
+            api_key=api_key,
+            base_url=provider_config.base_url,
             temperature=0.7,
             max_tokens=settings.agent_max_tokens,
             max_steps=settings.agent_max_steps,
@@ -255,38 +265,13 @@ class AgentRuntimeBootstrapper:
             AgentRuntimeBootstrapper._local_bootstrapped = True
 
     def _get_api_key(self, settings):
-        provider = settings.llm_provider.strip().lower()
-        if provider == "openai":
-            return settings.openai_api_key
-        if provider == "qwen":
-            return settings.qwen_api_key
-        if provider == "deepseek":
-            return settings.deepseek_api_key
-        if provider == "gemini":
-            return settings.gemini_api_key
+        # Deprecated: Using ProviderResolutionService now
         return None
 
     def _get_base_url(self, settings):
-        provider = settings.llm_provider.strip().lower()
-        if provider == "openai":
-            return settings.openai_base_url
-        if provider == "qwen":
-            return settings.qwen_base_url
-        if provider == "deepseek":
-            return settings.deepseek_base_url
+        # Deprecated: Using ProviderResolutionService now
         return None
 
     def _get_model(self, settings):
-        """Get the LLM model name based on the configured provider."""
-        provider = settings.llm_provider.strip().lower()
-        if provider == "openai":
-            return settings.openai_model
-        if provider == "qwen":
-            return settings.qwen_model
-        if provider == "deepseek":
-            return settings.deepseek_model
-        if provider == "gemini":
-            return settings.gemini_model
-        if provider == "zai" or provider == "zhipu":
-            return settings.zai_model
+        # Deprecated: Using ProviderResolutionService now
         return "qwen-plus"

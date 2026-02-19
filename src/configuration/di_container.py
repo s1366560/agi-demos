@@ -177,6 +177,11 @@ class DIContainer:
             workflow_engine=self._infra.workflow_engine_port(),
         )
 
+    def ai_service_factory(self):
+        """Get the AIServiceFactory singleton."""
+        from src.infrastructure.llm.provider_factory import get_ai_service_factory
+        return get_ai_service_factory()
+
     # === Properties that stay on the main class ===
 
     @property

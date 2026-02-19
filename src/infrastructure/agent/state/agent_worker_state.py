@@ -317,40 +317,6 @@ def clear_state() -> None:
 # ============================================================================
 
 
-async def get_or_create_llm_client(provider_config: Any) -> Any:
-    """Get or create a cached LLM client.
-
-    This function caches LLM clients by provider:model:api_key_hash to ensure
-    multi-tenant isolation. Different tenants with the same provider:model
-    but different API keys get separate client instances.
-
-    Args:
-        provider_config: Provider configuration object with provider_type and llm_model
-
-    Returns:
-        Cached or newly created LLM client
-    """
-    import hashlib
-
-    from src.infrastructure.llm.litellm.litellm_client import create_litellm_client
-
-    # Get provider type as string (handle both enum and string values)
-    provider_type_str = (
-        provider_config.provider_type.value
-        if hasattr(provider_config.provider_type, "value")
-        else str(provider_config.provider_type)
-    )
-    # Include API key hash in cache key for multi-tenant isolation
-    api_key_hash = hashlib.sha256((provider_config.api_key_encrypted or "").encode()).hexdigest()[
-        :12
-    ]
-    cache_key = f"{provider_type_str}:{provider_config.llm_model}:{api_key_hash}"
-
-    async with _llm_cache_lock:
-        if cache_key not in _llm_client_cache:
-            _llm_client_cache[cache_key] = create_litellm_client(provider_config)
-            logger.info(f"Agent Worker: LLM client cached for {cache_key}")
-        return _llm_client_cache[cache_key]
 
 
 def get_cached_llm_clients() -> Dict[str, Any]:
@@ -1613,49 +1579,65 @@ async def get_or_create_skills(
         return _skills_cache[cache_key]
 
 
-async def get_or_create_provider_config(force_refresh: bool = False) -> Any:
+async def get_or_create_provider_config(
+    tenant_id: Optional[str] = None,
+    force_refresh: bool = False,
+) -> Any:
     """Get or create cached default LLM provider config.
 
+    Delegates to AIServiceFactory which handles caching and provider resolution.
+
     Args:
-        force_refresh: Force refresh from database
+        tenant_id: Tenant ID for provider resolution (optional for backward compat)
+        force_refresh: Force refresh from database (ignored by factory for now, relying on LRU)
 
     Returns:
         ProviderConfig instance
     """
-    global _provider_config_cache, _provider_config_cached_at
+    from src.infrastructure.llm.provider_factory import get_ai_service_factory
 
-    now = time.time()
-    if (
-        not force_refresh
-        and _provider_config_cache is not None
-        and (now - _provider_config_cached_at) < _provider_config_cache_ttl_seconds
-    ):
-        return _provider_config_cache
+    # If tenant_id not provided, default to "default" to ensure we get *some* config
+    # This maintains behavior of "system global default" if no tenant specified
+    if not tenant_id:
+        tenant_id = "default"
 
-    async with _provider_config_cache_lock:
-        now = time.time()
-        if (
-            not force_refresh
-            and _provider_config_cache is not None
-            and (now - _provider_config_cached_at) < _provider_config_cache_ttl_seconds
-        ):
-            return _provider_config_cache
+    factory = get_ai_service_factory()
+    return await factory.resolve_provider(tenant_id)
 
-        from src.infrastructure.persistence.llm_providers_repository import (
-            SQLAlchemyProviderRepository,
-        )
 
-        provider_repo = SQLAlchemyProviderRepository()
-        provider_config = await provider_repo.find_default_provider()
-        if not provider_config:
-            provider_config = await provider_repo.find_first_active_provider()
-        if not provider_config:
-            raise ValueError("No active LLM provider found. Please configure a provider.")
+async def get_or_create_llm_client(
+    provider_config: Any = None,
+    tenant_id: Optional[str] = None,
+) -> Any:
+    """Get or create a cached LLM client using AIServiceFactory.
 
-        _provider_config_cache = provider_config
-        _provider_config_cached_at = now
+    Delegates to AIServiceFactory which handles caching and provider resolution.
 
-        return provider_config
+    Args:
+        provider_config: Legacy argument, ignored in favor of tenant_id resolution
+        tenant_id: Tenant ID for provider resolution
+
+    Returns:
+        Cached or newly created LLM client
+    """
+    from src.infrastructure.llm.provider_factory import get_ai_service_factory
+
+    # If tenant_id not provided, we might have issues resolving the correct provider.
+    # But for backward compatibility with tests/legacy calls that pass provider_config,
+    # we might need to handle it. However, the goal is to enforce tenant isolation.
+    # Since we updated the main caller (ProjectReActAgent), we assume tenant_id is present.
+
+    if not tenant_id:
+        # Fallback to "default" tenant if not provided
+        logger.warning("get_or_create_llm_client called without tenant_id, using 'default'")
+        tenant_id = "default"
+
+    factory = get_ai_service_factory()
+    # Resolve provider config first
+    resolved_config = await factory.resolve_provider(tenant_id)
+    # Create client using resolved config
+    return factory.create_llm_client(resolved_config)
+
 
 
 def get_cached_skills() -> Dict[str, list]:

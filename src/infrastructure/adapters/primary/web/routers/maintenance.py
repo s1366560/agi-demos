@@ -641,18 +641,23 @@ async def get_embedding_status(
     and count of nodes missing embeddings.
     """
     try:
-        from src.configuration.config import get_settings
         from src.infrastructure.adapters.secondary.graphiti.embedding_utils import (
             get_existing_embedding_dimension,
         )
-
-        settings = get_settings()
+        from src.infrastructure.llm.provider_factory import get_ai_service_factory
 
         current_dim = graphiti_client.embedder.embedding_dim
         existing_dim = await get_existing_embedding_dimension(graphiti_client.driver)
 
-        # Get provider name for display
-        provider = settings.llm_provider
+        # Get provider name for display from DB config
+        tenant_id = getattr(current_user, "tenant_id", "default")
+        factory = get_ai_service_factory()
+        try:
+            provider_config = await factory.resolve_provider(tenant_id)
+            provider = provider_config.provider
+        except Exception:
+            provider = "unknown"
+
         provider_name = {
             "gemini": "Gemini",
             "qwen": "Qwen",

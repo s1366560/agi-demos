@@ -99,7 +99,7 @@ class SendMessageHandler(WebSocketMessageHandler):
             # Create LLM and agent service
             from src.configuration.factories import create_llm_client
 
-            llm = create_llm_client(context.tenant_id)
+            llm = await create_llm_client(context.tenant_id)
             agent_service = container.agent_service(llm)
 
             # Send acknowledgment
