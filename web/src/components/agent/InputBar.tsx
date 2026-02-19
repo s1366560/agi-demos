@@ -9,7 +9,7 @@
  * - Plan mode toggle
  */
 
-import { useState, useRef, useCallback, memo } from 'react';
+import { useState, useRef, useCallback, useEffect, memo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -112,6 +112,14 @@ export const InputBar = memo<InputBarProps>(
       !isStreaming &&
       (content.trim().length > 0 || uploadedAttachments.length > 0) &&
       pendingCount === 0;
+
+    const resizeTextarea = useCallback((target: HTMLTextAreaElement) => {
+      target.style.height = 'auto';
+      const minHeight = 56;
+      const containerHeight = target.parentElement?.clientHeight ?? 400;
+      const nextHeight = Math.max(minHeight, Math.min(target.scrollHeight, containerHeight));
+      target.style.height = `${nextHeight}px`;
+    }, []);
 
     const handleSend = useCallback(() => {
       if (
@@ -247,6 +255,19 @@ export const InputBar = memo<InputBarProps>(
       setIsListening(true);
     }, [isListening]);
 
+    const handleSkillSelect = useCallback((skill: SkillResponse) => {
+      setSelectedSkill(skill);
+      setSlashDropdownVisible(false);
+      setContent('');
+      setSlashQuery('');
+      // Focus textarea for typing the message
+      textareaRef.current?.focus();
+    }, []);
+
+    const handleRemoveSkill = useCallback(() => {
+      setSelectedSkill(null);
+    }, []);
+
     const handleKeyDown = useCallback(
       (e: React.KeyboardEvent) => {
         // Mention dropdown keyboard navigation
@@ -316,20 +337,21 @@ export const InputBar = memo<InputBarProps>(
           handleSend();
         }
       },
-      [handleSend, handleMentionSelect, disabled, isStreaming, slashDropdownVisible, mentionVisible]
+      [
+        handleSend,
+        handleMentionSelect,
+        handleSkillSelect,
+        disabled,
+        isStreaming,
+        slashDropdownVisible,
+        mentionVisible,
+      ]
     );
 
     const handleInput = useCallback(
       (e: React.FormEvent<HTMLTextAreaElement>) => {
         const target = e.currentTarget;
-        target.style.height = 'auto';
-        const minHeight = 48;
-        // Use parent container's maxHeight for auto-resize limit
-        const parentMaxHeight = target.parentElement?.parentElement 
-          ? parseFloat(getComputedStyle(target.parentElement.parentElement).maxHeight) || 400
-          : 400;
-        const newHeight = Math.max(minHeight, Math.min(target.scrollHeight, parentMaxHeight));
-        target.style.height = `${newHeight}px`;
+        resizeTextarea(target);
         const value = target.value;
         setContent(value);
 
@@ -363,21 +385,31 @@ export const InputBar = memo<InputBarProps>(
           setMentionQuery('');
         }
       },
-      [selectedSkill, slashDropdownVisible, mentionVisible]
+      [selectedSkill, slashDropdownVisible, mentionVisible, resizeTextarea]
     );
 
-    const handleSkillSelect = useCallback((skill: SkillResponse) => {
-      setSelectedSkill(skill);
-      setSlashDropdownVisible(false);
-      setContent('');
-      setSlashQuery('');
-      // Focus textarea for typing the message
-      textareaRef.current?.focus();
-    }, []);
+    useEffect(() => {
+      if (textareaRef.current) {
+        resizeTextarea(textareaRef.current);
+      }
+    }, [content, resizeTextarea]);
 
-    const handleRemoveSkill = useCallback(() => {
-      setSelectedSkill(null);
-    }, []);
+    useEffect(() => {
+      const textarea = textareaRef.current;
+      const container = textarea?.parentElement;
+      if (!textarea || !container || typeof ResizeObserver === 'undefined') {
+        return;
+      }
+
+      const observer = new ResizeObserver(() => {
+        resizeTextarea(textarea);
+      });
+      observer.observe(container);
+
+      return () => {
+        observer.disconnect();
+      };
+    }, [resizeTextarea]);
 
     // --- Paste files (Ctrl/Cmd+V with images or files) ---
     const handlePaste = useCallback(
@@ -547,7 +579,7 @@ export const InputBar = memo<InputBarProps>(
           )}
 
           {/* Text Area */}
-          <div className="flex-1 min-h-0 px-4 py-3 relative">
+          <div className="flex-1 min-h-0 px-4 py-3 relative overflow-hidden">
             <SlashCommandDropdown
               ref={slashDropdownRef}
               query={slashQuery}
@@ -593,11 +625,13 @@ export const InputBar = memo<InputBarProps>(
               rows={1}
               data-testid="chat-input"
               className={`
-                w-full bg-transparent
+                w-full h-auto rounded-lg px-3 py-2
+                bg-slate-50/80 dark:bg-slate-900/50
                 text-slate-800 dark:text-slate-100
                 placeholder:text-slate-400 dark:placeholder:text-slate-500
                 focus:outline-none text-[15px] leading-relaxed
                 overflow-y-auto overflow-x-hidden
+                break-words
                 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600
                 scrollbar-track-transparent scrollbar-w-1.5
                 hover:scrollbar-thumb-slate-400 dark:hover:scrollbar-thumb-slate-500
@@ -606,8 +640,8 @@ export const InputBar = memo<InputBarProps>(
               style={{
                 // Auto-resize with content, scroll when exceeds parent container
                 resize: 'none',
-                minHeight: '48px',
-                maxHeight: 'inherit',
+                minHeight: '56px',
+                maxHeight: '100%',
               }}
             />
           </div>

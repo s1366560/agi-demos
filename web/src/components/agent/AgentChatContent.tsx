@@ -70,7 +70,7 @@ interface AgentChatContentProps {
 
 // Constants for resize constraints
 const INPUT_MIN_HEIGHT = 140;
-const INPUT_MAX_HEIGHT = 400;
+const INPUT_MAX_HEIGHT = 560;
 const INPUT_DEFAULT_HEIGHT = 180;
 
 

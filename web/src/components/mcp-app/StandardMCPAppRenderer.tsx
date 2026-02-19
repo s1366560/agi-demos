@@ -205,7 +205,11 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
 
   // Normalize: treat empty strings as undefined
   const effectiveHtml = html || undefined;
-  const effectiveUri = resourceUri || undefined;
+  const effectiveUri =
+    resourceUri ||
+    uiMetadata?.resourceUri ||
+    (uiMetadata as { resource_uri?: string } | undefined)?.resource_uri ||
+    undefined;
 
   const sandboxConfig = useMemo(
     () => ({

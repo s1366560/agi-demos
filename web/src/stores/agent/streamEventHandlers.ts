@@ -826,71 +826,93 @@ export function createStreamEventHandlers(
       const data = event.data as any;
       const appId = data.app_id || '';
       const htmlContent = data.resource_html || undefined;
-      const resourceUri = data.resource_uri || undefined;
+      const uiMetadata =
+        data.ui_metadata && typeof data.ui_metadata === 'object' ? data.ui_metadata : {};
+      const resourceUri =
+        data.resource_uri ||
+        uiMetadata.resourceUri ||
+        uiMetadata.resource_uri ||
+        undefined;
       const toolName = data.tool_name || '';
-      const projectId = data.project_id || '';
-      const serverName = data.server_name || '';
+      const projectId = data.project_id || uiMetadata.project_id || '';
+      const serverName = data.server_name || uiMetadata.server_name || '';
+
+      // SEP-1865: Merge structuredContent into tool result for the renderer
+      const toolResult = data.structured_content
+        ? {
+            ...((typeof data.tool_result === 'object' && data.tool_result) || {}),
+            structuredContent: data.structured_content,
+          }
+        : data.tool_result;
+
+      const openMCPAppTab = (
+        resolvedResourceUri?: string,
+        options?: {
+          title?: string;
+          toolName?: string;
+          serverName?: string;
+          uiMetadata?: Record<string, unknown>;
+        }
+      ) => {
+        const tabKey = resolvedResourceUri || appId || `app-${Date.now()}`;
+        const tabId = `mcp-app-${tabKey}`;
+        useCanvasStore.getState().openTab({
+          id: tabId,
+          title: options?.title || toolName || 'MCP App',
+          type: 'mcp-app',
+          content: '',
+          mcpAppId: appId || undefined,
+          mcpAppHtml: htmlContent,
+          mcpAppToolResult: toolResult,
+          mcpAppToolInput: (typeof data.tool_input === 'object' && data.tool_input) || undefined,
+          mcpAppUiMetadata: options?.uiMetadata || uiMetadata,
+          mcpResourceUri: resolvedResourceUri,
+          mcpToolName: options?.toolName || toolName || undefined,
+          mcpProjectId: projectId || undefined,
+          mcpServerName: options?.serverName || serverName || undefined,
+        });
+        useLayoutModeStore.getState().setMode('canvas');
+      };
+
+      const shouldWaitForStoreLookup = !!appId && !resourceUri && !htmlContent;
 
       // Always invalidate cached resource so fresh HTML is used
       if (appId) {
         import('../mcpAppStore').then(({ useMCPAppStore }) => {
-          useMCPAppStore.getState().invalidateResource(appId);
+          const store = useMCPAppStore.getState();
+          store.invalidateResource(appId);
 
-          // Fallback: if no resourceUri from SSE, try looking up from the store.
-          // This handles tools where _ui_metadata wasn't populated on the backend
-          // but the MCPApp was registered (with resourceUri) via onMCPAppRegistered.
           if (!resourceUri) {
-            const app = useMCPAppStore.getState().apps[appId];
+            const app = store.apps[appId];
             const storeUri = app?.ui_metadata?.resourceUri as string | undefined;
             if (storeUri) {
-              // Re-open the tab with the resolved resourceUri
-              const tabKey = storeUri;
-              const tabId = `mcp-app-${tabKey}`;
-              useCanvasStore.getState().openTab({
-                id: tabId,
+              openMCPAppTab(storeUri, {
                 title: (app.ui_metadata?.title as string) || toolName || 'MCP App',
-                type: 'mcp-app',
-                content: '',
-                mcpAppId: appId,
-                mcpAppHtml: htmlContent,
-                mcpAppToolResult: data.tool_result,
-                mcpResourceUri: storeUri,
-                mcpToolName: app.tool_name || toolName || undefined,
-                mcpProjectId: projectId || undefined,
-                mcpServerName: app.server_name || serverName || undefined,
+                toolName: app.tool_name || toolName || undefined,
+                serverName: app.server_name || serverName || undefined,
+                uiMetadata: (app.ui_metadata as Record<string, unknown>) || uiMetadata,
+              });
+              return;
+            }
+
+            if (shouldWaitForStoreLookup) {
+              openMCPAppTab(undefined, {
+                title: (app?.ui_metadata?.title as string) || toolName || 'MCP App',
+                toolName: app?.tool_name || toolName || undefined,
+                serverName: app?.server_name || serverName || undefined,
+                uiMetadata: (app?.ui_metadata as Record<string, unknown>) || uiMetadata,
               });
             }
           }
         });
       }
 
-      // SEP-1865: Merge structuredContent into tool result for the renderer
-      const toolResult = data.structured_content
-        ? { ...((typeof data.tool_result === 'object' && data.tool_result) || {}), structuredContent: data.structured_content }
-        : data.tool_result;
-
-      // Use resourceUri as the canonical tab key (stable across sessions)
-      const tabKey = resourceUri || appId || `app-${Date.now()}`;
-      const tabId = `mcp-app-${tabKey}`;
-      const title = data.ui_metadata?.title || toolName || 'MCP App';
-
-      useCanvasStore.getState().openTab({
-        id: tabId,
-        title,
-        type: 'mcp-app',
-        content: '',
-        mcpAppId: appId || undefined,
-        mcpAppHtml: htmlContent,
-        mcpAppToolResult: toolResult,
-        mcpAppToolInput: (typeof data.tool_input === 'object' && data.tool_input) || undefined,
-        mcpAppUiMetadata: data.ui_metadata,
-        mcpResourceUri: resourceUri,
-        mcpToolName: toolName || undefined,
-        mcpProjectId: projectId || undefined,
-        mcpServerName: serverName || undefined,
-      });
-
-      useLayoutModeStore.getState().setMode('canvas');
+      if (!shouldWaitForStoreLookup) {
+        openMCPAppTab(resourceUri, {
+          title: uiMetadata.title || toolName || 'MCP App',
+          uiMetadata,
+        });
+      }
     },
 
     onMCPAppRegistered: (event) => {

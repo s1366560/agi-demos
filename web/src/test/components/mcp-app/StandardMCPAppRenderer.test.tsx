@@ -45,8 +45,8 @@ vi.mock('../../../stores/theme', () => ({
 
 // Mock @mcp-ui/client (lazy loaded)
 vi.mock('@mcp-ui/client', () => ({
-  AppRenderer: ({ toolName, html, onCallTool }: any) => (
-    <div data-testid="app-renderer" data-tool={toolName}>
+  AppRenderer: ({ toolName, html, onCallTool, toolResourceUri }: any) => (
+    <div data-testid="app-renderer" data-tool={toolName} data-resource-uri={toolResourceUri || ''}>
       {html ? <div data-testid="html-content">{html}</div> : null}
       {onCallTool ? <div data-testid="has-callback" /> : null}
     </div>
@@ -472,5 +472,22 @@ describe('StandardMCPAppRenderer - General Functionality', () => {
     await waitFor(() => {
       expect(screen.getByText(/showing tool result/i)).toBeInTheDocument();
     });
+  });
+
+  it('should use uiMetadata.resourceUri when resourceUri prop is missing', async () => {
+    const props = createProps({
+      html: undefined,
+      resourceUri: undefined,
+      uiMetadata: {
+        resourceUri: 'ui://meta/fallback.html',
+      },
+    });
+
+    render(<StandardMCPAppRenderer {...props} />);
+
+    const renderer = await screen.findByTestId('app-renderer', {}, { timeout: 10000 });
+    expect(renderer).toBeInTheDocument();
+    expect(renderer).toHaveAttribute('data-resource-uri', 'ui://meta/fallback.html');
+    expect(screen.queryByText(/does not provide a UI resource/i)).not.toBeInTheDocument();
   });
 });

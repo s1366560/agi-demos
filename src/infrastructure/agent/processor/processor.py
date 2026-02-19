@@ -426,6 +426,67 @@ class SessionProcessor:
             logger.warning("[Processor] Failed to refresh tools from provider: %s", e)
             return None
 
+    @staticmethod
+    def _extract_mcp_resource_uri(ui_metadata: Optional[Dict[str, Any]]) -> str:
+        """Extract MCP resource URI from either camelCase or snake_case metadata."""
+        if not isinstance(ui_metadata, dict):
+            return ""
+        uri = ui_metadata.get("resourceUri") or ui_metadata.get("resource_uri")
+        return str(uri) if uri else ""
+
+    async def _load_mcp_app_ui_metadata(self, app_id: str) -> Dict[str, Any]:
+        """Load MCP App UI metadata from DB by app id."""
+        if not app_id or app_id.startswith("_synthetic_"):
+            return {}
+
+        try:
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+            from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
+                SqlMCPAppRepository,
+            )
+
+            async with async_session_factory() as db:
+                app_repo = SqlMCPAppRepository(db)
+                app = await app_repo.find_by_id(app_id)
+
+            if not app:
+                return {}
+
+            ui_metadata = app.ui_metadata.to_dict() if app.ui_metadata else {}
+            if app.resource and app.resource.uri and "resourceUri" not in ui_metadata:
+                ui_metadata["resourceUri"] = app.resource.uri
+            return ui_metadata
+        except Exception as exc:
+            logger.debug("[MCPApp] Failed to load ui metadata for app_id=%s: %s", app_id, exc)
+            return {}
+
+    async def _hydrate_mcp_ui_metadata(
+        self, tool_instance: Any, app_id: str, tool_name: str
+    ) -> Dict[str, Any]:
+        """Ensure MCP tool has usable UI metadata for app rendering."""
+        ui_metadata = getattr(tool_instance, "ui_metadata", None) or {}
+        if not isinstance(ui_metadata, dict):
+            ui_metadata = {}
+
+        resource_uri = self._extract_mcp_resource_uri(ui_metadata)
+        if not resource_uri and app_id:
+            recovered = await self._load_mcp_app_ui_metadata(app_id)
+            if recovered:
+                # Preserve runtime fields while filling missing resource metadata from DB.
+                ui_metadata = {**recovered, **ui_metadata}
+                if hasattr(tool_instance, "_ui_metadata"):
+                    tool_instance._ui_metadata = ui_metadata
+                logger.debug(
+                    "[MCPApp] Hydrated ui metadata from DB for tool=%s app_id=%s resource_uri=%s",
+                    tool_name,
+                    app_id,
+                    self._extract_mcp_resource_uri(ui_metadata),
+                )
+
+        return ui_metadata
+
     async def process(
         self,
         session_id: str,
@@ -1656,20 +1717,25 @@ class SessionProcessor:
 
             # Build observe-level ui_metadata for MCP tools with UI
             _observe_ui_meta: dict | None = None
+            _hydrated_ui_meta: Dict[str, Any] = {}
             if tool_instance and has_ui:
-                _raw_ui = getattr(tool_instance, "ui_metadata", None) or {}
                 _o_app_id = (
                     getattr(tool_instance, "_last_app_id", "")
                     or getattr(tool_instance, "_app_id", "")
                     or ""
                 )
+                _hydrated_ui_meta = await self._hydrate_mcp_ui_metadata(
+                    tool_instance=tool_instance,
+                    app_id=_o_app_id,
+                    tool_name=tool_name,
+                )
                 _o_server = getattr(tool_instance, "_server_name", "") or ""
                 _o_project_id = (self._langfuse_context or {}).get("project_id", "")
                 _observe_ui_meta = {
-                    "resource_uri": _raw_ui.get("resourceUri", ""),
+                    "resource_uri": self._extract_mcp_resource_uri(_hydrated_ui_meta),
                     "server_name": _o_server,
                     "app_id": _o_app_id,
-                    "title": _raw_ui.get("title", ""),
+                    "title": _hydrated_ui_meta.get("title", ""),
                     "project_id": _o_project_id,
                 }
 
@@ -1683,7 +1749,7 @@ class SessionProcessor:
             )
 
             if tool_instance and has_ui:
-                ui_meta = getattr(tool_instance, "ui_metadata", None) or {}
+                ui_meta = _hydrated_ui_meta or getattr(tool_instance, "ui_metadata", None) or {}
                 app_id = (
                     getattr(tool_instance, "_last_app_id", "")
                     or getattr(tool_instance, "_app_id", "")
@@ -1711,7 +1777,7 @@ class SessionProcessor:
                     "[MCPApp] Emitting event: tool=%s, app_id=%s, resource_uri=%s, html_len=%d",
                     tool_name,
                     app_id,
-                    ui_meta.get("resourceUri", ""),
+                    self._extract_mcp_resource_uri(ui_meta),
                     len(resource_html),
                 )
                 _server_name = getattr(tool_instance, "_server_name", "") or ""
@@ -1728,7 +1794,7 @@ class SessionProcessor:
                     tool_result=sse_result,
                     tool_input=arguments if arguments else None,
                     resource_html=resource_html,
-                    resource_uri=ui_meta.get("resourceUri", ""),
+                    resource_uri=self._extract_mcp_resource_uri(ui_meta),
                     ui_metadata=ui_meta,
                     tool_execution_id=tool_part.tool_execution_id,
                     project_id=_project_id,

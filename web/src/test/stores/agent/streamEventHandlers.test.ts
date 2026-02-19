@@ -19,6 +19,24 @@ import type {
 } from '../../../types/agent';
 import type { ConversationState } from '../../../types/conversationState';
 
+const {
+  openTabMock,
+  setModeMock,
+  invalidateResourceMock,
+  mcpApps,
+  launchMock,
+  completeMock,
+  failMock,
+} = vi.hoisted(() => ({
+  openTabMock: vi.fn(),
+  setModeMock: vi.fn(),
+  invalidateResourceMock: vi.fn(),
+  mcpApps: {} as Record<string, any>,
+  launchMock: vi.fn(),
+  completeMock: vi.fn(),
+  failMock: vi.fn(),
+}));
+
 // Mock external dependencies
 vi.mock('../../../utils/sseEventAdapter', () => ({
   appendSSEEventToTimeline: vi.fn((timeline, event) => [...timeline, event]),
@@ -34,9 +52,9 @@ vi.mock('../../../utils/tabSync', () => ({
 vi.mock('../../../stores/backgroundStore', () => ({
   useBackgroundStore: {
     getState: vi.fn(() => ({
-      launch: vi.fn(),
-      complete: vi.fn(),
-      fail: vi.fn(),
+      launch: launchMock,
+      complete: completeMock,
+      fail: failMock,
     })),
   },
 }));
@@ -44,7 +62,7 @@ vi.mock('../../../stores/backgroundStore', () => ({
 vi.mock('../../../stores/canvasStore', () => ({
   useCanvasStore: {
     getState: vi.fn(() => ({
-      openTab: vi.fn(),
+      openTab: openTabMock,
       updateContent: vi.fn(),
       closeTab: vi.fn(),
       tabs: [],
@@ -66,7 +84,19 @@ vi.mock('../../../stores/layoutMode', () => ({
   useLayoutModeStore: {
     getState: vi.fn(() => ({
       mode: 'chat',
-      setMode: vi.fn(),
+      setMode: setModeMock,
+    })),
+  },
+}));
+
+vi.mock('../../../stores/mcpAppStore', () => ({
+  useMCPAppStore: {
+    getState: vi.fn(() => ({
+      invalidateResource: invalidateResourceMock,
+      apps: mcpApps,
+      addApp: vi.fn(),
+      updateApp: vi.fn(),
+      fetchResourceHtml: vi.fn(),
     })),
   },
 }));
@@ -80,6 +110,7 @@ describe('streamEventHandlers - Tool Visibility', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.keys(mcpApps).forEach((key) => delete mcpApps[key]);
 
     // Reset captured updates
     capturedUpdates = [];
@@ -389,6 +420,51 @@ describe('streamEventHandlers - Tool Visibility', () => {
       // CRITICAL: Tool should be marked completed
       expect(updates.activeToolCalls!.get('terminal')?.status).toBe('completed');
       expect(updates.pendingToolsStack).toEqual([]);
+    });
+  });
+
+  describe('onMCPAppResult', () => {
+    it('should use ui_metadata.resourceUri when top-level resource_uri is missing', () => {
+      handlers.onMCPAppResult?.({
+        type: 'mcp_app_result',
+        data: {
+          app_id: '',
+          tool_name: 'mcp__demo__tool',
+          resource_uri: '',
+          ui_metadata: {
+            resourceUri: 'ui://widget/demo.html',
+            title: 'Demo App',
+          },
+          tool_result: { ok: true },
+        },
+      } as any);
+
+      expect(openTabMock).toHaveBeenCalledTimes(1);
+      expect(openTabMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'mcp-app-ui://widget/demo.html',
+          mcpResourceUri: 'ui://widget/demo.html',
+          title: 'Demo App',
+        })
+      );
+      expect(setModeMock).toHaveBeenCalledWith('canvas');
+    });
+
+    it('should defer opening fallback tab when app_id exists but uri/html are missing', () => {
+      handlers.onMCPAppResult?.({
+        type: 'mcp_app_result',
+        data: {
+          app_id: 'app-recover-1',
+          tool_name: 'mcp__server__tool',
+          resource_uri: '',
+          resource_html: '',
+          tool_result: { ok: true },
+        },
+      } as any);
+
+      // No immediate fallback-only tab before async mcpAppStore lookup.
+      expect(openTabMock).not.toHaveBeenCalled();
+      expect(setModeMock).not.toHaveBeenCalled();
     });
   });
 });

@@ -17,7 +17,7 @@ export const PANEL_DEFAULT_WIDTH = 360;
 export const PANEL_MAX_PERCENT = 0.9; // 90% of viewport width
 
 export const INPUT_MIN_HEIGHT = 140;
-export const INPUT_MAX_HEIGHT = 400;
+export const INPUT_MAX_HEIGHT = 560;
 export const INPUT_DEFAULT_HEIGHT = 180;
 
 /**
