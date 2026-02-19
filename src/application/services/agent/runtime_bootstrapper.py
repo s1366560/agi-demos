@@ -14,6 +14,9 @@ class AgentRuntimeBootstrapper:
 
     _local_bootstrapped = False
     _local_bootstrap_lock = asyncio.Lock()
+    _local_chat_lock = asyncio.Lock()
+    _local_chat_tasks: Dict[str, asyncio.Task[Any]] = {}
+    _local_chat_abort_signals: Dict[str, asyncio.Event] = {}
 
     @staticmethod
     def _normalize_runtime_mode(mode: str | None) -> str:
@@ -52,7 +55,7 @@ class AgentRuntimeBootstrapper:
         # Resolve provider config from DB
         factory = get_ai_service_factory()
         provider_config = await factory.resolve_provider(conversation.tenant_id)
-        
+
         # Decrypt API key for the actor
         encryption_service = get_encryption_service()
         api_key = encryption_service.decrypt(provider_config.api_key_encrypted)
@@ -91,7 +94,7 @@ class AgentRuntimeBootstrapper:
 
         if runtime_mode == "local":
             await self._register_project_local(conversation.tenant_id, conversation.project_id)
-            asyncio.create_task(self._run_chat_local(config, chat_request))
+            await self._start_local_chat(conversation.id, config, chat_request)
             logger.info(
                 "[AgentService] Using local execution (AGENT_RUNTIME_MODE=local) for conversation %s",
                 conversation.id,
@@ -113,7 +116,9 @@ class AgentRuntimeBootstrapper:
                     "AGENT_RUNTIME_MODE=ray but Ray router actor is unavailable. "
                     "Use AGENT_RUNTIME_MODE=auto or local."
                 )
-            await await_ray(router.add_project.remote(conversation.tenant_id, conversation.project_id))
+            await await_ray(
+                router.add_project.remote(conversation.tenant_id, conversation.project_id)
+            )
         else:
             await register_project(conversation.tenant_id, conversation.project_id)
 
@@ -151,7 +156,7 @@ class AgentRuntimeBootstrapper:
             )
         else:
             await self._register_project_local(conversation.tenant_id, conversation.project_id)
-            asyncio.create_task(self._run_chat_local(config, chat_request))
+            await self._start_local_chat(conversation.id, config, chat_request)
             logger.info(
                 "[AgentService] Using local execution (Ray unavailable, AGENT_RUNTIME_MODE=auto) "
                 "for conversation %s",
@@ -167,10 +172,78 @@ class AgentRuntimeBootstrapper:
 
         await register_project_local(tenant_id, project_id)
 
+    async def _start_local_chat(self, conversation_id: str, config: Any, request: Any) -> None:
+        """Start local execution task and register cancellation signal."""
+        abort_signal = asyncio.Event()
+        task = asyncio.create_task(self._run_chat_local(config, request, abort_signal=abort_signal))
+        await self._track_local_chat_task(conversation_id, task, abort_signal)
+
+    @classmethod
+    async def _track_local_chat_task(
+        cls,
+        conversation_id: str,
+        task: asyncio.Task[Any],
+        abort_signal: asyncio.Event,
+    ) -> None:
+        """Track local task and ensure previous in-flight execution is cancelled."""
+        async with cls._local_chat_lock:
+            previous_abort = cls._local_chat_abort_signals.get(conversation_id)
+            previous_task = cls._local_chat_tasks.get(conversation_id)
+
+            if previous_abort:
+                previous_abort.set()
+            if previous_task and not previous_task.done():
+                previous_task.cancel()
+
+            cls._local_chat_tasks[conversation_id] = task
+            cls._local_chat_abort_signals[conversation_id] = abort_signal
+
+        task.add_done_callback(
+            lambda done_task: cls._schedule_local_chat_cleanup(conversation_id, done_task)
+        )
+
+    @classmethod
+    def _schedule_local_chat_cleanup(cls, conversation_id: str, task: asyncio.Task[Any]) -> None:
+        """Schedule async cleanup for tracked local task."""
+        try:
+            asyncio.create_task(cls._cleanup_local_chat_task(conversation_id, task))
+        except RuntimeError:
+            # Event loop closed; best-effort direct cleanup.
+            if cls._local_chat_tasks.get(conversation_id) is task:
+                cls._local_chat_tasks.pop(conversation_id, None)
+                cls._local_chat_abort_signals.pop(conversation_id, None)
+
+    @classmethod
+    async def _cleanup_local_chat_task(cls, conversation_id: str, task: asyncio.Task[Any]) -> None:
+        """Cleanup tracked local task if it is still current."""
+        async with cls._local_chat_lock:
+            if cls._local_chat_tasks.get(conversation_id) is task:
+                cls._local_chat_tasks.pop(conversation_id, None)
+                cls._local_chat_abort_signals.pop(conversation_id, None)
+
+    @classmethod
+    async def cancel_local_chat(cls, conversation_id: str) -> bool:
+        """Cancel locally running chat task for a conversation."""
+        async with cls._local_chat_lock:
+            abort_signal = cls._local_chat_abort_signals.get(conversation_id)
+            task = cls._local_chat_tasks.get(conversation_id)
+
+            if abort_signal:
+                abort_signal.set()
+
+            if task and not task.done():
+                task.cancel()
+                return True
+
+            cls._local_chat_tasks.pop(conversation_id, None)
+            cls._local_chat_abort_signals.pop(conversation_id, None)
+            return False
+
     async def _run_chat_local(
         self,
         config: Any,
         request: Any,
+        abort_signal: Optional[asyncio.Event] = None,
     ) -> None:
         """Run agent chat locally in-process when Ray is unavailable."""
         from src.infrastructure.agent.actor.execution import execute_project_chat
@@ -212,7 +285,7 @@ class AgentRuntimeBootstrapper:
             except Exception:
                 pass  # Plan Mode awareness is optional
 
-            result = await execute_project_chat(agent, request)
+            result = await execute_project_chat(agent, request, abort_signal=abort_signal)
 
             if result.is_error:
                 logger.warning(

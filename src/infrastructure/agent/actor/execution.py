@@ -66,6 +66,7 @@ def _inject_app_model_context(
 async def execute_project_chat(
     agent: ProjectReActAgent,
     request: ProjectChatRequest,
+    abort_signal: Optional[asyncio.Event] = None,
 ) -> ProjectChatResult:
     """Execute a chat request and publish events to Redis/DB."""
     start_time = time_module.time()
@@ -96,6 +97,7 @@ async def execute_project_chat(
             ),
             tenant_id=agent.config.tenant_id,
             message_id=request.message_id,
+            abort_signal=abort_signal,
             file_metadata=request.file_metadata,
             forced_skill_name=request.forced_skill_name,
             context_summary_data=request.context_summary_data,
@@ -208,9 +210,7 @@ async def execute_project_chat(
                     correlation_id=request.correlation_id,
                 )
             except Exception as persist_err:
-                logger.warning(
-                    f"[ActorExecution] Failed to persist events on error: {persist_err}"
-                )
+                logger.warning(f"[ActorExecution] Failed to persist events on error: {persist_err}")
 
         try:
             await _publish_error_event(
@@ -474,9 +474,7 @@ async def continue_project_chat(
                     correlation_id=state.correlation_id,
                 )
             except Exception as persist_err:
-                logger.warning(
-                    f"[ActorExecution] Failed to persist events on error: {persist_err}"
-                )
+                logger.warning(f"[ActorExecution] Failed to persist events on error: {persist_err}")
 
         return ProjectChatResult(
             conversation_id=state.conversation_id,

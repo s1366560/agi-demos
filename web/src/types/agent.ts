@@ -1085,7 +1085,7 @@ export interface AgentService {
   ): Promise<PaginatedConversationsResponse>;
   getConversation(conversationId: string, projectId: string): Promise<Conversation | null>;
   chat(request: ChatRequest, handler: AgentStreamHandler): Promise<void>;
-  stopChat(conversationId: string): void;
+  stopChat(conversationId: string): boolean;
   deleteConversation(conversationId: string, projectId: string): Promise<void>;
   getConversationMessages(
     conversationId: string,

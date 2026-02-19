@@ -1,11 +1,38 @@
 """Unit tests for AgentRuntimeBootstrapper runtime mode behavior."""
 
+import asyncio
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBootstrapper
+
+
+@pytest.fixture(autouse=True)
+def _reset_local_task_tracking() -> None:
+    AgentRuntimeBootstrapper._local_chat_tasks.clear()
+    AgentRuntimeBootstrapper._local_chat_abort_signals.clear()
+    yield
+    AgentRuntimeBootstrapper._local_chat_tasks.clear()
+    AgentRuntimeBootstrapper._local_chat_abort_signals.clear()
+
+
+class _FakeTask:
+    def __init__(self, done: bool = False) -> None:
+        self._done = done
+        self.cancel_called = False
+        self.callbacks = []
+
+    def done(self) -> bool:
+        return self._done
+
+    def cancel(self) -> None:
+        self.cancel_called = True
+        self._done = True
+
+    def add_done_callback(self, callback) -> None:
+        self.callbacks.append(callback)
 
 
 @pytest.fixture
@@ -230,3 +257,36 @@ async def test_start_chat_actor_auto_mode_falls_back_to_local(bootstrapper, conv
     register_local_mock.assert_awaited_once_with("tenant-1", "proj-1")
     create_task_mock.assert_called_once()
     assert len(created_tasks) == 1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_local_chat_tracking_replaces_previous_task() -> None:
+    """Tracking a new local task should cancel previous in-flight task for same conversation."""
+    previous_abort = asyncio.Event()
+    previous_task = _FakeTask()
+
+    current_abort = asyncio.Event()
+    current_task = _FakeTask()
+
+    await AgentRuntimeBootstrapper._track_local_chat_task("conv-1", previous_task, previous_abort)
+    await AgentRuntimeBootstrapper._track_local_chat_task("conv-1", current_task, current_abort)
+
+    assert previous_task.cancel_called is True
+    assert previous_abort.is_set()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_cancel_local_chat_sets_abort_and_cancels_task() -> None:
+    """cancel_local_chat should set abort signal and cancel active local task."""
+    abort_signal = asyncio.Event()
+    task = _FakeTask()
+
+    await AgentRuntimeBootstrapper._track_local_chat_task("conv-1", task, abort_signal)
+
+    cancelled = await AgentRuntimeBootstrapper.cancel_local_chat("conv-1")
+
+    assert cancelled is True
+    assert abort_signal.is_set()
+    assert task.cancel_called is True

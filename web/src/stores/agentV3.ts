@@ -1639,7 +1639,24 @@ export const useAgentV3Store = create<AgentV3State>()(
         abortStream: (conversationId?: string) => {
           const targetConvId = conversationId || get().activeConversationId;
           if (targetConvId) {
-            agentService.stopChat(targetConvId);
+            const stopSent = agentService.stopChat(targetConvId);
+
+            if (stopSent === false) {
+              const { updateConversationState, activeConversationId } = get();
+              updateConversationState(targetConvId, {
+                error: 'Failed to send stop request',
+                isStreaming: false,
+                streamStatus: 'error',
+              });
+              if (targetConvId === activeConversationId) {
+                set({
+                  error: 'Failed to send stop request',
+                  isStreaming: false,
+                  streamStatus: 'error',
+                });
+              }
+              return;
+            }
 
             // Clean up delta buffers to prevent stale timers from firing
             clearDeltaBuffers(targetConvId);
@@ -1736,7 +1753,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                   });
                   break;
 
-                case 'env_var':
+                case 'env_var': {
                   // Use new format directly: name, label, required
                   // Data comes from request.options (stored in DB)
                   const fields = request.options || [];
@@ -1752,6 +1769,7 @@ export const useAgentV3Store = create<AgentV3State>()(
                     agentState: 'awaiting_input',
                   });
                   break;
+                }
               }
 
               // Only restore the first pending request

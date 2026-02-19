@@ -14,11 +14,6 @@ from src.configuration.factories import create_native_graph_adapter
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
     MCPSandboxAdapter,
 )
-from src.infrastructure.agent.state.agent_worker_state import (
-    set_agent_graph_service,
-    set_mcp_sandbox_adapter,
-    sync_mcp_sandbox_adapter_from_docker,
-)
 from src.infrastructure.agent.actor.execution import (
     continue_project_chat,
     execute_project_chat,
@@ -31,6 +26,11 @@ from src.infrastructure.agent.actor.types import (
 from src.infrastructure.agent.core.project_react_agent import (
     ProjectAgentConfig,
     ProjectReActAgent,
+)
+from src.infrastructure.agent.state.agent_worker_state import (
+    set_agent_graph_service,
+    set_mcp_sandbox_adapter,
+    sync_mcp_sandbox_adapter_from_docker,
 )
 from src.infrastructure.llm.initializer import initialize_default_llm_providers
 
@@ -50,6 +50,7 @@ class ProjectAgentActor:
         self._init_lock = asyncio.Lock()
         self._tasks: Dict[str, asyncio.Task] = {}
         self._task_conversations: Dict[str, str] = {}
+        self._abort_signals: Dict[str, asyncio.Event] = {}
         self._current_conversation_id: Optional[str] = None
         self._current_message_id: Optional[str] = None
 
@@ -113,13 +114,15 @@ class ProjectAgentActor:
                 raise RuntimeError("Actor config not set")
             await self.initialize(self._config)
 
-        task = asyncio.create_task(self._run_chat(request))
+        abort_signal = asyncio.Event()
+        task = asyncio.create_task(self._run_chat(request, abort_signal))
         self._tasks[request.message_id] = task
         self._task_conversations[request.message_id] = request.conversation_id
-        
+        self._abort_signals[request.message_id] = abort_signal
+
         # Add cleanup callback
         task.add_done_callback(lambda t: self._cleanup_task(request.message_id))
-        
+
         return {"status": "started", "message_id": request.message_id}
 
     async def continue_chat(
@@ -135,16 +138,17 @@ class ProjectAgentActor:
         self._tasks[request_id] = task
         if conversation_id:
             self._task_conversations[request_id] = conversation_id
-            
+
         # Add cleanup callback
         task.add_done_callback(lambda t: self._cleanup_task(request_id))
 
         return {"status": "continued", "request_id": request_id}
-        
+
     def _cleanup_task(self, task_id: str) -> None:
         """Remove task from tracking maps when done."""
         self._tasks.pop(task_id, None)
         self._task_conversations.pop(task_id, None)
+        self._abort_signals.pop(task_id, None)
 
     async def cancel(self, conversation_id: str) -> bool:
         """Cancel running tasks for a conversation."""
@@ -156,21 +160,24 @@ class ProjectAgentActor:
 
             # Check by explicit mapping or legacy current_conversation_id
             is_match = False
-            
+
             # 1. Check explicit mapping
-            if self._task_conversations.get(task_id) == conversation_id:
-                is_match = True
-            # 2. Check legacy current_conversation_id (fallback)
-            elif self._current_conversation_id == conversation_id:
-                is_match = True
-            # 3. Check if conversation_id is part of task_id (fallback)
-            elif conversation_id in task_id:
+            if (
+                self._task_conversations.get(task_id) == conversation_id
+                or self._current_conversation_id == conversation_id
+                or conversation_id in task_id
+            ):
                 is_match = True
 
             if is_match:
+                abort_signal = self._abort_signals.get(task_id)
+                if abort_signal:
+                    abort_signal.set()
                 task.cancel()
                 cancelled = True
-                logger.info(f"[ProjectAgentActor] Cancelled task {task_id} for conversation {conversation_id}")
+                logger.info(
+                    f"[ProjectAgentActor] Cancelled task {task_id} for conversation {conversation_id}"
+                )
 
         return cancelled
 
@@ -210,22 +217,29 @@ class ProjectAgentActor:
         for task in self._tasks.values():
             if not task.done():
                 task.cancel()
+        for abort_signal in self._abort_signals.values():
+            abort_signal.set()
         self._tasks.clear()
         self._task_conversations.clear()
+        self._abort_signals.clear()
 
         if self._agent:
             await self._agent.stop()
             self._agent = None
         return True
 
-    async def _run_chat(self, request: ProjectChatRequest) -> None:
+    async def _run_chat(
+        self,
+        request: ProjectChatRequest,
+        abort_signal: Optional[asyncio.Event] = None,
+    ) -> None:
         self._current_conversation_id = request.conversation_id
         self._current_message_id = request.message_id
 
         if not self._agent:
             return
 
-        result = await execute_project_chat(self._agent, request)
+        result = await execute_project_chat(self._agent, request, abort_signal=abort_signal)
         if result.hitl_pending:
             logger.info(
                 "[ProjectAgentActor] HITL pending: request_id=%s",

@@ -715,13 +715,25 @@ class SessionProcessor:
 
         parsed = self._extract_goal_json(content)
         if parsed is None:
-            logger.warning("[Processor] Goal self-check returned non-JSON payload")
+            parsed = self._extract_goal_from_plain_text(content)
+        if parsed is None:
+            logger.debug(
+                "[Processor] Goal self-check payload not parseable, using fallback: %s",
+                content[:200],
+            )
             return fallback
 
         achieved = parsed.get("goal_achieved")
         if not isinstance(achieved, bool):
-            logger.warning("[Processor] Goal self-check missing boolean goal_achieved")
-            return fallback
+            if isinstance(achieved, str):
+                lowered = achieved.strip().lower()
+                if lowered in {"true", "yes", "1"}:
+                    achieved = True
+                elif lowered in {"false", "no", "0"}:
+                    achieved = False
+            if not isinstance(achieved, bool):
+                logger.debug("[Processor] Goal self-check missing boolean goal_achieved")
+                return fallback
 
         reason = str(parsed.get("reason", "")).strip()
         return GoalCheckResult(
@@ -729,6 +741,40 @@ class SessionProcessor:
             reason=reason or ("Goal achieved" if achieved else "Goal not achieved"),
             source="llm_self_check",
         )
+
+    def _extract_goal_from_plain_text(self, text: str) -> Optional[Dict[str, Any]]:
+        """Parse non-JSON goal-check payloads from plain text."""
+        normalized = text.strip()
+        if not normalized:
+            return None
+        normalized = normalized[:2000]
+
+        # Example: goal_achieved: false
+        bool_match = re.search(
+            r"\bgoal[_\s-]*achieved\b\s*[:=]\s*(true|false|yes|no|1|0)\b",
+            normalized,
+            flags=re.IGNORECASE,
+        )
+        if bool_match:
+            bool_token = bool_match.group(1).strip().lower()
+            achieved = bool_token in {"true", "yes", "1"}
+            reason_match = re.search(
+                r"\breason\b\s*[:=]\s*([^\n\r]{1,500})",
+                normalized,
+                flags=re.IGNORECASE,
+            )
+            reason = reason_match.group(1).strip() if reason_match else normalized[:200]
+            return {"goal_achieved": achieved, "reason": reason}
+
+        lowered = normalized.lower()
+        if "goal not achieved" in lowered or "goal is not achieved" in lowered:
+            return {"goal_achieved": False, "reason": normalized[:200]}
+        if ("goal achieved" in lowered or "goal is achieved" in lowered) and not re.search(
+            r"\b(not|still|remaining|in progress|incomplete|partial)\b",
+            lowered,
+        ):
+            return {"goal_achieved": True, "reason": normalized[:200]}
+        return None
 
     def _evaluate_goal_from_latest_text(self) -> GoalCheckResult:
         """Fallback goal check from latest assistant text."""

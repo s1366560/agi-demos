@@ -147,6 +147,31 @@ class TestProcessorGoalCompletion:
         assert result.achieved is False
         assert result.source == "assistant_text"
 
+    @pytest.mark.asyncio
+    async def test_no_tasks_plain_text_self_check_is_parsed(self, config):
+        processor = SessionProcessor(
+            config=config,
+            tools=[create_todoread_tool([])],
+        )
+        processor._llm_client = AsyncMock()
+        processor._llm_client.generate = AsyncMock(
+            return_value={
+                "content": "goal_achieved: false\nreason: still implementing remaining items"
+            }
+        )
+
+        result = await processor._evaluate_goal_completion(
+            session_id="session-1",
+            messages=[
+                {"role": "user", "content": "please finish"},
+                {"role": "assistant", "content": "working"},
+            ],
+        )
+
+        assert result.achieved is False
+        assert result.source == "llm_self_check"
+        assert "remaining" in result.reason.lower()
+
     def test_extract_goal_json_handles_braces_in_string(self, config):
         processor = SessionProcessor(config=config, tools=[])
         parsed = processor._extract_goal_json(
@@ -154,3 +179,20 @@ class TestProcessorGoalCompletion:
         )
         assert parsed is not None
         assert parsed.get("goal_achieved") is True
+
+    def test_extract_goal_from_plain_text_prefers_explicit_negative(self, config):
+        processor = SessionProcessor(config=config, tools=[])
+        parsed = processor._extract_goal_from_plain_text(
+            "goal not achieved yet; some sub-goal achieved already"
+        )
+        assert parsed is not None
+        assert parsed.get("goal_achieved") is False
+
+    def test_extract_goal_from_plain_text_reason_is_line_bounded(self, config):
+        processor = SessionProcessor(config=config, tools=[])
+        parsed = processor._extract_goal_from_plain_text(
+            "goal_achieved: true\nreason: done line one\nextra line"
+        )
+        assert parsed is not None
+        assert parsed.get("goal_achieved") is True
+        assert parsed.get("reason") == "done line one"

@@ -1179,6 +1179,7 @@ class AgentServiceImpl implements AgentService {
    * This is a key advantage of WebSocket - immediate bidirectional communication.
    *
    * @param conversationId - The conversation ID to stop
+   * @returns true when stop signal is sent, false otherwise
    *
    * @example
    * ```typescript
@@ -1186,7 +1187,7 @@ class AgentServiceImpl implements AgentService {
    * agentService.stopChat('conv-123');
    * ```
    */
-  stopChat(conversationId: string): void {
+  stopChat(conversationId: string): boolean {
     // Send stop signal through WebSocket
     const sent = this.send({
       type: 'stop_session',
@@ -1195,11 +1196,10 @@ class AgentServiceImpl implements AgentService {
 
     if (sent) {
       logger.debug(`[AgentWS] Stop signal sent for conversation ${conversationId}`);
+    } else {
+      logger.warn('[AgentWS] Failed to send stop signal - WebSocket not connected');
     }
-
-    // Clean up handler
-    this.handlers.delete(conversationId);
-    this.subscriptions.delete(conversationId);
+    return sent;
   }
 
   // ============================================================================

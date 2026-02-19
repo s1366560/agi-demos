@@ -48,9 +48,7 @@ class SendMessageHandler(WebSocketMessageHandler):
             conversation = await conversation_repo.find_by_id(conversation_id)
 
             if not conversation:
-                await context.send_error(
-                    "Conversation not found", conversation_id=conversation_id
-                )
+                await context.send_error("Conversation not found", conversation_id=conversation_id)
                 return
 
             if conversation.user_id != context.user_id:
@@ -119,9 +117,7 @@ class SendMessageHandler(WebSocketMessageHandler):
                     app_model_context=app_model_context,
                 )
             )
-            context.connection_manager.add_bridge_task(
-                context.session_id, conversation_id, task
-            )
+            context.connection_manager.add_bridge_task(context.session_id, conversation_id, task)
 
         except Exception as e:
             logger.error(f"[WS] Error handling send_message: {e}", exc_info=True)
@@ -145,6 +141,7 @@ class StopSessionHandler(WebSocketMessageHandler):
 
         try:
             manager = context.connection_manager
+            cancelled = False
 
             # Cancel the bridge task if exists for this session
             if (
@@ -154,38 +151,72 @@ class StopSessionHandler(WebSocketMessageHandler):
                 task = manager.bridge_tasks[context.session_id][conversation_id]
                 task.cancel()
                 del manager.bridge_tasks[context.session_id][conversation_id]
+                cancelled = True
                 logger.info(f"[WS] Cancelled stream task for conversation {conversation_id}")
 
-            # Cancel Ray Actor execution
-            try:
-                from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-                    SqlConversationRepository,
-                )
-                from src.infrastructure.adapters.secondary.ray.client import await_ray
-                from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
+            from src.application.services.agent.runtime_bootstrapper import (
+                AgentRuntimeBootstrapper,
+            )
+            from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
+                SqlConversationRepository,
+            )
+            from src.infrastructure.adapters.secondary.ray.client import await_ray
+            from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
 
-                conv_repo = SqlConversationRepository(context.db)
-                conversation = await conv_repo.find_by_id(conversation_id)
-                if not conversation:
-                    await context.send_error("Conversation not found", conversation_id=conversation_id)
-                    return
-                if conversation.tenant_id != context.tenant_id:
-                    await context.send_error("Access denied", conversation_id=conversation_id)
+            conv_repo = SqlConversationRepository(context.db)
+            conversation = await conv_repo.find_by_id(conversation_id)
+            if not conversation:
+                await context.send_error("Conversation not found", conversation_id=conversation_id)
+                return
+            if conversation.tenant_id != context.tenant_id:
+                await context.send_error("Access denied", conversation_id=conversation_id)
+                return
+
+            actor = await get_actor_if_exists(
+                tenant_id=conversation.tenant_id,
+                project_id=conversation.project_id,
+                agent_mode="default",
+            )
+
+            if actor:
+                try:
+                    actor_cancelled = bool(await await_ray(actor.cancel.remote(conversation_id)))
+                except Exception as e:
+                    logger.error(
+                        "[WS] Failed to cancel Ray actor for conversation %s: %s",
+                        conversation_id,
+                        e,
+                        exc_info=True,
+                    )
+                    await context.send_error(
+                        "Failed to stop session",
+                        code="STOP_SESSION_FAILED",
+                        conversation_id=conversation_id,
+                    )
                     return
 
-                actor = await get_actor_if_exists(
-                    tenant_id=conversation.tenant_id,
-                    project_id=conversation.project_id,
-                    agent_mode="default",
-                )
-                if actor:
-                    await await_ray(actor.cancel.remote(conversation_id))
+                cancelled = cancelled or actor_cancelled
+                if actor_cancelled:
                     logger.info(
                         "[WS] Cancelled Ray actor execution for conversation %s",
                         conversation_id,
                     )
-            except Exception as e:
-                logger.warning(f"[WS] Failed to cancel Ray actor: {e}")
+            else:
+                local_cancelled = await AgentRuntimeBootstrapper.cancel_local_chat(conversation_id)
+                cancelled = cancelled or local_cancelled
+                if local_cancelled:
+                    logger.info(
+                        "[WS] Cancelled local execution for conversation %s",
+                        conversation_id,
+                    )
+
+            if not cancelled:
+                await context.send_error(
+                    "No running session found to stop",
+                    code="SESSION_NOT_RUNNING",
+                    conversation_id=conversation_id,
+                )
+                return
 
             # Send acknowledgment
             await context.send_ack("stop_session", conversation_id=conversation_id)
@@ -318,9 +349,7 @@ async def stream_hitl_response_to_websocket(
 
             # Check if session is still subscribed
             if not manager.is_subscribed(session_id, conversation_id):
-                logger.info(
-                    f"[WS HITL] Session {session_id[:8]}... unsubscribed, stopping stream"
-                )
+                logger.info(f"[WS HITL] Session {session_id[:8]}... unsubscribed, stopping stream")
                 break
 
             # Add conversation_id to event for routing
@@ -342,8 +371,10 @@ async def stream_hitl_response_to_websocket(
             # so the bridge should stop and let _start_hitl_stream_bridge create a new
             # one when the user responds to the next HITL request.
             HITL_ASKED_EVENTS = {
-                "clarification_asked", "decision_asked",
-                "env_var_requested", "permission_asked",
+                "clarification_asked",
+                "decision_asked",
+                "env_var_requested",
+                "permission_asked",
             }
             if event_type in ("complete", "error"):
                 logger.info(f"[WS HITL Bridge] Stream completed: type={event_type}")
