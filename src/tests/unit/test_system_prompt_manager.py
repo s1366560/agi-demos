@@ -45,8 +45,8 @@ class TestModelProviderDetection:
 
     def test_detect_qwen(self):
         """Test Qwen model detection."""
-        assert SystemPromptManager.detect_model_provider("qwen-turbo") == ModelProvider.QWEN
-        assert SystemPromptManager.detect_model_provider("qwen2-72b") == ModelProvider.QWEN
+        assert SystemPromptManager.detect_model_provider("qwen-turbo") == ModelProvider.DASHSCOPE
+        assert SystemPromptManager.detect_model_provider("qwen2-72b") == ModelProvider.DASHSCOPE
 
     def test_detect_deepseek(self):
         """Test Deepseek model detection."""
@@ -256,7 +256,7 @@ class TestSystemPromptManager:
         providers = [
             ModelProvider.DEFAULT,
             ModelProvider.GEMINI,
-            ModelProvider.QWEN,
+            ModelProvider.DASHSCOPE,
             ModelProvider.ANTHROPIC,
         ]
 
@@ -375,7 +375,7 @@ class TestModelProviderEnum:
         """Test ModelProvider enum values."""
         assert ModelProvider.ANTHROPIC.value == "anthropic"
         assert ModelProvider.GEMINI.value == "gemini"
-        assert ModelProvider.QWEN.value == "qwen"
+        assert ModelProvider.DASHSCOPE.value == "dashscope"
         assert ModelProvider.DEEPSEEK.value == "deepseek"
         assert ModelProvider.ZHIPU.value == "zhipu"
         assert ModelProvider.OPENAI.value == "openai"

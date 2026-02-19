@@ -16,7 +16,7 @@ This document provides an overview of the MemStack project, intended to serve as
 -   **Memos**: Lightweight record-keeping similar to Flomo, with tagging and privacy control.
 -   **Graph Visualization**: Interactive knowledge graph display.
 -   **High Test Coverage**: Over 80% test coverage with continuous integration.
--   **Multi-LLM Support**: Integrates with Google Gemini, Alibaba Cloud Qwen, Deepseek, ZhipuAI, OpenAI, etc.
+-   **Multi-LLM Support**: Integrates with Google Gemini, Alibaba Cloud Dashscope (Qwen), Deepseek, ZhipuAI, OpenAI, etc.
 
 ### Key Technologies:
 -   **Backend**: Python (3.12+), FastAPI (0.110+), Neo4j (5.26+), PostgreSQL (16+), Redis (7+).

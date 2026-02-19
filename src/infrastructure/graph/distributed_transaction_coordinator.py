@@ -62,6 +62,11 @@ class CompensatingTransaction:
     redis_committed: bool
     created_at: datetime
     status: str = "pending"  # pending, reconciled, failed
+    # Store original operation data for replay
+    neo4j_query: Optional[str] = None
+    neo4j_params: Optional[Dict[str, Any]] = None
+    redis_command: Optional[str] = None
+    redis_args: Optional[List[Any]] = None
 
 
 @dataclass
@@ -207,6 +212,10 @@ class DistributedTransactionCoordinator:
         postgres_committed: bool,
         neo4j_committed: bool,
         redis_committed: bool,
+        neo4j_query: Optional[str] = None,
+        neo4j_params: Optional[Dict[str, Any]] = None,
+        redis_command: Optional[str] = None,
+        redis_args: Optional[List[Any]] = None,
     ) -> str:
         """
         Log a compensating transaction for later reconciliation.
@@ -217,6 +226,10 @@ class DistributedTransactionCoordinator:
             postgres_committed: Whether PostgreSQL committed
             neo4j_committed: Whether Neo4j committed
             redis_committed: Whether Redis committed
+            neo4j_query: Original Neo4j query for replay
+            neo4j_params: Original Neo4j parameters for replay
+            redis_command: Original Redis command for replay
+            redis_args: Original Redis arguments for replay
 
         Returns:
             ID of the compensating transaction record
@@ -230,6 +243,10 @@ class DistributedTransactionCoordinator:
             neo4j_committed=neo4j_committed,
             redis_committed=redis_committed,
             created_at=datetime.now(timezone.utc),
+            neo4j_query=neo4j_query,
+            neo4j_params=neo4j_params,
+            redis_command=redis_command,
+            redis_args=redis_args,
         )
         self._pending_compensating[tx_id] = compensating
         self._stats.inconsistency_count += 1
@@ -258,11 +275,37 @@ class DistributedTransactionCoordinator:
         compensating = self._pending_compensating[transaction_id]
 
         try:
-            # TODO: Implement actual reconciliation logic
-            # This would involve:
-            # 1. Fetching the operation details from PostgreSQL
-            # 2. Replaying to Neo4j if it failed
-            # 3. Replaying to Redis if it failed
+            # Reconciliation strategy:
+            # 1. If PostgreSQL committed but Neo4j failed -> replay to Neo4j
+            # 2. If PostgreSQL committed but Redis failed -> acceptable (cache will rebuild)
+            # 3. If PostgreSQL failed -> no action needed (source of truth rolled back)
+
+            if compensating.postgres_committed and not compensating.neo4j_committed:
+                # Replay Neo4j operation
+                if compensating.neo4j_query and self._neo4j_client:
+                    try:
+                        await self._neo4j_client.execute_write(
+                            compensating.neo4j_query,
+                            compensating.neo4j_params or {},
+                        )
+                        logger.info(
+                            f"Replayed Neo4j operation for {transaction_id}: "
+                            f"{compensating.neo4j_query[:100]}..."
+                        )
+                    except Exception as neo4j_error:
+                        logger.error(
+                            f"Failed to replay Neo4j for {transaction_id}: {neo4j_error}"
+                        )
+                        compensating.status = "failed"
+                        return False
+
+            # Redis reconciliation is optional - cache inconsistency is acceptable
+            # The cache will be rebuilt on next read
+            if compensating.postgres_committed and not compensating.redis_committed:
+                logger.info(
+                    f"Redis cache inconsistency for {transaction_id} - "
+                    "will be rebuilt on next read"
+                )
 
             compensating.status = "reconciled"
             self._stats.reconciled_count += 1
@@ -280,7 +323,7 @@ class DistributedTransactionCoordinator:
         self,
         key: Optional[str] = None,
         timeout_seconds: Optional[float] = None,
-    ) -> AsyncGenerator["DistributedTransaction", None]:
+    ) -> AsyncGenerator[DistributedTransaction, None]:
         """
         Begin a distributed transaction.
 

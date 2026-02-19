@@ -437,6 +437,47 @@
         "temperature": "Temperature",
         "maxIterations": "Max Iterations"
       }
+    },
+    "analytics": {
+      "title": "Analytics",
+      "workspace_info": "Workspace usage statistics and insights",
+      "storage_usage": "Storage Usage",
+      "total_memories": "Total Memories",
+      "growing": "Growing",
+      "active_projects": "Active Projects",
+      "project_count": "Total projects",
+      "avg_per_project": "Avg per Project",
+      "avg_memories": "Average memories",
+      "plan": "Plan",
+      "quota": "Storage quota",
+      "memory_growth": "Memory Growth Trend",
+      "project_storage": "Project Storage Distribution",
+      "no_data": "No data available"
+    },
+    "billing": {
+      "title": "Billing",
+      "subtitle": "Manage your subscription and invoices",
+      "current_plan": "Current Plan",
+      "plan_description": "{{plan}} Plan",
+      "storage_usage": "Storage Usage",
+      "projects": "Projects",
+      "memories": "Memories",
+      "users": "Users",
+      "upgrade_options": "Upgrade Options",
+      "per_month": "/month",
+      "contact_sales": "Contact Sales",
+      "history": {
+        "title": "Billing History",
+        "no_history": "No billing history",
+        "date": "Date",
+        "amount": "Amount",
+        "status": "Status",
+        "actions": "Actions",
+        "download": "Download",
+        "paid": "Paid",
+        "pending": "Pending",
+        "failed": "Failed"
+      }
     }
   },
   "project": {

@@ -10,7 +10,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # ============================================================================
 # Model Metadata Models (for context window management)
@@ -145,7 +145,7 @@ DEFAULT_MODEL_METADATA: Dict[str, ModelMetadata] = {
         ],
         supports_json_mode=True,
     ),
-    # Qwen models
+    # Dashscope (Qwen) models
     "qwen-max": ModelMetadata(
         name="qwen-max",
         context_length=32000,
@@ -254,7 +254,7 @@ class ProviderType(str, Enum):
     """Supported LLM provider types"""
 
     OPENAI = "openai"
-    QWEN = "qwen"
+    DASHSCOPE = "dashscope"
     GEMINI = "gemini"
     ANTHROPIC = "anthropic"
     GROQ = "groq"
@@ -266,6 +266,8 @@ class ProviderType(str, Enum):
     DEEPSEEK = "deepseek"
     ZAI = "zai"  # Z.AI (ZhipuAI)
     KIMI = "kimi"  # Moonshot AI (Kimi)
+    OLLAMA = "ollama"  # Local Ollama server
+    LMSTUDIO = "lmstudio"  # LM Studio OpenAI-compatible server
 
 
 class ProviderStatus(str, Enum):
@@ -293,7 +295,7 @@ class ProviderConfigBase(BaseModel):
     """Base fields for provider configuration"""
 
     name: str = Field(..., min_length=1, description="Human-readable provider name")
-    provider_type: ProviderType = Field(..., description="Provider type (openai, qwen, etc.)")
+    provider_type: ProviderType = Field(..., description="Provider type (openai, dashscope, etc.)")
     tenant_id: Optional[str] = Field("default", description="Tenant/group ID")
     base_url: Optional[str] = Field(None, description="Custom base URL for API calls")
     llm_model: str = Field(..., min_length=1, description="Primary LLM model")
@@ -318,15 +320,24 @@ class ProviderConfigBase(BaseModel):
 class ProviderConfigCreate(ProviderConfigBase):
     """Model for creating a new provider (includes API key)"""
 
-    api_key: str = Field(..., min_length=1, description="API key for the provider")
+    api_key: Optional[str] = Field(None, description="API key for the provider")
 
     @field_validator("api_key")
     @classmethod
-    def api_key_must_not_be_empty(cls, v: str) -> str:
-        """Validate API key is not just whitespace"""
-        if not v or not v.strip():
+    def normalize_api_key(cls, v: Optional[str]) -> Optional[str]:
+        """Normalize API key by trimming whitespace."""
+        return v.strip() if isinstance(v, str) else v
+
+    @model_validator(mode="after")
+    def validate_api_key_requirement(self) -> "ProviderConfigCreate":
+        """Require API key for remote providers while allowing local providers."""
+        if self.provider_type in {ProviderType.OLLAMA, ProviderType.LMSTUDIO}:
+            return self
+
+        if not self.api_key:
             raise ValueError("API key cannot be empty")
-        return v.strip()
+
+        return self
 
 
 class ProviderConfigUpdate(BaseModel):
@@ -343,6 +354,12 @@ class ProviderConfigUpdate(BaseModel):
     config: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
     is_default: Optional[bool] = None
+
+    @field_validator("api_key")
+    @classmethod
+    def normalize_api_key(cls, v: Optional[str]) -> Optional[str]:
+        """Normalize API key by trimming whitespace."""
+        return v.strip() if isinstance(v, str) else v
 
 
 class ProviderConfig(ProviderConfigBase):
@@ -416,6 +433,10 @@ class TenantProviderMappingCreate(BaseModel):
 
     tenant_id: str = Field(..., min_length=1, description="Tenant/group ID")
     provider_id: UUID = Field(..., description="Provider to assign")
+    operation_type: OperationType = Field(
+        default=OperationType.LLM,
+        description="Operation type (llm, embedding, rerank)",
+    )
     priority: int = Field(0, ge=0, description="Priority (lower = higher priority)")
 
 
@@ -425,6 +446,7 @@ class TenantProviderMapping(BaseModel):
     id: UUID
     tenant_id: str
     provider_id: UUID
+    operation_type: OperationType
     priority: int
     created_at: datetime
 

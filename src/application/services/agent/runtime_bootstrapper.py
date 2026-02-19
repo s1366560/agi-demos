@@ -15,6 +15,14 @@ class AgentRuntimeBootstrapper:
     _local_bootstrapped = False
     _local_bootstrap_lock = asyncio.Lock()
 
+    @staticmethod
+    def _normalize_runtime_mode(mode: str | None) -> str:
+        """Normalize runtime mode value."""
+        normalized = (mode or "auto").strip().lower()
+        if normalized in {"auto", "ray", "local"}:
+            return normalized
+        return "auto"
+
     async def start_chat_actor(
         self,
         conversation: Conversation,
@@ -28,12 +36,8 @@ class AgentRuntimeBootstrapper:
         context_summary_data: Optional[Dict[str, Any]] = None,
         app_model_context: Optional[Dict[str, Any]] = None,
     ) -> str:
-        """Start agent execution via Ray Actor, with local fallback."""
+        """Start agent execution using configured runtime mode."""
         from src.configuration.config import get_settings
-        from src.infrastructure.agent.actor.actor_manager import (
-            get_or_create_actor,
-            register_project,
-        )
         from src.infrastructure.agent.actor.types import (
             ProjectAgentActorConfig,
             ProjectChatRequest,
@@ -43,6 +47,7 @@ class AgentRuntimeBootstrapper:
 
         settings = get_settings()
         agent_mode = "default"
+        runtime_mode = self._normalize_runtime_mode(settings.agent_runtime_mode)
 
         # Resolve provider config from DB
         factory = get_ai_service_factory()
@@ -84,7 +89,34 @@ class AgentRuntimeBootstrapper:
             app_model_context=app_model_context,
         )
 
-        await register_project(conversation.tenant_id, conversation.project_id)
+        if runtime_mode == "local":
+            await self._register_project_local(conversation.tenant_id, conversation.project_id)
+            asyncio.create_task(self._run_chat_local(config, chat_request))
+            logger.info(
+                "[AgentService] Using local execution (AGENT_RUNTIME_MODE=local) for conversation %s",
+                conversation.id,
+            )
+            return f"agent:{conversation.tenant_id}:{conversation.project_id}:{agent_mode}"
+
+        from src.infrastructure.agent.actor.actor_manager import (
+            ensure_router_actor,
+            get_or_create_actor,
+            register_project,
+        )
+
+        if runtime_mode == "ray":
+            from src.infrastructure.adapters.secondary.ray.client import await_ray
+
+            router = await ensure_router_actor()
+            if router is None:
+                raise RuntimeError(
+                    "AGENT_RUNTIME_MODE=ray but Ray router actor is unavailable. "
+                    "Use AGENT_RUNTIME_MODE=auto or local."
+                )
+            await await_ray(router.add_project.remote(conversation.tenant_id, conversation.project_id))
+        else:
+            await register_project(conversation.tenant_id, conversation.project_id)
+
         actor = await get_or_create_actor(
             tenant_id=conversation.tenant_id,
             project_id=conversation.project_id,
@@ -107,15 +139,33 @@ class AgentRuntimeBootstrapper:
                     )
 
             asyncio.create_task(_fire_and_forget_ray())
-            logger.info("[AgentService] Using Ray Actor for conversation %s", conversation.id)
+            logger.info(
+                "[AgentService] Using Ray Actor (AGENT_RUNTIME_MODE=%s) for conversation %s",
+                runtime_mode,
+                conversation.id,
+            )
+        elif runtime_mode == "ray":
+            raise RuntimeError(
+                "AGENT_RUNTIME_MODE=ray but failed to create Ray actor. "
+                "Use AGENT_RUNTIME_MODE=auto or local."
+            )
         else:
+            await self._register_project_local(conversation.tenant_id, conversation.project_id)
             asyncio.create_task(self._run_chat_local(config, chat_request))
             logger.info(
-                "[AgentService] Using local execution (Ray unavailable) for conversation %s",
+                "[AgentService] Using local execution (Ray unavailable, AGENT_RUNTIME_MODE=auto) "
+                "for conversation %s",
                 conversation.id,
             )
 
         return f"agent:{conversation.tenant_id}:{conversation.project_id}:{agent_mode}"
+
+    @staticmethod
+    async def _register_project_local(tenant_id: str, project_id: str) -> None:
+        """Register project with local HITL resume consumer."""
+        from src.infrastructure.agent.hitl.local_resume_consumer import register_project_local
+
+        await register_project_local(tenant_id, project_id)
 
     async def _run_chat_local(
         self,

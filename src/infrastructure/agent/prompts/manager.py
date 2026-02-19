@@ -5,7 +5,7 @@ This module implements a modular prompt management system inspired by
 OpenCode's system.ts architecture.
 
 Key features:
-- Multi-model adaptation (different prompts for Claude, Gemini, Qwen)
+- Multi-model adaptation (different prompts for Claude, Gemini, Dashscope)
 - Dynamic mode management (Plan/Build modes)
 - Environment context injection
 - Custom rules loading (.memstack/AGENTS.md, CLAUDE.md)
@@ -34,7 +34,7 @@ class ModelProvider(str, Enum):
 
     ANTHROPIC = "anthropic"  # Claude models
     GEMINI = "gemini"  # Google Gemini
-    QWEN = "qwen"  # Alibaba Qwen
+    DASHSCOPE = "dashscope"  # Alibaba Dashscope
     DEEPSEEK = "deepseek"  # Deepseek
     ZHIPU = "zhipu"  # ZhipuAI
     OPENAI = "openai"  # OpenAI GPT
@@ -242,7 +242,7 @@ class SystemPromptManager:
         filename_map = {
             ModelProvider.ANTHROPIC: "anthropic.txt",
             ModelProvider.GEMINI: "gemini.txt",
-            ModelProvider.QWEN: "qwen.txt",
+            ModelProvider.DASHSCOPE: "qwen.txt",
             ModelProvider.DEEPSEEK: "default.txt",  # Use default for now
             ModelProvider.ZHIPU: "qwen.txt",  # Similar to Qwen
             ModelProvider.OPENAI: "default.txt",
@@ -562,7 +562,7 @@ Use these tools in order: {tools}"""
         elif "gemini" in model_lower:
             return ModelProvider.GEMINI
         elif "qwen" in model_lower:
-            return ModelProvider.QWEN
+            return ModelProvider.DASHSCOPE
         elif "deepseek" in model_lower:
             return ModelProvider.DEEPSEEK
         elif "glm" in model_lower or "zhipu" in model_lower:

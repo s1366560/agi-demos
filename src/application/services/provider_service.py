@@ -19,6 +19,7 @@ from src.domain.llm_providers.models import (
     LLMUsageLog,
     LLMUsageLogCreate,
     ModelMetadata,
+    OperationType,
     ProviderConfig,
     ProviderConfigCreate,
     ProviderConfigResponse,
@@ -31,6 +32,7 @@ from src.domain.llm_providers.models import (
     get_default_model_metadata,
 )
 from src.domain.llm_providers.repositories import ProviderRepository
+from src.infrastructure.llm.provider_credentials import from_decrypted_api_key
 from src.infrastructure.llm.resilience import (
     get_circuit_breaker_registry,
     get_provider_rate_limiter,
@@ -219,7 +221,8 @@ class ProviderService:
 
         try:
             # Decrypt API key
-            api_key = self.encryption_service.decrypt(provider.api_key_encrypted)
+            decrypted_key = self.encryption_service.decrypt(provider.api_key_encrypted)
+            api_key = from_decrypted_api_key(decrypted_key)
 
             # Make a simple test request (using litellm or direct HTTP)
             # All providers support custom base_url for proxy/self-hosted scenarios
@@ -238,8 +241,8 @@ class ProviderService:
                     if response.status_code != 200:
                         error_message = f"HTTP {response.status_code}"
 
-                elif provider_type == "qwen":
-                    # Test Qwen API
+                elif provider_type == "dashscope":
+                    # Test Dashscope API
                     api_base = base_url or "https://dashscope.aliyuncs.com/compatible-mode/v1"
                     response = await client.get(
                         f"{api_base}/models",
@@ -297,6 +300,17 @@ class ProviderService:
                     if response.status_code != 200:
                         error_message = f"HTTP {response.status_code}"
 
+                elif provider_type == "kimi":
+                    # Moonshot Kimi API
+                    api_base = base_url or "https://api.moonshot.cn/v1"
+                    response = await client.get(
+                        f"{api_base}/models",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    status = "healthy" if response.status_code == 200 else "unhealthy"
+                    if response.status_code != 200:
+                        error_message = f"HTTP {response.status_code}"
+
                 elif provider_type == "groq":
                     # Groq API
                     api_base = base_url or "https://api.groq.com/openai/v1"
@@ -321,6 +335,23 @@ class ProviderService:
                         status = "healthy" if response.status_code == 200 else "unhealthy"
                         if response.status_code != 200:
                             error_message = f"HTTP {response.status_code}"
+
+                elif provider_type == "ollama":
+                    # Ollama local API
+                    api_base = base_url or "http://localhost:11434"
+                    response = await client.get(f"{api_base}/api/tags")
+                    status = "healthy" if response.status_code == 200 else "unhealthy"
+                    if response.status_code != 200:
+                        error_message = f"HTTP {response.status_code}"
+
+                elif provider_type == "lmstudio":
+                    # LM Studio OpenAI-compatible API
+                    api_base = base_url or "http://localhost:1234/v1"
+                    headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
+                    response = await client.get(f"{api_base}/models", headers=headers)
+                    status = "healthy" if response.status_code == 200 else "unhealthy"
+                    if response.status_code != 200:
+                        error_message = f"HTTP {response.status_code}"
 
                 elif provider_type == "cohere":
                     # Cohere API
@@ -386,7 +417,11 @@ class ProviderService:
         return health
 
     async def assign_provider_to_tenant(
-        self, tenant_id: str, provider_id: UUID, priority: int = 0
+        self,
+        tenant_id: str,
+        provider_id: UUID,
+        priority: int = 0,
+        operation_type: OperationType = OperationType.LLM,
     ) -> TenantProviderMapping:
         """Assign provider to tenant."""
         logger.info(f"Assigning provider {provider_id} to tenant {tenant_id}")
@@ -396,7 +431,9 @@ class ProviderService:
         if not provider:
             raise ValueError(f"Provider not found: {provider_id}")
 
-        mapping = await self.repository.assign_provider_to_tenant(tenant_id, provider_id, priority)
+        mapping = await self.repository.assign_provider_to_tenant(
+            tenant_id, provider_id, priority, operation_type
+        )
 
         # Invalidate cache for this tenant
         self.resolution_service.invalidate_cache(tenant_id=tenant_id)
@@ -404,11 +441,18 @@ class ProviderService:
         logger.info(f"Assigned provider {provider_id} to tenant {tenant_id}")
         return mapping
 
-    async def unassign_provider_from_tenant(self, tenant_id: str, provider_id: UUID) -> bool:
+    async def unassign_provider_from_tenant(
+        self,
+        tenant_id: str,
+        provider_id: UUID,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> bool:
         """Unassign provider from tenant."""
         logger.info(f"Unassigning provider {provider_id} from tenant {tenant_id}")
 
-        success = await self.repository.unassign_provider_from_tenant(tenant_id, provider_id)
+        success = await self.repository.unassign_provider_from_tenant(
+            tenant_id, provider_id, operation_type
+        )
 
         if success:
             # Invalidate cache for this tenant
@@ -416,11 +460,19 @@ class ProviderService:
 
         return success
 
-    async def get_tenant_provider(self, tenant_id: str) -> Optional[ProviderConfig]:
+    async def get_tenant_provider(
+        self,
+        tenant_id: str,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> Optional[ProviderConfig]:
         """Get provider for tenant."""
-        return await self.repository.find_tenant_provider(tenant_id)
+        return await self.repository.find_tenant_provider(tenant_id, operation_type)
 
-    async def resolve_provider_for_tenant(self, tenant_id: str) -> ProviderConfig:
+    async def resolve_provider_for_tenant(
+        self,
+        tenant_id: str,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> ProviderConfig:
         """
         Resolve provider for tenant with fallback.
 
@@ -433,7 +485,7 @@ class ProviderService:
         Raises:
             NoActiveProviderError: If no active provider found
         """
-        resolved = await self.repository.resolve_provider(tenant_id)
+        resolved = await self.repository.resolve_provider(tenant_id, operation_type)
         logger.info(
             f"Resolved provider '{resolved.provider.name}' "
             f"for tenant '{tenant_id}' "
@@ -589,9 +641,12 @@ class ProviderService:
         """
         try:
             decrypted = self.encryption_service.decrypt(encrypted_key)
-            if len(decrypted) <= 8:
+            normalized = from_decrypted_api_key(decrypted)
+            if not normalized:
+                return "(local-no-key)"
+            if len(normalized) <= 8:
                 return "sk-***"
-            return f"sk-{decrypted[:4]}...{decrypted[-4:]}"
+            return f"sk-{normalized[:4]}...{normalized[-4:]}"
         except ValueError as e:
             logger.warning(f"Failed to decrypt API key for masking (invalid format): {e}")
             return "sk-[ERROR]"

@@ -33,7 +33,7 @@
 ### Multi-Tenant Architecture
 - **Tenant Isolation**: Complete separation of tenants, projects, and configurations
 - **API Key Authentication**: SHA256-hashed keys with format `ms_sk_` + 64 hex chars
-- **Flexible LLM Support**: Google Gemini, Alibaba Qwen, Deepseek, ZhipuAI, OpenAI
+- **Flexible LLM Support**: Google Gemini, Alibaba Dashscope, Deepseek, ZhipuAI, OpenAI
 
 ## Architecture
 
@@ -117,7 +117,7 @@ MemStack follows **Domain-Driven Design (DDD)** with **Hexagonal Architecture (P
 | Provider | Models | Purpose |
 |----------|--------|---------|
 | **Google Gemini** | Gemini Pro | Entity extraction, summarization (default) |
-| **Alibaba Qwen** | Qwen-Turbo/Plus/Max | Chinese language optimization, embedding, reranking |
+| **Alibaba Dashscope** | Qwen-Turbo/Plus/Max | Chinese language optimization, embedding, reranking |
 | **Deepseek** | Deepseek-Chat | Cost-effective reasoning |
 | **ZhipuAI (Z.AI)** | GLM models | Chinese language model |
 | **OpenAI** | GPT models | General purpose |
@@ -130,7 +130,7 @@ MemStack follows **Domain-Driven Design (DDD)** with **Hexagonal Architecture (P
 - **Neo4j**: 5.26+
 - **PostgreSQL**: 16+ (for metadata)
 - **Redis**: 7+ (for caching)
-- **LLM API**: Google Gemini, Alibaba Qwen, Deepseek, ZhipuAI, or OpenAI
+- **LLM API**: Google Gemini, Alibaba Dashscope, Deepseek, ZhipuAI, or OpenAI
 
 ### Installation
 
@@ -157,7 +157,7 @@ cp .env.example .env
 # - NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 # - DATABASE_URL (PostgreSQL)
 # - REDIS_URL
-# - LLM_PROVIDER (gemini, qwen, deepseek, zhipu, openai)
+# - LLM_PROVIDER (gemini, dashscope, deepseek, zhipu, openai)
 # - Corresponding LLM API keys
 ```
 

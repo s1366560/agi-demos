@@ -1,9 +1,9 @@
 """Configuration management for MemStack."""
 
 from functools import lru_cache
-from typing import List, Optional, Union
+from typing import List, Literal, Optional, Union
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -43,6 +43,20 @@ class Settings(BaseSettings):
     redis_host: str = Field(default="localhost", alias="REDIS_HOST")
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
     redis_password: Optional[str] = Field(default=None, alias="REDIS_PASSWORD")
+
+    # Audit Log Settings
+    audit_log_backend: str = Field(default="database", alias="AUDIT_LOG_BACKEND")  # database, file, console
+    audit_log_file: Optional[str] = Field(default=None, alias="AUDIT_LOG_FILE")
+
+    # Alerting Settings
+    alert_slack_webhook_url: Optional[str] = Field(default=None, alias="ALERT_SLACK_WEBHOOK_URL")
+    alert_slack_channel: Optional[str] = Field(default=None, alias="ALERT_SLACK_CHANNEL")
+    alert_email_smtp_host: Optional[str] = Field(default=None, alias="ALERT_EMAIL_SMTP_HOST")
+    alert_email_smtp_port: int = Field(default=587, alias="ALERT_EMAIL_SMTP_PORT")
+    alert_email_username: Optional[str] = Field(default=None, alias="ALERT_EMAIL_USERNAME")
+    alert_email_password: Optional[str] = Field(default=None, alias="ALERT_EMAIL_PASSWORD")
+    alert_email_from: Optional[str] = Field(default=None, alias="ALERT_EMAIL_FROM")
+    alert_email_to: Optional[str] = Field(default=None, alias="ALERT_EMAIL_TO")
 
     # LLM Provider API Key Encryption
     # 32-byte (256-bit) encryption key as hex string (64 hex characters)
@@ -140,6 +154,10 @@ class Settings(BaseSettings):
     hitl_realtime_enabled: bool = Field(default=True, alias="HITL_REALTIME_ENABLED")
 
     # Agent Execution Limits
+    agent_runtime_mode: Literal["auto", "ray", "local"] = Field(
+        default="auto",
+        alias="AGENT_RUNTIME_MODE",
+    )  # Runtime mode: auto (prefer ray), ray (ray only), local (local only)
     agent_max_steps: int = Field(
         default=5000, alias="AGENT_MAX_STEPS"
     )  # Maximum steps for ReActAgent execution
@@ -313,6 +331,17 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    @field_validator("agent_runtime_mode", mode="before")
+    @classmethod
+    def normalize_agent_runtime_mode(cls, value: str | None) -> str:
+        """Normalize runtime mode value from environment."""
+        if value is None:
+            return "auto"
+        normalized = str(value).strip().lower()
+        if normalized in {"auto", "ray", "local"}:
+            return normalized
+        raise ValueError("AGENT_RUNTIME_MODE must be one of: auto, ray, local")
 
     @property
     def postgres_url(self) -> str:

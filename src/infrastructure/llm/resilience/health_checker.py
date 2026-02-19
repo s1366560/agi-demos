@@ -31,6 +31,7 @@ from typing import Callable, Optional
 import httpx
 
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
+from src.infrastructure.llm.provider_credentials import from_decrypted_api_key
 from src.infrastructure.security.encryption_service import get_encryption_service
 
 logger = logging.getLogger(__name__)
@@ -197,7 +198,8 @@ class HealthChecker:
 
         try:
             # Decrypt API key
-            api_key = self._encryption_service.decrypt(provider_config.api_key_encrypted)
+            decrypted_key = self._encryption_service.decrypt(provider_config.api_key_encrypted)
+            api_key = from_decrypted_api_key(decrypted_key)
 
             # Perform health check request
             response_time_ms = await self._do_health_check(provider_type, provider_config, api_key)
@@ -237,7 +239,7 @@ class HealthChecker:
         self,
         provider_type: ProviderType,
         provider_config: ProviderConfig,
-        api_key: str,
+        api_key: str | None,
     ) -> float:
         """
         Perform the actual health check request.
@@ -265,7 +267,7 @@ class HealthChecker:
                 )
                 response.raise_for_status()
 
-            elif provider_type == ProviderType.QWEN:
+            elif provider_type == ProviderType.DASHSCOPE:
                 base_url = (
                     provider_config.base_url or "https://dashscope.aliyuncs.com/compatible-mode/v1"
                 )
@@ -305,6 +307,25 @@ class HealthChecker:
                 # ZAI may return different status codes
                 if response.status_code not in (200, 404):
                     response.raise_for_status()
+
+            elif provider_type == ProviderType.KIMI:
+                base_url = provider_config.base_url or "https://api.moonshot.cn/v1"
+                response = await client.get(
+                    f"{base_url}/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                response.raise_for_status()
+
+            elif provider_type == ProviderType.OLLAMA:
+                base_url = provider_config.base_url or "http://localhost:11434"
+                response = await client.get(f"{base_url}/api/tags")
+                response.raise_for_status()
+
+            elif provider_type == ProviderType.LMSTUDIO:
+                base_url = provider_config.base_url or "http://localhost:1234/v1"
+                headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
+                response = await client.get(f"{base_url}/models", headers=headers)
+                response.raise_for_status()
 
             else:
                 # For unknown providers, just check if we can connect

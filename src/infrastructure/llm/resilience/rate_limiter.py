@@ -81,7 +81,7 @@ DEFAULT_RATE_LIMITS: dict[ProviderType, RateLimitConfig] = {
         rpm=60000,  # Very generous limits
         tpm=4000000,
     ),
-    ProviderType.QWEN: RateLimitConfig(
+    ProviderType.DASHSCOPE: RateLimitConfig(
         max_concurrent=30,
         rpm=6000,
         tpm=300000,
@@ -120,6 +120,16 @@ DEFAULT_RATE_LIMITS: dict[ProviderType, RateLimitConfig] = {
         max_concurrent=20,
         rpm=10000,
         tpm=200000,
+    ),
+    ProviderType.OLLAMA: RateLimitConfig(
+        max_concurrent=10,
+        rpm=0,  # Local provider
+        tpm=0,
+    ),
+    ProviderType.LMSTUDIO: RateLimitConfig(
+        max_concurrent=10,
+        rpm=0,  # Local provider
+        tpm=0,
     ),
 }
 

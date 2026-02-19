@@ -309,16 +309,32 @@ export const providerAPI = {
   ): Promise<unknown> => {
     return await api.get(`/llm-providers/${id}/usage`, { params });
   },
-  assignToTenant: async (id: string, tenantId: string, priority: number = 0): Promise<unknown> => {
+  assignToTenant: async (
+    id: string,
+    tenantId: string,
+    priority: number = 0,
+    operationType: 'llm' | 'embedding' | 'rerank' = 'llm'
+  ): Promise<unknown> => {
     return await api.post(`/llm-providers/tenants/${tenantId}/providers/${id}`, null, {
-      params: { priority },
+      params: { priority, operation_type: operationType },
     });
   },
-  unassignFromTenant: async (id: string, tenantId: string): Promise<void> => {
-    await api.delete(`/llm-providers/tenants/${tenantId}/providers/${id}`);
+  unassignFromTenant: async (
+    id: string,
+    tenantId: string,
+    operationType: 'llm' | 'embedding' | 'rerank' = 'llm'
+  ): Promise<void> => {
+    await api.delete(`/llm-providers/tenants/${tenantId}/providers/${id}`, {
+      params: { operation_type: operationType },
+    });
   },
-  getTenantProvider: async (tenantId: string): Promise<ProviderConfig> => {
-    return await api.get(`/llm-providers/tenants/${tenantId}/provider`);
+  getTenantProvider: async (
+    tenantId: string,
+    operationType: 'llm' | 'embedding' | 'rerank' = 'llm'
+  ): Promise<ProviderConfig> => {
+    return await api.get(`/llm-providers/tenants/${tenantId}/provider`, {
+      params: { operation_type: operationType },
+    });
   },
   // System-wide resilience status
   getSystemStatus: async (): Promise<SystemResilienceStatus> => {

@@ -93,25 +93,26 @@ class TenantAgentConfigService implements ITenantAgentConfigService {
   /**
    * Check if current user can modify tenant config
    *
-   * This method attempts to determine if the current user
+   * Calls the backend API to determine if the current user
    * has admin privileges for the tenant.
    *
-   * Currently a placeholder - in production this would check
-   * user roles/permissions from the auth context.
-   *
-   * @param _tenantId - Tenant ID to check permissions for
+   * @param tenantId - Tenant ID to check permissions for
    * @returns True if user can modify config, false otherwise
    */
-  async canModifyConfig(_tenantId: string): Promise<boolean> {
-    // TODO: Implement proper permission check
-    // Options:
-    // 1. Add a dedicated endpoint: GET /api/v1/agent/config/can-modify?tenant_id={id}
-    // 2. Check user roles from auth context/tenant store
-    // 3. Try a minimal update and catch 403 (not recommended)
-
-    // For now, return true and let the actual update fail with 403
-    // The UI should handle the 403 gracefully
-    return true;
+  async canModifyConfig(tenantId: string): Promise<boolean> {
+    try {
+      const response = await api.get<{ can_modify: boolean }>(
+        '/agent/config/can-modify',
+        {
+          params: { tenant_id: tenantId },
+        }
+      );
+      return response.can_modify;
+    } catch (error) {
+      // If API fails, assume no permission
+      console.warn('Failed to check config modify permission:', error);
+      return false;
+    }
   }
 
   /**

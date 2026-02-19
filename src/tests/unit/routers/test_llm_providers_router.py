@@ -123,12 +123,12 @@ def llm_providers_app(mock_provider_service, admin_user):
     """Create a test FastAPI app with only LLM providers router."""
     from fastapi import FastAPI
 
+    from src.infrastructure.adapters.primary.web.dependencies import get_current_user
     from src.infrastructure.adapters.primary.web.routers.llm_providers import (
         get_current_user_with_roles,
         get_provider_service_with_session,
         router,
     )
-    from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 
     app = FastAPI()
     app.include_router(router)
@@ -264,7 +264,9 @@ class TestLLMProvidersRouterList:
         self, llm_providers_app, mock_provider_service, regular_user
     ):
         """Test that non-admin users cannot see inactive providers."""
-        from src.infrastructure.adapters.primary.web.routers.llm_providers import get_current_user_with_roles
+        from src.infrastructure.adapters.primary.web.routers.llm_providers import (
+            get_current_user_with_roles,
+        )
 
         llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
         client = TestClient(llm_providers_app)
@@ -318,7 +320,9 @@ class TestLLMProvidersRouterGet:
         self, llm_providers_app, mock_provider_service, regular_user
     ):
         """Test that non-admin users cannot see inactive providers."""
-        from src.infrastructure.adapters.primary.web.routers.llm_providers import get_current_user_with_roles
+        from src.infrastructure.adapters.primary.web.routers.llm_providers import (
+            get_current_user_with_roles,
+        )
 
         llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
         client = TestClient(llm_providers_app)
@@ -384,7 +388,9 @@ class TestLLMProvidersRouterUpdate:
     @pytest.mark.asyncio
     async def test_update_provider_forbidden_for_non_admin(self, llm_providers_app, regular_user):
         """Test that non-admin users cannot update providers."""
-        from src.infrastructure.adapters.primary.web.routers.llm_providers import get_current_user_with_roles
+        from src.infrastructure.adapters.primary.web.routers.llm_providers import (
+            get_current_user_with_roles,
+        )
 
         llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
         client = TestClient(llm_providers_app)
@@ -429,7 +435,9 @@ class TestLLMProvidersRouterDelete:
     @pytest.mark.asyncio
     async def test_delete_provider_forbidden_for_non_admin(self, llm_providers_app, regular_user):
         """Test that non-admin users cannot delete providers."""
-        from src.infrastructure.adapters.primary.web.routers.llm_providers import get_current_user_with_roles
+        from src.infrastructure.adapters.primary.web.routers.llm_providers import (
+            get_current_user_with_roles,
+        )
 
         llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
         client = TestClient(llm_providers_app)
@@ -491,6 +499,7 @@ class TestLLMProvidersRouterTenantAssignment:
 
         mock_mapping = Mock()
         mock_mapping.id = str(uuid4())
+        mock_mapping.operation_type = "llm"
         mock_provider_service.assign_provider_to_tenant.return_value = mock_mapping
 
         response = llm_client.post(
@@ -600,7 +609,7 @@ class TestLLMProvidersRouterTypes:
         data = response.json()
         assert isinstance(data, list)
         assert "openai" in data
-        assert "qwen" in data
+        assert "dashscope" in data
         assert "gemini" in data
         assert "anthropic" in data
 
@@ -617,13 +626,13 @@ class TestLLMProvidersRouterTypes:
         assert "gpt-4o-mini" in data["models"]
 
     @pytest.mark.asyncio
-    async def test_list_models_for_qwen(self, llm_client):
-        """Test listing models for Qwen provider type."""
-        response = llm_client.get("/api/v1/llm-providers/models/qwen")
+    async def test_list_models_for_dashscope(self, llm_client):
+        """Test listing models for Dashscope provider type."""
+        response = llm_client.get("/api/v1/llm-providers/models/dashscope")
 
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert data["provider_type"] == "qwen"
+        assert data["provider_type"] == "dashscope"
         assert "models" in data
 
     @pytest.mark.asyncio
@@ -634,6 +643,46 @@ class TestLLMProvidersRouterTypes:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["provider_type"] == "gemini"
+
+    @pytest.mark.asyncio
+    async def test_list_models_for_kimi(self, llm_client):
+        """Test listing models for Kimi provider type."""
+        response = llm_client.get("/api/v1/llm-providers/models/kimi")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["provider_type"] == "kimi"
+        assert "kimi-embedding-1" in data["models"]
+
+    @pytest.mark.asyncio
+    async def test_list_models_for_zai(self, llm_client):
+        """Test listing models for ZAI provider type."""
+        response = llm_client.get("/api/v1/llm-providers/models/zai")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["provider_type"] == "zai"
+        assert "embedding-3" in data["models"]
+
+    @pytest.mark.asyncio
+    async def test_list_models_for_ollama(self, llm_client):
+        """Test listing models for Ollama provider type."""
+        response = llm_client.get("/api/v1/llm-providers/models/ollama")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["provider_type"] == "ollama"
+        assert "nomic-embed-text" in data["models"]
+
+    @pytest.mark.asyncio
+    async def test_list_models_for_lmstudio(self, llm_client):
+        """Test listing models for LM Studio provider type."""
+        response = llm_client.get("/api/v1/llm-providers/models/lmstudio")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["provider_type"] == "lmstudio"
+        assert "local-model" in data["models"]
 
     @pytest.mark.asyncio
     async def test_list_models_unknown_provider(self, llm_client):
@@ -668,7 +717,9 @@ class TestLLMProvidersRouterUsage:
         self, llm_providers_app, mock_provider_service, regular_user
     ):
         """Test that non-admin users only see their tenant's usage."""
-        from src.infrastructure.adapters.primary.web.routers.llm_providers import get_current_user_with_roles
+        from src.infrastructure.adapters.primary.web.routers.llm_providers import (
+            get_current_user_with_roles,
+        )
 
         llm_providers_app.dependency_overrides[get_current_user_with_roles] = lambda: regular_user
         client = TestClient(llm_providers_app)

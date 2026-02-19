@@ -12,6 +12,7 @@ from uuid import UUID
 from src.domain.llm_providers.models import (
     LLMUsageLog,
     LLMUsageLogCreate,
+    OperationType,
     ProviderConfig,
     ProviderConfigCreate,
     ProviderConfigUpdate,
@@ -78,12 +79,20 @@ class ProviderRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_tenant_provider(self, tenant_id: str) -> Optional[ProviderConfig]:
+    async def find_tenant_provider(
+        self,
+        tenant_id: str,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> Optional[ProviderConfig]:
         """Find provider assigned to specific tenant."""
         pass
 
     @abstractmethod
-    async def resolve_provider(self, tenant_id: Optional[str] = None) -> ResolvedProvider:
+    async def resolve_provider(
+        self,
+        tenant_id: Optional[str] = None,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> ResolvedProvider:
         """
         Resolve appropriate provider for tenant.
 
@@ -126,17 +135,30 @@ class ProviderRepository(ABC):
 
     @abstractmethod
     async def assign_provider_to_tenant(
-        self, tenant_id: str, provider_id: UUID, priority: int = 0
+        self,
+        tenant_id: str,
+        provider_id: UUID,
+        priority: int = 0,
+        operation_type: OperationType = OperationType.LLM,
     ) -> TenantProviderMapping:
         """Assign provider to tenant."""
         pass
 
     @abstractmethod
-    async def unassign_provider_from_tenant(self, tenant_id: str, provider_id: UUID) -> bool:
+    async def unassign_provider_from_tenant(
+        self,
+        tenant_id: str,
+        provider_id: UUID,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> bool:
         """Unassign provider from tenant."""
         pass
 
     @abstractmethod
-    async def get_tenant_providers(self, tenant_id: str) -> List[TenantProviderMapping]:
+    async def get_tenant_providers(
+        self,
+        tenant_id: str,
+        operation_type: Optional[OperationType] = None,
+    ) -> List[TenantProviderMapping]:
         """Get all providers assigned to tenant."""
         pass

@@ -12,6 +12,9 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+from src.infrastructure.adapters.secondary.persistence.models import AuditLog
+
 logger = logging.getLogger(__name__)
 
 
@@ -109,13 +112,33 @@ class AuditLogService:
     async def _log_to_database(self, entry: AuditLogEntry):
         """Store audit log in database."""
         try:
-            # For now, just log to console
-            # TODO: Create audit_logs table and store there
-            logger.info(f"Audit: {entry.action} on {entry.resource_type}")
+            async with async_session_factory() as session:
+                db_entry = AuditLog(
+                    id=entry.id or self.generate_id(),
+                    timestamp=entry.timestamp,
+                    actor=entry.actor,
+                    action=entry.action,
+                    resource_type=entry.resource_type,
+                    resource_id=entry.resource_id,
+                    tenant_id=entry.tenant_id,
+                    details=entry.details,
+                    ip_address=entry.ip_address,
+                    user_agent=entry.user_agent,
+                )
+                session.add(db_entry)
+                await session.commit()
+                logger.debug(f"Audit log saved: {entry.action} on {entry.resource_type}")
         except Exception as e:
             logger.error(f"Failed to log to database: {e}")
             # Fallback to console
             await self._log_to_console(entry)
+
+    @staticmethod
+    def generate_id() -> str:
+        """Generate a unique ID for audit log entries."""
+        from uuid import uuid4
+
+        return str(uuid4())
 
     async def _log_to_file(self, entry: AuditLogEntry):
         """Store audit log in file."""
@@ -272,6 +295,12 @@ def get_audit_service() -> AuditLogService:
     """Get or create singleton audit service instance."""
     global _audit_service
     if _audit_service is None:
-        # TODO: Read backend from config
-        _audit_service = AuditLogService(backend="console")
+        from src.configuration.config import get_settings
+
+        settings = get_settings()
+        _audit_service = AuditLogService(
+            backend=settings.audit_log_backend,
+            log_file=settings.audit_log_file,
+        )
+        logger.info(f"Audit service initialized with backend: {settings.audit_log_backend}")
     return _audit_service

@@ -9,7 +9,8 @@ import { ProviderConfig, ProviderType, SystemResilienceStatus } from '../../type
 
 const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
   openai: 'OpenAI',
-  qwen: 'Dashscope',
+  dashscope: 'Dashscope',
+  kimi: 'Moonshot Kimi',
   gemini: 'Google Gemini',
   anthropic: 'Anthropic',
   groq: 'Groq',
@@ -20,6 +21,8 @@ const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
   vertex: 'Google Vertex AI',
   deepseek: 'Deepseek',
   zai: 'ZhipuAI',
+  ollama: 'Ollama',
+  lmstudio: 'LM Studio',
 };
 
 type ViewMode = 'cards' | 'table';
@@ -214,7 +217,7 @@ export const ProviderList: React.FC = () => {
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
                 <option value="gemini">Google Gemini</option>
-                <option value="qwen">Qwen</option>
+                <option value="dashscope">Dashscope</option>
                 <option value="deepseek">Deepseek</option>
                 <option value="zai">ZhipuAI</option>
                 <option value="groq">Groq</option>

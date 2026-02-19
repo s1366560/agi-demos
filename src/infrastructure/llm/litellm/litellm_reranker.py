@@ -21,6 +21,7 @@ from typing import Any, List, Optional, Tuple
 from src.domain.llm_providers.base import BaseReranker
 from src.domain.llm_providers.llm_types import RateLimitError
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
+from src.infrastructure.llm.provider_credentials import from_decrypted_api_key
 from src.infrastructure.security.encryption_service import get_encryption_service
 
 logger = logging.getLogger(__name__)
@@ -37,10 +38,13 @@ DEFAULT_RERANK_MODELS = {
     ProviderType.OPENAI: "gpt-4o-mini",
     ProviderType.ANTHROPIC: "claude-3-5-haiku-20241022",
     ProviderType.GEMINI: "gemini-1.5-flash",
-    ProviderType.QWEN: "qwen-turbo",
+    ProviderType.DASHSCOPE: "qwen-turbo",
+    ProviderType.KIMI: "kimi-rerank-1",
     ProviderType.DEEPSEEK: "deepseek-chat",
     ProviderType.ZAI: "glm-4-flash",
     ProviderType.MISTRAL: "mistral-small-latest",
+    ProviderType.OLLAMA: "llama3.1:8b",
+    ProviderType.LMSTUDIO: "local-model",
 }
 
 
@@ -80,17 +84,18 @@ class LiteLLMReranker(BaseReranker):
         if isinstance(config, LiteLLMRerankerConfig):
             self._model = config.model
             self._api_key = config.api_key
-            self._base_url = config.base_url
             self._provider_type = config.provider_type
+            self._base_url = self._resolve_api_base(self._provider_type, config.base_url)
         else:
             self._provider_config = config
             self._provider_type = config.provider_type
             self._model = config.reranker_model or self._get_default_model(config.provider_type)
-            self._base_url = config.base_url
+            self._base_url = self._resolve_api_base(self._provider_type, config.base_url)
 
             # Decrypt API key
             encryption_service = get_encryption_service()
             self._api_key = encryption_service.decrypt(config.api_key_encrypted)
+            self._api_key = from_decrypted_api_key(self._api_key)
 
         self._use_native_rerank = self._provider_type in NATIVE_RERANK_PROVIDERS
 
@@ -102,6 +107,17 @@ class LiteLLMReranker(BaseReranker):
     def _get_default_model(self, provider_type: ProviderType) -> str:
         """Get default rerank model for provider."""
         return DEFAULT_RERANK_MODELS.get(provider_type, "gpt-4o-mini")
+
+    @staticmethod
+    def _resolve_api_base(provider_type: Optional[ProviderType], base_url: Optional[str]) -> Optional[str]:
+        """Resolve api_base using configured value or local-provider defaults."""
+        if base_url:
+            return base_url
+        if provider_type == ProviderType.OLLAMA:
+            return "http://localhost:11434"
+        if provider_type == ProviderType.LMSTUDIO:
+            return "http://localhost:1234/v1"
+        return None
 
     def _configure_litellm(self):
         """No-op. Kept for backward compatibility.
@@ -254,13 +270,60 @@ class LiteLLMReranker(BaseReranker):
             if self._base_url:
                 completion_kwargs["api_base"] = self._base_url
 
-            response = await litellm.acompletion(**completion_kwargs)
+            try:
+                response = await litellm.acompletion(**completion_kwargs)
+            except Exception as e:
+                error_msg = str(e).lower()
+                unsupported_response_format = (
+                    "does not support parameters" in error_msg and "response_format" in error_msg
+                )
+                if not unsupported_response_format:
+                    raise
+                logger.debug(
+                    "Rerank model does not support response_format; retrying without it: "
+                    f"model={model}"
+                )
+                completion_kwargs.pop("response_format", None)
+                response = await litellm.acompletion(**completion_kwargs)
 
             # Extract and parse response
             message = response.choices[0].message
             # Handle both dict and object formats
             content = message.get("content") if isinstance(message, dict) else message.content
             scores, _ = self._parse_rerank_response(content, len(passages))
+            if scores and all(score == 0.5 for score in scores):
+                logger.warning(
+                    "Rerank response parsing degraded to neutral scores; "
+                    f"retrying with compact prompt for model={model}"
+                )
+                retry_prompt = (
+                    "Return ONLY JSON object with key \"scores\" and "
+                    f"{len(passages)} floats in [0,1].\n"
+                    f"query={query}\n"
+                    f"passages={json.dumps(passages, ensure_ascii=False)}"
+                )
+                retry_kwargs = {
+                    **completion_kwargs,
+                    "messages": [
+                        {"role": "system", "content": "Output strict JSON only."},
+                        {"role": "user", "content": retry_prompt},
+                    ],
+                }
+                try:
+                    retry_response = await litellm.acompletion(**retry_kwargs)
+                    retry_message = retry_response.choices[0].message
+                    retry_content = (
+                        retry_message.get("content")
+                        if isinstance(retry_message, dict)
+                        else retry_message.content
+                    )
+                    retry_scores, retry_padded = self._parse_rerank_response(
+                        retry_content, len(passages)
+                    )
+                    if not retry_padded:
+                        scores = retry_scores
+                except Exception as retry_error:
+                    logger.debug(f"Rerank compact retry failed: {retry_error}")
 
             # Combine passages with scores and sort
             passage_scores = list(zip(passages, scores))
@@ -292,13 +355,17 @@ class LiteLLMReranker(BaseReranker):
             return f"mistral/{model}"
         elif provider_type == "deepseek" and not model.startswith("deepseek/"):
             return f"deepseek/{model}"
-        elif provider_type == "qwen":
+        elif provider_type in {"dashscope", "kimi"}:
             if not model.startswith("openai/"):
                 return f"openai/{model}"
         elif provider_type == "zai":
             # ZhipuAI uses 'zai/' prefix in LiteLLM
             if not model.startswith("zai/"):
                 return f"zai/{model}"
+        elif provider_type == "ollama" and not model.startswith("ollama/"):
+            return f"ollama/{model}"
+        elif provider_type == "lmstudio" and not model.startswith("openai/"):
+            return f"openai/{model}"
 
         return model
 

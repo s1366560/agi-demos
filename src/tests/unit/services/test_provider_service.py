@@ -8,9 +8,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from src.application.services.provider_service import ProviderService
 from src.domain.llm_providers.models import (
+    OperationType,
     ProviderConfigCreate,
     ProviderConfigUpdate,
     ProviderType,
@@ -166,7 +168,7 @@ class TestProviderService:
 
         assert result is not None
         service.repository.assign_provider_to_tenant.assert_called_once_with(
-            tenant_id, provider_id, 0
+            tenant_id, provider_id, 0, OperationType.LLM
         )
 
     @pytest.mark.asyncio
@@ -231,3 +233,23 @@ class TestProviderService:
 
         # Should invalidate cache
         service.resolution_service.invalidate_cache.assert_called_once()
+
+    def test_provider_config_create_allows_empty_api_key_for_ollama(self):
+        """Local Ollama provider should allow missing API key."""
+        config = ProviderConfigCreate(
+            name="local-ollama",
+            provider_type=ProviderType.OLLAMA,
+            api_key="",
+            llm_model="llama3.1:8b",
+        )
+        assert config.api_key == ""
+
+    def test_provider_config_create_requires_api_key_for_openai(self):
+        """Remote providers should still require API key."""
+        with pytest.raises(ValidationError):
+            ProviderConfigCreate(
+                name="remote-openai",
+                provider_type=ProviderType.OPENAI,
+                api_key="",
+                llm_model="gpt-4o",
+            )

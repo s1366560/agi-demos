@@ -15,7 +15,7 @@ services:
       - DATABASE_URL=postgresql://postgres:your_password_here@postgres:5432/memstack
       - REDIS_URL=redis://redis:6379
 
-      - LLM_PROVIDER=${LLM_PROVIDER:-qwen}
+      - LLM_PROVIDER=${LLM_PROVIDER:-dashscope}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}

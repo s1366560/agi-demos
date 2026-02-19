@@ -8,6 +8,7 @@ Coordinates:
 - AutoScalingService: Dynamic scaling
 - StateRecoveryService: State persistence
 - PoolMetricsCollector: Metrics collection
+- AlertService: Critical event notifications
 
 Usage:
     orchestrator = PoolOrchestrator(config)
@@ -24,6 +25,13 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
+
+from src.domain.ports.services.alert_service_port import (
+    Alert,
+    AlertServicePort,
+    AlertSeverity,
+    NullAlertService,
+)
 
 from .config import PoolConfig
 from .ha import (
@@ -93,6 +101,7 @@ class PoolOrchestrator:
         self._auto_scaling: Optional[AutoScalingService] = None
         self._state_recovery: Optional[StateRecoveryService] = None
         self._metrics_collector: Optional[PoolMetricsCollector] = None
+        self._alert_service: AlertServicePort = NullAlertService()
 
         # State
         self._is_running = False
@@ -298,6 +307,15 @@ class PoolOrchestrator:
             graceful=graceful,
         )
 
+    def set_alert_service(self, alert_service: AlertServicePort) -> None:
+        """Set the alert service for notifications.
+
+        Args:
+            alert_service: Alert service implementation (Slack, Email, etc.)
+        """
+        self._alert_service = alert_service
+        logger.info("Alert service configured for pool orchestrator")
+
     async def set_project_tier(
         self,
         tenant_id: str,
@@ -426,7 +444,22 @@ class PoolOrchestrator:
         if self._metrics_collector:
             self._metrics_collector.record_recovery_attempt(success=False)
 
-        # TODO: Send alert notification (email, Slack, PagerDuty, etc.)
+        # Send alert notification
+        try:
+            alert = Alert(
+                title=f"Agent Pool Escalation: {instance_key}",
+                message=f"Human intervention required. Reason: {reason}",
+                severity=AlertSeverity.CRITICAL,
+                source="agent_pool_orchestrator",
+                metadata={
+                    "instance_key": instance_key,
+                    "event_type": type(event).__name__ if event else "unknown",
+                    "reason": reason,
+                },
+            )
+            await self._alert_service.send_alert(alert)
+        except Exception as e:
+            logger.error(f"Failed to send escalation alert: {e}")
 
     async def _on_scale(self, instance_key: str, event: Any) -> None:
         """Handle scaling event."""

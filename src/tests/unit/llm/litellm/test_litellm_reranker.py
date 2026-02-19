@@ -12,6 +12,7 @@ import pytest
 
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
 from src.infrastructure.llm.litellm.litellm_reranker import LiteLLMReranker
+from src.infrastructure.llm.provider_credentials import NO_API_KEY_SENTINEL
 
 
 class TestLiteLLMReranker:
@@ -220,3 +221,120 @@ class TestLiteLLMReranker:
             mock_acompletion.assert_called_once()
             call_args = mock_acompletion.call_args
             assert call_args[1]["model"] == provider_config.reranker_model
+
+    @pytest.mark.asyncio
+    async def test_retry_without_response_format_when_unsupported(self, reranker):
+        """Should retry once without response_format when provider rejects it."""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message = {"content": '{"scores": [0.9, 0.1]}'}
+        unsupported_error = Exception("provider does not support parameters: ['response_format']")
+
+        with patch("litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+            mock_acompletion.side_effect = [unsupported_error, mock_response]
+            ranked = await reranker.rank("Where is Paris?", ["Sky", "Paris in France"], top_n=2)
+
+            assert len(ranked) == 2
+            assert mock_acompletion.await_count == 2
+            first_call = mock_acompletion.await_args_list[0].kwargs
+            second_call = mock_acompletion.await_args_list[1].kwargs
+            assert "response_format" in first_call
+            assert "response_format" not in second_call
+
+    def test_kimi_default_reranker_model_and_prefix(self):
+        """Kimi should use dedicated reranker default and OpenAI-compatible prefix."""
+        kimi_provider = ProviderConfig(
+            id=uuid4(),
+            name="kimi-provider",
+            provider_type=ProviderType.KIMI,
+            api_key_encrypted="encrypted_key",
+            llm_model="moonshot-v1-8k",
+            llm_small_model="moonshot-v1-8k",
+            embedding_model="kimi-embedding-1",
+            reranker_model=None,
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_reranker.get_encryption_service"
+        ) as mock_get:
+            mock_encryption = MagicMock()
+            mock_encryption.decrypt.return_value = "sk-test-api-key"
+            mock_get.return_value = mock_encryption
+            reranker = LiteLLMReranker(config=kimi_provider)
+
+        assert reranker._model == "kimi-rerank-1"
+        assert reranker._get_litellm_model_name() == "openai/kimi-rerank-1"
+
+    @pytest.mark.asyncio
+    async def test_ollama_without_api_key_uses_default_base_url(self):
+        """Ollama reranker should allow missing API key and use local base URL."""
+        ollama_provider = ProviderConfig(
+            id=uuid4(),
+            name="ollama-provider",
+            provider_type=ProviderType.OLLAMA,
+            api_key_encrypted="encrypted_key",
+            llm_model="llama3.1:8b",
+            llm_small_model="llama3.1:8b",
+            embedding_model="nomic-embed-text",
+            reranker_model=None,
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_reranker.get_encryption_service"
+        ) as mock_get:
+            mock_encryption = MagicMock()
+            mock_encryption.decrypt.return_value = NO_API_KEY_SENTINEL
+            mock_get.return_value = mock_encryption
+            reranker = LiteLLMReranker(config=ollama_provider)
+
+        assert reranker._base_url == "http://localhost:11434"
+        assert reranker._api_key is None
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message = {"content": '{"scores": [0.7, 0.2]}'}
+        with patch("litellm.acompletion", new_callable=AsyncMock) as mock_acompletion:
+            mock_acompletion.return_value = mock_response
+            await reranker.rank("query", ["a", "b"])
+
+        call_kwargs = mock_acompletion.call_args.kwargs
+        assert call_kwargs["model"] == "ollama/llama3.1:8b"
+        assert call_kwargs["api_base"] == "http://localhost:11434"
+        assert "api_key" not in call_kwargs
+
+    def test_lmstudio_default_reranker_model_and_prefix(self):
+        """LM Studio should use local reranker defaults and OpenAI-compatible prefix."""
+        lmstudio_provider = ProviderConfig(
+            id=uuid4(),
+            name="lmstudio-provider",
+            provider_type=ProviderType.LMSTUDIO,
+            api_key_encrypted="encrypted_key",
+            llm_model="local-model",
+            llm_small_model="local-model",
+            embedding_model="text-embedding-nomic-embed-text-v1.5",
+            reranker_model=None,
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_reranker.get_encryption_service"
+        ) as mock_get:
+            mock_encryption = MagicMock()
+            mock_encryption.decrypt.return_value = NO_API_KEY_SENTINEL
+            mock_get.return_value = mock_encryption
+            reranker = LiteLLMReranker(config=lmstudio_provider)
+
+        assert reranker._model == "local-model"
+        assert reranker._get_litellm_model_name() == "openai/local-model"
+        assert reranker._base_url == "http://localhost:1234/v1"

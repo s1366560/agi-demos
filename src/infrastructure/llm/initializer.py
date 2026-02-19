@@ -12,15 +12,15 @@ from typing import Dict, Optional
 from sqlalchemy.exc import IntegrityError
 
 from src.application.services.provider_service import ProviderService
-from src.configuration.config import get_settings
 from src.domain.llm_providers.models import ProviderConfigCreate, ProviderType
+from src.infrastructure.llm.provider_credentials import should_require_api_key
 
 logger = logging.getLogger(__name__)
 
 # Provider type mapping from config name to ProviderType enum
 PROVIDER_TYPE_MAP: Dict[str, ProviderType] = {
     "gemini": ProviderType.GEMINI,
-    "qwen": ProviderType.QWEN,
+    "dashscope": ProviderType.DASHSCOPE,
     "openai": ProviderType.OPENAI,
     "deepseek": ProviderType.DEEPSEEK,
     "zai": ProviderType.ZAI,
@@ -29,6 +29,8 @@ PROVIDER_TYPE_MAP: Dict[str, ProviderType] = {
     "moonshot": ProviderType.KIMI,  # Alias for kimi
     "anthropic": ProviderType.ANTHROPIC,  # Anthropic (Claude)
     "claude": ProviderType.ANTHROPIC,  # Alias for anthropic
+    "ollama": ProviderType.OLLAMA,  # Local Ollama
+    "lmstudio": ProviderType.LMSTUDIO,  # LM Studio
 }
 
 
@@ -56,7 +58,6 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
     Returns:
         True if a default provider was created, False otherwise
     """
-    settings = get_settings()
     provider_service = ProviderService()
 
     # If force recreate, clear all existing providers first
@@ -99,7 +100,7 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
         if os.getenv("GEMINI_API_KEY"):
             provider_name = "gemini"
         elif os.getenv("DASHSCOPE_API_KEY"):
-            provider_name = "qwen"
+            provider_name = "dashscope"
         elif os.getenv("OPENAI_API_KEY"):
             provider_name = "openai"
         elif os.getenv("DEEPSEEK_API_KEY"):
@@ -110,6 +111,10 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
             provider_name = "kimi"
         elif os.getenv("ANTHROPIC_API_KEY"):
             provider_name = "anthropic"
+        elif os.getenv("OLLAMA_BASE_URL"):
+            provider_name = "ollama"
+        elif os.getenv("LMSTUDIO_BASE_URL"):
+            provider_name = "lmstudio"
         else:
             provider_name = "gemini"  # Default fallback
 
@@ -199,13 +204,13 @@ def _build_provider_config(
         reranker_model = os.getenv("ZAI_RERANK_MODEL") or os.getenv("ZHIPU_RERANK_MODEL", "glm-4-flash")
         base_url = os.getenv("ZAI_BASE_URL") or os.getenv("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
 
-    elif provider_name == "qwen":
-        api_key = os.getenv("DASHSCOPE_API_KEY") or os.getenv("QWEN_API_KEY")
-        llm_model = os.getenv("QWEN_MODEL", "qwen-plus")
-        llm_small_model = os.getenv("QWEN_SMALL_MODEL", "qwen-turbo")
-        embedding_model = os.getenv("QWEN_EMBEDDING_MODEL", "text-embedding-v3")
-        reranker_model = os.getenv("QWEN_RERANK_MODEL", "qwen-plus")
-        base_url = os.getenv("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+    elif provider_name == "dashscope":
+        api_key = os.getenv("DASHSCOPE_API_KEY")
+        llm_model = os.getenv("DASHSCOPE_MODEL", "qwen-plus")
+        llm_small_model = os.getenv("DASHSCOPE_SMALL_MODEL", "qwen-turbo")
+        embedding_model = os.getenv("DASHSCOPE_EMBEDDING_MODEL", "text-embedding-v3")
+        reranker_model = os.getenv("DASHSCOPE_RERANK_MODEL", "qwen-turbo")
+        base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 
     elif provider_name == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
@@ -226,8 +231,8 @@ def _build_provider_config(
         api_key = os.getenv("KIMI_API_KEY")
         llm_model = os.getenv("KIMI_MODEL", "moonshot-v1-8k")
         llm_small_model = os.getenv("KIMI_SMALL_MODEL", "moonshot-v1-8k")
-        embedding_model = os.getenv("KIMI_EMBEDDING_MODEL", "")
-        reranker_model = os.getenv("KIMI_RERANK_MODEL", "moonshot-v1-8k")
+        embedding_model = os.getenv("KIMI_EMBEDDING_MODEL", "kimi-embedding-1")
+        reranker_model = os.getenv("KIMI_RERANK_MODEL", "kimi-rerank-1")
         base_url = os.getenv("KIMI_BASE_URL", "https://api.moonshot.cn/v1")
 
     elif provider_name in ("anthropic", "claude"):
@@ -238,8 +243,26 @@ def _build_provider_config(
         reranker_model = os.getenv("ANTHROPIC_RERANK_MODEL", "claude-3-haiku-20240307")
         base_url = os.getenv("ANTHROPIC_BASE_URL")
 
-    # Check if API key is available
-    if not api_key:
+    elif provider_name == "ollama":
+        api_key = os.getenv("OLLAMA_API_KEY")
+        llm_model = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+        llm_small_model = os.getenv("OLLAMA_SMALL_MODEL", "llama3.1:8b")
+        embedding_model = os.getenv("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+        reranker_model = os.getenv("OLLAMA_RERANK_MODEL", "llama3.1:8b")
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+
+    elif provider_name == "lmstudio":
+        api_key = os.getenv("LMSTUDIO_API_KEY")
+        llm_model = os.getenv("LMSTUDIO_MODEL", "local-model")
+        llm_small_model = os.getenv("LMSTUDIO_SMALL_MODEL", "local-model")
+        embedding_model = os.getenv(
+            "LMSTUDIO_EMBEDDING_MODEL", "text-embedding-nomic-embed-text-v1.5"
+        )
+        reranker_model = os.getenv("LMSTUDIO_RERANK_MODEL", "local-model")
+        base_url = os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
+
+    # Check if API key is available (except local providers with optional key)
+    if should_require_api_key(provider_type) and not api_key:
         return None
 
     # Create provider config

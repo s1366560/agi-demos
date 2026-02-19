@@ -88,7 +88,7 @@ class LLMProvider(Base):
     __table_args__ = (
         CheckConstraint("length(trim(name)) > 0", name="llm_providers_name_not_empty"),
         CheckConstraint(
-            "provider_type IN ('openai', 'qwen', 'gemini', 'anthropic', 'groq', 'azure_openai', 'cohere', 'mistral', 'bedrock', 'vertex', 'deepseek', 'zai')",
+            "provider_type IN ('openai', 'dashscope', 'gemini', 'anthropic', 'groq', 'azure_openai', 'cohere', 'mistral', 'bedrock', 'vertex', 'deepseek', 'zai', 'kimi', 'ollama', 'lmstudio')",
             name="llm_providers_valid_type",
         ),
         Index("idx_llm_providers_type", "provider_type"),
@@ -116,6 +116,7 @@ class TenantProviderMapping(Base):
 
     # Mapping
     tenant_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    operation_type: Mapped[str] = mapped_column(String(20), default="llm", nullable=False)
     provider_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="CASCADE"), nullable=False
     )
@@ -135,10 +136,18 @@ class TenantProviderMapping(Base):
         CheckConstraint(
             "length(trim(tenant_id)) > 0", name="tenant_provider_mappings_tenant_not_empty"
         ),
+        CheckConstraint(
+            "operation_type IN ('llm', 'embedding', 'rerank')",
+            name="tenant_provider_mappings_valid_operation",
+        ),
         UniqueConstraint(
-            "tenant_id", "provider_id", name="tenant_provider_mappings_unique_tenant_provider"
+            "tenant_id",
+            "provider_id",
+            "operation_type",
+            name="tenant_provider_mappings_unique_tenant_provider_op",
         ),
         Index("idx_tenant_mappings_tenant", "tenant_id"),
+        Index("idx_tenant_mappings_operation", "operation_type"),
         Index("idx_tenant_mappings_provider", "provider_id"),
         Index("idx_tenant_mappings_priority", "priority"),
     )

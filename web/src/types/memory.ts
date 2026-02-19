@@ -266,7 +266,8 @@ export interface UserProject {
 // LLM Provider Types
 export type ProviderType =
   | 'openai'
-  | 'qwen'
+  | 'dashscope'
+  | 'kimi'
   | 'gemini'
   | 'anthropic'
   | 'groq'
@@ -276,7 +277,9 @@ export type ProviderType =
   | 'bedrock'
   | 'vertex'
   | 'deepseek'
-  | 'zai';
+  | 'zai'
+  | 'ollama'
+  | 'lmstudio';
 export type ProviderStatus = 'healthy' | 'degraded' | 'unhealthy';
 
 // Circuit breaker state enum

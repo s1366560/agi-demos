@@ -277,6 +277,54 @@ class TestProviderRepository:
         assert found.id == provider.id
 
     @pytest.mark.asyncio
+    async def test_find_tenant_provider_by_operation_type(self, db_session):
+        """Test operation-specific tenant provider resolution."""
+        repository = SQLAlchemyProviderRepository(session=db_session)
+
+        llm_provider = await repository.create(
+            ProviderConfigCreate(
+                name="tenant-llm-provider",
+                provider_type=ProviderType.OPENAI,
+                api_key="sk-test-llm",
+                llm_model="gpt-4o",
+            )
+        )
+        embedding_provider = await repository.create(
+            ProviderConfigCreate(
+                name="tenant-embedding-provider",
+                provider_type=ProviderType.DASHSCOPE,
+                api_key="sk-test-embedding",
+                llm_model="qwen-plus",
+            )
+        )
+
+        tenant_id = "tenant-op-routing"
+        await repository.assign_provider_to_tenant(
+            tenant_id,
+            llm_provider.id,
+            priority=0,
+            operation_type=OperationType.LLM,
+        )
+        await repository.assign_provider_to_tenant(
+            tenant_id,
+            embedding_provider.id,
+            priority=0,
+            operation_type=OperationType.EMBEDDING,
+        )
+
+        llm_found = await repository.find_tenant_provider(tenant_id, OperationType.LLM)
+        embedding_found = await repository.find_tenant_provider(tenant_id, OperationType.EMBEDDING)
+        rerank_fallback = await repository.find_tenant_provider(tenant_id, OperationType.RERANK)
+
+        assert llm_found is not None
+        assert embedding_found is not None
+        assert rerank_fallback is not None
+        assert llm_found.id == llm_provider.id
+        assert embedding_found.id == embedding_provider.id
+        # No rerank-specific mapping: should fallback to LLM mapping.
+        assert rerank_fallback.id == llm_provider.id
+
+    @pytest.mark.asyncio
     async def test_resolve_provider_hierarchy(self, db_session):
         """Test provider resolution hierarchy: tenant -> default -> first active."""
         repository = SQLAlchemyProviderRepository(session=db_session)
@@ -317,6 +365,23 @@ class TestProviderRepository:
         assert resolved.resolution_source == "default"  # Should be default, not fallback
         assert resolved.provider.is_default is True  # Should be the default provider
         assert resolved.provider.is_active is True
+
+    @pytest.mark.asyncio
+    async def test_create_local_provider_without_api_key(self, db_session):
+        """Local providers should be creatable without API key."""
+        repository = SQLAlchemyProviderRepository(session=db_session)
+
+        provider = await repository.create(
+            ProviderConfigCreate(
+                name="local-ollama-provider",
+                provider_type=ProviderType.OLLAMA,
+                api_key="",
+                llm_model="llama3.1:8b",
+            )
+        )
+
+        assert provider.id is not None
+        assert provider.provider_type == ProviderType.OLLAMA
 
     @pytest.mark.asyncio
     async def test_resolve_provider_no_active_providers(self, db_session):

@@ -18,7 +18,7 @@ os.environ.setdefault("POSTGRES_PASSWORD", "your_password_here")
 os.environ.setdefault("NEO4J_URI", "bolt://localhost:7687")
 os.environ.setdefault("NEO4J_USER", "neo4j")
 os.environ.setdefault("NEO4J_PASSWORD", "your_password_here")
-os.environ.setdefault("LLM_PROVIDER", "qwen")
+os.environ.setdefault("LLM_PROVIDER", "dashscope")
 os.environ.setdefault("RAY_ADDRESS", "ray://localhost:10001")
 
 from src.configuration.config import get_settings

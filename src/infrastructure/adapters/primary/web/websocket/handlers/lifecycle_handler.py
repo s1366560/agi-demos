@@ -335,6 +335,8 @@ class RestartAgentHandler(WebSocketMessageHandler):
         )
         from src.infrastructure.agent.actor.project_agent_actor import ProjectAgentActor
         from src.infrastructure.agent.actor.types import ProjectAgentActorConfig
+        from src.infrastructure.llm.provider_factory import get_ai_service_factory
+        from src.infrastructure.security.encryption_service import get_encryption_service
 
         project_id = message.get("project_id")
         if not project_id:
@@ -512,7 +514,10 @@ async def _sync_and_repair_sandbox(context: MessageContext, project_id: str) -> 
         )
 
         # Sync and repair sandbox on restart (handles container recreation if needed)
-        sandbox_info = await lifecycle_service.sync_and_repair_sandbox(project_id)
+        sandbox_info = await lifecycle_service.sync_and_repair_sandbox(
+            project_id=project_id,
+            tenant_id=context.tenant_id,
+        )
         if sandbox_info:
             logger.info(
                 f"[WS] Sandbox synced for agent restart: project={project_id}, "

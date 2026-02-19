@@ -62,8 +62,8 @@ const PROVIDERS: ProviderMeta[] = [
     documentationUrl: 'https://ai.google.dev/docs',
   },
   {
-    value: 'qwen',
-    label: 'Alibaba Qwen',
+    value: 'dashscope',
+    label: 'Alibaba Dashscope',
     icon: '🌐',
     description: 'Qwen-Max, Qwen-Plus, Qwen-Turbo, text-embedding-v3',
     apiKeyEnvVar: 'DASHSCOPE_API_KEY',
@@ -72,6 +72,18 @@ const PROVIDERS: ProviderMeta[] = [
     hasNativeRerank: true,
     baseUrlRequired: false,
     documentationUrl: 'https://help.aliyun.com/zh/dashscope',
+  },
+  {
+    value: 'kimi',
+    label: 'Moonshot Kimi',
+    icon: '🌙',
+    description: 'Moonshot Kimi chat, embedding and rerank models',
+    apiKeyEnvVar: 'KIMI_API_KEY',
+    apiKeyPlaceholder: 'sk-...',
+    hasEmbedding: true,
+    hasNativeRerank: false,
+    baseUrlRequired: false,
+    documentationUrl: 'https://platform.moonshot.cn/docs',
   },
   {
     value: 'deepseek',
@@ -169,7 +181,36 @@ const PROVIDERS: ProviderMeta[] = [
     baseUrlRequired: false,
     documentationUrl: 'https://cloud.google.com/vertex-ai/docs',
   },
+  {
+    value: 'ollama',
+    label: 'Ollama',
+    icon: '🦙',
+    description: 'Local Ollama runtime (Open source models)',
+    apiKeyEnvVar: 'OLLAMA_API_KEY',
+    apiKeyPlaceholder: '(optional)',
+    hasEmbedding: true,
+    hasNativeRerank: false,
+    baseUrlRequired: false,
+    documentationUrl: 'https://github.com/ollama/ollama',
+  },
+  {
+    value: 'lmstudio',
+    label: 'LM Studio',
+    icon: '🖥️',
+    description: 'Local OpenAI-compatible endpoint from LM Studio',
+    apiKeyEnvVar: 'LMSTUDIO_API_KEY',
+    apiKeyPlaceholder: '(optional)',
+    hasEmbedding: true,
+    hasNativeRerank: false,
+    baseUrlRequired: false,
+    documentationUrl: 'https://lmstudio.ai/docs',
+  },
 ];
+
+const OPTIONAL_API_KEY_PROVIDERS: ProviderType[] = ['ollama', 'lmstudio'];
+
+const providerTypeRequiresApiKey = (type: ProviderType) =>
+  !OPTIONAL_API_KEY_PROVIDERS.includes(type);
 
 // Model presets by provider
 const MODEL_PRESETS: Record<
@@ -224,7 +265,7 @@ const MODEL_PRESETS: Record<
     embedding: [{ name: 'text-embedding-004', dimension: 768 }],
     reranker: [{ name: 'gemini-1.5-flash', description: 'LLM-based reranking' }],
   },
-  qwen: {
+  dashscope: {
     llm: [
       { name: 'qwen-max', description: 'Most capable' },
       { name: 'qwen-plus', description: 'Balanced performance' },
@@ -239,6 +280,16 @@ const MODEL_PRESETS: Record<
       { name: 'qwen3-rerank', description: 'Native reranker' },
       { name: 'qwen-turbo', description: 'LLM-based' },
     ],
+  },
+  kimi: {
+    llm: [
+      { name: 'moonshot-v1-8k', description: 'Fast model' },
+      { name: 'moonshot-v1-32k', description: 'Longer context' },
+      { name: 'moonshot-v1-128k', description: 'Longest context' },
+    ],
+    small: [{ name: 'moonshot-v1-8k', description: 'Fast & affordable' }],
+    embedding: [{ name: 'kimi-embedding-1', dimension: 1024 }],
+    reranker: [{ name: 'kimi-rerank-1', description: 'Native reranking model' }],
   },
   deepseek: {
     llm: [
@@ -342,6 +393,18 @@ const MODEL_PRESETS: Record<
     small: [{ name: 'gemini-1.5-flash', description: 'Gemini Flash on Vertex' }],
     embedding: [{ name: 'textembedding-gecko', dimension: 768 }],
     reranker: [],
+  },
+  ollama: {
+    llm: [{ name: 'llama3.1:8b', description: 'Local default model' }],
+    small: [{ name: 'llama3.1:8b', description: 'Local default model' }],
+    embedding: [{ name: 'nomic-embed-text', dimension: 768 }],
+    reranker: [{ name: 'llama3.1:8b', description: 'LLM-based reranking' }],
+  },
+  lmstudio: {
+    llm: [{ name: 'local-model', description: 'LM Studio loaded chat model' }],
+    small: [{ name: 'local-model', description: 'LM Studio loaded chat model' }],
+    embedding: [{ name: 'text-embedding-nomic-embed-text-v1.5', dimension: 768 }],
+    reranker: [{ name: 'local-model', description: 'LLM-based reranking' }],
   },
 };
 
@@ -451,7 +514,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   };
 
   const handleTestConnection = useCallback(async () => {
-    if (!formData.api_key && !isEditing) {
+    if (!formData.api_key && !isEditing && providerTypeRequiresApiKey(formData.provider_type)) {
       setTestResult({ success: false, message: 'API key is required' });
       return;
     }
@@ -468,7 +531,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     } finally {
       setIsTesting(false);
     }
-  }, [formData.api_key, isEditing]);
+  }, [formData.api_key, formData.provider_type, isEditing]);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -538,7 +601,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       case 'provider':
         return !!formData.provider_type;
       case 'credentials':
-        return !!formData.name && (isEditing || !!formData.api_key);
+        return (
+          !!formData.name &&
+          (isEditing || !!formData.api_key || !providerTypeRequiresApiKey(formData.provider_type))
+        );
       case 'models':
         return !!formData.llm_model;
       case 'review':
@@ -709,7 +775,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  API Key {!isEditing && '*'}
+                  API Key {!isEditing && providerTypeRequiresApiKey(formData.provider_type) && '*'}
                 </label>
                 <div className="relative">
                   <input
@@ -717,7 +783,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     value={formData.api_key}
                     onChange={(e) => setFormData((prev) => ({ ...prev, api_key: e.target.value }))}
                     placeholder={
-                      isEditing ? 'Leave empty to keep current' : selectedProvider.apiKeyPlaceholder
+                      isEditing
+                        ? 'Leave empty to keep current'
+                        : providerTypeRequiresApiKey(formData.provider_type)
+                          ? selectedProvider.apiKeyPlaceholder
+                          : 'Optional'
                     }
                     className="w-full px-4 py-2.5 pr-24 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
@@ -737,6 +807,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     {selectedProvider.apiKeyEnvVar}
                   </code>
                 </p>
+                {!providerTypeRequiresApiKey(formData.provider_type) && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    API key is optional for local providers.
+                  </p>
+                )}
                 {testResult && (
                   <div
                     className={`mt-2 p-2 rounded-lg text-sm flex items-center gap-2 ${

@@ -1534,3 +1534,26 @@ class MemoryChunk(Base):
         Index("ix_chunks_project_source", "project_id", "source_type"),
         Index("ix_chunks_content_hash", "content_hash"),
     )
+
+
+class AuditLog(IdGeneratorMixin, Base):
+    """Audit log for tracking sensitive operations."""
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), index=True, server_default=func.now()
+    )
+    actor: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    action: Mapped[str] = mapped_column(String, index=True)
+    resource_type: Mapped[str] = mapped_column(String, index=True)
+    resource_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    tenant_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    ip_address: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    user_agent: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    __table_args__ = (
+        Index("ix_audit_logs_tenant_action", "tenant_id", "action"),
+    )

@@ -10,6 +10,7 @@ from typing import Optional
 
 from src.domain.llm_providers.models import (
     NoActiveProviderError,
+    OperationType,
     ProviderConfig,
     ResolvedProvider,
 )
@@ -47,7 +48,11 @@ class ProviderResolutionService:
         self.repository = repository
         self.cache = cache if cache is not None else {}
 
-    async def resolve_provider(self, tenant_id: Optional[str] = None) -> ProviderConfig:
+    async def resolve_provider(
+        self,
+        tenant_id: Optional[str] = None,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> ProviderConfig:
         """
         Resolve provider for tenant.
 
@@ -61,14 +66,14 @@ class ProviderResolutionService:
             NoActiveProviderError: If no active provider found
         """
         # Check cache first
-        cache_key = f"provider:{tenant_id or 'default'}"
+        cache_key = f"provider:{tenant_id or 'default'}:{operation_type.value}"
         if cache_key in self.cache:
             cached_provider = self.cache[cache_key]
             logger.debug(f"Cache hit for {cache_key}")
             return cached_provider
 
         # Resolve provider (with fallback logic)
-        resolved = await self._resolve_with_fallback(tenant_id)
+        resolved = await self._resolve_with_fallback(tenant_id, operation_type)
         provider = resolved.provider
 
         # Cache the result
@@ -82,7 +87,11 @@ class ProviderResolutionService:
 
         return provider
 
-    async def _resolve_with_fallback(self, tenant_id: Optional[str]) -> ResolvedProvider:
+    async def _resolve_with_fallback(
+        self,
+        tenant_id: Optional[str],
+        operation_type: OperationType,
+    ) -> ResolvedProvider:
         """
         Resolve provider using fallback hierarchy.
 
@@ -101,7 +110,7 @@ class ProviderResolutionService:
         if tenant_id:
             # 1. Try tenant-specific provider
             logger.debug(f"Looking for tenant-specific provider: {tenant_id}")
-            provider = await self.repository.find_tenant_provider(tenant_id)
+            provider = await self.repository.find_tenant_provider(tenant_id, operation_type)
             if provider:
                 resolution_source = "tenant"
 
@@ -137,10 +146,14 @@ class ProviderResolutionService:
             tenant_id: Optional tenant ID to invalidate. If None, clears all cache.
         """
         if tenant_id:
-            cache_key = f"provider:{tenant_id}"
-            if cache_key in self.cache:
-                del self.cache[cache_key]
-                logger.debug(f"Invalidated cache for {cache_key}")
+            prefix = f"provider:{tenant_id}:"
+            keys_to_delete = [k for k in self.cache.keys() if k.startswith(prefix)]
+            for key in keys_to_delete:
+                del self.cache[key]
+            if keys_to_delete:
+                logger.debug(
+                    f"Invalidated {len(keys_to_delete)} provider cache entries for tenant '{tenant_id}'"
+                )
         else:
             self.cache.clear()
             logger.debug("Cleared all provider cache")

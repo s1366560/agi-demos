@@ -133,7 +133,8 @@ class TestProjectReActAgentLifecycleNotifications:
         # Patch all the dependencies imported in initialize()
         # Note: Must use the full import path since they're imported inside the method
         with patch(
-            f"{WORKER_STATE_MODULE}.get_agent_graph_service",
+            f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
+            new_callable=AsyncMock,
             return_value=mock_graph_service,
         ):
             with patch(
@@ -211,9 +212,10 @@ class TestProjectReActAgentLifecycleNotifications:
         """
         agent = ProjectReActAgent(agent_config)
 
-        # Patch get_agent_graph_service to raise an error
+        # Patch tenant graph-service resolver to return no service
         with patch(
-            f"{WORKER_STATE_MODULE}.get_agent_graph_service",
+            f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
+            new_callable=AsyncMock,
             return_value=None,
         ):
             # Inject the mock notifier
@@ -486,7 +488,8 @@ class TestProjectReActAgentNotificationContent:
         mock_subagents = [MagicMock(name="subagent1")]
 
         with patch(
-            f"{WORKER_STATE_MODULE}.get_agent_graph_service",
+            f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
+            new_callable=AsyncMock,
             return_value=mock_graph_service,
         ):
             with patch(
@@ -613,7 +616,8 @@ class TestProjectReActAgentNotificationContent:
 
         # Mock initialization to raise a specific error
         with patch(
-            f"{WORKER_STATE_MODULE}.get_agent_graph_service",
+            f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
+            new_callable=AsyncMock,
             return_value=None,
         ):
             # Inject the mock notifier

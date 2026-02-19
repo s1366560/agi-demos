@@ -46,8 +46,8 @@ _LLM_LOG_BUFFER_INTERVAL = float(os.environ.get("LLM_LOG_BUFFER_INTERVAL", "1.0"
 # Model name prefixes that map to specific providers
 MODEL_PROVIDER_MAP: Dict[str, str] = {
     # Qwen/Dashscope models
-    "qwen-": "qwen",
-    "qwq-": "qwen",
+    "qwen-": "dashscope",
+    "qwq-": "dashscope",
     # OpenAI models
     "gpt-": "openai",
     "o1-": "openai",
@@ -71,7 +71,7 @@ def infer_provider_from_model(model: str) -> str:
         model: Model name (e.g., "qwen-turbo", "gpt-4", "gemini-pro")
 
     Returns:
-        Provider type: "qwen", "openai", "gemini", "deepseek", "zhipu"
+        Provider type: "dashscope", "openai", "gemini", "deepseek", "zhipu"
     """
     model_lower = model.lower()
 
@@ -79,8 +79,8 @@ def infer_provider_from_model(model: str) -> str:
         if model_lower.startswith(prefix):
             return provider
 
-    # Default to qwen for unknown models (most restrictive)
-    return "qwen"
+    # Default to dashscope for unknown models (most restrictive)
+    return "dashscope"
 
 
 # ============================================================================

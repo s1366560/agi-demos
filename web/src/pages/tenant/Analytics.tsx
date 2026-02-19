@@ -1,10 +1,13 @@
-import React, { useEffect, useState, lazy, Suspense, memo, useCallback, useMemo } from 'react';
+import { useEffect, useState, lazy, Suspense, memo, useCallback, useMemo, type FC } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
+import { analyticsService } from '../../services/analyticsService';
 import { projectAPI } from '../../services/api';
 import { useTenantStore } from '../../stores/tenant';
-import { Project } from '../../types/memory';
+
+import type { TenantAnalytics } from '../../types/analytics';
+import type { Project } from '../../types/memory';
 
 // Dynamic imports for chart libraries to reduce initial bundle size
 const ChartComponents = lazy(() => import('./ChartComponents'));
@@ -78,19 +81,25 @@ const AnalyticsHeader = memo<AnalyticsHeaderProps>(
 );
 AnalyticsHeader.displayName = 'AnalyticsHeader';
 
-export const Analytics: React.FC = memo(() => {
+export const Analytics: FC = memo(() => {
   const { t } = useTranslation();
   const { currentTenant } = useTenantStore();
   const [projects, setProjects] = useState<Project[]>([]);
-  const [_loading, setLoading] = useState(true);
+  const [analytics, setAnalytics] = useState<TenantAnalytics | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const fetchProjects = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     if (currentTenant) {
       try {
-        const data = await projectAPI.list(currentTenant.id);
-        setProjects(data.projects);
+        // Fetch projects and analytics in parallel
+        const [projectData, analyticsData] = await Promise.all([
+          projectAPI.list(currentTenant.id),
+          analyticsService.getTenantAnalytics(currentTenant.id, '30d'),
+        ]);
+        setProjects(projectData.projects);
+        setAnalytics(analyticsData);
       } catch (error) {
-        console.error('Failed to fetch projects:', error);
+        console.error('Failed to fetch analytics data:', error);
       } finally {
         setLoading(false);
       }
@@ -98,19 +107,21 @@ export const Analytics: React.FC = memo(() => {
   }, [currentTenant]);
 
   useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+    fetchData();
+  }, [fetchData]);
 
   // Memoize chart data to prevent recalculation on re-renders
-  // Must be called before any conditional returns (Rules of Hooks)
   const chartData = useMemo(() => {
-    const memoryGrowthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'];
+    // Use real data from API, or fallback to empty arrays
+    const memoryGrowthLabels = analytics?.memoryGrowth?.map((p) => p.date) || [];
+    const memoryGrowthCounts = analytics?.memoryGrowth?.map((p) => p.count) || [];
+
     const memoryGrowthData = {
       labels: memoryGrowthLabels,
       datasets: [
         {
           label: 'Memories',
-          data: [40, 300, 200, 278, 189, 239, 349],
+          data: memoryGrowthCounts,
           borderColor: 'rgb(99, 102, 241)',
           backgroundColor: 'rgba(99, 102, 241, 0.5)',
           tension: 0.3,
@@ -118,11 +129,16 @@ export const Analytics: React.FC = memo(() => {
       ],
     };
 
+    // Use real project storage data
+    const projectStorageLabels =
+      analytics?.projectStorage?.map((p) => p.name) || projects.map((p) => p.name);
+    const projectStorageValues = analytics?.projectStorage?.map((p) => p.storage_bytes) || [];
+
     const projectStorageData = {
-      labels: projects.map((p) => p.name),
+      labels: projectStorageLabels,
       datasets: [
         {
-          data: projects.map(() => Math.floor(Math.random() * 100)),
+          data: projectStorageValues.length > 0 ? projectStorageValues : projects.map(() => 0),
           backgroundColor: [
             'rgba(99, 102, 241, 0.8)',
             'rgba(139, 92, 246, 0.8)',
@@ -136,7 +152,7 @@ export const Analytics: React.FC = memo(() => {
     };
 
     return { memoryGrowthData, projectStorageData };
-  }, [projects]);
+  }, [projects, analytics]);
 
   // Memoize chart options
   const lineOptions = useMemo(
@@ -171,6 +187,34 @@ export const Analytics: React.FC = memo(() => {
     []
   );
 
+  // Format storage bytes to human-readable
+  const formatStorage = (bytes: number): string => {
+    const gb = bytes / (1024 * 1024 * 1024);
+    return `${gb.toFixed(1)} GB`;
+  };
+
+  // Calculate average memories per project
+  const avgMemoriesPerProject =
+    analytics?.summary?.total_projects && analytics.summary.total_projects > 0
+      ? Math.round(
+          analytics.summary.total_memories / analytics.summary.total_projects
+        ).toLocaleString()
+      : '0';
+
+  // Format total memories with locale
+  const totalMemoriesDisplay = analytics?.summary?.total_memories
+    ? analytics.summary.total_memories.toLocaleString()
+    : '0';
+
+  // Format storage display
+  const storageDisplay = analytics?.summary?.total_storage_bytes
+    ? `${formatStorage(analytics.summary.total_storage_bytes)} / 100 GB`
+    : '0 GB / 100 GB';
+
+  if (loading) {
+    return <LoadingState message={t('common.loading')} />;
+  }
+
   return (
     <div className="max-w-full mx-auto flex flex-col gap-8">
       {/* Header */}
@@ -178,26 +222,26 @@ export const Analytics: React.FC = memo(() => {
         title={t('tenant.analytics.title')}
         subtitle={t('tenant.analytics.workspace_info')}
         storageLabel={t('tenant.analytics.storage_usage')}
-        storageValue="45.2 GB / 100 GB"
+        storageValue={storageDisplay}
       />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <KPICard
           label={t('tenant.analytics.total_memories')}
-          value="12,450"
-          subtext="+12% Growing"
+          value={totalMemoriesDisplay}
+          subtext={t('tenant.analytics.growing')}
           subtextIcon="trending_up"
           subtextColorClass="text-green-600"
         />
         <KPICard
           label={t('tenant.analytics.active_projects')}
-          value={projects.length}
+          value={analytics?.summary?.total_projects ?? projects.length}
           subtext={t('tenant.analytics.project_count')}
         />
         <KPICard
           label={t('tenant.analytics.avg_per_project')}
-          value="4,150"
+          value={avgMemoriesPerProject}
           subtext={t('tenant.analytics.avg_memories')}
         />
         <KPICard

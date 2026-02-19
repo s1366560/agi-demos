@@ -18,6 +18,7 @@ from sqlalchemy.orm import selectinload
 from src.application.services.provider_service import ProviderService, get_provider_service
 from src.domain.llm_providers.models import (
     NoActiveProviderError,
+    OperationType,
     ProviderConfigCreate,
     ProviderConfigResponse,
     ProviderConfigUpdate,
@@ -144,7 +145,24 @@ async def list_models_for_provider_type(
     # Common models for each provider type
     models = {
         "openai": ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo", "text-embedding-3-small"],
-        "qwen": ["qwen-plus", "qwen-turbo", "text-embedding-v3"],
+        "dashscope": [
+            "qwen-max",
+            "qwen-plus",
+            "qwen-turbo",
+            "text-embedding-v3",
+            "text-embedding-v4",
+            "qwen3-rerank",
+        ],
+        "zai": ["glm-4-plus", "glm-4-flash", "embedding-3", "rerank"],
+        "kimi": [
+            "moonshot-v1-8k",
+            "moonshot-v1-32k",
+            "moonshot-v1-128k",
+            "kimi-embedding-1",
+            "kimi-rerank-1",
+        ],
+        "ollama": ["llama3.1:8b", "qwen2.5:7b", "nomic-embed-text"],
+        "lmstudio": ["local-model", "text-embedding-nomic-embed-text-v1.5"],
         "gemini": ["gemini-1.5-pro", "gemini-1.5-flash"],
         "anthropic": ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
         "groq": ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"],
@@ -289,6 +307,10 @@ async def assign_provider_to_tenant(
     tenant_id: str,
     provider_id: UUID,
     priority: int = Query(0, description="Priority for fallback (lower = higher priority)"),
+    operation_type: OperationType = Query(
+        OperationType.LLM,
+        description="Operation type mapping: llm, embedding, rerank",
+    ),
     current_user: User = Depends(require_admin),
     service: ProviderService = Depends(get_provider_service_with_session),
 ):
@@ -298,13 +320,19 @@ async def assign_provider_to_tenant(
     Requires admin access.
     """
     try:
-        mapping = await service.assign_provider_to_tenant(tenant_id, provider_id, priority)
+        mapping = await service.assign_provider_to_tenant(
+            tenant_id,
+            provider_id,
+            priority,
+            operation_type,
+        )
         logger.info(
             f"Provider {provider_id} assigned to tenant {tenant_id} by user {current_user.id}"
         )
         return {
             "message": "Provider assigned to tenant",
             "mapping_id": str(mapping.id),
+            "operation_type": mapping.operation_type,
         }
     except ValueError as e:
         raise HTTPException(
@@ -316,6 +344,10 @@ async def assign_provider_to_tenant(
 @router.get("/tenants/{tenant_id}/provider", response_model=ProviderConfigResponse)
 async def get_tenant_provider(
     tenant_id: str,
+    operation_type: OperationType = Query(
+        OperationType.LLM,
+        description="Operation type to resolve: llm, embedding, rerank",
+    ),
     current_user: User = Depends(get_current_user),
     service: ProviderService = Depends(get_provider_service_with_session),
 ) -> ProviderConfigResponse:
@@ -325,7 +357,7 @@ async def get_tenant_provider(
     Returns the resolved provider based on fallback hierarchy.
     """
     try:
-        provider = await service.resolve_provider_for_tenant(tenant_id)
+        provider = await service.resolve_provider_for_tenant(tenant_id, operation_type)
         return await service.get_provider_response(provider.id)
     except NoActiveProviderError as e:
         raise HTTPException(
@@ -338,6 +370,10 @@ async def get_tenant_provider(
 async def unassign_provider_from_tenant(
     tenant_id: str,
     provider_id: UUID,
+    operation_type: OperationType = Query(
+        OperationType.LLM,
+        description="Operation type mapping: llm, embedding, rerank",
+    ),
     current_user: User = Depends(require_admin),
     service: ProviderService = Depends(get_provider_service_with_session),
 ):
@@ -346,7 +382,7 @@ async def unassign_provider_from_tenant(
 
     Requires admin access.
     """
-    success = await service.unassign_provider_from_tenant(tenant_id, provider_id)
+    success = await service.unassign_provider_from_tenant(tenant_id, provider_id, operation_type)
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -408,12 +444,12 @@ async def get_system_resilience_status(
     Returns circuit breaker states, rate limiter stats, and health status
     for all registered provider types. Requires admin access.
     """
+    from src.domain.llm_providers.models import ProviderType
     from src.infrastructure.llm.resilience import (
         get_circuit_breaker_registry,
         get_health_checker,
         get_provider_rate_limiter,
     )
-    from src.domain.llm_providers.models import ProviderType
 
     cb_registry = get_circuit_breaker_registry()
     rate_limiter = get_provider_rate_limiter()

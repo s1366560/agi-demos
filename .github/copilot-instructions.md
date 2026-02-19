@@ -123,7 +123,7 @@ web/src/
 
 - **Backend**: Python 3.12+, FastAPI, SQLAlchemy 2.0+, PostgreSQL 16+, Redis 7+, Neo4j 5.26+
 - **Workflow**: Temporal.io
-- **LLM**: LiteLLM (supports Gemini, Qwen, Deepseek, OpenAI, Anthropic)
+- **LLM**: LiteLLM (supports Gemini, Dashscope, Deepseek, OpenAI, Anthropic)
 - **Frontend**: React 19+, TypeScript, Vite, Ant Design, Zustand
 - **Testing**: pytest, Vitest, Playwright
 

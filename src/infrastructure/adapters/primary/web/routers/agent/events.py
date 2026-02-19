@@ -30,6 +30,19 @@ from .utils import get_container_with_db
 
 logger = logging.getLogger(__name__)
 
+
+async def _get_resume_service(db: AsyncSession):
+    """Build ExecutionResumeService with per-request DB session."""
+    from src.infrastructure.adapters.secondary.persistence.sql_execution_checkpoint_repository import (
+        SqlExecutionCheckpointRepository,
+    )
+    from src.application.services.agent.execution_resume_service import (
+        ExecutionResumeService,
+    )
+
+    checkpoint_repo = SqlExecutionCheckpointRepository(db)
+    return ExecutionResumeService(checkpoint_repo=checkpoint_repo)
+
 router = APIRouter()
 
 
@@ -208,6 +221,9 @@ async def get_execution_status(
 @router.post("/conversations/{conversation_id}/resume", status_code=202)
 async def resume_execution(
     conversation_id: str,
+    override_message: Optional[str] = Query(
+        None, description="Optional message to use instead of pending message"
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
@@ -216,35 +232,47 @@ async def resume_execution(
     Resume agent execution from the last checkpoint.
 
     This endpoint retrieves the latest checkpoint for a conversation and
-    resumes the agent execution from that point. If no checkpoint exists,
-    returns 404.
+    prepares the context for resuming agent execution. The actual execution
+    should be triggered through the chat endpoint with the resume context.
+
+    Returns:
+        - status: "resuming" if checkpoint found
+        - checkpoint_id: ID of the checkpoint being resumed from
+        - checkpoint_type: Type of the checkpoint
+        - step_number: Step number at which execution was interrupted
+        - resume_request: Request payload that can be used to continue execution
     """
     try:
-        container = get_container_with_db(request, db)
-        checkpoint_repo = container.execution_checkpoint_repository()
+        resume_service = await _get_resume_service(db)
 
-        if not checkpoint_repo:
-            raise HTTPException(status_code=501, detail="Execution checkpoint not configured")
+        # Check if resumable
+        if not await resume_service.can_resume(conversation_id):
+            raise HTTPException(
+                status_code=404, detail="No resumable checkpoint found for this conversation"
+            )
 
-        # Get latest checkpoint
-        checkpoint = await checkpoint_repo.get_latest(conversation_id)
+        # Get resume context
+        context = await resume_service.get_resume_context(conversation_id)
+        if not context:
+            raise HTTPException(status_code=404, detail="Failed to get resume context")
 
-        if not checkpoint:
-            raise HTTPException(status_code=404, detail="No checkpoint found for this conversation")
+        # Prepare resume request
+        resume_request = await resume_service.prepare_resume_request(
+            conversation_id, override_message=override_message
+        )
+        if not resume_request:
+            raise HTTPException(status_code=500, detail="Failed to prepare resume request")
 
-        # TODO: Implement actual resumption logic
-        # This would involve:
-        # 1. Create a new ReActAgent instance
-        # 2. Restore state from checkpoint.execution_state
-        # 3. Continue execution from the checkpoint point
-        # For now, we just return the checkpoint info
+        # Mark as resumed
+        await resume_service.mark_resumed(conversation_id, context.checkpoint.id)
 
         return {
             "status": "resuming",
-            "checkpoint_id": checkpoint.id,
-            "checkpoint_type": checkpoint.checkpoint_type,
-            "step_number": checkpoint.step_number,
-            "message": f"Resuming from {checkpoint.checkpoint_type} checkpoint at step {checkpoint.step_number}",
+            "checkpoint_id": context.checkpoint.id,
+            "checkpoint_type": str(context.checkpoint.checkpoint_type),
+            "step_number": context.checkpoint.step_number or 0,
+            "message": f"Resuming from {context.checkpoint.checkpoint_type} checkpoint at step {context.checkpoint.step_number}",
+            "resume_request": resume_request,
         }
 
     except HTTPException:

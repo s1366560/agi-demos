@@ -33,6 +33,38 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/config/can-modify")
+async def check_config_modify_permission(
+    tenant_id: str = Query(..., description="Tenant ID to check permission for"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """
+    Check if current user can modify tenant agent configuration.
+
+    Returns:
+        dict: {"can_modify": bool} indicating if user has admin access
+    """
+    try:
+        # Check if user is tenant admin or global admin
+        result = await db.execute(
+            select(UserTenant).where(
+                UserTenant.user_id == current_user.id,
+                UserTenant.tenant_id == tenant_id,
+            )
+        )
+        user_tenant = result.scalar_one_or_none()
+
+        is_global_admin = any(r.role.name == "admin" for r in current_user.roles)
+        is_tenant_admin = user_tenant and user_tenant.role in ["admin", "owner"]
+
+        return {"can_modify": is_global_admin or is_tenant_admin}
+
+    except Exception as e:
+        logger.error(f"Error checking config modify permission: {e}")
+        return {"can_modify": False}
+
+
 @router.get("/config", response_model=TenantAgentConfigResponse)
 async def get_tenant_agent_config(
     tenant_id: str = Query(..., description="Tenant ID to get config for"),

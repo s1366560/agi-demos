@@ -347,6 +347,7 @@
       "title": "账单管理",
       "subtitle": "管理您的订阅和账单",
       "current_plan": "当前计划",
+      "plan_description": "{{plan}} 计划",
       "storage_usage": "存储使用",
       "projects": "项目",
       "memories": "记忆",
@@ -393,7 +394,9 @@
       "workspace_info": "工作空间信息",
       "name": "名称",
       "quota": "存储配额",
-      "loading": "加载分析数据..."
+      "loading": "加载分析数据...",
+      "memory_growth": "记忆增长趋势",
+      "project_storage": "项目存储分布"
     },
     "tasks": {
       "title": "任务状态看板",

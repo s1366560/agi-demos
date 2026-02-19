@@ -17,27 +17,24 @@ from src.domain.llm_providers.models import (
     LLMUsageLog,
     LLMUsageLogCreate,
     NoActiveProviderError,
+    OperationType,
     ProviderConfig,
     ProviderConfigCreate,
     ProviderConfigUpdate,
     ProviderHealth,
     ProviderHealthCreate,
+    ProviderType,
     ResolvedProvider,
     TenantProviderMapping,
     UsageStatistics,
 )
 from src.domain.llm_providers.repositories import ProviderRepository
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+from src.infrastructure.llm.provider_credentials import to_storable_api_key
 from src.infrastructure.persistence.llm_providers_models import (
     LLMProvider as LLMProviderORM,
-)
-from src.infrastructure.persistence.llm_providers_models import (
     LLMUsageLog as LLMUsageLogORM,
-)
-from src.infrastructure.persistence.llm_providers_models import (
     ProviderHealth as ProviderHealthORM,
-)
-from src.infrastructure.persistence.llm_providers_models import (
     TenantProviderMapping as TenantProviderMappingORM,
 )
 from src.infrastructure.security.encryption_service import get_encryption_service
@@ -103,7 +100,8 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         async def op(session: AsyncSession) -> ProviderConfig:
             # Encrypt API key before storing
-            api_key_encrypted = self.encryption_service.encrypt(config.api_key)
+            storable_api_key = to_storable_api_key(config.provider_type, config.api_key)
+            api_key_encrypted = self.encryption_service.encrypt(storable_api_key)
 
             # Build values dict for insert
             values = {
@@ -204,7 +202,9 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         if config.provider_type is not None:
             orm.provider_type = config.provider_type.value
         if config.api_key is not None:
-            orm.api_key_encrypted = self.encryption_service.encrypt(config.api_key)
+            provider_type = config.provider_type or ProviderType(orm.provider_type)
+            storable_api_key = to_storable_api_key(provider_type, config.api_key)
+            orm.api_key_encrypted = self.encryption_service.encrypt(storable_api_key)
         if config.base_url is not None:
             orm.base_url = config.base_url
         if config.llm_model is not None:
@@ -289,24 +289,47 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return await self._run_with_session(op)
 
-    async def find_tenant_provider(self, tenant_id: str) -> Optional[ProviderConfig]:
+    async def find_tenant_provider(
+        self,
+        tenant_id: str,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> Optional[ProviderConfig]:
         """Find provider assigned to specific tenant."""
 
         async def op(session):
-            result = await session.execute(
+            operation_value = operation_type.value
+            query = (
                 select(LLMProviderORM)
                 .join(TenantProviderMappingORM)
                 .where(TenantProviderMappingORM.tenant_id == tenant_id)
+                .where(TenantProviderMappingORM.operation_type == operation_value)
                 .where(LLMProviderORM.is_active)
                 .order_by(TenantProviderMappingORM.priority)
                 .limit(1)
             )
+            result = await session.execute(query)
             orm = result.scalar_one_or_none()
+            if orm is None and operation_type != OperationType.LLM:
+                fallback_query = (
+                    select(LLMProviderORM)
+                    .join(TenantProviderMappingORM)
+                    .where(TenantProviderMappingORM.tenant_id == tenant_id)
+                    .where(TenantProviderMappingORM.operation_type == OperationType.LLM.value)
+                    .where(LLMProviderORM.is_active)
+                    .order_by(TenantProviderMappingORM.priority)
+                    .limit(1)
+                )
+                fallback_result = await session.execute(fallback_query)
+                orm = fallback_result.scalar_one_or_none()
             return self._orm_to_config(orm, tenant_id=tenant_id) if orm else None
 
         return await self._run_with_session(op)
 
-    async def resolve_provider(self, tenant_id: Optional[str] = None) -> ResolvedProvider:
+    async def resolve_provider(
+        self,
+        tenant_id: Optional[str] = None,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> ResolvedProvider:
         """
         Resolve appropriate provider for tenant.
 
@@ -323,7 +346,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         if tenant_id:
             # Try tenant-specific provider
-            provider = await self.find_tenant_provider(tenant_id)
+            provider = await self.find_tenant_provider(tenant_id, operation_type=operation_type)
             if provider:
                 resolution_source = "tenant"
 
@@ -503,31 +526,45 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         tenant_id: str,
         provider_id: UUID,
         priority: int = 0,
+        operation_type: OperationType = OperationType.LLM,
     ) -> TenantProviderMapping:
         """Assign provider to tenant."""
         session = await self._get_session()
 
-        orm = TenantProviderMappingORM(
+        stmt = pg_insert(TenantProviderMappingORM).values(
             id=uuid4(),
             tenant_id=tenant_id,
             provider_id=provider_id,
+            operation_type=operation_type.value,
             priority=priority,
         )
-
-        session.add(orm)
-        await session.flush()
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["tenant_id", "provider_id", "operation_type"],
+            set_={"priority": priority},
+        ).returning(TenantProviderMappingORM.id)
+        result = await session.execute(stmt)
+        mapping_id = result.scalar_one()
         await session.commit()
-        await session.refresh(orm)
+        orm_result = await session.execute(
+            select(TenantProviderMappingORM).where(TenantProviderMappingORM.id == mapping_id)
+        )
+        orm = orm_result.scalar_one()
 
         return TenantProviderMapping(
             id=orm.id,
             tenant_id=orm.tenant_id,
             provider_id=orm.provider_id,
+            operation_type=OperationType(orm.operation_type),
             priority=orm.priority,
             created_at=orm.created_at,
         )
 
-    async def unassign_provider_from_tenant(self, tenant_id: str, provider_id: UUID) -> bool:
+    async def unassign_provider_from_tenant(
+        self,
+        tenant_id: str,
+        provider_id: UUID,
+        operation_type: OperationType = OperationType.LLM,
+    ) -> bool:
         """Unassign provider from tenant."""
         session = await self._get_session()
 
@@ -536,6 +573,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
                 and_(
                     TenantProviderMappingORM.tenant_id == tenant_id,
                     TenantProviderMappingORM.provider_id == provider_id,
+                    TenantProviderMappingORM.operation_type == operation_type.value,
                 )
             )
         )
@@ -550,15 +588,23 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return True
 
-    async def get_tenant_providers(self, tenant_id: str) -> List[TenantProviderMapping]:
+    async def get_tenant_providers(
+        self,
+        tenant_id: str,
+        operation_type: Optional[OperationType] = None,
+    ) -> List[TenantProviderMapping]:
         """Get all providers assigned to tenant."""
         session = await self._get_session()
 
-        result = await session.execute(
+        query = (
             select(TenantProviderMappingORM)
             .where(TenantProviderMappingORM.tenant_id == tenant_id)
             .order_by(TenantProviderMappingORM.priority)
         )
+        if operation_type is not None:
+            query = query.where(TenantProviderMappingORM.operation_type == operation_type.value)
+
+        result = await session.execute(query)
         orms = result.scalars().all()
 
         return [
@@ -566,6 +612,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
                 id=orm.id,
                 tenant_id=orm.tenant_id,
                 provider_id=orm.provider_id,
+                operation_type=OperationType(orm.operation_type),
                 priority=orm.priority,
                 created_at=orm.created_at,
             )

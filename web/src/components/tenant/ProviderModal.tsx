@@ -16,7 +16,8 @@ const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
   { value: 'openai', label: 'OpenAI' },
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'gemini', label: 'Google Gemini' },
-  { value: 'qwen', label: 'Alibaba Dashscope' },
+  { value: 'dashscope', label: 'Alibaba Dashscope' },
+  { value: 'kimi', label: 'Moonshot Kimi' },
   { value: 'groq', label: 'Groq' },
   { value: 'azure_openai', label: 'Azure OpenAI' },
   { value: 'cohere', label: 'Cohere' },
@@ -25,7 +26,14 @@ const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
   { value: 'vertex', label: 'Google Vertex AI' },
   { value: 'deepseek', label: 'Deepseek' },
   { value: 'zai', label: 'ZhipuAI (智普AI)' },
+  { value: 'ollama', label: 'Ollama (Local)' },
+  { value: 'lmstudio', label: 'LM Studio (Local)' },
 ];
+
+const OPTIONAL_API_KEY_PROVIDERS: ProviderType[] = ['ollama', 'lmstudio'];
+
+const providerTypeRequiresApiKey = (type: ProviderType) =>
+  !OPTIONAL_API_KEY_PROVIDERS.includes(type);
 
 const DEFAULT_MODELS: Record<
   ProviderType,
@@ -34,11 +42,17 @@ const DEFAULT_MODELS: Record<
   openai: { llm: 'gpt-4o', small: 'gpt-4o-mini', embedding: 'text-embedding-3-small' },
   anthropic: { llm: 'claude-sonnet-4-20250514', small: 'claude-3-5-haiku-20241022' },
   gemini: { llm: 'gemini-1.5-pro', small: 'gemini-1.5-flash', embedding: 'text-embedding-004' },
-  qwen: {
+  dashscope: {
     llm: 'qwen-max',
     small: 'qwen-turbo',
     embedding: 'text-embedding-v3',
-    reranker: 'qwen3-rerank',
+    reranker: 'qwen-turbo',
+  },
+  kimi: {
+    llm: 'moonshot-v1-8k',
+    small: 'moonshot-v1-8k',
+    embedding: 'kimi-embedding-1',
+    reranker: 'kimi-rerank-1',
   },
   groq: { llm: 'llama-3.3-70b-versatile', small: 'llama-3.1-8b-instant' },
   azure_openai: { llm: 'gpt-4o', small: 'gpt-4o-mini', embedding: 'text-embedding-3-small' },
@@ -56,7 +70,19 @@ const DEFAULT_MODELS: Record<
   bedrock: { llm: 'anthropic.claude-3-sonnet-20240229-v1:0' },
   vertex: { llm: 'gemini-1.5-pro', small: 'gemini-1.5-flash' },
   deepseek: { llm: 'deepseek-chat', small: 'deepseek-coder' },
-  zai: { llm: 'glm-4-plus', small: 'glm-4-flash', embedding: 'embedding-3' },
+  zai: { llm: 'glm-4-plus', small: 'glm-4-flash', embedding: 'embedding-3', reranker: 'glm-4-flash' },
+  ollama: {
+    llm: 'llama3.1:8b',
+    small: 'llama3.1:8b',
+    embedding: 'nomic-embed-text',
+    reranker: 'llama3.1:8b',
+  },
+  lmstudio: {
+    llm: 'local-model',
+    small: 'local-model',
+    embedding: 'text-embedding-nomic-embed-text-v1.5',
+    reranker: 'local-model',
+  },
 };
 
 export const ProviderModal: React.FC<ProviderModalProps> = ({
@@ -301,16 +327,22 @@ export const ProviderModal: React.FC<ProviderModalProps> = ({
                   <input
                     id="api-key"
                     type="password"
-                    required={!isEditing}
+                    required={!isEditing && providerTypeRequiresApiKey(formData.provider_type)}
                     value={formData.api_key}
                     onChange={(e) => setFormData((prev) => ({ ...prev, api_key: e.target.value }))}
                     placeholder={
-                      isEditing ? 'Leave empty to keep current key' : 'Enter your API key'
+                      isEditing
+                        ? 'Leave empty to keep current key'
+                        : providerTypeRequiresApiKey(formData.provider_type)
+                          ? 'Enter your API key'
+                          : 'Optional for local providers'
                     }
                     className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
                   />
                   <p className="mt-1 text-xs text-slate-500">
-                    Your API key is encrypted and stored securely.
+                    {providerTypeRequiresApiKey(formData.provider_type)
+                      ? 'Your API key is encrypted and stored securely.'
+                      : 'API key is optional for local providers and will be encrypted if provided.'}
                   </p>
                 </div>
 

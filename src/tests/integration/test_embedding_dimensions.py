@@ -244,15 +244,15 @@ class TestValidatedEmbedderWithRealProviders:
             LiteLLMEmbedderConfig,
         )
 
-        if not os.environ.get("DASHSCOPE_API_KEY") and not os.environ.get("QWEN_API_KEY"):
-            pytest.skip("No Qwen API key available")
+        if not os.environ.get("DASHSCOPE_API_KEY"):
+            pytest.skip("No Dashscope API key available")
 
         # Create LiteLLM embedder config
         config = LiteLLMEmbedderConfig(
             embedding_dim=DIM_1024,
             embedding_model="text-embedding-v3",
-            provider_type=ProviderType.QWEN,
-            api_key=os.environ.get("DASHSCOPE_API_KEY") or os.environ.get("QWEN_API_KEY"),
+            provider_type=ProviderType.DASHSCOPE,
+            api_key=os.environ.get("DASHSCOPE_API_KEY"),
         )
 
         base_embedder = LiteLLMEmbedder(config=config)

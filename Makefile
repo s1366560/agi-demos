@@ -279,7 +279,7 @@ update: ## Update all dependencies
 dev: dev-all ## Start all services (API + worker + infra + web)
 	@echo " Starting full development environment..."
 
-dev-all: dev-infra db-init
+dev-all: dev-infra-dev db-init
 	@echo " Starting API server, Ray actor worker and Web in background..."
 	@echo "   API: http://localhost:8000 (logs: logs/api.log)"
 	@echo "   Web: http://localhost:3000 (logs: logs/web.log)"

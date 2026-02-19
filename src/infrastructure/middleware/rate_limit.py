@@ -13,6 +13,8 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from src.configuration.config import get_settings
+
 logger = logging.getLogger(__name__)
 
 # Initialize rate limiter with Redis backend if available
@@ -30,12 +32,13 @@ def get_rate_limiter() -> Limiter:
     global _rate_limiter
 
     if _rate_limiter is None:
+        settings = get_settings()
         _rate_limiter = Limiter(
             key_func=get_remote_address,
             default_limits=["200/minute"],
-            storage_uri="redis://localhost:6379",  # TODO: Get from settings
+            storage_uri=settings.redis_url,
         )
-        logger.info("Rate limiter initialized")
+        logger.info(f"Rate limiter initialized with Redis at {settings.redis_host}:{settings.redis_port}")
 
     return _rate_limiter
 

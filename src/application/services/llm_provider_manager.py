@@ -99,16 +99,20 @@ class LLMProviderManager:
                 ProviderType.OPENAI,
                 ProviderType.ANTHROPIC,
                 ProviderType.GEMINI,
-                ProviderType.QWEN,
+                ProviderType.DASHSCOPE,
                 ProviderType.DEEPSEEK,
+                ProviderType.OLLAMA,
+                ProviderType.LMSTUDIO,
             ],
             OperationType.EMBEDDING: [
                 ProviderType.OPENAI,
-                ProviderType.QWEN,
+                ProviderType.DASHSCOPE,
                 ProviderType.GEMINI,
+                ProviderType.OLLAMA,
+                ProviderType.LMSTUDIO,
             ],
             OperationType.STRUCTURED_OUTPUT: [
-                ProviderType.QWEN,  # Best structured output support
+                ProviderType.DASHSCOPE,  # Best structured output support
                 ProviderType.OPENAI,
                 ProviderType.GEMINI,
             ],

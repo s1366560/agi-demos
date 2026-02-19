@@ -289,7 +289,7 @@ class ProjectReActAgent:
             from src.infrastructure.agent.core.processor import ProcessorConfig
             from src.infrastructure.agent.core.react_agent import ReActAgent
             from src.infrastructure.agent.state.agent_worker_state import (
-                get_agent_graph_service,
+                get_or_create_agent_graph_service,
                 get_or_create_agent_session,
                 get_or_create_llm_client,
                 get_or_create_provider_config,
@@ -298,8 +298,8 @@ class ProjectReActAgent:
                 get_redis_client,
             )
 
-            # Get shared services
-            graph_service = get_agent_graph_service()
+            # Graph service must be resolved by tenant so embedding/rerank mappings are honored.
+            graph_service = await get_or_create_agent_graph_service(tenant_id=self.config.tenant_id)
             if not graph_service:
                 raise RuntimeError("Graph service not available")
 

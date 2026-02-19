@@ -19,8 +19,10 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Iterable, List, Optional
 
+from src.configuration.config import get_settings
 from src.domain.llm_providers.base import BaseEmbedder
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
+from src.infrastructure.llm.provider_credentials import from_decrypted_api_key
 from src.infrastructure.security.encryption_service import get_encryption_service
 
 logger = logging.getLogger(__name__)
@@ -54,6 +56,9 @@ EMBEDDING_DIMENSIONS = {
     # Voyage
     "voyage-2": 1024,
     "voyage-large-2": 1536,
+    # Local providers
+    "nomic-embed-text": 768,
+    "text-embedding-nomic-embed-text-v1.5": 768,
 }
 
 # Default models by provider
@@ -61,8 +66,9 @@ DEFAULT_EMBEDDING_MODELS = {
     ProviderType.OPENAI: "text-embedding-3-small",
     ProviderType.ANTHROPIC: "text-embedding-3-small",  # Uses OpenAI
     ProviderType.GEMINI: "text-embedding-004",
-    ProviderType.QWEN: "text-embedding-v3",
-    ProviderType.DEEPSEEK: "text-embedding-v3",  # Uses Qwen fallback
+    ProviderType.DASHSCOPE: "text-embedding-v3",
+    ProviderType.KIMI: "kimi-embedding-1",
+    ProviderType.DEEPSEEK: "text-embedding-v3",  # Uses Dashscope fallback
     ProviderType.ZAI: "embedding-3",
     ProviderType.COHERE: "embed-english-v3.0",
     ProviderType.MISTRAL: "mistral-embed",
@@ -70,6 +76,8 @@ DEFAULT_EMBEDDING_MODELS = {
     ProviderType.BEDROCK: "amazon.titan-embed-text-v1",
     ProviderType.VERTEX: "textembedding-gecko",
     ProviderType.GROQ: "text-embedding-3-small",  # Uses OpenAI
+    ProviderType.OLLAMA: "nomic-embed-text",
+    ProviderType.LMSTUDIO: "text-embedding-nomic-embed-text-v1.5",
 }
 
 
@@ -112,8 +120,8 @@ class LiteLLMEmbedder(BaseEmbedder):
             self._embedding_model = config.embedding_model
             self._embedding_dim = embedding_dim or config.embedding_dim
             self._api_key = config.api_key
-            self._base_url = config.base_url
             self._provider_type = config.provider_type
+            self._base_url = self._resolve_api_base(self._provider_type, config.base_url)
         else:
             self._provider_config = config
             self._embedding_model = config.embedding_model or self._get_default_model(
@@ -121,11 +129,14 @@ class LiteLLMEmbedder(BaseEmbedder):
             )
             self._embedding_dim = embedding_dim or self._detect_embedding_dim(self._embedding_model)
             self._provider_type = config.provider_type
-            self._base_url = config.base_url
+            self._base_url = self._resolve_api_base(self._provider_type, config.base_url)
 
             # Decrypt API key
             encryption_service = get_encryption_service()
             self._api_key = encryption_service.decrypt(config.api_key_encrypted)
+            self._api_key = from_decrypted_api_key(self._api_key)
+
+        self._timeout_seconds = float(get_settings().llm_timeout)
 
         logger.debug(
             f"LiteLLM embedder initialized: provider={self._provider_type}, "
@@ -149,6 +160,17 @@ class LiteLLMEmbedder(BaseEmbedder):
 
         # Default fallback
         return 1024
+
+    @staticmethod
+    def _resolve_api_base(provider_type: Optional[ProviderType], base_url: Optional[str]) -> Optional[str]:
+        """Resolve api_base using configured value or local-provider defaults."""
+        if base_url:
+            return base_url
+        if provider_type == ProviderType.OLLAMA:
+            return "http://localhost:11434"
+        if provider_type == ProviderType.LMSTUDIO:
+            return "http://localhost:1234/v1"
+        return None
 
     @property
     def embedding_dim(self) -> int:
@@ -180,14 +202,24 @@ class LiteLLMEmbedder(BaseEmbedder):
             return f"mistral/{model}"
         elif provider_type == "azure_openai" and not model.startswith("azure/"):
             return f"azure/{model}"
-        elif provider_type == "qwen":
-            # Qwen uses OpenAI-compatible API via Dashscope
+        elif provider_type == "dashscope":
+            # Dashscope uses OpenAI-compatible API
+            if not model.startswith("openai/"):
+                return f"openai/{model}"
+        elif provider_type == "kimi":
+            # Kimi uses OpenAI-compatible API
             if not model.startswith("openai/"):
                 return f"openai/{model}"
         elif provider_type == "zai":
-            # ZhipuAI uses 'zai/' prefix in LiteLLM
-            if not model.startswith("zai/"):
-                return f"zai/{model}"
+            # ZhipuAI embedding API is OpenAI-compatible.
+            if not model.startswith("openai/"):
+                return f"openai/{model}"
+        elif provider_type == "ollama":
+            if not model.startswith("ollama/"):
+                return f"ollama/{model}"
+        elif provider_type == "lmstudio":
+            if not model.startswith("openai/"):
+                return f"openai/{model}"
 
         return model
 
@@ -239,6 +271,7 @@ class LiteLLMEmbedder(BaseEmbedder):
             embedding_kwargs: dict[str, Any] = {
                 "model": model,
                 "input": texts,
+                "timeout": self._timeout_seconds,
             }
             # Pass api_key directly (no env var pollution)
             if self._api_key:
@@ -246,14 +279,23 @@ class LiteLLMEmbedder(BaseEmbedder):
             # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
             if self._base_url:
                 embedding_kwargs["api_base"] = self._base_url
+            # Dashscope embedding endpoint validates encoding_format strictly.
+            if self._provider_type == ProviderType.DASHSCOPE:
+                embedding_kwargs["encoding_format"] = "float"
 
             response = await litellm.aembedding(**embedding_kwargs)
 
             # Extract embedding
-            if not response.data or not response.data[0].embedding:
+            if not response.data:
                 raise ValueError("No embedding returned")
 
-            embedding = response.data[0].embedding
+            first_item = response.data[0]
+            if isinstance(first_item, dict):
+                embedding = first_item.get("embedding")
+            else:
+                embedding = getattr(first_item, "embedding", None)
+            if not embedding:
+                raise ValueError("No embedding returned")
 
             # Update detected dimension if different
             if len(embedding) != self._embedding_dim:
@@ -308,15 +350,26 @@ class LiteLLMEmbedder(BaseEmbedder):
             batch_kwargs: dict[str, Any] = {
                 "model": model,
                 "input": input_data_list,
+                "timeout": self._timeout_seconds,
             }
             if self._api_key:
                 batch_kwargs["api_key"] = self._api_key
             if self._base_url:
                 batch_kwargs["api_base"] = self._base_url
+            if self._provider_type == ProviderType.DASHSCOPE:
+                batch_kwargs["encoding_format"] = "float"
 
             response = await litellm.aembedding(**batch_kwargs)
 
-            embeddings = [item.embedding for item in response.data]
+            embeddings = []
+            for item in response.data:
+                if isinstance(item, dict):
+                    embedding = item.get("embedding")
+                else:
+                    embedding = getattr(item, "embedding", None)
+                if not embedding:
+                    raise ValueError("No embedding returned")
+                embeddings.append(embedding)
 
             logger.debug(
                 f"Created batch embeddings: model={model}, "

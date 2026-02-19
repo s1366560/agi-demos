@@ -20,7 +20,6 @@ Performance Impact (with Agent Session Pool):
 import asyncio
 import logging
 import os
-import time
 from typing import Any, Dict, List, Optional
 
 import redis.asyncio as redis
@@ -82,6 +81,10 @@ __all__ = [
     "compute_skills_hash",
     # Provider config
     "get_or_create_provider_config",
+    # Graph service
+    "get_or_create_agent_graph_service",
+    "get_agent_graph_service",
+    "set_agent_graph_service",
     # Prewarm
     "prewarm_agent_session",
     # Utilities
@@ -106,6 +109,8 @@ __all__ = [
 
 # Global state for agent worker
 _agent_graph_service: Optional[Any] = None
+_tenant_graph_services: Dict[str, Any] = {}
+_tenant_graph_service_lock = asyncio.Lock()
 _redis_pool: Optional[redis.ConnectionPool] = None
 _mcp_sandbox_adapter: Optional[Any] = None
 _pool_adapter: Optional[Any] = None  # PooledAgentSessionAdapter (when enabled)
@@ -145,6 +150,7 @@ def set_agent_graph_service(service: Any) -> None:
     """
     global _agent_graph_service
     _agent_graph_service = service
+    _tenant_graph_services.setdefault("default", service)
     logger.info("Agent Worker: Graph service registered for Activities")
 
 
@@ -155,6 +161,30 @@ def get_agent_graph_service() -> Optional[Any]:
         The graph service instance or None if not initialized
     """
     return _agent_graph_service
+
+
+async def get_or_create_agent_graph_service(tenant_id: Optional[str] = None) -> Any:
+    """Get tenant-scoped graph service, creating and caching when needed."""
+    cache_key = tenant_id or "default"
+    if cache_key in _tenant_graph_services:
+        return _tenant_graph_services[cache_key]
+
+    async with _tenant_graph_service_lock:
+        if cache_key in _tenant_graph_services:
+            return _tenant_graph_services[cache_key]
+
+        from src.configuration.factories import create_native_graph_adapter
+
+        graph_service = await create_native_graph_adapter(tenant_id=tenant_id)
+        _tenant_graph_services[cache_key] = graph_service
+
+        # Keep backward compatibility for callers that still use global getter
+        if cache_key == "default":
+            global _agent_graph_service
+            _agent_graph_service = graph_service
+
+        logger.info("Agent Worker: Graph service cached for tenant key '%s'", cache_key)
+        return graph_service
 
 
 def set_mcp_sandbox_adapter(adapter: Any) -> None:
@@ -292,6 +322,7 @@ def clear_state() -> None:
     """
     global \
         _agent_graph_service, \
+        _tenant_graph_services, \
         _llm_client_cache, \
         _tools_cache, \
         _skills_cache, \
@@ -299,6 +330,7 @@ def clear_state() -> None:
         _provider_config_cache, \
         _provider_config_cached_at
     _agent_graph_service = None
+    _tenant_graph_services.clear()
     _llm_client_cache.clear()
     _tools_cache.clear()
     _skills_cache.clear()
@@ -1839,10 +1871,7 @@ async def prewarm_agent_session(
     outside of the critical request path.
     """
     try:
-        graph_service = get_agent_graph_service()
-        if not graph_service:
-            logger.warning("Agent Worker: Graph service not initialized, skip prewarm")
-            return
+        graph_service = await get_or_create_agent_graph_service(tenant_id=tenant_id)
 
         redis_client = await get_redis_client()
 

@@ -6,6 +6,7 @@ Provides unified access to 100+ LLM providers.
 """
 
 import logging
+import math
 from typing import Any
 
 from pydantic import BaseModel
@@ -21,7 +22,11 @@ from src.domain.llm_providers.llm_types import (
 from src.domain.llm_providers.models import ProviderConfig
 from src.infrastructure.llm.model_registry import (
     clamp_max_tokens as _clamp_max_tokens,
+    get_model_chars_per_token,
+    get_model_input_budget,
+    get_model_max_input_tokens,
 )
+from src.infrastructure.llm.provider_credentials import from_decrypted_api_key
 from src.infrastructure.llm.resilience import (
     get_circuit_breaker_registry,
     get_provider_rate_limiter,
@@ -72,6 +77,7 @@ class LiteLLMClient(LLMClient):
         self._api_key = self.config.api_key or self.encryption_service.decrypt(
             self.provider_config.api_key_encrypted
         )
+        self._api_key = from_decrypted_api_key(self._api_key)
 
         # Resolve base URL for this provider
         self._api_base = self._resolve_api_base()
@@ -86,6 +92,10 @@ class LiteLLMClient(LLMClient):
             return self.provider_config.base_url or "https://open.bigmodel.cn/api/paas/v4"
         elif provider_type == "kimi":
             return self.provider_config.base_url or "https://api.moonshot.cn/v1"
+        elif provider_type == "ollama":
+            return self.provider_config.base_url or "http://localhost:11434"
+        elif provider_type == "lmstudio":
+            return self.provider_config.base_url or "http://localhost:1234/v1"
         elif self.provider_config.base_url:
             return self.provider_config.base_url
         return None
@@ -104,7 +114,7 @@ class LiteLLMClient(LLMClient):
         # Set env vars as fallback (some LiteLLM codepaths may still check them)
         env_key_map = {
             "openai": "OPENAI_API_KEY",
-            "qwen": "DASHSCOPE_API_KEY",
+            "dashscope": "DASHSCOPE_API_KEY",
             "gemini": "GOOGLE_API_KEY",
             "anthropic": "ANTHROPIC_API_KEY",
             "groq": "GROQ_API_KEY",
@@ -114,9 +124,9 @@ class LiteLLMClient(LLMClient):
             "kimi": "KIMI_API_KEY",
         }
         env_var = env_key_map.get(provider_type)
-        if env_var:
+        if env_var and api_key:
             os.environ[env_var] = api_key
-        if provider_type == "gemini":
+        if provider_type == "gemini" and api_key:
             os.environ["GEMINI_API_KEY"] = api_key
 
         logger.debug(f"Configured LiteLLM for provider: {provider_type}")
@@ -135,14 +145,22 @@ class LiteLLMClient(LLMClient):
         Centralizes api_key, api_base, temperature, retries, and
         langfuse metadata — previously duplicated across 3 methods.
         """
+        clamped_max_tokens = _clamp_max_tokens(model, max_tokens)
+        normalized_messages = self._trim_messages_to_input_limit(
+            model=model,
+            messages=messages,
+            max_tokens=clamped_max_tokens,
+        )
+
         kwargs: dict[str, Any] = {
             "model": model,
-            "messages": messages,
-            "max_tokens": _clamp_max_tokens(model, max_tokens),
+            "messages": normalized_messages,
+            "max_tokens": clamped_max_tokens,
             "temperature": self.temperature if temperature is None else temperature,
-            "api_key": self._api_key,
             **extra,
         }
+        if self._api_key:
+            kwargs["api_key"] = self._api_key
         if self._api_base:
             kwargs["api_base"] = self._api_base
 
@@ -159,6 +177,145 @@ class LiteLLMClient(LLMClient):
         settings = get_settings()
         kwargs["num_retries"] = settings.llm_max_retries
         return kwargs
+
+    @staticmethod
+    def _estimate_input_tokens(model: str, messages: list[dict[str, Any]]) -> int | None:
+        """Estimate input tokens using LiteLLM tokenizer for provider-aware counting."""
+        import litellm
+
+        try:
+            return int(litellm.token_counter(model=model, messages=messages))
+        except Exception as e:
+            logger.debug(f"Failed to estimate prompt tokens for {model}: {e}")
+            return None
+
+    @staticmethod
+    def _estimate_message_chars(messages: list[dict[str, Any]]) -> int:
+        """Estimate message size in characters for conservative fallback budgeting."""
+        total_chars = 0
+        for msg in messages:
+            total_chars += len(str(msg.get("role", "")))
+            total_chars += len(str(msg.get("name", "")))
+            total_chars += len(str(msg.get("tool_call_id", "")))
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                total_chars += len(content)
+            else:
+                total_chars += len(str(content))
+            tool_calls = msg.get("tool_calls")
+            if tool_calls is not None:
+                total_chars += len(str(tool_calls))
+        return total_chars
+
+    def _estimate_effective_input_tokens(self, model: str, messages: list[dict[str, Any]]) -> int:
+        """Estimate effective input tokens using tokenizer + char-based guard."""
+        token_count = self._estimate_input_tokens(model, messages)
+        chars = self._estimate_message_chars(messages)
+        chars_per_token = max(0.1, get_model_chars_per_token(model))
+        char_estimate = math.ceil(chars / chars_per_token)
+        if token_count is None:
+            return char_estimate
+        return max(token_count, char_estimate)
+
+    @staticmethod
+    def _truncate_text_middle(text: str, max_chars: int) -> str:
+        """Truncate text while preserving both head and tail context."""
+        if max_chars <= 0:
+            return ""
+        if len(text) <= max_chars:
+            return text
+        marker = "\n...[truncated]...\n"
+        if max_chars <= len(marker) + 20:
+            return text[-max_chars:]
+        head = (max_chars - len(marker)) // 2
+        tail = max_chars - len(marker) - head
+        return f"{text[:head]}{marker}{text[-tail:]}"
+
+    def _truncate_largest_message(
+        self,
+        messages: list[dict[str, Any]],
+        target_tokens: int,
+        current_tokens: int,
+        prefer_non_system: bool,
+    ) -> bool:
+        """Truncate the largest string content message in-place."""
+        candidates = [
+            idx
+            for idx, msg in enumerate(messages)
+            if isinstance(msg.get("content"), str) and msg.get("content")
+        ]
+        if not candidates:
+            return False
+        if prefer_non_system:
+            non_system = [idx for idx in candidates if messages[idx].get("role") != "system"]
+            if non_system:
+                candidates = non_system
+        target_idx = max(candidates, key=lambda idx: len(str(messages[idx].get("content", ""))))
+        original = str(messages[target_idx]["content"])
+        if not original:
+            return False
+        shrink_ratio = min(0.95, max(0.05, target_tokens / max(1, current_tokens)))
+        next_chars = max(128, int(len(original) * shrink_ratio))
+        if next_chars >= len(original):
+            next_chars = max(1, len(original) - max(32, len(original) // 10))
+        messages[target_idx]["content"] = self._truncate_text_middle(original, next_chars)
+        return True
+
+    def _trim_messages_to_input_limit(
+        self,
+        model: str,
+        messages: list[dict[str, Any]],
+        max_tokens: int,
+    ) -> list[dict[str, Any]]:
+        """Trim oldest context when estimated input tokens exceed model input budget."""
+        hard_input_limit = get_model_max_input_tokens(model, max_tokens)
+        input_limit = get_model_input_budget(model, max_tokens)
+        token_count = self._estimate_effective_input_tokens(model, messages)
+        if token_count <= input_limit:
+            return messages
+
+        original_count = token_count
+        trimmed = [dict(msg) for msg in messages]
+        keep_system_prompt = bool(trimmed and trimmed[0].get("role") == "system")
+        min_messages = 2 if keep_system_prompt else 1
+
+        while token_count > input_limit and len(trimmed) > min_messages:
+            del trimmed[1 if keep_system_prompt else 0]
+            token_count = self._estimate_effective_input_tokens(model, trimmed)
+
+        # Last resort: drop system prompt if still above limit.
+        if token_count > input_limit and keep_system_prompt and len(trimmed) > 1:
+            del trimmed[0]
+            token_count = self._estimate_effective_input_tokens(model, trimmed)
+
+        # Final fallback: truncate largest remaining content until within budget.
+        truncate_attempts = 0
+        while token_count > input_limit and truncate_attempts < 8:
+            updated = self._truncate_largest_message(
+                messages=trimmed,
+                target_tokens=input_limit,
+                current_tokens=token_count,
+                prefer_non_system=True,
+            )
+            if not updated:
+                break
+            token_count = self._estimate_effective_input_tokens(model, trimmed)
+            truncate_attempts += 1
+
+        if token_count > input_limit:
+            logger.warning(
+                "Prompt still exceeds input budget after trimming: "
+                f"model={model}, tokens={token_count}, budget={input_limit}, hard_limit={hard_input_limit}"
+            )
+            return trimmed
+
+        logger.info(
+            "Trimmed prompt to input budget: "
+            f"model={model}, tokens={original_count}->{token_count}, "
+            f"budget={input_limit}, hard_limit={hard_input_limit}, "
+            f"messages={len(messages)}->{len(trimmed)}"
+        )
+        return trimmed
 
     @staticmethod
     def _is_client_error(e: Exception) -> bool:
@@ -513,7 +670,7 @@ class LiteLLMClient(LLMClient):
         # But if using Dashscope directly, LiteLLM supports 'qwen/qwen-max' or just 'qwen-max' if it knows it.
 
         # Let's handle generic prefixing based on provider type if needed.
-        # For 'qwen', LiteLLM might not auto-detect 'qwen-max' as a specific provider if not in its default list or if strict.
+        # For 'dashscope', LiteLLM might not auto-detect 'qwen-max' as a specific provider if not in its default list or if strict.
         # But the error explicitly says: "Pass in the LLM provider you are trying to call. You passed model=qwen-max"
 
         # If the model name already contains the prefix (e.g. "anthropic/claude-3"), don't add it.
@@ -541,7 +698,12 @@ class LiteLLMClient(LLMClient):
         elif provider_type == "kimi":
             # Moonshot AI (Kimi) uses OpenAI-compatible API
             return f"openai/{model}"
-        # For Qwen, let's try explicitly adding the provider if it's missing?
+        elif provider_type == "ollama":
+            return f"ollama/{model}"
+        elif provider_type == "lmstudio":
+            # LM Studio exposes OpenAI-compatible API.
+            return f"openai/{model}"
+        # For Dashscope, let's try explicitly adding the provider if it's missing?
         # LiteLLM docs say for some providers you need provider/model.
         # But for Qwen/Dashscope, it often works with just model if DASHSCOPE_API_KEY is set.
         # The error suggests LiteLLM doesn't recognize 'qwen-max' as belonging to a provider it has credentials for,
@@ -549,7 +711,7 @@ class LiteLLMClient(LLMClient):
 
         # If using Dashscope (Qwen) via standard litellm logic,
         # sometimes "qwen/" prefix helps disambiguate if it's not default.
-        if provider_type == "qwen":
+        if provider_type == "dashscope":
             # Check if it looks like a model name without prefix
             return f"dashscope/{model}"
 

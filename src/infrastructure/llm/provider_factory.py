@@ -18,7 +18,7 @@ from src.application.services.provider_resolution_service import (
     ProviderResolutionService,
     get_provider_resolution_service,
 )
-from src.domain.llm_providers.models import ProviderConfig
+from src.domain.llm_providers.models import OperationType, ProviderConfig
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +44,24 @@ class AIServiceFactory:
     async def resolve_provider(
         self,
         tenant_id: Optional[str] = None,
+        operation_type: OperationType = OperationType.LLM,
     ) -> ProviderConfig:
         """Resolve the active provider config from the database."""
-        return await self._resolution.resolve_provider(tenant_id)
+        return await self._resolution.resolve_provider(tenant_id, operation_type)
+
+    async def resolve_embedding_provider(
+        self,
+        tenant_id: Optional[str] = None,
+    ) -> ProviderConfig:
+        """Resolve provider config for embedding operations."""
+        return await self.resolve_provider(tenant_id, operation_type=OperationType.EMBEDDING)
+
+    async def resolve_rerank_provider(
+        self,
+        tenant_id: Optional[str] = None,
+    ) -> ProviderConfig:
+        """Resolve provider config for rerank operations."""
+        return await self.resolve_provider(tenant_id, operation_type=OperationType.RERANK)
 
     # ------------------------------------------------------------------
     # LLM Client

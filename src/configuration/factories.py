@@ -10,6 +10,7 @@ from typing import Optional
 
 from src.configuration.config import get_settings
 from src.domain.llm_providers.llm_types import LLMClient
+from src.domain.llm_providers.models import OperationType
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 EMBEDDING_DIMS = {
     "openai": 1536,
     "gemini": 768,
-    "qwen": 1024,
+    "dashscope": 1024,
     "deepseek": 1024,  # Uses fallback
     "zai": 1024,
 }
@@ -58,7 +59,10 @@ async def create_native_graph_adapter(
     factory = get_ai_service_factory()
     # For embedding, we need the provider config first
     # TODO: Pass project_id if available, currently using default
-    provider_config = await factory.resolve_provider(tenant_id=tenant_id)
+    provider_config = await factory.resolve_provider(
+        tenant_id=tenant_id,
+        operation_type=OperationType.EMBEDDING,
+    )
     embedder = factory.create_embedder(provider_config)
     
     # Wrap in EmbeddingService if needed, but NativeGraphAdapter expects EmbeddingService

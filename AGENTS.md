@@ -839,7 +839,7 @@ curl -N http://localhost:8000/api/v1/agent/chat \
 | **Neo4j** | `NEO4J_URI`, `NEO4J_USER`, `NEO4J_PASSWORD` | Graph database |
 | **PostgreSQL** | `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Metadata DB |
 | **Redis** | `REDIS_HOST`, `REDIS_PORT` | Cache |
-| **LLM** | `LLM_PROVIDER` | Provider: `gemini`, `qwen`, `openai`, `deepseek` |
+| **LLM** | `LLM_PROVIDER` | Provider: `gemini`, `dashscope`, `openai`, `deepseek` |
 | **LLM Keys** | `GEMINI_API_KEY`, `DASHSCOPE_API_KEY`, `OPENAI_API_KEY` | API keys |
 | **Sandbox** | `SANDBOX_DEFAULT_PROVIDER`, `SANDBOX_TIMEOUT_SECONDS` | Code execution |
 | **MCP** | `MCP_ENABLED`, `MCP_DEFAULT_TIMEOUT` | MCP protocol |
@@ -850,7 +850,7 @@ curl -N http://localhost:8000/api/v1/agent/chat \
 |-------|--------------|
 | **Backend** | Python 3.12+, FastAPI 0.104+, SQLAlchemy 2.0+, PostgreSQL 16+, Redis 7+, Neo4j 5.26+ |
 | **Workflow** | asyncio + Ray Actors |
-| **LLM** | LiteLLM (Gemini, Qwen, Deepseek, OpenAI, Anthropic) |
+| **LLM** | LiteLLM (Gemini, Dashscope, Deepseek, OpenAI, Anthropic) |
 | **Frontend** | React 19.2+, TypeScript 5.9+, Vite 7.3+, Ant Design 6.1+, Zustand 5.0+ |
 | **Testing** | pytest 7.4+, Vitest, Playwright (80%+ coverage target) |
 

@@ -23,6 +23,7 @@ export const TenantAssignmentModal: React.FC<TenantAssignmentModalProps> = ({
 }) => {
   const { t } = useTranslation();
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
+  const [operationType, setOperationType] = useState<'llm' | 'embedding' | 'rerank'>('llm');
   const [priority, setPriority] = useState<number>(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { tenants, listTenants } = useTenantStore();
@@ -31,6 +32,7 @@ export const TenantAssignmentModal: React.FC<TenantAssignmentModalProps> = ({
     if (isOpen) {
       listTenants();
       setSelectedTenantId('');
+      setOperationType('llm');
       setPriority(0);
     }
   }, [isOpen, listTenants]);
@@ -40,7 +42,7 @@ export const TenantAssignmentModal: React.FC<TenantAssignmentModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      await providerAPI.assignToTenant(provider.id, selectedTenantId, priority);
+      await providerAPI.assignToTenant(provider.id, selectedTenantId, priority, operationType);
       message.success('Provider assigned to tenant successfully');
       onSuccess();
     } catch (err: any) {
@@ -103,8 +105,25 @@ export const TenantAssignmentModal: React.FC<TenantAssignmentModalProps> = ({
         </div>
 
         <div>
+          <label className="block text-sm font-medium mb-1">Operation Type</label>
+          <Select
+            className="w-full"
+            value={operationType}
+            onChange={(value) => setOperationType(value)}
+            options={[
+              { label: 'LLM (chat/completion)', value: 'llm' },
+              { label: 'Embedding (vector generation)', value: 'embedding' },
+              { label: 'Rerank (result re-ordering)', value: 'rerank' },
+            ]}
+          />
+          <div className="mt-1 text-xs text-slate-500">
+            Assignment applies only to the selected operation type.
+          </div>
+        </div>
+
+        <div>
           <label className="block text-sm font-medium mb-1">
-            Priority <span className="text-slate-400 font-normal">(Higher value = higher priority)</span>
+            Priority <span className="text-slate-400 font-normal">(Lower value = higher priority)</span>
           </label>
           <InputNumber
             className="w-full"

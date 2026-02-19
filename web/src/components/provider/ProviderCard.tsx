@@ -22,7 +22,8 @@ const PROVIDER_ICONS: Record<ProviderType, string> = {
   openai: '🤖',
   anthropic: '🧠',
   gemini: '✨',
-  qwen: '🌐',
+  dashscope: '🌐',
+  kimi: '🌙',
   groq: '⚡',
   azure_openai: '☁️',
   cohere: '🔮',
@@ -31,11 +32,14 @@ const PROVIDER_ICONS: Record<ProviderType, string> = {
   vertex: '📊',
   deepseek: '🔍',
   zai: '🐲',
+  ollama: '🦙',
+  lmstudio: '🖥️',
 };
 
 const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
   openai: 'OpenAI',
-  qwen: 'Dashscope',
+  dashscope: 'Dashscope',
+  kimi: 'Moonshot Kimi',
   gemini: 'Google Gemini',
   anthropic: 'Anthropic',
   groq: 'Groq',
@@ -46,6 +50,8 @@ const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
   vertex: 'Google Vertex AI',
   deepseek: 'Deepseek',
   zai: 'ZhipuAI',
+  ollama: 'Ollama',
+  lmstudio: 'LM Studio',
 };
 
 const getStatusColor = (status?: ProviderStatus) => {

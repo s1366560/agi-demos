@@ -5,15 +5,45 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import Memory, MemoryShare, User
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Memory,
+    MemoryShare,
+    User,
+    UserProject,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["shares"])
 logger = logging.getLogger(__name__)
+
+
+async def _check_project_admin_access(
+    db: AsyncSession, user_id: str, project_id: str
+) -> bool:
+    """Check if user has admin/owner access to the project.
+
+    Args:
+        db: Database session
+        user_id: User ID to check
+        project_id: Project ID to check access for
+
+    Returns:
+        True if user is project owner or admin, False otherwise
+    """
+    result = await db.execute(
+        select(UserProject).where(
+            and_(
+                UserProject.user_id == user_id,
+                UserProject.project_id == project_id,
+                UserProject.role.in_(["owner", "admin"]),
+            )
+        )
+    )
+    return result.scalar_one_or_none() is not None
 
 
 @router.post("/memories/{memory_id}/shares", status_code=status.HTTP_201_CREATED)
@@ -109,10 +139,10 @@ async def list_shares(
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
 
-    # Check access
+    # Check access - author OR project admin/owner
     if memory.author_id != current_user.id:
-        # TODO: Add project access check
-        raise HTTPException(status_code=403, detail="Access denied")
+        if not await _check_project_admin_access(db, current_user.id, memory.project_id):
+            raise HTTPException(status_code=403, detail="Access denied")
 
     # Get shares
     shares_result = await db.execute(
@@ -153,10 +183,10 @@ async def delete_share(
     if not memory:
         raise HTTPException(status_code=404, detail="Memory not found")
 
-    # Check access
+    # Check access - author OR project admin/owner
     if memory.author_id != current_user.id:
-        # TODO: Add project access check
-        raise HTTPException(status_code=403, detail="Access denied")
+        if not await _check_project_admin_access(db, current_user.id, memory.project_id):
+            raise HTTPException(status_code=403, detail="Access denied")
 
     # Get share
     share_result = await db.execute(select(MemoryShare).where(MemoryShare.id == share_id))

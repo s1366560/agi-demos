@@ -660,7 +660,7 @@ async def get_embedding_status(
 
         provider_name = {
             "gemini": "Gemini",
-            "qwen": "Qwen",
+            "dashscope": "Dashscope",
             "openai": "OpenAI",
             "zai": "Z.AI",
             "deepseek": "Deepseek",
