@@ -98,7 +98,7 @@ class FeishuAdapter:
     async def _connect_websocket(self) -> None:
         """Connect via WebSocket."""
         try:
-            from larksuiteoapi import WSClient, EventDispatcher, LoggerLevel
+            from lark_oapi import WSClient, EventDispatcher, LoggerLevel
             
             self._ws_client = WSClient(
                 app_id=self._config.app_id,
@@ -119,7 +119,7 @@ class FeishuAdapter:
         except ImportError:
             raise ImportError(
                 "Feishu SDK not installed. "
-                "Install with: pip install larksuiteoapi"
+                "Install with: pip install lark_oapi"
             )
     
     async def _run_websocket(self) -> None:
@@ -295,7 +295,7 @@ class FeishuAdapter:
             raise RuntimeError("Feishu adapter not connected")
         
         try:
-            from larksuiteoapi import Client
+            from lark_oapi import Client
             
             client = Client(
                 app_id=self._config.app_id,
@@ -341,7 +341,7 @@ class FeishuAdapter:
         except ImportError:
             raise ImportError(
                 "Feishu SDK not installed. "
-                "Install with: pip install larksuiteoapi"
+                "Install with: pip install lark_oapi"
             )
     
     async def send_text(self, to: str, text: str, reply_to: Optional[str] = None) -> str:
@@ -378,7 +378,7 @@ class FeishuAdapter:
     async def get_chat_members(self, chat_id: str) -> List[SenderInfo]:
         """Get chat members."""
         try:
-            from larksuiteoapi import Client
+            from lark_oapi import Client
             
             client = Client(
                 app_id=self._config.app_id,
@@ -402,7 +402,7 @@ class FeishuAdapter:
     async def get_user_info(self, user_id: str) -> Optional[SenderInfo]:
         """Get user info."""
         try:
-            from larksuiteoapi import Client
+            from lark_oapi import Client
             
             client = Client(
                 app_id=self._config.app_id,
