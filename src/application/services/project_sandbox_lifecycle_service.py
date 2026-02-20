@@ -790,6 +790,9 @@ class ProjectSandboxLifecycleService:
         except Exception as e:
             logger.warning(f"Could not terminate old sandbox {original_sandbox_id}: {e}")
 
+        # Clear MCPApp resources so the frontend doesn't show stale READY state (D3)
+        asyncio.create_task(self._clear_mcp_app_resources(association.project_id))
+
         # Step 2: Clean up any other containers for this project (orphans)
         try:
             cleaned = await self._adapter.cleanup_project_containers(association.project_id)
@@ -829,6 +832,14 @@ class ProjectSandboxLifecycleService:
             except Exception as e:
                 logger.warning(f"Failed to connect MCP for {instance.id}: {e}")
 
+            # Reinstall child MCP servers that were configured for this project (D1)
+            asyncio.create_task(
+                self._reinstall_mcp_servers(
+                    project_id=association.project_id,
+                    tenant_id=association.tenant_id,
+                )
+            )
+
             logger.info(
                 f"Recreated sandbox for project {association.project_id}: "
                 f"sandbox_id={instance.id} (preserved)"
@@ -840,6 +851,171 @@ class ProjectSandboxLifecycleService:
             association.mark_error(f"Recreation failed: {e}")
             await self._repository.save(association)
             raise
+
+    async def _reinstall_mcp_servers(self, project_id: str, tenant_id: str) -> None:
+        """Reinstall all enabled child MCP servers after sandbox recreation (D1 fix).
+
+        Runs as a background task after the new sandbox container is ready.
+        Each server failure is logged as a warning but does not abort the others.
+
+        Args:
+            project_id: The project whose servers to reinstall.
+            tenant_id: Tenant ID for sandbox access scoping.
+        """
+        try:
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+            from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
+                SqlMCPServerRepository,
+            )
+
+            async with async_session_factory() as session:
+                repo = SqlMCPServerRepository(session)
+                servers = await repo.list_by_project(project_id, enabled_only=True)
+
+            if not servers:
+                return
+
+            logger.info(
+                "Reinstalling %d MCP server(s) after sandbox recreation: project=%s",
+                len(servers),
+                project_id,
+            )
+
+            import json
+
+            results = await asyncio.gather(
+                *[
+                    self._install_single_mcp_server(
+                        project_id=project_id,
+                        server_name=server.name,
+                        server_type=server.server_type,
+                        transport_config=server.transport_config or {},
+                    )
+                    for server in servers
+                ],
+                return_exceptions=True,
+            )
+
+            for server, result in zip(servers, results):
+                if isinstance(result, Exception):
+                    logger.warning(
+                        "Failed to reinstall MCP server '%s' after sandbox recreation: %s",
+                        server.name,
+                        result,
+                    )
+                else:
+                    logger.info(
+                        "Reinstalled MCP server '%s' after sandbox recreation",
+                        server.name,
+                    )
+
+        except Exception as e:
+            logger.warning("_reinstall_mcp_servers failed for project %s: %s", project_id, e)
+
+    async def _install_single_mcp_server(
+        self,
+        project_id: str,
+        server_name: str,
+        server_type: str,
+        transport_config: dict,
+    ) -> None:
+        """Install and start a single MCP server in the project sandbox.
+
+        Args:
+            project_id: The project ID.
+            server_name: MCP server name.
+            server_type: Transport type (stdio, http, sse, websocket).
+            transport_config: Transport configuration dict.
+        """
+        import json
+
+        from src.application.services.sandbox_mcp_server_manager import (
+            MCP_INSTALL_TIMEOUT,
+            MCP_START_TIMEOUT,
+            TOOL_INSTALL,
+            TOOL_START,
+        )
+
+        config_json = json.dumps(transport_config)
+
+        install_result = await self.execute_tool(
+            project_id=project_id,
+            tool_name=TOOL_INSTALL,
+            arguments={
+                "name": server_name,
+                "server_type": server_type,
+                "transport_config": config_json,
+            },
+            timeout=MCP_INSTALL_TIMEOUT,
+        )
+
+        # Check install success
+        content = install_result.get("content", [])
+        if isinstance(content, list) and content:
+            first = content[0] if isinstance(content[0], dict) else {}
+            text = first.get("text", "{}")
+        else:
+            text = str(install_result)
+        try:
+            import json as _json
+
+            data = _json.loads(text) if isinstance(text, str) else {}
+        except Exception:
+            data = {}
+        if not data.get("success", False) and not install_result.get("success", False):
+            raise RuntimeError(
+                f"Install failed for '{server_name}': {data.get('error', text)}"
+            )
+
+        await self.execute_tool(
+            project_id=project_id,
+            tool_name=TOOL_START,
+            arguments={
+                "name": server_name,
+                "server_type": server_type,
+                "transport_config": config_json,
+            },
+            timeout=MCP_START_TIMEOUT,
+        )
+
+    async def _clear_mcp_app_resources(self, project_id: str) -> None:
+        """Clear MCPApp resources for a project after sandbox recreation (D3 fix).
+
+        Marks all non-disabled MCPApps as DISCOVERED so the frontend does not
+        show stale READY apps that point to a resource in the old sandbox.
+
+        Args:
+            project_id: The project whose app resources to clear.
+        """
+        try:
+            from src.application.services.mcp_app_service import MCPAppService
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+            from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
+                SqlMCPAppRepository,
+            )
+            from src.infrastructure.mcp.resource_resolver import MCPAppResourceResolver
+
+            async with async_session_factory() as session:
+                app_repo = SqlMCPAppRepository(session)
+                # resource_resolver is not used by clear_resources_for_project
+                service = MCPAppService(
+                    app_repo=app_repo,
+                    resource_resolver=MCPAppResourceResolver(manager_factory=lambda: None),
+                )
+                count = await service.clear_resources_for_project(project_id)
+                await session.commit()
+                if count > 0:
+                    logger.info(
+                        "Cleared %d MCPApp resource(s) for project %s after sandbox recreation",
+                        count,
+                        project_id,
+                    )
+        except Exception as e:
+            logger.warning("_clear_mcp_app_resources failed for project %s: %s", project_id, e)
 
     async def _recover_sandbox(self, association: ProjectSandbox) -> bool:
         """Attempt to recover an unhealthy sandbox."""

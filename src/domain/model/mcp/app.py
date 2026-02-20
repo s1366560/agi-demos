@@ -198,6 +198,17 @@ class MCPApp:
         self.status = MCPAppStatus.DISABLED
         self.updated_at = datetime.utcnow()
 
+    def mark_discovered(self) -> None:
+        """Reset to discovered state, clearing any cached resource.
+
+        Called when the sandbox is recreated and the resource is no longer
+        accessible. The app can be re-resolved once the sandbox is ready.
+        """
+        self.resource = None
+        self.status = MCPAppStatus.DISCOVERED
+        self.error_message = None
+        self.updated_at = datetime.utcnow()
+
     @property
     def is_ready(self) -> bool:
         """Check if the app is ready to render."""

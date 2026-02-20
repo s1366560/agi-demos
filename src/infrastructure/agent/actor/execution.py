@@ -126,6 +126,16 @@ async def execute_project_chat(
                 error_message = event.get("data", {}).get("message", "Unknown error")
             elif event_type == "context_summary_generated":
                 summary_save_data = event.get("data")
+            elif event_type == "mcp_app_result":
+                # Persist agent-generated HTML to DB so page refreshes can load it (D2 fix)
+                event_data = event.get("data", {})
+                _app_id = event_data.get("app_id")
+                _resource_html = event_data.get("resource_html", "")
+                _resource_uri = event_data.get("resource_uri", "")
+                if _app_id and _resource_html:
+                    asyncio.create_task(
+                        _save_mcp_app_html(_app_id, _resource_uri, _resource_html)
+                    )
 
             now = time_module.time()
             if now - last_refresh > 60:
@@ -771,3 +781,45 @@ def _format_hitl_response_as_tool_result(
         return "User denied permission"
 
     return f"User responded to {hitl_type} request"
+
+
+async def _save_mcp_app_html(app_id: str, resource_uri: str, html_content: str) -> None:
+    """Persist agent-generated MCPApp HTML to the database (D2 fix).
+
+    Called as a fire-and-forget background task when the agent emits a
+    `mcp_app_result` event with non-empty `resource_html`. Persisting the
+    HTML ensures the app can be loaded after page refreshes without requiring
+    a live sandbox round-trip.
+
+    Args:
+        app_id: MCPApp ID to update.
+        resource_uri: The ui:// URI of the resource.
+        html_content: HTML content to persist.
+    """
+    try:
+        from src.domain.model.mcp.app import MCPAppResource
+        from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
+            SqlMCPAppRepository,
+        )
+
+        async with async_session_factory() as session:
+            repo = SqlMCPAppRepository(session)
+            app = await repo.find_by_id(app_id)
+            if not app:
+                logger.warning("[ActorExecution] MCPApp not found for html persist: %s", app_id)
+                return
+            resource = MCPAppResource(
+                uri=resource_uri,
+                html_content=html_content,
+                size_bytes=len(html_content.encode("utf-8")),
+            )
+            app.mark_ready(resource)
+            await repo.save(app)
+            await session.commit()
+            logger.info(
+                "[ActorExecution] Persisted MCPApp html: app_id=%s, size=%d bytes",
+                app_id,
+                resource.size_bytes,
+            )
+    except Exception as e:
+        logger.warning("[ActorExecution] Failed to persist MCPApp html: %s", e)

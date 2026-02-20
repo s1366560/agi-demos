@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 from src.domain.model.mcp.app import (
     MCPApp,
+    MCPAppResource,
     MCPAppSource,
     MCPAppStatus,
     MCPAppUIMetadata,
@@ -240,3 +241,66 @@ class MCPAppService:
         Useful when the app has been rebuilt (e.g., by the agent).
         """
         return await self.resolve_resource(app_id, project_id)
+
+    async def save_html_if_ready(
+        self,
+        app_id: str,
+        resource_uri: str,
+        html_content: str,
+    ) -> Optional[MCPApp]:
+        """Persist agent-generated HTML to an MCPApp record, marking it READY.
+
+        Called from the agent execution layer when the agent emits
+        `mcp_app_result` with non-empty `resource_html`. Persisting the HTML
+        ensures it survives page refreshes without requiring sandbox access.
+
+        Args:
+            app_id: The MCPApp ID.
+            resource_uri: The ui:// URI of the resource.
+            html_content: HTML content to persist.
+
+        Returns:
+            Updated MCPApp, or None if app not found.
+        """
+        app = await self._app_repo.find_by_id(app_id)
+        if not app:
+            logger.warning("MCPApp not found for html persistence: %s", app_id)
+            return None
+
+        resource = MCPAppResource(
+            uri=resource_uri,
+            html_content=html_content,
+            size_bytes=len(html_content.encode("utf-8")),
+        )
+        app.mark_ready(resource)
+        app = await self._app_repo.save(app)
+        logger.info(
+            "Persisted MCPApp html: id=%s, size=%d bytes",
+            app_id,
+            resource.size_bytes,
+        )
+        return app
+
+    async def clear_resources_for_project(self, project_id: str) -> int:
+        """Clear HTML resources for all MCPApps in a project.
+
+        Called when a project sandbox is recreated so that MCPApps revert
+        to DISCOVERED state. This prevents the frontend from showing stale
+        READY apps whose resources no longer exist in the new sandbox.
+
+        Args:
+            project_id: The project ID.
+
+        Returns:
+            Number of apps whose resources were cleared.
+        """
+        apps = await self._app_repo.find_by_project(project_id, include_disabled=True)
+        count = 0
+        for app in apps:
+            if app.status in (MCPAppStatus.READY, MCPAppStatus.LOADING, MCPAppStatus.ERROR):
+                app.mark_discovered()
+                await self._app_repo.save(app)
+                count += 1
+        if count > 0:
+            logger.info("Cleared resources for %d MCPApps in project %s", count, project_id)
+        return count

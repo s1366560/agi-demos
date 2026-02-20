@@ -456,3 +456,118 @@ class TestProjectSandboxLifecycleService:
         result = await service.get_or_create_sandbox("proj-456", "tenant-789")
 
         assert result.sandbox_id == "sb-new"
+
+
+@pytest.mark.unit
+class TestRecreateSandboxLifecycleFixes:
+    """Tests for D1 (_reinstall_mcp_servers) and D3 (_clear_mcp_app_resources) fixes."""
+
+    @pytest.fixture
+    def mock_repository(self):
+        repo = MagicMock()
+        repo.save = AsyncMock()
+        repo.find_by_project = AsyncMock(return_value=None)
+        repo.find_by_id = AsyncMock(return_value=None)
+        repo.find_by_sandbox = AsyncMock(return_value=None)
+        repo.find_by_tenant = AsyncMock(return_value=[])
+        repo.find_stale = AsyncMock(return_value=[])
+        repo.delete = AsyncMock(return_value=True)
+        repo.delete_by_project = AsyncMock(return_value=True)
+        repo.exists_for_project = AsyncMock(return_value=False)
+        repo.acquire_project_lock = AsyncMock(return_value=True)
+        repo.release_project_lock = AsyncMock()
+        repo.find_and_lock_by_project = AsyncMock(return_value=None)
+        return repo
+
+    @pytest.fixture
+    def mock_adapter(self):
+        adapter = MagicMock()
+        adapter.create_sandbox = AsyncMock()
+        adapter.terminate_sandbox = AsyncMock()
+        adapter.get_sandbox = AsyncMock(return_value=None)
+        adapter.health_check = AsyncMock(return_value=True)
+        adapter.call_tool = AsyncMock(
+            return_value={"content": [{"type": "text", "text": '{"success": true}'}]}
+        )
+        adapter.connect_mcp = AsyncMock(return_value=True)
+        adapter.container_exists = AsyncMock(return_value=True)
+        adapter.cleanup_project_containers = AsyncMock(return_value=0)
+        return adapter
+
+    @pytest.fixture
+    def service(self, mock_repository, mock_adapter):
+        return ProjectSandboxLifecycleService(
+            repository=mock_repository,
+            sandbox_adapter=mock_adapter,
+            default_profile=SandboxProfileType.STANDARD,
+            health_check_interval_seconds=60,
+            auto_recover=True,
+        )
+
+    @pytest.mark.asyncio
+    async def test_recreate_sandbox_spawns_reinstall_and_clear_tasks(
+        self, service, mock_repository, mock_adapter
+    ) -> None:
+        """_recreate_sandbox should spawn background tasks for reinstall and clear."""
+        import asyncio
+        from unittest.mock import patch
+
+        association = ProjectSandbox(
+            id="assoc-1",
+            project_id="proj-1",
+            tenant_id="tenant-1",
+            sandbox_id="sb-old",
+            status=ProjectSandboxStatus.UNHEALTHY,
+            created_at=datetime.now(timezone.utc),
+        )
+
+        mock_instance = MagicMock()
+        mock_instance.id = "sb-old"
+        mock_instance.status = "running"
+        mock_adapter.create_sandbox.return_value = mock_instance
+
+        spawned_tasks = []
+        original_create_task = asyncio.create_task
+
+        def capture_task(coro, **kwargs):
+            task = original_create_task(coro, **kwargs)
+            spawned_tasks.append(task)
+            return task
+
+        with patch("asyncio.create_task", side_effect=capture_task):
+            await service._recreate_sandbox(association)
+
+        # Allow background tasks to run (they will fail due to missing DB, but that's ok)
+        await asyncio.gather(*spawned_tasks, return_exceptions=True)
+
+        # Both _reinstall_mcp_servers and _clear_mcp_app_resources tasks spawned
+        assert len(spawned_tasks) == 2
+
+    @pytest.mark.asyncio
+    async def test_install_single_mcp_server_calls_install_and_start(
+        self, service, mock_repository, mock_adapter
+    ) -> None:
+        """_install_single_mcp_server should call mcp_server_install then mcp_server_start."""
+        assoc = ProjectSandbox(
+            id="assoc-1",
+            project_id="proj-1",
+            tenant_id="tenant-1",
+            sandbox_id="sb-1",
+            status=ProjectSandboxStatus.RUNNING,
+            created_at=datetime.now(timezone.utc),
+        )
+        mock_repository.find_by_project.return_value = assoc
+
+        await service._install_single_mcp_server(
+            project_id="proj-1",
+            server_name="snake-game",
+            server_type="stdio",
+            transport_config={"command": "node", "args": ["server.js"]},
+        )
+
+        # Should have called call_tool twice: install + start
+        assert mock_adapter.call_tool.call_count == 2
+        calls = mock_adapter.call_tool.call_args_list
+        assert calls[0].kwargs["tool_name"] == "mcp_server_install"
+        assert calls[1].kwargs["tool_name"] == "mcp_server_start"
+        assert calls[0].kwargs["arguments"]["name"] == "snake-game"
