@@ -486,9 +486,7 @@ class Conversation(Base):
     parent_conversation_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("conversations.id"), nullable=True, index=True
     )
-    branch_point_message_id: Mapped[Optional[str]] = mapped_column(
-        String, nullable=True
-    )
+    branch_point_message_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     project: Mapped["Project"] = relationship(foreign_keys=[project_id])
@@ -533,15 +531,9 @@ class Message(Base):
     )
 
     # Message versioning
-    version: Mapped[int] = mapped_column(
-        Integer, default=1, nullable=False
-    )
-    original_content: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True
-    )
-    edited_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    original_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
     executions: Mapped[List["AgentExecution"]] = relationship(
@@ -640,7 +632,9 @@ class AgentExecutionEvent(Base):
     __table_args__ = (
         # Unique constraint to prevent duplicate events within a conversation
         UniqueConstraint(
-            "conversation_id", "event_time_us", "event_counter",
+            "conversation_id",
+            "event_time_us",
+            "event_counter",
             name="uq_agent_events_conv_time",
         ),
         # Index for ordered replay within a conversation
@@ -888,7 +882,9 @@ class Skill(Base):
     full_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Full SKILL.md content for Web UI editing
     # Version tracking
-    current_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
+    current_version: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False, server_default="0"
+    )
     version_label: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     # Relationships
@@ -1048,18 +1044,14 @@ class SubAgentTemplate(Base):
     max_tokens: Mapped[int] = mapped_column(Integer, default=4096, nullable=False)
     temperature: Mapped[float] = mapped_column(Float, default=0.7, nullable=False)
     max_iterations: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
-    allowed_tools: Mapped[list[str]] = mapped_column(
-        JSON, default=lambda: ["*"], nullable=False
-    )
+    allowed_tools: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["*"], nullable=False)
     author: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     is_builtin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     is_published: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     install_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     rating: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     metadata_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True
     )
@@ -1096,6 +1088,8 @@ class MCPServer(Base):
     )  # stdio, sse, http, websocket
     transport_config: Mapped[dict] = mapped_column(JSON, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    runtime_status: Mapped[str] = mapped_column(String(30), default="unknown", nullable=False)
+    runtime_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     discovered_tools: Mapped[list[dict]] = mapped_column(JSON, default=list, nullable=False)
     sync_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_sync_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -1372,33 +1366,21 @@ class PromptTemplateModel(IdGeneratorMixin, Base):
     project_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("projects.id"), nullable=True, index=True
     )
-    created_by: Mapped[str] = mapped_column(
-        String, ForeignKey("users.id"), nullable=False
-    )
+    created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
 
     title: Mapped[str] = mapped_column(String(200), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    category: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="general", index=True
-    )
-    variables: Mapped[dict] = mapped_column(
-        JSON, default=list, nullable=False
-    )
+    category: Mapped[str] = mapped_column(String(50), nullable=False, default="general", index=True)
+    variables: Mapped[dict] = mapped_column(JSON, default=list, nullable=False)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False)
     usage_count: Mapped[int] = mapped_column(Integer, default=0)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True
     )
 
-    __table_args__ = (
-        UniqueConstraint(
-            "tenant_id", "title", name="uq_tenant_template_title"
-        ),
-    )
+    __table_args__ = (UniqueConstraint("tenant_id", "title", name="uq_tenant_template_title"),)
 
 
 # ===== AGENT TASK MODEL =====
@@ -1418,23 +1400,29 @@ class AgentTaskModel(IdGeneratorMixin, Base):
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="pending", index=True,
+        String(20),
+        nullable=False,
+        default="pending",
+        index=True,
     )
     priority: Mapped[str] = mapped_column(
-        String(10), nullable=False, default="medium",
+        String(10),
+        nullable=False,
+        default="medium",
     )
     order_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(),
+        DateTime(timezone=True),
+        server_default=func.now(),
     )
     updated_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), onupdate=func.now(), nullable=True,
+        DateTime(timezone=True),
+        onupdate=func.now(),
+        nullable=True,
     )
 
-    __table_args__ = (
-        Index("ix_agent_tasks_conv_status", "conversation_id", "status"),
-    )
+    __table_args__ = (Index("ix_agent_tasks_conv_status", "conversation_id", "status"),)
 
 
 class MCPAppModel(Base):
@@ -1467,16 +1455,11 @@ class MCPAppModel(Base):
     resource_resolved_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    source: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="user_added"
-    )
-    status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="discovered"
-    )
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="user_added")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="discovered")
+    lifecycle_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True
     )
@@ -1487,8 +1470,43 @@ class MCPAppModel(Base):
     server: Mapped[Optional["MCPServer"]] = relationship(foreign_keys=[server_id])
 
     __table_args__ = (
-        UniqueConstraint("project_id", "server_name", "tool_name", name="uq_mcp_app_project_server_tool"),
+        UniqueConstraint(
+            "project_id", "server_name", "tool_name", name="uq_mcp_app_project_server_tool"
+        ),
         Index("ix_mcp_apps_project_status", "project_id", "status"),
+    )
+
+
+class MCPLifecycleEvent(Base):
+    """Lifecycle/audit event log for MCP server and app operations."""
+
+    __tablename__ = "mcp_lifecycle_events"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String, ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    project_id: Mapped[str] = mapped_column(
+        String, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    server_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("mcp_servers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    app_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("mcp_apps.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+
+    __table_args__ = (
+        Index("ix_mcp_lifecycle_events_project_created", "project_id", "created_at"),
+        Index("ix_mcp_lifecycle_events_server_created", "server_id", "created_at"),
+        Index("ix_mcp_lifecycle_events_app_created", "app_id", "created_at"),
     )
 
 
@@ -1501,12 +1519,8 @@ class MemoryChunk(Base):
 
     __tablename__ = "memory_chunks"
 
-    id: Mapped[str] = mapped_column(
-        String, primary_key=True, default=lambda: str(uuid.uuid4())
-    )
-    project_id: Mapped[str] = mapped_column(
-        String, ForeignKey("projects.id"), nullable=False
-    )
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id: Mapped[str] = mapped_column(String, ForeignKey("projects.id"), nullable=False)
     source_type: Mapped[str] = mapped_column(
         String(20), nullable=False
     )  # memory, conversation, episode
@@ -1517,16 +1531,12 @@ class MemoryChunk(Base):
     embedding: Mapped[Optional[list]] = mapped_column(
         Vector(1024) if Vector else JSON, nullable=True
     )
-    metadata_: Mapped[dict] = mapped_column(
-        "metadata", JSON, default=dict
-    )
+    metadata_: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
     importance: Mapped[float] = mapped_column(Float, default=0.5)
     category: Mapped[str] = mapped_column(
         String(20), default="other"
     )  # preference, fact, decision, entity, other
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     project: Mapped["Project"] = relationship(foreign_keys=[project_id])
 
@@ -1554,6 +1564,4 @@ class AuditLog(IdGeneratorMixin, Base):
     ip_address: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     user_agent: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
-    __table_args__ = (
-        Index("ix_audit_logs_tenant_action", "tenant_id", "action"),
-    )
+    __table_args__ = (Index("ix_audit_logs_tenant_action", "tenant_id", "action"),)

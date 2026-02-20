@@ -579,7 +579,7 @@ export const InputBar = memo<InputBarProps>(
           )}
 
           {/* Text Area */}
-          <div className="flex-1 min-h-0 px-4 py-3 relative overflow-hidden">
+          <div className="flex-1 min-h-0 px-4 py-3 relative overflow-visible">
             <SlashCommandDropdown
               ref={slashDropdownRef}
               query={slashQuery}

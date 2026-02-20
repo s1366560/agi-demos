@@ -113,8 +113,8 @@ export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMess
             <p
               className={
                 forcedSkillName
-                  ? 'text-sm leading-relaxed text-slate-800 dark:text-slate-100'
-                  : 'text-sm leading-relaxed'
+                  ? 'text-sm leading-relaxed text-slate-800 dark:text-slate-100 break-words'
+                  : 'text-sm leading-relaxed break-words'
               }
             >
               {content}
@@ -178,7 +178,7 @@ export function AgentSection({
       <div className={`w-8 h-8 rounded-full ${iconBg} flex items-center justify-center shrink-0`}>
         <span className={`material-symbols-outlined text-lg ${iconColor}`}>{icon}</span>
       </div>
-      <div className="flex-1">{children}</div>
+      <div className="flex-1 min-w-0">{children}</div>
     </div>
   );
 }

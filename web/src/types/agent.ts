@@ -1779,6 +1779,8 @@ export interface MCPServerResponse {
   server_type: MCPServerType;
   transport_config: Record<string, unknown>;
   enabled: boolean;
+  runtime_status?: string;
+  runtime_metadata?: Record<string, unknown>;
   discovered_tools: MCPToolInfo[];
   last_sync_at?: string;
   sync_error?: string;
@@ -1832,7 +1834,10 @@ export interface MCPServerSyncResponse {
 export interface MCPServerTestResponse {
   success: boolean;
   message: string;
-  latency_ms?: number;
+  tools_discovered?: number;
+  connection_time_ms?: number;
+  latency_ms?: number; // Backward compatibility
+  errors?: string[];
 }
 
 /**

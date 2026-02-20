@@ -27,6 +27,14 @@ export interface MCPServerListParams {
   limit?: number;
 }
 
+export interface MCPReconcileResult {
+  project_id: string;
+  total_enabled_servers: number;
+  already_running: number;
+  restored: number;
+  failed: number;
+}
+
 export const mcpAPI = {
   /**
    * List MCP servers, optionally filtered by project
@@ -77,6 +85,13 @@ export const mcpAPI = {
    */
   test: async (serverId: string): Promise<MCPServerTestResponse> => {
     return await api.post<MCPServerTestResponse>(`/mcp/${serverId}/test`);
+  },
+
+  /**
+   * Reconcile enabled MCP servers with current sandbox runtime state.
+   */
+  reconcileProject: async (projectId: string): Promise<MCPReconcileResult> => {
+    return await api.post<MCPReconcileResult>(`/mcp/reconcile/${projectId}`);
   },
 
   /**

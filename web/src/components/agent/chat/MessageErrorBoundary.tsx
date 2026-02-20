@@ -80,8 +80,7 @@ const DefaultErrorFallback: React.FC<{
         {showRetry && (
           <Button
             onClick={onRetry}
-            variant="outline"
-            size="sm"
+            size="small"
             className="mt-2 text-xs"
           >
             <span className="material-symbols-outlined text-sm mr-1">refresh</span>
@@ -114,7 +113,7 @@ export class MessageErrorBoundary extends Component<
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+  override componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     this.setState({ errorInfo });
     
     // Log error to console in development
@@ -140,9 +139,9 @@ export class MessageErrorBoundary extends Component<
     });
   };
 
-  render(): ReactNode {
+  override render(): ReactNode {
     const { hasError, error, retryCount } = this.state;
-    const { fallback, showRetry = true, errorMessage } = this.props;
+    const { fallback, showRetry = true } = this.props;
 
     if (hasError) {
       // Use custom fallback if provided

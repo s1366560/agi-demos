@@ -37,20 +37,58 @@ const TYPE_COLORS: Record<MCPServerType, { bg: string; text: string; border: str
   },
 };
 
-type ConnectionStatus = 'connected' | 'not_synced' | 'error' | 'disabled';
+type RuntimeStatus = 'running' | 'starting' | 'error' | 'disabled' | 'unknown';
 
-const STATUS_DOT: Record<ConnectionStatus, { color: string; label: string }> = {
-  connected: { color: 'bg-green-500', label: 'Connected' },
-  not_synced: { color: 'bg-yellow-500', label: 'Not synced' },
-  error: { color: 'bg-red-500', label: 'Error' },
-  disabled: { color: 'bg-slate-400', label: 'Disabled' },
+const RUNTIME_STATUS_STYLES: Record<
+  RuntimeStatus,
+  { dot: string; label: string; chip: string }
+> = {
+  running: {
+    dot: 'bg-green-500',
+    label: 'Running',
+    chip: 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800',
+  },
+  starting: {
+    dot: 'bg-blue-500',
+    label: 'Starting',
+    chip: 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800',
+  },
+  error: {
+    dot: 'bg-red-500',
+    label: 'Error',
+    chip: 'bg-red-50 text-red-700 border-red-200 dark:bg-red-900/20 dark:text-red-300 dark:border-red-800',
+  },
+  disabled: {
+    dot: 'bg-slate-400',
+    label: 'Disabled',
+    chip: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600',
+  },
+  unknown: {
+    dot: 'bg-amber-500',
+    label: 'Unknown',
+    chip: 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-300 dark:border-amber-800',
+  },
 };
 
-function getConnectionStatus(server: MCPServerResponse): ConnectionStatus {
+function getRuntimeStatus(server: MCPServerResponse): RuntimeStatus {
+  const status = server.runtime_status;
+  if (status === 'running' || status === 'starting' || status === 'error' || status === 'disabled') {
+    return status;
+  }
   if (!server.enabled) return 'disabled';
   if (server.sync_error) return 'error';
-  if (!server.last_sync_at) return 'not_synced';
-  return 'connected';
+  if (server.last_sync_at) return 'running';
+  return 'unknown';
+}
+
+function getRuntimeText(server: MCPServerResponse, key: string): string | undefined {
+  const value = server.runtime_metadata?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function formatStatusText(value?: string): string {
+  if (!value) return '';
+  return value.replace(/_/g, ' ');
 }
 
 function formatLastSync(dateStr?: string): string {
@@ -73,14 +111,38 @@ export interface McpServerCardProps {
   onEdit: (server: MCPServerResponse) => void;
   onDelete: (id: string) => void;
   onShowTools: (server: MCPServerResponse) => void;
+  appCount?: number;
+  readyAppCount?: number;
+  errorAppCount?: number;
 }
 
 export const McpServerCard: React.FC<McpServerCardProps> = React.memo(
-  ({ server, isSyncing, isTesting, onToggle, onSync, onTest, onEdit, onDelete, onShowTools }) => {
-    const status = getConnectionStatus(server);
-    const dot = STATUS_DOT[status];
+  ({
+    server,
+    isSyncing,
+    isTesting,
+    onToggle,
+    onSync,
+    onTest,
+    onEdit,
+    onDelete,
+    onShowTools,
+    appCount = 0,
+    readyAppCount = 0,
+    errorAppCount = 0,
+  }) => {
+    const status = getRuntimeStatus(server);
+    const runtimeStyle = RUNTIME_STATUS_STYLES[status];
     const typeColor = TYPE_COLORS[server.server_type];
     const toolCount = server.discovered_tools?.length || 0;
+    const runtimeError =
+      status === 'error'
+        ? getRuntimeText(server, 'last_error_message') ||
+          getRuntimeText(server, 'last_error') ||
+          server.sync_error
+        : undefined;
+    const lastTestStatus = getRuntimeText(server, 'last_test_status');
+    const lastReconcileStatus = getRuntimeText(server, 'last_reconcile_status');
 
     return (
       <div className={`bg-white dark:bg-slate-800 rounded-xl border hover:shadow-lg transition-all duration-200 overflow-hidden ${
@@ -95,9 +157,9 @@ export const McpServerCard: React.FC<McpServerCardProps> = React.memo(
           {/* Top Row: Status, Name, Type Badge, Toggle */}
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              <Tooltip title={`${dot.label}${server.enabled ? '' : ' (Disabled)'}`}>
-                <span className={`inline-block w-2.5 h-2.5 rounded-full ${dot.color} flex-shrink-0 ${
-                  status === 'connected' ? 'animate-pulse' : ''
+              <Tooltip title={runtimeStyle.label}>
+                <span className={`inline-block w-2.5 h-2.5 rounded-full ${runtimeStyle.dot} flex-shrink-0 ${
+                  status === 'running' ? 'animate-pulse' : ''
                 }`} />
               </Tooltip>
               <h3 className="text-base font-semibold text-slate-900 dark:text-white truncate">
@@ -108,6 +170,9 @@ export const McpServerCard: React.FC<McpServerCardProps> = React.memo(
               <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${typeColor.bg} ${typeColor.text} ${typeColor.border}`}>
                 <span className="material-symbols-outlined text-xs mr-1">{typeColor.icon}</span>
                 {server.server_type.toUpperCase()}
+              </span>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border ${runtimeStyle.chip}`}>
+                {runtimeStyle.label}
               </span>
               <Switch
                 checked={server.enabled}
@@ -143,10 +208,16 @@ export const McpServerCard: React.FC<McpServerCardProps> = React.memo(
 
           {/* Tools preview */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
               <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0">
                 {toolCount} tool{toolCount !== 1 ? 's' : ''}
               </span>
+              {appCount > 0 && (
+                <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0">
+                  {readyAppCount}/{appCount} app{appCount !== 1 ? 's' : ''} ready
+                  {errorAppCount > 0 ? `, ${errorAppCount} error` : ''}
+                </span>
+              )}
               <div className="flex flex-wrap gap-1 min-w-0">
                 {server.discovered_tools?.slice(0, 4).map((tool: MCPToolInfo, idx: number) => (
                   <Tooltip key={idx} title={tool.description}>
@@ -170,11 +241,11 @@ export const McpServerCard: React.FC<McpServerCardProps> = React.memo(
         </div>
 
         {/* Sync error banner */}
-        {server.sync_error && (
+        {runtimeError && (
           <div className="px-5 py-2.5 bg-red-50 dark:bg-red-950/20 border-y border-red-100 dark:border-red-800/30">
             <p className="text-xs text-red-600 dark:text-red-400 line-clamp-2 flex items-center gap-1.5">
               <span className="material-symbols-outlined text-xs">error</span>
-              {server.sync_error}
+              {runtimeError}
             </p>
           </div>
         )}
@@ -248,6 +319,13 @@ export const McpServerCard: React.FC<McpServerCardProps> = React.memo(
             <span className="material-symbols-outlined text-xs">schedule</span>
             Last sync: {formatLastSync(server.last_sync_at)}
           </p>
+          {(lastTestStatus || lastReconcileStatus) && (
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+              {lastTestStatus ? `Test: ${formatStatusText(lastTestStatus)}` : ''}
+              {lastTestStatus && lastReconcileStatus ? ' · ' : ''}
+              {lastReconcileStatus ? `Reconcile: ${formatStatusText(lastReconcileStatus)}` : ''}
+            </p>
+          )}
         </div>
       </div>
     );

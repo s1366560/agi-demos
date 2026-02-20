@@ -14,6 +14,10 @@ import { mcpAppAPI } from '@/services/mcpAppService';
 import { getErrorMessage } from '@/types/common';
 import type { MCPApp, MCPAppResource, MCPAppToolCallResponse } from '@/types/mcpApp';
 
+const RESOURCE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const HTML_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_HTML_CACHE_ENTRIES = 200;
+
 interface MCPAppState {
   /** Registered MCP Apps indexed by ID */
   apps: Record<string, MCPApp>;
@@ -21,6 +25,8 @@ interface MCPAppState {
   resources: Record<string, MCPAppResource>;
   /** Timestamps when resources were cached (for TTL expiry) */
   resourceCachedAt: Record<string, number>;
+  /** Cached HTML content by resource URI (for timeline "Open App" lookup) */
+  htmlByUri: Record<string, { html: string; cachedAt: number }>;
   /** Loading state */
   loading: boolean;
   /** Error message */
@@ -32,6 +38,10 @@ interface MCPAppState {
   removeApp: (appId: string) => void;
   loadResource: (appId: string, bustCache?: boolean) => Promise<MCPAppResource | null>;
   invalidateResource: (appId: string) => void;
+  /** Cache HTML content by resource URI for later lookup */
+  cacheHtmlByUri: (uri: string, html: string) => void;
+  /** Get cached HTML content by resource URI */
+  getHtmlByUri: (uri: string) => string | null;
   proxyToolCall: (
     appId: string,
     toolName: string,
@@ -46,6 +56,7 @@ export const useMCPAppStore = create<MCPAppState>()(
       apps: {},
       resources: {},
       resourceCachedAt: {},
+      htmlByUri: {},
       loading: false,
       error: null,
 
@@ -96,8 +107,6 @@ export const useMCPAppStore = create<MCPAppState>()(
       },
 
       loadResource: async (appId: string, bustCache = false) => {
-        const RESOURCE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
         // Check cache first (unless bust requested or TTL expired)
         if (!bustCache) {
           const cached = get().resources[appId];
@@ -129,6 +138,49 @@ export const useMCPAppStore = create<MCPAppState>()(
         });
       },
 
+      cacheHtmlByUri: (uri: string, html: string) => {
+        if (!uri || !html) return;
+        const now = Date.now();
+        set((state) => {
+          const nextHtmlByUri = { ...state.htmlByUri };
+          for (const [key, value] of Object.entries(nextHtmlByUri)) {
+            if (now - value.cachedAt >= HTML_CACHE_TTL_MS) {
+              delete nextHtmlByUri[key];
+            }
+          }
+
+          nextHtmlByUri[uri] = { html, cachedAt: now };
+
+          const keys = Object.keys(nextHtmlByUri);
+          if (keys.length > MAX_HTML_CACHE_ENTRIES) {
+            keys
+              .sort((a, b) => nextHtmlByUri[a].cachedAt - nextHtmlByUri[b].cachedAt)
+              .slice(0, keys.length - MAX_HTML_CACHE_ENTRIES)
+              .forEach((key) => {
+                delete nextHtmlByUri[key];
+              });
+          }
+
+          return { htmlByUri: nextHtmlByUri };
+        });
+      },
+
+      getHtmlByUri: (uri: string) => {
+        if (!uri) return null;
+        const entry = get().htmlByUri[uri];
+        const now = Date.now();
+        if (entry && now - entry.cachedAt < HTML_CACHE_TTL_MS) {
+          return entry.html;
+        }
+        if (entry && now - entry.cachedAt >= HTML_CACHE_TTL_MS) {
+          set((state) => {
+            const { [uri]: _, ...rest } = state.htmlByUri;
+            return { htmlByUri: rest };
+          });
+        }
+        return null;
+      },
+
       proxyToolCall: async (
         appId: string,
         toolName: string,
@@ -140,7 +192,7 @@ export const useMCPAppStore = create<MCPAppState>()(
         });
       },
 
-      reset: () => set({ apps: {}, resources: {}, resourceCachedAt: {}, loading: false, error: null }),
+      reset: () => set({ apps: {}, resources: {}, resourceCachedAt: {}, htmlByUri: {}, loading: false, error: null }),
     }),
     { name: 'mcp-app-store' },
   ),
@@ -156,6 +208,8 @@ export const useMCPAppActions = () =>
       addApp: s.addApp,
       removeApp: s.removeApp,
       loadResource: s.loadResource,
+      cacheHtmlByUri: s.cacheHtmlByUri,
+      getHtmlByUri: s.getHtmlByUri,
       proxyToolCall: s.proxyToolCall,
       reset: s.reset,
     })),

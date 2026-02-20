@@ -278,7 +278,7 @@ function TaskStartItem({ event }: { event: TimelineEvent }) {
             task_alt
           </span>
         </div>
-        <div className="flex-1 pt-1">
+        <div className="flex-1 min-w-0 pt-1">
           <div className="text-sm font-medium text-blue-700 dark:text-blue-300">
             Task {e.orderIndex + 1}/{e.totalTasks}
           </div>
@@ -320,7 +320,7 @@ function TaskCompleteItem({ event }: { event: TimelineEvent }) {
           {isSuccess ? 'check_circle' : 'cancel'}
         </span>
       </div>
-      <div className="flex-1 text-sm text-slate-500 dark:text-slate-400 pt-1">
+      <div className="flex-1 min-w-0 text-sm text-slate-500 dark:text-slate-400 pt-1">
         Task {e.orderIndex + 1}/{e.totalTasks} {isSuccess ? 'completed' : e.status}
       </div>
     </div>
@@ -461,7 +461,7 @@ function ClarificationAskedItem({ event }: { event: ClarificationAskedTimelineEv
             help_outline
           </span>
         </div>
-        <div className="flex-1 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
+        <div className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider">
               需要澄清
@@ -560,7 +560,7 @@ function DecisionAskedItem({ event }: { event: DecisionAskedTimelineEvent }) {
             rule
           </span>
         </div>
-        <div className="flex-1 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-700/50 rounded-xl p-4">
+        <div className="flex-1 min-w-0 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-medium text-blue-700 dark:text-blue-400 uppercase tracking-wider">
               需要决策
@@ -669,7 +669,7 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
             key
           </span>
         </div>
-        <div className="flex-1 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
+        <div className="flex-1 min-w-0 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-medium text-slate-600 dark:text-slate-400 uppercase tracking-wider">
               需要配置

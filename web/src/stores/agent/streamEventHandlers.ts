@@ -837,6 +837,13 @@ export function createStreamEventHandlers(
       const projectId = data.project_id || uiMetadata.project_id || '';
       const serverName = data.server_name || uiMetadata.server_name || '';
 
+      // Cache HTML by URI for timeline "Open App" lookup
+      if (resourceUri && htmlContent) {
+        import('../mcpAppStore').then(({ useMCPAppStore }) => {
+          useMCPAppStore.getState().cacheHtmlByUri(resourceUri, htmlContent);
+        });
+      }
+
       // SEP-1865: Merge structuredContent into tool result for the renderer
       const toolResult = data.structured_content
         ? {
@@ -890,7 +897,7 @@ export function createStreamEventHandlers(
                 title: (app.ui_metadata?.title as string) || toolName || 'MCP App',
                 toolName: app.tool_name || toolName || undefined,
                 serverName: app.server_name || serverName || undefined,
-                uiMetadata: (app.ui_metadata as Record<string, unknown>) || uiMetadata,
+                uiMetadata: (app.ui_metadata as unknown as Record<string, unknown>) || uiMetadata,
               });
               return;
             }
@@ -900,7 +907,7 @@ export function createStreamEventHandlers(
                 title: (app?.ui_metadata?.title as string) || toolName || 'MCP App',
                 toolName: app?.tool_name || toolName || undefined,
                 serverName: app?.server_name || serverName || undefined,
-                uiMetadata: (app?.ui_metadata as Record<string, unknown>) || uiMetadata,
+                uiMetadata: (app?.ui_metadata as unknown as Record<string, unknown>) || uiMetadata,
               });
             }
           }

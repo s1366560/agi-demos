@@ -6,28 +6,49 @@ MCP servers are project-scoped and run inside project sandbox containers.
 
 import logging
 import time
-from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.mcp_runtime_service import MCPRuntimeService
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
+    SqlMCPAppRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
+    SqlMCPServerRepository,
+)
 
 from .schemas import (
     MCPHealthSummary,
+    MCPReconcileResultResponse,
     MCPServerCreate,
     MCPServerHealthStatus,
     MCPServerResponse,
     MCPServerTestResult,
     MCPServerUpdate,
 )
-from .utils import get_sandbox_mcp_server_manager
+from .utils import ensure_project_access, get_sandbox_mcp_server_manager
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+async def _get_runtime_service(request: Request, db: AsyncSession) -> MCPRuntimeService:
+    """Build unified MCP runtime service for request scope."""
+    container = request.app.state.container.with_db(db)
+    manager = await get_sandbox_mcp_server_manager(request, db)
+    return MCPRuntimeService(
+        db=db,
+        server_repo=SqlMCPServerRepository(db),
+        app_repo=SqlMCPAppRepository(db),
+        app_service=container.mcp_app_service(),
+        sandbox_manager=manager,
+        redis_client=container.redis(),
+    )
 
 
 @router.post("/create", response_model=MCPServerResponse, status_code=status.HTTP_201_CREATED)
@@ -43,14 +64,9 @@ async def create_mcp_server(
     The server is bound to the project specified by project_id.
     Auto-discovers tools after creation so they are immediately available.
     """
-    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SqlMCPServerRepository,
-    )
-
-    repository = SqlMCPServerRepository(db)
-
     try:
-        server_id = await repository.create(
+        runtime = await _get_runtime_service(request, db)
+        server = await runtime.create_server(
             tenant_id=tenant_id,
             project_id=server_data.project_id,
             name=server_data.name,
@@ -59,58 +75,21 @@ async def create_mcp_server(
             transport_config=server_data.transport_config,
             enabled=server_data.enabled,
         )
-
         await db.commit()
 
-        # Auto-discover tools (best-effort, does not block creation)
-        if server_data.project_id:
-            try:
-                manager = await get_sandbox_mcp_server_manager(request, db)
-                tools = await manager.discover_tools(
-                    project_id=server_data.project_id,
-                    tenant_id=tenant_id,
-                    server_name=server_data.name,
-                    server_type=server_data.server_type,
-                    transport_config=server_data.transport_config,
-                )
-                await repository.update_discovered_tools(
-                    server_id=server_id,
-                    tools=tools,
-                    last_sync_at=datetime.now(timezone.utc),
-                )
-                await db.commit()
+        from src.infrastructure.agent.state.agent_session_pool import (
+            invalidate_mcp_tools_cache,
+        )
 
-                if server_data.enabled:
-                    from src.infrastructure.agent.state.agent_session_pool import (
-                        invalidate_mcp_tools_cache,
-                    )
-
-                    invalidate_mcp_tools_cache(tenant_id)
-
-                logger.info(
-                    f"Auto-discovered {len(tools)} tools from MCP server "
-                    f"'{server_data.name}' (project={server_data.project_id})"
-                )
-            except Exception as e:
-                sync_err = str(e)
-                logger.warning(
-                    f"Auto-discovery failed for MCP server '{server_data.name}', "
-                    f"manual sync required: {sync_err}"
-                )
-                try:
-                    await repository.update_discovered_tools(
-                        server_id=server_id,
-                        tools=[],
-                        last_sync_at=datetime.now(timezone.utc),
-                        sync_error=sync_err,
-                    )
-                    await db.commit()
-                except Exception:
-                    pass
-
-        server = await repository.get_by_id(server_id)
+        invalidate_mcp_tools_cache(tenant_id)
         return MCPServerResponse.model_validate(server)
 
+    except PermissionError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
     except Exception as e:
         await db.rollback()
         logger.error(f"Failed to create MCP server: {e}")
@@ -131,13 +110,10 @@ async def list_mcp_servers(
     List MCP servers. If project_id is provided, returns servers for that project only.
     Otherwise returns all servers for the current tenant.
     """
-    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SqlMCPServerRepository,
-    )
-
     repository = SqlMCPServerRepository(db)
 
     if project_id:
+        await ensure_project_access(db, project_id, tenant_id)
         servers = await repository.list_by_project(
             project_id=project_id,
             enabled_only=enabled_only,
@@ -160,10 +136,6 @@ async def get_mcp_server(
     """
     Get a specific MCP server by ID.
     """
-    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SqlMCPServerRepository,
-    )
-
     repository = SqlMCPServerRepository(db)
 
     server = await repository.get_by_id(server_id)
@@ -196,134 +168,38 @@ async def update_mcp_server(
 
     When enabled status changes, starts/stops the server in its project sandbox.
     """
-    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SqlMCPServerRepository,
-    )
-
-    repository = SqlMCPServerRepository(db)
-
-    server = await repository.get_by_id(server_id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"MCP server not found: {server_id}",
-        )
-
-    if server.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
-        )
-
-    old_enabled = server.enabled
-    new_enabled = server_data.enabled if server_data.enabled is not None else old_enabled
-    project_id = server.project_id
-
     try:
-        await repository.update(
+        runtime = await _get_runtime_service(request, db)
+        server = await runtime.update_server(
             server_id=server_id,
+            tenant_id=tenant_id,
             name=server_data.name,
             description=server_data.description,
             server_type=server_data.server_type,
             transport_config=server_data.transport_config,
             enabled=server_data.enabled,
         )
-
         await db.commit()
 
-        # Handle enabled state change - start/stop in project sandbox
-        if old_enabled != new_enabled and project_id:
-            try:
-                updated_server = await repository.get_by_id(server_id)
-                manager = await get_sandbox_mcp_server_manager(request, db)
+        from src.infrastructure.agent.state.agent_session_pool import (
+            invalidate_mcp_tools_cache,
+        )
 
-                if new_enabled:
-                    await manager.install_and_start(
-                        project_id=project_id,
-                        tenant_id=tenant_id,
-                        server_name=updated_server.name,
-                        server_type=updated_server.server_type,
-                        transport_config=updated_server.transport_config,
-                    )
-                    logger.info(f"Started MCP server {server_id} in sandbox (project={project_id})")
-
-                    # Auto-discover tools on enable (best-effort)
-                    try:
-                        tools = await manager.discover_tools(
-                            project_id=project_id,
-                            tenant_id=tenant_id,
-                            server_name=updated_server.name,
-                            server_type=updated_server.server_type,
-                            transport_config=updated_server.transport_config,
-                        )
-                        await repository.update_discovered_tools(
-                            server_id=server_id,
-                            tools=tools,
-                            last_sync_at=datetime.now(timezone.utc),
-                        )
-                        await db.commit()
-                        logger.info(
-                            f"Auto-discovered {len(tools)} tools on enable "
-                            f"for MCP server '{updated_server.name}'"
-                        )
-                    except Exception as disc_err:
-                        sync_err = str(disc_err)
-                        logger.warning(
-                            f"Auto-discovery failed on enable for MCP server "
-                            f"{server_id}, manual sync required: {sync_err}"
-                        )
-                        try:
-                            await repository.update_discovered_tools(
-                                server_id=server_id,
-                                tools=[],
-                                last_sync_at=datetime.now(timezone.utc),
-                                sync_error=sync_err,
-                            )
-                            await db.commit()
-                        except Exception:
-                            pass
-                else:
-                    await manager.stop_server(project_id, updated_server.name)
-                    logger.info(f"Stopped MCP server {server_id}")
-
-                    # Clean up tool adapter cache on disable
-                    try:
-                        from src.infrastructure.mcp.tools.factory import MCPToolFactory
-
-                        MCPToolFactory.remove_adapter(updated_server.name)
-                    except Exception:
-                        pass
-
-                    # Disable associated MCP Apps so frontend knows they're unreachable
-                    try:
-                        from src.application.services.mcp_app_service import MCPAppService
-                        from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
-                            SqlMCPAppRepository,
-                        )
-
-                        app_service = MCPAppService(
-                            app_repo=SqlMCPAppRepository(db),
-                            resource_resolver=None,
-                        )
-                        disabled_count = await app_service.disable_apps_by_server(server_id)
-                        if disabled_count > 0:
-                            logger.info(
-                                f"Disabled {disabled_count} MCP apps for server {server_id}"
-                            )
-                    except Exception as e:
-                        logger.warning(f"Failed to disable MCP apps for server {server_id}: {e}")
-
-                from src.infrastructure.agent.state.agent_session_pool import (
-                    invalidate_mcp_tools_cache,
-                )
-
-                invalidate_mcp_tools_cache(tenant_id)
-            except Exception as e:
-                logger.warning(f"Failed to update MCP server lifecycle for {server_id}: {e}")
-
-        server = await repository.get_by_id(server_id)
+        invalidate_mcp_tools_cache(tenant_id)
         return MCPServerResponse.model_validate(server)
 
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except PermissionError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
     except Exception as e:
         await db.rollback()
         logger.error(f"Failed to update MCP server: {e}")
@@ -345,10 +221,6 @@ async def delete_mcp_server(
 
     Stops the server in its project sandbox if enabled before deletion.
     """
-    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SqlMCPServerRepository,
-    )
-
     repository = SqlMCPServerRepository(db)
 
     server = await repository.get_by_id(server_id)
@@ -365,50 +237,30 @@ async def delete_mcp_server(
         )
 
     try:
-        # Stop in project sandbox if enabled
-        if server.enabled and server.project_id:
-            try:
-                manager = await get_sandbox_mcp_server_manager(request, db)
-                await manager.stop_server(server.project_id, server.name)
-                logger.info(f"Stopped MCP server for deleted config {server_id}")
-            except Exception as e:
-                logger.warning(f"Failed to stop MCP server {server_id}: {e}")
+        runtime = await _get_runtime_service(request, db)
+        await runtime.delete_server(server_id, tenant_id)
 
-        # Always invalidate cache on delete (even if server was already disabled)
         from src.infrastructure.agent.state.agent_session_pool import (
             invalidate_mcp_tools_cache,
         )
+        from src.infrastructure.mcp.tools.factory import MCPToolFactory
 
         invalidate_mcp_tools_cache(tenant_id)
-
-        # Clean up tool adapter cache
-        try:
-            from src.infrastructure.mcp.tools.factory import MCPToolFactory
-
-            MCPToolFactory.remove_adapter(server.name)
-        except Exception:
-            pass
-
-        # Clean up associated MCP Apps before deleting server
-        try:
-            from src.application.services.mcp_app_service import MCPAppService
-            from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
-                SqlMCPAppRepository,
-            )
-
-            app_service = MCPAppService(
-                app_repo=SqlMCPAppRepository(db),
-                resource_resolver=None,
-            )
-            deleted_count = await app_service.delete_apps_by_server(server_id)
-            if deleted_count > 0:
-                logger.info(f"Cleaned up {deleted_count} MCP apps for server {server_id}")
-        except Exception as e:
-            logger.warning(f"Failed to clean up MCP apps for server {server_id}: {e}")
-
-        await repository.delete(server_id)
+        MCPToolFactory.remove_adapter(server.name)
         await db.commit()
 
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+    except PermissionError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
     except Exception as e:
         await db.rollback()
         logger.error(f"Failed to delete MCP server: {e}")
@@ -430,64 +282,35 @@ async def sync_mcp_server_tools(
 
     Uses the server's stored project_id to determine sandbox context.
     """
-    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SqlMCPServerRepository,
-    )
-
-    repository = SqlMCPServerRepository(db)
-
-    server = await repository.get_by_id(server_id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"MCP server not found: {server_id}",
-        )
-
-    if server.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
-        )
-
-    project_id = server.project_id
-    if not project_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MCP server has no associated project",
-        )
-
     try:
-        manager = await get_sandbox_mcp_server_manager(request, db)
-        tools = await manager.discover_tools(
-            project_id=project_id,
-            tenant_id=tenant_id,
-            server_name=server.name,
-            server_type=server.server_type,
-            transport_config=server.transport_config,
-        )
-
-        await repository.update_discovered_tools(
-            server_id=server_id,
-            tools=tools,
-            last_sync_at=datetime.now(timezone.utc),
-            sync_error=None,
-        )
+        runtime = await _get_runtime_service(request, db)
+        server = await runtime.sync_server(server_id, tenant_id)
         await db.commit()
 
-        if server.enabled:
-            from src.infrastructure.agent.state.agent_session_pool import (
-                invalidate_mcp_tools_cache,
-            )
-
-            invalidate_mcp_tools_cache(tenant_id)
-
-        logger.info(
-            f"Synced {len(tools)} tools from MCP server '{server.name}' (project={project_id})"
+        from src.infrastructure.agent.state.agent_session_pool import (
+            invalidate_mcp_tools_cache,
         )
 
-        server = await repository.get_by_id(server_id)
+        invalidate_mcp_tools_cache(tenant_id)
         return MCPServerResponse.model_validate(server)
 
+    except ValueError as e:
+        await db.rollback()
+        message = str(e)
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+                if "not found" in message.lower()
+                else status.HTTP_400_BAD_REQUEST
+            ),
+            detail=message,
+        ) from e
+    except PermissionError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
     except Exception as e:
         await db.rollback()
         logger.error(f"Failed to sync MCP server tools: {e}")
@@ -509,43 +332,11 @@ async def test_mcp_server_connection(
 
     Uses the server's stored project_id to determine sandbox context.
     """
-    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-        SqlMCPServerRepository,
-    )
-
-    repository = SqlMCPServerRepository(db)
-
-    server = await repository.get_by_id(server_id)
-    if not server:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"MCP server not found: {server_id}",
-        )
-
-    if server.tenant_id != tenant_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
-        )
-
-    project_id = server.project_id
-    if not project_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="MCP server has no associated project",
-        )
-
     try:
         start_time = time.time()
-
-        manager = await get_sandbox_mcp_server_manager(request, db)
-        result = await manager.test_connection(
-            project_id=project_id,
-            tenant_id=tenant_id,
-            server_name=server.name,
-            server_type=server.server_type,
-            transport_config=server.transport_config,
-        )
+        runtime = await _get_runtime_service(request, db)
+        result = await runtime.test_server(server_id, tenant_id)
+        await db.commit()
 
         latency_ms = (time.time() - start_time) * 1000
 
@@ -563,13 +354,65 @@ async def test_mcp_server_connection(
             connection_time_ms=latency_ms,
         )
 
+    except ValueError as e:
+        await db.rollback()
+        message = str(e)
+        raise HTTPException(
+            status_code=(
+                status.HTTP_404_NOT_FOUND
+                if "not found" in message.lower()
+                else status.HTTP_400_BAD_REQUEST
+            ),
+            detail=message,
+        ) from e
+    except PermissionError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
     except Exception as e:
+        await db.rollback()
         logger.error(f"Failed to test MCP server connection: {e}")
         return MCPServerTestResult(
             success=False,
             message=f"Connection failed: {e!s}",
             errors=[str(e)],
         )
+
+
+@router.post("/reconcile/{project_id}", response_model=MCPReconcileResultResponse)
+async def reconcile_mcp_project(
+    project_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    tenant_id: str = Depends(get_current_user_tenant),
+):
+    """Reconcile enabled MCP servers with current sandbox runtime."""
+    try:
+        runtime = await _get_runtime_service(request, db)
+        result = await runtime.reconcile_project(project_id, tenant_id)
+        await db.commit()
+        return MCPReconcileResultResponse(
+            project_id=result.project_id,
+            total_enabled_servers=result.total_enabled_servers,
+            already_running=result.already_running,
+            restored=result.restored,
+            failed=result.failed,
+        )
+    except PermissionError as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(e),
+        ) from e
+    except Exception as e:
+        await db.rollback()
+        logger.exception("Failed to reconcile MCP project %s", project_id)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to reconcile MCP servers",
+        ) from e
 
 
 def _compute_server_health(server) -> MCPServerHealthStatus:
@@ -610,6 +453,7 @@ async def get_mcp_health_summary(
     repository = SqlMCPServerRepository(db)
 
     if project_id:
+        await ensure_project_access(db, project_id, tenant_id)
         servers = await repository.list_by_project(project_id)
     else:
         servers = await repository.list_by_tenant(tenant_id)

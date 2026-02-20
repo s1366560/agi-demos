@@ -10,7 +10,10 @@ import { Plus, RefreshCw, Search, Filter, Server, AlertCircle } from 'lucide-rea
 
 
 import { useMCPStore } from '@/stores/mcp';
+import { useMCPAppStore } from '@/stores/mcpAppStore';
 import { useProjectStore } from '@/stores/project';
+
+import { mcpAPI } from '@/services/mcpService';
 
 import { McpServerCard } from './McpServerCard';
 import { McpServerDrawer } from './McpServerDrawer';
@@ -20,10 +23,22 @@ import type { MCPServerResponse, MCPServerType } from '@/types/agent';
 
 const { Search: AntSearch } = Input;
 
+function getServerRuntimeStatus(server: MCPServerResponse): string {
+  if (server.runtime_status) return server.runtime_status;
+  if (!server.enabled) return 'disabled';
+  if (server.sync_error) return 'error';
+  if (server.last_sync_at) return 'running';
+  return 'unknown';
+}
+
 export const McpServerTab: React.FC = () => {
   const [search, setSearch] = useState('');
   const [enabledFilter, setEnabledFilter] = useState<'all' | 'enabled' | 'disabled'>('all');
   const [typeFilter, setTypeFilter] = useState<'all' | MCPServerType>('all');
+  const [runtimeFilter, setRuntimeFilter] = useState<
+    'all' | 'running' | 'starting' | 'error' | 'disabled' | 'unknown'
+  >('all');
+  const [isReconciling, setIsReconciling] = useState(false);
 
   // Drawer state
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -40,6 +55,8 @@ export const McpServerTab: React.FC = () => {
   const toggleEnabled = useMCPStore((s) => s.toggleEnabled);
   const syncServer = useMCPStore((s) => s.syncServer);
   const testServer = useMCPStore((s) => s.testServer);
+  const apps = useMCPAppStore((s) => s.apps);
+  const fetchApps = useMCPAppStore((s) => s.fetchApps);
 
   const currentProject = useProjectStore((s) => s.currentProject);
   const hasLoadedRef = useRef(false);
@@ -47,11 +64,13 @@ export const McpServerTab: React.FC = () => {
   useEffect(() => {
     if (currentProject?.id) {
       listServers({ project_id: currentProject.id });
+      fetchApps(currentProject.id);
     } else if (!hasLoadedRef.current) {
       hasLoadedRef.current = true;
       listServers();
+      fetchApps();
     }
-  }, [listServers, currentProject?.id]);
+  }, [listServers, fetchApps, currentProject?.id]);
 
   const filteredServers = useMemo(() => {
     return servers.filter((server) => {
@@ -67,9 +86,33 @@ export const McpServerTab: React.FC = () => {
       if (enabledFilter === 'enabled' && !server.enabled) return false;
       if (enabledFilter === 'disabled' && server.enabled) return false;
       if (typeFilter !== 'all' && server.server_type !== typeFilter) return false;
+      if (runtimeFilter !== 'all' && getServerRuntimeStatus(server) !== runtimeFilter) return false;
       return true;
     });
-  }, [servers, search, enabledFilter, typeFilter]);
+  }, [servers, search, enabledFilter, typeFilter, runtimeFilter]);
+
+  const appStatsByServer = useMemo(() => {
+    const byId: Record<string, { total: number; ready: number; error: number }> = {};
+    const byName: Record<string, { total: number; ready: number; error: number }> = {};
+
+    for (const app of Object.values(apps)) {
+      const base = { total: 1, ready: app.status === 'ready' ? 1 : 0, error: app.status === 'error' ? 1 : 0 };
+      if (app.server_id) {
+        byId[app.server_id] = {
+          total: (byId[app.server_id]?.total || 0) + base.total,
+          ready: (byId[app.server_id]?.ready || 0) + base.ready,
+          error: (byId[app.server_id]?.error || 0) + base.error,
+        };
+      }
+      byName[app.server_name] = {
+        total: (byName[app.server_name]?.total || 0) + base.total,
+        ready: (byName[app.server_name]?.ready || 0) + base.ready,
+        error: (byName[app.server_name]?.error || 0) + base.error,
+      };
+    }
+
+    return { byId, byName };
+  }, [apps]);
 
   const handleCreate = useCallback(() => {
     setEditingServer(null);
@@ -122,7 +165,13 @@ export const McpServerTab: React.FC = () => {
       try {
         const result = await testServer(server.id);
         if (result.success) {
-          message.success(`Connection successful (${result.latency_ms}ms)`);
+          const latencyMs = result.connection_time_ms ?? result.latency_ms;
+          const toolsCount = result.tools_discovered ?? 0;
+          message.success(
+            latencyMs != null
+              ? `Connection successful (${Math.round(latencyMs)}ms, ${toolsCount} tools)`
+              : 'Connection successful'
+          );
         } else {
           message.error(`Connection failed: ${result.message}`);
         }
@@ -148,11 +197,35 @@ export const McpServerTab: React.FC = () => {
   const handleRefresh = useCallback(() => {
     const projectId = currentProject?.id;
     listServers(projectId ? { project_id: projectId } : {});
-  }, [listServers, currentProject]);
+    fetchApps(projectId);
+  }, [listServers, fetchApps, currentProject]);
+
+  const handleReconcile = useCallback(async () => {
+    if (!currentProject?.id) {
+      message.warning('Please select a project first');
+      return;
+    }
+
+    setIsReconciling(true);
+    try {
+      const result = await mcpAPI.reconcileProject(currentProject.id);
+      await Promise.all([
+        listServers({ project_id: currentProject.id }),
+        fetchApps(currentProject.id),
+      ]);
+      message.success(
+        `Reconciled runtime: restored ${result.restored}, already running ${result.already_running}, failed ${result.failed}`
+      );
+    } catch {
+      message.error('Failed to reconcile MCP runtime');
+    } finally {
+      setIsReconciling(false);
+    }
+  }, [currentProject?.id, listServers, fetchApps]);
 
   // Error count for badge
   const errorCount = useMemo(() => 
-    servers.filter(s => s.sync_error).length, 
+    servers.filter((s) => s.sync_error || getServerRuntimeStatus(s) === 'error').length,
     [servers]
   );
 
@@ -203,6 +276,20 @@ export const McpServerTab: React.FC = () => {
                 { label: 'WebSocket', value: 'websocket' },
               ]}
             />
+            <Select
+              value={runtimeFilter}
+              onChange={setRuntimeFilter}
+              className="w-40"
+              size="middle"
+              options={[
+                { label: 'All Runtime', value: 'all' },
+                { label: 'Running', value: 'running' },
+                { label: 'Starting', value: 'starting' },
+                { label: 'Error', value: 'error' },
+                { label: 'Disabled', value: 'disabled' },
+                { label: 'Unknown', value: 'unknown' },
+              ]}
+            />
           </div>
           
           {/* Actions */}
@@ -213,8 +300,18 @@ export const McpServerTab: React.FC = () => {
                 disabled={isLoading}
                 className="inline-flex items-center justify-center px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 disabled:opacity-50 transition-colors"
                 aria-label="refresh"
+                >
+                  <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+                </button>
+              </Tooltip>
+            <Tooltip title="Reconcile runtime with sandbox">
+              <button
+                onClick={handleReconcile}
+                disabled={isReconciling || !currentProject?.id}
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 disabled:opacity-50 transition-colors"
               >
-                <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+                <RefreshCw size={16} className={isReconciling ? 'animate-spin' : ''} />
+                <span className="text-xs font-medium">Reconcile</span>
               </button>
             </Tooltip>
             <button
@@ -228,17 +325,18 @@ export const McpServerTab: React.FC = () => {
         </div>
         
         {/* Filter summary */}
-        {(search || enabledFilter !== 'all' || typeFilter !== 'all') && (
+        {(search || enabledFilter !== 'all' || typeFilter !== 'all' || runtimeFilter !== 'all') && (
           <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100 dark:border-slate-700/50">
             <span className="text-xs text-slate-500 dark:text-slate-400">
               Showing {filteredServers.length} of {servers.length} servers
             </span>
-            {(search || enabledFilter !== 'all' || typeFilter !== 'all') && (
+            {(search || enabledFilter !== 'all' || typeFilter !== 'all' || runtimeFilter !== 'all') && (
               <button
                 onClick={() => {
                   setSearch('');
                   setEnabledFilter('all');
                   setTypeFilter('all');
+                  setRuntimeFilter('all');
                 }}
                 className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 dark:hover:text-primary-300"
               >
@@ -317,6 +415,21 @@ export const McpServerTab: React.FC = () => {
               onEdit={handleEdit}
               onDelete={handleDelete}
               onShowTools={setToolsServer}
+              appCount={
+                appStatsByServer.byId[server.id]?.total ??
+                appStatsByServer.byName[server.name]?.total ??
+                0
+              }
+              readyAppCount={
+                appStatsByServer.byId[server.id]?.ready ??
+                appStatsByServer.byName[server.name]?.ready ??
+                0
+              }
+              errorAppCount={
+                appStatsByServer.byId[server.id]?.error ??
+                appStatsByServer.byName[server.name]?.error ??
+                0
+              }
             />
           ))}
         </div>

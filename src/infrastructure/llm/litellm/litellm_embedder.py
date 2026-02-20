@@ -16,7 +16,7 @@ Supported Providers:
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterable, List, Optional
 
 from src.configuration.config import get_settings
@@ -80,13 +80,29 @@ DEFAULT_EMBEDDING_MODELS = {
     ProviderType.LMSTUDIO: "text-embedding-nomic-embed-text-v1.5",
 }
 
+RESERVED_EMBEDDING_KWARGS = {
+    "model",
+    "input",
+    "timeout",
+    "api_key",
+    "api_base",
+    "encoding_format",
+    "dimensions",
+    "user",
+}
+
 
 @dataclass
 class LiteLLMEmbedderConfig:
     """Configuration for LiteLLM Embedder."""
 
     embedding_model: str
-    embedding_dim: int = 1024
+    embedding_dim: Optional[int] = None
+    dimensions: Optional[int] = None
+    encoding_format: Optional[str] = None
+    user: Optional[str] = None
+    timeout: Optional[float] = None
+    provider_options: dict[str, Any] = field(default_factory=dict)
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     provider_type: Optional[ProviderType] = None
@@ -116,18 +132,51 @@ class LiteLLMEmbedder(BaseEmbedder):
             config: Provider configuration or embedder config
             embedding_dim: Override embedding dimension (auto-detected if not provided)
         """
+        self._dimensions_override: Optional[int] = None
+        self._encoding_format: Optional[str] = None
+        self._embedding_user: Optional[str] = None
+        self._provider_options: dict[str, Any] = {}
+        timeout_override: Optional[float] = None
+
         if isinstance(config, LiteLLMEmbedderConfig):
             self._embedding_model = config.embedding_model
-            self._embedding_dim = embedding_dim or config.embedding_dim
+            self._dimensions_override = self._normalize_optional_int(config.dimensions)
+            configured_dim = embedding_dim or config.embedding_dim or self._dimensions_override
+            self._embedding_dim = configured_dim or self._detect_embedding_dim(
+                self._embedding_model
+            )
+            self._encoding_format = self._normalize_encoding_format(config.encoding_format)
+            self._embedding_user = self._normalize_optional_str(config.user)
+            self._provider_options = self._normalize_provider_options(config.provider_options)
+            timeout_override = self._normalize_optional_float(config.timeout)
             self._api_key = config.api_key
             self._provider_type = config.provider_type
             self._base_url = self._resolve_api_base(self._provider_type, config.base_url)
         else:
             self._provider_config = config
-            self._embedding_model = config.embedding_model or self._get_default_model(
-                config.provider_type
+            embedding_cfg = self._get_embedding_config_payload(config)
+            configured_model = self._normalize_optional_str(embedding_cfg.get("model"))
+            self._embedding_model = (
+                configured_model
+                or config.embedding_model
+                or self._get_default_model(config.provider_type)
             )
-            self._embedding_dim = embedding_dim or self._detect_embedding_dim(self._embedding_model)
+            self._dimensions_override = self._normalize_optional_int(
+                embedding_cfg.get("dimensions")
+            )
+            self._embedding_dim = (
+                embedding_dim
+                or self._dimensions_override
+                or self._detect_embedding_dim(self._embedding_model)
+            )
+            self._encoding_format = self._normalize_encoding_format(
+                embedding_cfg.get("encoding_format")
+            )
+            self._embedding_user = self._normalize_optional_str(embedding_cfg.get("user"))
+            self._provider_options = self._normalize_provider_options(
+                embedding_cfg.get("provider_options")
+            )
+            timeout_override = self._normalize_optional_float(embedding_cfg.get("timeout"))
             self._provider_type = config.provider_type
             self._base_url = self._resolve_api_base(self._provider_type, config.base_url)
 
@@ -136,12 +185,70 @@ class LiteLLMEmbedder(BaseEmbedder):
             self._api_key = encryption_service.decrypt(config.api_key_encrypted)
             self._api_key = from_decrypted_api_key(self._api_key)
 
-        self._timeout_seconds = float(get_settings().llm_timeout)
+        self._timeout_seconds = timeout_override or float(get_settings().llm_timeout)
 
         logger.debug(
             f"LiteLLM embedder initialized: provider={self._provider_type}, "
-            f"model={self._embedding_model}, dim={self._embedding_dim}"
+            f"model={self._embedding_model}, dim={self._embedding_dim}, "
+            f"dimensions_override={self._dimensions_override}"
         )
+
+    @staticmethod
+    def _normalize_optional_str(value: Any) -> Optional[str]:
+        if not isinstance(value, str):
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+    @staticmethod
+    def _normalize_optional_int(value: Any) -> Optional[int]:
+        if value is None:
+            return None
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed > 0 else None
+
+    @staticmethod
+    def _normalize_optional_float(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if parsed > 0 else None
+
+    @staticmethod
+    def _normalize_provider_options(value: Any) -> dict[str, Any]:
+        return dict(value) if isinstance(value, dict) else {}
+
+    @classmethod
+    def _normalize_encoding_format(cls, value: Any) -> Optional[str]:
+        normalized = cls._normalize_optional_str(value)
+        if normalized in {"float", "base64"}:
+            return normalized
+        return None
+
+    def _get_embedding_config_payload(self, provider_config: ProviderConfig) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        embedding_config = getattr(provider_config, "embedding_config", None)
+        if embedding_config is not None:
+            if hasattr(embedding_config, "model_dump"):
+                payload = embedding_config.model_dump(exclude_none=True)
+            elif isinstance(embedding_config, dict):
+                payload = dict(embedding_config)
+
+        raw_config = provider_config.config if isinstance(provider_config.config, dict) else {}
+        raw_embedding = raw_config.get("embedding")
+        if isinstance(raw_embedding, dict):
+            payload = {**raw_embedding, **payload}
+
+        if provider_config.embedding_model and not payload.get("model"):
+            payload["model"] = provider_config.embedding_model
+
+        return payload
 
     def _get_default_model(self, provider_type: ProviderType) -> str:
         """Get default embedding model for provider."""
@@ -162,7 +269,9 @@ class LiteLLMEmbedder(BaseEmbedder):
         return 1024
 
     @staticmethod
-    def _resolve_api_base(provider_type: Optional[ProviderType], base_url: Optional[str]) -> Optional[str]:
+    def _resolve_api_base(
+        provider_type: Optional[ProviderType], base_url: Optional[str]
+    ) -> Optional[str]:
         """Resolve api_base using configured value or local-provider defaults."""
         if base_url:
             return base_url
@@ -183,6 +292,26 @@ class LiteLLMEmbedder(BaseEmbedder):
         API key is now passed per-request via the ``api_key`` parameter to
         ``litellm.aembedding()`` instead of polluting ``os.environ``.
         """
+
+    def _apply_embedding_options(self, request_kwargs: dict[str, Any]) -> None:
+        """Apply structured embedding options to LiteLLM request kwargs."""
+        if self._dimensions_override is not None:
+            request_kwargs["dimensions"] = self._dimensions_override
+
+        if self._encoding_format:
+            request_kwargs["encoding_format"] = self._encoding_format
+        elif self._provider_type == ProviderType.DASHSCOPE:
+            # Dashscope embedding endpoint validates encoding_format strictly.
+            request_kwargs["encoding_format"] = "float"
+
+        if self._embedding_user:
+            request_kwargs["user"] = self._embedding_user
+
+        for key, value in self._provider_options.items():
+            if key in RESERVED_EMBEDDING_KWARGS:
+                logger.warning("Ignoring reserved embedding provider option: %s", key)
+                continue
+            request_kwargs[key] = value
 
     def _get_litellm_model_name(self) -> str:
         """Get model name in LiteLLM format."""
@@ -279,9 +408,7 @@ class LiteLLMEmbedder(BaseEmbedder):
             # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
             if self._base_url:
                 embedding_kwargs["api_base"] = self._base_url
-            # Dashscope embedding endpoint validates encoding_format strictly.
-            if self._provider_type == ProviderType.DASHSCOPE:
-                embedding_kwargs["encoding_format"] = "float"
+            self._apply_embedding_options(embedding_kwargs)
 
             response = await litellm.aembedding(**embedding_kwargs)
 
@@ -388,8 +515,7 @@ class LiteLLMEmbedder(BaseEmbedder):
                         batch_kwargs["api_key"] = self._api_key
                     if self._base_url:
                         batch_kwargs["api_base"] = self._base_url
-                    if self._provider_type == ProviderType.DASHSCOPE:
-                        batch_kwargs["encoding_format"] = "float"
+                    self._apply_embedding_options(batch_kwargs)
 
                     response = await litellm.aembedding(**batch_kwargs)
 
@@ -429,7 +555,9 @@ class LiteLLMEmbedder(BaseEmbedder):
                         )
                         # Return partial results instead of failing completely
                         # Fill remaining slots with zero vectors
-                        remaining = len(batch) - (len(all_embeddings) % batch_size if all_embeddings else 0)
+                        remaining = len(batch) - (
+                            len(all_embeddings) % batch_size if all_embeddings else 0
+                        )
                         zero_embeddings = [[0.0] * self._embedding_dim] * remaining
                         all_embeddings.extend(zero_embeddings)
                         break

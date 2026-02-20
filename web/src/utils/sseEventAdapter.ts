@@ -232,14 +232,15 @@ export function sseEventToTimeline(
       const isError = !!data.error;
 
       // Extract MCP App UI metadata if present (for timeline "Open App")
+      // Support both snake_case (Python) and camelCase (TypeScript) field names
       const rawUiMeta = (data as any).ui_metadata;
       const mcpUiMetadata = rawUiMeta && typeof rawUiMeta === 'object'
         ? {
-            resource_uri: rawUiMeta.resource_uri || undefined,
-            server_name: rawUiMeta.server_name || undefined,
-            app_id: rawUiMeta.app_id || undefined,
+            resource_uri: rawUiMeta.resource_uri || rawUiMeta.resourceUri || undefined,
+            server_name: rawUiMeta.server_name || rawUiMeta.serverName || undefined,
+            app_id: rawUiMeta.app_id || rawUiMeta.appId || undefined,
             title: rawUiMeta.title || undefined,
-            project_id: rawUiMeta.project_id || undefined,
+            project_id: rawUiMeta.project_id || rawUiMeta.projectId || undefined,
           }
         : undefined;
 

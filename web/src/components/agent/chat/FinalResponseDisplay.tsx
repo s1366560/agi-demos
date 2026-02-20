@@ -85,7 +85,7 @@ export function FinalResponseDisplay({
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-6 pb-12">
       {/* Main Content */}
-      <div className={`flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-xl p-8 ${MARKDOWN_PROSE_CLASSES} text-slate-800 dark:text-slate-200`}>
+      <div className={`flex-1 min-w-0 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-xl p-8 ${MARKDOWN_PROSE_CLASSES} text-slate-800 dark:text-slate-200`}>
         {/* Header */}
         <div className="flex items-center justify-between mb-8 border-b border-slate-100 dark:border-border-dark pb-4 -mt-4">
           <h2 className="m-0 text-2xl">Final Synthesis Report</h2>

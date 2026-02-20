@@ -13,10 +13,17 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.mcp_app_service import MCPAppService
+from src.application.services.mcp_runtime_service import MCPRuntimeService
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
 from src.infrastructure.adapters.secondary.persistence.database import get_db
+from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
+    SqlMCPAppRepository,
+)
+from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
+    SqlMCPServerRepository,
+)
 
-from .utils import get_container_with_db
+from .utils import ensure_project_access, get_container_with_db
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +45,7 @@ class MCPAppResponse(BaseModel):
     ui_metadata: dict
     source: str
     status: str
+    lifecycle_metadata: dict = Field(default_factory=dict)
     error_message: Optional[str] = None
     has_resource: bool = False
     resource_size_bytes: Optional[int] = None
@@ -84,6 +92,19 @@ def _get_mcp_app_service(request: Request, db: AsyncSession) -> MCPAppService:
     return container.mcp_app_service()
 
 
+async def _get_mcp_runtime_service(request: Request, db: AsyncSession) -> MCPRuntimeService:
+    """Get MCP runtime service from request-scoped dependencies."""
+    container = request.app.state.container.with_db(db)
+    return MCPRuntimeService(
+        db=db,
+        server_repo=SqlMCPServerRepository(db),
+        app_repo=SqlMCPAppRepository(db),
+        app_service=container.mcp_app_service(),
+        sandbox_manager=container.sandbox_mcp_server_manager(),
+        redis_client=container.redis(),
+    )
+
+
 def _validate_tenant(app: Any, tenant_id: str) -> None:
     """Ensure app belongs to the requesting tenant."""
     if app.tenant_id != tenant_id:
@@ -104,6 +125,7 @@ async def list_mcp_apps(
     """List MCP Apps. If project_id is provided, scopes to that project; otherwise lists all tenant apps."""
     service = _get_mcp_app_service(request, db)
     if project_id:
+        await ensure_project_access(db, project_id, tenant_id)
         apps = await service.list_apps(project_id, include_disabled=include_disabled)
     else:
         apps = await service.list_apps_by_tenant(tenant_id, include_disabled=include_disabled)
@@ -119,6 +141,7 @@ async def list_mcp_apps(
             ui_metadata=app.ui_metadata.to_dict(),
             source=app.source.value,
             status=app.status.value,
+            lifecycle_metadata=app.lifecycle_metadata,
             error_message=app.error_message,
             has_resource=app.resource is not None,
             resource_size_bytes=app.resource.size_bytes if app.resource else None,
@@ -156,6 +179,7 @@ async def proxy_tool_call_direct(
     and has no persistent DB record (synthetic app_id like ``_synthetic_<tool>``).
     """
     try:
+        await ensure_project_access(db, body.project_id, tenant_id)
         container = get_container_with_db(request, db)
         mcp_manager = container.sandbox_mcp_server_manager()
         result = await mcp_manager.call_tool(
@@ -209,6 +233,7 @@ async def get_mcp_app(
         ui_metadata=app.ui_metadata.to_dict(),
         source=app.source.value,
         status=app.status.value,
+        lifecycle_metadata=app.lifecycle_metadata,
         error_message=app.error_message,
         has_resource=app.resource is not None,
         resource_size_bytes=app.resource.size_bytes if app.resource else None,
@@ -312,15 +337,21 @@ async def delete_mcp_app(
     tenant_id: str = Depends(get_current_user_tenant),
 ):
     """Delete an MCP App."""
-    service = _get_mcp_app_service(request, db)
-    app = await service.get_app(app_id)
-    if not app:
-        raise HTTPException(status_code=404, detail="MCP App not found")
-    _validate_tenant(app, tenant_id)
-
-    await service.delete_app(app_id)
-    await db.commit()
-    return {"message": "MCP App deleted", "id": app_id}
+    try:
+        runtime = await _get_mcp_runtime_service(request, db)
+        await runtime.delete_app(app_id, tenant_id)
+        await db.commit()
+        return {"message": "MCP App deleted", "id": app_id}
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except PermissionError as e:
+        await db.rollback()
+        raise HTTPException(status_code=403, detail=str(e)) from e
+    except Exception as e:
+        await db.rollback()
+        logger.exception("Delete app failed: app=%s", app_id)
+        raise HTTPException(status_code=500, detail="Failed to delete app") from e
 
 
 @router.post("/{app_id}/refresh", response_model=MCPAppResponse)
@@ -335,16 +366,10 @@ async def refresh_mcp_app_resource(
     Useful when the app has been rebuilt (e.g., by the agent).
     Note: Requires full DI wiring for sandbox access.
     """
-    service = _get_mcp_app_service(request, db)
-    app = await service.get_app(app_id)
-    if not app:
-        raise HTTPException(status_code=404, detail="MCP App not found")
-    _validate_tenant(app, tenant_id)
-
     try:
-        resource = await service.resolve_resource(app_id)
+        runtime = await _get_mcp_runtime_service(request, db)
+        app = await runtime.refresh_app_resource(app_id, tenant_id)
         await db.commit()
-        app = await service.get_app(app_id)
         return MCPAppResponse(
             id=app.id,
             project_id=app.project_id,
@@ -355,15 +380,23 @@ async def refresh_mcp_app_resource(
             ui_metadata=app.ui_metadata.to_dict(),
             source=app.source.value,
             status=app.status.value,
+            lifecycle_metadata=app.lifecycle_metadata,
             error_message=app.error_message,
             has_resource=app.resource is not None,
-            resource_size_bytes=resource.size_bytes if resource else None,
+            resource_size_bytes=app.resource.size_bytes if app.resource else None,
             created_at=app.created_at.isoformat() if app.created_at else None,
             updated_at=app.updated_at.isoformat() if app.updated_at else None,
         )
+    except ValueError as e:
+        await db.rollback()
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except PermissionError as e:
+        await db.rollback()
+        raise HTTPException(status_code=403, detail=str(e)) from e
     except Exception as e:
-        logger.error("Resource refresh failed: app=%s, err=%s", app_id, e)
-        raise HTTPException(status_code=500, detail=f"Failed to refresh resource: {e!s}")
+        await db.rollback()
+        logger.exception("Resource refresh failed: app=%s", app_id)
+        raise HTTPException(status_code=500, detail="Failed to refresh resource") from e
 
 
 # === Standard MCP Resource/Tool Proxy ===
@@ -430,6 +463,7 @@ async def proxy_resource_read(
     The resources/read is proxied through the sandbox management server's
     mcp_server_call_tool to reach the correct child MCP server.
     """
+    await ensure_project_access(db, body.project_id, tenant_id)
     service = _get_mcp_app_service(request, db)
 
     # Path 1: Check if any registered app owns this URI
@@ -510,15 +544,11 @@ async def proxy_resource_read(
                     )
                     result = await _read_resource()
                 else:
-                    raise HTTPException(
-                        status_code=404, detail=f"Resource not found: {body.uri}"
-                    )
+                    raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}")
             except HTTPException:
                 raise
             except asyncio.TimeoutError:
-                logger.warning(
-                    "resources/read retry timed out after reinstall: uri=%s", body.uri
-                )
+                logger.warning("resources/read retry timed out after reinstall: uri=%s", body.uri)
                 raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}")
             except Exception as reinstall_err:
                 logger.warning(
@@ -600,6 +630,7 @@ async def proxy_resource_list(
     servers in the project's sandbox.
     """
     try:
+        await ensure_project_access(db, body.project_id, tenant_id)
         container = get_container_with_db(request, db)
         mcp_manager = container.sandbox_mcp_server_manager()
         resources = await mcp_manager.list_resources(

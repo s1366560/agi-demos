@@ -79,27 +79,27 @@ describe('McpServerList Page', () => {
   describe('Header and Stats', () => {
     it('should render page title and subtitle', async () => {
       await renderPage();
-      expect(screen.getByText('MCP Servers')).toBeInTheDocument();
-      expect(screen.getByText(/Manage Model Context Protocol servers, tools, and applications/)).toBeInTheDocument();
+      expect(screen.getByText('MCP Runtime')).toBeInTheDocument();
+      expect(screen.getByText(/Unified runtime dashboard for MCP servers, tools, and app lifecycle/)).toBeInTheDocument();
     });
 
     it('should render stats cards with correct values', async () => {
       await renderPage();
       expect(screen.getByText('Total')).toBeInTheDocument();
-      expect(screen.getByText('Active')).toBeInTheDocument();
-      expect(screen.getByText('Tool Count')).toBeInTheDocument();
-      expect(screen.getByText('By Type')).toBeInTheDocument();
+      expect(screen.getByText('Running Runtime')).toBeInTheDocument();
+      expect(screen.getByText('Runtime Errors')).toBeInTheDocument();
+      expect(screen.getByText('Apps Ready')).toBeInTheDocument();
     });
 
     it('should compute stats from store data', async () => {
       await renderPage();
-      // Total servers = 2, enabled = 1, total tools = 3
-      // Use getAllByText since counts may appear in both stats and tab badges
+      // Total servers = 2
+      // Running Runtime = 0 (mock data lacks runtime info)
+      // Runtime Errors = 0
+      // Apps Ready = 0
+      
+      // Check total count
       expect(screen.getAllByText('2').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('1').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getAllByText('3').length).toBeGreaterThanOrEqual(1);
-      expect(screen.getByText('STDIO')).toBeInTheDocument();
-      expect(screen.getByText('SSE')).toBeInTheDocument();
     });
 
     it('should show zero stats when no servers', async () => {

@@ -149,6 +149,11 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
               <code className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-slate-700 dark:text-slate-300 font-mono text-xs">
                 {provider.embedding_model}
               </code>
+              {provider.embedding_config?.dimensions && (
+                <span className="text-xs text-slate-500">
+                  {provider.embedding_config.dimensions}d
+                </span>
+              )}
             </div>
           )}
         </div>

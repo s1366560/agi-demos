@@ -7,7 +7,7 @@ following Domain-Driven Design principles.
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -291,6 +291,23 @@ class OperationType(str, Enum):
 # ============================================================================
 
 
+class EmbeddingConfig(BaseModel):
+    """Structured embedding configuration for provider runtime calls."""
+
+    model: Optional[str] = Field(None, min_length=1, description="Embedding model name")
+    dimensions: Optional[int] = Field(None, ge=1, description="Requested embedding dimensions")
+    encoding_format: Optional[Literal["float", "base64"]] = Field(
+        None,
+        description="Embedding encoding format",
+    )
+    user: Optional[str] = Field(None, min_length=1, description="Provider user identifier")
+    timeout: Optional[float] = Field(None, gt=0, description="Embedding request timeout in seconds")
+    provider_options: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Additional provider-specific embedding parameters",
+    )
+
+
 class ProviderConfigBase(BaseModel):
     """Base fields for provider configuration"""
 
@@ -301,6 +318,10 @@ class ProviderConfigBase(BaseModel):
     llm_model: str = Field(..., min_length=1, description="Primary LLM model")
     llm_small_model: Optional[str] = Field(None, description="Smaller/faster LLM model")
     embedding_model: Optional[str] = Field(None, description="Embedding model")
+    embedding_config: Optional[EmbeddingConfig] = Field(
+        None,
+        description="Structured embedding model configuration",
+    )
     reranker_model: Optional[str] = Field(None, description="Reranker model")
     config: Dict[str, Any] = Field(
         default_factory=dict, description="Additional provider-specific config"
@@ -350,6 +371,7 @@ class ProviderConfigUpdate(BaseModel):
     llm_model: Optional[str] = None
     llm_small_model: Optional[str] = None
     embedding_model: Optional[str] = None
+    embedding_config: Optional[EmbeddingConfig] = None
     reranker_model: Optional[str] = None
     config: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None

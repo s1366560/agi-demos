@@ -175,6 +175,8 @@ class MCPServer:
     transport_config: Optional[Dict[str, Any]] = None
     enabled: bool = True
     discovered_tools: List[Any] = field(default_factory=list)
+    runtime_status: str = "unknown"
+    runtime_metadata: Dict[str, Any] = field(default_factory=dict)
     sync_error: Optional[str] = None
     last_sync_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
@@ -198,6 +200,16 @@ class MCPServer:
         self.discovered_tools = tools
         self.last_sync_at = sync_time or datetime.now()
 
+    def update_runtime(
+        self,
+        status: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Update runtime status and metadata snapshot."""
+        self.runtime_status = status
+        if metadata:
+            self.runtime_metadata = {**self.runtime_metadata, **metadata}
+
     @property
     def is_connected(self) -> bool:
         """Check if server is currently connected."""
@@ -220,6 +232,8 @@ class MCPServer:
             "transport_config": self.transport_config,
             "enabled": self.enabled,
             "discovered_tools": self.discovered_tools,
+            "runtime_status": self.runtime_status,
+            "runtime_metadata": self.runtime_metadata,
             "sync_error": self.sync_error,
             "status": self.status.status.value,
             "connected": self.status.connected,

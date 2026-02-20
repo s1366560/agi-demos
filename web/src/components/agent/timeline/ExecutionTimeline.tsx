@@ -281,12 +281,17 @@ const TimelineStepItem = memo<{
                 const conversationProjectId = useConversationsStore.getState().currentConversation?.project_id;
                 const currentProjectId = ui.project_id || projectStoreId || conversationProjectId || '';
                 const tabId = `mcp-app-${ui.resource_uri}`;
+
+                // Look up cached HTML from mcp_app_result event
+                const cachedHtml = mcpState.getHtmlByUri(ui.resource_uri);
+
                 canvasState.openTab({
                   id: tabId,
                   title: ui.title || getToolLabel(step.toolName),
                   type: 'mcp-app' as const,
                   content: '',
                   mcpResourceUri: ui.resource_uri,
+                  mcpAppHtml: cachedHtml || undefined,
                   mcpToolName: step.toolName,
                   mcpProjectId: currentProjectId,
                   mcpAppToolResult: step.output,
@@ -334,12 +339,16 @@ const TimelineStepItem = memo<{
               const tabKey = resourceUri || match?.id || step.id;
               const tabId = `mcp-app-${tabKey}`;
 
+              // Look up cached HTML from mcp_app_result event
+              const cachedHtml = resourceUri ? mcpState.getHtmlByUri(resourceUri) : null;
+
               canvasState.openTab({
                 id: tabId,
                 title: match?.ui_metadata?.title as string || getToolLabel(step.toolName),
                 type: 'mcp-app' as const,
                 content: '',
                 mcpResourceUri: resourceUri,
+                mcpAppHtml: cachedHtml || undefined,
                 mcpToolName: step.toolName,
                 mcpProjectId: currentProjectId,
                 mcpAppToolResult: step.output,

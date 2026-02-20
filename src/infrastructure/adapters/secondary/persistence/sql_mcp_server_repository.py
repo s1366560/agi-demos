@@ -53,6 +53,8 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
             server_type=server_type,
             transport_config=transport_config,
             enabled=enabled,
+            runtime_status="pending_start" if enabled else "disabled",
+            runtime_metadata={},
             discovered_tools=[],
             last_sync_at=None,
         )
@@ -176,6 +178,29 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         logger.info(f"Updated tools for MCP server {server_id}: {len(tools)} tools")
         return True
 
+    async def update_runtime_metadata(
+        self,
+        server_id: str,
+        runtime_status: Optional[str] = None,
+        runtime_metadata: Optional[dict] = None,
+    ) -> bool:
+        """Update runtime status/metadata for MCP server lifecycle tracking."""
+        result = await self._session.execute(select(DBMCPServer).where(DBMCPServer.id == server_id))
+        db_server = result.scalar_one_or_none()
+
+        if not db_server:
+            logger.warning(f"MCP server not found: {server_id}")
+            return False
+
+        if runtime_status is not None:
+            db_server.runtime_status = runtime_status
+        if runtime_metadata is not None:
+            existing = db_server.runtime_metadata or {}
+            db_server.runtime_metadata = {**existing, **runtime_metadata}
+        db_server.updated_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return True
+
     async def delete(self, server_id: str) -> bool:
         """Delete an MCP server."""
         result = await self._session.execute(delete(DBMCPServer).where(DBMCPServer.id == server_id))
@@ -213,6 +238,8 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
             server_type=db_server.server_type,
             transport_config=db_server.transport_config,
             enabled=db_server.enabled,
+            runtime_status=db_server.runtime_status or "unknown",
+            runtime_metadata=db_server.runtime_metadata or {},
             discovered_tools=db_server.discovered_tools or [],
             sync_error=db_server.sync_error,
             last_sync_at=db_server.last_sync_at,
@@ -231,6 +258,8 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
             server_type=entity.server_type,
             transport_config=entity.transport_config or {},
             enabled=entity.enabled,
+            runtime_status=entity.runtime_status,
+            runtime_metadata=entity.runtime_metadata or {},
             discovered_tools=entity.discovered_tools or [],
             last_sync_at=entity.last_sync_at,
             created_at=entity.created_at,
@@ -246,6 +275,10 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         if entity.transport_config is not None:
             db_model.transport_config = entity.transport_config
         db_model.enabled = entity.enabled
+        if entity.runtime_status:
+            db_model.runtime_status = entity.runtime_status
+        if entity.runtime_metadata:
+            db_model.runtime_metadata = entity.runtime_metadata
         db_model.discovered_tools = entity.discovered_tools
         if entity.last_sync_at is not None:
             db_model.last_sync_at = entity.last_sync_at

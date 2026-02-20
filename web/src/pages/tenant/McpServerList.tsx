@@ -18,6 +18,19 @@ import { useMCPAppStore } from '../../stores/mcpAppStore';
 import type { McpTabKey, McpTab, McpServerListProps, StatsCardProps } from './McpServerList/types';
 import type { MCPServerType } from '../../types/agent';
 
+function getRuntimeStatus(server: {
+  runtime_status?: string;
+  enabled: boolean;
+  sync_error?: string;
+  last_sync_at?: string;
+}): string {
+  if (server.runtime_status) return server.runtime_status;
+  if (!server.enabled) return 'disabled';
+  if (server.sync_error) return 'error';
+  if (server.last_sync_at) return 'running';
+  return 'unknown';
+}
+
 // ============================================================================
 // Stats Card
 // ============================================================================
@@ -88,12 +101,32 @@ export const McpServerList: React.FC<McpServerListProps> = ({ className = '' }) 
   }, [clearError]);
 
   // Computed stats
-  const enabledCount = useMemo(() => servers.filter((s) => s.enabled).length, [servers]);
   const disabledCount = useMemo(() => servers.filter((s) => !s.enabled).length, [servers]);
   const totalToolsCount = useMemo(
     () => servers.reduce((sum, s) => sum + (s.discovered_tools?.length || 0), 0),
     [servers]
   );
+  const runtimeCounts = useMemo(() => {
+    const counts = { running: 0, starting: 0, error: 0, disabled: 0, unknown: 0 };
+    for (const server of servers) {
+      const status = getRuntimeStatus(server);
+      if (status === 'running' || status === 'starting' || status === 'error' || status === 'disabled') {
+        counts[status]++;
+      } else {
+        counts.unknown++;
+      }
+    }
+    return counts;
+  }, [servers]);
+  const appStatusCounts = useMemo(() => {
+    const counts = { ready: 0, loading: 0, error: 0, disabled: 0, discovered: 0 };
+    for (const app of Object.values(apps)) {
+      if (app.status in counts) {
+        counts[app.status as keyof typeof counts]++;
+      }
+    }
+    return counts;
+  }, [apps]);
   const serversByType = useMemo(() => {
     const result: Record<MCPServerType, number> = { stdio: 0, sse: 0, http: 0, websocket: 0 };
     servers.forEach((s) => {
@@ -118,9 +151,9 @@ export const McpServerList: React.FC<McpServerListProps> = ({ className = '' }) 
     <div className={`max-w-full mx-auto w-full flex flex-col gap-5 p-2 ${className}`}>
       {/* Header */}
       <div>
-        <h1 className="text-lg font-semibold text-slate-900 dark:text-white">MCP Servers</h1>
+        <h1 className="text-lg font-semibold text-slate-900 dark:text-white">MCP Runtime</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          Manage Model Context Protocol servers, tools, and applications
+          Unified runtime dashboard for MCP servers, tools, and app lifecycle
         </p>
       </div>
 
@@ -135,22 +168,31 @@ export const McpServerList: React.FC<McpServerListProps> = ({ className = '' }) 
           subtitle={`${disabledCount} disabled`}
         />
         <StatsCard
-          title="Active"
-          value={enabledCount}
-          icon="check_circle"
+          title="Running Runtime"
+          value={runtimeCounts.running}
+          icon="play_circle"
           iconBgColor="bg-green-50 dark:bg-green-900/20"
           iconColor="text-green-500"
           valueColor="text-green-600 dark:text-green-400"
-          subtitle={`${servers.length > 0 ? Math.round((enabledCount / servers.length) * 100) : 0}% enabled`}
+          subtitle={`${runtimeCounts.starting} starting`}
         />
         <StatsCard
-          title="Tool Count"
-          value={totalToolsCount}
-          icon="build"
+          title="Runtime Errors"
+          value={runtimeCounts.error}
+          icon="error"
+          iconBgColor="bg-red-50 dark:bg-red-900/20"
+          iconColor="text-red-500"
+          valueColor="text-red-600 dark:text-red-400"
+          subtitle={`${disabledCount} disabled`}
+        />
+        <StatsCard
+          title="Apps Ready"
+          value={appStatusCounts.ready}
+          icon="widgets"
           iconBgColor="bg-blue-50 dark:bg-blue-900/20"
           iconColor="text-blue-500"
           valueColor="text-blue-600 dark:text-blue-400"
-          subtitle={`${servers.length > 0 ? (totalToolsCount / servers.length).toFixed(1) : 0} avg`}
+          subtitle={`${appStatusCounts.loading} loading · ${appStatusCounts.error} errors`}
         />
         <div className="bg-white dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700/60">
           <div className="flex items-center gap-3">
@@ -172,6 +214,13 @@ export const McpServerList: React.FC<McpServerListProps> = ({ className = '' }) 
           </div>
         </div>
       </div>
+
+      {runtimeCounts.error > 0 && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-800 dark:bg-red-950/20 dark:text-red-300">
+          <span className="material-symbols-outlined text-base">warning</span>
+          {runtimeCounts.error} runtime error server(s) detected. Open Servers tab for reconcile, sync, or test.
+        </div>
+      )}
 
       {/* Tab Bar */}
       <div className="border-b border-slate-200 dark:border-slate-700">

@@ -22,8 +22,10 @@ from typing import Any, Dict, List, Optional
 
 from sqlalchemy.exc import IntegrityError
 
-from src.application.services.sandbox_profile import SandboxProfileType
-from src.application.services.sandbox_profile import get_profile as get_sandbox_profile
+from src.application.services.sandbox_profile import (
+    SandboxProfileType,
+    get_profile as get_sandbox_profile,
+)
 from src.domain.model.sandbox.exceptions import SandboxLockTimeoutError
 from src.domain.model.sandbox.project_sandbox import ProjectSandbox, ProjectSandboxStatus
 from src.domain.ports.repositories.project_sandbox_repository import ProjectSandboxRepository
@@ -365,9 +367,7 @@ class ProjectSandboxLifecycleService:
 
                     elif existing.status == ProjectSandboxStatus.TERMINATED:
                         # Sandbox was explicitly terminated, clean up and create new
-                        logger.info(
-                            f"Project {project_id} sandbox terminated, creating new..."
-                        )
+                        logger.info(f"Project {project_id} sandbox terminated, creating new...")
                         await self._cleanup_failed_sandbox(existing)
                         # Fall through to create new
 
@@ -863,53 +863,53 @@ class ProjectSandboxLifecycleService:
             tenant_id: Tenant ID for sandbox access scoping.
         """
         try:
+            from src.application.services.mcp_app_service import MCPAppService
+            from src.application.services.mcp_runtime_service import MCPRuntimeService
+            from src.application.services.sandbox_mcp_server_manager import (
+                SandboxMCPServerManager,
+            )
             from src.infrastructure.adapters.secondary.persistence.database import (
                 async_session_factory,
+            )
+            from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
+                SqlMCPAppRepository,
             )
             from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
                 SqlMCPServerRepository,
             )
+            from src.infrastructure.mcp.resource_resolver import MCPAppResourceResolver
 
             async with async_session_factory() as session:
-                repo = SqlMCPServerRepository(session)
-                servers = await repo.list_by_project(project_id, enabled_only=True)
-
-            if not servers:
-                return
-
-            logger.info(
-                "Reinstalling %d MCP server(s) after sandbox recreation: project=%s",
-                len(servers),
-                project_id,
-            )
-
-            import json
-
-            results = await asyncio.gather(
-                *[
-                    self._install_single_mcp_server(
-                        project_id=project_id,
-                        server_name=server.name,
-                        server_type=server.server_type,
-                        transport_config=server.transport_config or {},
-                    )
-                    for server in servers
-                ],
-                return_exceptions=True,
-            )
-
-            for server, result in zip(servers, results):
-                if isinstance(result, Exception):
-                    logger.warning(
-                        "Failed to reinstall MCP server '%s' after sandbox recreation: %s",
-                        server.name,
-                        result,
-                    )
-                else:
-                    logger.info(
-                        "Reinstalled MCP server '%s' after sandbox recreation",
-                        server.name,
-                    )
+                server_repo = SqlMCPServerRepository(session)
+                app_repo = SqlMCPAppRepository(session)
+                manager: SandboxMCPServerManager
+                resource_resolver = MCPAppResourceResolver(manager_factory=lambda: manager)
+                app_service = MCPAppService(
+                    app_repo=app_repo,
+                    resource_resolver=resource_resolver,
+                )
+                manager = SandboxMCPServerManager(
+                    sandbox_resource=self,
+                    app_service=app_service,
+                )
+                runtime = MCPRuntimeService(
+                    db=session,
+                    server_repo=server_repo,
+                    app_repo=app_repo,
+                    app_service=app_service,
+                    sandbox_manager=manager,
+                )
+                result = await runtime.reconcile_project(project_id=project_id, tenant_id=tenant_id)
+                await session.commit()
+                logger.info(
+                    "Reconciled MCP runtime after sandbox recreation: "
+                    "project=%s enabled=%d restored=%d failed=%d already_running=%d",
+                    project_id,
+                    result.total_enabled_servers,
+                    result.restored,
+                    result.failed,
+                    result.already_running,
+                )
 
         except Exception as e:
             logger.warning("_reinstall_mcp_servers failed for project %s: %s", project_id, e)
@@ -965,9 +965,7 @@ class ProjectSandboxLifecycleService:
         except Exception:
             data = {}
         if not data.get("success", False) and not install_result.get("success", False):
-            raise RuntimeError(
-                f"Install failed for '{server_name}': {data.get('error', text)}"
-            )
+            raise RuntimeError(f"Install failed for '{server_name}': {data.get('error', text)}")
 
         await self.execute_tool(
             project_id=project_id,

@@ -23,7 +23,7 @@
  * <MarkdownContent content="**Result:** Done" className="text-xs" />
  */
 
-import { memo, useMemo, lazy, Suspense, useCallback } from 'react';
+import { memo, useMemo, lazy, Suspense } from 'react';
 
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
@@ -64,41 +64,21 @@ const CodeBlockLoadingFallback: React.FC = () => (
  * Lazy-loaded CodeBlock with Suspense.
  * Code blocks are heavy due to syntax highlighting, so we lazy load them.
  */
-const CodeBlockWithSuspense = memo<{
+// Define the lazy component outside to prevent recreation
+const LazyCodeBlock = lazy(() => import('./CodeBlock').then((module) => ({ default: module.CodeBlock })));
+
+const CodeBlockWithSuspense: React.FC<{
   children?: React.ReactNode;
   codeActions?: boolean;
   loadingFallback?: React.ReactNode;
-}>(({ children, codeActions = false, loadingFallback }) => {
-  const LazyCodeBlock = useMemo(
-    () => lazy(() => import('./CodeBlock').then((module) => ({ default: module.CodeBlock }))),
-    []
-  );
-
+}> = ({ children, codeActions = false, loadingFallback }) => {
   return (
     <Suspense fallback={loadingFallback || <CodeBlockLoadingFallback />}>
+      {/* @ts-ignore - Dynamic component props type check issue */}
       <LazyCodeBlock codeActions={codeActions}>{children}</LazyCodeBlock>
     </Suspense>
   );
-});
-
-CodeBlockWithSuspense.displayName = 'CodeBlockWithSuspense';
-
-/**
- * Create code components with memoization.
- */
-const useCodeComponents = memo(({ codeActions }: { codeActions: boolean }) => {
-  const components: Components = useMemo(
-    () => ({
-      pre: ({ children, ...props }) => (
-        <CodeBlockWithSuspense codeActions={codeActions}>{children}</CodeBlockWithSuspense>
-      ),
-    }),
-    [codeActions]
-  );
-  return components;
-});
-
-useCodeComponents.displayName = 'useCodeComponents';
+};
 
 /**
  * MarkdownContent component
@@ -107,18 +87,25 @@ useCodeComponents.displayName = 'useCodeComponents';
  * - React.memo prevents re-renders when props haven't changed
  * - Lazy loading for heavy components (CodeBlock)
  * - useMemo for plugin initialization
- * - useCallback for stable event handlers
  */
 export const MarkdownContent = memo<MarkdownContentProps>(
   ({ content, className = '', prose = true, codeActions = false, loadingFallback }) => {
     const combinedClassName = prose ? `${MARKDOWN_PROSE_CLASSES} ${className}`.trim() : className;
-    const CodeComponents = useCodeComponents({ codeActions });
-    const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
-
+    
     // Stable components reference
-    const components = useMemo(() => {
-      return codeActions ? CodeComponents : undefined;
-    }, [codeActions, CodeComponents]);
+    const components: Components = useMemo(() => {
+      if (!codeActions) return {};
+      
+      return {
+        pre: ({ children }) => (
+          <CodeBlockWithSuspense codeActions={codeActions} loadingFallback={loadingFallback}>
+            {children}
+          </CodeBlockWithSuspense>
+        ),
+      };
+    }, [codeActions, loadingFallback]);
+
+    const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
 
     return (
       <div className={combinedClassName}>
@@ -138,7 +125,8 @@ export const MarkdownContent = memo<MarkdownContentProps>(
       prevProps.content === nextProps.content &&
       prevProps.className === nextProps.className &&
       prevProps.prose === nextProps.prose &&
-      prevProps.codeActions === nextProps.codeActions
+      prevProps.codeActions === nextProps.codeActions &&
+      prevProps.loadingFallback === nextProps.loadingFallback
     );
   }
 );

@@ -22,7 +22,7 @@ export const ASSISTANT_PROSE_CLASSES = MARKDOWN_PROSE_CLASSES;
  * Used by: AssistantMessage, TextEndItem, streaming content display.
  */
 export const ASSISTANT_BUBBLE_CLASSES =
-  'flex-1 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4';
+  'flex-1 min-w-0 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-sm p-4';
 
 /**
  * Assistant avatar component classes.

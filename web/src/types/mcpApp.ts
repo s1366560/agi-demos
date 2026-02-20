@@ -45,6 +45,7 @@ export interface MCPApp {
   ui_metadata: MCPAppUIMetadata;
   source: MCPAppSource;
   status: MCPAppStatus;
+  lifecycle_metadata?: Record<string, unknown>;
   error_message?: string;
   has_resource: boolean;
   resource_size_bytes?: number;

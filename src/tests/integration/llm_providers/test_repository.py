@@ -7,6 +7,7 @@ Tests repository operations with real database.
 import pytest
 
 from src.domain.llm_providers.models import (
+    EmbeddingConfig,
     LLMUsageLogCreate,
     NoActiveProviderError,
     OperationType,
@@ -44,6 +45,40 @@ class TestProviderRepository:
         assert provider.llm_model == "gpt-4o"
         assert provider.is_active is True
         assert provider.is_default is False
+
+    @pytest.mark.asyncio
+    async def test_create_provider_persists_embedding_config(self, db_session):
+        """Test structured embedding config is persisted and hydrated."""
+        repository = SQLAlchemyProviderRepository(session=db_session)
+
+        config = ProviderConfigCreate(
+            name="test-openai-embedding-config",
+            provider_type=ProviderType.OPENAI,
+            api_key="sk-test-key-12345",
+            llm_model="gpt-4o",
+            embedding_config=EmbeddingConfig(
+                model="text-embedding-3-large",
+                dimensions=1024,
+                encoding_format="float",
+                user="tenant-a",
+                timeout=9.5,
+                provider_options={"x_custom": "on"},
+            ),
+        )
+
+        provider = await repository.create(config)
+
+        assert provider.embedding_model == "text-embedding-3-large"
+        assert provider.embedding_config is not None
+        assert provider.embedding_config.model == "text-embedding-3-large"
+        assert provider.embedding_config.dimensions == 1024
+        assert provider.embedding_config.user == "tenant-a"
+
+        stored_embedding = provider.config.get("embedding", {})
+        assert stored_embedding.get("model") == "text-embedding-3-large"
+        assert stored_embedding.get("dimensions") == 1024
+        assert stored_embedding.get("x_custom") is None
+        assert stored_embedding.get("provider_options", {}).get("x_custom") == "on"
 
     @pytest.mark.asyncio
     async def test_get_provider_by_id(self, db_session):
@@ -141,6 +176,34 @@ class TestProviderRepository:
         assert updated is not None
         assert updated.name == "updated-name"
         assert updated.llm_model == "gpt-4o-turbo"
+
+    @pytest.mark.asyncio
+    async def test_update_provider_embedding_config_merges_model(self, db_session):
+        """Updating embedding config without model should keep existing embedding model."""
+        repository = SQLAlchemyProviderRepository(session=db_session)
+
+        created = await repository.create(
+            ProviderConfigCreate(
+                name="provider-update-embedding-config",
+                provider_type=ProviderType.OPENAI,
+                api_key="sk-test",
+                llm_model="gpt-4o",
+                embedding_model="text-embedding-3-small",
+            )
+        )
+
+        updated = await repository.update(
+            created.id,
+            ProviderConfigUpdate(
+                embedding_config=EmbeddingConfig(dimensions=1536, timeout=4.0),
+            ),
+        )
+
+        assert updated is not None
+        assert updated.embedding_model == "text-embedding-3-small"
+        assert updated.embedding_config is not None
+        assert updated.embedding_config.model == "text-embedding-3-small"
+        assert updated.embedding_config.dimensions == 1536
 
     @pytest.mark.asyncio
     async def test_delete_provider_soft_delete(self, db_session):

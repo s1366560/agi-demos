@@ -1,7 +1,13 @@
 import React, { useEffect, useState, useCallback } from 'react';
 
 import { providerAPI } from '../../services/api';
-import { ProviderConfig, ProviderCreate, ProviderType, ProviderUpdate } from '../../types/memory';
+import {
+  EmbeddingConfig,
+  ProviderConfig,
+  ProviderCreate,
+  ProviderType,
+  ProviderUpdate,
+} from '../../types/memory';
 
 interface ProviderConfigModalProps {
   isOpen: boolean;
@@ -410,6 +416,20 @@ const MODEL_PRESETS: Record<
 
 type Step = 'provider' | 'credentials' | 'models' | 'review';
 
+const resolveEmbeddingConfig = (provider: ProviderConfig): EmbeddingConfig | undefined => {
+  if (provider.embedding_config) {
+    return provider.embedding_config;
+  }
+  const legacyEmbeddingConfig = provider.config?.embedding;
+  if (legacyEmbeddingConfig && typeof legacyEmbeddingConfig === 'object') {
+    return legacyEmbeddingConfig as EmbeddingConfig;
+  }
+  if (provider.embedding_model) {
+    return { model: provider.embedding_model };
+  }
+  return undefined;
+};
+
 export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   isOpen,
   onClose,
@@ -434,6 +454,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     llm_model: 'gpt-4o',
     llm_small_model: 'gpt-4o-mini',
     embedding_model: 'text-embedding-3-small',
+    embedding_dimensions: '1536',
+    embedding_encoding_format: '' as '' | 'float' | 'base64',
+    embedding_user: '',
+    embedding_timeout: '',
+    embedding_provider_options_json: '{}',
     reranker_model: '',
     config: {} as Record<string, any>,
     is_active: true,
@@ -461,6 +486,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
   useEffect(() => {
     if (provider) {
+      const embeddingConfig = resolveEmbeddingConfig(provider);
       setFormData({
         name: provider.name,
         provider_type: provider.provider_type,
@@ -468,7 +494,18 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         base_url: provider.base_url || '',
         llm_model: provider.llm_model,
         llm_small_model: provider.llm_small_model || '',
-        embedding_model: provider.embedding_model || '',
+        embedding_model: embeddingConfig?.model || provider.embedding_model || '',
+        embedding_dimensions:
+          embeddingConfig?.dimensions !== undefined ? String(embeddingConfig.dimensions) : '',
+        embedding_encoding_format: embeddingConfig?.encoding_format || '',
+        embedding_user: embeddingConfig?.user || '',
+        embedding_timeout:
+          embeddingConfig?.timeout !== undefined ? String(embeddingConfig.timeout) : '',
+        embedding_provider_options_json: JSON.stringify(
+          embeddingConfig?.provider_options || {},
+          null,
+          2
+        ),
         reranker_model: provider.reranker_model || '',
         config: provider.config || {},
         is_active: provider.is_active,
@@ -486,6 +523,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         llm_model: 'gpt-4o',
         llm_small_model: 'gpt-4o-mini',
         embedding_model: 'text-embedding-3-small',
+        embedding_dimensions: '1536',
+        embedding_encoding_format: '',
+        embedding_user: '',
+        embedding_timeout: '',
+        embedding_provider_options_json: '{}',
         reranker_model: '',
         config: {},
         is_active: true,
@@ -508,6 +550,13 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       llm_model: presets?.llm[0]?.name || '',
       llm_small_model: presets?.small[0]?.name || '',
       embedding_model: presets?.embedding[0]?.name || '',
+      embedding_dimensions: presets?.embedding[0]?.dimension
+        ? String(presets.embedding[0].dimension)
+        : '',
+      embedding_encoding_format: type === 'dashscope' ? 'float' : '',
+      embedding_user: '',
+      embedding_timeout: '',
+      embedding_provider_options_json: '{}',
       reranker_model: presets?.reranker[0]?.name || '',
     }));
     setTestResult(null);
@@ -538,13 +587,86 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     setError(null);
 
     // Parse and validate config JSON
-    let config = {};
+    let config: Record<string, any> = {};
     try {
       config = JSON.parse(configJson);
     } catch (_e) {
       setError('Invalid JSON in Advanced Configuration');
       setIsSubmitting(false);
       return;
+    }
+    if (typeof config !== 'object' || Array.isArray(config) || config === null) {
+      setError('Advanced Configuration must be a JSON object');
+      setIsSubmitting(false);
+      return;
+    }
+
+    let embeddingProviderOptions: Record<string, any> = {};
+    try {
+      embeddingProviderOptions = JSON.parse(formData.embedding_provider_options_json || '{}');
+    } catch (_e) {
+      setError('Embedding provider options must be valid JSON');
+      setIsSubmitting(false);
+      return;
+    }
+    if (
+      typeof embeddingProviderOptions !== 'object' ||
+      embeddingProviderOptions === null ||
+      Array.isArray(embeddingProviderOptions)
+    ) {
+      setError('Embedding provider options must be a JSON object');
+      setIsSubmitting(false);
+      return;
+    }
+
+    let embeddingDimensions: number | undefined;
+    if (formData.embedding_dimensions.trim()) {
+      embeddingDimensions = Number(formData.embedding_dimensions);
+      if (!Number.isInteger(embeddingDimensions) || embeddingDimensions <= 0) {
+        setError('Embedding dimensions must be a positive integer');
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    let embeddingTimeout: number | undefined;
+    if (formData.embedding_timeout.trim()) {
+      embeddingTimeout = Number(formData.embedding_timeout);
+      if (!Number.isFinite(embeddingTimeout) || embeddingTimeout <= 0) {
+        setError('Embedding timeout must be a positive number');
+        setIsSubmitting(false);
+        return;
+      }
+    }
+
+    const embeddingConfig: EmbeddingConfig = {};
+    if (formData.embedding_model.trim()) {
+      embeddingConfig.model = formData.embedding_model.trim();
+    }
+    if (embeddingDimensions !== undefined) {
+      embeddingConfig.dimensions = embeddingDimensions;
+    }
+    if (formData.embedding_encoding_format) {
+      embeddingConfig.encoding_format = formData.embedding_encoding_format;
+    }
+    if (formData.embedding_user.trim()) {
+      embeddingConfig.user = formData.embedding_user.trim();
+    }
+    if (embeddingTimeout !== undefined) {
+      embeddingConfig.timeout = embeddingTimeout;
+    }
+    if (Object.keys(embeddingProviderOptions).length > 0) {
+      embeddingConfig.provider_options = embeddingProviderOptions;
+    }
+
+    const normalizedEmbeddingConfig =
+      Object.keys(embeddingConfig).length > 0 ? embeddingConfig : undefined;
+    if (normalizedEmbeddingConfig) {
+      config = { ...config, embedding: normalizedEmbeddingConfig };
+    } else {
+      const nextConfig = { ...config };
+      delete nextConfig.embedding;
+      config = nextConfig;
     }
 
     try {
@@ -556,6 +678,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
           llm_model: formData.llm_model,
           llm_small_model: formData.llm_small_model || undefined,
           embedding_model: formData.embedding_model || undefined,
+          embedding_config: normalizedEmbeddingConfig,
           reranker_model: formData.reranker_model || undefined,
           config: config,
           is_active: formData.is_active,
@@ -574,6 +697,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
           llm_model: formData.llm_model,
           llm_small_model: formData.llm_small_model || undefined,
           embedding_model: formData.embedding_model || undefined,
+          embedding_config: normalizedEmbeddingConfig,
           reranker_model: formData.reranker_model || undefined,
           config: config,
           is_active: formData.is_active,
@@ -1002,18 +1126,22 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
               )}
 
               {/* Embedding Model */}
-              {presets.embedding.length > 0 && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Embedding Model <span className="text-slate-400">(optional)</span>
-                  </label>
-                  <div className="grid grid-cols-1 gap-2">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  Embedding Model <span className="text-slate-400">(optional)</span>
+                </label>
+                {presets.embedding && presets.embedding.length > 0 && (
+                  <div className="grid grid-cols-1 gap-2 mb-2">
                     {presets.embedding.map((model) => (
                       <button
                         key={model.name}
                         type="button"
                         onClick={() =>
-                          setFormData((prev) => ({ ...prev, embedding_model: model.name }))
+                          setFormData((prev) => ({
+                            ...prev,
+                            embedding_model: model.name,
+                            embedding_dimensions: String(model.dimension),
+                          }))
                         }
                         className={`p-3 rounded-lg border text-left transition-all ${
                           formData.embedding_model === model.name
@@ -1028,8 +1156,97 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       </button>
                     ))}
                   </div>
+                )}
+                <input
+                  type="text"
+                  list={
+                    (presets.embedding && presets.embedding.length > 0) || fetchedModels.length > 0
+                      ? 'embedding-models-list'
+                      : undefined
+                  }
+                  value={formData.embedding_model}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, embedding_model: e.target.value }))
+                  }
+                  autoComplete="off"
+                  placeholder="Or enter custom embedding model"
+                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                />
+                <datalist id="embedding-models-list">
+                  {[...new Set([...(presets.embedding?.map((m) => m.name) || []), ...fetchedModels])].map(
+                    (modelName) => (
+                      <option key={modelName} value={modelName} />
+                    )
+                  )}
+                </datalist>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Embedding Dimensions
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={formData.embedding_dimensions}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, embedding_dimensions: e.target.value }))
+                    }
+                    placeholder="e.g., 1024"
+                    className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  />
                 </div>
-              )}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Encoding Format
+                  </label>
+                  <select
+                    value={formData.embedding_encoding_format}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        embedding_encoding_format: e.target.value as '' | 'float' | 'base64',
+                      }))
+                    }
+                    className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  >
+                    <option value="">Default</option>
+                    <option value="float">float</option>
+                    <option value="base64">base64</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Embedding User
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.embedding_user}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, embedding_user: e.target.value }))
+                    }
+                    placeholder="Optional user identifier"
+                    className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Embedding Timeout (s)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.1"
+                    value={formData.embedding_timeout}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, embedding_timeout: e.target.value }))
+                    }
+                    placeholder="Optional override"
+                    className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  />
+                </div>
+              </div>
 
               {/* Reranker Model */}
               {presets.reranker.length > 0 && (
@@ -1070,22 +1287,40 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                   onClick={() => setShowAdvanced(!showAdvanced)}
                   className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-primary transition-colors w-full"
                 >
-                  <span className="material-symbols-outlined text-lg transform transition-transform duration-200" style={{ transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                  <span
+                    className="material-symbols-outlined text-lg transform transition-transform duration-200"
+                    style={{ transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                  >
                     chevron_right
                   </span>
                   Advanced Configuration (JSON)
                 </button>
-                
+
                 {showAdvanced && (
                   <div className="mt-4">
                     <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                      Override model limits or provider-specific settings. 
-                      Example: <code>{'{ "max_tokens": 8192, "timeout": 60 }'}</code>
+                      Override model limits or provider-specific settings. Example:{' '}
+                      <code>{'{ "max_tokens": 8192, "timeout": 60 }'}</code>
                     </p>
                     <textarea
                       value={configJson}
                       onChange={(e) => setConfigJson(e.target.value)}
                       className="w-full h-40 p-3 font-mono text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-y"
+                      placeholder="{}"
+                      spellCheck={false}
+                    />
+                    <label className="block text-xs text-slate-500 dark:text-slate-400 mt-4 mb-2">
+                      Embedding Provider Options (JSON object)
+                    </label>
+                    <textarea
+                      value={formData.embedding_provider_options_json}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          embedding_provider_options_json: e.target.value,
+                        }))
+                      }
+                      className="w-full h-28 p-3 font-mono text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-y"
                       placeholder="{}"
                       spellCheck={false}
                     />
@@ -1136,6 +1371,26 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       </p>
                       <code className="text-sm font-mono text-slate-900 dark:text-white">
                         {formData.embedding_model}
+                      </code>
+                    </div>
+                  )}
+                  {formData.embedding_dimensions && (
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase tracking-wider">
+                        Embedding Dimensions
+                      </p>
+                      <code className="text-sm font-mono text-slate-900 dark:text-white">
+                        {formData.embedding_dimensions}
+                      </code>
+                    </div>
+                  )}
+                  {formData.embedding_encoding_format && (
+                    <div>
+                      <p className="text-xs text-slate-500 uppercase tracking-wider">
+                        Embedding Encoding
+                      </p>
+                      <code className="text-sm font-mono text-slate-900 dark:text-white">
+                        {formData.embedding_encoding_format}
                       </code>
                     </div>
                   )}

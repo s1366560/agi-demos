@@ -76,6 +76,8 @@ class MCPServerResponse(BaseModel):
     server_type: str
     transport_config: Dict[str, Any]
     enabled: bool
+    runtime_status: str = "unknown"
+    runtime_metadata: Dict[str, Any] = Field(default_factory=dict)
     discovered_tools: List[Dict[str, Any]]
     sync_error: Optional[str] = None
     last_sync_at: Optional[datetime]
@@ -91,6 +93,16 @@ class MCPServerTestResult(BaseModel):
     tools_discovered: int = 0
     connection_time_ms: float = 0.0
     errors: List[str] = Field(default_factory=list)
+
+
+class MCPReconcileResultResponse(BaseModel):
+    """Result of project-level MCP reconcile."""
+
+    project_id: str
+    total_enabled_servers: int
+    already_running: int
+    restored: int
+    failed: int
 
 
 # === Tool Schemas ===

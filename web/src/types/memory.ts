@@ -282,6 +282,15 @@ export type ProviderType =
   | 'lmstudio';
 export type ProviderStatus = 'healthy' | 'degraded' | 'unhealthy';
 
+export interface EmbeddingConfig {
+  model?: string;
+  dimensions?: number;
+  encoding_format?: 'float' | 'base64';
+  user?: string;
+  timeout?: number;
+  provider_options?: Record<string, any>;
+}
+
 // Circuit breaker state enum
 export type CircuitBreakerState = 'closed' | 'open' | 'half_open';
 
@@ -311,6 +320,7 @@ export interface ProviderConfig {
   llm_model: string;
   llm_small_model?: string;
   embedding_model?: string;
+  embedding_config?: EmbeddingConfig;
   reranker_model?: string;
   config: Record<string, any>;
   is_active: boolean;
@@ -334,6 +344,7 @@ export interface ProviderCreate {
   llm_model: string;
   llm_small_model?: string;
   embedding_model?: string;
+  embedding_config?: EmbeddingConfig;
   reranker_model?: string;
   config?: Record<string, any>;
   is_active?: boolean;
@@ -348,6 +359,7 @@ export interface ProviderUpdate {
   llm_model?: string;
   llm_small_model?: string;
   embedding_model?: string;
+  embedding_config?: EmbeddingConfig;
   reranker_model?: string;
   config?: Record<string, any>;
   is_active?: boolean;

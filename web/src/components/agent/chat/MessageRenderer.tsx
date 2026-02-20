@@ -49,8 +49,7 @@ export interface MessageRendererProps {
  */
 const UserMessageRenderer: React.FC<{
   message: UserMessage;
-  onClick?: (message: ChatMessage) => void;
-}> = ({ message, onClick }) => {
+}> = ({ message }) => {
   const fileMetadata = message.metadata?.attachments?.map((att) => ({
     filename: att.filename,
     sandbox_path: att.sandbox_path,
@@ -72,10 +71,7 @@ const UserMessageRenderer: React.FC<{
  */
 const AssistantMessageRenderer: React.FC<{
   message: AssistantMessage;
-  isLatest?: boolean;
-  onCopy?: (messageId: string) => void;
-  onRetry?: (messageId: string) => void;
-}> = ({ message, isLatest, onCopy, onRetry }) => {
+}> = ({ message }) => {
   return (
     <AssistantMessageComponent
       content={message.content}
@@ -172,12 +168,7 @@ const ToolMessageRenderer: React.FC<{
  */
 export const MessageRenderer: React.FC<MessageRendererProps> = ({
   message,
-  isLatest = false,
   onClick,
-  onRetry,
-  onCopy,
-  onDelete,
-  onEdit,
   className = '',
 }) => {
   const handleClick = React.useCallback(() => {
@@ -187,14 +178,11 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
   const renderMessage = () => {
     switch (message.role) {
       case 'user':
-        return <UserMessageRenderer message={message} onClick={onClick} />;
+        return <UserMessageRenderer message={message} />;
       case 'assistant':
         return (
           <AssistantMessageRenderer
             message={message}
-            isLatest={isLatest}
-            onCopy={onCopy}
-            onRetry={onRetry}
           />
         );
       case 'system':

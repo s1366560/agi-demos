@@ -172,31 +172,44 @@ class MCPApp:
     source: MCPAppSource = MCPAppSource.USER_ADDED
     status: MCPAppStatus = MCPAppStatus.DISCOVERED
     error_message: Optional[str] = None
+    lifecycle_metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
+
+    def _record_lifecycle(self, status: MCPAppStatus, **metadata: Any) -> None:
+        """Record lifecycle transition metadata for persistence/audit."""
+        now = datetime.utcnow()
+        self.lifecycle_metadata["last_status"] = status.value
+        self.lifecycle_metadata["last_transition_at"] = now.isoformat()
+        self.lifecycle_metadata.update(metadata)
+        self.updated_at = now
 
     def mark_loading(self) -> None:
         """Transition to loading state."""
         self.status = MCPAppStatus.LOADING
-        self.updated_at = datetime.utcnow()
+        self._record_lifecycle(MCPAppStatus.LOADING)
 
     def mark_ready(self, resource: MCPAppResource) -> None:
         """Transition to ready state with resolved resource."""
         self.resource = resource
         self.status = MCPAppStatus.READY
         self.error_message = None
-        self.updated_at = datetime.utcnow()
+        self._record_lifecycle(
+            MCPAppStatus.READY,
+            resource_uri=resource.uri,
+            resource_size_bytes=resource.size_bytes,
+        )
 
     def mark_error(self, error: str) -> None:
         """Transition to error state."""
         self.status = MCPAppStatus.ERROR
         self.error_message = error
-        self.updated_at = datetime.utcnow()
+        self._record_lifecycle(MCPAppStatus.ERROR, last_error=error)
 
     def mark_disabled(self) -> None:
         """Disable the app."""
         self.status = MCPAppStatus.DISABLED
-        self.updated_at = datetime.utcnow()
+        self._record_lifecycle(MCPAppStatus.DISABLED)
 
     def mark_discovered(self) -> None:
         """Reset to discovered state, clearing any cached resource.
@@ -207,7 +220,7 @@ class MCPApp:
         self.resource = None
         self.status = MCPAppStatus.DISCOVERED
         self.error_message = None
-        self.updated_at = datetime.utcnow()
+        self._record_lifecycle(MCPAppStatus.DISCOVERED, resource_uri=self.ui_metadata.resource_uri)
 
     @property
     def is_ready(self) -> bool:
@@ -238,6 +251,7 @@ class MCPApp:
             "source": self.source.value,
             "status": self.status.value,
             "error_message": self.error_message,
+            "lifecycle_metadata": self.lifecycle_metadata,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

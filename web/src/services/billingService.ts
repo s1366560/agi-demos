@@ -3,7 +3,7 @@
  * Handles billing, invoices, and subscription management
  */
 
-import { httpClient } from './httpClient';
+import { httpClient } from './client/httpClient';
 
 // Types
 export interface BillingTenant {

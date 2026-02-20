@@ -147,6 +147,18 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
             logger.info("Disabled %d MCP Apps for server %s", count, server_id)
         return count
 
+    async def update_lifecycle_metadata(self, app_id: str, metadata: dict) -> bool:
+        """Merge lifecycle metadata into existing app metadata."""
+        result = await self._session.execute(select(MCPAppModel).where(MCPAppModel.id == app_id))
+        db_app = result.scalar_one_or_none()
+        if not db_app:
+            return False
+        existing = db_app.lifecycle_metadata or {}
+        db_app.lifecycle_metadata = {**existing, **(metadata or {})}
+        db_app.updated_at = datetime.now(timezone.utc)
+        await self._session.flush()
+        return True
+
     def _to_domain(self, db: MCPAppModel) -> MCPApp:
         """Convert DB model to domain entity."""
         ui_metadata = MCPAppUIMetadata.from_dict(db.ui_metadata or {})
@@ -173,6 +185,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
             source=MCPAppSource(db.source),
             status=MCPAppStatus(db.status),
             error_message=db.error_message,
+            lifecycle_metadata=db.lifecycle_metadata or {},
             created_at=db.created_at,
             updated_at=db.updated_at,
         )
@@ -189,6 +202,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
             ui_metadata=app.ui_metadata.to_dict(),
             source=app.source.value,
             status=app.status.value,
+            lifecycle_metadata=app.lifecycle_metadata or {},
             error_message=app.error_message,
         )
         if app.resource:
@@ -205,6 +219,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
         db.status = app.status.value
         db.error_message = app.error_message
         db.source = app.source.value
+        db.lifecycle_metadata = app.lifecycle_metadata or {}
         db.updated_at = datetime.now(timezone.utc)
 
         if app.resource:

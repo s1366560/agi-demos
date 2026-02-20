@@ -153,20 +153,21 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         server_name: str,
         server_type: str,
         transport_config: Dict[str, Any],
+        ensure_running: bool = True,
     ) -> List[Dict[str, Any]]:
         """Discover tools from an MCP server in the sandbox."""
-        # Ensure server is running
-        status = await self.install_and_start(
-            project_id=project_id,
-            tenant_id=tenant_id,
-            server_name=server_name,
-            server_type=server_type,
-            transport_config=transport_config,
-        )
-        if status.status == "failed":
-            raise RuntimeError(
-                f"Cannot discover tools: server '{server_name}' failed to start: {status.error}"
+        if ensure_running:
+            status = await self.install_and_start(
+                project_id=project_id,
+                tenant_id=tenant_id,
+                server_name=server_name,
+                server_type=server_type,
+                transport_config=transport_config,
             )
+            if status.status == "failed":
+                raise RuntimeError(
+                    f"Cannot discover tools: server '{server_name}' failed to start: {status.error}"
+                )
 
         # Discover tools
         result = await self._sandbox_resource.execute_tool(
@@ -318,8 +319,20 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 timeout=MCP_DISCOVER_TIMEOUT,
             )
             tools = self._parse_tool_result(result)
-            tool_count = len(tools) if isinstance(tools, list) else 0
-            status.tool_count = tool_count
+            if isinstance(tools, list):
+                tool_count = len(tools)
+                status.tool_count = tool_count
+            else:
+                # If not a list, it might be an error dict or raw text
+                error_msg = "Unknown error"
+                if isinstance(tools, dict):
+                    error_msg = tools.get("error", tools.get("raw_output", str(tools)))
+                else:
+                    error_msg = str(tools)
+                
+                status.status = "failed"
+                status.error = f"Tool discovery failed: {error_msg}"
+                status.tool_count = 0
         except Exception as e:
             status.status = "failed"
             status.error = f"Tool discovery failed: {e!s}"
@@ -376,4 +389,4 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         try:
             return json.loads(text)
         except (json.JSONDecodeError, ValueError):
-            return text
+            return {"success": False, "error": text, "raw_output": text}

@@ -260,6 +260,30 @@ class TestSqlMCPServerRepositoryUpdate:
         assert len(server.discovered_tools) == 2
         assert server.discovered_tools[0]["name"] == "tool1"
 
+    @pytest.mark.asyncio
+    async def test_update_runtime_metadata(self, v2_mcp_repo: SqlMCPServerRepository):
+        """Test updating runtime metadata snapshot."""
+        server_id = await v2_mcp_repo.create(
+            tenant_id=TENANT_ID,
+            project_id=PROJECT_ID,
+            name="Runtime Meta",
+            description="runtime",
+            server_type="stdio",
+            transport_config={},
+        )
+
+        result = await v2_mcp_repo.update_runtime_metadata(
+            server_id=server_id,
+            runtime_status="running",
+            runtime_metadata={"last_sync_status": "success", "tool_count": 3},
+        )
+
+        assert result is True
+        server = await v2_mcp_repo.get_by_id(server_id)
+        assert server.runtime_status == "running"
+        assert server.runtime_metadata["last_sync_status"] == "success"
+        assert server.runtime_metadata["tool_count"] == 3
+
 
 class TestSqlMCPServerRepositoryDelete:
     """Tests for deleting MCP servers."""

@@ -45,8 +45,13 @@ vi.mock('../../../stores/theme', () => ({
 
 // Mock @mcp-ui/client (lazy loaded)
 vi.mock('@mcp-ui/client', () => ({
-  AppRenderer: ({ toolName, html, onCallTool, toolResourceUri }: any) => (
-    <div data-testid="app-renderer" data-tool={toolName} data-resource-uri={toolResourceUri || ''}>
+  AppRenderer: ({ toolName, html, onCallTool, toolResourceUri, sandbox }: any) => (
+    <div
+      data-testid="app-renderer"
+      data-tool={toolName}
+      data-resource-uri={toolResourceUri || ''}
+      data-sandbox-url={sandbox?.url || ''}
+    >
       {html ? <div data-testid="html-content">{html}</div> : null}
       {onCallTool ? <div data-testid="has-callback" /> : null}
     </div>
@@ -489,5 +494,26 @@ describe('StandardMCPAppRenderer - General Functionality', () => {
     expect(renderer).toBeInTheDocument();
     expect(renderer).toHaveAttribute('data-resource-uri', 'ui://meta/fallback.html');
     expect(screen.queryByText(/does not provide a UI resource/i)).not.toBeInTheDocument();
+  });
+
+  it('should normalize full URL VITE_API_HOST for sandbox proxy URL', async () => {
+    const originalHost = (import.meta.env as { VITE_API_HOST?: string }).VITE_API_HOST;
+    (import.meta.env as { VITE_API_HOST?: string }).VITE_API_HOST = 'http://localhost:8000/api/v1';
+
+    try {
+      render(<StandardMCPAppRenderer {...createProps({ html: '<div>Test</div>' })} />);
+
+      const renderer = await screen.findByTestId('app-renderer', {}, { timeout: 10000 });
+      expect(renderer).toHaveAttribute(
+        'data-sandbox-url',
+        'http://localhost:8000/static/sandbox_proxy.html'
+      );
+    } finally {
+      if (originalHost === undefined) {
+        delete (import.meta.env as { VITE_API_HOST?: string }).VITE_API_HOST;
+      } else {
+        (import.meta.env as { VITE_API_HOST?: string }).VITE_API_HOST = originalHost;
+      }
+    }
   });
 });

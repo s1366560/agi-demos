@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.llm_providers.models import (
+    EmbeddingConfig,
     LLMUsageLog,
     LLMUsageLogCreate,
     NoActiveProviderError,
@@ -75,8 +76,38 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         async with async_session_factory() as session:
             return await operation(session)
 
+    @staticmethod
+    def _build_embedding_payload(
+        embedding_model: Optional[str],
+        embedding_config: Optional[EmbeddingConfig],
+    ) -> Optional[dict]:
+        """Build normalized embedding payload for config JSON storage."""
+        payload = embedding_config.model_dump(exclude_none=True) if embedding_config else {}
+        if embedding_model and not payload.get("model"):
+            payload["model"] = embedding_model
+        return payload or None
+
+    def _extract_embedding_config(self, orm: LLMProviderORM) -> Optional[EmbeddingConfig]:
+        """Hydrate structured embedding config from JSON config and legacy column."""
+        config_data = orm.config if isinstance(orm.config, dict) else {}
+        embedding_data = config_data.get("embedding")
+        payload = embedding_data.copy() if isinstance(embedding_data, dict) else {}
+        if orm.embedding_model and not payload.get("model"):
+            payload["model"] = orm.embedding_model
+        if not payload:
+            return None
+        try:
+            return EmbeddingConfig(**payload)
+        except Exception:
+            # Keep read path resilient for historical malformed JSON.
+            return None
+
     def _orm_to_config(self, orm: LLMProviderORM, tenant_id: str = "default") -> ProviderConfig:
         """Convert ORM model to domain model."""
+        embedding_config = self._extract_embedding_config(orm)
+        embedding_model = orm.embedding_model or (
+            embedding_config.model if embedding_config else None
+        )
         return ProviderConfig(
             id=orm.id,
             name=orm.name,
@@ -86,7 +117,8 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             base_url=orm.base_url,
             llm_model=orm.llm_model,
             llm_small_model=orm.llm_small_model,
-            embedding_model=orm.embedding_model,
+            embedding_model=embedding_model,
+            embedding_config=embedding_config,
             reranker_model=orm.reranker_model,
             config=orm.config,
             is_active=orm.is_active,
@@ -102,6 +134,15 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             # Encrypt API key before storing
             storable_api_key = to_storable_api_key(config.provider_type, config.api_key)
             api_key_encrypted = self.encryption_service.encrypt(storable_api_key)
+            embedding_payload = self._build_embedding_payload(
+                config.embedding_model,
+                config.embedding_config,
+            )
+            provider_config = dict(config.config or {})
+            if embedding_payload:
+                provider_config["embedding"] = embedding_payload
+            elif isinstance(provider_config.get("embedding"), dict):
+                embedding_payload = dict(provider_config["embedding"])
 
             # Build values dict for insert
             values = {
@@ -112,9 +153,11 @@ class SQLAlchemyProviderRepository(ProviderRepository):
                 "base_url": config.base_url,
                 "llm_model": config.llm_model,
                 "llm_small_model": config.llm_small_model,
-                "embedding_model": config.embedding_model,
+                "embedding_model": (
+                    embedding_payload.get("model") if embedding_payload else config.embedding_model
+                ),
                 "reranker_model": config.reranker_model,
-                "config": config.config or {},
+                "config": provider_config,
                 "is_active": config.is_active,
                 "is_default": config.is_default,
             }
@@ -211,12 +254,45 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             orm.llm_model = config.llm_model
         if config.llm_small_model is not None:
             orm.llm_small_model = config.llm_small_model
-        if config.embedding_model is not None:
+        should_update_config = config.config is not None
+        updated_config = (
+            dict(config.config) if config.config is not None else dict(orm.config or {})
+        )
+        if config.embedding_config is not None:
+            embedding_payload = self._build_embedding_payload(
+                config.embedding_model,
+                config.embedding_config,
+            )
+            
+            if embedding_payload:
+                updated_config["embedding"] = embedding_payload
+                orm.embedding_model = embedding_payload.get("model")
+            else:
+                updated_config.pop("embedding", None)
+                orm.embedding_model = None
+                
+        elif config.embedding_model is not None:
+            existing_embedding = (
+                dict(updated_config.get("embedding", {}))
+                if isinstance(updated_config.get("embedding"), dict)
+                else {}
+            )
+            if config.embedding_model:
+                existing_embedding["model"] = config.embedding_model
+            else:
+                existing_embedding.pop("model", None)
+            if existing_embedding:
+                updated_config["embedding"] = existing_embedding
+            else:
+                updated_config.pop("embedding", None)
             orm.embedding_model = config.embedding_model
+            should_update_config = True
         if config.reranker_model is not None:
             orm.reranker_model = config.reranker_model
-        if config.config is not None:
-            orm.config = config.config
+        if config.embedding_config is not None:
+            should_update_config = True
+        if should_update_config:
+            orm.config = updated_config
         if config.is_active is not None:
             orm.is_active = config.is_active
         if config.is_default is not None:

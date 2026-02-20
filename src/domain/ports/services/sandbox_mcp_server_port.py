@@ -90,6 +90,7 @@ class SandboxMCPServerPort(ABC):
         server_name: str,
         server_type: str,
         transport_config: Dict[str, Any],
+        ensure_running: bool = True,
     ) -> List[Dict[str, Any]]:
         """Discover tools from an MCP server running in the sandbox.
 
@@ -101,6 +102,7 @@ class SandboxMCPServerPort(ABC):
             server_name: MCP server name.
             server_type: Transport type.
             transport_config: Transport configuration.
+            ensure_running: When True, bootstrap runtime before discovery.
 
         Returns:
             List of tool definitions.

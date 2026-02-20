@@ -10,7 +10,7 @@ from uuid import uuid4
 
 import pytest
 
-from src.domain.llm_providers.models import ProviderConfig, ProviderType
+from src.domain.llm_providers.models import EmbeddingConfig, ProviderConfig, ProviderType
 from src.infrastructure.llm.litellm.litellm_embedder import LiteLLMEmbedder
 from src.infrastructure.llm.provider_credentials import NO_API_KEY_SENTINEL
 
@@ -119,6 +119,58 @@ class TestLiteLLMEmbedder:
 
             with pytest.raises(Exception):
                 await embedder.create("Test text")
+
+    @pytest.mark.asyncio
+    async def test_embedding_config_parameters_are_forwarded(self):
+        """Structured embedding config should be forwarded to LiteLLM kwargs."""
+        provider = ProviderConfig(
+            id=uuid4(),
+            name="test-structured-embedding",
+            provider_type=ProviderType.OPENAI,
+            api_key_encrypted="encrypted_key",
+            llm_model="gpt-4o",
+            llm_small_model="gpt-4o-mini",
+            embedding_model="text-embedding-3-small",
+            embedding_config=EmbeddingConfig(
+                model="text-embedding-3-large",
+                dimensions=1024,
+                encoding_format="base64",
+                user="tenant-user",
+                timeout=12.5,
+                provider_options={
+                    "custom_option": "enabled",
+                    "model": "should-be-ignored",
+                    "timeout": 1,
+                },
+            ),
+            config={},
+            is_active=True,
+            is_default=False,
+            created_at=datetime.now(),
+            updated_at=datetime.now(),
+        )
+
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_embedder.get_encryption_service"
+        ) as mock_get:
+            mock_encryption = MagicMock()
+            mock_encryption.decrypt.return_value = "sk-test-api-key"
+            mock_get.return_value = mock_encryption
+            embedder = LiteLLMEmbedder(config=provider)
+
+        mock_response = MagicMock()
+        mock_response.data = [{"embedding": [0.1] * 1024}]
+        with patch("litellm.aembedding", new_callable=AsyncMock) as mock_aembedding:
+            mock_aembedding.return_value = mock_response
+            await embedder.create("hello")
+
+        call_kwargs = mock_aembedding.call_args.kwargs
+        assert call_kwargs["model"] == "text-embedding-3-large"
+        assert call_kwargs["dimensions"] == 1024
+        assert call_kwargs["encoding_format"] == "base64"
+        assert call_kwargs["user"] == "tenant-user"
+        assert call_kwargs["timeout"] == 12.5
+        assert call_kwargs["custom_option"] == "enabled"
 
     @pytest.mark.asyncio
     async def test_create_validates_input(self, embedder):

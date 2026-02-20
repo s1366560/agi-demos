@@ -20,6 +20,7 @@ Performance Impact (with Agent Session Pool):
 import asyncio
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import redis.asyncio as redis
@@ -347,8 +348,6 @@ def clear_state() -> None:
 # ============================================================================
 # LLM Client Caching
 # ============================================================================
-
-
 
 
 def get_cached_llm_clients() -> Dict[str, Any]:
@@ -1179,13 +1178,23 @@ async def _auto_restore_mcp_servers(
                         # Continue with restore if double-check fails
 
                     # Perform restore inside lock
-                    await _restore_single_server(
+                    restored, restore_error = await _restore_single_server(
                         sandbox_adapter=sandbox_adapter,
                         sandbox_id=sandbox_id,
                         server_name=server_name,
                         server_type=server_type,
                         transport_config=transport_config,
                     )
+                    server_id = getattr(server, "id", None)
+                    server_tenant_id = getattr(server, "tenant_id", None)
+                    if server_id and server_tenant_id:
+                        await _persist_restore_lifecycle_result(
+                            tenant_id=server_tenant_id,
+                            project_id=project_id,
+                            server_id=server_id,
+                            restored=restored,
+                            error_message=restore_error,
+                        )
 
                 finally:
                     # Release lock (only if we own it)
@@ -1199,13 +1208,23 @@ async def _auto_restore_mcp_servers(
                         )
             else:
                 # Fallback: No lock (backward compatible)
-                await _restore_single_server(
+                restored, restore_error = await _restore_single_server(
                     sandbox_adapter=sandbox_adapter,
                     sandbox_id=sandbox_id,
                     server_name=server_name,
                     server_type=server_type,
                     transport_config=transport_config,
                 )
+                server_id = getattr(server, "id", None)
+                server_tenant_id = getattr(server, "tenant_id", None)
+                if server_id and server_tenant_id:
+                    await _persist_restore_lifecycle_result(
+                        tenant_id=server_tenant_id,
+                        project_id=project_id,
+                        server_id=server_id,
+                        restored=restored,
+                        error_message=restore_error,
+                    )
 
     except Exception as e:
         logger.warning(f"[AgentWorker] Error in auto-restore MCP servers: {e}")
@@ -1217,7 +1236,7 @@ async def _restore_single_server(
     server_name: str,
     server_type: str,
     transport_config: dict,
-) -> bool:
+) -> tuple[bool, Optional[str]]:
     """Restore a single MCP server by installing and starting it.
 
     Args:
@@ -1228,7 +1247,7 @@ async def _restore_single_server(
         transport_config: Transport configuration dict.
 
     Returns:
-        True if restore succeeded, False otherwise.
+        Tuple[success, error_message].
     """
     import json
 
@@ -1247,10 +1266,11 @@ async def _restore_single_server(
             timeout=120.0,
         )
         if install_result.get("is_error"):
+            error_message = f"install failed: {install_result}"
             logger.warning(
                 f"[AgentWorker] Failed to install MCP server '{server_name}': {install_result}"
             )
-            return False
+            return False, error_message
 
         # Start
         start_result = await sandbox_adapter.call_tool(
@@ -1264,19 +1284,72 @@ async def _restore_single_server(
             timeout=60.0,
         )
         if start_result.get("is_error"):
+            error_message = f"start failed: {start_result}"
             logger.warning(
                 f"[AgentWorker] Failed to start MCP server '{server_name}': {start_result}"
             )
-            return False
+            return False, error_message
 
         logger.info(
             f"[AgentWorker] Auto-restored MCP server '{server_name}' in sandbox {sandbox_id}"
         )
-        return True
+        return True, None
 
     except Exception as e:
         logger.warning(f"[AgentWorker] Error restoring MCP server '{server_name}': {e}")
-        return False
+        return False, str(e)
+
+
+async def _persist_restore_lifecycle_result(
+    tenant_id: str,
+    project_id: str,
+    server_id: str,
+    restored: bool,
+    error_message: Optional[str],
+) -> None:
+    """Persist auto-restore metadata and audit event."""
+    import uuid
+
+    from src.infrastructure.adapters.secondary.persistence.database import (
+        async_session_factory,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import MCPLifecycleEvent
+    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
+        SqlMCPServerRepository,
+    )
+
+    try:
+        async with async_session_factory() as session:
+            repo = SqlMCPServerRepository(session)
+            await repo.update_runtime_metadata(
+                server_id=server_id,
+                runtime_status="running" if restored else "error",
+                runtime_metadata={
+                    "last_auto_restore_at": datetime.now(timezone.utc).isoformat(),
+                    "last_auto_restore_status": "success" if restored else "failed",
+                    "last_error": error_message if error_message else "",
+                },
+            )
+            session.add(
+                MCPLifecycleEvent(
+                    id=str(uuid.uuid4()),
+                    tenant_id=tenant_id,
+                    project_id=project_id,
+                    server_id=server_id,
+                    app_id=None,
+                    event_type="server.auto_restore",
+                    status="success" if restored else "failed",
+                    error_message=error_message,
+                    metadata_json={},
+                )
+            )
+            await session.commit()
+    except Exception as e:
+        logger.warning(
+            "[AgentWorker] Failed to persist MCP auto-restore metadata for server %s: %s",
+            server_id,
+            e,
+        )
 
 
 def _parse_mcp_server_list(content: list) -> list:
@@ -1669,7 +1742,6 @@ async def get_or_create_llm_client(
     resolved_config = await factory.resolve_provider(tenant_id)
     # Create client using resolved config
     return factory.create_llm_client(resolved_config)
-
 
 
 def get_cached_skills() -> Dict[str, list]:

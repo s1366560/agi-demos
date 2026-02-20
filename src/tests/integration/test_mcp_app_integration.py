@@ -156,12 +156,14 @@ class TestSqlMCPAppRepository:
         await repo.save(app)
         found = await repo.find_by_id(app.id)
         assert found.status == MCPAppStatus.LOADING
+        assert found.lifecycle_metadata.get("last_status") == MCPAppStatus.LOADING.value
 
         app.mark_error("timeout")
         await repo.save(app)
         found = await repo.find_by_id(app.id)
         assert found.status == MCPAppStatus.ERROR
         assert found.error_message == "timeout"
+        assert found.lifecycle_metadata.get("last_error") == "timeout"
 
     async def test_delete(self, db_session):
         repo = SqlMCPAppRepository(db_session)

@@ -140,6 +140,7 @@ class ProviderService:
             llm_model=provider.llm_model,
             llm_small_model=provider.llm_small_model,
             embedding_model=provider.embedding_model,
+            embedding_config=provider.embedding_config,
             reranker_model=provider.reranker_model,
             config=provider.config,
             is_active=provider.is_active,
@@ -379,13 +380,17 @@ class ProviderService:
                     # AWS Bedrock is complex to test without boto3
                     # Mark as degraded (will be validated during actual usage)
                     status = "degraded"
-                    error_message = "Bedrock health check not implemented, will be validated during usage"
+                    error_message = (
+                        "Bedrock health check not implemented, will be validated during usage"
+                    )
 
                 elif provider_type == "vertex":
                     # Google Vertex AI requires GCP authentication
                     # Mark as degraded (will be validated during actual usage)
                     status = "degraded"
-                    error_message = "Vertex AI health check not implemented, will be validated during usage"
+                    error_message = (
+                        "Vertex AI health check not implemented, will be validated during usage"
+                    )
 
                 else:
                     # Unknown provider, mark as degraded
@@ -575,6 +580,8 @@ class ProviderService:
         elif model_type == "llm_small":
             return provider.llm_small_model or provider.llm_model
         elif model_type == "embedding":
+            if provider.embedding_config and provider.embedding_config.model:
+                return provider.embedding_config.model
             return provider.embedding_model or "text-embedding-3-small"
         elif model_type == "reranker":
             return provider.reranker_model or "rerank-v3"

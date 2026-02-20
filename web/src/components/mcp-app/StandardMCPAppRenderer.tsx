@@ -85,13 +85,19 @@ export interface StandardMCPAppRendererProps {
 }
 
 /**
- * Get the sandbox proxy URL as a string.
+ * Get the sandbox proxy URL.
  * The proxy must be on a different origin from the frontend for iframe security.
  */
-function getSandboxProxyUrl(): string {
-  const apiHost = import.meta.env.VITE_API_HOST || 'localhost:8000';
+function getSandboxProxyUrl(): URL {
+  // Accept both host-only (localhost:8000) and full URL forms
+  // (http://localhost:8000/api/v1) from env configs.
+  const envApiTarget =
+    import.meta.env.VITE_API_HOST ||
+    (import.meta.env as { VITE_API_URL?: string }).VITE_API_URL ||
+    (window.location.host.includes(':3000') ? 'localhost:8000' : window.location.host);
+  const apiHost = envApiTarget.replace(/^[a-z]+:\/\//i, '').split('/')[0] || 'localhost:8000';
   const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-  return new URL(`${protocol}//${apiHost}/static/sandbox_proxy.html`).href;
+  return new URL(`${protocol}//${apiHost}/static/sandbox_proxy.html`);
 }
 
 export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, StandardMCPAppRendererProps>(({
@@ -155,6 +161,7 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
   // 3. Connection has failed completely (status === 'error')
   const isConnecting = mcpStatus === 'connecting';
   const shouldUseFallback = !useDirectClient && !isInGracePeriod && !isConnecting && mcpStatus === 'error';
+  const shouldUseHttpToolCall = shouldUseFallback || !mcpClient;
    
   const appRendererRef = useRef<any>(null);
   const computedTheme = useThemeStore((s) => s.computedTheme);
@@ -550,21 +557,30 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
           // We extract the HTML text for @mcp-ui/client compatibility
           onReadResource={effectiveUri ? handleReadResource as any : undefined}
 
-          // Always provide onCallTool for tool calls from app
-          onCallTool={handleCallTool as any}
+           // Only use HTTP fallback for tool calls when direct MCP client is unavailable
+           onCallTool={shouldUseHttpToolCall ? handleCallTool as any : undefined}
 
           onListResources={shouldUseFallback ? handleListResources as any : undefined}
           // Host-specific handlers (always needed regardless of mode)
 
           onMessage={handleMessage as any}
 
-          onSizeChanged={handleSizeChanged as any}
-          onError={handleError}
-          onOpenLink={async ({ url }) => {
-            window.open(url, '_blank', 'noopener,noreferrer');
-            return {};
-          }}
-        />
+           onSizeChanged={handleSizeChanged as any}
+           onError={handleError}
+           onOpenLink={async ({ url }) => {
+             let parsedUrl: URL;
+             try {
+               parsedUrl = new URL(url, window.location.origin);
+             } catch {
+               return {};
+             }
+             if (!['http:', 'https:', 'mailto:'].includes(parsedUrl.protocol)) {
+               return {};
+             }
+             window.open(parsedUrl.toString(), '_blank', 'noopener,noreferrer');
+             return {};
+           }}
+         />
         </React.Suspense>
       </ErrorBoundary>
     </div>

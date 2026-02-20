@@ -144,6 +144,26 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
   }, [messages.length, autoScroll, isNearBottom]);
 
   /**
+   * Auto-scroll when content size changes (e.g. streaming responses).
+   * Keeps the view at the bottom if the user was already at the bottom.
+   */
+  useEffect(() => {
+    if (!autoScroll || !parentRef.current) return;
+    
+    // Check if we were near bottom BEFORE this size change
+    // Note: isNearBottom state might be slightly stale if a scroll event hasn't fired yet
+    // but usually it's close enough.
+    
+    if (isNearBottom) {
+       // Use 'auto' behavior for streaming updates to prevent smooth scroll lag
+       parentRef.current.scrollTo({
+         top: parentRef.current.scrollHeight,
+         behavior: 'auto',
+       });
+    }
+  }, [virtualizer.getTotalSize(), autoScroll, isNearBottom]);
+
+  /**
    * Set up scroll listener.
    */
   useEffect(() => {

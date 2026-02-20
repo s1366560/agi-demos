@@ -24,6 +24,7 @@ import {
 
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
+import { useMCPStore } from '@/stores/mcp';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
 import { useProjectStore } from '@/stores/project';
 
@@ -46,12 +47,36 @@ const STATUS_CONFIG: Record<MCPAppStatus, { color: string; icon: React.ReactNode
     disabled: { color: 'default', icon: <Ban size={12} />, label: 'Disabled' },
   };
 
+const SERVER_RUNTIME_TAG: Record<string, string> = {
+  running: 'green',
+  starting: 'blue',
+  error: 'red',
+  disabled: 'default',
+  unknown: 'gold',
+};
+
+function getLifecycleText(app: MCPApp, key: string): string | undefined {
+  const value = app.lifecycle_metadata?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function formatRelativeTime(dateStr?: string): string {
+  if (!dateStr) return '';
+  const minutes = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
 // ============================================================================
 // App Card
 // ============================================================================
 
 interface McpAppCardProps {
   app: MCPApp;
+  serverRuntime?: string;
   onDelete: (appId: string) => void;
   onRetry: (appId: string) => void;
   onOpenInCanvas: (app: MCPApp) => void;
@@ -61,6 +86,7 @@ interface McpAppCardProps {
 
 const McpAppCard: React.FC<McpAppCardProps> = ({
   app,
+  serverRuntime,
   onDelete,
   onRetry,
   onOpenInCanvas,
@@ -70,6 +96,8 @@ const McpAppCard: React.FC<McpAppCardProps> = ({
   const statusCfg = STATUS_CONFIG[app.status];
   const isAgentDeveloped = app.source === 'agent_developed';
   const title = app.ui_metadata?.title || app.tool_name;
+  const refreshStatus = getLifecycleText(app, 'last_resource_refresh_status');
+  const refreshAt = getLifecycleText(app, 'last_resource_refresh_at');
 
   const [loadingTimeout, setLoadingTimeout] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -109,13 +137,24 @@ const McpAppCard: React.FC<McpAppCardProps> = ({
               </p>
             </div>
           </div>
-          <Tag 
-            color={statusCfg.color} 
-            className="text-xs flex-shrink-0 m-0"
-            style={{ margin: 0 }}
-          >
-            {statusCfg.label}
-          </Tag>
+          <div className="flex flex-col gap-1 items-end">
+            <Tag
+              color={statusCfg.color}
+              className="text-xs flex-shrink-0 m-0"
+              style={{ margin: 0 }}
+            >
+              {statusCfg.label}
+            </Tag>
+            {serverRuntime && (
+              <Tag
+                color={SERVER_RUNTIME_TAG[serverRuntime] || 'default'}
+                className="text-[10px] flex-shrink-0 m-0"
+                style={{ margin: 0 }}
+              >
+                Runtime {serverRuntime}
+              </Tag>
+            )}
+          </div>
         </div>
 
         {/* Resource URI - Compact */}
@@ -123,6 +162,12 @@ const McpAppCard: React.FC<McpAppCardProps> = ({
           <code className="text-xs text-slate-600 dark:text-slate-400 break-all font-mono">
             {app.ui_metadata?.resourceUri || 'No resource URI'}
           </code>
+          {refreshStatus && (
+            <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+              Refresh {refreshStatus}
+              {refreshAt ? ` · ${formatRelativeTime(refreshAt)}` : ''}
+            </p>
+          )}
         </div>
 
         {/* Error message */}
@@ -217,6 +262,7 @@ export const McpAppsTab: React.FC = () => {
   const apps = useMCPAppStore((s) => s.apps);
   const loading = useMCPAppStore((s) => s.loading);
   const fetchApps = useMCPAppStore((s) => s.fetchApps);
+  const servers = useMCPStore((s) => s.servers);
   const removeApp = useMCPAppStore((s) => s.removeApp);
   const currentProject = useProjectStore((s) => s.currentProject);
 
@@ -307,6 +353,12 @@ export const McpAppsTab: React.FC = () => {
     return counts;
   }, [apps]);
 
+  const serverRuntimeByName = useMemo(() => {
+    return Object.fromEntries(
+      servers.map((server) => [server.name, server.runtime_status || (server.enabled ? 'unknown' : 'disabled')])
+    );
+  }, [servers]);
+
   if (loading && Object.keys(apps).length === 0) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -376,6 +428,7 @@ export const McpAppsTab: React.FC = () => {
             <McpAppCard
               key={app.id}
               app={app}
+              serverRuntime={serverRuntimeByName[app.server_name]}
               onDelete={handleDelete}
               onRetry={handleRetry}
               onOpenInCanvas={handleOpenInCanvas}

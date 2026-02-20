@@ -31,6 +31,27 @@ class MCPAppService:
         self._app_repo = app_repo
         self._resource_resolver = resource_resolver
 
+    async def sync_apps_from_tools(
+        self,
+        project_id: str,
+        server_id: str,
+        server_name: str,
+        tenant_id: str,
+        tools: List[Dict[str, Any]],
+    ) -> List[MCPApp]:
+        """Sync discovered tools to MCPApps.
+
+        Wrapper around detect_apps_from_tools for use by MCPRuntimeService.
+        """
+        return await self.detect_apps_from_tools(
+            server_id=server_id,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            server_name=server_name,
+            tools=tools,
+            source=MCPAppSource.TOOL_DISCOVERY,
+        )
+
     async def detect_apps_from_tools(
         self,
         server_id: str,
@@ -87,8 +108,7 @@ class MCPAppService:
                 new_ui_metadata = MCPAppUIMetadata.from_dict(ui_meta)
                 if existing.ui_metadata.to_dict() != new_ui_metadata.to_dict():
                     existing.ui_metadata = new_ui_metadata
-                    existing.status = MCPAppStatus.DISCOVERED
-                    existing.cached_resource = None
+                    existing.mark_discovered()
                     await self._app_repo.save(existing)
                     logger.info(
                         "Updated MCP App metadata: server=%s, tool=%s",
