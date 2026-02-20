@@ -1,0 +1,243 @@
+"""Feishu utility functions for direct API calls."""
+
+import json
+from typing import Any, Dict, List, Optional
+
+from src.domain.model.channels.message import SenderInfo
+
+
+class FeishuClient:
+    """Simple Feishu API client for direct operations."""
+    
+    def __init__(self, app_id: str, app_secret: str, domain: str = "feishu"):
+        self.app_id = app_id
+        self.app_secret = app_secret
+        self.domain = domain
+        self._client: Optional[Any] = None
+    
+    def _get_client(self):
+        """Lazy load Feishu client."""
+        if self._client is None:
+            try:
+                from larksuiteoapi import Client
+                self._client = Client(
+                    app_id=self.app_id,
+                    app_secret=self.app_secret,
+                )
+            except ImportError:
+                raise ImportError("larksuiteoapi not installed")
+        return self._client
+    
+    async def send_text_message(self, to: str, text: str) -> str:
+        """Send text message.
+        
+        Args:
+            to: Recipient ID (open_id or chat_id)
+            text: Message text
+            
+        Returns:
+            Message ID
+        """
+        client = self._get_client()
+        receive_id_type = "open_id" if to.startswith("ou_") else "chat_id"
+        
+        response = client.im.message.create(
+            {"receive_id_type": receive_id_type},
+            {
+                "receive_id": to,
+                "msg_type": "text",
+                "content": json.dumps({"text": text}),
+            }
+        )
+        
+        return response.get("data", {}).get("message_id")
+    
+    async def send_card_message(
+        self,
+        to: str,
+        card: Dict[str, Any]
+    ) -> str:
+        """Send interactive card message.
+        
+        Args:
+            to: Recipient ID
+            card: Card configuration dict
+            
+        Returns:
+            Message ID
+        """
+        client = self._get_client()
+        receive_id_type = "open_id" if to.startswith("ou_") else "chat_id"
+        
+        response = client.im.message.create(
+            {"receive_id_type": receive_id_type},
+            {
+                "receive_id": to,
+                "msg_type": "interactive",
+                "content": json.dumps(card),
+            }
+        )
+        
+        return response.get("data", {}).get("message_id")
+    
+    async def reply_message(
+        self,
+        message_id: str,
+        text: str
+    ) -> str:
+        """Reply to a message.
+        
+        Args:
+            message_id: Original message ID
+            text: Reply text
+            
+        Returns:
+            Reply message ID
+        """
+        client = self._get_client()
+        
+        response = client.im.message.reply(
+            {"message_id": message_id},
+            {
+                "content": json.dumps({"text": text}),
+                "msg_type": "text",
+            }
+        )
+        
+        return response.get("data", {}).get("message_id")
+    
+    async def get_chat_info(self, chat_id: str) -> Dict[str, Any]:
+        """Get chat group information.
+        
+        Args:
+            chat_id: Chat ID
+            
+        Returns:
+            Chat info dict with name, description, member_count
+        """
+        client = self._get_client()
+        
+        response = client.im.chat.get({"chat_id": chat_id})
+        chat = response.get("data", {})
+        
+        return {
+            "id": chat.get("chat_id"),
+            "name": chat.get("name"),
+            "description": chat.get("description"),
+            "member_count": chat.get("member_count"),
+            "owner_id": chat.get("owner_id"),
+        }
+    
+    async def get_chat_members(self, chat_id: str) -> List[SenderInfo]:
+        """Get chat members.
+        
+        Args:
+            chat_id: Chat ID
+            
+        Returns:
+            List of SenderInfo
+        """
+        client = self._get_client()
+        
+        response = client.im.chatMembers.get(
+            {"chat_id": chat_id},
+            {"member_id_type": "open_id"}
+        )
+        
+        members = response.get("data", {}).get("items", [])
+        return [
+            SenderInfo(id=m.get("member_id"), name=m.get("name"))
+            for m in members
+        ]
+    
+    async def get_user_info(self, user_id: str) -> Optional[SenderInfo]:
+        """Get user information.
+        
+        Args:
+            user_id: User open_id
+            
+        Returns:
+            SenderInfo or None
+        """
+        client = self._get_client()
+        
+        response = client.contact.user.get(
+            {"user_id": user_id},
+            {"user_id_type": "open_id"}
+        )
+        
+        user = response.get("data", {}).get("user", {})
+        if not user:
+            return None
+        
+        return SenderInfo(
+            id=user.get("open_id", user_id),
+            name=user.get("name"),
+            avatar=user.get("avatar", {}).get("avatar_origin")
+        )
+    
+    async def send_image(self, to: str, image_key: str) -> str:
+        """Send image message.
+        
+        Args:
+            to: Recipient ID
+            image_key: Image key from upload
+            
+        Returns:
+            Message ID
+        """
+        client = self._get_client()
+        receive_id_type = "open_id" if to.startswith("ou_") else "chat_id"
+        
+        response = client.im.message.create(
+            {"receive_id_type": receive_id_type},
+            {
+                "receive_id": to,
+                "msg_type": "image",
+                "content": json.dumps({"image_key": image_key}),
+            }
+        )
+        
+        return response.get("data", {}).get("message_id")
+    
+    async def upload_image(self, image_data: bytes) -> str:
+        """Upload image.
+        
+        Args:
+            image_data: Raw image bytes
+            
+        Returns:
+            Image key
+        """
+        client = self._get_client()
+        
+        response = client.im.image.create(
+            {"image_type": "message"},
+            image_data
+        )
+        
+        return response.get("data", {}).get("image_key")
+
+
+# Convenience functions for direct use
+
+async def send_feishu_text(
+    app_id: str,
+    app_secret: str,
+    to: str,
+    text: str
+) -> str:
+    """Send text message to Feishu (convenience function)."""
+    client = FeishuClient(app_id, app_secret)
+    return await client.send_text_message(to, text)
+
+
+async def send_feishu_card(
+    app_id: str,
+    app_secret: str,
+    to: str,
+    card: Dict[str, Any]
+) -> str:
+    """Send card message to Feishu (convenience function)."""
+    client = FeishuClient(app_id, app_secret)
+    return await client.send_card_message(to, card)
