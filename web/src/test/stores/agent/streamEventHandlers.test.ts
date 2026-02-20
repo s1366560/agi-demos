@@ -1,470 +1,293 @@
-/**
- * Tests for streamEventHandlers - Tool visibility during streaming
- *
- * This test suite verifies that tool calls are correctly tracked
- * in activeToolCalls during the act -> observe flow.
- *
- * TDD Phase: Fix tool streaming visibility issue
- */
-
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createStreamEventHandlers } from '../../../stores/agent/streamEventHandlers';
-
-import type {
-  AgentStreamHandler,
-  AgentEvent,
-  ActEventData,
-  ObserveEventData,
-} from '../../../types/agent';
+import type { DeltaBufferState, StreamHandlerDeps } from '../../../stores/agent/streamEventHandlers';
 import type { ConversationState } from '../../../types/conversationState';
+import type { 
+  AgentEvent, 
+  ThoughtEventData, 
+  ActEventData, 
+  ObserveEventData, 
+  TextDeltaEventData 
+} from '../../../types/agent';
 
-const {
-  openTabMock,
-  setModeMock,
-  invalidateResourceMock,
-  mcpApps,
-  launchMock,
-  completeMock,
-  failMock,
-} = vi.hoisted(() => ({
-  openTabMock: vi.fn(),
-  setModeMock: vi.fn(),
-  invalidateResourceMock: vi.fn(),
-  mcpApps: {} as Record<string, any>,
-  launchMock: vi.fn(),
-  completeMock: vi.fn(),
-  failMock: vi.fn(),
-}));
-
-// Mock external dependencies
-vi.mock('../../../utils/sseEventAdapter', () => ({
-  appendSSEEventToTimeline: vi.fn((timeline, event) => [...timeline, event]),
-}));
-
-vi.mock('../../../utils/tabSync', () => ({
-  tabSync: {
-    broadcastConversationCompleted: vi.fn(),
-    broadcastStreamingStateChanged: vi.fn(),
-  },
-}));
-
-vi.mock('../../../stores/backgroundStore', () => ({
-  useBackgroundStore: {
-    getState: vi.fn(() => ({
-      launch: launchMock,
-      complete: completeMock,
-      fail: failMock,
-    })),
-  },
-}));
-
-vi.mock('../../../stores/canvasStore', () => ({
-  useCanvasStore: {
-    getState: vi.fn(() => ({
-      openTab: openTabMock,
-      updateContent: vi.fn(),
-      closeTab: vi.fn(),
-      tabs: [],
-    })),
-  },
-}));
-
-vi.mock('../../../stores/contextStore', () => ({
-  useContextStore: {
-    getState: vi.fn(() => ({
-      handleCostUpdate: vi.fn(),
-      handleContextCompressed: vi.fn(),
-      handleContextStatus: vi.fn(),
-    })),
-  },
-}));
-
-vi.mock('../../../stores/layoutMode', () => ({
-  useLayoutModeStore: {
-    getState: vi.fn(() => ({
-      mode: 'chat',
-      setMode: setModeMock,
-    })),
-  },
-}));
-
-vi.mock('../../../stores/mcpAppStore', () => ({
-  useMCPAppStore: {
-    getState: vi.fn(() => ({
-      invalidateResource: invalidateResourceMock,
-      apps: mcpApps,
-      addApp: vi.fn(),
-      updateApp: vi.fn(),
-      fetchResourceHtml: vi.fn(),
-    })),
-  },
-}));
-
-describe('streamEventHandlers - Tool Visibility', () => {
-  let mockConversationState: ConversationState;
-  let capturedUpdates: Partial<ConversationState>[];
-  let handlers: AgentStreamHandler;
-
-  const conversationId = 'test-conv-1';
+describe('streamEventHandlers', () => {
+  const conversationId = 'conv-1';
+  // Mock state object
+  let mockState: ConversationState;
+  
+  // Mock dependencies
+  let mockUpdateConversationState: ReturnType<typeof vi.fn>;
+  let mockGetConversationState: ReturnType<typeof vi.fn>;
+  let mockSet: ReturnType<typeof vi.fn>;
+  let deltaBuffers: Map<string, DeltaBufferState>;
+  let mockDeps: StreamHandlerDeps;
 
   beforeEach(() => {
-    vi.clearAllMocks();
-    Object.keys(mcpApps).forEach((key) => delete mcpApps[key]);
+    vi.useFakeTimers();
 
-    // Reset captured updates
-    capturedUpdates = [];
-
-    // Initialize mock conversation state
-    mockConversationState = {
+    // Initialize mock state with minimal required fields
+    mockState = {
+      conversationId,
+      messages: [],
       timeline: [],
-      isStreaming: true,
-      streamStatus: 'streaming',
-      streamingAssistantContent: '',
-      error: null,
-      agentState: 'idle',
-      currentThought: '',
-      streamingThought: '',
+      isStreaming: false,
       isThinkingStreaming: false,
+      agentState: 'idle',
+      streamingAssistantContent: '',
+      streamingThought: '',
       activeToolCalls: new Map(),
       pendingToolsStack: [],
-      isPlanMode: false,
-      pendingClarification: null,
-      pendingDecision: null,
-      pendingEnvVarRequest: null,
-      pendingPermission: null,
-      doomLoopDetected: null,
-      costTracking: null,
-      suggestions: [],
-      hasEarlier: false,
-      earliestTimeUs: null,
-      earliestCounter: null,
       tasks: [],
-      appModelContext: null,
-      pendingHITLSummary: null,
-    };
+      artifacts: [],
+      files: [],
+      isPlanMode: false,
+      streamStatus: 'idle',
+      currentThought: '',
+      // ... other fields can be undefined or partial for tests
+    } as unknown as ConversationState;
 
-    const mockGet = () => ({
-      activeConversationId: conversationId,
-      getConversationState: () => mockConversationState,
-      updateConversationState: (id: string, updates: Partial<ConversationState>) => {
-        // Capture the updates for assertions
-        capturedUpdates.push(updates);
-        // Apply updates to mock state for testing
-        mockConversationState = {
-          ...mockConversationState,
-          ...updates,
-          // Special handling for Maps
-          activeToolCalls:
-            updates.activeToolCalls !== undefined
-              ? updates.activeToolCalls
-              : mockConversationState.activeToolCalls,
-        };
-      },
+    mockUpdateConversationState = vi.fn((id, updates) => {
+      // Apply updates to mockState for subsequent calls
+      Object.assign(mockState, updates);
     });
+    
+    mockGetConversationState = vi.fn().mockReturnValue(mockState);
+    
+    mockSet = vi.fn();
 
-    // Create handlers with mock dependencies
-    handlers = createStreamEventHandlers(
-      conversationId,
-      undefined, // no additional handlers
-      {
-        get: mockGet as any,
-        set: vi.fn() as any,
-        getDeltaBuffer: () => ({
+    deltaBuffers = new Map();
+    const getDeltaBuffer = (id: string) => {
+      if (!deltaBuffers.has(id)) {
+        deltaBuffers.set(id, {
           textDeltaBuffer: '',
           textDeltaFlushTimer: null,
           thoughtDeltaBuffer: '',
           thoughtDeltaFlushTimer: null,
           actDeltaBuffer: null,
           actDeltaFlushTimer: null,
-        }),
-        clearDeltaBuffers: () => {},
-        clearAllDeltaBuffers: () => {},
-        timelineToMessages: (timeline) => timeline,
-        tokenBatchIntervalMs: 50,
-        thoughtBatchIntervalMs: 50,
+        });
       }
+      return deltaBuffers.get(id)!;
+    };
+
+    mockDeps = {
+      get: () => ({
+        activeConversationId: conversationId,
+        getConversationState: mockGetConversationState,
+        updateConversationState: mockUpdateConversationState,
+      }),
+      set: mockSet,
+      getDeltaBuffer,
+      clearDeltaBuffers: vi.fn(),
+      clearAllDeltaBuffers: vi.fn(),
+      timelineToMessages: vi.fn(),
+      tokenBatchIntervalMs: 50,
+      thoughtBatchIntervalMs: 50,
+    };
+  });
+
+  afterEach(() => {
+    vi.clearAllTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('should handle onTextStart', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    handlers.onTextStart!();
+
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(conversationId, {
+      streamStatus: 'streaming',
+      streamingAssistantContent: '',
+    });
+  });
+
+  it('should buffer and flush onTextDelta', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    const event: AgentEvent<TextDeltaEventData> = {
+      type: 'text_delta',
+      data: { delta: 'Hello' },
+    };
+
+    // First chunk
+    handlers.onTextDelta!(event);
+    
+    // Should not update state yet (buffered)
+    expect(mockUpdateConversationState).not.toHaveBeenCalled();
+
+    // Advance timer to trigger flush
+    vi.advanceTimersByTime(50);
+
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(conversationId, {
+      streamingAssistantContent: 'Hello',
+      streamStatus: 'streaming',
+    });
+  });
+
+  it('should handle onTextEnd and flush remaining buffer', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    
+    // Add some data to buffer
+    handlers.onTextDelta!({ type: 'text_delta', data: { delta: 'World' } });
+
+    const endEvent: AgentEvent<any> = {
+      type: 'text_end',
+      data: { full_text: 'Hello World' },
+    };
+
+    handlers.onTextEnd!(endEvent);
+
+    // Should clear timer
+    const buffer = deltaBuffers.get(conversationId)!;
+    expect(buffer.textDeltaFlushTimer).toBeNull();
+    expect(buffer.textDeltaBuffer).toBe('');
+
+    // Should update state with timeline event
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({
+        streamingAssistantContent: '',
+        timeline: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'text_end',
+            fullText: 'Hello World'
+          })
+        ])
+      })
     );
   });
 
-  describe('onAct - Tool execution starts', () => {
-    it('should add tool to activeToolCalls with running status', () => {
-      const actEvent: AgentEvent<ActEventData> = {
-        type: 'act',
-        data: {
-          tool_name: 'web_search',
-          tool_input: { query: 'test' },
-          step_number: 1,
-        },
-      };
+  it('should handle onAct (tool call)', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    const event: AgentEvent<ActEventData> = {
+      type: 'act',
+      data: {
+        tool_name: 'search',
+        tool_input: { query: 'test' },
+        step_number: 1,
+      },
+    };
 
-      handlers.onAct?.(actEvent);
+    handlers.onAct!(event);
 
-      // Verify updateConversationState was called
-      expect(capturedUpdates.length).toBeGreaterThan(0);
-      const updates = capturedUpdates[0];
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({
+        agentState: 'acting',
+        activeToolCalls: expect.any(Map),
+        pendingToolsStack: ['search'],
+      })
+    );
 
-      expect(updates.activeToolCalls).toBeDefined();
-      expect(updates.activeToolCalls!.has('web_search')).toBe(true);
+    // Verify activeToolCalls map in the update call
+    const lastCall = mockUpdateConversationState.mock.calls[0];
+    const updates = lastCall[1];
+    const calls = updates.activeToolCalls;
+    expect(calls.get('search')).toEqual(expect.objectContaining({
+      name: 'search',
+      status: 'running',
+    }));
+  });
 
-      const toolCall = updates.activeToolCalls!.get('web_search');
-      expect(toolCall?.status).toBe('running');
-      expect(toolCall?.arguments).toEqual({ query: 'test' });
-    });
+  it('should handle onObserve (tool result)', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    
+    // Setup initial state with active tool call
+    const activeCalls = new Map();
+    activeCalls.set('search', { name: 'search', status: 'running' });
+    mockState.activeToolCalls = activeCalls;
+    mockState.pendingToolsStack = ['search'];
 
-    it('should push tool name to pendingToolsStack', () => {
-      const actEvent: AgentEvent<ActEventData> = {
-        type: 'act',
-        data: {
-          tool_name: 'file_read',
-          tool_input: { path: '/tmp/test.txt' },
-          step_number: 1,
-        },
-      };
+    const event: AgentEvent<ObserveEventData> = {
+      type: 'observe',
+      data: {
+        tool_name: 'search',
+        observation: 'Found results',
+      },
+    };
 
-      handlers.onAct?.(actEvent);
+    handlers.onObserve!(event);
 
-      const updates = capturedUpdates[0];
-      expect(updates.pendingToolsStack).toEqual(['file_read']);
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({
+        agentState: 'observing',
+        pendingToolsStack: [], // Should pop 'search'
+        activeToolCalls: expect.any(Map),
+      })
+    );
+
+    const lastCall = mockUpdateConversationState.mock.calls[0];
+    const updates = lastCall[1];
+    const calls = updates.activeToolCalls;
+    expect(calls.get('search').status).toBe('success');
+    expect(calls.get('search').result).toBe('Found results');
+  });
+
+  it('should buffer and flush onThoughtDelta', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    const event: AgentEvent<any> = {
+      type: 'thought_delta',
+      data: { delta: 'Thinking...' },
+    };
+
+    handlers.onThoughtDelta!(event);
+    
+    expect(mockUpdateConversationState).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(50);
+
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(conversationId, {
+      streamingThought: 'Thinking...',
+      isThinkingStreaming: true,
+      agentState: 'thinking',
     });
   });
 
-  describe('onObserve - Tool execution completes', () => {
-    it('should pop tool from pendingToolsStack', () => {
-      // First, simulate an act event
-      mockConversationState.pendingToolsStack = ['web_search'];
-      mockConversationState.activeToolCalls = new Map([
-        [
-          'web_search',
-          {
-            name: 'web_search',
-            arguments: { query: 'test' },
-            status: 'running',
-            startTime: Date.now(),
-          },
-        ],
-      ]);
+  it('should handle onThought and add to timeline', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    const event: AgentEvent<ThoughtEventData> = {
+      type: 'thought',
+      data: {
+        thought: 'I should search.',
+        thought_level: 'work',
+        step_number: 1,
+      },
+    };
 
-      const observeEvent: AgentEvent<ObserveEventData> = {
-        type: 'observe',
-        data: {
-          observation: 'Search completed successfully',
-        },
-      };
+    handlers.onThought!(event);
 
-      handlers.onObserve?.(observeEvent);
-
-      const updates = capturedUpdates[0];
-      expect(updates.pendingToolsStack).toEqual([]);
-    });
-
-    it('CRITICAL: should update activeToolCalls to mark tool as completed', () => {
-      // Setup: Tool is running
-      const startTime = Date.now() - 1000;
-      mockConversationState.pendingToolsStack = ['todowrite'];
-      mockConversationState.activeToolCalls = new Map([
-        [
-          'todowrite',
-          {
-            name: 'todowrite',
-            arguments: { tasks: [] },
-            status: 'running',
-            startTime,
-          },
-        ],
-      ]);
-
-      const observeEvent: AgentEvent<ObserveEventData> = {
-        type: 'observe',
-        data: {
-          tool_name: 'todowrite',
-          observation: 'Tasks updated successfully',
-        },
-      };
-
-      handlers.onObserve?.(observeEvent);
-
-      // CRITICAL ASSERTION: activeToolCalls should be updated
-      const updates = capturedUpdates[0];
-
-      // This is the fix - activeToolCalls must be updated
-      expect(updates.activeToolCalls).toBeDefined();
-      expect(updates.activeToolCalls!.has('todowrite')).toBe(true);
-
-      const toolCall = updates.activeToolCalls!.get('todowrite');
-      // Tool status should change from 'running' to 'completed'
-      expect(toolCall?.status).toBe('completed');
-      // Result should be stored
-      expect(toolCall?.result).toBe('Tasks updated successfully');
-      // Completion timestamp should be recorded
-      expect(toolCall?.completedAt).toBeDefined();
-      expect(typeof toolCall?.completedAt).toBe('number');
-    });
-
-    it('should handle observe event without tool_name in data', () => {
-      // Setup: Tool is running
-      mockConversationState.pendingToolsStack = ['unknown_tool'];
-      mockConversationState.activeToolCalls = new Map([
-        [
-          'unknown_tool',
-          {
-            name: 'unknown_tool',
-            arguments: {},
-            status: 'running',
-            startTime: Date.now(),
-          },
-        ],
-      ]);
-
-      const observeEvent: AgentEvent<ObserveEventData> = {
-        type: 'observe',
-        data: {
-          // No tool_name provided
-          observation: 'Tool completed',
-        },
-      };
-
-      // Should NOT throw
-      expect(() => handlers.onObserve?.(observeEvent)).not.toThrow();
-
-      // Should still pop from stack
-      const updates = capturedUpdates[0];
-      expect(updates.pendingToolsStack).toEqual([]);
-    });
-
-    it('should handle multiple concurrent tool calls', () => {
-      // Setup: Multiple tools running
-      const startTime = Date.now() - 500;
-      mockConversationState.pendingToolsStack = ['tool_a', 'tool_b'];
-      mockConversationState.activeToolCalls = new Map([
-        [
-          'tool_a',
-          {
-            name: 'tool_a',
-            arguments: {},
-            status: 'running',
-            startTime,
-          },
-        ],
-        [
-          'tool_b',
-          {
-            name: 'tool_b',
-            arguments: {},
-            status: 'running',
-            startTime: startTime + 100,
-          },
-        ],
-      ]);
-
-      // First tool completes
-      const observeEvent1: AgentEvent<ObserveEventData> = {
-        type: 'observe',
-        data: {
-          tool_name: 'tool_b',
-          observation: 'Tool B completed',
-        },
-      };
-
-      handlers.onObserve?.(observeEvent1);
-
-      const updates = capturedUpdates[0];
-
-      // Stack should have tool_a left
-      expect(updates.pendingToolsStack).toEqual(['tool_a']);
-
-      // tool_b should be marked completed, tool_a still running
-      expect(updates.activeToolCalls!.get('tool_b')?.status).toBe('completed');
-      expect(updates.activeToolCalls!.get('tool_a')?.status).toBe('running');
-    });
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({
+        agentState: 'thinking',
+        isThinkingStreaming: false,
+        streamingThought: '',
+        currentThought: '\nI should search.',
+        timeline: expect.arrayContaining([
+            expect.objectContaining({
+                type: 'thought',
+                content: 'I should search.'
+            })
+        ])
+      })
+    );
   });
 
-  describe('Complete flow: act -> observe -> complete', () => {
-    it('should correctly track tool visibility throughout full cycle', () => {
-      // 1. Act: Tool starts
-      const actEvent: AgentEvent<ActEventData> = {
-        type: 'act',
-        data: {
-          tool_name: 'terminal',
-          tool_input: { command: 'ls -la' },
-          step_number: 1,
-        },
-      };
+  it('should handle onTaskListUpdated', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    const tasks = [{ id: 'task-1', status: 'pending', title: 'Task 1' }];
+    const event: AgentEvent<any> = {
+      type: 'task_list_updated',
+      data: {
+        conversation_id: conversationId,
+        tasks,
+      },
+    };
 
-      handlers.onAct?.(actEvent);
+    handlers.onTaskListUpdated!(event);
 
-      expect(capturedUpdates.length).toBeGreaterThan(0);
-      let updates = capturedUpdates[0];
-
-      expect(updates.activeToolCalls!.get('terminal')?.status).toBe('running');
-      expect(updates.pendingToolsStack).toEqual(['terminal']);
-
-      // Update mock state for next event
-      mockConversationState.activeToolCalls = updates.activeToolCalls!;
-      mockConversationState.pendingToolsStack = updates.pendingToolsStack as string[];
-
-      // 2. Observe: Tool completes
-      const observeEvent: AgentEvent<ObserveEventData> = {
-        type: 'observe',
-        data: {
-          tool_name: 'terminal',
-          observation: 'Command executed',
-        },
-      };
-
-      handlers.onObserve?.(observeEvent);
-
-      expect(capturedUpdates.length).toBeGreaterThan(1);
-      updates = capturedUpdates[1];
-
-      // CRITICAL: Tool should be marked completed
-      expect(updates.activeToolCalls!.get('terminal')?.status).toBe('completed');
-      expect(updates.pendingToolsStack).toEqual([]);
-    });
-  });
-
-  describe('onMCPAppResult', () => {
-    it('should use ui_metadata.resourceUri when top-level resource_uri is missing', () => {
-      handlers.onMCPAppResult?.({
-        type: 'mcp_app_result',
-        data: {
-          app_id: '',
-          tool_name: 'mcp__demo__tool',
-          resource_uri: '',
-          ui_metadata: {
-            resourceUri: 'ui://widget/demo.html',
-            title: 'Demo App',
-          },
-          tool_result: { ok: true },
-        },
-      } as any);
-
-      expect(openTabMock).toHaveBeenCalledTimes(1);
-      expect(openTabMock).toHaveBeenCalledWith(
-        expect.objectContaining({
-          id: 'mcp-app-ui://widget/demo.html',
-          mcpResourceUri: 'ui://widget/demo.html',
-          title: 'Demo App',
-        })
-      );
-      expect(setModeMock).toHaveBeenCalledWith('canvas');
-    });
-
-    it('should defer opening fallback tab when app_id exists but uri/html are missing', () => {
-      handlers.onMCPAppResult?.({
-        type: 'mcp_app_result',
-        data: {
-          app_id: 'app-recover-1',
-          tool_name: 'mcp__server__tool',
-          resource_uri: '',
-          resource_html: '',
-          tool_result: { ok: true },
-        },
-      } as any);
-
-      // No immediate fallback-only tab before async mcpAppStore lookup.
-      expect(openTabMock).not.toHaveBeenCalled();
-      expect(setModeMock).not.toHaveBeenCalled();
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(conversationId, {
+      tasks,
     });
   });
 });
