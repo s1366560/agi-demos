@@ -244,6 +244,9 @@ class SandboxMCPServerToolAdapter(AgentTool):
                 return f"Error: {error_msg}"
 
             texts = self._extract_text(content)
+            # Detect HTML content in the result and cache it so processor.py
+            # can emit it in mcp_app_result without an extra resources/read call.
+            self._capture_html_from_content(content)
             return texts or "Tool executed successfully (no output)"
 
         except Exception as e:
@@ -263,3 +266,25 @@ class SandboxMCPServerToolAdapter(AgentTool):
             else:
                 texts.append(str(item))
         return "\n".join(texts)
+
+    def _capture_html_from_content(self, content: list) -> None:
+        """Detect HTML in tool result and cache it for mcp_app_result emission.
+
+        If the tool execution returns HTML directly (e.g., a game renderer that
+        generates the page inline), store it in _last_html and _cached_html so
+        processor.py can include it in mcp_app_result without a round-trip
+        resources/read call.
+        """
+        import time
+
+        for item in content:
+            if not isinstance(item, dict) or item.get("type") != "text":
+                continue
+            text = item.get("text", "")
+            prefix = text.lstrip()[:80].lower()
+            if "<!doctype html" in prefix or "<html" in prefix:
+                self._last_html: str = text
+                self._cached_html = text
+                self._cache_fetched_at = time.time()
+                logger.debug("Captured HTML from tool result for %s (%d bytes)", self._name, len(text))
+                return

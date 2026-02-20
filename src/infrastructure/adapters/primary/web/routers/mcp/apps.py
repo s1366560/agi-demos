@@ -4,6 +4,7 @@ CRUD operations and resource serving for MCP Apps -
 interactive HTML interfaces declared by MCP tools.
 """
 
+import asyncio
 import logging
 from typing import Any, List, Optional
 
@@ -459,14 +460,22 @@ async def proxy_resource_read(
         container = get_container_with_db(request, db)
         mcp_manager = container.sandbox_mcp_server_manager()
 
-        # Use call_tool with __resources_read__ to proxy to child MCP server
-        # This is the same pattern used by MCPAppResourceResolver.resolve()
-        result = await mcp_manager.call_tool(
-            project_id=body.project_id,
-            server_name=server_name,
-            tool_name="__resources_read__",
-            arguments={"uri": body.uri},
-        )
+        # Use call_tool with __resources_read__ to proxy to child MCP server.
+        # Use a short timeout so callers don't wait the full 60s when the
+        # resource doesn't exist (e.g. ephemeral sandbox was restarted).
+        try:
+            result = await asyncio.wait_for(
+                mcp_manager.call_tool(
+                    project_id=body.project_id,
+                    server_name=server_name,
+                    tool_name="__resources_read__",
+                    arguments={"uri": body.uri},
+                ),
+                timeout=15.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("resources/read timed out after 15s: uri=%s", body.uri)
+            raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}")
 
         if result.is_error:
             error_text = ""
