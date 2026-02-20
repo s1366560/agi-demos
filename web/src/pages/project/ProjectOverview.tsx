@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-
+import { Modal, message } from '@/components/ui/lazyAntd';
+import { LazyDropdown } from '@/components/ui/lazyAntd';
 import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 
@@ -16,6 +17,11 @@ export const ProjectOverview: React.FC = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Action states
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [memoryToDelete, setMemoryToDelete] = useState<Memory | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -41,6 +47,47 @@ export const ProjectOverview: React.FC = () => {
     };
     fetchData();
   }, [projectId]);
+
+  const handleReprocess = async (memoryId: string) => {
+    if (!projectId) return;
+    try {
+      await memoryAPI.reprocess(projectId, memoryId);
+      message.success(t('common.status.processing_started') || 'Processing started');
+      // Optimistic update
+      setMemories((prev: Memory[]) =>
+        prev.map((m: Memory) => (m.id === memoryId ? { ...m, processing_status: 'PENDING' } : m))
+      );
+    } catch (error) {
+      console.error('Failed to reprocess:', error);
+      message.error(t('common.errors.processing_failed') || 'Processing failed');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!memoryToDelete || !projectId) return;
+    
+    setIsDeleting(true);
+    try {
+      await memoryAPI.delete(projectId, memoryToDelete.id);
+      message.success(t('common.status.deleted') || 'Memory deleted');
+      
+      // Refresh list
+      const memoriesData = await memoryAPI.list(projectId, { page: 1, page_size: 5 });
+      setMemories(memoriesData.memories);
+      
+      // Refresh stats
+      const statsData = await projectAPI.getStats(projectId);
+      setStats(statsData);
+      
+      setDeleteModalOpen(false);
+      setMemoryToDelete(null);
+    } catch (error) {
+      console.error('Failed to delete memory:', error);
+      message.error(t('common.errors.delete_failed') || 'Delete failed');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   if (!projectId) {
     return <div className="p-8 text-center text-slate-500">{t('project.overview.not_found')}</div>;
@@ -254,7 +301,7 @@ export const ProjectOverview: React.FC = () => {
                       </td>
                     </tr>
                   ) : (
-                    memories.map((memory) => {
+                    memories.map((memory: Memory) => {
                       const status = getMemoryStatus(memory);
                       return (
                         <tr
@@ -303,20 +350,44 @@ export const ProjectOverview: React.FC = () => {
                             {formatStorage(memory.content?.length || 0)}
                           </td>
                           <td className="px-6 py-3 text-right">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                // TODO: Implement menu
+                            <LazyDropdown
+                              menu={{
+                                items: [
+                                  {
+                                    key: 'reprocess',
+                                    label: t('common.actions.reprocess') || 'Reprocess',
+                                    icon: <span className="material-symbols-outlined text-sm">refresh</span>,
+                                  },
+                                  {
+                                    key: 'delete',
+                                    label: t('common.actions.delete') || 'Delete',
+                                    danger: true,
+                                    icon: <span className="material-symbols-outlined text-sm">delete</span>,
+                                  },
+                                ],
+                                onClick: ({ key, domEvent }: { key: string; domEvent: any }) => {
+                                  domEvent.stopPropagation();
+                                  if (key === 'reprocess') handleReprocess(memory.id);
+                                  if (key === 'delete') {
+                                    setMemoryToDelete(memory);
+                                    setDeleteModalOpen(true);
+                                  }
+                                },
                               }}
-                              className="text-slate-400 hover:text-primary p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
+                              trigger={['click']}
                             >
-                              <span
-                                className="material-symbols-outlined"
-                                style={{ fontSize: '20px' }}
+                              <button
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-slate-400 hover:text-primary p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
                               >
-                                more_vert
-                              </span>
-                            </button>
+                                <span
+                                  className="material-symbols-outlined"
+                                  style={{ fontSize: '20px' }}
+                                >
+                                  more_vert
+                                </span>
+                              </button>
+                            </LazyDropdown>
                           </td>
                         </tr>
                       );
@@ -394,6 +465,29 @@ export const ProjectOverview: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <Modal
+        title={t('project.memories.deleteTitle') || 'Delete Memory'}
+        open={deleteModalOpen}
+        onOk={handleDelete}
+        onCancel={() => {
+          setDeleteModalOpen(false);
+          setMemoryToDelete(null);
+        }}
+        okText={t('common.actions.delete') || 'Delete'}
+        cancelText={t('common.actions.cancel') || 'Cancel'}
+        okButtonProps={{ danger: true, loading: isDeleting }}
+      >
+        <p>
+          {t('project.memories.deleteConfirmation') || 'Are you sure you want to delete this memory? This action cannot be undone.'}
+        </p>
+        {memoryToDelete && (
+          <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+            <p className="font-medium text-slate-900 dark:text-white">{memoryToDelete.title}</p>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };
