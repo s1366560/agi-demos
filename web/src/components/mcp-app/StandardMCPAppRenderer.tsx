@@ -85,13 +85,13 @@ export interface StandardMCPAppRendererProps {
 }
 
 /**
- * Get the sandbox proxy URL.
+ * Get the sandbox proxy URL as a string.
  * The proxy must be on a different origin from the frontend for iframe security.
  */
-function getSandboxProxyUrl(): URL {
+function getSandboxProxyUrl(): string {
   const apiHost = import.meta.env.VITE_API_HOST || 'localhost:8000';
   const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-  return new URL(`${protocol}//${apiHost}/static/sandbox_proxy.html`);
+  return new URL(`${protocol}//${apiHost}/static/sandbox_proxy.html`).href;
 }
 
 export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, StandardMCPAppRendererProps>(({
@@ -507,9 +507,11 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
           }
         >
           <LazyAppRenderer
-          // Force re-mount when connection mode changes to avoid stale handlers
-          // Use stable key during grace period to prevent UI flickering
-          key={shouldUseFallback ? 'mode-b-http' : 'mode-a-ws'}
+          // Use a stable key so the renderer is never remounted mid-handshake.
+          // The client/onCallTool/onListResources props update reactively when
+          // the connection mode changes (shouldUseFallback) without a remount,
+          // which would interrupt the sandbox proxy PROXY_READY handshake.
+          key="mcp-app-renderer"
           ref={appRendererRef}
           toolName={toolName}
           sandbox={sandboxConfig}

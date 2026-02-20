@@ -63,11 +63,21 @@
         return parts.join("; ");
       }
 
+      // Common CDN domains allowed by default so that AI-generated apps
+      // using three.js, D3, etc. from CDNs do not hit CSP violations.
+      var DEFAULT_CDN_DOMAINS = [
+        "https://cdnjs.cloudflare.com",
+        "https://unpkg.com",
+        "https://cdn.jsdelivr.net",
+        "https://cdn.skypack.dev",
+        "https://esm.sh"
+      ].join(" ");
+
       // Build CSP meta tag content from _meta.ui.csp metadata per SEP-1865.
-      // If no CSP metadata is provided, applies restrictive defaults.
+      // If no CSP metadata is provided, applies restrictive defaults with CDN allowlist.
       function buildCSPContent(csp) {
         var connectSrc = "'self'";
-        var resourceSrc = "";
+        var resourceSrc = DEFAULT_CDN_DOMAINS;
         var frameSrc = "'none'";
         var baseUri = "'self'";
 
@@ -76,7 +86,7 @@
             connectSrc = "'self' " + csp.connectDomains.join(" ");
           }
           if (csp.resourceDomains && csp.resourceDomains.length > 0) {
-            resourceSrc = " " + csp.resourceDomains.join(" ");
+            resourceSrc = DEFAULT_CDN_DOMAINS + " " + csp.resourceDomains.join(" ");
           }
           if (csp.frameDomains && csp.frameDomains.length > 0) {
             frameSrc = csp.frameDomains.join(" ");
@@ -88,11 +98,11 @@
 
         return [
           "default-src 'none'",
-          "script-src 'self' 'unsafe-inline'" + resourceSrc,
-          "style-src 'self' 'unsafe-inline'" + resourceSrc,
-          "img-src 'self' data:" + resourceSrc,
-          "font-src 'self'" + resourceSrc,
-          "media-src 'self' data:" + resourceSrc,
+          "script-src 'self' 'unsafe-inline' " + resourceSrc,
+          "style-src 'self' 'unsafe-inline' " + resourceSrc,
+          "img-src 'self' data: " + resourceSrc,
+          "font-src 'self' " + resourceSrc,
+          "media-src 'self' data: " + resourceSrc,
           "connect-src " + connectSrc,
           "frame-src " + frameSrc,
           "object-src 'none'",
@@ -121,6 +131,8 @@
           if (EXPECTED_HOST_ORIGIN !== "*" && event.origin !== EXPECTED_HOST_ORIGIN) return;
 
           if (event.data && event.data.method === RESOURCE_READY) {
+            proxyReadyAcked = true;
+            clearInterval(proxyReadyInterval);
             var params = event.data.params || {};
             if (typeof params.sandbox === "string") inner.setAttribute("sandbox", params.sandbox);
             var allow = buildAllowAttr(params.permissions);
@@ -144,11 +156,21 @@
         }
       });
 
-      // Signal readiness to host
-      window.parent.postMessage({
-        method: PROXY_READY,
-        params: {}
-      }, EXPECTED_HOST_ORIGIN);
+      // Signal readiness to host with retry until RESOURCE_READY is received.
+      // @mcp-ui/client registers its message listener inside a React useEffect, which
+      // fires after the first paint. If PROXY_READY is sent only once synchronously
+      // (before the client has mounted), it is silently dropped. Retry every 200 ms
+      // (max 5 s) to survive the race condition.
+      var proxyReadyAcked = false;
+      function sendProxyReady() {
+        window.parent.postMessage({ method: PROXY_READY, params: {} }, EXPECTED_HOST_ORIGIN);
+      }
+      sendProxyReady();
+      var proxyReadyInterval = setInterval(function() {
+        if (proxyReadyAcked) { clearInterval(proxyReadyInterval); return; }
+        sendProxyReady();
+      }, 200);
+      setTimeout(function() { clearInterval(proxyReadyInterval); }, 5000);
 
       // GAP-12: CSP audit logging (SEP-1865 recommends logging CSP configs)
       // Listen for CSP violations inside the inner iframe and relay to host as log messages.
