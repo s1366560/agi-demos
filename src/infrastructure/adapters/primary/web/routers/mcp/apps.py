@@ -460,11 +460,9 @@ async def proxy_resource_read(
         container = get_container_with_db(request, db)
         mcp_manager = container.sandbox_mcp_server_manager()
 
-        # Use call_tool with __resources_read__ to proxy to child MCP server.
-        # Use a short timeout so callers don't wait the full 60s when the
-        # resource doesn't exist (e.g. ephemeral sandbox was restarted).
-        try:
-            result = await asyncio.wait_for(
+        async def _read_resource() -> Any:
+            """Call __resources_read__ with a 15s timeout."""
+            return await asyncio.wait_for(
                 mcp_manager.call_tool(
                     project_id=body.project_id,
                     server_name=server_name,
@@ -473,9 +471,60 @@ async def proxy_resource_read(
                 ),
                 timeout=15.0,
             )
+
+        # Use call_tool with __resources_read__ to proxy to child MCP server.
+        # Use a short timeout so callers don't wait the full 60s when the
+        # resource doesn't exist (e.g. ephemeral sandbox was restarted).
+        # On failure (timeout or server-not-found), attempt a one-shot reinstall
+        # and retry — handles the case where the management server was restarted
+        # and lost its in-memory server registry.
+        need_retry = False
+        try:
+            result = await _read_resource()
+            if result.is_error:
+                need_retry = True
         except asyncio.TimeoutError:
             logger.warning("resources/read timed out after 15s: uri=%s", body.uri)
-            raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}")
+            need_retry = True
+
+        if need_retry:
+            # Attempt to reinstall + restart the server, then retry once.
+            try:
+                from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
+                    SqlMCPServerRepository,
+                )
+
+                mcp_repo = SqlMCPServerRepository(db)
+                mcp_server = await mcp_repo.get_by_name(body.project_id, server_name)
+                if mcp_server and mcp_server.transport_config:
+                    logger.info(
+                        "resources/read failed — reinstalling server '%s' and retrying",
+                        server_name,
+                    )
+                    await mcp_manager.install_and_start(
+                        project_id=body.project_id,
+                        tenant_id=tenant_id,
+                        server_name=server_name,
+                        server_type=mcp_server.server_type,
+                        transport_config=mcp_server.transport_config,
+                    )
+                    result = await _read_resource()
+                else:
+                    raise HTTPException(
+                        status_code=404, detail=f"Resource not found: {body.uri}"
+                    )
+            except HTTPException:
+                raise
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "resources/read retry timed out after reinstall: uri=%s", body.uri
+                )
+                raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}")
+            except Exception as reinstall_err:
+                logger.warning(
+                    "resources/read reinstall failed for '%s': %s", server_name, reinstall_err
+                )
+                raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}")
 
         if result.is_error:
             error_text = ""

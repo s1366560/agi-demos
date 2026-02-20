@@ -1011,6 +1011,12 @@ class MCPServerManager:
                 error_msg = f"{error_msg}\n--- Server stderr ---\n{stderr_text}"
             raise RuntimeError(error_msg)
 
+        # If the reader task stopped (e.g. idle timeout), restart it before
+        # sending the request so responses can be received.
+        if conn._reader_task is None or conn._reader_task.done():
+            logger.info("Stdio reader for '%s' was stopped; restarting before request", name)
+            conn._reader_task = asyncio.create_task(self._read_stdio_responses(name))
+
         request_id = conn.next_id()
         request = {
             "jsonrpc": "2.0",
