@@ -187,21 +187,32 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
     return () => observer.disconnect();
   }, []);
 
-  // Mark app as initialized once the MCP client connects (Mode A) or
-  // after a short fallback delay (Mode B / no direct client).
-  // This defers hostContext delivery to avoid "Not connected" errors
-  // from @mcp-ui/client's internal setHostContext -> notification().
+  // Defer hostContext until the sandbox bridge is connected to avoid
+  // "Not connected" Promise rejections from @mcp-ui/client setHostContext.
+  //
+  // The bridge connects after: React.lazy bundle download + iframe load +
+  // PROXY_READY handshake. On cold cache this can take 500-1000ms total.
+  //
+  // We reset appInitialized when appId/effectiveUri changes so a new app
+  // opened with the stable key="mcp-app-renderer" properly re-initializes.
+  //
+  // We also set appInitialized=true immediately when the app sends a
+  // size-change notification (handled in handleSizeChanged), giving an
+  // early signal for apps that initialize quickly.
   useEffect(() => {
+    setAppInitialized(false);
+
     if (useDirectClient) {
-      // Mode A: MCP client is connected, but add a small delay to ensure
-      // the internal bridge is fully ready before sending hostContext
-      const timer = setTimeout(() => setAppInitialized(true), 300);
+      // Mode A: WS client connected; iframe proxy handshake still needed.
+      // 1500ms covers lazy-bundle load + proxy handshake on cold cache.
+      const timer = setTimeout(() => setAppInitialized(true), 1500);
       return () => clearTimeout(timer);
     }
-    // Mode B: No direct client, use a short delay for iframe bridge setup
-    const timer = setTimeout(() => setAppInitialized(true), 500);
+    // Mode B: no direct client. 3000ms generous fallback for cold cache.
+    // handleSizeChanged fires earlier when the app reports its size.
+    const timer = setTimeout(() => setAppInitialized(true), 3000);
     return () => clearTimeout(timer);
-  }, [useDirectClient]);
+  }, [useDirectClient, appId, resourceUri]);
 
   // Normalize: treat empty strings as undefined
   const effectiveHtml = html || undefined;
@@ -422,9 +433,13 @@ export const StandardMCPAppRenderer = forwardRef<StandardMCPAppRendererHandle, S
   );
 
   // Handler for ui/notifications/size-changed from the app (SEP-1865)
+  // Also fires immediately when the bridge is working — used as an early
+  // "ready" signal to unblock hostContext delivery before the fallback timer.
   const handleSizeChanged = useCallback(
      
     (params: any) => {
+      // Bridge is confirmed live: app can only send notifications after connect()
+      setAppInitialized(true);
       onSizeChanged?.({ width: params?.width, height: params?.height });
     },
     [onSizeChanged],
