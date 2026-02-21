@@ -68,7 +68,7 @@ class HITLChannelResponder:
         )
 
         repo = SqlHITLRequestRepository(session)
-        request = await repo.find_by_id(request_id)
+        request = await repo.get_by_id(request_id)
         if not request:
             logger.warning(
                 f"[HITLChannelResponder] Request not found: {request_id}"

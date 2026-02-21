@@ -25,7 +25,7 @@ class TestHITLChannelResponder:
         """Returns False if HITL request not found in DB."""
         mock_session = AsyncMock()
         mock_repo = AsyncMock()
-        mock_repo.find_by_id.return_value = None
+        mock_repo.get_by_id.return_value = None
 
         mock_ctx = AsyncMock()
         mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
@@ -41,7 +41,7 @@ class TestHITLChannelResponder:
             )
 
         assert result is False
-        mock_repo.find_by_id.assert_awaited_once_with("missing-id")
+        mock_repo.get_by_id.assert_awaited_once_with("missing-id")
 
     async def test_respond_already_resolved(self, responder: HITLChannelResponder) -> None:
         """Returns False if HITL request already resolved."""
@@ -49,7 +49,7 @@ class TestHITLChannelResponder:
         mock_repo = AsyncMock()
         mock_request = MagicMock()
         mock_request.status = "resolved"
-        mock_repo.find_by_id.return_value = mock_request
+        mock_repo.get_by_id.return_value = mock_request
 
         mock_ctx = AsyncMock()
         mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
@@ -74,7 +74,7 @@ class TestHITLChannelResponder:
         mock_request.status = "pending"
         mock_request.tenant_id = "t-1"
         mock_request.project_id = "p-1"
-        mock_repo.find_by_id.return_value = mock_request
+        mock_repo.get_by_id.return_value = mock_request
 
         mock_redis = AsyncMock()
         mock_redis.xadd = AsyncMock()

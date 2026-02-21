@@ -175,8 +175,8 @@ async def test_invoke_agent_streams_and_sends_final_response() -> None:
         await router._invoke_agent(message, "conv-1")
 
     mock_create_llm_client.assert_awaited_once_with("tenant-1")
-    # Only text_delta is broadcast; complete is filtered to prevent duplicate messages
-    assert router._broadcast_workspace_event.await_count == 1
+    # text_delta and complete are both broadcast to WebSocket for web UI rendering
+    assert router._broadcast_workspace_event.await_count == 2
     router._send_response.assert_awaited_once_with(message, "conv-1", "final answer")
 
 

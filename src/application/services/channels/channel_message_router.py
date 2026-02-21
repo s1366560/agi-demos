@@ -533,7 +533,7 @@ class ChannelMessageRouter:
                 error_message: Optional[str] = None
                 _stream_done = False
 
-                _SKIP_BROADCAST = {"assistant_message", "text_end", "complete"}
+                _SKIP_BROADCAST = {"assistant_message"}
                 _STREAM_TIMEOUT = 180.0
 
                 # --- Background card updater (Feishu streaming) --------------
