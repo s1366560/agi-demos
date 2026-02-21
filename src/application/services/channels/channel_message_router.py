@@ -543,25 +543,34 @@ class ChannelMessageRouter:
                 _card_stream_state: Any = None  # CardStreamState when using CardKit
 
                 if streaming_adapter:
-                    use_cardkit = self._supports_cardkit_streaming(streaming_adapter)
 
-                    if use_cardkit:
+                    async def _card_updater() -> None:
+                        nonlocal _card_msg_id, _card_stream_state
 
-                        async def _card_updater() -> None:
-                            nonlocal _card_msg_id, _card_stream_state
-                            from src.infrastructure.adapters.secondary.channels.feishu.cardkit_streaming import (  # noqa: E501
-                                CardKitStreamingManager,
-                            )
+                        reply_to = self._extract_channel_message_id(message)
+                        use_cardkit = self._supports_cardkit_streaming(streaming_adapter)
+                        cardkit_mgr = None
+                        cardkit_state = None
 
-                            mgr = CardKitStreamingManager(streaming_adapter)
-                            reply_to = self._extract_channel_message_id(message)
-                            state = await mgr.start_streaming(
-                                message.chat_id, reply_to=reply_to,
-                            )
-                            if not state:
-                                return
-                            _card_msg_id = state.message_id
-                            _card_stream_state = state
+                        # Try CardKit streaming first
+                        if use_cardkit:
+                            try:
+                                from src.infrastructure.adapters.secondary.channels.feishu.cardkit_streaming import (  # noqa: E501
+                                    CardKitStreamingManager,
+                                )
+                                cardkit_mgr = CardKitStreamingManager(streaming_adapter)
+                                cardkit_state = await cardkit_mgr.start_streaming(
+                                    message.chat_id, reply_to=reply_to,
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"[MessageRouter] CardKit start failed: {e}"
+                                )
+
+                        if cardkit_state:
+                            # CardKit streaming path
+                            _card_msg_id = cardkit_state.message_id
+                            _card_stream_state = cardkit_state
 
                             # Register with event bridge for unified HITL
                             try:
@@ -569,7 +578,7 @@ class ChannelMessageRouter:
                                     get_channel_event_bridge,
                                 )
                                 get_channel_event_bridge().register_card_state(
-                                    conversation_id, state
+                                    conversation_id, cardkit_state
                                 )
                             except Exception:
                                 pass
@@ -583,15 +592,21 @@ class ChannelMessageRouter:
                                 elif _card_status:
                                     display = f"_{_card_status}_\n\n{_delta_text}"
                                 if display != last_snapshot and display.strip():
-                                    ok = await mgr.update_text(state, display)
+                                    ok = await cardkit_mgr.update_text(
+                                        cardkit_state, display
+                                    )
                                     if ok:
                                         last_snapshot = display
                             # Finalize
                             final_display = _final_content or _delta_text
                             if final_display.strip():
-                                await mgr.finish_streaming(state, final_display)
+                                await cardkit_mgr.finish_streaming(
+                                    cardkit_state, final_display
+                                )
                             else:
-                                await mgr.finish_streaming(state, last_snapshot)
+                                await cardkit_mgr.finish_streaming(
+                                    cardkit_state, last_snapshot
+                                )
 
                             # Unregister card state
                             try:
@@ -604,10 +619,8 @@ class ChannelMessageRouter:
                             except Exception:
                                 pass
 
-                    else:
-
-                        async def _card_updater() -> None:
-                            nonlocal _card_msg_id
+                        else:
+                            # Legacy streaming fallback
                             _card_msg_id = await self._send_initial_streaming_card(
                                 streaming_adapter, message,
                             )
@@ -628,7 +641,6 @@ class ChannelMessageRouter:
                                     )
                                     if ok:
                                         last_snapshot = display
-                            # Final patch: authoritative content or fallback
                             final_display = _final_content or _delta_text
                             if final_display.strip():
                                 await self._patch_streaming_card(

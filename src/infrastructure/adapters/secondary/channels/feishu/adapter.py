@@ -1038,7 +1038,7 @@ class FeishuAdapter:
                 CreateCardRequest.builder()
                 .request_body(
                     CreateCardRequestBody.builder()
-                    .type("raw")
+                    .type("card_json")
                     .data(json.dumps(card_data))
                     .build()
                 )
