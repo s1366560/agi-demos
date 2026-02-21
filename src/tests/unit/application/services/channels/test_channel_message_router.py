@@ -248,7 +248,7 @@ async def test_invoke_agent_sends_response_text_on_no_progress_error() -> None:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_invoke_agent_streams_via_card_when_adapter_supports_it() -> None:
-    """When adapter supports streaming cards, router patches card with async SDK."""
+    """Background card updater sends initial card and patches with content."""
     router = ChannelMessageRouter()
     router._send_response = AsyncMock()
     router._send_error_feedback = AsyncMock()
@@ -308,17 +308,17 @@ async def test_invoke_agent_streams_via_card_when_adapter_supports_it() -> None:
     ):
         await router._invoke_agent(message, "conv-1")
 
-    # Initial streaming card sent
+    # Background task sent initial streaming card
     fake_adapter.send_streaming_card.assert_awaited_once()
-    # Streaming path handled response — _send_response NOT called
+    # Streaming path handled response -- _send_response NOT called
     router._send_response.assert_not_awaited()
     router._record_streaming_outbox.assert_awaited_once()
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_invoke_agent_falls_back_when_patch_card_fails() -> None:
-    """When final patch_card fails, falls through to _send_response."""
+async def test_invoke_agent_falls_back_when_initial_card_fails() -> None:
+    """When send_streaming_card returns None, falls through to _send_response."""
     router = ChannelMessageRouter()
     router._send_response = AsyncMock()
     router._send_error_feedback = AsyncMock()
@@ -326,8 +326,8 @@ async def test_invoke_agent_falls_back_when_patch_card_fails() -> None:
     router._record_streaming_outbox = AsyncMock()
 
     fake_adapter = MagicMock()
-    fake_adapter.send_streaming_card = AsyncMock(return_value="om_stream_1")
-    fake_adapter.patch_card = AsyncMock(return_value=False)
+    fake_adapter.send_streaming_card = AsyncMock(return_value=None)  # card send fails
+    fake_adapter.patch_card = AsyncMock(return_value=True)
     fake_adapter._build_streaming_card = MagicMock(return_value='{"elements":[]}')
 
     message = _build_message(
@@ -377,7 +377,7 @@ async def test_invoke_agent_falls_back_when_patch_card_fails() -> None:
     ):
         await router._invoke_agent(message, "conv-1")
 
-    # Patch failed → falls through to regular _send_response
+    # Initial card failed (_card_msg_id=None) → falls through to regular send
     router._send_response.assert_awaited_once_with(message, "conv-1", "Hello world")
     router._record_streaming_outbox.assert_not_awaited()
 

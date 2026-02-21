@@ -4,6 +4,7 @@ This module provides the routing logic to bridge incoming channel messages
 (Feishu, DingTalk, WeCom, etc.) to the Agent conversation system.
 """
 
+import asyncio
 import collections
 import logging
 import math
@@ -529,12 +530,43 @@ class ChannelMessageRouter:
                 # runs multiple turns, each emitting its own assistant_message.
                 _SKIP_BROADCAST = {"assistant_message", "text_end", "complete"}
 
-                # Streaming card support: send an initial card on first delta,
-                # then patch it periodically with accumulated text (all async).
+                # Streaming card: run card updates in a background task so the
+                # stream loop has ZERO HTTP calls and never blocks on I/O.
                 streaming_adapter = self._get_streaming_adapter(message)
-                streaming_msg_id: Optional[str] = None
-                _PATCH_INTERVAL = 2.0
-                _last_patch_time = 0.0
+                _card_updater_task: Optional[asyncio.Task] = None
+                _stream_done = False
+                _card_msg_id: Optional[str] = None
+
+                if streaming_adapter:
+
+                    async def _card_updater() -> None:
+                        """Background task: sends initial card, patches periodically."""
+                        nonlocal _card_msg_id
+                        # Send initial "Thinking..." card
+                        _card_msg_id = await self._send_initial_streaming_card(
+                            streaming_adapter, message,
+                        )
+                        if not _card_msg_id:
+                            return
+                        last_patched = ""
+                        while not _stream_done:
+                            await asyncio.sleep(1.5)
+                            current = response_text
+                            if current != last_patched and current.strip():
+                                ok = await self._patch_streaming_card(
+                                    streaming_adapter, _card_msg_id,
+                                    current, loading=True,
+                                )
+                                if ok:
+                                    last_patched = current
+                        # Final patch with complete content
+                        if response_text.strip() and response_text != last_patched:
+                            await self._patch_streaming_card(
+                                streaming_adapter, _card_msg_id,
+                                response_text, loading=False,
+                            )
+
+                    _card_updater_task = asyncio.create_task(_card_updater())
 
                 async for event in agent_service.stream_chat_v2(
                     conversation_id=conversation_id,
@@ -559,26 +591,6 @@ class ChannelMessageRouter:
                         delta = event_data.get("delta", "")
                         if isinstance(delta, str):
                             response_text += delta
-
-                        # Streaming card: send initial card on first delta
-                        if streaming_adapter and not streaming_msg_id:
-                            streaming_msg_id = await self._send_initial_streaming_card(
-                                streaming_adapter, message,
-                            )
-
-                        # Periodic patch with accumulated text
-                        now = time.monotonic()
-                        if (
-                            streaming_msg_id
-                            and response_text.strip()
-                            and now - _last_patch_time >= _PATCH_INTERVAL
-                        ):
-                            await self._patch_streaming_card(
-                                streaming_adapter, streaming_msg_id,
-                                response_text, loading=True,
-                            )
-                            _last_patch_time = now
-
                     elif event_type == "assistant_message":
                         assistant_content = event_data.get("content")
                         if isinstance(assistant_content, str) and assistant_content.strip():
@@ -590,21 +602,25 @@ class ChannelMessageRouter:
                     elif event_type == "error":
                         error_message = event_data.get("message") or "Unknown agent error"
 
-                # Finalize streaming card with complete content
-                if streaming_msg_id and response_text.strip():
-                    patched = await self._patch_streaming_card(
-                        streaming_adapter, streaming_msg_id,
-                        response_text, loading=False,
+                # Signal background card updater to finish
+                _stream_done = True
+                if _card_updater_task:
+                    try:
+                        await asyncio.wait_for(_card_updater_task, timeout=15.0)
+                    except (asyncio.TimeoutError, Exception) as e:
+                        logger.warning(f"[MessageRouter] Card updater error: {e}")
+                        _card_updater_task.cancel()
+
+                # If streaming card was successfully used, we're done
+                if _card_msg_id and response_text.strip():
+                    await self._record_streaming_outbox(
+                        message, conversation_id, response_text, _card_msg_id,
                     )
-                    if patched:
-                        await self._record_streaming_outbox(
-                            message, conversation_id, response_text, streaming_msg_id,
+                    if error_message:
+                        logger.warning(
+                            f"[MessageRouter] Agent error after streaming: {error_message}"
                         )
-                        if error_message:
-                            logger.warning(
-                                f"[MessageRouter] Agent error after streaming: {error_message}"
-                            )
-                        return
+                    return
 
                 if error_message:
                     logger.warning(
