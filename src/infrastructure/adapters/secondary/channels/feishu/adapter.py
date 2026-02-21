@@ -323,36 +323,52 @@ class FeishuAdapter:
         logger.info(f"[Feishu] Bot removed from chat: {chat_id}")
 
     def _on_card_action(self, event: Any) -> Any:
-        """Handle interactive card button click / action.
+        """Handle interactive card button click (card.action.trigger callback).
 
-        The card action callback is synchronous in lark_oapi. We schedule the
-        async HITL response handler on the running event loop.
+        The lark_oapi SDK deserializes the callback into typed objects:
+        - ``event.event``: P2CardActionTriggerData
+        - ``event.event.action``: CallBackAction (value, tag, name, ...)
+        - ``event.event.operator``: CallBackOperator (open_id, user_id, ...)
+        - ``event.event.context``: CallBackContext (open_message_id, open_chat_id)
 
-        The ``event.event`` dict contains:
-        - ``action``: {"value": {"hitl_request_id": "...", "response_data": {...}}}
-        - ``operator``: {"open_id": "ou_xxx"}
+        Response must be returned within 3 seconds. We return both a toast
+        and an updated card (with buttons replaced by confirmation text).
         """
         from lark_oapi.event.callback.model.p2_card_action_trigger import (
             P2CardActionTriggerResponse,
         )
 
         try:
-            action_data = event.event if isinstance(event.event, dict) else {}
-            action = action_data.get("action", {})
-            value = action.get("value", {})
+            event_data = event.event
+            if event_data is None:
+                logger.warning("[Feishu] Card action event has no event data")
+                return P2CardActionTriggerResponse()
 
-            hitl_request_id = value.get("hitl_request_id")
+            # Extract action value — SDK parses it as a typed CallBackAction object
+            action = event_data.action
+            value = action.value if action and action.value else {}
+
+            hitl_request_id = value.get("hitl_request_id") if isinstance(value, dict) else None
             if not hitl_request_id:
                 logger.debug("[Feishu] Card action without hitl_request_id, ignoring")
                 return P2CardActionTriggerResponse()
 
-            response_data = value.get("response_data", {})
-            operator = action_data.get("operator", {})
-            user_id = operator.get("open_id", "")
+            response_data = value.get("response_data", {}) if isinstance(value, dict) else {}
+            hitl_type = value.get("hitl_type", "clarification") if isinstance(value, dict) else "clarification"
+
+            # Extract operator info
+            operator = event_data.operator
+            user_id = operator.open_id if operator and operator.open_id else ""
+
+            # Extract context info (message_id, chat_id)
+            context = event_data.context
+            message_id = context.open_message_id if context else ""
+            chat_id = context.open_chat_id if context else ""
 
             logger.info(
                 f"[Feishu] Card action: request_id={hitl_request_id}, "
-                f"user={user_id}, response={response_data}"
+                f"hitl_type={hitl_type}, user={user_id}, "
+                f"message_id={message_id}, response={response_data}"
             )
 
             # Schedule async HITL response on the event loop
@@ -368,7 +384,7 @@ class FeishuAdapter:
                 loop.create_task(
                     responder.respond(
                         request_id=hitl_request_id,
-                        hitl_type=value.get("hitl_type", "clarification"),
+                        hitl_type=hitl_type,
                         response_data=response_data,
                         responder_id=user_id,
                     )
@@ -376,16 +392,64 @@ class FeishuAdapter:
             except RuntimeError:
                 logger.warning("[Feishu] No running event loop for card action")
 
+            # Build updated card showing "response submitted" state
+            selected_label = self._extract_selected_label(response_data)
+            responded_card = self._build_responded_card(
+                hitl_type=hitl_type,
+                selected_label=selected_label,
+            )
+
+            # Return toast + updated card per Feishu callback docs
+            resp = {
+                "toast": {
+                    "type": "success",
+                    "content": "Response submitted",
+                    "i18n": {
+                        "zh_cn": "Response submitted",
+                        "en_us": "Response submitted",
+                    },
+                },
+            }
+            if responded_card:
+                resp["card"] = {
+                    "type": "raw",
+                    "data": responded_card,
+                }
+            return P2CardActionTriggerResponse(resp)
+
         except Exception as e:
             logger.error(f"[Feishu] Card action handling failed: {e}", exc_info=True)
 
-        # Return toast to acknowledge the click
         return P2CardActionTriggerResponse({
             "toast": {
-                "type": "info",
-                "content": "Response received",
+                "type": "error",
+                "content": "Processing failed, please try again",
             }
         })
+
+    def _extract_selected_label(self, response_data: Dict[str, Any]) -> str:
+        """Extract a human-readable label from the HITL response data."""
+        if not response_data:
+            return ""
+        answer = response_data.get("answer", "")
+        if answer:
+            return str(answer)
+        action = response_data.get("action", "")
+        if action:
+            return str(action).capitalize()
+        return str(next(iter(response_data.values()), ""))
+
+    def _build_responded_card(
+        self,
+        hitl_type: str,
+        selected_label: str = "",
+    ) -> Optional[Dict[str, Any]]:
+        """Build a confirmation card after user responds to HITL request."""
+        from src.infrastructure.adapters.secondary.channels.feishu.hitl_cards import (
+            HITLCardBuilder,
+        )
+
+        return HITLCardBuilder().build_responded_card(hitl_type, selected_label)
 
     async def _connect_webhook(self) -> None:
         """Connect via Webhook (HTTP server mode)."""

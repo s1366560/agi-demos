@@ -15,6 +15,18 @@ class HITLCardBuilder:
     response back to the HITL coordinator.
     """
 
+    # Normalize event type names to canonical HITL types
+    _TYPE_MAP = {
+        "clarification": "clarification",
+        "clarification_asked": "clarification",
+        "decision": "decision",
+        "decision_asked": "decision",
+        "permission": "permission",
+        "permission_asked": "permission",
+        "env_var": "env_var",
+        "env_var_requested": "env_var",
+    }
+
     def build_card(
         self,
         hitl_type: str,
@@ -24,31 +36,33 @@ class HITLCardBuilder:
         """Build a card for the given HITL type.
 
         Args:
-            hitl_type: One of clarification, decision, env_var, permission.
+            hitl_type: One of clarification, decision, env_var, permission
+                       (or their ``_asked`` variants).
             request_id: The HITL request ID for routing responses.
             data: Event data containing question, options, fields, etc.
 
         Returns:
             Card dict compatible with Feishu interactive message, or None.
         """
+        canonical = self._TYPE_MAP.get(hitl_type)
+        if not canonical:
+            return None
+
         builders = {
             "clarification": self._build_clarification,
-            "clarification_asked": self._build_clarification,
             "decision": self._build_decision,
-            "decision_asked": self._build_decision,
             "permission": self._build_permission,
-            "permission_asked": self._build_permission,
             "env_var": self._build_env_var,
-            "env_var_requested": self._build_env_var,
         }
-        builder = builders.get(hitl_type)
+        builder = builders.get(canonical)
         if not builder:
             return None
-        return builder(request_id, data)
+        return builder(request_id, canonical, data)
 
     def _build_clarification(
         self,
         request_id: str,
+        hitl_type: str,
         data: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         """Card with question text + option buttons."""
@@ -62,7 +76,7 @@ class HITLCardBuilder:
         ]
 
         if options:
-            actions = self._build_option_buttons(request_id, options)
+            actions = self._build_option_buttons(request_id, hitl_type, options)
             elements.append({"tag": "action", "actions": actions})
 
         return self._wrap_card(
@@ -74,6 +88,7 @@ class HITLCardBuilder:
     def _build_decision(
         self,
         request_id: str,
+        hitl_type: str,
         data: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         """Card with options as buttons + risk indicator."""
@@ -97,7 +112,7 @@ class HITLCardBuilder:
         ]
 
         if options:
-            actions = self._build_option_buttons(request_id, options)
+            actions = self._build_option_buttons(request_id, hitl_type, options)
             elements.append({"tag": "action", "actions": actions})
 
         return self._wrap_card(
@@ -109,6 +124,7 @@ class HITLCardBuilder:
     def _build_permission(
         self,
         request_id: str,
+        hitl_type: str,
         data: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         """Card with Allow/Deny buttons + tool description."""
@@ -130,6 +146,7 @@ class HITLCardBuilder:
                         "type": "primary",
                         "value": {
                             "hitl_request_id": request_id,
+                            "hitl_type": hitl_type,
                             "response_data": {"action": "allow"},
                         },
                     },
@@ -139,6 +156,7 @@ class HITLCardBuilder:
                         "type": "danger",
                         "value": {
                             "hitl_request_id": request_id,
+                            "hitl_type": hitl_type,
                             "response_data": {"action": "deny"},
                         },
                     },
@@ -155,6 +173,7 @@ class HITLCardBuilder:
     def _build_env_var(
         self,
         request_id: str,
+        hitl_type: str,
         data: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         """Card showing requested env vars (text-only, no form input in Feishu cards).
@@ -205,6 +224,7 @@ class HITLCardBuilder:
     def _build_option_buttons(
         self,
         request_id: str,
+        hitl_type: str,
         options: List[Any],
         max_buttons: int = 5,
     ) -> List[Dict[str, Any]]:
@@ -224,6 +244,7 @@ class HITLCardBuilder:
                 "type": "primary" if i == 0 else "default",
                 "value": {
                     "hitl_request_id": request_id,
+                    "hitl_type": hitl_type,
                     "response_data": {"answer": value},
                 },
             })
@@ -244,3 +265,40 @@ class HITLCardBuilder:
             },
             "elements": elements,
         }
+
+    def build_responded_card(
+        self,
+        hitl_type: str,
+        selected_label: str = "",
+    ) -> Dict[str, Any]:
+        """Build a confirmation card after the user has responded.
+
+        This card replaces the original interactive card (with buttons)
+        to show the user's selection and a "submitted" confirmation.
+        Returned as the ``card.data`` in the callback response body.
+
+        Args:
+            hitl_type: The canonical HITL type.
+            selected_label: The label the user selected (button text / answer).
+
+        Returns:
+            Feishu Card JSON dict (used as ``card.data`` in callback response).
+        """
+        type_titles = {
+            "clarification": "Clarification Responded",
+            "decision": "Decision Made",
+            "permission": "Permission Responded",
+            "env_var": "Variables Submitted",
+        }
+        canonical = self._TYPE_MAP.get(hitl_type, hitl_type)
+        title = type_titles.get(canonical, "Response Submitted")
+
+        content = "Your response has been submitted to the agent."
+        if selected_label:
+            content = f"**Selected**: {selected_label}\n\n{content}"
+
+        return self._wrap_card(
+            title=title,
+            template="green",
+            elements=[{"tag": "markdown", "content": content}],
+        )

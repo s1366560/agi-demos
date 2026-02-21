@@ -133,3 +133,43 @@ class TestHITLCardBuilder:
         actions = card["elements"][1]["actions"]
         assert actions[0]["text"]["content"] == "Option A"
         assert actions[0]["value"]["response_data"]["answer"] == "a"
+
+    def test_buttons_include_hitl_type(self, builder: HITLCardBuilder) -> None:
+        """All buttons should include hitl_type in their value payload."""
+        card = builder.build_card(
+            "decision_asked", "req-12",
+            {"question": "Which?", "options": ["A", "B"]},
+        )
+        assert card is not None
+        actions = card["elements"][1]["actions"]
+        for action in actions:
+            assert action["value"]["hitl_type"] == "decision"
+
+    def test_permission_buttons_include_hitl_type(self, builder: HITLCardBuilder) -> None:
+        """Permission Allow/Deny buttons should include hitl_type."""
+        card = builder.build_card(
+            "permission_asked", "req-13",
+            {"tool_name": "terminal"},
+        )
+        assert card is not None
+        actions = card["elements"][1]["actions"]
+        assert actions[0]["value"]["hitl_type"] == "permission"
+        assert actions[1]["value"]["hitl_type"] == "permission"
+
+    def test_build_responded_card_decision(self, builder: HITLCardBuilder) -> None:
+        """build_responded_card should return green confirmation card."""
+        card = builder.build_responded_card("decision", "Option A")
+        assert card is not None
+        assert card["header"]["template"] == "green"
+        assert card["header"]["title"]["content"] == "Decision Made"
+        assert "**Selected**: Option A" in card["elements"][0]["content"]
+        assert "submitted" in card["elements"][0]["content"].lower()
+
+    def test_build_responded_card_clarification(self, builder: HITLCardBuilder) -> None:
+        card = builder.build_responded_card("clarification_asked", "PostgreSQL")
+        assert card["header"]["title"]["content"] == "Clarification Responded"
+
+    def test_build_responded_card_no_label(self, builder: HITLCardBuilder) -> None:
+        card = builder.build_responded_card("permission")
+        assert "Selected" not in card["elements"][0]["content"]
+        assert "submitted" in card["elements"][0]["content"].lower()

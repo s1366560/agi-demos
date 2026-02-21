@@ -730,3 +730,128 @@ def test_build_streaming_card_with_loading(adapter: FeishuAdapter) -> None:
 
     assert "Generating..." in card["elements"][0]["content"]
     assert "Partial text" in card["elements"][0]["content"]
+
+
+# ------------------------------------------------------------------
+# Card action handler tests
+# ------------------------------------------------------------------
+
+
+@pytest.mark.unit
+def test_extract_selected_label_answer(adapter: FeishuAdapter) -> None:
+    """_extract_selected_label should extract 'answer' field."""
+    assert adapter._extract_selected_label({"answer": "PostgreSQL"}) == "PostgreSQL"
+
+
+@pytest.mark.unit
+def test_extract_selected_label_action(adapter: FeishuAdapter) -> None:
+    """_extract_selected_label should extract 'action' field."""
+    assert adapter._extract_selected_label({"action": "allow"}) == "Allow"
+
+
+@pytest.mark.unit
+def test_extract_selected_label_empty(adapter: FeishuAdapter) -> None:
+    """_extract_selected_label should return empty for empty dict."""
+    assert adapter._extract_selected_label({}) == ""
+
+
+@pytest.mark.unit
+def test_build_responded_card(adapter: FeishuAdapter) -> None:
+    """_build_responded_card should return green card with selected label."""
+    card = adapter._build_responded_card("decision", "Option A")
+    assert card is not None
+    assert card["header"]["template"] == "green"
+    assert card["header"]["title"]["content"] == "Decision Made"
+    assert "**Selected**: Option A" in card["elements"][0]["content"]
+    assert card["config"] == {"wide_screen_mode": True}
+
+
+@pytest.mark.unit
+def test_on_card_action_with_typed_event(adapter: FeishuAdapter) -> None:
+    """_on_card_action should parse typed P2CardActionTriggerData objects."""
+    # Build typed SDK objects
+    operator = SimpleNamespace(
+        open_id="ou_user123",
+        user_id="uid_123",
+        union_id="un_123",
+        tenant_key="tk_123",
+    )
+    action = SimpleNamespace(
+        value={
+            "hitl_request_id": "req-001",
+            "hitl_type": "decision",
+            "response_data": {"answer": "Option B"},
+        },
+        tag="button",
+        option=None,
+        timezone=None,
+        name=None,
+        form_value=None,
+        input_value=None,
+        options=None,
+        checked=None,
+    )
+    context = SimpleNamespace(
+        open_message_id="om_msg123",
+        open_chat_id="oc_chat456",
+        url=None,
+        preview_token=None,
+    )
+    event_data = SimpleNamespace(
+        operator=operator,
+        action=action,
+        token="card-token",
+        context=context,
+        host="im_message",
+        delivery_type=None,
+    )
+    event = SimpleNamespace(event=event_data)
+
+    # Patch the HITL responder to prevent actual Redis calls
+    with patch(
+        "src.application.services.channels.hitl_responder.HITLChannelResponder.respond",
+        new_callable=AsyncMock,
+    ):
+        response = adapter._on_card_action(event)
+
+    # Should return response with toast and updated card
+    assert response is not None
+    assert response.toast is not None
+    assert response.toast.type == "success"
+    assert response.card is not None
+    assert response.card.type == "raw"
+    assert response.card.data["header"]["title"]["content"] == "Decision Made"
+
+
+@pytest.mark.unit
+def test_on_card_action_without_hitl_request_id(adapter: FeishuAdapter) -> None:
+    """_on_card_action should ignore events without hitl_request_id."""
+    action = SimpleNamespace(
+        value={"key": "some_other_value"},
+        tag="button",
+        option=None, timezone=None, name=None, form_value=None,
+        input_value=None, options=None, checked=None,
+    )
+    event_data = SimpleNamespace(
+        operator=SimpleNamespace(open_id="ou_x", user_id=None, union_id=None, tenant_key=None),
+        action=action,
+        token="t",
+        context=None,
+        host="im_message",
+        delivery_type=None,
+    )
+    event = SimpleNamespace(event=event_data)
+
+    response = adapter._on_card_action(event)
+    assert response is not None
+    # Should return empty response (no toast, no card update)
+    assert response.toast is None
+    assert response.card is None
+
+
+@pytest.mark.unit
+def test_on_card_action_with_none_event(adapter: FeishuAdapter) -> None:
+    """_on_card_action should handle None event data gracefully."""
+    event = SimpleNamespace(event=None)
+    response = adapter._on_card_action(event)
+    assert response is not None
