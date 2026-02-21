@@ -1,30 +1,21 @@
 /**
  * McpServerCardV2 - Modern MCP Server Card
- * Redesigned with elegant UI/UX, better visual hierarchy, and smooth animations
+ * Aligned with agent workspace design system
  */
 
 import React from 'react';
 
-import { Popconfirm, Switch, Tooltip, Tag } from 'antd';
-import { 
-  Trash2, 
-  Edit3, 
-  RefreshCw, 
-  Zap, 
-  ChevronRight, 
-  Server,
-  Activity,
-  AlertCircle,
-  Clock,
-  Cpu,
-  Layers
-} from 'lucide-react';
+import { Popconfirm, Switch, Tooltip } from 'antd';
+import { Trash2, Edit3, RefreshCw, Zap, Activity } from 'lucide-react';
 
-import { 
-  RUNTIME_STATUS_STYLES, 
+import { MaterialIcon } from '../agent/shared/MaterialIcon';
+
+import {
+  RUNTIME_STATUS_STYLES,
   SERVER_TYPE_STYLES,
   CARD_STYLES,
-  ANIMATION_CLASSES 
+  BUTTON_STYLES,
+  ANIMATION_CLASSES
 } from './styles';
 import { getRuntimeStatus } from './types';
 
@@ -46,13 +37,13 @@ export interface McpServerCardV2Props {
 }
 
 function formatLastSync(dateStr?: string): string {
-  if (!dateStr) return '从未同步';
+  if (!dateStr) return 'Never synced';
   const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
-  if (mins < 1) return '刚刚';
-  if (mins < 60) return `${mins} 分钟前`;
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} 小时前`;
-  return `${Math.floor(hrs / 24)} 天前`;
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 function formatConfigPreview(server: MCPServerResponse): string {
@@ -82,7 +73,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
     const runtimeStyle = RUNTIME_STATUS_STYLES[status];
     const typeStyle = SERVER_TYPE_STYLES[server.server_type];
     const toolCount = server.discovered_tools?.length || 0;
-    
+
     const hasError = status === 'error' || server.sync_error;
     const runtimeError = hasError
       ? (server.runtime_metadata?.last_error_message as string) ||
@@ -90,238 +81,150 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
         server.sync_error
       : undefined;
 
-    const lastTestStatus = server.runtime_metadata?.last_test_status as string;
-    const lastReconcileStatus = server.runtime_metadata?.last_reconcile_status as string;
-
     return (
       <div className={`group relative ${CARD_STYLES.base} ${CARD_STYLES.hover} ${
         hasError ? CARD_STYLES.error : ''
-      } transition-all duration-300 overflow-hidden`}>
-        
-        {/* Gradient Top Border */}
-        <div className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r ${typeStyle.gradient}`} />
+      } transition-all duration-200 overflow-hidden`}>
+        {/* Status Bar */}
+        <div className={`h-1 w-full ${status === 'error' ? 'bg-red-500' : status === 'running' ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
 
         {/* Card Content */}
-        <div className="p-5">
-          {/* Header Row */}
-          <div className="flex items-start justify-between gap-3 mb-4">
-            <div className="flex items-center gap-3 min-w-0 flex-1">
-              {/* Status Indicator */}
-              <Tooltip title={runtimeStyle.label}>
-                <div className="relative">
-                  <div className={`w-3 h-3 rounded-full ${runtimeStyle.dot} ${
-                    status === 'running' ? ANIMATION_CLASSES.pulse : ''
-                  }`} />
-                  {status === 'starting' && (
-                    <div className="absolute inset-0 rounded-full bg-blue-400 animate-ping opacity-75" />
+        <div className="p-4">
+          {/* Header */}
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-3 flex-1">
+              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${typeStyle.bgColor}`}>
+                <MaterialIcon name={typeStyle.icon} size={20} className={typeStyle.textColor} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+                    {server.name}
+                  </h3>
+                  {server.enabled === false && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500">
+                      Disabled
+                    </span>
                   )}
                 </div>
-              </Tooltip>
-
-              {/* Server Name */}
-              <div className="min-w-0 flex-1">
-                <h3 className="text-base font-semibold text-slate-900 dark:text-white truncate">
-                  {server.name}
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
                   {formatConfigPreview(server)}
                 </p>
               </div>
             </div>
 
             {/* Toggle Switch */}
-            <Switch
-              checked={server.enabled}
-              onChange={(checked) => onToggle(server, checked)}
-              size="small"
-              className="ml-2"
+            <Tooltip title={server.enabled ? 'Disable server' : 'Enable server'}>
+              <Switch
+                size="small"
+                checked={server.enabled !== false}
+                onChange={(checked) => onToggle(server, checked)}
+                checkedChildren=""
+                unCheckedChildren=""
+                className="ml-2"
+              />
+            </Tooltip>
+          </div>
+
+          {/* Status Badge */}
+          <div className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border mb-3 ${runtimeStyle.bgColor} ${runtimeStyle.borderColor}`}>
+            <MaterialIcon
+              name={runtimeStyle.icon}
+              size={16}
+              className={`${runtimeStyle.color} ${status === 'starting' ? 'animate-spin' : ''}`}
             />
-          </div>
-
-          {/* Description */}
-          <div className="mb-4">
-            {server.description ? (
-              <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">
-                {server.description}
-              </p>
-            ) : (
-              <p className="text-sm text-slate-400 dark:text-slate-500 italic">
-                暂无描述
-              </p>
-            )}
-          </div>
-
-          {/* Tags Row */}
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            {/* Type Badge */}
-            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border ${typeStyle.bg} ${typeStyle.text} ${typeStyle.border}`}>
-              <span className="material-symbols-outlined text-xs">{typeStyle.icon}</span>
-              {server.server_type.toUpperCase()}
-            </span>
-
-            {/* Runtime Status Badge */}
-            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border ${runtimeStyle.chip}`}>
-              <span className="material-symbols-outlined text-xs">{runtimeStyle.icon}</span>
+            <span className={`text-xs font-medium ${runtimeStyle.color}`}>
               {runtimeStyle.label}
             </span>
-
-            {/* Tool Count */}
-            {toolCount > 0 && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
-                <Cpu size={10} />
-                {toolCount} 工具
-              </span>
-            )}
-
-            {/* App Count */}
-            {appCount > 0 && (
-              <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium ${
-                errorAppCount > 0
-                  ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
-                  : 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400'
-              }`}>
-                <Layers size={10} />
-                {readyAppCount}/{appCount} 应用
-                {errorAppCount > 0 && <span className="ml-0.5">({errorAppCount} 错误)</span>}
-              </span>
+            {status === 'error' && runtimeError && (
+              <Tooltip title={runtimeError}>
+                <MaterialIcon name="info" size={14} className="text-red-500" />
+              </Tooltip>
             )}
           </div>
 
-          {/* Tools Preview */}
-          {toolCount > 0 && (
-            <div className="mb-4">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs text-slate-400 dark:text-slate-500">工具:</span>
-                <div className="flex flex-wrap gap-1.5">
-                  {server.discovered_tools?.slice(0, 5).map((tool: MCPToolInfo, idx: number) => (
-                    <Tooltip key={idx} title={tool.description} color="blue">
-                      <Tag 
-                        className="text-xs m-0 truncate max-w-[120px] cursor-default" 
-                        style={{ fontSize: '11px', lineHeight: '18px', padding: '0 8px' }}
-                      >
-                        {tool.name}
-                      </Tag>
-                    </Tooltip>
-                  ))}
-                  {toolCount > 5 && (
-                    <button
-                      onClick={() => onShowTools(server)}
-                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary-50 dark:bg-primary-900/20 text-xs text-primary-600 dark:text-primary-400 rounded-lg hover:bg-primary-100 dark:hover:bg-primary-900/30 transition-colors"
-                    >
-                      +{toolCount - 5}
-                      <ChevronRight size={12} />
-                    </button>
-                  )}
-                </div>
-              </div>
+          {/* Stats Grid */}
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="text-center p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+              <p className="text-lg font-bold text-slate-900 dark:text-white">{toolCount}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">Tools</p>
             </div>
-          )}
-
-          {/* Error Banner */}
-          {runtimeError && (
-            <div className="mb-4 p-3 bg-red-50 dark:bg-red-950/20 rounded-xl border border-red-100 dark:border-red-800/30">
-              <div className="flex items-start gap-2">
-                <AlertCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-red-600 dark:text-red-400 line-clamp-2">
-                  {runtimeError}
-                </p>
-              </div>
+            <div className="text-center p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+              <p className="text-lg font-bold text-slate-900 dark:text-white">{appCount || 0}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">Apps</p>
             </div>
-          )}
-        </div>
-
-        {/* Footer Actions */}
-        <div className={`px-5 py-3 ${hasError ? 'bg-red-50/50 dark:bg-red-950/10' : 'bg-slate-50 dark:bg-slate-700/30'} border-t border-slate-100 dark:border-slate-700/50`}>
-          <div className="flex items-center justify-between">
-            {/* Action Buttons */}
-            <div className="flex items-center gap-2">
-              <Tooltip title={isSyncing ? '同步中...' : '同步工具'}>
-                <button
-                  onClick={() => onSync(server)}
-                  disabled={isSyncing || !server.enabled}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
-                    isSyncing
-                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
-                      : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  <RefreshCw size={12} className={isSyncing ? ANIMATION_CLASSES.spin : ''} />
-                  同步
-                </button>
-              </Tooltip>
-
-              <Tooltip title={isTesting ? '测试中...' : '测试连接'}>
-                <button
-                  onClick={() => onTest(server)}
-                  disabled={isTesting || !server.enabled}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 ${
-                    isTesting
-                      ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400'
-                      : 'bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-600'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  <Zap size={12} className={isTesting ? ANIMATION_CLASSES.pulse : ''} />
-                  测试
-                </button>
-              </Tooltip>
+            <div className="text-center p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+              <p className="text-lg font-bold text-slate-900 dark:text-white">{readyAppCount || 0}</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">Ready</p>
             </div>
+          </div>
 
-            {/* Edit & Delete */}
-            <div className="flex items-center gap-1">
-              <Tooltip title="编辑">
-                <button
-                  onClick={() => onEdit(server)}
-                  className="p-2 text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-white dark:hover:bg-slate-600 rounded-lg transition-colors"
-                  aria-label="edit"
-                >
-                  <Edit3 size={14} />
-                </button>
-              </Tooltip>
+          {/* Last Sync */}
+          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-3">
+            <MaterialIcon name="schedule" size={14} />
+            <span>Synced {formatLastSync(server.last_sync_time)}</span>
+          </div>
 
-              <Popconfirm
-                title="确定要删除此服务器吗？"
-                description="此操作无法撤销"
-                onConfirm={() => onDelete(server.id)}
-                okText="删除"
-                cancelText="取消"
-                okButtonProps={{ danger: true }}
+          {/* Actions */}
+          <div className="flex items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <Tooltip title="Sync tools">
+              <button
+                onClick={() => onSync(server)}
+                disabled={isSyncing}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
               >
-                <Tooltip title="删除">
-                  <button
-                    className="p-2 text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-white dark:hover:bg-slate-600 rounded-lg transition-colors"
-                    aria-label="delete"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </Tooltip>
-              </Popconfirm>
-            </div>
-          </div>
-        </div>
+                <MaterialIcon
+                  name={isSyncing ? 'progress_activity' : 'sync'}
+                  size={16}
+                  className={isSyncing ? 'animate-spin' : ''}
+                />
+                Sync
+              </button>
+            </Tooltip>
 
-        {/* Status Bar */}
-        <div className="px-5 py-2 bg-slate-50/50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-700/50">
-          <div className="flex items-center justify-between text-[10px] text-slate-400 dark:text-slate-500">
-            <div className="flex items-center gap-1">
-              <Clock size={10} />
-              <span>最后同步：{formatLastSync(server.last_sync_at)}</span>
-            </div>
-            {(lastTestStatus || lastReconcileStatus) && (
-              <div className="flex items-center gap-2">
-                {lastTestStatus && (
-                  <span className="flex items-center gap-1">
-                    <Activity size={10} />
-                    测试：{lastTestStatus.replace(/_/g, ' ')}
-                  </span>
-                )}
-                {lastReconcileStatus && (
-                  <span className="flex items-center gap-1">
-                    <Server size={10} />
-                    协调：{lastReconcileStatus.replace(/_/g, ' ')}
-                  </span>
-                )}
-              </div>
-            )}
+            <Tooltip title="Test connection">
+              <button
+                onClick={() => onTest(server)}
+                disabled={isTesting}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+              >
+                <MaterialIcon
+                  name={isTesting ? 'progress_activity' : 'science'}
+                  size={16}
+                  className={isTesting ? 'animate-spin' : ''}
+                />
+                Test
+              </button>
+            </Tooltip>
+
+            <Tooltip title="View tools">
+              <button
+                onClick={() => onShowTools(server)}
+                className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
+              >
+                <MaterialIcon name="build" size={18} />
+              </button>
+            </Tooltip>
+
+            <button
+              onClick={() => onEdit(server)}
+              className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              <MaterialIcon name="edit" size={18} />
+            </button>
+
+            <Popconfirm
+              title="Delete Server"
+              description="Are you sure you want to delete this server?"
+              onConfirm={() => onDelete(server.id)}
+              okText="Delete"
+              cancelText="Cancel"
+              okButtonProps={{ danger: true }}
+            >
+              <button className="p-2 text-slate-400 hover:text-red-500 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors">
+                <MaterialIcon name="delete" size={18} />
+              </button>
+            </Popconfirm>
           </div>
         </div>
       </div>

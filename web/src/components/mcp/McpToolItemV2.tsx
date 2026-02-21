@@ -1,18 +1,14 @@
 /**
  * McpToolItemV2 - Modern MCP Tool List Item
- * Redesigned with elegant UI/UX, expandable details, and smooth animations
+ * Aligned with agent workspace design system
  */
 
 import React from 'react';
 
 import { Tag, Tooltip } from 'antd';
-import {
-  Wrench,
-  ChevronDown,
-  FileJson,
-  Terminal,
-  Wifi,
-} from 'lucide-react';
+import { ChevronDown, FileJson } from 'lucide-react';
+
+import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
 import { SERVER_TYPE_STYLES, CARD_STYLES } from './styles';
 
@@ -35,21 +31,15 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({
   isExpanded,
   onToggle,
 }) => {
-  const typeStyle = SERVER_TYPE_STYLES[tool.serverType] || SERVER_TYPE_STYLES.stdio;
-
-  const ServerIcon = 
-    tool.serverType === 'stdio' ? Terminal :
-    tool.serverType === 'sse' ? Wifi :
-    tool.serverType === 'websocket' ? Wifi :
-    Terminal;
+  const typeStyle = SERVER_TYPE_STYLES[tool.serverType as keyof typeof SERVER_TYPE_STYLES] || SERVER_TYPE_STYLES.stdio;
 
   return (
     <div
-      className={`group ${CARD_STYLES.base} ${
+      className={`group ${CARD_STYLES.base} ${CARD_STYLES.hover} ${
         isExpanded
-          ? 'shadow-lg shadow-primary-500/10 border-primary-200 dark:border-primary-800/50 ring-1 ring-primary-50 dark:ring-primary-900/20'
-          : 'hover:shadow-md hover:border-slate-300 dark:hover:border-slate-600'
-      } transition-all duration-300 overflow-hidden`}
+          ? 'border-primary bg-primary/5 dark:border-primary'
+          : ''
+      } transition-all duration-200 overflow-hidden`}
     >
       {/* Header - Clickable */}
       <div
@@ -59,12 +49,12 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             {/* Tool Icon */}
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
+            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
               isExpanded
-                ? 'bg-gradient-to-br from-primary-50 to-primary-100 dark:from-primary-900/30 dark:to-primary-900/20 text-primary-600 dark:text-primary-400'
-                : 'bg-slate-50 dark:bg-slate-700/50 text-slate-400 dark:text-slate-500'
+                ? 'bg-primary/10 text-primary'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
             }`}>
-              <Wrench size={18} />
+              <MaterialIcon name="build" size={20} />
             </div>
 
             {/* Tool Info */}
@@ -74,8 +64,8 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({
                   {tool.name}
                 </h4>
                 {tool.input_schema && (
-                  <Tooltip title="包含输入模式">
-                    <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500">
+                  <Tooltip title="Has input schema">
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-slate-100 dark:bg-slate-800 text-slate-400">
                       <FileJson size={10} />
                     </span>
                   </Tooltip>
@@ -87,7 +77,7 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({
                 </p>
               ) : (
                 <p className="text-xs text-slate-400 dark:text-slate-500 italic mt-0.5">
-                  暂无描述
+                  No description
                 </p>
               )}
             </div>
@@ -95,18 +85,18 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({
 
           <div className="flex items-center gap-3 flex-shrink-0">
             {/* Server Tag */}
-            <Tag className="text-xs m-0 px-2.5 py-1 rounded-lg" color="default">
-              <span className="flex items-center gap-1.5">
-                <ServerIcon size={10} />
+            <Tag className="text-xs m-0 px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 border-0">
+              <span className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+                <MaterialIcon name={typeStyle.icon} size={12} />
                 {tool.serverName}
               </span>
             </Tag>
 
             {/* Expand Indicator */}
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center transition-all duration-300 ${
+            <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 ${
               isExpanded
-                ? 'bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 rotate-180'
-                : 'bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500'
+                ? 'bg-primary/10 text-primary rotate-180'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
             }`}>
               <ChevronDown size={14} />
             </div>
@@ -116,18 +106,17 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({
 
       {/* Expanded Content */}
       {isExpanded && (
-        <div className="px-4 pb-4 border-t border-slate-100 dark:border-slate-700/50 animate-in slide-in-from-top-2 duration-200">
+        <div className="px-4 pb-4 border-t border-slate-100 dark:border-slate-800">
           {/* Server Info */}
           <div className="flex items-center gap-4 py-3 text-xs text-slate-500 dark:text-slate-400">
             <div className="flex items-center gap-2">
-              <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${typeStyle.bg}`}>
-                <ServerIcon size={12} className={typeStyle.text} />
+              <div className={`w-6 h-6 rounded flex items-center justify-center ${typeStyle.bgColor}`}>
+                <MaterialIcon name={typeStyle.icon} size={14} className={typeStyle.textColor} />
               </div>
               <span className="font-medium text-slate-700 dark:text-slate-300">{tool.serverName}</span>
             </div>
             <span className="text-slate-300 dark:text-slate-600">•</span>
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded ${typeStyle.bg} ${typeStyle.text}`}>
-              <span className="material-symbols-outlined text-xs">{typeStyle.icon}</span>
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${typeStyle.bgColor} ${typeStyle.textColor}`}>
               {tool.serverType.toUpperCase()}
             </span>
           </div>
@@ -137,7 +126,7 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({
             <div className="mb-4">
               <div className="flex items-center gap-1.5 mb-2">
                 <FileJson size={12} className="text-slate-400" />
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">功能说明</span>
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Description</span>
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                 {tool.description}
@@ -150,9 +139,9 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({
             <div>
               <div className="flex items-center gap-1.5 mb-2">
                 <FileJson size={12} className="text-slate-400" />
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">输入模式</span>
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Input Schema</span>
               </div>
-              <pre className="p-3 bg-slate-50 dark:bg-slate-900/80 rounded-xl text-xs text-slate-700 dark:text-slate-300 overflow-auto max-h-80 border border-slate-100 dark:border-slate-800 font-mono">
+              <pre className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-xs text-slate-700 dark:text-slate-300 overflow-auto max-h-80 border border-slate-200 dark:border-slate-700 font-mono">
                 {JSON.stringify(tool.input_schema, null, 2)}
               </pre>
             </div>
