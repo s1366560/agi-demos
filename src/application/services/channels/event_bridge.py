@@ -86,12 +86,17 @@ class ChannelEventBridge:
         try:
             binding = await self._lookup_binding(conversation_id)
             if not binding:
+                logger.info(
+                    f"[EventBridge] No binding for conversation {conversation_id}, "
+                    f"skipping {event_type}"
+                )
                 return
 
             adapter = self._get_adapter(binding.channel_config_id)
             if not adapter:
-                logger.debug(
-                    f"[EventBridge] No adapter for config {binding.channel_config_id}"
+                logger.info(
+                    f"[EventBridge] No adapter for config {binding.channel_config_id}, "
+                    f"skipping {event_type}"
                 )
                 return
 
@@ -124,14 +129,14 @@ class ChannelEventBridge:
                 repo = ChannelSessionBindingRepository(session)
                 return await repo.get_by_conversation_id(conversation_id)
         except Exception as e:
-            logger.debug(f"[EventBridge] Binding lookup failed: {e}")
+            logger.info(f"[EventBridge] Binding lookup failed: {e}")
             return None
 
     def _get_adapter(self, channel_config_id: str) -> Optional[ChannelAdapter]:
         """Get the channel adapter for a config ID."""
         if not self._channel_manager:
             try:
-                from src.infrastructure.channels.connection_manager import (
+                from src.infrastructure.adapters.primary.web.startup.channels import (
                     get_channel_manager,
                 )
                 self._channel_manager = get_channel_manager()
