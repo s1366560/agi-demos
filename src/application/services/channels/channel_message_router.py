@@ -559,11 +559,18 @@ class ChannelMessageRouter:
                         error_message = event_data.get("message") or "Unknown agent error"
 
                 if error_message:
-                    logger.error(
+                    logger.warning(
                         f"[MessageRouter] Agent returned error for conversation "
                         f"{conversation_id}: {error_message}"
                     )
-                    await self._send_error_feedback(message, conversation_id)
+                    # If the agent accumulated a response before erroring (e.g. the
+                    # ReAct loop's "no-progress" detector fires after generating
+                    # valid text), prefer sending the real response over a generic
+                    # error message.
+                    if response_text.strip():
+                        await self._send_response(message, conversation_id, response_text)
+                    else:
+                        await self._send_error_feedback(message, conversation_id)
                     return
 
                 if response_text.strip():

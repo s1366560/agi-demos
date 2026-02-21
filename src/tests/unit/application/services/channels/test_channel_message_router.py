@@ -182,6 +182,71 @@ async def test_invoke_agent_streams_and_sends_final_response() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_invoke_agent_sends_response_text_on_no_progress_error() -> None:
+    """When agent errors with 'no-progress' but has accumulated text, send that text."""
+    router = ChannelMessageRouter()
+    router._send_response = AsyncMock()
+    router._send_error_feedback = AsyncMock()
+    router._broadcast_workspace_event = AsyncMock()
+
+    message = _build_message(
+        text="hi",
+        raw_data={
+            "_routing": {"channel_config_id": "cfg-1", "channel_message_id": "msg-1"},
+            "event": {"sender": {"sender_type": "user"}},
+        },
+    )
+
+    conversation = SimpleNamespace(
+        id="conv-1",
+        project_id="project-1",
+        user_id="user-1",
+        tenant_id="tenant-1",
+    )
+
+    session = MagicMock()
+    session.get = AsyncMock(return_value=conversation)
+
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+
+    async def fake_stream(**_):
+        yield {"type": "assistant_message", "data": {"content": "Hello! How can I help?"}}
+        yield {"type": "error", "data": {"message": "Goal not achieved after 3 no-progress turns."}}
+
+    agent_service = MagicMock()
+    agent_service.stream_chat_v2 = fake_stream
+
+    scoped_container = MagicMock()
+    scoped_container.agent_service.return_value = agent_service
+
+    app_container = MagicMock()
+    app_container.with_db.return_value = scoped_container
+
+    with (
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+            return_value=session_ctx,
+        ),
+        patch(
+            "src.configuration.factories.create_llm_client",
+            new=AsyncMock(return_value=object()),
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
+            return_value=app_container,
+        ),
+    ):
+        await router._invoke_agent(message, "conv-1")
+
+    # Should send the accumulated response, NOT the generic error feedback
+    router._send_response.assert_awaited_once_with(message, "conv-1", "Hello! How can I help?")
+    router._send_error_feedback.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_send_response_marks_outbox_failed_when_connection_missing() -> None:
     """Router should persist failed outbox state if channel connection is unavailable."""
     router = ChannelMessageRouter()
