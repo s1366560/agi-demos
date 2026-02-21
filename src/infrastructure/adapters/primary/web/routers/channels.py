@@ -1,23 +1,31 @@
 """Channel configuration API endpoints."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, select
+from sqlalchemy import and_, desc, func, nullslast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.model.auth.roles import RoleDefinition
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.primary.web.startup import get_channel_manager
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelConfigModel,
+    ChannelOutboxModel,
+    ChannelSessionBindingModel,
 )
 from src.infrastructure.adapters.secondary.persistence.channel_repository import (
     ChannelConfigRepository,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import User, UserProject
+from src.infrastructure.adapters.secondary.persistence.models import (
+    Role,
+    User,
+    UserProject,
+    UserRole,
+)
 from src.infrastructure.security.encryption_service import get_encryption_service
 
 logger = logging.getLogger(__name__)
@@ -64,7 +72,11 @@ async def verify_project_access(
 class ChannelConfigCreate(BaseModel):
     """Schema for creating channel configuration."""
 
-    channel_type: str = Field(..., description="Channel type: feishu, dingtalk, wecom")
+    channel_type: str = Field(
+        ...,
+        description="Channel type: feishu, dingtalk, wecom",
+        pattern=r"^(feishu|dingtalk|wecom|slack|telegram)$",
+    )
     name: str = Field(..., description="Display name")
     enabled: bool = Field(True, description="Whether enabled")
     connection_mode: str = Field("websocket", description="websocket or webhook")
@@ -77,8 +89,29 @@ class ChannelConfigCreate(BaseModel):
 
     # Webhook
     webhook_url: Optional[str] = Field(None, description="Webhook URL")
-    webhook_port: Optional[int] = Field(None, description="Webhook port")
+    webhook_port: Optional[int] = Field(None, ge=1, le=65535, description="Webhook port")
     webhook_path: Optional[str] = Field(None, description="Webhook path")
+
+    # Access control
+    dm_policy: str = Field(
+        "open",
+        description="DM policy: open, allowlist, disabled",
+        pattern=r"^(open|allowlist|disabled)$",
+    )
+    group_policy: str = Field(
+        "open",
+        description="Group policy: open, allowlist, disabled",
+        pattern=r"^(open|allowlist|disabled)$",
+    )
+    allow_from: Optional[List[str]] = Field(
+        None, description="Allowlist of user IDs (wildcard * = all)"
+    )
+    group_allow_from: Optional[List[str]] = Field(
+        None, description="Allowlist of group/chat IDs"
+    )
+    rate_limit_per_minute: int = Field(
+        60, ge=0, description="Max messages per minute per chat (0 = unlimited)"
+    )
 
     # Settings
     domain: Optional[str] = Field("feishu", description="Domain")
@@ -97,11 +130,20 @@ class ChannelConfigUpdate(BaseModel):
     encrypt_key: Optional[str] = None
     verification_token: Optional[str] = None
     webhook_url: Optional[str] = None
-    webhook_port: Optional[int] = None
+    webhook_port: Optional[int] = Field(None, ge=1, le=65535)
     webhook_path: Optional[str] = None
     domain: Optional[str] = None
     extra_settings: Optional[dict] = None
     description: Optional[str] = None
+    dm_policy: Optional[str] = Field(
+        None, pattern=r"^(open|allowlist|disabled)$"
+    )
+    group_policy: Optional[str] = Field(
+        None, pattern=r"^(open|allowlist|disabled)$"
+    )
+    allow_from: Optional[List[str]] = None
+    group_allow_from: Optional[List[str]] = None
+    rate_limit_per_minute: Optional[int] = Field(None, ge=0)
 
 
 class ChannelConfigResponse(BaseModel):
@@ -120,6 +162,11 @@ class ChannelConfigResponse(BaseModel):
     webhook_path: Optional[str] = None
     domain: Optional[str] = None
     extra_settings: Optional[dict] = None
+    dm_policy: str = "open"
+    group_policy: str = "open"
+    allow_from: Optional[List[str]] = None
+    group_allow_from: Optional[List[str]] = None
+    rate_limit_per_minute: int = 60
     status: str
     last_error: Optional[str] = None
     description: Optional[str] = None
@@ -152,6 +199,11 @@ def to_response(config: ChannelConfigModel) -> ChannelConfigResponse:
         webhook_path=config.webhook_path,
         domain=config.domain,
         extra_settings=config.extra_settings,
+        dm_policy=getattr(config, "dm_policy", None) or "open",
+        group_policy=getattr(config, "group_policy", None) or "open",
+        allow_from=getattr(config, "allow_from", None),
+        group_allow_from=getattr(config, "group_allow_from", None),
+        rate_limit_per_minute=getattr(config, "rate_limit_per_minute", None) or 60,
         status=config.status,
         last_error=config.last_error,
         description=config.description,
@@ -201,6 +253,11 @@ async def create_config(
         webhook_path=data.webhook_path,
         domain=data.domain,
         extra_settings=data.extra_settings,
+        dm_policy=data.dm_policy,
+        group_policy=data.group_policy,
+        allow_from=data.allow_from,
+        group_allow_from=data.group_allow_from,
+        rate_limit_per_minute=data.rate_limit_per_minute,
         description=data.description,
         created_by=current_user.id,
     )
@@ -414,6 +471,243 @@ class ChannelStatusResponse(BaseModel):
     reconnect_attempts: int = 0
 
 
+class ChannelObservabilitySummaryResponse(BaseModel):
+    """Project-level channel routing and delivery summary."""
+
+    project_id: str
+    session_bindings_total: int
+    outbox_total: int
+    outbox_by_status: Dict[str, int]
+    active_connections: int
+    connected_config_ids: List[str]
+    latest_delivery_error: Optional[str] = None
+
+
+class ChannelOutboxItemResponse(BaseModel):
+    """Outbox queue item response."""
+
+    id: str
+    channel_config_id: str
+    conversation_id: str
+    chat_id: str
+    status: str
+    attempt_count: int
+    max_attempts: int
+    sent_channel_message_id: Optional[str] = None
+    last_error: Optional[str] = None
+    next_retry_at: Optional[str] = None
+    created_at: str
+    updated_at: Optional[str] = None
+
+
+class ChannelOutboxListResponse(BaseModel):
+    """Paginated outbox list response."""
+
+    items: List[ChannelOutboxItemResponse]
+    total: int
+
+
+class ChannelSessionBindingItemResponse(BaseModel):
+    """Session binding item response."""
+
+    id: str
+    channel_config_id: str
+    conversation_id: str
+    channel_type: str
+    chat_id: str
+    chat_type: str
+    thread_id: Optional[str] = None
+    topic_id: Optional[str] = None
+    session_key: str
+    created_at: str
+    updated_at: Optional[str] = None
+
+
+class ChannelSessionBindingListResponse(BaseModel):
+    """Paginated session binding list response."""
+
+    items: List[ChannelSessionBindingItemResponse]
+    total: int
+
+
+@router.get(
+    "/projects/{project_id}/observability/summary",
+    response_model=ChannelObservabilitySummaryResponse,
+)
+async def get_project_channel_observability_summary(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get project-level channel routing and delivery observability summary."""
+    await verify_project_access(project_id, current_user, db, ["owner", "admin"])
+
+    bindings_total_result = await db.execute(
+        select(func.count())
+        .select_from(ChannelSessionBindingModel)
+        .where(ChannelSessionBindingModel.project_id == project_id)
+    )
+    session_bindings_total = int(bindings_total_result.scalar() or 0)
+
+    outbox_total_result = await db.execute(
+        select(func.count())
+        .select_from(ChannelOutboxModel)
+        .where(ChannelOutboxModel.project_id == project_id)
+    )
+    outbox_total = int(outbox_total_result.scalar() or 0)
+
+    outbox_by_status_result = await db.execute(
+        select(ChannelOutboxModel.status, func.count())
+        .where(ChannelOutboxModel.project_id == project_id)
+        .group_by(ChannelOutboxModel.status)
+    )
+    outbox_by_status: Dict[str, int] = {
+        status_name: int(status_count)
+        for status_name, status_count in outbox_by_status_result.all()
+    }
+
+    latest_error_result = await db.execute(
+        select(ChannelOutboxModel.last_error)
+        .where(
+            ChannelOutboxModel.project_id == project_id,
+            ChannelOutboxModel.last_error.isnot(None),
+            ChannelOutboxModel.status.in_(["failed", "dead_letter"]),
+        )
+        .order_by(
+            nullslast(desc(ChannelOutboxModel.updated_at)), desc(ChannelOutboxModel.created_at)
+        )
+        .limit(1)
+    )
+    latest_delivery_error = latest_error_result.scalar_one_or_none()
+
+    active_connections = 0
+    connected_config_ids: List[str] = []
+    channel_manager = get_channel_manager()
+    if channel_manager:
+        for connection in channel_manager.connections.values():
+            if connection.project_id == project_id and connection.status == "connected":
+                active_connections += 1
+                connected_config_ids.append(connection.config_id)
+
+    return ChannelObservabilitySummaryResponse(
+        project_id=project_id,
+        session_bindings_total=session_bindings_total,
+        outbox_total=outbox_total,
+        outbox_by_status=outbox_by_status,
+        active_connections=active_connections,
+        connected_config_ids=connected_config_ids,
+        latest_delivery_error=latest_delivery_error,
+    )
+
+
+@router.get(
+    "/projects/{project_id}/observability/outbox",
+    response_model=ChannelOutboxListResponse,
+)
+async def list_project_channel_outbox(
+    project_id: str,
+    status_filter: Optional[Literal["pending", "failed", "sent", "dead_letter"]] = Query(
+        None, alias="status", description="Filter by outbox status"
+    ),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List outbound queue items for a project."""
+    await verify_project_access(project_id, current_user, db, ["owner", "admin"])
+
+    query = select(ChannelOutboxModel).where(ChannelOutboxModel.project_id == project_id)
+    count_query = (
+        select(func.count())
+        .select_from(ChannelOutboxModel)
+        .where(ChannelOutboxModel.project_id == project_id)
+    )
+    if status_filter:
+        query = query.where(ChannelOutboxModel.status == status_filter)
+        count_query = count_query.where(ChannelOutboxModel.status == status_filter)
+
+    query = query.order_by(desc(ChannelOutboxModel.created_at)).limit(limit).offset(offset)
+    result = await db.execute(query)
+    items = result.scalars().all()
+
+    total_result = await db.execute(count_query)
+    total = int(total_result.scalar() or 0)
+
+    return ChannelOutboxListResponse(
+        items=[
+            ChannelOutboxItemResponse(
+                id=item.id,
+                channel_config_id=item.channel_config_id,
+                conversation_id=item.conversation_id,
+                chat_id=item.chat_id,
+                status=item.status,
+                attempt_count=item.attempt_count,
+                max_attempts=item.max_attempts,
+                sent_channel_message_id=item.sent_channel_message_id,
+                last_error=item.last_error,
+                next_retry_at=item.next_retry_at.isoformat() if item.next_retry_at else None,
+                created_at=item.created_at.isoformat(),
+                updated_at=item.updated_at.isoformat() if item.updated_at else None,
+            )
+            for item in items
+        ],
+        total=total,
+    )
+
+
+@router.get(
+    "/projects/{project_id}/observability/session-bindings",
+    response_model=ChannelSessionBindingListResponse,
+)
+async def list_project_channel_session_bindings(
+    project_id: str,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List deterministic channel session bindings for a project."""
+    await verify_project_access(project_id, current_user, db, ["owner", "admin"])
+
+    query = (
+        select(ChannelSessionBindingModel)
+        .where(ChannelSessionBindingModel.project_id == project_id)
+        .order_by(desc(ChannelSessionBindingModel.created_at))
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await db.execute(query)
+    items = result.scalars().all()
+
+    total_result = await db.execute(
+        select(func.count())
+        .select_from(ChannelSessionBindingModel)
+        .where(ChannelSessionBindingModel.project_id == project_id)
+    )
+    total = int(total_result.scalar() or 0)
+
+    return ChannelSessionBindingListResponse(
+        items=[
+            ChannelSessionBindingItemResponse(
+                id=item.id,
+                channel_config_id=item.channel_config_id,
+                conversation_id=item.conversation_id,
+                channel_type=item.channel_type,
+                chat_id=item.chat_id,
+                chat_type=item.chat_type,
+                thread_id=item.thread_id,
+                topic_id=item.topic_id,
+                session_key=item.session_key,
+                created_at=item.created_at.isoformat(),
+                updated_at=item.updated_at.isoformat() if item.updated_at else None,
+            )
+            for item in items
+        ],
+        total=total,
+    )
+
+
 @router.get("/configs/{config_id}/status", response_model=ChannelStatusResponse)
 async def get_connection_status(
     config_id: str,
@@ -478,7 +772,21 @@ async def list_all_connection_status(
     Requires admin role.
     """
     # Only admins can view all statuses
-    if current_user.role not in ["admin", "super_admin"]:
+    has_admin_role = False
+    if not current_user.is_superuser:
+        role_result = await db.execute(
+            select(func.count())
+            .select_from(UserRole)
+            .join(Role, UserRole.role_id == Role.id)
+            .where(
+                UserRole.user_id == current_user.id,
+                Role.name.in_([RoleDefinition.SYSTEM_ADMIN, "admin", "super_admin"]),
+                UserRole.tenant_id.is_(None),
+            )
+        )
+        has_admin_role = bool(role_result.scalar())
+
+    if not current_user.is_superuser and not has_admin_role:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin role required",

@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -239,31 +239,74 @@ class ChannelOutboxRepository:
 
     async def mark_sent(self, outbox_id: str, sent_channel_message_id: Optional[str]) -> bool:
         """Mark outbox message as sent."""
-        outbox_item = await self.get_by_id(outbox_id)
-        if not outbox_item:
-            return False
-        outbox_item.status = "sent"
-        outbox_item.sent_channel_message_id = sent_channel_message_id
-        outbox_item.last_error = None
-        outbox_item.next_retry_at = None
+        result = await self._session.execute(
+            update(ChannelOutboxModel)
+            .where(
+                ChannelOutboxModel.id == outbox_id,
+                ChannelOutboxModel.status.in_(("pending", "failed")),
+            )
+            .values(
+                status="sent",
+                sent_channel_message_id=sent_channel_message_id,
+                last_error=None,
+                next_retry_at=None,
+            )
+        )
         await self._session.flush()
-        return True
+        return result.rowcount > 0
 
     async def mark_failed(self, outbox_id: str, error_message: str) -> bool:
         """Mark outbox message as failed/dead-letter with retry backoff."""
-        outbox_item = await self.get_by_id(outbox_id)
-        if not outbox_item:
+        current_result = await self._session.execute(
+            select(ChannelOutboxModel.attempt_count, ChannelOutboxModel.max_attempts)
+            .where(
+                ChannelOutboxModel.id == outbox_id,
+                ChannelOutboxModel.status.in_(("pending", "failed")),
+            )
+            .with_for_update()
+        )
+        current = current_result.one_or_none()
+        if current is None:
             return False
 
-        attempts = outbox_item.attempt_count + 1
-        outbox_item.attempt_count = attempts
-        outbox_item.last_error = error_message
-        if attempts >= outbox_item.max_attempts:
-            outbox_item.status = "dead_letter"
-            outbox_item.next_retry_at = None
-        else:
-            outbox_item.status = "failed"
-            retry_seconds = min(2**attempts, 300)
-            outbox_item.next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=retry_seconds)
+        current_attempt_count, max_attempts = current
+        next_attempt_count = int(current_attempt_count) + 1
+        move_to_dead_letter = next_attempt_count >= int(max_attempts)
+        next_retry_at = None
+        if not move_to_dead_letter:
+            backoff_seconds = min(2**next_attempt_count, 300)
+            next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=backoff_seconds)
+
+        result = await self._session.execute(
+            update(ChannelOutboxModel)
+            .where(
+                ChannelOutboxModel.id == outbox_id,
+                ChannelOutboxModel.status.in_(("pending", "failed")),
+                ChannelOutboxModel.attempt_count == int(current_attempt_count),
+            )
+            .values(
+                attempt_count=next_attempt_count,
+                last_error=error_message,
+                status="dead_letter" if move_to_dead_letter else "failed",
+                next_retry_at=next_retry_at,
+            )
+        )
         await self._session.flush()
-        return True
+        return result.rowcount > 0
+
+    async def list_pending_retry(self, limit: int = 20) -> List[ChannelOutboxModel]:
+        """List outbox messages eligible for retry.
+
+        Returns failed messages whose next_retry_at has passed.
+        """
+        now = datetime.now(timezone.utc)
+        result = await self._session.execute(
+            select(ChannelOutboxModel)
+            .where(
+                ChannelOutboxModel.status == "failed",
+                ChannelOutboxModel.next_retry_at <= now,
+            )
+            .order_by(ChannelOutboxModel.next_retry_at.asc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())

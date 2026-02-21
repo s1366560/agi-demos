@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional, Protocol
 
-from src.domain.shared_kernel import Entity, ValueObject, DomainEvent
+from src.domain.shared_kernel import DomainEvent, Entity, ValueObject
 
 
 class MessageType(str, Enum):
@@ -60,6 +60,8 @@ class Message(Entity):
     content: MessageContent
     project_id: Optional[str] = None
     reply_to: Optional[str] = None  # message_id being replied to
+    thread_id: Optional[str] = None  # thread/topic identifier
+    sender_type: str = "user"  # user, bot, app
     mentions: List[str] = field(default_factory=list)  # mentioned user IDs
     raw_data: Optional[Dict[str, Any]] = field(default=None, repr=False)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
@@ -161,6 +163,23 @@ class ChannelAdapter(Protocol):
         """Get user information by ID."""
         ...
 
+    async def edit_message(self, message_id: str, content: MessageContent) -> bool:
+        """Edit a previously sent message."""
+        ...
+
+    async def delete_message(self, message_id: str) -> bool:
+        """Delete/recall a message."""
+        ...
+
+    async def send_card(
+        self,
+        to: str,
+        card: Dict[str, Any],
+        reply_to: Optional[str] = None,
+    ) -> str:
+        """Send an interactive card message."""
+        ...
+
 
 # Domain Events
 
@@ -203,3 +222,20 @@ class ChannelErrorEvent(DomainEvent):
 
     channel: str
     error: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class MessageEditedEvent(DomainEvent):
+    """Event emitted when a message is edited in a channel."""
+
+    channel: str
+    message_id: str
+    new_content: MessageContent
+
+
+@dataclass(frozen=True, kw_only=True)
+class MessageDeletedEvent(DomainEvent):
+    """Event emitted when a message is deleted/recalled from a channel."""
+
+    channel: str
+    message_id: str

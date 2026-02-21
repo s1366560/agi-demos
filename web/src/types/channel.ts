@@ -2,6 +2,9 @@
  * Channel configuration types
  */
 
+export type DmPolicy = 'open' | 'allowlist' | 'disabled';
+export type GroupPolicy = 'open' | 'allowlist' | 'disabled';
+
 export interface ChannelConfig {
   id: string;
   project_id: string;
@@ -15,7 +18,12 @@ export interface ChannelConfig {
   webhook_path?: string;
   domain?: string;
   extra_settings?: Record<string, any>;
-  status: 'connected' | 'disconnected' | 'error';
+  dm_policy: DmPolicy;
+  group_policy: GroupPolicy;
+  allow_from?: string[];
+  group_allow_from?: string[];
+  rate_limit_per_minute: number;
+  status: 'connected' | 'disconnected' | 'error' | 'circuit_open';
   last_error?: string;
   description?: string;
   created_at: string;
@@ -37,6 +45,11 @@ export interface CreateChannelConfig {
   domain?: string;
   extra_settings?: Record<string, any>;
   description?: string;
+  dm_policy?: DmPolicy;
+  group_policy?: GroupPolicy;
+  allow_from?: string[];
+  group_allow_from?: string[];
+  rate_limit_per_minute?: number;
 }
 
 export interface UpdateChannelConfig {
@@ -53,11 +66,34 @@ export interface UpdateChannelConfig {
   domain?: string;
   extra_settings?: Record<string, any>;
   description?: string;
+  dm_policy?: DmPolicy;
+  group_policy?: GroupPolicy;
+  allow_from?: string[];
+  group_allow_from?: string[];
+  rate_limit_per_minute?: number;
 }
 
 export interface ChannelConfigList {
   items: ChannelConfig[];
   total: number;
+}
+
+export interface ChannelConnectionStatus {
+  config_id: string;
+  project_id: string;
+  channel_type: string;
+  status: string;
+  connected: boolean;
+  last_heartbeat?: string;
+  last_error?: string;
+  reconnect_attempts: number;
+}
+
+export interface ChannelObservabilitySummary {
+  bindings_total: number;
+  outbox_total: number;
+  outbox_by_status: Record<string, number>;
+  active_connections: number;
 }
 
 export interface ChannelMessage {

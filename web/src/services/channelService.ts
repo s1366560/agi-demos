@@ -5,6 +5,8 @@ import type {
   CreateChannelConfig,
   UpdateChannelConfig,
   ChannelConfigList,
+  ChannelConnectionStatus,
+  ChannelObservabilitySummary,
 } from '@/types/channel';
 
 const BASE_URL = '/channels';
@@ -72,6 +74,26 @@ export const channelService = {
   ): Promise<{ success: boolean; message: string }> {
     return httpClient.post<{ success: boolean; message: string }>(
       `${BASE_URL}/configs/${configId}/test`
+    );
+  },
+
+  /**
+   * Get connection status for a specific channel config
+   */
+  async getConnectionStatus(configId: string): Promise<ChannelConnectionStatus> {
+    return httpClient.get<ChannelConnectionStatus>(
+      `${BASE_URL}/configs/${configId}/status`
+    );
+  },
+
+  /**
+   * Get observability summary for a project
+   */
+  async getObservabilitySummary(
+    projectId: string
+  ): Promise<ChannelObservabilitySummary> {
+    return httpClient.get<ChannelObservabilitySummary>(
+      `${BASE_URL}/projects/${projectId}/observability/summary`
     );
   },
 };

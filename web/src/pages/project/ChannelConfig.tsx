@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 
 import { useParams } from 'react-router-dom';
 
@@ -26,6 +26,8 @@ import {
   Tooltip,
   Typography,
   Badge,
+  InputNumber,
+  Divider,
 } from 'antd';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -44,9 +46,17 @@ const CHANNEL_TYPES = [
 ];
 
 const CONNECTION_MODES = [
-  { value: 'websocket', label: 'WebSocket (推荐)' },
+  { value: 'websocket', label: 'WebSocket (Recommended)' },
   { value: 'webhook', label: 'Webhook' },
 ];
+
+const POLICY_OPTIONS = [
+  { value: 'open', label: 'Open (all allowed)' },
+  { value: 'allowlist', label: 'Allowlist (restricted)' },
+  { value: 'disabled', label: 'Disabled' },
+];
+
+const STATUS_REFRESH_INTERVAL = 10_000;
 
 const ChannelConfigPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -79,6 +89,19 @@ const ChannelConfigPage: React.FC = () => {
     if (projectId) {
       fetchConfigs(projectId);
     }
+  }, [projectId, fetchConfigs]);
+
+  // Auto-refresh status every 10s
+  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  useEffect(() => {
+    if (projectId) {
+      intervalRef.current = setInterval(() => {
+        fetchConfigs(projectId);
+      }, STATUS_REFRESH_INTERVAL);
+    }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [projectId, fetchConfigs]);
 
   const handleAdd = useCallback(() => {
@@ -153,6 +176,8 @@ const ChannelConfigPage: React.FC = () => {
         return <Badge status="success" text="Connected" />;
       case 'error':
         return <Badge status="error" text="Error" />;
+      case 'circuit_open':
+        return <Badge color="orange" text="Circuit Open" />;
       default:
         return <Badge status="default" text="Disconnected" />;
     }
@@ -301,6 +326,9 @@ const ChannelConfigPage: React.FC = () => {
             channel_type: 'feishu',
             connection_mode: 'websocket',
             enabled: true,
+            dm_policy: 'open',
+            group_policy: 'open',
+            rate_limit_per_minute: 60,
           }}
         >
           <Form.Item
@@ -380,7 +408,49 @@ const ChannelConfigPage: React.FC = () => {
           </Form.Item>
 
           <Form.Item name="description" label="Description (Optional)">
-            <Input.TextArea rows={3} placeholder="Optional description" />
+            <Input.TextArea rows={2} placeholder="Optional description" />
+          </Form.Item>
+
+          <Divider>Access Control</Divider>
+
+          <Form.Item name="dm_policy" label="DM Policy">
+            <Select>
+              {POLICY_OPTIONS.map((opt) => (
+                <Option key={opt.value} value={opt.value}>{opt.label}</Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item name="group_policy" label="Group Policy">
+            <Select>
+              {POLICY_OPTIONS.map((opt) => (
+                <Option key={opt.value} value={opt.value}>{opt.label}</Option>
+              ))}
+            </Select>
+          </Form.Item>
+
+          <Form.Item
+            name="allow_from"
+            label="DM Allowlist (User IDs)"
+            tooltip="User IDs allowed to DM the bot. Use * for all."
+          >
+            <Select mode="tags" placeholder="Enter user IDs (e.g., ou_xxx)" />
+          </Form.Item>
+
+          <Form.Item
+            name="group_allow_from"
+            label="Group Allowlist (Chat IDs)"
+            tooltip="Group chat IDs where the bot can respond. Use * for all."
+          >
+            <Select mode="tags" placeholder="Enter group chat IDs (e.g., oc_xxx)" />
+          </Form.Item>
+
+          <Form.Item
+            name="rate_limit_per_minute"
+            label="Rate Limit (per minute per chat)"
+            tooltip="0 = unlimited"
+          >
+            <InputNumber min={0} max={1000} style={{ width: '100%' }} />
           </Form.Item>
         </Form>
       </Modal>

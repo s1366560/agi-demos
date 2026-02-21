@@ -7,6 +7,7 @@ automatic reconnection with exponential backoff, health checks, and message rout
 
 import asyncio
 import logging
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
@@ -23,6 +24,7 @@ from src.infrastructure.adapters.secondary.persistence.channel_models import (
 from src.infrastructure.adapters.secondary.persistence.channel_repository import (
     ChannelConfigRepository,
 )
+from src.infrastructure.channels.outbox_worker import OutboxRetryWorker
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,7 @@ logger = logging.getLogger(__name__)
 MAX_RECONNECT_DELAY = 60  # Maximum reconnect delay in seconds
 INITIAL_RECONNECT_DELAY = 2  # Initial reconnect delay in seconds
 HEALTH_CHECK_INTERVAL = 30  # Health check interval in seconds
+MAX_RECONNECT_ATTEMPTS = 20  # Max attempts before circuit breaker opens
 
 
 @dataclass
@@ -110,6 +113,8 @@ class ChannelConnectionManager:
         self._message_router = message_router
         self._session_factory = session_factory
         self._health_check_task: Optional[asyncio.Task] = None
+        self._outbox_worker: Optional[OutboxRetryWorker] = None
+        self._main_loop: Optional[asyncio.AbstractEventLoop] = None
         self._started = False
 
     @property
@@ -143,6 +148,7 @@ class ChannelConnectionManager:
 
         logger.info("[ChannelManager] Starting all channel connections...")
         self._started = True
+        self._main_loop = asyncio.get_running_loop()
 
         # Load all enabled configurations
         async with self._session_factory() as session:
@@ -162,6 +168,14 @@ class ChannelConnectionManager:
 
         # Start health check loop
         self._health_check_task = asyncio.create_task(self._health_check_loop())
+
+        # Start outbox retry worker
+        if self._session_factory:
+            self._outbox_worker = OutboxRetryWorker(
+                session_factory=self._session_factory,
+                get_connection_fn=lambda cid: self._connections.get(cid),
+            )
+            self._outbox_worker.start()
 
         logger.info(f"[ChannelManager] Started {started}/{len(configs)} connections")
         return started
@@ -194,6 +208,14 @@ class ChannelConnectionManager:
 
         logger.info(f"[ChannelManager] Adding connection {config.id} ({config.channel_type})")
 
+        current_loop = asyncio.get_running_loop()
+        if (
+            self._main_loop is None
+            or self._main_loop.is_closed()
+            or not self._main_loop.is_running()
+        ):
+            self._main_loop = current_loop
+
         # Create adapter based on channel type
         adapter = await self._create_adapter(config)
 
@@ -209,9 +231,7 @@ class ChannelConnectionManager:
         self._connections[config.id] = connection
 
         # Start connection task
-        connection.task = asyncio.create_task(
-            self._connection_loop(connection, config)
-        )
+        connection.task = asyncio.create_task(self._connection_loop(connection, config))
 
         return connection
 
@@ -294,12 +314,15 @@ class ChannelConnectionManager:
                     routing_meta["channel_config_id"] = config.id
                     routing_meta["project_id"] = config.project_id
                     routing_meta["channel_type"] = config.channel_type
+                    routing_meta["rate_limit_per_minute"] = getattr(
+                        config, "rate_limit_per_minute", 60
+                    )
                     raw_data["_routing"] = routing_meta
                     message.raw_data = raw_data
 
                     if self._message_router:
                         try:
-                            asyncio.create_task(self._safe_route_message(message))
+                            self._schedule_route_message(message)
                         except Exception as e:
                             logger.error(f"[ChannelManager] Error routing message: {e}")
 
@@ -318,10 +341,7 @@ class ChannelConnectionManager:
                 logger.info(f"[ChannelManager] Connected: {config.id} ({config.channel_type})")
 
                 # Wait for disconnect or stop signal
-                while (
-                    connection.adapter.connected
-                    and not connection._stop_event.is_set()
-                ):
+                while connection.adapter.connected and not connection._stop_event.is_set():
                     await asyncio.sleep(1)
 
                 if connection._stop_event.is_set():
@@ -338,11 +358,25 @@ class ChannelConnectionManager:
 
                 await self._update_db_status(config.id, "error", str(e))
 
-            # Reconnect with exponential backoff
+            # Reconnect with exponential backoff (circuit breaker)
             if not connection._stop_event.is_set():
                 connection.reconnect_attempts += 1
+                if connection.reconnect_attempts >= MAX_RECONNECT_ATTEMPTS:
+                    connection.status = "circuit_open"
+                    await self._update_db_status(
+                        config.id,
+                        "error",
+                        f"Circuit breaker open after {MAX_RECONNECT_ATTEMPTS} "
+                        f"failed attempts. Manual restart required.",
+                    )
+                    logger.error(
+                        f"[ChannelManager] Circuit breaker open for {config.id} "
+                        f"after {connection.reconnect_attempts} attempts"
+                    )
+                    break
+
                 delay = min(
-                    INITIAL_RECONNECT_DELAY ** connection.reconnect_attempts,
+                    INITIAL_RECONNECT_DELAY**connection.reconnect_attempts,
                     MAX_RECONNECT_DELAY,
                 )
                 logger.info(
@@ -370,6 +404,33 @@ class ChannelConnectionManager:
                     self._message_router(message)
         except Exception as e:
             logger.error(f"[ChannelManager] Message routing error: {e}")
+
+    def _schedule_route_message(self, message: Message) -> None:
+        """Schedule message routing on the manager's main event loop."""
+        if (
+            self._main_loop is None
+            or self._main_loop.is_closed()
+            or not self._main_loop.is_running()
+        ):
+            logger.error("[ChannelManager] Main event loop not initialized for routing")
+            return
+
+        coro = self._safe_route_message(message)
+        try:
+            future = asyncio.run_coroutine_threadsafe(coro, self._main_loop)
+        except Exception as e:
+            coro.close()
+            logger.error(f"[ChannelManager] Failed to schedule message routing: {e}")
+            return
+
+        future.add_done_callback(self._on_route_future_done)
+
+    def _on_route_future_done(self, future: Future[Any]) -> None:
+        """Log unexpected routing task failures."""
+        try:
+            _ = future.result()
+        except Exception as e:
+            logger.error(f"[ChannelManager] Scheduled message routing failed: {e}")
 
     async def _update_db_status(
         self,
@@ -466,6 +527,11 @@ class ChannelConnectionManager:
         """Shutdown all connections gracefully."""
         logger.info("[ChannelManager] Shutting down all connections...")
 
+        # Stop outbox worker
+        if self._outbox_worker:
+            await self._outbox_worker.stop()
+            self._outbox_worker = None
+
         # Stop health check
         if self._health_check_task and not self._health_check_task.done():
             self._health_check_task.cancel()
@@ -483,6 +549,7 @@ class ChannelConnectionManager:
             await asyncio.gather(*stop_tasks, return_exceptions=True)
 
         self._started = False
+        self._main_loop = None
         logger.info("[ChannelManager] All connections shut down")
 
     async def _health_check_loop(self) -> None:

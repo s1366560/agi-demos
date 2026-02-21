@@ -4,9 +4,13 @@ This module provides the routing logic to bridge incoming channel messages
 (Feishu, DingTalk, WeCom, etc.) to the Agent conversation system.
 """
 
+import collections
 import logging
+import math
+import time
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from src.domain.model.channels.message import ChatType, Message
 
@@ -14,6 +18,40 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
+
+# LRU cache max size for session key -> conversation mapping
+_MAX_CACHE_SIZE = 10_000
+
+
+class _SlidingWindowRateLimiter:
+    """Per-key sliding window rate limiter."""
+
+    def __init__(self, default_limit: int = 60, window_seconds: int = 60) -> None:
+        self._default_limit = default_limit
+        self._window = window_seconds
+        self._buckets: Dict[str, List[float]] = {}
+
+    def is_allowed(self, key: str, limit: int = 0) -> bool:
+        effective_limit = limit if limit > 0 else self._default_limit
+        if effective_limit <= 0:
+            return True
+
+        now = time.monotonic()
+        cutoff = now - self._window
+        bucket = self._buckets.get(key)
+        if bucket is None:
+            bucket = []
+            self._buckets[key] = bucket
+
+        # Prune expired timestamps
+        while bucket and bucket[0] < cutoff:
+            bucket.pop(0)
+
+        if len(bucket) >= effective_limit:
+            return False
+
+        bucket.append(now)
+        return True
 
 
 class ChannelMessageRouter:
@@ -37,7 +75,10 @@ class ChannelMessageRouter:
     """
 
     def __init__(self) -> None:
-        self._chat_to_conversation: Dict[str, str] = {}
+        self._chat_to_conversation: collections.OrderedDict[str, str] = (
+            collections.OrderedDict()
+        )
+        self._rate_limiter = _SlidingWindowRateLimiter()
 
     async def route_message(self, message: Message) -> None:
         """Route an incoming channel message to the agent system.
@@ -52,6 +93,22 @@ class ChannelMessageRouter:
         try:
             if self._is_bot_message(message):
                 logger.debug("[MessageRouter] Skipping bot/app echo message")
+                return
+
+            # Access control check
+            denied_reason = await self._check_access_control(message)
+            if denied_reason:
+                logger.info(
+                    f"[MessageRouter] Access denied for {message.sender.id} "
+                    f"in {message.chat_id}: {denied_reason}"
+                )
+                return
+
+            # Rate limiting check
+            if not self._check_rate_limit(message):
+                logger.warning(
+                    f"[MessageRouter] Rate limited: chat_id={message.chat_id}"
+                )
                 return
 
             logger.info(
@@ -70,6 +127,29 @@ class ChannelMessageRouter:
 
             # Store message in channel history
             await self._store_message_history(message, conversation_id)
+
+            inbound_event_time_us = int(datetime.now(timezone.utc).timestamp() * 1_000_000)
+            inbound_message_id = self._extract_channel_message_id(message) or (
+                f"channel-{uuid.uuid4().hex}"
+            )
+            await self._broadcast_workspace_event(
+                conversation_id=conversation_id,
+                event_type="message",
+                event_data={
+                    "id": inbound_message_id,
+                    "role": "user",
+                    "content": message.content.text or "",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "event_time_us": inbound_event_time_us,
+                    "event_counter": 0,
+                    "metadata": {
+                        "source": "channel_inbound",
+                        "channel": message.channel,
+                        "chat_id": message.chat_id,
+                    },
+                },
+                raw_event={},
+            )
 
             # Route to agent system
             await self._invoke_agent(message, conversation_id)
@@ -131,7 +211,7 @@ class ChannelMessageRouter:
                 await session.commit()
 
                 if conversation_id:
-                    self._chat_to_conversation[session_key] = conversation_id
+                    self._cache_conversation(session_key, conversation_id)
 
                 return conversation_id
 
@@ -314,26 +394,32 @@ class ChannelMessageRouter:
                     )
                     return
 
+                safe_mentions = self._to_json_safe(message.mentions)
+                mentions = safe_mentions if isinstance(safe_mentions, list) else []
+                raw_data = self._to_json_safe(message.raw_data)
+
                 channel_message = ChannelMessageModel(
                     channel_config_id=channel_config_id,
                     project_id=message.project_id or "",
                     channel_message_id=channel_message_id,
                     chat_id=message.chat_id,
                     chat_type=message.chat_type.value,
-                    sender_id=message.sender.id,
+                    sender_id=str(message.sender.id),
                     sender_name=message.sender.name,
                     message_type=message.content.type.value,
                     content_text=message.content.text,
-                    content_data={
-                        "conversation_id": conversation_id,
-                        "channel_config_id": channel_config_id,
-                        "reply_to": message.reply_to,
-                        "mentions": message.mentions,
-                    },
+                    content_data=self._to_json_safe(
+                        {
+                            "conversation_id": conversation_id,
+                            "channel_config_id": channel_config_id,
+                            "reply_to": message.reply_to,
+                            "mentions": mentions,
+                        }
+                    ),
                     reply_to=message.reply_to,
-                    mentions=message.mentions,
+                    mentions=mentions,
                     direction="inbound",
-                    raw_data=message.raw_data,
+                    raw_data=raw_data,
                 )
 
                 await repo.create(channel_message)
@@ -341,6 +427,49 @@ class ChannelMessageRouter:
 
         except Exception as e:
             logger.warning(f"[MessageRouter] Failed to store message history: {e}")
+
+    def _to_json_safe(self, value: Any, *, _depth: int = 0) -> Any:
+        """Convert payload value into JSON-serializable primitives."""
+        if _depth > 8:
+            return str(value)
+
+        if isinstance(value, float):
+            if not math.isfinite(value):
+                return None
+            return value
+
+        if value is None or isinstance(value, (str, int, bool)):
+            return value
+
+        if isinstance(value, dict):
+            return {
+                str(key): self._to_json_safe(item, _depth=_depth + 1)
+                for key, item in value.items()
+            }
+
+        if isinstance(value, (list, tuple, set)):
+            return [self._to_json_safe(item, _depth=_depth + 1) for item in value]
+
+        if hasattr(value, "to_dict"):
+            try:
+                return self._to_json_safe(value.to_dict(), _depth=_depth + 1)
+            except Exception:
+                return str(value)
+
+        dict_method = getattr(value, "dict", None)
+        if callable(dict_method):
+            try:
+                return self._to_json_safe(dict_method(), _depth=_depth + 1)
+            except Exception:
+                return str(value)
+
+        if hasattr(value, "__dict__"):
+            try:
+                return self._to_json_safe(vars(value), _depth=_depth + 1)
+            except Exception:
+                return str(value)
+
+        return str(value)
 
     async def _invoke_agent(self, message: Message, conversation_id: str) -> None:
         """Invoke the agent to process the message.
@@ -401,6 +530,13 @@ class ChannelMessageRouter:
                     event_type = event.get("type")
                     event_data = event.get("data") or {}
 
+                    await self._broadcast_workspace_event(
+                        conversation_id=conversation_id,
+                        event_type=event_type,
+                        event_data=event_data if isinstance(event_data, dict) else {},
+                        raw_event=event,
+                    )
+
                     if event_type == "text_delta":
                         delta = event_data.get("delta", "")
                         if isinstance(delta, str):
@@ -421,6 +557,7 @@ class ChannelMessageRouter:
                         f"[MessageRouter] Agent returned error for conversation "
                         f"{conversation_id}: {error_message}"
                     )
+                    await self._send_error_feedback(message, conversation_id)
                     return
 
                 if response_text.strip():
@@ -430,9 +567,47 @@ class ChannelMessageRouter:
                         f"[MessageRouter] Agent produced empty response for conversation "
                         f"{conversation_id}"
                     )
+                    await self._send_error_feedback(message, conversation_id)
 
         except Exception as e:
             logger.error(f"[MessageRouter] Agent invocation error: {e}", exc_info=True)
+
+    async def _broadcast_workspace_event(
+        self,
+        conversation_id: str,
+        event_type: Optional[str],
+        event_data: Dict[str, Any],
+        raw_event: Dict[str, Any],
+    ) -> None:
+        """Forward agent stream events to subscribed workspace WebSocket sessions."""
+        if not event_type:
+            return
+
+        try:
+            from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
+                get_connection_manager,
+            )
+
+            safe_data = self._to_json_safe(event_data)
+            if not isinstance(safe_data, dict):
+                safe_data = {"value": safe_data}
+
+            ws_event: Dict[str, Any] = {
+                "type": event_type,
+                "data": safe_data,
+                "conversation_id": conversation_id,
+                "timestamp": raw_event.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+            }
+            if "event_time_us" in raw_event:
+                ws_event["event_time_us"] = raw_event["event_time_us"]
+            if "event_counter" in raw_event:
+                ws_event["event_counter"] = raw_event["event_counter"]
+
+            await get_connection_manager().broadcast_to_conversation(conversation_id, ws_event)
+        except Exception as e:
+            logger.warning(
+                f"[MessageRouter] Failed to broadcast event to workspace: {event_type}, error={e}"
+            )
 
     async def _send_response(self, message: Message, conversation_id: str, response: str) -> None:
         """Send agent response back to the channel.
@@ -445,11 +620,6 @@ class ChannelMessageRouter:
         outbox_id: Optional[str] = None
         try:
             from src.infrastructure.adapters.primary.web.startup import get_channel_manager
-
-            channel_manager = get_channel_manager()
-            if not channel_manager:
-                logger.warning("[MessageRouter] No channel manager available")
-                return
 
             channel_config_id = self._extract_channel_config_id(message)
             if not channel_config_id:
@@ -464,14 +634,6 @@ class ChannelMessageRouter:
                 )
                 return
 
-            connection = channel_manager.connections.get(channel_config_id)
-            if not connection:
-                logger.warning(
-                    "[MessageRouter] No active connection for outbound response: "
-                    f"channel_config_id={channel_config_id}"
-                )
-                return
-
             inbound_message_id = self._extract_channel_message_id(message)
             outbox_id = await self._create_outbox_record(
                 message=message,
@@ -480,6 +642,24 @@ class ChannelMessageRouter:
                 response=response,
                 reply_to=inbound_message_id,
             )
+
+            channel_manager = get_channel_manager()
+            if not channel_manager:
+                if outbox_id:
+                    await self._mark_outbox_failed(outbox_id, "channel manager unavailable")
+                logger.warning("[MessageRouter] No channel manager available")
+                return
+
+            connection = channel_manager.connections.get(channel_config_id)
+            if not connection:
+                if outbox_id:
+                    await self._mark_outbox_failed(outbox_id, "no active connection")
+                logger.warning(
+                    "[MessageRouter] No active connection for outbound response: "
+                    f"channel_config_id={channel_config_id}"
+                )
+                return
+
             sent_message_id = await connection.adapter.send_text(
                 message.chat_id,
                 response,
@@ -754,6 +934,90 @@ class ChannelMessageRouter:
                 f"{e}"
             )
         return None
+
+    async def _check_access_control(self, message: Message) -> Optional[str]:
+        """Check access control policies for the incoming message.
+
+        Returns a denial reason string if access is denied, or None if allowed.
+        """
+        try:
+            config = await self._load_channel_config(message)
+            if not config:
+                return None  # No config found; allow (backward compat)
+
+            is_group = message.chat_type == ChatType.GROUP
+            if is_group:
+                policy = getattr(config, "group_policy", "open")
+                if policy == "disabled":
+                    return "group messages disabled"
+                if policy == "allowlist":
+                    group_allow_from = getattr(config, "group_allow_from", None) or []
+                    if "*" not in group_allow_from and message.chat_id not in group_allow_from:
+                        return f"group {message.chat_id} not in allowlist"
+            else:
+                policy = getattr(config, "dm_policy", "open")
+                if policy == "disabled":
+                    return "DM messages disabled"
+                if policy == "allowlist":
+                    allow_from = getattr(config, "allow_from", None) or []
+                    if "*" not in allow_from and message.sender.id not in allow_from:
+                        return f"sender {message.sender.id} not in allowlist"
+
+        except Exception as e:
+            logger.warning(f"[MessageRouter] Access control check error: {e}")
+        return None
+
+    def _check_rate_limit(self, message: Message) -> bool:
+        """Check rate limit for the incoming message. Returns True if allowed."""
+        config_id = self._extract_channel_config_id(message) or "default"
+        key = f"{config_id}:{message.chat_id}"
+        rate_limit = 0
+        if isinstance(message.raw_data, dict):
+            routing = message.raw_data.get("_routing") or {}
+            rate_limit = routing.get("rate_limit_per_minute", 0)
+        return self._rate_limiter.is_allowed(key, limit=rate_limit)
+
+    async def _load_channel_config(self, message: Message):
+        """Load the ChannelConfigModel for this message."""
+        config_id = self._extract_channel_config_id(message)
+        if not config_id:
+            return None
+        try:
+            from src.infrastructure.adapters.secondary.persistence.channel_models import (
+                ChannelConfigModel,
+            )
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+
+            async with async_session_factory() as session:
+                return await session.get(ChannelConfigModel, config_id)
+        except Exception as e:
+            logger.warning(f"[MessageRouter] Failed to load channel config: {e}")
+            return None
+
+    async def _send_error_feedback(
+        self, message: Message, conversation_id: str
+    ) -> None:
+        """Send a user-friendly error message back to the channel."""
+        try:
+            error_text = (
+                "Sorry, I encountered an error processing your message. "
+                "Please try again later."
+            )
+            await self._send_response(message, conversation_id, error_text)
+        except Exception as e:
+            logger.warning(f"[MessageRouter] Failed to send error feedback: {e}")
+
+    def _cache_conversation(self, session_key: str, conversation_id: str) -> None:
+        """Cache session_key -> conversation_id with LRU eviction."""
+        if session_key in self._chat_to_conversation:
+            self._chat_to_conversation.move_to_end(session_key)
+            self._chat_to_conversation[session_key] = conversation_id
+            return
+        self._chat_to_conversation[session_key] = conversation_id
+        while len(self._chat_to_conversation) > _MAX_CACHE_SIZE:
+            self._chat_to_conversation.popitem(last=False)
 
     def _build_session_key(self, message: Message, channel_config_id: str) -> str:
         """Build deterministic session key for channel routing."""

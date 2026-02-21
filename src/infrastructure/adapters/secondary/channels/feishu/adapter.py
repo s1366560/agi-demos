@@ -3,16 +3,17 @@
 import asyncio
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional, cast
+import threading
+import time
+from typing import Any, Callable, Dict, List, Optional
 
 from src.domain.model.channels.message import (
+    ChannelConfig,
+    ChatType,
     Message,
     MessageContent,
     MessageType,
     SenderInfo,
-    ChatType,
-    ChannelConfig,
-    ChannelAdapter,
 )
 
 logger = logging.getLogger(__name__)
@@ -23,10 +24,10 @@ ErrorHandler = Callable[[Exception], None]
 
 class FeishuAdapter:
     """Feishu/Lark channel adapter.
-    
+
     Implements the ChannelAdapter protocol for Feishu integration.
     Supports both WebSocket and Webhook connection modes.
-    
+
     Usage:
         config = ChannelConfig(
             app_id="cli_xxx",
@@ -35,71 +36,79 @@ class FeishuAdapter:
         )
         adapter = FeishuAdapter(config)
         await adapter.connect()
-        
+
         # Send message
         await adapter.send_text("oc_xxx", "Hello!")
-        
+
         # Handle incoming messages
         adapter.on_message(lambda msg: print(msg.content.text))
     """
-    
+
+    _WS_STARTUP_TIMEOUT_SECONDS = 8.0
+
     def __init__(self, config: ChannelConfig) -> None:
         self._config = config
         self._client: Optional[Any] = None
         self._ws_client: Optional[Any] = None
+        self._ws_thread: Optional[threading.Thread] = None
+        self._ws_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._ws_ready = threading.Event()
+        self._ws_start_error: Optional[Exception] = None
+        self._ws_stop_requested = False
         self._event_dispatcher: Optional[Any] = None
         self._connected = False
         self._message_handlers: List[MessageHandler] = []
         self._error_handlers: List[ErrorHandler] = []
         self._message_history: Dict[str, bool] = {}
+        self._sender_name_cache: Dict[str, str] = {}
         self._bot_open_id: Optional[str] = None
-        
+
         self._validate_config()
-    
+
     @property
     def id(self) -> str:
         return "feishu"
-    
+
     @property
     def name(self) -> str:
         return "Feishu"
-    
+
     @property
     def connected(self) -> bool:
         return self._connected
-    
+
     def _validate_config(self) -> None:
         """Validate configuration."""
         if not self._config.app_id:
             raise ValueError("Feishu adapter: app_id is required")
         if not self._config.app_secret:
             raise ValueError("Feishu adapter: app_secret is required")
-    
+
     async def connect(self) -> None:
         """Connect to Feishu."""
         if self._connected:
             logger.info("[Feishu] Already connected")
             return
-        
+
         try:
             mode = self._config.connection_mode
             if mode == "webhook":
                 await self._connect_webhook()
+                self._connected = True
             else:
                 await self._connect_websocket()
-            
-            self._connected = True
+                if not (self._ws_thread and self._ws_thread.is_alive() and self._ws_ready.is_set()):
+                    raise RuntimeError("Feishu websocket failed to stay alive after startup")
+                self._connected = True
             logger.info("[Feishu] Connected successfully")
         except Exception as e:
             logger.error(f"[Feishu] Connection failed: {e}")
             self._handle_error(e)
             raise
-    
+
     async def _connect_websocket(self) -> None:
         """Connect via WebSocket."""
         try:
-            from lark_oapi.ws import Client as WSClient
-            from lark_oapi import LogLevel
             from lark_oapi.event.dispatcher_handler import EventDispatcherHandlerBuilder
 
             # Build event handler
@@ -120,6 +129,79 @@ class FeishuAdapter:
             if self._config.domain == "lark":
                 domain = "https://open.larksuite.com"
 
+            self._event_dispatcher = event_handler
+
+            if self._ws_thread and self._ws_thread.is_alive():
+                raise RuntimeError("Feishu websocket thread is already running")
+
+            self._ws_stop_requested = False
+            self._ws_start_error = None
+            self._ws_ready.clear()
+
+            # Start WebSocket client in dedicated thread because lark_oapi.ws.Client.start()
+            # uses loop.run_until_complete() and cannot run inside FastAPI's running loop.
+            self._ws_thread = threading.Thread(
+                target=self._run_websocket,
+                kwargs={
+                    "event_handler": event_handler,
+                    "domain": domain,
+                },
+                name=f"feishu-ws-{self._config.app_id}",
+                daemon=True,
+            )
+            self._ws_thread.start()
+            try:
+                await self._wait_for_websocket_ready()
+            except Exception:
+                self._ws_stop_requested = True
+                try:
+                    await self.disconnect()
+                except Exception as cleanup_error:
+                    logger.warning(
+                        "[Feishu] WebSocket startup cleanup failed: %s",
+                        cleanup_error,
+                    )
+                raise
+
+        except ImportError as e:
+            raise ImportError(
+                f"Feishu SDK not installed or import error: {e}. "
+                "Install with: pip install lark_oapi"
+            )
+
+    async def _wait_for_websocket_ready(self) -> None:
+        """Wait until websocket is connected or startup fails."""
+        deadline = time.monotonic() + self._WS_STARTUP_TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            if self._ws_start_error:
+                raise RuntimeError(
+                    f"Feishu websocket startup failed: {self._ws_start_error}"
+                ) from self._ws_start_error
+
+            if self._ws_ready.is_set():
+                if self._ws_thread and not self._ws_thread.is_alive():
+                    raise RuntimeError("Feishu websocket startup failed: thread exited")
+                return
+
+            if self._ws_thread and not self._ws_thread.is_alive():
+                raise RuntimeError("Feishu websocket startup failed: thread exited")
+
+            await asyncio.sleep(0.1)
+
+        raise RuntimeError("Feishu websocket startup timeout")
+
+    def _run_websocket(self, event_handler: Any, domain: str) -> None:
+        """Run WebSocket client."""
+        ws_loop: Optional[asyncio.AbstractEventLoop] = None
+        try:
+            from lark_oapi import LogLevel
+            from lark_oapi.ws import Client as WSClient, client as ws_client_module
+
+            ws_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(ws_loop)
+            ws_client_module.loop = ws_loop
+            self._ws_loop = ws_loop
+
             self._ws_client = WSClient(
                 app_id=self._config.app_id,
                 app_secret=self._config.app_secret,
@@ -128,32 +210,41 @@ class FeishuAdapter:
                 domain=domain,
             )
 
-            self._event_dispatcher = event_handler
+            try:
+                ws_loop.run_until_complete(self._ws_client._connect())
+            except Exception:
+                ws_loop.run_until_complete(self._ws_client._disconnect())
+                if getattr(self._ws_client, "_auto_reconnect", False):
+                    ws_loop.run_until_complete(self._ws_client._reconnect())
+                else:
+                    raise
 
-            # Start WebSocket in background
-            asyncio.create_task(self._run_websocket())
-
-        except ImportError as e:
-            raise ImportError(
-                f"Feishu SDK not installed or import error: {e}. "
-                "Install with: pip install lark_oapi"
-            )
-    
-    async def _run_websocket(self) -> None:
-        """Run WebSocket client."""
-        try:
-            self._ws_client.start()
+            self._ws_ready.set()
+            ws_loop.create_task(self._ws_client._ping_loop())
+            ws_loop.run_until_complete(ws_client_module._select())
         except Exception as e:
-            logger.error(f"[Feishu] WebSocket error: {e}")
-            self._handle_error(e)
+            self._ws_start_error = e
+            self._ws_ready.clear()
+            if self._ws_stop_requested:
+                logger.info("[Feishu] WebSocket thread stopped")
+            else:
+                logger.error(f"[Feishu] WebSocket error: {e}")
+                self._handle_error(e)
+            self._connected = False
+        finally:
+            if ws_loop and not ws_loop.is_closed():
+                ws_loop.close()
+            self._ws_client = None
+            self._ws_loop = None
+            self._ws_ready.clear()
 
     def _on_message_receive(self, event: Any) -> None:
         """Handle incoming message event from WebSocket."""
         try:
-            message_data = event.event.message if hasattr(event, 'event') else {}
-            sender_data = event.event.sender if hasattr(event, 'event') else {}
+            message_data = event.event.message if hasattr(event, "event") else {}
+            sender_data = event.event.sender if hasattr(event, "event") else {}
 
-            message_id = message_data.message_id if hasattr(message_data, 'message_id') else None
+            message_id = message_data.message_id if hasattr(message_data, "message_id") else None
 
             if not message_id:
                 return
@@ -171,19 +262,17 @@ class FeishuAdapter:
             # Convert to dict for parsing
             message_dict = {
                 "message_id": message_id,
-                "chat_id": getattr(message_data, 'chat_id', ''),
-                "chat_type": getattr(message_data, 'chat_type', 'p2p'),
-                "content": getattr(message_data, 'content', ''),
-                "message_type": getattr(message_data, 'message_type', 'text'),
-                "parent_id": getattr(message_data, 'parent_id', None),
-                "mentions": getattr(message_data, 'mentions', []),
+                "chat_id": getattr(message_data, "chat_id", ""),
+                "chat_type": getattr(message_data, "chat_type", "p2p"),
+                "content": getattr(message_data, "content", ""),
+                "message_type": getattr(message_data, "message_type", "text"),
+                "parent_id": getattr(message_data, "parent_id", None),
+                "mentions": getattr(message_data, "mentions", []),
             }
 
             sender_dict = {
-                "sender_id": {
-                    "open_id": getattr(sender_data, 'sender_id', {}).get('open_id', '') if isinstance(getattr(sender_data, 'sender_id', None), dict) else ''
-                },
-                "sender_type": getattr(sender_data, 'sender_type', ''),
+                "sender_id": getattr(sender_data, "sender_id", None),
+                "sender_type": getattr(sender_data, "sender_type", ""),
             }
 
             # Parse message
@@ -202,87 +291,174 @@ class FeishuAdapter:
 
     def _on_message_recalled(self, event: Any) -> None:
         """Handle message recalled event."""
-        logger.debug(f"[Feishu] Message recalled")
+        logger.debug("[Feishu] Message recalled")
 
     def _on_bot_added(self, event: Any) -> None:
         """Handle bot added to chat event."""
-        chat_id = getattr(event.event, 'chat_id', '') if hasattr(event, 'event') else ''
+        chat_id = getattr(event.event, "chat_id", "") if hasattr(event, "event") else ""
         logger.info(f"[Feishu] Bot added to chat: {chat_id}")
 
     def _on_bot_deleted(self, event: Any) -> None:
         """Handle bot removed from chat event."""
-        chat_id = getattr(event.event, 'chat_id', '') if hasattr(event, 'event') else ''
+        chat_id = getattr(event.event, "chat_id", "") if hasattr(event, "event") else ""
         logger.info(f"[Feishu] Bot removed from chat: {chat_id}")
-    
+
     async def _connect_webhook(self) -> None:
         """Connect via Webhook (HTTP server mode)."""
         logger.warning("[Feishu] Webhook mode not yet implemented")
         # TODO: Implement HTTP server for receiving webhooks
 
-    def _parse_message(
-        self,
-        message_data: Dict[str, Any],
-        sender_data: Dict[str, Any]
-    ) -> Message:
+    def _parse_message(self, message_data: Dict[str, Any], sender_data: Dict[str, Any]) -> Message:
         """Parse Feishu message to unified format."""
         content = self._parse_content(
-            message_data.get("content", ""),
-            message_data.get("message_type", "text")
+            message_data.get("content", ""), message_data.get("message_type", "text")
         )
-        
-        sender_id = sender_data.get("sender_id", {}).get("open_id", "")
-        sender_name = sender_data.get("sender_type", "")
-        
+
+        sender_id = self._extract_sender_open_id(sender_data.get("sender_id"))
+        sender_type_raw = sender_data.get("sender_type", "user")
+        sender_name = self._resolve_sender_name(sender_data, sender_id)
+        chat_type_raw = message_data.get("chat_type", "p2p") or "p2p"
+        try:
+            chat_type = ChatType(chat_type_raw)
+        except (TypeError, ValueError):
+            logger.warning("[Feishu] Unknown chat_type '%s', fallback to p2p", chat_type_raw)
+            chat_type = ChatType.P2P
+        mentions = self._extract_mentions(message_data.get("mentions"))
+
         return Message(
             channel="feishu",
-            chat_type=ChatType(message_data.get("chat_type", "p2p")),
+            chat_type=chat_type,
             chat_id=message_data.get("chat_id", ""),
             sender=SenderInfo(id=sender_id, name=sender_name),
+            sender_type=sender_type_raw or "user",
             content=content,
             reply_to=message_data.get("parent_id"),
-            mentions=[m.get("id", {}).get("open_id", "") 
-                     for m in message_data.get("mentions", [])],
-            raw_data={"event": {"message": message_data, "sender": sender_data}}
+            thread_id=message_data.get("thread_id") or message_data.get("root_id"),
+            mentions=mentions,
+            raw_data={"event": {"message": message_data, "sender": sender_data}},
         )
-    
-    def _parse_content(self, content_str: str, message_type: str) -> MessageContent:
+
+    def _resolve_sender_name(
+        self, sender_data: Dict[str, Any], sender_id: str
+    ) -> str:
+        """Resolve sender display name with cache."""
+        if sender_id in self._sender_name_cache:
+            return self._sender_name_cache[sender_id]
+        # Try extracting name from sender data attributes
+        name = ""
+        sender_id_obj = sender_data.get("sender_id")
+        if isinstance(sender_id_obj, dict):
+            name = sender_id_obj.get("user_id", "")
+        if not name:
+            name = sender_data.get("sender_type", "")
+        if sender_id and name:
+            self._sender_name_cache[sender_id] = name
+        return name
+
+    def _extract_sender_open_id(self, sender_id_data: Any) -> str:
+        """Extract sender open_id from SDK dict/object payloads."""
+        if isinstance(sender_id_data, dict):
+            open_id = sender_id_data.get("open_id")
+            return open_id if isinstance(open_id, str) else ""
+        if sender_id_data is None:
+            return ""
+        open_id = getattr(sender_id_data, "open_id", None)
+        return open_id if isinstance(open_id, str) else ""
+
+    def _extract_mention_open_id(self, mention_data: Any) -> str:
+        """Extract mention open_id from SDK dict/object payloads."""
+        if isinstance(mention_data, dict):
+            mention_id = mention_data.get("id")
+            if isinstance(mention_id, dict):
+                mention_open_id = mention_id.get("open_id")
+                return mention_open_id if isinstance(mention_open_id, str) else ""
+            mention_open_id = mention_data.get("open_id")
+            return mention_open_id if isinstance(mention_open_id, str) else ""
+
+        mention_id = getattr(mention_data, "id", None)
+        if isinstance(mention_id, dict):
+            mention_open_id = mention_id.get("open_id")
+            if isinstance(mention_open_id, str):
+                return mention_open_id
+        else:
+            mention_open_id = getattr(mention_id, "open_id", None)
+            if isinstance(mention_open_id, str):
+                return mention_open_id
+
+        mention_open_id = getattr(mention_data, "open_id", None)
+        return mention_open_id if isinstance(mention_open_id, str) else ""
+
+    def _extract_mentions(self, mentions_data: Any) -> List[str]:
+        """Normalize mentions payload and return mentioned open_id list."""
+        if not mentions_data:
+            return []
+
+        mentions_list: List[Any]
+        if isinstance(mentions_data, list):
+            mentions_list = mentions_data
+        else:
+            try:
+                mentions_list = list(mentions_data)
+            except TypeError:
+                return []
+
+        mention_open_ids: List[str] = []
+        for mention_data in mentions_list:
+            mention_open_id = self._extract_mention_open_id(mention_data)
+            if mention_open_id:
+                mention_open_ids.append(mention_open_id)
+        return mention_open_ids
+
+    def _parse_content(self, content_data: Any, message_type: str) -> MessageContent:
         """Parse message content based on type."""
-        try:
-            parsed = json.loads(content_str) if content_str else {}
-        except json.JSONDecodeError:
-            parsed = {"text": content_str}
-        
+        parsed: Dict[str, Any]
+        if isinstance(content_data, dict):
+            parsed = content_data
+        elif isinstance(content_data, str):
+            try:
+                raw_parsed = json.loads(content_data) if content_data else {}
+                parsed = raw_parsed if isinstance(raw_parsed, dict) else {"text": str(raw_parsed)}
+            except json.JSONDecodeError:
+                parsed = {"text": content_data}
+        elif content_data is None:
+            parsed = {}
+        else:
+            parsed = {"text": str(content_data)}
+
         if message_type == "text":
-            return MessageContent(type=MessageType.TEXT, text=parsed.get("text", ""))
-        
-        elif message_type == "image":
-            return MessageContent(
-                type=MessageType.IMAGE,
-                image_key=parsed.get("image_key")
+            text_value = parsed.get("text", "")
+            text = (
+                text_value
+                if isinstance(text_value, str)
+                else ("" if text_value is None else str(text_value))
             )
-        
+            return MessageContent(type=MessageType.TEXT, text=text)
+
+        elif message_type == "image":
+            return MessageContent(type=MessageType.IMAGE, image_key=parsed.get("image_key"))
+
         elif message_type == "file":
             return MessageContent(
                 type=MessageType.FILE,
                 file_key=parsed.get("file_key"),
-                file_name=parsed.get("file_name")
+                file_name=parsed.get("file_name"),
             )
-        
+
         elif message_type == "post":
             # Rich text post
             text = self._parse_post_content(parsed)
             return MessageContent(type=MessageType.POST, text=text)
-        
+
         else:
-            return MessageContent(type=MessageType.TEXT, text=str(content_str))
-    
+            return MessageContent(type=MessageType.TEXT, text=str(content_data or ""))
+
     def _parse_post_content(self, content: Dict[str, Any]) -> str:
         """Parse rich text post content."""
         title = content.get("title", "")
         content_blocks = content.get("content", [])
-        
+
         text_parts = [title] if title else []
-        
+
         for paragraph in content_blocks:
             if isinstance(paragraph, list):
                 para_text = ""
@@ -295,42 +471,75 @@ class FeishuAdapter:
                     elif tag == "at":
                         para_text += f"@{element.get('user_name', '')}"
                     elif tag == "img":
-                        para_text += "[图片]"
+                        para_text += "[image]"
+                    elif tag == "media":
+                        para_text += "[media]"
+                    elif tag in ("code_block", "code"):
+                        lang = element.get("language", "")
+                        code_text = element.get("text", "")
+                        if lang:
+                            para_text += f"\n```{lang}\n{code_text}\n```\n"
+                        else:
+                            para_text += f"`{code_text}`"
+                    elif tag == "pre":
+                        para_text += f"\n```\n{element.get('text', '')}\n```\n"
+                    elif tag == "blockquote":
+                        para_text += f"> {element.get('text', '')}"
+                    elif tag == "mention":
+                        para_text += f"@{element.get('name', element.get('key', ''))}"
                 text_parts.append(para_text)
-        
-        return "\n".join(text_parts) or "[富文本消息]"
-    
+
+        return "\n".join(text_parts) or "[rich text message]"
+
     async def disconnect(self) -> None:
         """Disconnect from Feishu."""
         self._connected = False
-        
-        if self._ws_client:
-            # WebSocket client doesn't have explicit close in this SDK
-            self._ws_client = None
-        
+        self._ws_stop_requested = True
+
+        if self._ws_client and self._ws_loop and self._ws_loop.is_running():
+            disconnect_coro = getattr(self._ws_client, "_disconnect", None)
+            if callable(disconnect_coro):
+                try:
+                    future = asyncio.run_coroutine_threadsafe(disconnect_coro(), self._ws_loop)
+                    future.result(timeout=3)
+                except Exception:
+                    pass
+            try:
+                self._ws_loop.call_soon_threadsafe(self._ws_loop.stop)
+            except Exception:
+                pass
+
+        if self._ws_thread and self._ws_thread.is_alive():
+            self._ws_thread.join(timeout=5)
+            if self._ws_thread.is_alive():
+                raise RuntimeError("Feishu websocket thread did not stop within timeout")
+
+        self._ws_client = None
+        self._ws_thread = None
+        self._ws_loop = None
+        self._ws_ready.clear()
+        self._ws_start_error = None
+
         logger.info("[Feishu] Disconnected")
-    
+
     async def send_message(
-        self,
-        to: str,
-        content: MessageContent,
-        reply_to: Optional[str] = None
+        self, to: str, content: MessageContent, reply_to: Optional[str] = None
     ) -> str:
         """Send a message."""
         if not self._connected:
             raise RuntimeError("Feishu adapter not connected")
-        
+
         try:
             from lark_oapi import Client
-            
+
             client = Client(
                 app_id=self._config.app_id,
                 app_secret=self._config.app_secret,
             )
-            
+
             # Determine recipient type
             receive_id_type = "open_id" if to.startswith("ou_") else "chat_id"
-            
+
             # Build message payload
             if content.type == MessageType.TEXT:
                 msg_type = "text"
@@ -340,59 +549,152 @@ class FeishuAdapter:
                 msg_content = json.dumps({"image_key": content.image_key})
             elif content.type == MessageType.FILE:
                 msg_type = "file"
-                msg_content = json.dumps({
-                    "file_key": content.file_key,
-                    "file_name": content.file_name
-                })
+                msg_content = json.dumps(
+                    {"file_key": content.file_key, "file_name": content.file_name}
+                )
+            elif content.type == MessageType.CARD:
+                msg_type = "interactive"
+                msg_content = json.dumps(content.card or {})
             else:
                 msg_type = "text"
                 msg_content = json.dumps({"text": str(content.text)})
-            
-            # Send via API
-            response = client.im.message.create(
-                {"receive_id_type": receive_id_type},
-                {
+
+            def _parse_send_response(
+                api_response: Any,
+            ) -> tuple[Optional[int], Optional[str], Optional[str]]:
+                response_code = (
+                    api_response.get("code")
+                    if isinstance(api_response, dict)
+                    else getattr(api_response, "code", None)
+                )
+                response_msg = (
+                    api_response.get("msg")
+                    if isinstance(api_response, dict)
+                    else getattr(api_response, "msg", None)
+                )
+                response_data = (
+                    api_response.get("data")
+                    if isinstance(api_response, dict)
+                    else getattr(api_response, "data", None)
+                )
+                if isinstance(response_data, dict):
+                    message_id = response_data.get("message_id")
+                else:
+                    message_id = getattr(response_data, "message_id", None)
+                return response_code, response_msg, str(message_id) if message_id else None
+
+            # Prefer threaded reply when possible; fallback to create if reply fails.
+            if reply_to and hasattr(client.im.message, "reply"):
+                try:
+                    reply_response = client.im.message.reply(
+                        path={"message_id": reply_to},
+                        data={
+                            "msg_type": msg_type,
+                            "content": msg_content,
+                        },
+                    )
+                    reply_code, reply_msg, reply_message_id = _parse_send_response(reply_response)
+                    if reply_code in (None, 0) and reply_message_id:
+                        return reply_message_id
+                    logger.warning(
+                        "[Feishu] Reply API failed, fallback to create: "
+                        f"code={reply_code}, msg={reply_msg}"
+                    )
+                except Exception as e:
+                    logger.warning(f"[Feishu] Reply API error, fallback to create: {e}")
+
+            create_response = client.im.message.create(
+                params={"receive_id_type": receive_id_type},
+                data={
                     "receive_id": to,
                     "msg_type": msg_type,
                     "content": msg_content,
-                }
+                },
             )
-            
-            message_id = response.get("data", {}).get("message_id")
+
+            response_code, response_msg, message_id = _parse_send_response(create_response)
+            if response_code not in (None, 0):
+                raise RuntimeError(
+                    f"Feishu send failed (code={response_code}): {response_msg or 'unknown error'}"
+                )
             if not message_id:
-                raise RuntimeError("No message_id in response")
-            
+                raise RuntimeError(
+                    f"No message_id in Feishu response (code={response_code}, msg={response_msg})"
+                )
             return message_id
-        
+
         except ImportError:
-            raise ImportError(
-                "Feishu SDK not installed. "
-                "Install with: pip install lark_oapi"
-            )
-    
+            raise ImportError("Feishu SDK not installed. Install with: pip install lark_oapi")
+
     async def send_text(self, to: str, text: str, reply_to: Optional[str] = None) -> str:
         """Send a text message."""
         content = MessageContent(type=MessageType.TEXT, text=text)
         return await self.send_message(to, content, reply_to)
-    
+
+    async def send_card(
+        self,
+        to: str,
+        card: Dict[str, Any],
+        reply_to: Optional[str] = None,
+    ) -> str:
+        """Send an interactive card message."""
+        content = MessageContent(type=MessageType.CARD, card=card)
+        return await self.send_message(to, content, reply_to)
+
+    async def edit_message(self, message_id: str, content: MessageContent) -> bool:
+        """Edit a previously sent message."""
+        try:
+            from src.infrastructure.adapters.secondary.channels.feishu.client import FeishuClient
+
+            client = FeishuClient(
+                app_id=self._config.app_id or "",
+                app_secret=self._config.app_secret or "",
+            )
+            if content.type == MessageType.TEXT:
+                msg_type = "text"
+                msg_content = json.dumps({"text": content.text})
+            else:
+                msg_type = "text"
+                msg_content = json.dumps({"text": str(content.text or "")})
+            await client.edit_message(message_id, msg_type, msg_content)
+            return True
+        except Exception as e:
+            logger.error(f"[Feishu] Edit message failed: {e}")
+            return False
+
+    async def delete_message(self, message_id: str) -> bool:
+        """Delete/recall a message."""
+        try:
+            from src.infrastructure.adapters.secondary.channels.feishu.client import FeishuClient
+
+            client = FeishuClient(
+                app_id=self._config.app_id or "",
+                app_secret=self._config.app_secret or "",
+            )
+            await client.recall_message(message_id)
+            return True
+        except Exception as e:
+            logger.error(f"[Feishu] Delete message failed: {e}")
+            return False
+
     def on_message(self, handler: MessageHandler) -> Callable[[], None]:
         """Register message handler."""
         self._message_handlers.append(handler)
-        
+
         def unregister():
             self._message_handlers.remove(handler)
-        
+
         return unregister
-    
+
     def on_error(self, handler: ErrorHandler) -> Callable[[], None]:
         """Register error handler."""
         self._error_handlers.append(handler)
-        
+
         def unregister():
             self._error_handlers.remove(handler)
-        
+
         return unregister
-    
+
     def _handle_error(self, error: Exception) -> None:
         """Handle errors."""
         for handler in self._error_handlers:
@@ -400,57 +702,50 @@ class FeishuAdapter:
                 handler(error)
             except Exception:
                 pass
-    
+
     async def get_chat_members(self, chat_id: str) -> List[SenderInfo]:
         """Get chat members."""
         try:
             from lark_oapi import Client
-            
+
             client = Client(
                 app_id=self._config.app_id,
                 app_secret=self._config.app_secret,
             )
-            
+
             response = client.im.chatMembers.get(
-                {"chat_id": chat_id},
-                {"member_id_type": "open_id"}
+                {"chat_id": chat_id}, {"member_id_type": "open_id"}
             )
-            
+
             members = response.get("data", {}).get("items", [])
-            return [
-                SenderInfo(id=m.get("member_id"), name=m.get("name"))
-                for m in members
-            ]
-        
+            return [SenderInfo(id=m.get("member_id"), name=m.get("name")) for m in members]
+
         except ImportError:
             raise ImportError("Feishu SDK not installed")
-    
+
     async def get_user_info(self, user_id: str) -> Optional[SenderInfo]:
         """Get user info."""
         try:
             from lark_oapi import Client
-            
+
             client = Client(
                 app_id=self._config.app_id,
                 app_secret=self._config.app_secret,
             )
-            
-            response = client.contact.user.get(
-                {"user_id": user_id},
-                {"user_id_type": "open_id"}
-            )
-            
+
+            response = client.contact.user.get({"user_id": user_id}, {"user_id_type": "open_id"})
+
             user = response.get("data", {}).get("user", {})
             return SenderInfo(
                 id=user.get("open_id", user_id),
                 name=user.get("name"),
-                avatar=user.get("avatar", {}).get("avatar_origin")
+                avatar=user.get("avatar", {}).get("avatar_origin"),
             )
-        
+
         except ImportError:
             raise ImportError("Feishu SDK not installed")
 
 
 # Make FeishuAdapter implement ChannelAdapter protocol
-if hasattr(FeishuAdapter, '__init__'):
+if hasattr(FeishuAdapter, "__init__"):
     pass  # Class is complete

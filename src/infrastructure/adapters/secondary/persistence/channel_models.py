@@ -90,6 +90,35 @@ class ChannelConfigModel(IdGeneratorMixin, Base):
         comment="Webhook endpoint path"
     )
     
+    # Access control & policies
+    dm_policy: Mapped[str] = mapped_column(
+        String,
+        default="open",
+        nullable=False,
+        comment="DM policy: open, allowlist, disabled",
+    )
+    group_policy: Mapped[str] = mapped_column(
+        String,
+        default="open",
+        nullable=False,
+        comment="Group policy: open, allowlist, disabled",
+    )
+    allow_from: Mapped[Optional[list]] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Allowlist of user IDs for DM access (wildcard * = all)",
+    )
+    group_allow_from: Mapped[Optional[list]] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Allowlist of group/chat IDs allowed to trigger the agent",
+    )
+    rate_limit_per_minute: Mapped[int] = mapped_column(
+        default=60,
+        nullable=False,
+        comment="Max messages per minute per chat (0 = unlimited)",
+    )
+
     # Channel-specific settings
     domain: Mapped[Optional[str]] = mapped_column(
         String,
