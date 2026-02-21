@@ -522,12 +522,6 @@ class ChannelMessageRouter:
                     f"[MessageRouter] Invoking agent for conversation {conversation_id}"
                 )
 
-                # Resolve the channel adapter for streaming card support
-                streaming_adapter = self._get_streaming_adapter(message)
-                streaming_msg_id: Optional[str] = None
-                last_patch_time = 0.0
-                _PATCH_INTERVAL = 2.0  # seconds between card patches
-
                 response_text = ""
                 error_message: Optional[str] = None
                 # Event types that produce full-text messages in the frontend.
@@ -557,22 +551,6 @@ class ChannelMessageRouter:
                         delta = event_data.get("delta", "")
                         if isinstance(delta, str):
                             response_text += delta
-
-                        # Streaming card: send initial card on first delta, patch periodically
-                        if streaming_adapter and response_text.strip():
-                            now = time.monotonic()
-                            if streaming_msg_id is None:
-                                streaming_msg_id = await self._send_initial_streaming_card(
-                                    streaming_adapter, message
-                                )
-                                last_patch_time = now
-                            elif now - last_patch_time >= _PATCH_INTERVAL:
-                                await self._patch_streaming_card(
-                                    streaming_adapter, streaming_msg_id, response_text,
-                                    loading=True,
-                                )
-                                last_patch_time = now
-
                     elif event_type == "assistant_message":
                         assistant_content = event_data.get("content")
                         if isinstance(assistant_content, str) and assistant_content.strip():
@@ -583,26 +561,6 @@ class ChannelMessageRouter:
                             response_text = complete_content
                     elif event_type == "error":
                         error_message = event_data.get("message") or "Unknown agent error"
-
-                # Finalize streaming card with complete content
-                if streaming_msg_id and response_text.strip():
-                    patched = await self._patch_streaming_card(
-                        streaming_adapter, streaming_msg_id, response_text, loading=False,
-                    )
-                    if patched:
-                        await self._record_streaming_outbox(
-                            message, conversation_id, response_text, streaming_msg_id,
-                        )
-                        if error_message:
-                            logger.warning(
-                                f"[MessageRouter] Agent error after streaming: {error_message}"
-                            )
-                        return
-                    # Patch failed -- fall through to send a new message instead
-                    logger.warning(
-                        "[MessageRouter] Streaming card patch failed, "
-                        "falling back to regular send"
-                    )
 
                 if error_message:
                     logger.warning(
