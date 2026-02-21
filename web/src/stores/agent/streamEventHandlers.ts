@@ -20,11 +20,8 @@ import type {
   ThoughtEventData,
   CompleteEventData,
   ClarificationAskedEventData,
-  ClarificationAnsweredEventData,
   DecisionAskedEventData,
-  DecisionAnsweredEventData,
   EnvVarRequestedEventData,
-  EnvVarProvidedEventData,
   PermissionAskedEventData,
   CostUpdateEventData,
   ToolCall,
@@ -477,7 +474,7 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('clarification_asked', event.data as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent('clarification_asked', event.data as unknown as Record<string, unknown>, handlerConversationId);
     },
 
     onDecisionAsked: (event) => {
@@ -498,14 +495,20 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('decision_asked', event.data as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent('decision_asked', event.data as unknown as Record<string, unknown>, handlerConversationId);
     },
 
     onClarificationAnswered: (event) => {
       const { updateConversationState, getConversationState } = get();
-
       const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      const requestId = event.data.request_id;
+
+      // Merge answer into the existing asked card in timeline
+      const updatedTimeline = convState.timeline.map((te) =>
+        te.type === 'clarification_asked' && (te as any).requestId === requestId
+          ? { ...te, answered: true, answer: event.data.answer }
+          : te
+      );
 
       updateConversationState(handlerConversationId, {
         timeline: updatedTimeline,
@@ -513,17 +516,21 @@ export function createStreamEventHandlers(
         agentState: 'thinking',
       });
 
-      // Forward to unified HITL store to mark request as completed
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('clarification_answered', event.data as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent('clarification_answered', event.data as unknown as Record<string, unknown>, handlerConversationId);
     },
 
     onDecisionAnswered: (event) => {
       const { updateConversationState, getConversationState } = get();
-
       const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      const requestId = event.data.request_id;
+
+      const updatedTimeline = convState.timeline.map((te) =>
+        te.type === 'decision_asked' && (te as any).requestId === requestId
+          ? { ...te, answered: true, decision: event.data.decision }
+          : te
+      );
 
       updateConversationState(handlerConversationId, {
         timeline: updatedTimeline,
@@ -533,14 +540,19 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('decision_answered', event.data as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent('decision_answered', event.data as unknown as Record<string, unknown>, handlerConversationId);
     },
 
     onEnvVarProvided: (event) => {
       const { updateConversationState, getConversationState } = get();
-
       const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      const requestId = event.data.request_id;
+
+      const updatedTimeline = convState.timeline.map((te) =>
+        te.type === 'env_var_requested' && (te as any).requestId === requestId
+          ? { ...te, answered: true, variableNames: event.data.variable_names }
+          : te
+      );
 
       updateConversationState(handlerConversationId, {
         timeline: updatedTimeline,
@@ -550,7 +562,7 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('env_var_provided', event.data as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent('env_var_provided', event.data as unknown as Record<string, unknown>, handlerConversationId);
     },
 
     onDoomLoopDetected: (event) => {
@@ -579,7 +591,7 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('env_var_requested', event.data as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent('env_var_requested', event.data as unknown as Record<string, unknown>, handlerConversationId);
     },
 
     onPermissionAsked: (event) => {
@@ -600,14 +612,19 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('permission_asked', event.data as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent('permission_asked', event.data as unknown as Record<string, unknown>, handlerConversationId);
     },
 
     onPermissionReplied: (event) => {
       const { updateConversationState, getConversationState } = get();
-
       const convState = getConversationState(handlerConversationId);
-      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+      const requestId = event.data.request_id;
+
+      const updatedTimeline = convState.timeline.map((te) =>
+        te.type === 'permission_asked' && (te as any).requestId === requestId
+          ? { ...te, answered: true, granted: event.data.granted }
+          : te
+      );
 
       updateConversationState(handlerConversationId, {
         timeline: updatedTimeline,
@@ -617,7 +634,7 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('permission_replied', event.data as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent('permission_replied', event.data as unknown as Record<string, unknown>, handlerConversationId);
     },
 
     onDoomLoopIntervened: (event) => {
