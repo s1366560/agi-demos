@@ -7,9 +7,20 @@ Provides unified access to 100+ LLM providers.
 
 import logging
 import math
+import warnings
 from typing import Any
 
 from pydantic import BaseModel
+
+# Suppress Pydantic serialization warnings from litellm's ModelResponse when
+# providers inject dynamic fields (e.g. Anthropic's server_tool_use for web search).
+# These warnings are harmless -- the field is simply not in the declared schema.
+warnings.filterwarnings(
+    "ignore",
+    message=r".*Expected `ServerToolUse`.*",
+    category=UserWarning,
+    module=r"pydantic\.main",
+)
 
 from src.configuration.config import get_settings
 from src.domain.llm_providers.llm_types import (
