@@ -1,5 +1,6 @@
 """Unit tests for ChannelMessageRouter."""
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -84,10 +85,43 @@ async def test_route_message_skips_bot_echo_messages() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_route_message_broadcasts_inbound_user_message_to_workspace() -> None:
+    """Router should emit realtime inbound user message event for workspace."""
+    router = ChannelMessageRouter()
+    router._get_or_create_conversation = AsyncMock(return_value="conv-1")
+    router._store_message_history = AsyncMock()
+    router._broadcast_workspace_event = AsyncMock()
+    router._invoke_agent = AsyncMock()
+
+    message = _build_message(
+        text="hello from feishu",
+        raw_data={
+            "_routing": {"channel_config_id": "cfg-1", "channel_message_id": "om_1"},
+            "event": {"sender": {"sender_type": "user"}},
+        },
+    )
+
+    await router.route_message(message)
+
+    message_calls = [
+        call.kwargs
+        for call in router._broadcast_workspace_event.await_args_list
+        if call.kwargs.get("event_type") == "message"
+    ]
+    assert len(message_calls) == 1
+    broadcast_call = message_calls[0]
+    assert broadcast_call["event_data"]["metadata"]["source"] == "channel_inbound"
+    assert broadcast_call["event_data"]["content"] == "hello from feishu"
+    router._invoke_agent.assert_awaited_once_with(message, "conv-1")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_invoke_agent_streams_and_sends_final_response() -> None:
     """Router should invoke AgentService stream and forward complete response to channel."""
     router = ChannelMessageRouter()
     router._send_response = AsyncMock()
+    router._broadcast_workspace_event = AsyncMock()
 
     message = _build_message(
         text="What is the status?",
@@ -141,4 +175,157 @@ async def test_invoke_agent_streams_and_sends_final_response() -> None:
         await router._invoke_agent(message, "conv-1")
 
     mock_create_llm_client.assert_awaited_once_with("tenant-1")
+    # Only text_delta is broadcast; complete is filtered to prevent duplicate messages
+    assert router._broadcast_workspace_event.await_count == 1
     router._send_response.assert_awaited_once_with(message, "conv-1", "final answer")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_response_marks_outbox_failed_when_connection_missing() -> None:
+    """Router should persist failed outbox state if channel connection is unavailable."""
+    router = ChannelMessageRouter()
+    router._create_outbox_record = AsyncMock(return_value="outbox-1")
+    router._mark_outbox_failed = AsyncMock()
+
+    message = _build_message(
+        text="hello",
+        raw_data={"_routing": {"channel_config_id": "cfg-1", "channel_message_id": "msg-1"}},
+    )
+
+    channel_manager = SimpleNamespace(connections={})
+    with patch(
+        "src.infrastructure.adapters.primary.web.startup.get_channel_manager",
+        return_value=channel_manager,
+    ):
+        await router._send_response(message, "conv-1", "reply")
+
+    router._mark_outbox_failed.assert_awaited_once_with("outbox-1", "no active connection")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_response_marks_outbox_failed_when_manager_missing() -> None:
+    """Router should mark outbox failed when channel manager is unavailable."""
+    router = ChannelMessageRouter()
+    router._create_outbox_record = AsyncMock(return_value="outbox-1")
+    router._mark_outbox_failed = AsyncMock()
+
+    message = _build_message(
+        text="hello",
+        raw_data={"_routing": {"channel_config_id": "cfg-1", "channel_message_id": "msg-1"}},
+    )
+
+    with patch(
+        "src.infrastructure.adapters.primary.web.startup.get_channel_manager",
+        return_value=None,
+    ):
+        await router._send_response(message, "conv-1", "reply")
+
+    router._mark_outbox_failed.assert_awaited_once_with("outbox-1", "channel manager unavailable")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_broadcast_workspace_event_sanitizes_payload() -> None:
+    """Workspace broadcast payload should be JSON-safe."""
+    router = ChannelMessageRouter()
+
+    class _SenderId:
+        def __init__(self, open_id: str) -> None:
+            self.open_id = open_id
+
+    manager = SimpleNamespace(broadcast_to_conversation=AsyncMock(return_value=1))
+    with patch(
+        "src.infrastructure.adapters.primary.web.websocket.connection_manager.get_connection_manager",
+        return_value=manager,
+    ):
+        await router._broadcast_workspace_event(
+            conversation_id="conv-1",
+            event_type="text_delta",
+            event_data={"sender_id": _SenderId("ou_123")},
+            raw_event={},
+        )
+
+    sent_event = manager.broadcast_to_conversation.await_args.args[1]
+    assert sent_event["data"]["sender_id"]["open_id"] == "ou_123"
+
+
+@pytest.mark.unit
+def test_to_json_safe_converts_sdk_objects_to_dicts() -> None:
+    """Router should sanitize SDK objects before JSON persistence."""
+    router = ChannelMessageRouter()
+
+    class _UserId:
+        def __init__(self, open_id: str) -> None:
+            self.open_id = open_id
+
+    payload = {
+        "_routing": {"channel_config_id": "cfg-1", "channel_message_id": "msg-1"},
+        "event": {"sender": {"sender_id": _UserId("ou_x"), "sender_type": "user"}},
+    }
+    safe_payload = router._to_json_safe(payload)
+
+    assert safe_payload["event"]["sender"]["sender_id"]["open_id"] == "ou_x"
+    json.dumps(safe_payload, allow_nan=False)
+
+
+@pytest.mark.unit
+def test_to_json_safe_sanitizes_non_finite_floats() -> None:
+    """Router should sanitize non-finite floats for strict JSON safety."""
+    router = ChannelMessageRouter()
+    safe_payload = router._to_json_safe({"nan": float("nan"), "inf": float("inf"), "ok": 1.25})
+
+    assert safe_payload["nan"] is None
+    assert safe_payload["inf"] is None
+    assert safe_payload["ok"] == 1.25
+    json.dumps(safe_payload, allow_nan=False)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_store_message_history_sanitizes_non_serializable_raw_data() -> None:
+    """Storing history should sanitize raw_data to avoid JSON serialization errors."""
+    router = ChannelMessageRouter()
+    router._resolve_channel_config_id = AsyncMock(return_value="cfg-1")
+
+    class _UserId:
+        def __init__(self, open_id: str) -> None:
+            self.open_id = open_id
+
+    message = _build_message(
+        text="hello",
+        raw_data={
+            "_routing": {"channel_config_id": "cfg-1", "channel_message_id": "msg-1"},
+            "event": {"sender": {"sender_id": _UserId("ou_x"), "sender_type": "user"}},
+        },
+    )
+
+    mock_dedupe_result = MagicMock()
+    mock_dedupe_result.scalar_one_or_none.return_value = None
+    session = MagicMock()
+    session.execute = AsyncMock(return_value=mock_dedupe_result)
+    session.commit = AsyncMock()
+
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+
+    mock_repo = MagicMock()
+    mock_repo.create = AsyncMock()
+
+    with (
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+            return_value=session_ctx,
+        ),
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.channel_repository.ChannelMessageRepository",
+            return_value=mock_repo,
+        ),
+    ):
+        await router._store_message_history(message, "conv-1")
+
+    saved_message = mock_repo.create.await_args.args[0]
+    assert saved_message.raw_data["event"]["sender"]["sender_id"]["open_id"] == "ou_x"
+    json.dumps(saved_message.raw_data, allow_nan=False)

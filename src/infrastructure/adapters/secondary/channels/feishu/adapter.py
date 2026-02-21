@@ -77,6 +77,19 @@ class FeishuAdapter:
     def connected(self) -> bool:
         return self._connected
 
+    def _build_rest_client(self) -> Any:
+        """Build a lark_oapi REST Client with proper domain configuration."""
+        from lark_oapi import Client, FEISHU_DOMAIN, LARK_DOMAIN
+
+        domain = LARK_DOMAIN if self._config.domain == "lark" else FEISHU_DOMAIN
+        return (
+            Client.builder()
+            .app_id(self._config.app_id or "")
+            .app_secret(self._config.app_secret or "")
+            .domain(domain)
+            .build()
+        )
+
     def _validate_config(self) -> None:
         """Validate configuration."""
         if not self._config.app_id:
@@ -530,14 +543,7 @@ class FeishuAdapter:
             raise RuntimeError("Feishu adapter not connected")
 
         try:
-            from lark_oapi import Client
-
-            client = Client(
-                app_id=self._config.app_id,
-                app_secret=self._config.app_secret,
-            )
-
-            # Determine recipient type
+            client = self._build_rest_client()
             receive_id_type = "open_id" if to.startswith("ou_") else "chat_id"
 
             # Build message payload
@@ -706,12 +712,7 @@ class FeishuAdapter:
     async def get_chat_members(self, chat_id: str) -> List[SenderInfo]:
         """Get chat members."""
         try:
-            from lark_oapi import Client
-
-            client = Client(
-                app_id=self._config.app_id,
-                app_secret=self._config.app_secret,
-            )
+            client = self._build_rest_client()
 
             response = client.im.chatMembers.get(
                 {"chat_id": chat_id}, {"member_id_type": "open_id"}
@@ -726,12 +727,7 @@ class FeishuAdapter:
     async def get_user_info(self, user_id: str) -> Optional[SenderInfo]:
         """Get user info."""
         try:
-            from lark_oapi import Client
-
-            client = Client(
-                app_id=self._config.app_id,
-                app_secret=self._config.app_secret,
-            )
+            client = self._build_rest_client()
 
             response = client.contact.user.get({"user_id": user_id}, {"user_id_type": "open_id"})
 
@@ -748,12 +744,7 @@ class FeishuAdapter:
     async def health_check(self) -> bool:
         """Verify connection is alive by calling Feishu bot info API."""
         try:
-            from lark_oapi import Client
-
-            client = Client(
-                app_id=self._config.app_id,
-                app_secret=self._config.app_secret,
-            )
+            client = self._build_rest_client()
             response = client.bot.bot_info.get()
             code = getattr(response, "code", None)
             if code is None and isinstance(response, dict):

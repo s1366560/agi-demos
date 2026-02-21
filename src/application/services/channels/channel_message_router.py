@@ -520,6 +520,10 @@ class ChannelMessageRouter:
 
                 response_text = ""
                 error_message: Optional[str] = None
+                # Event types that produce full-text messages in the frontend.
+                # Broadcasting these causes duplicate bubbles when the ReAct loop
+                # runs multiple turns, each emitting its own assistant_message.
+                _SKIP_BROADCAST = {"assistant_message", "text_end", "complete"}
                 async for event in agent_service.stream_chat_v2(
                     conversation_id=conversation_id,
                     user_message=text,
@@ -531,12 +535,13 @@ class ChannelMessageRouter:
                     event_type = event.get("type")
                     event_data = event.get("data") or {}
 
-                    await self._broadcast_workspace_event(
-                        conversation_id=conversation_id,
-                        event_type=event_type,
-                        event_data=event_data if isinstance(event_data, dict) else {},
-                        raw_event=event,
-                    )
+                    if event_type not in _SKIP_BROADCAST:
+                        await self._broadcast_workspace_event(
+                            conversation_id=conversation_id,
+                            event_type=event_type,
+                            event_data=event_data if isinstance(event_data, dict) else {},
+                            raw_event=event,
+                        )
 
                     if event_type == "text_delta":
                         delta = event_data.get("delta", "")
