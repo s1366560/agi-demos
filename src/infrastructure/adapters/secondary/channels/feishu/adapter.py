@@ -135,6 +135,7 @@ class FeishuAdapter:
                 .register_p2_im_message_message_read_v1(self._on_message_read)
                 .register_p2_im_chat_member_bot_added_v1(self._on_bot_added)
                 .register_p2_im_chat_member_bot_deleted_v1(self._on_bot_deleted)
+                .register_p2_card_action_trigger(self._on_card_action)
                 .build()
             )
 
@@ -320,6 +321,65 @@ class FeishuAdapter:
         """Handle bot removed from chat event."""
         chat_id = getattr(event.event, "chat_id", "") if hasattr(event, "event") else ""
         logger.info(f"[Feishu] Bot removed from chat: {chat_id}")
+
+    def _on_card_action(self, event: Any) -> Any:
+        """Handle interactive card button click / action.
+
+        The card action callback is synchronous in lark_oapi. We schedule the
+        async HITL response handler on the running event loop.
+
+        The ``event.event`` dict contains:
+        - ``action``: {"value": {"hitl_request_id": "...", "response_data": {...}}}
+        - ``operator``: {"open_id": "ou_xxx"}
+        """
+        from lark_oapi.event.callback.model.p2_card_action_trigger import (
+            P2CardActionTriggerResponse,
+        )
+
+        try:
+            action_data = event.event if isinstance(event.event, dict) else {}
+            action = action_data.get("action", {})
+            value = action.get("value", {})
+
+            hitl_request_id = value.get("hitl_request_id")
+            if not hitl_request_id:
+                logger.debug("[Feishu] Card action without hitl_request_id, ignoring")
+                return P2CardActionTriggerResponse()
+
+            response_data = value.get("response_data", {})
+            operator = action_data.get("operator", {})
+            user_id = operator.get("open_id", "")
+
+            logger.info(
+                f"[Feishu] Card action: request_id={hitl_request_id}, "
+                f"user={user_id}"
+            )
+
+            # Schedule async HITL response on the event loop
+            import asyncio
+
+            from src.application.services.channels.hitl_responder import (
+                HITLChannelResponder,
+            )
+
+            responder = HITLChannelResponder()
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(
+                    responder.respond(
+                        request_id=hitl_request_id,
+                        hitl_type=value.get("hitl_type", "clarification"),
+                        response_data=response_data,
+                        responder_id=user_id,
+                    )
+                )
+            except RuntimeError:
+                logger.warning("[Feishu] No running event loop for card action")
+
+        except Exception as e:
+            logger.error(f"[Feishu] Card action handling failed: {e}", exc_info=True)
+
+        return P2CardActionTriggerResponse()
 
     async def _connect_webhook(self) -> None:
         """Connect via Webhook (HTTP server mode)."""

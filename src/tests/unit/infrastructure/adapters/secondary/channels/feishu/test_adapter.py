@@ -152,6 +152,9 @@ async def test_connect_websocket_starts_dedicated_thread(adapter: FeishuAdapter)
         def register_p2_im_chat_member_bot_deleted_v1(self, _handler):
             return self
 
+        def register_p2_card_action_trigger(self, _handler):
+            return self
+
         def build(self):
             return object()
 
@@ -212,6 +215,9 @@ async def test_connect_websocket_cleans_up_when_wait_fails(
             return self
 
         def register_p2_im_chat_member_bot_deleted_v1(self, _handler):
+            return self
+
+        def register_p2_card_action_trigger(self, _handler):
             return self
 
         def build(self):
