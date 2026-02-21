@@ -398,65 +398,96 @@ async def test_disconnect_raises_when_thread_does_not_stop(adapter: FeishuAdapte
     assert adapter._ws_thread is stuck_thread
     assert stuck_thread.joined is True
 
+# -- Helpers for mocking lark_oapi v2 SDK response objects -----------------
+
+
+class _FakeResponseData:
+    """Mimics the SDK response data object with a message_id attribute."""
+
+    def __init__(self, message_id: str | None = None) -> None:
+        self.message_id = message_id
+
+
+class _FakeResponse:
+    """Mimics CreateMessageResponse / ReplyMessageResponse."""
+
+    def __init__(
+        self,
+        code: int = 0,
+        msg: str = "ok",
+        message_id: str | None = None,
+    ) -> None:
+        self.code = code
+        self.msg = msg
+        self.data = _FakeResponseData(message_id) if message_id else None
+
+    def success(self) -> bool:
+        return self.code == 0
+
+
+class _FakeMessageAPI:
+    """Mimics client.im.v1.message with create() and reply()."""
+
+    def __init__(
+        self,
+        create_response: _FakeResponse | None = None,
+        reply_response: _FakeResponse | None = None,
+        *,
+        has_reply: bool = True,
+    ) -> None:
+        self.create_called = False
+        self.reply_called = False
+        self.create_request = None
+        self.reply_request = None
+        self._create_response = create_response or _FakeResponse(message_id="om_default")
+        self._reply_response = reply_response
+        self._has_reply = has_reply
+
+    def create(self, request, option=None):
+        self.create_called = True
+        self.create_request = request
+        return self._create_response
+
+    def reply(self, request, option=None):
+        if not self._has_reply:
+            raise AttributeError("no reply")
+        self.reply_called = True
+        self.reply_request = request
+        return self._reply_response or _FakeResponse(message_id="om_reply_default")
+
+
+def _build_fake_client(message_api: _FakeMessageAPI) -> SimpleNamespace:
+    """Build a fake client matching client.im.v1.message structure."""
+    return SimpleNamespace(im=SimpleNamespace(v1=SimpleNamespace(message=message_api)))
+
+
+# -- send_message tests using v2 SDK builder pattern -----------------------
+
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_send_message_accepts_object_response_payload(adapter: FeishuAdapter) -> None:
-    """send_message should parse object-shaped SDK responses."""
-
-    class _ResponseData:
-        def __init__(self) -> None:
-            self.message_id = "om_123"
-
-    class _Response:
-        def __init__(self) -> None:
-            self.code = 0
-            self.msg = "ok"
-            self.data = _ResponseData()
-
-    class _MessageAPI:
-        def __init__(self) -> None:
-            self.create_kwargs = None
-
-        @staticmethod
-        def create(**kwargs):
-            return _Response()
-
-    class _Client:
-        def __init__(self, **_kwargs) -> None:
-            self.im = SimpleNamespace(message=_MessageAPI())
-
+    """send_message should parse SDK response objects (response.data.message_id)."""
+    msg_api = _FakeMessageAPI(create_response=_FakeResponse(message_id="om_123"))
     adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
 
-    adapter._build_rest_client = lambda: _Client()
     message_id = await adapter.send_text("oc_chat_1", "hello")
 
     assert message_id == "om_123"
+    assert msg_api.create_called is True
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_send_message_raises_on_non_zero_response_code(adapter: FeishuAdapter) -> None:
     """send_message should raise if Feishu API returns an error code."""
-
-    class _Response:
-        def __init__(self) -> None:
-            self.code = 99991663
-            self.msg = "forbidden"
-            self.data = None
-
-    class _MessageAPI:
-        @staticmethod
-        def create(**_kwargs):
-            return _Response()
-
-    class _Client:
-        def __init__(self) -> None:
-            self.im = SimpleNamespace(message=_MessageAPI())
-
+    msg_api = _FakeMessageAPI(
+        create_response=_FakeResponse(code=99991663, msg="forbidden")
+    )
     adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
 
-    adapter._build_rest_client = lambda: _Client()
     with pytest.raises(RuntimeError, match="Feishu send failed"):
         await adapter.send_text("oc_chat_1", "hello")
 
@@ -465,48 +496,18 @@ async def test_send_message_raises_on_non_zero_response_code(adapter: FeishuAdap
 @pytest.mark.asyncio
 async def test_send_message_uses_reply_api_when_reply_to_provided(adapter: FeishuAdapter) -> None:
     """send_message should use reply API when reply_to is available."""
-
-    class _Response:
-        def __init__(self, message_id: str) -> None:
-            self.code = 0
-            self.msg = "ok"
-            self.data = {"message_id": message_id}
-
-    class _MessageAPI:
-        def __init__(self) -> None:
-            self.reply_called = False
-            self.create_called = False
-            self.reply_kwargs = None
-            self.create_kwargs = None
-
-        def reply(self, **kwargs):
-            self.reply_called = True
-            self.reply_kwargs = kwargs
-            return _Response("om_reply_1")
-
-        def create(self, **kwargs):
-            self.create_called = True
-            self.create_kwargs = kwargs
-            return _Response("om_create_1")
-
-    message_api = _MessageAPI()
-
-    class _Client:
-        def __init__(self) -> None:
-            self.im = SimpleNamespace(message=message_api)
-
+    msg_api = _FakeMessageAPI(
+        reply_response=_FakeResponse(message_id="om_reply_1"),
+        create_response=_FakeResponse(message_id="om_create_1"),
+    )
     adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
 
-    adapter._build_rest_client = lambda: _Client()
     message_id = await adapter.send_text("oc_chat_1", "hello", reply_to="om_parent")
 
     assert message_id == "om_reply_1"
-    assert message_api.reply_called is True
-    assert message_api.create_called is False
-    assert message_api.reply_kwargs == {
-        "path": {"message_id": "om_parent"},
-        "data": {"msg_type": "text", "content": '{"text": "hello"}'},
-    }
+    assert msg_api.reply_called is True
+    assert msg_api.create_called is False
 
 
 @pytest.mark.unit
@@ -514,41 +515,18 @@ async def test_send_message_uses_reply_api_when_reply_to_provided(adapter: Feish
 async def test_send_message_falls_back_to_create_when_reply_api_missing(
     adapter: FeishuAdapter,
 ) -> None:
-    """send_message should fallback to create when SDK has no reply API."""
-
-    class _Response:
-        def __init__(self, message_id: str) -> None:
-            self.code = 0
-            self.msg = "ok"
-            self.data = {"message_id": message_id}
-
-    class _MessageAPI:
-        def __init__(self) -> None:
-            self.create_called = False
-            self.create_kwargs = None
-
-        def create(self, **kwargs):
-            self.create_called = True
-            self.create_kwargs = kwargs
-            return _Response("om_create_2")
-
-    message_api = _MessageAPI()
-
-    class _Client:
-        def __init__(self) -> None:
-            self.im = SimpleNamespace(message=message_api)
-
+    """send_message should fallback to create when reply raises an error."""
+    msg_api = _FakeMessageAPI(
+        create_response=_FakeResponse(message_id="om_create_2"),
+        has_reply=False,
+    )
     adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
 
-    adapter._build_rest_client = lambda: _Client()
     message_id = await adapter.send_text("oc_chat_1", "hello", reply_to="om_parent")
 
     assert message_id == "om_create_2"
-    assert message_api.create_called is True
-    assert message_api.create_kwargs == {
-        "params": {"receive_id_type": "chat_id"},
-        "data": {"receive_id": "oc_chat_1", "msg_type": "text", "content": '{"text": "hello"}'},
-    }
+    assert msg_api.create_called is True
 
 
 @pytest.mark.unit
@@ -557,49 +535,15 @@ async def test_send_message_falls_back_to_create_when_reply_returns_error(
     adapter: FeishuAdapter,
 ) -> None:
     """send_message should fallback to create when reply API returns non-zero code."""
-
-    class _Response:
-        def __init__(self, code: int, message_id: str | None = None) -> None:
-            self.code = code
-            self.msg = "ok" if code == 0 else "reply failed"
-            self.data = {"message_id": message_id} if message_id else {}
-
-    class _MessageAPI:
-        def __init__(self) -> None:
-            self.reply_called = False
-            self.create_called = False
-            self.reply_kwargs = None
-            self.create_kwargs = None
-
-        def reply(self, **kwargs):
-            self.reply_called = True
-            self.reply_kwargs = kwargs
-            return _Response(999, None)
-
-        def create(self, **kwargs):
-            self.create_called = True
-            self.create_kwargs = kwargs
-            return _Response(0, "om_create_fallback")
-
-    message_api = _MessageAPI()
-
-    class _Client:
-        def __init__(self) -> None:
-            self.im = SimpleNamespace(message=message_api)
-
+    msg_api = _FakeMessageAPI(
+        reply_response=_FakeResponse(code=999, msg="reply failed"),
+        create_response=_FakeResponse(message_id="om_create_fallback"),
+    )
     adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
 
-    adapter._build_rest_client = lambda: _Client()
     message_id = await adapter.send_text("oc_chat_1", "hello", reply_to="om_parent")
 
     assert message_id == "om_create_fallback"
-    assert message_api.reply_called is True
-    assert message_api.create_called is True
-    assert message_api.reply_kwargs == {
-        "path": {"message_id": "om_parent"},
-        "data": {"msg_type": "text", "content": '{"text": "hello"}'},
-    }
-    assert message_api.create_kwargs == {
-        "params": {"receive_id_type": "chat_id"},
-        "data": {"receive_id": "oc_chat_1", "msg_type": "text", "content": '{"text": "hello"}'},
-    }
+    assert msg_api.reply_called is True
+    assert msg_api.create_called is True

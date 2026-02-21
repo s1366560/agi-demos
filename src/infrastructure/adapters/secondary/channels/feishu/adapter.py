@@ -538,15 +538,21 @@ class FeishuAdapter:
     async def send_message(
         self, to: str, content: MessageContent, reply_to: Optional[str] = None
     ) -> str:
-        """Send a message."""
+        """Send a message using lark_oapi v2 SDK builder pattern."""
         if not self._connected:
             raise RuntimeError("Feishu adapter not connected")
 
         try:
-            client = self._build_rest_client()
-            receive_id_type = "open_id" if to.startswith("ou_") else "chat_id"
+            from lark_oapi.api.im.v1 import (
+                CreateMessageRequest,
+                CreateMessageRequestBody,
+                ReplyMessageRequest,
+                ReplyMessageRequestBody,
+            )
 
-            # Build message payload
+            client = self._build_rest_client()
+
+            # Determine message type and content JSON
             if content.type == MessageType.TEXT:
                 msg_type = "text"
                 msg_content = json.dumps({"text": content.text})
@@ -565,69 +571,55 @@ class FeishuAdapter:
                 msg_type = "text"
                 msg_content = json.dumps({"text": str(content.text)})
 
-            def _parse_send_response(
-                api_response: Any,
-            ) -> tuple[Optional[int], Optional[str], Optional[str]]:
-                response_code = (
-                    api_response.get("code")
-                    if isinstance(api_response, dict)
-                    else getattr(api_response, "code", None)
-                )
-                response_msg = (
-                    api_response.get("msg")
-                    if isinstance(api_response, dict)
-                    else getattr(api_response, "msg", None)
-                )
-                response_data = (
-                    api_response.get("data")
-                    if isinstance(api_response, dict)
-                    else getattr(api_response, "data", None)
-                )
-                if isinstance(response_data, dict):
-                    message_id = response_data.get("message_id")
-                else:
-                    message_id = getattr(response_data, "message_id", None)
-                return response_code, response_msg, str(message_id) if message_id else None
-
-            # Prefer threaded reply when possible; fallback to create if reply fails.
-            if reply_to and hasattr(client.im.message, "reply"):
+            # Prefer threaded reply when reply_to is provided
+            if reply_to:
                 try:
-                    reply_response = client.im.message.reply(
-                        path={"message_id": reply_to},
-                        data={
-                            "msg_type": msg_type,
-                            "content": msg_content,
-                        },
+                    request = (
+                        ReplyMessageRequest.builder()
+                        .message_id(reply_to)
+                        .request_body(
+                            ReplyMessageRequestBody.builder()
+                            .msg_type(msg_type)
+                            .content(msg_content)
+                            .build()
+                        )
+                        .build()
                     )
-                    reply_code, reply_msg, reply_message_id = _parse_send_response(reply_response)
-                    if reply_code in (None, 0) and reply_message_id:
-                        return reply_message_id
+                    response = client.im.v1.message.reply(request)
+                    if response.success() and response.data and response.data.message_id:
+                        return response.data.message_id
                     logger.warning(
                         "[Feishu] Reply API failed, fallback to create: "
-                        f"code={reply_code}, msg={reply_msg}"
+                        f"code={response.code}, msg={response.msg}"
                     )
                 except Exception as e:
                     logger.warning(f"[Feishu] Reply API error, fallback to create: {e}")
 
-            create_response = client.im.message.create(
-                params={"receive_id_type": receive_id_type},
-                data={
-                    "receive_id": to,
-                    "msg_type": msg_type,
-                    "content": msg_content,
-                },
+            # Fallback: create a new message
+            receive_id_type = "open_id" if to.startswith("ou_") else "chat_id"
+            request = (
+                CreateMessageRequest.builder()
+                .receive_id_type(receive_id_type)
+                .request_body(
+                    CreateMessageRequestBody.builder()
+                    .receive_id(to)
+                    .msg_type(msg_type)
+                    .content(msg_content)
+                    .build()
+                )
+                .build()
             )
+            response = client.im.v1.message.create(request)
 
-            response_code, response_msg, message_id = _parse_send_response(create_response)
-            if response_code not in (None, 0):
+            if not response.success():
                 raise RuntimeError(
-                    f"Feishu send failed (code={response_code}): {response_msg or 'unknown error'}"
+                    f"Feishu send failed (code={response.code}): {response.msg or 'unknown error'}"
                 )
-            if not message_id:
+            if not response.data or not response.data.message_id:
                 raise RuntimeError(
-                    f"No message_id in Feishu response (code={response_code}, msg={response_msg})"
+                    f"No message_id in Feishu response (code={response.code}, msg={response.msg})"
                 )
-            return message_id
+            return response.data.message_id
 
         except ImportError:
             raise ImportError("Feishu SDK not installed. Install with: pip install lark_oapi")
