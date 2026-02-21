@@ -455,46 +455,56 @@ class TestChannelOutboxRepository:
 
     @pytest.mark.asyncio
     async def test_mark_sent(self, mock_session, sample_outbox):
-        """Should mark outbox as sent and clear retry fields."""
+        """Should issue status update and return success when row is updated."""
         mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = sample_outbox
+        mock_result.rowcount = 1
         mock_session.execute.return_value = mock_result
 
         repo = ChannelOutboxRepository(mock_session)
         result = await repo.mark_sent("outbox-1", "sent-123")
 
         assert result is True
-        assert sample_outbox.status == "sent"
-        assert sample_outbox.sent_channel_message_id == "sent-123"
-        assert sample_outbox.next_retry_at is None
+        mock_session.flush.assert_called()
 
     @pytest.mark.asyncio
     async def test_mark_failed_sets_retry(self, mock_session, sample_outbox):
-        """Should increment attempts and mark as failed before max attempts."""
+        """Should issue retry update and return success when row is updated."""
+        select_result = MagicMock()
+        select_result.one_or_none.return_value = (0, 3)
         mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = sample_outbox
-        mock_session.execute.return_value = mock_result
+        mock_result.rowcount = 1
+        mock_session.execute.side_effect = [select_result, mock_result]
 
         repo = ChannelOutboxRepository(mock_session)
         result = await repo.mark_failed("outbox-1", "network timeout")
 
         assert result is True
-        assert sample_outbox.status == "failed"
-        assert sample_outbox.attempt_count == 1
-        assert sample_outbox.next_retry_at is not None
+        assert mock_session.execute.call_count == 2
+        mock_session.flush.assert_called()
 
     @pytest.mark.asyncio
-    async def test_mark_failed_dead_letter_after_max_attempts(self, mock_session, sample_outbox):
-        """Should move record to dead_letter when max attempts reached."""
-        sample_outbox.attempt_count = 2
+    async def test_mark_failed_returns_false_when_not_updated(self, mock_session, sample_outbox):
+        """Should return False when no outbox row matches update guard."""
+        select_result = MagicMock()
+        select_result.one_or_none.return_value = (0, 3)
         mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = sample_outbox
-        mock_session.execute.return_value = mock_result
+        mock_result.rowcount = 0
+        mock_session.execute.side_effect = [select_result, mock_result]
 
         repo = ChannelOutboxRepository(mock_session)
         result = await repo.mark_failed("outbox-1", "permanent failure")
 
-        assert result is True
-        assert sample_outbox.status == "dead_letter"
-        assert sample_outbox.attempt_count == 3
-        assert sample_outbox.next_retry_at is None
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_mark_failed_returns_false_when_not_found(self, mock_session, sample_outbox):
+        """Should return False when target outbox row is missing."""
+        select_result = MagicMock()
+        select_result.one_or_none.return_value = None
+        mock_session.execute.return_value = select_result
+
+        repo = ChannelOutboxRepository(mock_session)
+        result = await repo.mark_failed("outbox-1", "permanent failure")
+
+        assert result is False
+        assert mock_session.execute.call_count == 1

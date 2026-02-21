@@ -18,10 +18,11 @@ import { useMCPAppStore } from '@/stores/mcpAppStore';
 import { useProjectStore } from '@/stores/project';
 
 import { mcpAppAPI } from '@/services/mcpAppService';
+
 import { McpAppCardV2 } from './McpAppCardV2';
+import { CARD_STYLES, BUTTON_STYLES } from './styles';
 
 import type { MCPApp, MCPAppStatus } from '@/types/mcpApp';
-import { CARD_STYLES, BUTTON_STYLES } from './styles';
 
 export const McpAppsTabV2: React.FC = () => {
   const apps = useMCPAppStore((s) => s.apps);

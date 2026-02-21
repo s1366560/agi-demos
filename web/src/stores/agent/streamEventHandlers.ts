@@ -15,6 +15,7 @@ import { useLayoutModeStore } from '../layoutMode';
 import type {
   AgentStreamHandler,
   AgentEvent,
+  MessageEventData,
   ThoughtEventData,
   CompleteEventData,
   ClarificationAskedEventData,
@@ -97,7 +98,33 @@ export function createStreamEventHandlers(
   const setState = set as any;
 
   return {
-    onMessage: (_event) => {},
+    onMessage: (event) => {
+      const messageData = event.data as MessageEventData & {
+        metadata?: { source?: string };
+      };
+      const source = messageData?.metadata?.source;
+      if (source !== 'channel_inbound') {
+        return;
+      }
+
+      const { updateConversationState, getConversationState, activeConversationId } = get();
+      const convState = getConversationState(handlerConversationId);
+
+      if (messageData.id && convState.timeline.some((timelineEvent) => timelineEvent.id === messageData.id)) {
+        return;
+      }
+
+      const updatedTimeline = appendSSEEventToTimeline(
+        convState.timeline,
+        event as AgentEvent<MessageEventData>
+      );
+      updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+
+      if (handlerConversationId === activeConversationId) {
+        const newMessages = timelineToMessages(updatedTimeline);
+        setState({ messages: newMessages });
+      }
+    },
 
     onThoughtDelta: (event) => {
       const delta = event.data.delta;

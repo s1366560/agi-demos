@@ -535,6 +535,7 @@ async def _persist_events(
     correlation_id: Optional[str] = None,
 ) -> None:
     """Persist agent events to database."""
+    from sqlalchemy import select
     from sqlalchemy.dialects.postgresql import insert
 
     SKIP_EVENT_TYPES = {
@@ -547,6 +548,20 @@ async def _persist_events(
         has_text_end_messages = False
         async with async_session_factory() as session:
             async with session.begin():
+                existing_assistant_result = await session.execute(
+                    select(AgentExecutionEvent.event_data)
+                    .where(
+                        AgentExecutionEvent.conversation_id == conversation_id,
+                        AgentExecutionEvent.message_id == message_id,
+                        AgentExecutionEvent.event_type == "assistant_message",
+                    )
+                )
+                has_complete_assistant_message = any(
+                    isinstance(existing_event_data, dict)
+                    and existing_event_data.get("source") == "complete"
+                    for existing_event_data in existing_assistant_result.scalars().all()
+                )
+
                 for event in events:
                     event_type = event.get("type", "unknown")
                     event_data = event.get("data", {})
@@ -566,6 +581,7 @@ async def _persist_events(
                                 "content": full_text,
                                 "message_id": str(uuid.uuid4()),
                                 "role": "assistant",
+                                "source": "text_end",
                             }
                             has_text_end_messages = True
                         else:
@@ -573,7 +589,7 @@ async def _persist_events(
 
                     if event_type == "complete":
                         # Skip if text_end events already cover the text content
-                        if has_text_end_messages:
+                        if has_text_end_messages or has_complete_assistant_message:
                             continue
                         content = event_data.get("content", "")
                         if content:
@@ -582,9 +598,11 @@ async def _persist_events(
                                 "content": content,
                                 "message_id": str(uuid.uuid4()),
                                 "role": "assistant",
+                                "source": "complete",
                             }
                             if event.get("data", {}).get("artifacts"):
                                 event_data["artifacts"] = event["data"]["artifacts"]
+                            has_complete_assistant_message = True
                         else:
                             continue
 

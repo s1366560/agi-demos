@@ -2,7 +2,7 @@
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -53,3 +53,61 @@ async def test_execute_project_chat_passes_abort_signal() -> None:
     assert result.is_error is False
     assert agent.execute_chat_kwargs is not None
     assert agent.execute_chat_kwargs["abort_signal"] is abort_signal
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_persist_events_skips_complete_when_assistant_exists() -> None:
+    """_persist_events should not add duplicate assistant_message on complete."""
+    session = MagicMock()
+    existing_result = MagicMock()
+    existing_result.scalars.return_value.all.return_value = [{"source": "complete"}]
+    session.execute = AsyncMock(return_value=existing_result)
+
+    begin_ctx = AsyncMock()
+    begin_ctx.__aenter__.return_value = None
+    begin_ctx.__aexit__.return_value = None
+    session.begin.return_value = begin_ctx
+
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+
+    with patch.object(execution, "async_session_factory", return_value=session_ctx):
+        await execution._persist_events(
+            conversation_id="conv-1",
+            message_id="msg-1",
+            events=[{"type": "complete", "data": {"content": "final answer"}}],
+        )
+
+    # Only the assistant existence check query should run; no insert should happen.
+    assert session.execute.await_count == 1
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_persist_events_converts_complete_to_assistant_message() -> None:
+    """_persist_events should persist complete content when no assistant exists."""
+    session = MagicMock()
+    existing_result = MagicMock()
+    existing_result.scalars.return_value.all.return_value = []
+    session.execute = AsyncMock(side_effect=[existing_result, MagicMock()])
+
+    begin_ctx = AsyncMock()
+    begin_ctx.__aenter__.return_value = None
+    begin_ctx.__aexit__.return_value = None
+    session.begin.return_value = begin_ctx
+
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+
+    with patch.object(execution, "async_session_factory", return_value=session_ctx):
+        await execution._persist_events(
+            conversation_id="conv-1",
+            message_id="msg-1",
+            events=[{"type": "complete", "data": {"content": "final answer"}}],
+        )
+
+    # One query for existing assistant + one insert for converted assistant_message.
+    assert session.execute.await_count == 2

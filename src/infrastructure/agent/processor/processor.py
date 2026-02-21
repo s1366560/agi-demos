@@ -64,6 +64,8 @@ if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
 
 
+from src.domain.model.agent.hitl_types import HITLType
+
 from ..core.llm_stream import LLMStream, StreamConfig, StreamEventType
 from ..core.message import Message, MessageRole, ToolPart, ToolState
 from ..cost import CostTracker, TokenUsage
@@ -1517,28 +1519,46 @@ class SessionProcessor:
                 return
 
             elif permission_rule.action == PermissionAction.ASK:
-                # Request permission
+                # Request permission via HITLCoordinator for proper response routing
                 self._state = ProcessorState.WAITING_PERMISSION
 
-                yield AgentPermissionAskedEvent(
-                    request_id=f"perm_{uuid.uuid4().hex[:8]}",
-                    permission=tool_def.permission,
-                    patterns=[tool_name],
-                    metadata={"tool": tool_name, "input": arguments},
-                )
-
                 try:
-                    permission_result = await asyncio.wait_for(
-                        self.permission_manager.ask(
-                            permission=tool_def.permission,
-                            patterns=[tool_name],
-                            session_id=session_id,
-                            metadata={"tool": tool_name, "input": arguments},
-                        ),
-                        timeout=self.config.permission_timeout,
+                    coordinator = self._get_hitl_coordinator()
+
+                    # Prepare permission request data
+                    request_data = {
+                        "tool_name": tool_name,
+                        "action": "execute",
+                        "risk_level": "medium",
+                        "details": {"tool": tool_name, "input": arguments},
+                        "permission_type": tool_def.permission,
+                    }
+
+                    # Prepare the request (registers in global coordinator registry)
+                    request_id = await coordinator.prepare_request(
+                        hitl_type=HITLType.PERMISSION,
+                        request_data=request_data,
+                        timeout_seconds=self.config.permission_timeout,
                     )
 
-                    if permission_result == "reject":
+                    # Yield permission asked event with the real request_id
+                    yield AgentPermissionAskedEvent(
+                        request_id=request_id,
+                        permission=tool_def.permission,
+                        patterns=[tool_name],
+                        metadata={"tool": tool_name, "input": arguments},
+                    )
+
+                    # Wait for user response via HITLCoordinator
+                    # This uses the global registry so responses from
+                    # LocalHITLResumeConsumer can reach us
+                    permission_granted = await coordinator.wait_for_response(
+                        request_id=request_id,
+                        hitl_type=HITLType.PERMISSION,
+                        timeout_seconds=self.config.permission_timeout,
+                    )
+
+                    if not permission_granted:
                         tool_part.status = ToolState.ERROR
                         tool_part.error = "Permission rejected by user"
                         tool_part.end_time = time.time()
@@ -1559,6 +1579,20 @@ class SessionProcessor:
                     yield AgentObserveEvent(
                         tool_name=tool_name,
                         error="Permission request timed out",
+                        call_id=call_id,
+                        tool_execution_id=tool_part.tool_execution_id,
+                    )
+                    return
+                except ValueError as e:
+                    # HITLCoordinator not available (no langfuse context)
+                    logger.warning(f"[Processor] HITLCoordinator unavailable: {e}")
+                    tool_part.status = ToolState.ERROR
+                    tool_part.error = "Permission request failed: no HITL context"
+                    tool_part.end_time = time.time()
+
+                    yield AgentObserveEvent(
+                        tool_name=tool_name,
+                        error="Permission request failed: no HITL context",
                         call_id=call_id,
                         tool_execution_id=tool_part.tool_execution_id,
                     )

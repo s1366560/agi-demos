@@ -1,8 +1,9 @@
 import React from 'react';
 
 import { ProviderConfig, CircuitBreakerState } from '../../types/memory';
-import { ProviderIcon } from './ProviderIcon';
 import { MaterialIcon } from '../agent/shared/MaterialIcon';
+
+import { ProviderIcon } from './ProviderIcon';
 
 export interface ProviderCardProps {
   provider: ProviderConfig;
@@ -124,7 +125,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                 )}
               </div>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                {provider.provider_type}
+                {provider.provider_type} • {provider.api_key_masked}
               </p>
             </div>
           </div>

@@ -806,3 +806,288 @@ async def validate_embeddings(
     except Exception as e:
         logger.error(f"Failed to validate embeddings: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Native Graph Adapter Embedding Management ---
+
+
+@router.get("/embeddings/native/status")
+async def get_native_embedding_status(
+    project_id: Optional[str] = Query(None, description="Project ID to check"),
+    current_user: User = Depends(get_current_user),
+    neo4j_client=Depends(get_neo4j_client),
+):
+    """
+    Get embedding dimension status using native graph adapter.
+
+    Returns:
+        - Current configured embedding dimension
+        - Existing embedding dimension in Neo4j
+        - Compatibility status
+        - Vector index information
+    """
+    try:
+        from src.configuration.config import get_settings
+        from src.infrastructure.llm.provider_factory import get_ai_service_factory
+
+        settings = get_settings()
+
+        # Get current embedder dimension
+        tenant_id = getattr(current_user, "tenant_id", "default")
+        factory = get_ai_service_factory()
+
+        try:
+            provider_config = await factory.resolve_provider(tenant_id)
+            provider = provider_config.provider
+        except Exception:
+            provider = "unknown"
+
+        # Get configured dimension
+        config_dim = settings.embedding_dimension
+
+        # Get existing dimension from Neo4j
+        existing_dim = await neo4j_client.get_vector_index_dimension("entity_name_vector")
+
+        # Check for embeddings in database
+        query_count = """
+            MATCH (n:Entity)
+            WHERE n.name_embedding IS NOT NULL
+            RETURN count(n) AS total, n.embedding_dim AS dim
+            ORDER BY total DESC
+            LIMIT 5
+        """
+        result = await neo4j_client.execute_query(query_count)
+
+        dimension_counts = {}
+        total_embeddings = 0
+        for record in result.records:
+            dim = record.get("dim")
+            count = record.get("total", 0)
+            if dim:
+                dimension_counts[str(dim)] = count
+            total_embeddings += count
+
+        # Determine compatibility
+        if config_dim:
+            target_dim = config_dim
+        elif existing_dim:
+            target_dim = existing_dim
+        else:
+            # Will be auto-detected from embedder
+            target_dim = None
+
+        is_compatible = (
+            existing_dim is None
+            or target_dim is None
+            or existing_dim == target_dim
+        )
+
+        return {
+            "configured_dimension": config_dim,
+            "index_dimension": existing_dim,
+            "target_dimension": target_dim,
+            "is_compatible": is_compatible,
+            "provider": provider,
+            "total_embeddings": total_embeddings,
+            "dimension_distribution": dimension_counts,
+            "recommendations": _get_embedding_recommendations(
+                config_dim, existing_dim, total_embeddings, is_compatible
+            ),
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get native embedding status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+def _get_embedding_recommendations(
+    config_dim: Optional[int],
+    existing_dim: Optional[int],
+    total_embeddings: int,
+    is_compatible: bool,
+) -> list:
+    """Generate recommendations based on embedding status."""
+    recommendations = []
+
+    if not is_compatible:
+        recommendations.append({
+            "type": "dimension_mismatch",
+            "priority": "critical",
+            "message": (
+                f"Dimension mismatch detected: configured={config_dim}, "
+                f"existing={existing_dim}. Vector search will fail."
+            ),
+            "action": "migrate_embeddings",
+        })
+
+    if total_embeddings > 0 and existing_dim is None:
+        recommendations.append({
+            "type": "index_missing",
+            "priority": "high",
+            "message": "Embeddings exist but no vector index found.",
+            "action": "create_index",
+        })
+
+    if total_embeddings == 0:
+        recommendations.append({
+            "type": "no_embeddings",
+            "priority": "low",
+            "message": "No embeddings in database. They will be created on demand.",
+            "action": "none",
+        })
+
+    if is_compatible and total_embeddings > 0:
+        recommendations.append({
+            "type": "healthy",
+            "priority": "info",
+            "message": f"Embedding system healthy. {total_embeddings} embeddings at {existing_dim}D.",
+            "action": "none",
+        })
+
+    return recommendations
+
+
+@router.post("/embeddings/native/migrate")
+async def migrate_embeddings(
+    target_model: str = Query(
+        ..., description="Target embedding model (e.g., 'text-embedding-3-small')"
+    ),
+    project_id: Optional[str] = Query(None, description="Project ID to migrate"),
+    dry_run: bool = Query(True, description="If true, only report without migrating"),
+    current_user: User = Depends(get_current_user),
+    neo4j_client=Depends(get_neo4j_client),
+):
+    """
+    Migrate embeddings to a new model dimension.
+
+    This endpoint triggers embedding migration when switching models.
+    In dry_run mode, reports what would be migrated.
+    In execute mode, clears old embeddings (new ones generated on demand).
+
+    Args:
+        target_model: The target embedding model name
+        project_id: Optional project ID to limit scope
+        dry_run: If True, only report without executing
+    """
+    try:
+        from src.configuration.factories import EMBEDDING_DIMS
+
+        # Determine target dimension from model name
+        target_dim = None
+        model_lower = target_model.lower()
+        for provider, dim in EMBEDDING_DIMS.items():
+            if provider in model_lower:
+                target_dim = dim
+                break
+
+        if target_dim is None:
+            # Try to parse from model name
+            if "3072" in model_lower:
+                target_dim = 3072
+            elif "1536" in model_lower or "ada" in model_lower:
+                target_dim = 1536
+            elif "1024" in model_lower:
+                target_dim = 1024
+            elif "768" in model_lower:
+                target_dim = 768
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unknown model dimension for: {target_model}",
+                )
+
+        # Get existing embeddings info
+        if project_id:
+            count_query = """
+                MATCH (n:Entity {project_id: $project_id})
+                WHERE n.name_embedding IS NOT NULL
+                RETURN count(n) AS count,
+                       n.embedding_dim AS dim,
+                       size(n.name_embedding) AS actual_dim
+            """
+            result = await neo4j_client.execute_query(count_query, project_id=project_id)
+        else:
+            count_query = """
+                MATCH (n:Entity)
+                WHERE n.name_embedding IS NOT NULL
+                RETURN count(n) AS count,
+                       n.embedding_dim AS dim,
+                       size(n.name_embedding) AS actual_dim
+            """
+            result = await neo4j_client.execute_query(count_query)
+
+        total_count = 0
+        dimension_groups = {}
+        for record in result.records:
+            count = record.get("count", 0)
+            dim = record.get("dim") or record.get("actual_dim")
+            total_count += count
+            if dim:
+                dimension_groups[str(dim)] = dimension_groups.get(str(dim), 0) + count
+
+        if dry_run:
+            return {
+                "dry_run": True,
+                "target_model": target_model,
+                "target_dimension": target_dim,
+                "total_embeddings": total_count,
+                "current_dimensions": dimension_groups,
+                "action_required": total_count > 0,
+                "message": (
+                    f"Would migrate {total_count} embeddings from "
+                    f"{list(dimension_groups.keys())} to {target_dim}D"
+                ),
+            }
+
+        # Execute migration: clear old embeddings
+        if project_id:
+            clear_query = """
+                MATCH (n:Entity {project_id: $project_id})
+                WHERE n.name_embedding IS NOT NULL
+                REMOVE n.name_embedding, n.embedding_dim
+                RETURN count(n) AS cleared
+            """
+            result = await neo4j_client.execute_query(clear_query, project_id=project_id)
+        else:
+            clear_query = """
+                MATCH (n:Entity)
+                WHERE n.name_embedding IS NOT NULL
+                REMOVE n.name_embedding, n.embedding_dim
+                RETURN count(n) AS cleared
+            """
+            result = await neo4j_client.execute_query(clear_query)
+
+        cleared = result.records[0]["cleared"] if result.records else 0
+
+        # Create new vector index with target dimension
+        new_index_name = f"entity_name_vector_{target_dim}D"
+        await neo4j_client.create_vector_index(
+            index_name=new_index_name,
+            label="Entity",
+            property_name="name_embedding",
+            dimensions=target_dim,
+            similarity_function="cosine",
+        )
+
+        logger.info(
+            f"Embedding migration completed: cleared {cleared} embeddings, "
+            f"created index {new_index_name}"
+        )
+
+        return {
+            "dry_run": False,
+            "target_model": target_model,
+            "target_dimension": target_dim,
+            "embeddings_cleared": cleared,
+            "new_index": new_index_name,
+            "message": (
+                f"Cleared {cleared} embeddings. New embeddings will be generated "
+                f"on demand at {target_dim}D when entities are accessed."
+            ),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to migrate embeddings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -324,5 +324,29 @@ describe('agentV3 Store - Timeline Merging During Streaming', () => {
       expect(result.current.timeline.length).toBeGreaterThan(0);
       expect(result.current.timeline.find((e) => e.id === 'new-api-1')).toBeDefined();
     });
+
+    it('should subscribe active conversation even when execution is idle', async () => {
+      const { result } = renderHook(() => useAgentV3Store());
+
+      act(() => {
+        useAgentV3Store.setState({
+          activeConversationId: 'conv-123',
+          isStreaming: false,
+          timeline: [],
+        });
+      });
+
+      const { agentService } = await import('../../services/agentService');
+      vi.mocked(agentService.getExecutionStatus).mockResolvedValue({
+        is_running: false,
+        last_sequence: 0,
+      } as any);
+
+      await act(async () => {
+        await result.current.loadMessages('conv-123', 'proj-123');
+      });
+
+      expect(agentService.subscribe).toHaveBeenCalledWith('conv-123', expect.any(Object));
+    });
   });
 });

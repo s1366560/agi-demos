@@ -2,10 +2,19 @@ import React, { useCallback, useEffect, useState } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { ProviderCard, ProviderHealthPanel, ProviderConfigModal, ProviderUsageStats } from '@/components/provider';
 import { MaterialIcon } from '@/components/agent/shared/MaterialIcon';
+import {
+  ProviderCard,
+  ProviderHealthPanel,
+  ProviderConfigModal,
+  ProviderUsageStats,
+  AssignProviderModal,
+  ModelAssignment,
+} from '@/components/provider';
+import { PROVIDERS } from '../../constants/providers';
 
 import { providerAPI } from '../../services/api';
+import { useTenantStore } from '../../stores/tenant';
 import { ProviderConfig, ProviderType, SystemResilienceStatus } from '../../types/memory';
 
 const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
@@ -32,6 +41,7 @@ type SortOrder = 'asc' | 'desc';
 
 export const ProviderList: React.FC = () => {
   const { t } = useTranslation();
+  const currentTenant = useTenantStore((state) => state.currentTenant);
   const [providers, setProviders] = useState<ProviderConfig[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -47,6 +57,9 @@ export const ProviderList: React.FC = () => {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [viewingStats, setViewingStats] = useState<ProviderConfig | null>(null);
+  const [assigningProvider, setAssigningProvider] = useState<ProviderConfig | null>(null);
+  const [activeTab, setActiveTab] = useState<'my-providers' | 'marketplace' | 'assignments'>('my-providers');
+  const [selectedProviderType, setSelectedProviderType] = useState<ProviderType | undefined>(undefined);
 
   const loadProviders = useCallback(async () => {
     setIsLoading(true);
@@ -124,14 +137,20 @@ export const ProviderList: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleCreate = () => {
+  const handleCreate = (type?: ProviderType) => {
     setEditingProvider(null);
+    setSelectedProviderType(type);
     setIsModalOpen(true);
+  };
+
+  const handleAssign = (provider: ProviderConfig) => {
+    setAssigningProvider(provider);
   };
 
   const handleModalClose = () => {
     setIsModalOpen(false);
     setEditingProvider(null);
+    setSelectedProviderType(undefined);
   };
 
   const handleModalSuccess = () => {
@@ -198,7 +217,7 @@ export const ProviderList: React.FC = () => {
           </p>
         </div>
         <button
-          onClick={handleCreate}
+          onClick={() => handleCreate()}
           className="inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
         >
           <MaterialIcon name="add" size={20} />
@@ -206,12 +225,48 @@ export const ProviderList: React.FC = () => {
         </button>
       </div>
 
-      {/* Health Dashboard */}
-      <ProviderHealthPanel
-        providers={providers}
-        systemStatus={systemStatus}
-        isLoading={isLoading}
-      />
+      {/* View Toggle */}
+      <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg w-fit">
+        <button
+          onClick={() => setActiveTab('my-providers')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'my-providers'
+              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
+        >
+          My Providers
+        </button>
+        <button
+          onClick={() => setActiveTab('marketplace')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'marketplace'
+              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
+        >
+          Marketplace
+        </button>
+        <button
+          onClick={() => setActiveTab('assignments')}
+          className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+            activeTab === 'assignments'
+              ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          }`}
+        >
+          Routing & Assignments
+        </button>
+      </div>
+
+      {activeTab === 'my-providers' && (
+        <>
+          {/* Health Dashboard */}
+          <ProviderHealthPanel
+            providers={providers}
+            systemStatus={systemStatus}
+            isLoading={isLoading}
+          />
 
       {/* Error State */}
       {error && (
@@ -323,7 +378,7 @@ export const ProviderList: React.FC = () => {
                 </p>
               </div>
               <button
-                onClick={handleCreate}
+                onClick={() => handleCreate()}
                 className="mt-2 inline-flex items-center gap-2 text-primary hover:text-primary-dark font-medium"
               >
                 <MaterialIcon name="add" size={18} />
@@ -339,7 +394,7 @@ export const ProviderList: React.FC = () => {
                 key={provider.id}
                 provider={provider}
                 onEdit={handleEdit}
-                onAssign={() => {}}
+                onAssign={handleAssign}
                 onDelete={handleDelete}
                 onCheckHealth={handleCheckHealth}
                 onResetCircuitBreaker={handleResetCircuitBreaker}
@@ -520,6 +575,51 @@ export const ProviderList: React.FC = () => {
           </div>
         )}
       </div>
+      </>
+      )}
+
+      {activeTab === 'marketplace' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {PROVIDERS.map((providerMeta) => (
+            <div
+              key={providerMeta.value}
+              className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 flex flex-col items-center text-center hover:shadow-lg transition-all"
+            >
+              <div className="w-16 h-16 rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center mb-4 text-4xl">
+                {providerMeta.icon}
+              </div>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1">
+                {providerMeta.label}
+              </h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 line-clamp-2">
+                {providerMeta.description}
+              </p>
+              
+              <div className="mt-auto w-full pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-4">
+                <a
+                  href={providerMeta.documentationUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-slate-500 hover:text-primary flex items-center gap-1"
+                >
+                  Docs <MaterialIcon name="open_in_new" size={14} />
+                </a>
+                <button
+                  onClick={() => handleCreate(providerMeta.value)}
+                  className="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-2"
+                >
+                  <MaterialIcon name="add" size={16} />
+                  Connect
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'assignments' && (
+        <ModelAssignment tenantId={currentTenant.id} providers={providers} />
+      )}
 
       {/* Modals */}
       <ProviderConfigModal
@@ -527,12 +627,26 @@ export const ProviderList: React.FC = () => {
         onClose={handleModalClose}
         onSuccess={handleModalSuccess}
         provider={editingProvider}
+        initialProviderType={selectedProviderType}
       />
 
       {viewingStats && (
         <ProviderUsageStats
           provider={viewingStats}
           onClose={() => setViewingStats(null)}
+        />
+      )}
+
+      {assigningProvider && currentTenant && (
+        <AssignProviderModal
+          isOpen={!!assigningProvider}
+          onClose={() => setAssigningProvider(null)}
+          onSuccess={() => {
+            setAssigningProvider(null);
+            loadProviders();
+          }}
+          provider={assigningProvider}
+          tenantId={currentTenant.id}
         />
       )}
     </div>

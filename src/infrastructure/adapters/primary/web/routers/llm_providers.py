@@ -24,6 +24,7 @@ from src.domain.llm_providers.models import (
     ProviderConfigUpdate,
     ProviderHealth,
     ProviderType,
+    TenantProviderMapping,
 )
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -140,43 +141,102 @@ async def list_models_for_provider_type(
     """
     List available models for a given provider type.
 
-    Returns common model names for the provider.
+    Returns categorized models (chat, embedding, rerank) for the provider.
     """
-    # Common models for each provider type
-    models = {
-        "openai": ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo", "text-embedding-3-small"],
-        "dashscope": [
-            "qwen-max",
-            "qwen-plus",
-            "qwen-turbo",
-            "text-embedding-v3",
-            "text-embedding-v4",
-            "qwen3-rerank",
-        ],
-        "zai": ["glm-4-plus", "glm-4-flash", "embedding-3", "rerank"],
-        "kimi": [
-            "moonshot-v1-8k",
-            "moonshot-v1-32k",
-            "moonshot-v1-128k",
-            "kimi-embedding-1",
-            "kimi-rerank-1",
-        ],
-        "ollama": ["llama3.1:8b", "qwen2.5:7b", "nomic-embed-text"],
-        "lmstudio": ["local-model", "text-embedding-nomic-embed-text-v1.5"],
-        "gemini": ["gemini-1.5-pro", "gemini-1.5-flash"],
-        "anthropic": ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
-        "groq": ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"],
+    # Categorized models for each provider type
+    models_data = {
+        "openai": {
+            "chat": ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
+            "embedding": ["text-embedding-3-small", "text-embedding-3-large"],
+            "rerank": []
+        },
+        "dashscope": {
+            "chat": ["qwen-max", "qwen-plus", "qwen-turbo", "qwen-long"],
+            "embedding": ["text-embedding-v3", "text-embedding-v2"],
+            "rerank": ["qwen3-rerank", "qwen-turbo"]
+        },
+        "zai": {
+            "chat": ["glm-4-plus", "glm-4-flash", "glm-4-air"],
+            "embedding": ["embedding-3", "embedding-2"],
+            "rerank": ["glm-4-flash"]
+        },
+        "kimi": {
+            "chat": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
+            "embedding": ["kimi-embedding-1"],
+            "rerank": ["kimi-rerank-1"]
+        },
+        "ollama": {
+            "chat": ["llama3.1:8b", "qwen2.5:7b", "mistral-nemo"],
+            "embedding": ["nomic-embed-text"],
+            "rerank": ["llama3.1:8b"]
+        },
+        "lmstudio": {
+            "chat": ["local-model"],
+            "embedding": ["text-embedding-nomic-embed-text-v1.5"],
+            "rerank": ["local-model"]
+        },
+        "gemini": {
+            "chat": ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.5-pro-002", "gemini-1.5-flash-002"],
+            "embedding": ["text-embedding-004"],
+            "rerank": ["gemini-1.5-flash"]
+        },
+        "anthropic": {
+            "chat": ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"],
+            "embedding": [],
+            "rerank": ["claude-3-5-haiku-20241022"]
+        },
+        "groq": {
+            "chat": ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "mixtral-8x7b-32768", "llama-3.1-8b-instant"],
+            "embedding": [],
+            "rerank": []
+        },
+        "deepseek": {
+            "chat": ["deepseek-chat", "deepseek-coder"],
+            "embedding": [],
+            "rerank": ["deepseek-chat"]
+        },
+        "cohere": {
+            "chat": ["command-r-plus", "command-r"],
+            "embedding": ["embed-english-v3.0", "embed-multilingual-v3.0"],
+            "rerank": ["rerank-english-v3.0", "rerank-multilingual-v3.0"]
+        },
+        "mistral": {
+            "chat": ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"],
+            "embedding": ["mistral-embed"],
+            "rerank": ["mistral-small-latest"]
+        },
+        "azure_openai": {
+            "chat": ["gpt-4o", "gpt-4", "gpt-4o-mini", "gpt-35-turbo"],
+            "embedding": ["text-embedding-3-small", "text-embedding-ada-002"],
+            "rerank": []
+        },
+        "bedrock": {
+            "chat": ["anthropic.claude-3-sonnet-20240229-v1:0", "anthropic.claude-3-haiku-20240307-v1:0", "meta.llama3-70b-instruct-v1:0"],
+            "embedding": ["amazon.titan-embed-text-v1", "amazon.titan-embed-text-v2:0"],
+            "rerank": []
+        },
+        "vertex": {
+            "chat": ["gemini-1.5-pro", "gemini-1.5-flash"],
+            "embedding": ["textembedding-gecko"],
+            "rerank": []
+        }
     }
 
-    if provider_type not in models:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Unknown provider type: {provider_type}",
-        )
+    if provider_type not in models_data:
+        # Return empty lists for unknown providers instead of error
+        # This allows frontend to fallback to defaults or show empty dropdowns
+        return {
+            "provider_type": provider_type,
+            "models": {
+                "chat": [],
+                "embedding": [],
+                "rerank": []
+            }
+        }
 
     return {
         "provider_type": provider_type,
-        "models": models[provider_type],
+        "models": models_data[provider_type],
     }
 
 
@@ -300,6 +360,29 @@ async def get_provider_health(
 
 
 # Tenant Assignment Endpoints
+
+
+@router.get("/tenants/{tenant_id}/assignments", response_model=List[TenantProviderMapping])
+async def list_tenant_assignments(
+    tenant_id: str,
+    operation_type: Optional[OperationType] = Query(
+        None, description="Filter by operation type: llm, embedding, rerank"
+    ),
+    current_user: User = Depends(get_current_user_with_roles),
+    service: ProviderService = Depends(get_provider_service_with_session),
+):
+    """
+    List all provider assignments for a tenant.
+    """
+    # Check permissions: admin or user belongs to tenant
+    is_admin = any(r.role.name == "admin" for r in current_user.roles)
+    if not is_admin and current_user.tenant_id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied to tenant assignments",
+        )
+
+    return await service.get_tenant_providers(tenant_id, operation_type)
 
 
 @router.post("/tenants/{tenant_id}/providers/{provider_id}")

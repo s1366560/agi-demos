@@ -452,6 +452,86 @@ class Neo4jClient:
             if "EquivalentSchemaRuleAlreadyExists" not in str(e):
                 logger.warning(f"Failed to create vector index: {e}")
 
+    async def get_vector_index_dimension(self, index_name: str) -> Optional[int]:
+        """
+        Get the dimension of an existing vector index.
+
+        Args:
+            index_name: Name of the vector index
+
+        Returns:
+            Dimension of the index, or None if not found
+        """
+        query = """
+            SHOW INDEXES YIELD name, indexType, options
+            WHERE name = $index_name AND indexType = 'VECTOR'
+            RETURN options.`indexConfig`.`vector.dimensions` AS dimensions
+        """
+        try:
+            result = await self.execute_query(query, index_name=index_name)
+            if result.records and len(result.records) > 0:
+                return result.records[0].get("dimensions")
+        except Exception as e:
+            logger.warning(f"Failed to get index dimension for {index_name}: {e}")
+        return None
+
+    async def get_or_create_vector_index(
+        self,
+        index_name: str,
+        label: str,
+        property_name: str,
+        dimensions: int,
+        similarity_function: str = "cosine",
+    ) -> str:
+        """
+        Get existing vector index or create a new one.
+
+        If an index with the same name exists but different dimensions,
+        a new index with dimension suffix will be created.
+
+        Args:
+            index_name: Base name of the vector index
+            label: Node label
+            property_name: Property containing the vector
+            dimensions: Required vector dimensions
+            similarity_function: Similarity function ("cosine", "euclidean")
+
+        Returns:
+            The actual index name used (may have dimension suffix)
+        """
+        existing_dim = await self.get_vector_index_dimension(index_name)
+
+        if existing_dim is None:
+            # Index doesn't exist, create it
+            await self.create_vector_index(
+                index_name=index_name,
+                label=label,
+                property_name=property_name,
+                dimensions=dimensions,
+                similarity_function=similarity_function,
+            )
+            return index_name
+
+        if existing_dim == dimensions:
+            # Index exists with correct dimensions
+            logger.debug(f"Using existing vector index {index_name} ({dimensions}D)")
+            return index_name
+
+        # Index exists with different dimensions, create dimension-specific index
+        dimension_specific_name = f"{index_name}_{dimensions}D"
+        logger.info(
+            f"Index {index_name} has {existing_dim}D but {dimensions}D needed. "
+            f"Creating dimension-specific index: {dimension_specific_name}"
+        )
+        await self.create_vector_index(
+            index_name=dimension_specific_name,
+            label=label,
+            property_name=property_name,
+            dimensions=dimensions,
+            similarity_function=similarity_function,
+        )
+        return dimension_specific_name
+
     async def vector_search(
         self,
         index_name: str,

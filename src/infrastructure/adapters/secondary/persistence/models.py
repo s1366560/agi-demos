@@ -1532,8 +1532,8 @@ class MemoryChunk(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     embedding: Mapped[Optional[list]] = mapped_column(
-        Vector(1024) if Vector else JSON, nullable=True
-    )
+        Vector(3072) if Vector else JSON, nullable=True
+    )  # Max dimension for text-embedding-3-large, supports all common models
     metadata_: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
     importance: Mapped[float] = mapped_column(Float, default=0.5)
     category: Mapped[str] = mapped_column(

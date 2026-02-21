@@ -413,6 +413,7 @@ export interface TenantProviderMapping {
   tenant_id: string;
   provider_id: string;
   priority: number;
+  operation_type: 'llm' | 'embedding' | 'rerank';
   created_at: string;
 }
 

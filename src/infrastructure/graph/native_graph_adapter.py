@@ -273,15 +273,34 @@ class NativeGraphAdapter(GraphServicePort):
             logger.error(f"Failed to check embedding dimension: {e}", exc_info=True)
 
     async def _get_existing_embedding_dimension(self) -> Optional[int]:
-        """Get the dimension of existing embeddings in Neo4j."""
-        query = """
+        """Get the dimension of existing embeddings in Neo4j.
+
+        First checks embedding_dim property, then falls back to computing
+        from the actual vector size.
+        """
+        # First try to get from embedding_dim property (faster)
+        query_dim = """
+            MATCH (n:Entity)
+            WHERE n.embedding_dim IS NOT NULL
+            WITH n LIMIT 1
+            RETURN n.embedding_dim AS dim
+        """
+        try:
+            result = await self._neo4j_client.execute_query(query_dim)
+            if result.records and len(result.records) > 0 and result.records[0]["dim"]:
+                return result.records[0]["dim"]
+        except Exception as e:
+            logger.debug(f"Failed to get embedding_dim property: {e}")
+
+        # Fallback: compute from actual vector size
+        query_size = """
             MATCH (n:Entity)
             WHERE n.name_embedding IS NOT NULL
             WITH n LIMIT 1
             RETURN size(n.name_embedding) AS dim
         """
         try:
-            result = await self._neo4j_client.execute_query(query)
+            result = await self._neo4j_client.execute_query(query_size)
             if result.records and len(result.records) > 0:
                 return result.records[0]["dim"]
         except Exception as e:
@@ -732,6 +751,7 @@ class NativeGraphAdapter(GraphServicePort):
                         labels=node_data.get("labels", []),
                         summary=node_data.get("summary", ""),
                         name_embedding=node_data.get("name_embedding"),
+                        embedding_dim=node_data.get("embedding_dim"),
                         attributes=attributes,
                         created_at=created_at,
                         tenant_id=node_data.get("tenant_id"),

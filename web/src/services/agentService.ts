@@ -1370,10 +1370,11 @@ class AgentServiceImpl implements AgentService {
    * ```
    */
   subscribe(conversationId: string, handler: AgentStreamHandler): void {
+    const alreadySubscribed = this.subscriptions.has(conversationId);
     this.handlers.set(conversationId, handler);
     this.subscriptions.add(conversationId);
 
-    if (this.isConnected()) {
+    if (this.isConnected() && !alreadySubscribed) {
       this.send({
         type: 'subscribe',
         conversation_id: conversationId,

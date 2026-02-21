@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
-import { ProviderConfig } from '../../types/memory';
+import { providerAPI } from '../../services/api';
+import { ProviderConfig, ProviderUsageStats as ProviderUsageStatsType } from '../../types/memory';
+import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
 interface ProviderUsageStatsProps {
   provider: ProviderConfig;
@@ -8,19 +10,28 @@ interface ProviderUsageStatsProps {
 }
 
 export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider, onClose }) => {
-  // Mock data - replace with actual API call
-  const stats = {
-    totalRequests: 12453,
-    totalTokens: 2847392,
-    totalCost: 23.45,
-    avgResponseTime: 245,
-    successRate: 99.2,
-    requestsByDay: [1200, 1800, 1500, 2200, 1900, 2400, 2100],
-    tokensByModel: {
-      [provider.llm_model]: 1847392,
-      [provider.llm_small_model || 'N/A']: 1000000,
-    },
-  };
+  const [stats, setStats] = useState<ProviderUsageStatsType | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setLoading(true);
+        const data = await providerAPI.getUsage(provider.id);
+        setStats(data);
+      } catch (err) {
+        console.error('Failed to fetch usage stats:', err);
+        setError('Failed to load usage statistics');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (provider.id) {
+      fetchStats();
+    }
+  }, [provider.id]);
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
@@ -40,120 +51,103 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
             </div>
             <button
               onClick={onClose}
-              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             >
-              <span className="material-symbols-outlined">close</span>
+              <MaterialIcon name="close" />
             </button>
           </div>
 
           {/* Content */}
           <div className="p-6 space-y-6">
-            {/* Stats Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-900/10 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="material-symbols-outlined text-blue-500">analytics</span>
-                  <span className="text-sm text-blue-700 dark:text-blue-400">Total Requests</span>
-                </div>
-                <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
-                  {stats.totalRequests.toLocaleString()}
-                </p>
+            {loading ? (
+              <div className="flex justify-center items-center py-12">
+                <MaterialIcon name="progress_activity" className="animate-spin text-primary text-4xl" />
               </div>
-
-              <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-900/10 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="material-symbols-outlined text-purple-500">data_usage</span>
-                  <span className="text-sm text-purple-700 dark:text-purple-400">Total Tokens</span>
-                </div>
-                <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
-                  {(stats.totalTokens / 1000000).toFixed(2)}M
-                </p>
+            ) : error ? (
+              <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-lg flex items-center gap-2">
+                <MaterialIcon name="error" />
+                {error}
               </div>
+            ) : stats ? (
+              <>
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-900/10 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MaterialIcon name="analytics" className="text-blue-500" />
+                      <span className="text-sm text-blue-700 dark:text-blue-400">Total Requests</span>
+                    </div>
+                    <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
+                      {stats.total_requests.toLocaleString()}
+                    </p>
+                  </div>
 
-              <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-900/10 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="material-symbols-outlined text-green-500">attach_money</span>
-                  <span className="text-sm text-green-700 dark:text-green-400">Total Cost</span>
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-900/10 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MaterialIcon name="data_usage" className="text-purple-500" />
+                      <span className="text-sm text-purple-700 dark:text-purple-400">Total Tokens</span>
+                    </div>
+                    <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
+                      {(stats.total_tokens / 1000).toFixed(1)}k
+                    </p>
+                    <div className="text-xs text-purple-600/80 dark:text-purple-400/80 mt-1">
+                      {stats.total_prompt_tokens.toLocaleString()} in / {stats.total_completion_tokens.toLocaleString()} out
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-900/10 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MaterialIcon name="attach_money" className="text-green-500" />
+                      <span className="text-sm text-green-700 dark:text-green-400">Total Cost</span>
+                    </div>
+                    <p className="text-2xl font-bold text-green-900 dark:text-green-100">
+                      ${(stats.total_cost_usd || 0).toFixed(4)}
+                    </p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-900/10 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <MaterialIcon name="speed" className="text-orange-500" />
+                      <span className="text-sm text-orange-700 dark:text-orange-400">Avg Response</span>
+                    </div>
+                    <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
+                      {(stats.avg_response_time_ms || 0).toFixed(0)}ms
+                    </p>
+                  </div>
                 </div>
-                <p className="text-2xl font-bold text-green-900 dark:text-green-100">
-                  ${stats.totalCost.toFixed(2)}
-                </p>
-              </div>
 
-              <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-900/10 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="material-symbols-outlined text-orange-500">speed</span>
-                  <span className="text-sm text-orange-700 dark:text-orange-400">Avg Response</span>
-                </div>
-                <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
-                  {stats.avgResponseTime}ms
-                </p>
-              </div>
-
-              <div className="bg-gradient-to-br from-teal-50 to-teal-100 dark:from-teal-900/20 dark:to-teal-900/10 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="material-symbols-outlined text-teal-500">check_circle</span>
-                  <span className="text-sm text-teal-700 dark:text-teal-400">Success Rate</span>
-                </div>
-                <p className="text-2xl font-bold text-teal-900 dark:text-teal-100">
-                  {stats.successRate}%
-                </p>
-              </div>
-            </div>
-
-            {/* Chart Placeholder */}
-            <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-6">
-              <h3 className="font-semibold text-slate-900 dark:text-white mb-4">
-                Requests (Last 7 Days)
-              </h3>
-              <div className="h-48 flex items-end justify-between gap-2">
-                {stats.requestsByDay.map((value, index) => {
-                  const maxValue = Math.max(...stats.requestsByDay);
-                  const height = (value / maxValue) * 100;
-                  return (
-                    <div key={index} className="flex-1 flex flex-col items-center gap-2">
-                      <div
-                        className="w-full bg-gradient-to-t from-primary/80 to-primary rounded-t-lg transition-all hover:from-primary hover:to-primary-dark"
-                        style={{ height: `${height}%` }}
-                      />
-                      <span className="text-xs text-slate-500">
-                        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][index]}
+                {/* Additional Info */}
+                <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-6">
+                   <h3 className="font-semibold text-slate-900 dark:text-white mb-4">
+                    Details
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                    <div className="flex justify-between py-2 border-b border-slate-200 dark:border-slate-600">
+                      <span className="text-slate-500">First Request</span>
+                      <span className="font-mono text-slate-900 dark:text-white">
+                        {stats.first_request_at ? new Date(stats.first_request_at).toLocaleString() : 'N/A'}
                       </span>
                     </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Token Distribution */}
-            <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-6">
-              <h3 className="font-semibold text-slate-900 dark:text-white mb-4">
-                Token Distribution by Model
-              </h3>
-              <div className="space-y-3">
-                {Object.entries(stats.tokensByModel).map(([model, tokens]) => {
-                  const percentage = (tokens / stats.totalTokens) * 100;
-                  return (
-                    <div key={model}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-slate-600 dark:text-slate-400 font-mono">
-                          {model}
-                        </span>
-                        <span className="text-slate-900 dark:text-white font-medium">
-                          {percentage.toFixed(1)}%
-                        </span>
-                      </div>
-                      <div className="h-2 bg-slate-200 dark:bg-slate-600 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-primary to-primary-dark rounded-full"
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
+                    <div className="flex justify-between py-2 border-b border-slate-200 dark:border-slate-600">
+                      <span className="text-slate-500">Last Request</span>
+                      <span className="font-mono text-slate-900 dark:text-white">
+                        {stats.last_request_at ? new Date(stats.last_request_at).toLocaleString() : 'N/A'}
+                      </span>
                     </div>
-                  );
-                })}
+                    <div className="flex justify-between py-2 border-b border-slate-200 dark:border-slate-600">
+                      <span className="text-slate-500">Provider ID</span>
+                      <span className="font-mono text-slate-900 dark:text-white truncate max-w-[200px]" title={stats.provider_id}>
+                        {stats.provider_id}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-12 text-slate-500">
+                No usage data available for this provider.
               </div>
-            </div>
+            )}
           </div>
 
           {/* Footer */}

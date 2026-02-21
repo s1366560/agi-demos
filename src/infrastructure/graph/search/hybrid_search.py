@@ -267,16 +267,30 @@ class HybridSearch:
             RETURN node.uuid AS uuid,
                    node.name AS name,
                    node.summary AS summary,
-                   node.entity_type AS entity_type,
+                   coalesce(node.entity_type, 'Entity') AS entity_type,
                    score
             ORDER BY score DESC
             LIMIT $result_limit
         """
-        params["index_name"] = self._vector_index_name
+
+        # Try dimension-specific index first, then fall back to default
+        query_dim = len(query_embedding)
+        dimension_specific_index = f"entity_name_vector_{query_dim}D"
         params["result_limit"] = limit
 
         try:
+            # First try dimension-specific index
+            params["index_name"] = dimension_specific_index
             result = await self._neo4j_client.execute_query(cypher_query, **params)
+
+            # If no results with dimension-specific index, try default index
+            if not result.records:
+                logger.debug(
+                    f"No results from dimension-specific index {dimension_specific_index}, "
+                    f"trying default index {self._vector_index_name}"
+                )
+                params["index_name"] = self._vector_index_name
+                result = await self._neo4j_client.execute_query(cypher_query, **params)
 
             items = []
             for record in result.records:
@@ -296,6 +310,15 @@ class HybridSearch:
             return items
 
         except Exception as e:
+            error_str = str(e)
+            # Check for dimension mismatch errors
+            if "dimensions" in error_str.lower() or "vector has" in error_str.lower():
+                logger.warning(
+                    f"Vector dimension mismatch detected. Falling back to keyword search. "
+                    f"Error: {e}"
+                )
+                # Return empty list - RRF fusion will use keyword results only
+                return []
             logger.error(f"Vector search query failed: {e}")
             return []
 
@@ -336,7 +359,7 @@ class HybridSearch:
             RETURN node.uuid AS uuid,
                    node.name AS name,
                    node.summary AS summary,
-                   node.entity_type AS entity_type,
+                   coalesce(node.entity_type, 'Entity') AS entity_type,
                    score
             ORDER BY score DESC
             LIMIT $limit

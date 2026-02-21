@@ -247,6 +247,143 @@ async def test_invoke_agent_sends_response_text_on_no_progress_error() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_invoke_agent_streams_via_card_when_adapter_supports_it() -> None:
+    """When adapter supports streaming cards, router patches card with async SDK."""
+    router = ChannelMessageRouter()
+    router._send_response = AsyncMock()
+    router._send_error_feedback = AsyncMock()
+    router._broadcast_workspace_event = AsyncMock()
+    router._record_streaming_outbox = AsyncMock()
+
+    fake_adapter = MagicMock()
+    fake_adapter.send_streaming_card = AsyncMock(return_value="om_stream_1")
+    fake_adapter.patch_card = AsyncMock(return_value=True)
+    fake_adapter._build_streaming_card = MagicMock(return_value='{"elements":[]}')
+
+    message = _build_message(
+        text="Tell me a story",
+        raw_data={
+            "_routing": {"channel_config_id": "cfg-1", "channel_message_id": "msg-1"},
+            "event": {"sender": {"sender_type": "user"}},
+        },
+    )
+
+    conversation = SimpleNamespace(
+        id="conv-1", project_id="project-1", user_id="user-1", tenant_id="tenant-1",
+    )
+
+    session = MagicMock()
+    session.get = AsyncMock(return_value=conversation)
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+
+    async def fake_stream(**_):
+        yield {"type": "text_delta", "data": {"delta": "Once "}}
+        yield {"type": "text_delta", "data": {"delta": "upon a time"}}
+        yield {"type": "complete", "data": {"content": "Once upon a time"}}
+
+    agent_service = MagicMock()
+    agent_service.stream_chat_v2 = fake_stream
+    scoped_container = MagicMock()
+    scoped_container.agent_service.return_value = agent_service
+    app_container = MagicMock()
+    app_container.with_db.return_value = scoped_container
+
+    router._get_streaming_adapter = MagicMock(return_value=fake_adapter)
+
+    with (
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+            return_value=session_ctx,
+        ),
+        patch(
+            "src.configuration.factories.create_llm_client",
+            new=AsyncMock(return_value=object()),
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
+            return_value=app_container,
+        ),
+    ):
+        await router._invoke_agent(message, "conv-1")
+
+    # Initial streaming card sent
+    fake_adapter.send_streaming_card.assert_awaited_once()
+    # Streaming path handled response — _send_response NOT called
+    router._send_response.assert_not_awaited()
+    router._record_streaming_outbox.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_invoke_agent_falls_back_when_patch_card_fails() -> None:
+    """When final patch_card fails, falls through to _send_response."""
+    router = ChannelMessageRouter()
+    router._send_response = AsyncMock()
+    router._send_error_feedback = AsyncMock()
+    router._broadcast_workspace_event = AsyncMock()
+    router._record_streaming_outbox = AsyncMock()
+
+    fake_adapter = MagicMock()
+    fake_adapter.send_streaming_card = AsyncMock(return_value="om_stream_1")
+    fake_adapter.patch_card = AsyncMock(return_value=False)
+    fake_adapter._build_streaming_card = MagicMock(return_value='{"elements":[]}')
+
+    message = _build_message(
+        text="hello",
+        raw_data={
+            "_routing": {"channel_config_id": "cfg-1", "channel_message_id": "msg-1"},
+            "event": {"sender": {"sender_type": "user"}},
+        },
+    )
+
+    conversation = SimpleNamespace(
+        id="conv-1", project_id="project-1", user_id="user-1", tenant_id="tenant-1",
+    )
+
+    session = MagicMock()
+    session.get = AsyncMock(return_value=conversation)
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+
+    async def fake_stream(**_):
+        yield {"type": "text_delta", "data": {"delta": "Hello world"}}
+        yield {"type": "complete", "data": {"content": "Hello world"}}
+
+    agent_service = MagicMock()
+    agent_service.stream_chat_v2 = fake_stream
+    scoped_container = MagicMock()
+    scoped_container.agent_service.return_value = agent_service
+    app_container = MagicMock()
+    app_container.with_db.return_value = scoped_container
+
+    router._get_streaming_adapter = MagicMock(return_value=fake_adapter)
+
+    with (
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+            return_value=session_ctx,
+        ),
+        patch(
+            "src.configuration.factories.create_llm_client",
+            new=AsyncMock(return_value=object()),
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
+            return_value=app_container,
+        ),
+    ):
+        await router._invoke_agent(message, "conv-1")
+
+    # Patch failed → falls through to regular _send_response
+    router._send_response.assert_awaited_once_with(message, "conv-1", "Hello world")
+    router._record_streaming_outbox.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_send_response_marks_outbox_failed_when_connection_missing() -> None:
     """Router should persist failed outbox state if channel connection is unavailable."""
     router = ChannelMessageRouter()

@@ -19,8 +19,9 @@ import { useTranslation } from 'react-i18next';
 
 import { Hash, FileText, Loader2, Workflow } from 'lucide-react';
 
-import { mentionService, type MentionItem } from '@/services/mentionService';
 import { useSubAgentStore } from '@/stores/subagent';
+
+import { mentionService, type MentionItem } from '@/services/mentionService';
 
 export interface MentionPopoverHandle {
   getSelectedItem: () => MentionItem | null;

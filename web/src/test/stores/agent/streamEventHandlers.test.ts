@@ -103,6 +103,52 @@ describe('streamEventHandlers', () => {
     });
   });
 
+  it('should append channel inbound onMessage event to timeline', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    const convertedMessages = [{ id: 'msg-1', role: 'user', content: 'hello from feishu' }];
+    (mockDeps.timelineToMessages as any).mockReturnValue(convertedMessages);
+
+    handlers.onMessage!({
+      type: 'message',
+      data: {
+        id: 'om_1',
+        role: 'user',
+        content: 'hello from feishu',
+        metadata: { source: 'channel_inbound' },
+      } as any,
+    });
+
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({
+        timeline: expect.arrayContaining([
+          expect.objectContaining({
+            type: 'user_message',
+            id: 'om_1',
+            content: 'hello from feishu',
+          }),
+        ]),
+      })
+    );
+    expect(mockSet).toHaveBeenCalledWith({ messages: convertedMessages });
+  });
+
+  it('should ignore non-channel onMessage events', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+
+    handlers.onMessage!({
+      type: 'message',
+      data: {
+        id: 'msg-regular',
+        role: 'user',
+        content: 'hello',
+      } as any,
+    });
+
+    expect(mockUpdateConversationState).not.toHaveBeenCalled();
+    expect(mockSet).not.toHaveBeenCalled();
+  });
+
   it('should buffer and flush onTextDelta', () => {
     const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
     const event: AgentEvent<TextDeltaEventData> = {

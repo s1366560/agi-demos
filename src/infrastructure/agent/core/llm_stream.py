@@ -638,9 +638,18 @@ class LLMStream:
             logger.debug("[LLMStream] choice has no delta")
             return
 
-        # Debug: log delta contents
-        logger.info(
-            f"[LLMStream] delta: content={getattr(delta, 'content', None)}, tool_calls={getattr(delta, 'tool_calls', None)}"
+        # Debug: log delta summary without serializing provider-specific objects.
+        tool_calls = getattr(delta, "tool_calls", None)
+        if isinstance(tool_calls, list):
+            tool_call_count = len(tool_calls)
+        elif tool_calls:
+            tool_call_count = 1
+        else:
+            tool_call_count = 0
+        logger.debug(
+            "[LLMStream] delta: has_content=%s, tool_call_count=%s",
+            bool(getattr(delta, "content", None)),
+            tool_call_count,
         )
 
         # Check for content (text)

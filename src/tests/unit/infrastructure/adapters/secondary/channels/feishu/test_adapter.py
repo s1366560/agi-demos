@@ -432,7 +432,7 @@ class _FakeResponse:
 
 
 class _FakeMessageAPI:
-    """Mimics client.im.v1.message with create(), reply(), patch(), update(), delete()."""
+    """Mimics client.im.v1.message with async a-prefixed methods."""
 
     def __init__(
         self,
@@ -461,29 +461,29 @@ class _FakeMessageAPI:
         self._delete_response = delete_response or _FakeResponse()
         self._has_reply = has_reply
 
-    def create(self, request, option=None):
+    async def acreate(self, request, option=None):
         self.create_called = True
         self.create_request = request
         return self._create_response
 
-    def reply(self, request, option=None):
+    async def areply(self, request, option=None):
         if not self._has_reply:
             raise AttributeError("no reply")
         self.reply_called = True
         self.reply_request = request
         return self._reply_response or _FakeResponse(message_id="om_reply_default")
 
-    def patch(self, request, option=None):
+    async def apatch(self, request, option=None):
         self.patch_called = True
         self.patch_request = request
         return self._patch_response
 
-    def update(self, request, option=None):
+    async def aupdate(self, request, option=None):
         self.update_called = True
         self.update_request = request
         return self._update_response
 
-    def delete(self, request, option=None):
+    async def adelete(self, request, option=None):
         self.delete_called = True
         self.delete_request = request
         return self._delete_response

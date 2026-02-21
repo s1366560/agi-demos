@@ -87,18 +87,21 @@ class SqlChunkRepository:
 
         Returns list of dicts with id, content, metadata, score, created_at.
         """
-        # Use bindparams() to avoid asyncpg parameter binding conflicts with ::vector cast
+        # Use separate parameter names for each occurrence to avoid asyncpg conflicts
+        # asyncpg doesn't support the same parameter name being used multiple times
+        vec_str = str(query_embedding)
         sql = text("""
             SELECT id, content, metadata, created_at, category,
                    source_type, source_id,
-                   1 - (embedding <=> :query_vec::vector) AS score
+                   1 - (embedding <=> :vec1::vector) AS score
             FROM memory_chunks
             WHERE project_id = :project_id
               AND embedding IS NOT NULL
-            ORDER BY embedding <=> :query_vec::vector
+            ORDER BY embedding <=> :vec2::vector
             LIMIT :limit
         """).bindparams(
-            bindparam("query_vec", value=str(query_embedding)),
+            bindparam("vec1", value=vec_str),
+            bindparam("vec2", value=vec_str),
             bindparam("project_id", value=project_id),
             bindparam("limit", value=limit),
         )
@@ -196,18 +199,22 @@ class SqlChunkRepository:
         limit: int = 1,
     ) -> list[dict]:
         """Find chunks with similarity above threshold (for dedup)."""
-        # Use bindparams() to avoid asyncpg parameter binding conflicts with ::vector cast
+        # Use separate parameter names for each occurrence to avoid asyncpg conflicts
+        # asyncpg doesn't support the same parameter name being used multiple times
+        vec_str = str(embedding)
         sql = text("""
             SELECT id, content,
-                   1 - (embedding <=> :query_vec::vector) AS similarity
+                   1 - (embedding <=> :vec1::vector) AS similarity
             FROM memory_chunks
             WHERE project_id = :project_id
               AND embedding IS NOT NULL
-              AND 1 - (embedding <=> :query_vec::vector) >= :threshold
-            ORDER BY embedding <=> :query_vec::vector
+              AND 1 - (embedding <=> :vec2::vector) >= :threshold
+            ORDER BY embedding <=> :vec3::vector
             LIMIT :limit
         """).bindparams(
-            bindparam("query_vec", value=str(embedding)),
+            bindparam("vec1", value=vec_str),
+            bindparam("vec2", value=vec_str),
+            bindparam("vec3", value=vec_str),
             bindparam("project_id", value=project_id),
             bindparam("threshold", value=threshold),
             bindparam("limit", value=limit),

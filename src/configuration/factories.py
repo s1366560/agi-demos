@@ -73,16 +73,42 @@ async def create_native_graph_adapter(
     from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
     embedding_service = EmbeddingService(embedder=embedder)
 
+    # Determine embedding dimension: use config override or auto-detect
+    auto_detected_dim = embedding_service.embedding_dim
+    embedding_dim = settings.embedding_dimension or auto_detected_dim
+
+    if settings.embedding_dimension:
+        logger.info(f"Using configured embedding dimension: {embedding_dim}D")
+    else:
+        logger.info(f"Auto-detected embedding dimension: {embedding_dim}D")
+
     # Create vector index for entity name embeddings
-    embedding_dim = embedding_service.embedding_dim
+    # Use dimension-specific index name to support multiple embedding models
+    index_name = f"entity_name_vector_{embedding_dim}D"
     await neo4j_client.create_vector_index(
-        index_name="entity_name_vector",
+        index_name=index_name,
         label="Entity",
         property_name="name_embedding",
         dimensions=embedding_dim,
         similarity_function="cosine",
     )
-    logger.info(f"Created entity_name_vector index with dimensions={embedding_dim}")
+    logger.info(f"Created vector index {index_name} with dimensions={embedding_dim}")
+
+    # Also ensure the default index exists for backward compatibility
+    # This allows searches using the default index name to work
+    if index_name != "entity_name_vector":
+        try:
+            await neo4j_client.create_vector_index(
+                index_name="entity_name_vector",
+                label="Entity",
+                property_name="name_embedding",
+                dimensions=embedding_dim,
+                similarity_function="cosine",
+            )
+            logger.info(f"Created default entity_name_vector index with dimensions={embedding_dim}")
+        except Exception as e:
+            # Log warning but don't fail - the dimension-specific index is the primary one
+            logger.warning(f"Could not create default index: {e}")
 
     # Create NativeGraphAdapter
     adapter = NativeGraphAdapter(

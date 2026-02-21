@@ -106,6 +106,17 @@ class Settings(BaseSettings):
     auto_clear_mismatched_embeddings: bool = Field(
         default=True, alias="AUTO_CLEAR_MISMATCHED_EMBEDDINGS"
     )
+    embedding_dimension: Optional[int] = Field(
+        default=None,
+        alias="EMBEDDING_DIMENSION",
+        description="Embedding vector dimension. Auto-detected from provider if None. "
+        "Common values: 1024 (Qwen/Dashscope), 1536 (OpenAI ada-002), 768 (Gemini).",
+    )
+    embedding_index_auto_create: bool = Field(
+        default=True,
+        alias="EMBEDDING_INDEX_AUTO_CREATE",
+        description="Auto-create vector indices on startup if missing.",
+    )
 
     # LLM Timeout & Concurrency Settings
     llm_timeout: int = Field(

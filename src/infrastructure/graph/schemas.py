@@ -117,6 +117,7 @@ class EntityNode(BaseNode):
     labels: List[str] = Field(default_factory=list)  # Additional Neo4j labels
     summary: str = ""
     name_embedding: Optional[List[float]] = None
+    embedding_dim: Optional[int] = None  # Dimension of the embedding vector
     attributes: Dict[str, Any] = Field(default_factory=dict)
 
     def get_labels(self) -> List[str]:
@@ -143,6 +144,7 @@ class EntityNode(BaseNode):
         }
         if self.name_embedding:
             props["name_embedding"] = self.name_embedding
+            props["embedding_dim"] = len(self.name_embedding)
         return props
 
 

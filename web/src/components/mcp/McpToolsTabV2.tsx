@@ -12,9 +12,9 @@ import { useMCPStore } from '@/stores/mcp';
 import { useProjectStore } from '@/stores/project';
 
 import { McpToolItemV2 } from './McpToolItemV2';
+import { CARD_STYLES } from './styles';
 
 import type { ToolWithServer } from './McpToolItemV2';
-import { CARD_STYLES } from './styles';
 
 const { Search: AntSearch } = Input;
 

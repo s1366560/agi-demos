@@ -1307,30 +1307,28 @@ export const useAgentV3Store = create<AgentV3State>()(
               lastTimeUs,
             });
 
-            // If agent is running, set up streaming state and subscribe to WebSocket
-            // The normal WebSocket event flow will handle incoming events
-            // No special recovery logic needed - just subscribe and wait for events
+            // If agent is already running, recover streaming state before subscribing.
+            // This avoids clearing freshly-arrived deltas after subscription.
             if (execStatus?.is_running) {
               logger.debug(
-                `[AgentV3] Conversation ${conversationId} is running, ` +
-                  `subscribing to WebSocket for live events...`
+                `[AgentV3] Conversation ${conversationId} is running, recovering live stream...`
               );
 
-              // CRITICAL: Clear any stale delta buffers before subscribing to running session
+              // CRITICAL: Clear any stale delta buffers before attaching to running session
               // This prevents duplicate content from previous page loads
               clearAllDeltaBuffers();
 
-              // Set streaming state
               set({ isStreaming: true, agentState: 'thinking' });
+            }
 
-              // Ensure WebSocket is connected
+            // Always subscribe active conversation to WebSocket so externally-triggered
+            // executions (e.g. channel ingress) can stream into the workspace in real time.
+            if (get().activeConversationId === conversationId) {
               if (!agentService.isConnected()) {
                 logger.debug(`[AgentV3] Connecting WebSocket...`);
                 await agentService.connect();
               }
 
-              // Reuse the same full handler used by sendMessage so that
-              // recovery events are appended to the timeline via appendSSEEventToTimeline.
               const streamHandler: AgentStreamHandler = createStreamEventHandlers(
                 conversationId,
                 undefined, // no additionalHandlers during recovery
@@ -1346,7 +1344,6 @@ export const useAgentV3Store = create<AgentV3State>()(
                 }
               );
 
-              // Subscribe to conversation - WebSocket will forward events from Redis Stream
               agentService.subscribe(conversationId, streamHandler);
               logger.debug(`[AgentV3] Subscribed to conversation ${conversationId}`);
             }

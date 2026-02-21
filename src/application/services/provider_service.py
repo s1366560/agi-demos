@@ -473,6 +473,14 @@ class ProviderService:
         """Get provider for tenant."""
         return await self.repository.find_tenant_provider(tenant_id, operation_type)
 
+    async def get_tenant_providers(
+        self,
+        tenant_id: str,
+        operation_type: Optional[OperationType] = None,
+    ) -> List[TenantProviderMapping]:
+        """Get all providers assigned to tenant."""
+        return await self.repository.get_tenant_providers(tenant_id, operation_type)
+
     async def resolve_provider_for_tenant(
         self,
         tenant_id: str,

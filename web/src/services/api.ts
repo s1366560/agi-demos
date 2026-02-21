@@ -33,6 +33,7 @@ import type {
   SchemaEdgeType,
   EdgeMapping,
   SystemResilienceStatus,
+  ProviderUsageStats,
 } from '../types/memory';
 
 // Use centralized HTTP client instead of creating a new axios instance
@@ -306,8 +307,16 @@ export const providerAPI = {
   getUsage: async (
     id: string,
     params: { start_date?: string; end_date?: string; tenant_id?: string } = {}
-  ): Promise<unknown> => {
-    return await api.get(`/llm-providers/${id}/usage`, { params });
+  ): Promise<ProviderUsageStats> => {
+    return await api.get<ProviderUsageStats>(`/llm-providers/${id}/usage`, { params });
+  },
+  listTenantAssignments: async (
+    tenantId: string,
+    operationType?: 'llm' | 'embedding' | 'rerank'
+  ): Promise<any[]> => {
+    return await api.get(`/llm-providers/tenants/${tenantId}/assignments`, {
+      params: { operation_type: operationType },
+    });
   },
   assignToTenant: async (
     id: string,
@@ -348,7 +357,14 @@ export const providerAPI = {
   },
   listModels: async (
     providerType: string
-  ): Promise<{ provider_type: string; models: string[] }> => {
+  ): Promise<{
+    provider_type: string;
+    models: {
+      chat: string[];
+      embedding: string[];
+      rerank: string[];
+    };
+  }> => {
     return await api.get(`/llm-providers/models/${providerType}`);
   },
 };

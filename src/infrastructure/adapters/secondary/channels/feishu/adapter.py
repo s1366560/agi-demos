@@ -590,7 +590,7 @@ class FeishuAdapter:
                         )
                         .build()
                     )
-                    response = client.im.v1.message.reply(request)
+                    response = await client.im.v1.message.areply(request)
                     if response.success() and response.data and response.data.message_id:
                         return response.data.message_id
                     logger.warning(
@@ -614,7 +614,7 @@ class FeishuAdapter:
                 )
                 .build()
             )
-            response = client.im.v1.message.create(request)
+            response = await client.im.v1.message.acreate(request)
 
             if not response.success():
                 raise RuntimeError(
@@ -671,7 +671,7 @@ class FeishuAdapter:
                 )
                 .build()
             )
-            response = client.im.v1.message.update(request)
+            response = await client.im.v1.message.aupdate(request)
             if not response.success():
                 logger.warning(
                     f"[Feishu] Edit message failed: code={response.code}, msg={response.msg}"
@@ -689,7 +689,7 @@ class FeishuAdapter:
 
             client = self._build_rest_client()
             request = DeleteMessageRequest.builder().message_id(message_id).build()
-            response = client.im.v1.message.delete(request)
+            response = await client.im.v1.message.adelete(request)
             if not response.success():
                 logger.warning(
                     f"[Feishu] Delete message failed: code={response.code}, msg={response.msg}"
@@ -738,7 +738,7 @@ class FeishuAdapter:
                 .member_id_type("open_id")
                 .build()
             )
-            response = client.im.v1.chat_members.get(request)
+            response = await client.im.v1.chat_members.aget(request)
             if not response.success() or not response.data:
                 return []
             items = response.data.items or []
@@ -763,7 +763,7 @@ class FeishuAdapter:
                 .user_id_type("open_id")
                 .build()
             )
-            response = client.contact.v3.user.get(request)
+            response = await client.contact.v3.user.aget(request)
             if not response.success() or not response.data or not response.data.user:
                 return None
             user = response.data.user
@@ -786,7 +786,7 @@ class FeishuAdapter:
 
             client = self._build_rest_client()
             request = ListChatRequest.builder().page_size(1).build()
-            response = client.im.v1.chat.list(request)
+            response = await client.im.v1.chat.alist(request)
             return response.success()
         except Exception as e:
             logger.warning(f"[Feishu] Health check failed: {e}")
@@ -832,7 +832,7 @@ class FeishuAdapter:
                 )
                 .build()
             )
-            response = client.im.v1.message.patch(request)
+            response = await client.im.v1.message.apatch(request)
             if not response.success():
                 logger.warning(
                     f"[Feishu] Patch card failed: code={response.code}, msg={response.msg}"

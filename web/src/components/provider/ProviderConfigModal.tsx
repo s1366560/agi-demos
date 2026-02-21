@@ -8,211 +8,19 @@ import {
   ProviderType,
   ProviderUpdate,
 } from '../../types/memory';
-import { ProviderIcon } from './ProviderIcon';
 import { MaterialIcon } from '../agent/shared/MaterialIcon';
+
+import { ProviderIcon } from './ProviderIcon';
 
 interface ProviderConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
   provider?: ProviderConfig | null;
+  initialProviderType?: ProviderType;
 }
 
-interface ProviderMeta {
-  value: ProviderType;
-  label: string;
-  icon: string;
-  description: string;
-  apiKeyEnvVar: string;
-  apiKeyPlaceholder: string;
-  hasEmbedding: boolean;
-  hasNativeRerank: boolean;
-  baseUrlRequired: boolean;
-  documentationUrl: string;
-}
-
-const PROVIDERS: ProviderMeta[] = [
-  {
-    value: 'openai',
-    label: 'OpenAI',
-    icon: '🤖',
-    description: 'GPT-4, GPT-3.5, text-embedding models',
-    apiKeyEnvVar: 'OPENAI_API_KEY',
-    apiKeyPlaceholder: 'sk-...',
-    hasEmbedding: true,
-    hasNativeRerank: false,
-    baseUrlRequired: false,
-    documentationUrl: 'https://platform.openai.com/docs',
-  },
-  {
-    value: 'anthropic',
-    label: 'Anthropic',
-    icon: '🧠',
-    description: 'Claude 3.5/4 Sonnet, Haiku, Opus',
-    apiKeyEnvVar: 'ANTHROPIC_API_KEY',
-    apiKeyPlaceholder: 'sk-ant-...',
-    hasEmbedding: false,
-    hasNativeRerank: false,
-    baseUrlRequired: false,
-    documentationUrl: 'https://docs.anthropic.com',
-  },
-  {
-    value: 'gemini',
-    label: 'Google Gemini',
-    icon: '✨',
-    description: 'Gemini Pro, Flash, text-embedding-004',
-    apiKeyEnvVar: 'GEMINI_API_KEY',
-    apiKeyPlaceholder: 'AIza...',
-    hasEmbedding: true,
-    hasNativeRerank: false,
-    baseUrlRequired: false,
-    documentationUrl: 'https://ai.google.dev/docs',
-  },
-  {
-    value: 'dashscope',
-    label: 'Alibaba Dashscope',
-    icon: '🌐',
-    description: 'Qwen-Max, Qwen-Plus, Qwen-Turbo, text-embedding-v3',
-    apiKeyEnvVar: 'DASHSCOPE_API_KEY',
-    apiKeyPlaceholder: 'sk-...',
-    hasEmbedding: true,
-    hasNativeRerank: true,
-    baseUrlRequired: false,
-    documentationUrl: 'https://help.aliyun.com/zh/dashscope',
-  },
-  {
-    value: 'kimi',
-    label: 'Moonshot Kimi',
-    icon: '🌙',
-    description: 'Moonshot Kimi chat, embedding and rerank models',
-    apiKeyEnvVar: 'KIMI_API_KEY',
-    apiKeyPlaceholder: 'sk-...',
-    hasEmbedding: true,
-    hasNativeRerank: false,
-    baseUrlRequired: false,
-    documentationUrl: 'https://platform.moonshot.cn/docs',
-  },
-  {
-    value: 'deepseek',
-    label: 'Deepseek',
-    icon: '🔍',
-    description: 'Deepseek-Chat, Deepseek-Coder (cost-effective)',
-    apiKeyEnvVar: 'DEEPSEEK_API_KEY',
-    apiKeyPlaceholder: 'sk-...',
-    hasEmbedding: false,
-    hasNativeRerank: false,
-    baseUrlRequired: false,
-    documentationUrl: 'https://platform.deepseek.com/docs',
-  },
-  {
-    value: 'zai',
-    label: 'ZhipuAI 智谱',
-    icon: '🐲',
-    description: 'GLM-4-Plus, GLM-4-Flash, embedding-3',
-    apiKeyEnvVar: 'ZAI_API_KEY',
-    apiKeyPlaceholder: '...',
-    hasEmbedding: true,
-    hasNativeRerank: false,
-    baseUrlRequired: false,
-    documentationUrl: 'https://open.bigmodel.cn/dev/api',
-  },
-  {
-    value: 'cohere',
-    label: 'Cohere',
-    icon: '🔮',
-    description: 'Command-R, embed-english-v3, native rerank',
-    apiKeyEnvVar: 'COHERE_API_KEY',
-    apiKeyPlaceholder: '...',
-    hasEmbedding: true,
-    hasNativeRerank: true,
-    baseUrlRequired: false,
-    documentationUrl: 'https://docs.cohere.com',
-  },
-  {
-    value: 'mistral',
-    label: 'Mistral AI',
-    icon: '🌪️',
-    description: 'Mistral-Large, Mistral-Small, mistral-embed',
-    apiKeyEnvVar: 'MISTRAL_API_KEY',
-    apiKeyPlaceholder: '...',
-    hasEmbedding: true,
-    hasNativeRerank: false,
-    baseUrlRequired: false,
-    documentationUrl: 'https://docs.mistral.ai',
-  },
-  {
-    value: 'groq',
-    label: 'Groq',
-    icon: '⚡',
-    description: 'LLaMA 3, Mixtral (ultra-fast inference)',
-    apiKeyEnvVar: 'GROQ_API_KEY',
-    apiKeyPlaceholder: 'gsk_...',
-    hasEmbedding: false,
-    hasNativeRerank: false,
-    baseUrlRequired: false,
-    documentationUrl: 'https://console.groq.com/docs',
-  },
-  {
-    value: 'azure_openai',
-    label: 'Azure OpenAI',
-    icon: '☁️',
-    description: 'Azure-hosted OpenAI models',
-    apiKeyEnvVar: 'AZURE_API_KEY',
-    apiKeyPlaceholder: '...',
-    hasEmbedding: true,
-    hasNativeRerank: false,
-    baseUrlRequired: true,
-    documentationUrl: 'https://learn.microsoft.com/azure/ai-services/openai',
-  },
-  {
-    value: 'bedrock',
-    label: 'AWS Bedrock',
-    icon: '🏔️',
-    description: 'Claude, Titan, Llama on AWS',
-    apiKeyEnvVar: 'AWS_ACCESS_KEY_ID',
-    apiKeyPlaceholder: 'AKIA...',
-    hasEmbedding: true,
-    hasNativeRerank: false,
-    baseUrlRequired: false,
-    documentationUrl: 'https://docs.aws.amazon.com/bedrock',
-  },
-  {
-    value: 'vertex',
-    label: 'Google Vertex AI',
-    icon: '📊',
-    description: 'Gemini on Google Cloud',
-    apiKeyEnvVar: 'GOOGLE_APPLICATION_CREDENTIALS',
-    apiKeyPlaceholder: 'JSON credentials',
-    hasEmbedding: true,
-    hasNativeRerank: false,
-    baseUrlRequired: false,
-    documentationUrl: 'https://cloud.google.com/vertex-ai/docs',
-  },
-  {
-    value: 'ollama',
-    label: 'Ollama',
-    icon: '🦙',
-    description: 'Local Ollama runtime (Open source models)',
-    apiKeyEnvVar: 'OLLAMA_API_KEY',
-    apiKeyPlaceholder: '(optional)',
-    hasEmbedding: true,
-    hasNativeRerank: false,
-    baseUrlRequired: false,
-    documentationUrl: 'https://github.com/ollama/ollama',
-  },
-  {
-    value: 'lmstudio',
-    label: 'LM Studio',
-    icon: '🖥️',
-    description: 'Local OpenAI-compatible endpoint from LM Studio',
-    apiKeyEnvVar: 'LMSTUDIO_API_KEY',
-    apiKeyPlaceholder: '(optional)',
-    hasEmbedding: true,
-    hasNativeRerank: false,
-    baseUrlRequired: false,
-    documentationUrl: 'https://lmstudio.ai/docs',
-  },
-];
+import { PROVIDERS } from '../../constants/providers';
 
 const OPTIONAL_API_KEY_PROVIDERS: ProviderType[] = ['ollama', 'lmstudio'];
 
@@ -220,202 +28,6 @@ const providerTypeRequiresApiKey = (type: ProviderType) =>
   !OPTIONAL_API_KEY_PROVIDERS.includes(type);
 
 type Step = 'provider' | 'credentials' | 'models' | 'review';
-
-// Model presets by provider
-const MODEL_PRESETS: Record<
-  ProviderType,
-  {
-    llm: { name: string; description: string }[];
-    small: { name: string; description: string }[];
-    embedding: { name: string; dimension: number }[];
-    reranker: { name: string; description: string }[];
-  }
-> = {
-  openai: {
-    llm: [
-      { name: 'gpt-4o', description: 'Most capable, multimodal' },
-      { name: 'gpt-4-turbo', description: 'Faster GPT-4' },
-      { name: 'gpt-4', description: 'Original GPT-4' },
-    ],
-    small: [
-      { name: 'gpt-4o-mini', description: 'Fast & affordable' },
-      { name: 'gpt-3.5-turbo', description: 'Legacy fast model' },
-    ],
-    embedding: [
-      { name: 'text-embedding-3-small', dimension: 1536 },
-      { name: 'text-embedding-3-large', dimension: 3072 },
-      { name: 'text-embedding-ada-002', dimension: 1536 },
-    ],
-    reranker: [{ name: 'gpt-4o-mini', description: 'LLM-based reranking' }],
-  },
-  anthropic: {
-    llm: [
-      { name: 'claude-sonnet-4-20250514', description: 'Latest Sonnet 4' },
-      { name: 'claude-3-5-sonnet-20241022', description: 'Claude 3.5 Sonnet' },
-      { name: 'claude-3-opus-20240229', description: 'Most capable' },
-    ],
-    small: [
-      { name: 'claude-3-5-haiku-20241022', description: 'Fast & efficient' },
-      { name: 'claude-3-haiku-20240307', description: 'Legacy Haiku' },
-    ],
-    embedding: [],
-    reranker: [{ name: 'claude-3-5-haiku-20241022', description: 'LLM-based reranking' }],
-  },
-  gemini: {
-    llm: [
-      { name: 'gemini-2.0-flash-exp', description: 'Latest experimental' },
-      { name: 'gemini-1.5-pro', description: '1M context window' },
-      { name: 'gemini-1.5-pro-002', description: 'Improved Pro' },
-    ],
-    small: [
-      { name: 'gemini-1.5-flash', description: 'Fast & multimodal' },
-      { name: 'gemini-1.5-flash-002', description: 'Improved Flash' },
-    ],
-    embedding: [{ name: 'text-embedding-004', dimension: 768 }],
-    reranker: [{ name: 'gemini-1.5-flash', description: 'LLM-based reranking' }],
-  },
-  dashscope: {
-    llm: [
-      { name: 'qwen-max', description: 'Most capable' },
-      { name: 'qwen-plus', description: 'Balanced performance' },
-      { name: 'qwen-long', description: 'Long context' },
-    ],
-    small: [{ name: 'qwen-turbo', description: 'Fast & cost-effective' }],
-    embedding: [
-      { name: 'text-embedding-v3', dimension: 1024 },
-      { name: 'text-embedding-v2', dimension: 1536 },
-    ],
-    reranker: [
-      { name: 'qwen3-rerank', description: 'Native reranker' },
-      { name: 'qwen-turbo', description: 'LLM-based' },
-    ],
-  },
-  kimi: {
-    llm: [
-      { name: 'moonshot-v1-8k', description: 'Fast model' },
-      { name: 'moonshot-v1-32k', description: 'Longer context' },
-      { name: 'moonshot-v1-128k', description: 'Longest context' },
-    ],
-    small: [{ name: 'moonshot-v1-8k', description: 'Fast & affordable' }],
-    embedding: [{ name: 'kimi-embedding-1', dimension: 1024 }],
-    reranker: [{ name: 'kimi-rerank-1', description: 'Native reranking model' }],
-  },
-  deepseek: {
-    llm: [
-      { name: 'deepseek-chat', description: 'General purpose' },
-      { name: 'deepseek-reasoner', description: 'Reasoning focused' },
-    ],
-    small: [{ name: 'deepseek-coder', description: 'Code specialized' }],
-    embedding: [],
-    reranker: [{ name: 'deepseek-chat', description: 'LLM-based reranking' }],
-  },
-  zai: {
-    llm: [
-      { name: 'glm-4-plus', description: 'Most capable' },
-      { name: 'glm-4', description: 'Standard' },
-      { name: 'glm-4-long', description: '128K context' },
-    ],
-    small: [
-      { name: 'glm-4-flash', description: 'Fast & affordable' },
-      { name: 'glm-4-air', description: 'Balanced' },
-    ],
-    embedding: [
-      { name: 'embedding-3', dimension: 1024 },
-      { name: 'embedding-2', dimension: 1024 },
-    ],
-    reranker: [{ name: 'glm-4-flash', description: 'LLM-based reranking' }],
-  },
-  cohere: {
-    llm: [
-      { name: 'command-r-plus', description: 'Most capable' },
-      { name: 'command-r', description: 'RAG optimized' },
-    ],
-    small: [
-      { name: 'command-r', description: 'Efficient' },
-      { name: 'command-light', description: 'Lightweight' },
-    ],
-    embedding: [
-      { name: 'embed-english-v3.0', dimension: 1024 },
-      { name: 'embed-multilingual-v3.0', dimension: 1024 },
-      { name: 'embed-english-light-v3.0', dimension: 384 },
-    ],
-    reranker: [
-      { name: 'rerank-english-v3.0', description: 'Native reranker' },
-      { name: 'rerank-multilingual-v3.0', description: 'Multilingual' },
-    ],
-  },
-  mistral: {
-    llm: [
-      { name: 'mistral-large-latest', description: 'Most capable' },
-      { name: 'mistral-medium-latest', description: 'Balanced' },
-    ],
-    small: [
-      { name: 'mistral-small-latest', description: 'Fast & efficient' },
-      { name: 'open-mistral-7b', description: 'Open source' },
-    ],
-    embedding: [{ name: 'mistral-embed', dimension: 1024 }],
-    reranker: [{ name: 'mistral-small-latest', description: 'LLM-based reranking' }],
-  },
-  groq: {
-    llm: [
-      { name: 'llama-3.3-70b-versatile', description: 'Most capable' },
-      { name: 'llama-3.1-70b-versatile', description: 'Llama 3.1 70B' },
-      { name: 'mixtral-8x7b-32768', description: 'Mixtral MoE' },
-    ],
-    small: [
-      { name: 'llama-3.1-8b-instant', description: 'Ultra-fast' },
-      { name: 'gemma2-9b-it', description: 'Google Gemma' },
-    ],
-    embedding: [],
-    reranker: [],
-  },
-  azure_openai: {
-    llm: [
-      { name: 'gpt-4o', description: 'GPT-4o deployment' },
-      { name: 'gpt-4', description: 'GPT-4 deployment' },
-    ],
-    small: [
-      { name: 'gpt-4o-mini', description: 'Fast deployment' },
-      { name: 'gpt-35-turbo', description: 'GPT-3.5 deployment' },
-    ],
-    embedding: [
-      { name: 'text-embedding-3-small', dimension: 1536 },
-      { name: 'text-embedding-ada-002', dimension: 1536 },
-    ],
-    reranker: [],
-  },
-  bedrock: {
-    llm: [
-      { name: 'anthropic.claude-3-sonnet-20240229-v1:0', description: 'Claude 3 Sonnet' },
-      { name: 'anthropic.claude-3-haiku-20240307-v1:0', description: 'Claude 3 Haiku' },
-      { name: 'meta.llama3-70b-instruct-v1:0', description: 'Llama 3 70B' },
-    ],
-    small: [{ name: 'anthropic.claude-3-haiku-20240307-v1:0', description: 'Fast Claude' }],
-    embedding: [
-      { name: 'amazon.titan-embed-text-v1', dimension: 1536 },
-      { name: 'amazon.titan-embed-text-v2:0', dimension: 1024 },
-    ],
-    reranker: [],
-  },
-  vertex: {
-    llm: [{ name: 'gemini-1.5-pro', description: 'Gemini Pro on Vertex' }],
-    small: [{ name: 'gemini-1.5-flash', description: 'Gemini Flash on Vertex' }],
-    embedding: [{ name: 'textembedding-gecko', dimension: 768 }],
-    reranker: [],
-  },
-  ollama: {
-    llm: [{ name: 'llama3.1:8b', description: 'Local default model' }],
-    small: [{ name: 'llama3.1:8b', description: 'Local default model' }],
-    embedding: [{ name: 'nomic-embed-text', dimension: 768 }],
-    reranker: [{ name: 'llama3.1:8b', description: 'LLM-based reranking' }],
-  },
-  lmstudio: {
-    llm: [{ name: 'local-model', description: 'LM Studio loaded chat model' }],
-    small: [{ name: 'local-model', description: 'LM Studio loaded chat model' }],
-    embedding: [{ name: 'text-embedding-nomic-embed-text-v1.5', dimension: 768 }],
-    reranker: [{ name: 'local-model', description: 'LLM-based reranking' }],
-  },
-} as const;
 
 const resolveEmbeddingConfig = (provider: ProviderConfig): EmbeddingConfig | undefined => {
   if (provider.embedding_config) {
@@ -436,6 +48,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   onClose,
   onSuccess,
   provider,
+  initialProviderType,
 }) => {
   const isEditing = !!provider;
   const [currentStep, setCurrentStep] = useState<Step>('provider');
@@ -443,8 +56,12 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [fetchedModels, setFetchedModels] = useState<string[]>([]);
+  const [availableModels, setAvailableModels] = useState<{
+    chat: string[];
+    embedding: string[];
+    rerank: string[];
+  }>({ chat: [], embedding: [], rerank: [] });
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -466,17 +83,75 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     use_custom_base_url: false,
   });
 
+  // Track which model fields are in custom input mode
+  const [useCustomModel, setUseCustomModel] = useState({
+    llm: false,
+    small: false,
+    embedding: false,
+    reranker: false,
+  });
+
   const steps: { key: Step; label: string; icon: string; description: string }[] = [
-    { key: 'provider', label: 'Select Provider', icon: 'smart_toy', description: 'Choose LLM provider' },
+    {
+      key: 'provider',
+      label: 'Select Provider',
+      icon: 'smart_toy',
+      description: 'Choose LLM provider',
+    },
     { key: 'credentials', label: 'Credentials', icon: 'key', description: 'API key & config' },
     { key: 'models', label: 'Models', icon: 'psychology', description: 'Configure models' },
     { key: 'review', label: 'Review', icon: 'check_circle', description: 'Review & save' },
   ];
 
+  const fetchModels = useCallback(async (type: ProviderType) => {
+    setIsLoadingModels(true);
+    try {
+      const response = await providerAPI.listModels(type);
+      setAvailableModels(response.models);
+      
+      // If editing, don't auto-select defaults yet, we handle that in useEffect
+      return response.models;
+    } catch (err) {
+      console.error('Failed to fetch models:', err);
+      // Fallback to empty
+      setAvailableModels({ chat: [], embedding: [], rerank: [] });
+      return null;
+    } finally {
+      setIsLoadingModels(false);
+    }
+  }, []);
+
   // Initialize form data
   useEffect(() => {
     if (provider) {
       const embeddingConfig = resolveEmbeddingConfig(provider);
+      
+      // Fetch models for the provider
+      fetchModels(provider.provider_type).then((models) => {
+        if (!models) return;
+        
+        // Check if models are custom (not in fetched list)
+        const llmIsCustom = !models.chat.includes(provider.llm_model);
+        const smallIsCustom =
+          !!provider.llm_small_model &&
+          !models.chat.includes(provider.llm_small_model);
+        const embeddingModel = embeddingConfig?.model || provider.embedding_model || '';
+        const embeddingIsCustom =
+          !!embeddingModel && !models.embedding.includes(embeddingModel);
+        const rerankerIsCustom =
+          !!provider.reranker_model &&
+          !models.rerank.includes(provider.reranker_model);
+
+        setUseCustomModel({
+          llm: llmIsCustom,
+          small: smallIsCustom,
+          embedding: embeddingIsCustom,
+          reranker: rerankerIsCustom,
+        });
+      });
+
+      const embeddingModel = embeddingConfig?.model || provider.embedding_model || '';
+
       setFormData({
         name: provider.name,
         provider_type: provider.provider_type,
@@ -484,7 +159,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         base_url: provider.base_url || '',
         llm_model: provider.llm_model,
         llm_small_model: provider.llm_small_model || '',
-        embedding_model: embeddingConfig?.model || provider.embedding_model || '',
+        embedding_model: embeddingModel,
         embedding_dimensions:
           embeddingConfig?.dimensions !== undefined ? String(embeddingConfig.dimensions) : '',
         embedding_encoding_format: embeddingConfig?.encoding_format || '',
@@ -502,16 +177,21 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         is_default: provider.is_default,
         use_custom_base_url: !!provider.base_url,
       });
+
       setCurrentStep('credentials');
     } else {
+      // Default state for new provider
+      const defaultProvider = initialProviderType || 'openai';
+      const providerMeta = PROVIDERS.find(p => p.value === defaultProvider);
+      
       setFormData({
-        name: '',
-        provider_type: 'openai',
+        name: providerMeta?.label || '',
+        provider_type: defaultProvider,
         api_key: '',
         base_url: '',
-        llm_model: 'gpt-4o',
-        llm_small_model: 'gpt-4o-mini',
-        embedding_model: 'text-embedding-3-small',
+        llm_model: '',
+        llm_small_model: '',
+        embedding_model: '',
         embedding_dimensions: '1536',
         embedding_encoding_format: '',
         embedding_user: '',
@@ -523,27 +203,58 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         is_default: false,
         use_custom_base_url: false,
       });
-      setCurrentStep('provider');
+      
+      // Fetch models for default provider
+      fetchModels(defaultProvider).then((models) => {
+        if (models && models.chat.length > 0) {
+           setFormData(prev => ({
+             ...prev,
+             llm_model: models.chat[0],
+             llm_small_model: models.chat.find(m => m.includes('mini') || m.includes('small') || m.includes('flash') || m.includes('haiku')) || models.chat[1] || '',
+             embedding_model: models.embedding[0] || '',
+             reranker_model: models.rerank[0] || '',
+           }));
+        }
+      });
+
+
+      setUseCustomModel({
+        llm: false,
+        small: false,
+        embedding: false,
+        reranker: false,
+      });
+
+      setCurrentStep(initialProviderType ? 'credentials' : 'provider');
     }
     setError(null);
     setTestResult(null);
-  }, [provider, isOpen]);
+  }, [provider, isOpen, fetchModels, initialProviderType]);
 
-  const handleProviderSelect = (type: ProviderType) => {
+  const handleProviderSelect = async (type: ProviderType) => {
     const providerMeta = PROVIDERS.find((p) => p.value === type);
-    const presets = MODEL_PRESETS[type];
+    
+    // Fetch models first
+    const models = await fetchModels(type);
+    
     setFormData((prev) => ({
       ...prev,
       provider_type: type,
       name: prev.name || providerMeta?.label || '',
-      llm_model: presets?.llm[0]?.name || '',
-      llm_small_model: presets?.small[0]?.name || '',
-      embedding_model: presets?.embedding[0]?.name || '',
-      embedding_dimensions: presets?.embedding[0]?.dimension
-        ? String(presets.embedding[0].dimension)
-        : '',
-      reranker_model: presets?.reranker[0]?.name || '',
+      llm_model: models?.chat[0] || '',
+      llm_small_model: models?.chat.find(m => m.includes('mini') || m.includes('small') || m.includes('flash') || m.includes('haiku')) || models?.chat[1] || '',
+      embedding_model: models?.embedding[0] || '',
+      embedding_dimensions: '1536', // Default, user can change
+      reranker_model: models?.rerank[0] || '',
     }));
+    
+    // Reset custom model mode when switching provider
+    setUseCustomModel({
+      llm: false,
+      small: false,
+      embedding: false,
+      reranker: false,
+    });
     setTestResult(null);
   };
 
@@ -809,7 +520,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           value={formData.api_key}
                           onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
                           className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
-                          placeholder={PROVIDERS.find((p) => p.value === formData.provider_type)?.apiKeyPlaceholder || 'sk-...'}
+                          placeholder={
+                            PROVIDERS.find((p) => p.value === formData.provider_type)
+                              ?.apiKeyPlaceholder || 'sk-...'
+                          }
                         />
                         <button
                           onClick={handleTestConnection}
@@ -817,7 +531,11 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           className="px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors disabled:opacity-50 font-medium"
                         >
                           {isTesting ? (
-                            <MaterialIcon name="progress_activity" size={18} className="animate-spin" />
+                            <MaterialIcon
+                              name="progress_activity"
+                              size={18}
+                              className="animate-spin"
+                            />
                           ) : (
                             'Test'
                           )}
@@ -856,62 +574,183 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
             {/* Step 3: Models */}
             {currentStep === 'models' && (
               <div className="space-y-4">
+                {isLoadingModels && (
+                  <div className="flex items-center gap-2 text-sm text-slate-500 mb-2">
+                    <MaterialIcon name="sync" size={16} className="animate-spin" />
+                    Fetching available models...
+                  </div>
+                )}
+                
+                {/* Primary LLM Model */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                     Primary LLM Model
                   </label>
-                  <select
-                    value={formData.llm_model}
-                    onChange={(e) => setFormData({ ...formData, llm_model: e.target.value })}
-                    className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
-                  >
-                    {MODEL_PRESETS[formData.provider_type]?.llm.map((m) => (
-                      <option key={m.name} value={m.name}>
-                        {m.name} - {m.description}
-                      </option>
-                    ))}
-                  </select>
+                  {useCustomModel.llm ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={formData.llm_model}
+                        onChange={(e) => setFormData({ ...formData, llm_model: e.target.value })}
+                        placeholder="Enter custom model name"
+                        className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUseCustomModel({ ...useCustomModel, llm: false });
+                          setFormData({
+                            ...formData,
+                            llm_model: availableModels.chat[0] || '',
+                          });
+                        }}
+                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                        title="Use preset model"
+                      >
+                        <MaterialIcon name="list" size={18} />
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={formData.llm_model}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '__custom__') {
+                          setUseCustomModel({ ...useCustomModel, llm: true });
+                          setFormData({ ...formData, llm_model: '' });
+                        } else {
+                          setFormData({ ...formData, llm_model: value });
+                        }
+                      }}
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                      disabled={isLoadingModels}
+                    >
+                      {availableModels.chat.length === 0 && !isLoadingModels && (
+                         <option value="" disabled>No models available</option>
+                      )}
+                      {availableModels.chat.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                      <option value="__custom__">Custom model name...</option>
+                    </select>
+                  )}
                 </div>
 
+                {/* Small/Fast Model */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                     Small/Fast Model (Optional)
                   </label>
-                  <select
-                    value={formData.llm_small_model}
-                    onChange={(e) =>
-                      setFormData({ ...formData, llm_small_model: e.target.value })
-                    }
-                    className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
-                  >
-                    <option value="">None</option>
-                    {MODEL_PRESETS[formData.provider_type]?.small.map((m) => (
-                      <option key={m.name} value={m.name}>
-                        {m.name} - {m.description}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {MODEL_PRESETS[formData.provider_type]?.embedding && MODEL_PRESETS[formData.provider_type].embedding.length > 0 && (
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                      Embedding Model (Optional)
-                    </label>
+                  {useCustomModel.small ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={formData.llm_small_model}
+                        onChange={(e) =>
+                          setFormData({ ...formData, llm_small_model: e.target.value })
+                        }
+                        placeholder="Enter custom model name"
+                        className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUseCustomModel({ ...useCustomModel, small: false });
+                          setFormData({
+                            ...formData,
+                            llm_small_model: availableModels.chat[0] || '',
+                          });
+                        }}
+                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                        title="Use preset model"
+                      >
+                        <MaterialIcon name="list" size={18} />
+                      </button>
+                    </div>
+                  ) : (
                     <select
-                      value={formData.embedding_model}
-                      onChange={(e) => setFormData({ ...formData, embedding_model: e.target.value })}
+                      value={formData.llm_small_model}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '__custom__') {
+                          setUseCustomModel({ ...useCustomModel, small: true });
+                          setFormData({ ...formData, llm_small_model: '' });
+                        } else {
+                          setFormData({ ...formData, llm_small_model: value });
+                        }
+                      }}
                       className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                      disabled={isLoadingModels}
                     >
                       <option value="">None</option>
-                      {MODEL_PRESETS[formData.provider_type].embedding.map((m) => (
-                        <option key={m.name} value={m.name}>
-                          {m.name} ({m.dimension}d)
+                      {availableModels.chat.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
                         </option>
                       ))}
+                      <option value="__custom__">Custom model name...</option>
                     </select>
-                  </div>
-                )}
+                  )}
+                </div>
+
+                {/* Embedding Model */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Embedding Model (Optional)
+                  </label>
+                  {useCustomModel.embedding ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={formData.embedding_model}
+                        onChange={(e) =>
+                          setFormData({ ...formData, embedding_model: e.target.value })
+                        }
+                        placeholder="Enter custom model name"
+                        className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUseCustomModel({ ...useCustomModel, embedding: false });
+                          setFormData({
+                            ...formData,
+                            embedding_model: availableModels.embedding[0] || '',
+                          });
+                        }}
+                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                        title="Use preset model"
+                      >
+                        <MaterialIcon name="list" size={18} />
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={formData.embedding_model}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '__custom__') {
+                          setUseCustomModel({ ...useCustomModel, embedding: true });
+                          setFormData({ ...formData, embedding_model: '' });
+                        } else {
+                          setFormData({ ...formData, embedding_model: value });
+                        }
+                      }}
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                      disabled={isLoadingModels}
+                    >
+                      <option value="">None</option>
+                      {availableModels.embedding.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                      <option value="__custom__">Custom model name...</option>
+                    </select>
+                  )}
+                </div>
               </div>
             )}
 
@@ -932,23 +771,56 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                   <div className="border-t border-slate-200 dark:border-slate-600 pt-3 space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-slate-500">Primary Model:</span>
-                      <span className="font-medium text-slate-900 dark:text-white">
+                      <span
+                        className={`font-medium ${
+                          useCustomModel.llm
+                            ? 'text-amber-600 dark:text-amber-400'
+                            : 'text-slate-900 dark:text-white'
+                        }`}
+                      >
                         {formData.llm_model}
+                        {useCustomModel.llm && (
+                          <span className="ml-1.5 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
+                            Custom
+                          </span>
+                        )}
                       </span>
                     </div>
                     {formData.llm_small_model && (
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-500">Small Model:</span>
-                        <span className="font-medium text-slate-900 dark:text-white">
+                        <span
+                          className={`font-medium ${
+                            useCustomModel.small
+                              ? 'text-amber-600 dark:text-amber-400'
+                              : 'text-slate-900 dark:text-white'
+                          }`}
+                        >
                           {formData.llm_small_model}
+                          {useCustomModel.small && (
+                            <span className="ml-1.5 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
+                              Custom
+                            </span>
+                          )}
                         </span>
                       </div>
                     )}
                     {formData.embedding_model && (
                       <div className="flex justify-between text-sm">
                         <span className="text-slate-500">Embedding:</span>
-                        <span className="font-medium text-slate-900 dark:text-white">
+                        <span
+                          className={`font-medium ${
+                            useCustomModel.embedding
+                              ? 'text-amber-600 dark:text-amber-400'
+                              : 'text-slate-900 dark:text-white'
+                          }`}
+                        >
                           {formData.embedding_model}
+                          {useCustomModel.embedding && (
+                            <span className="ml-1.5 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
+                              Custom
+                            </span>
+                          )}
                         </span>
                       </div>
                     )}
@@ -977,7 +849,12 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
           {/* Footer */}
           <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex items-center justify-between">
             <button
-              onClick={currentStep === 'provider' ? onClose : () => setCurrentStep(steps[steps.findIndex((s) => s.key === currentStep) - 1].key)}
+              onClick={
+                currentStep === 'provider'
+                  ? onClose
+                  : () =>
+                      setCurrentStep(steps[steps.findIndex((s) => s.key === currentStep) - 1].key)
+              }
               className="px-4 py-2 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
             >
               {currentStep === 'provider' ? 'Cancel' : 'Back'}
@@ -1001,7 +878,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 </button>
               ) : (
                 <button
-                  onClick={() => setCurrentStep(steps[steps.findIndex((s) => s.key === currentStep) + 1].key)}
+                  onClick={() =>
+                    setCurrentStep(steps[steps.findIndex((s) => s.key === currentStep) + 1].key)
+                  }
                   disabled={!canProceed()}
                   className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >

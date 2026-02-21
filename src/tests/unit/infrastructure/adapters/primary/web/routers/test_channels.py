@@ -7,18 +7,20 @@ Tests cover:
 - Encryption of credentials (P0-SEC-1)
 """
 
-import pytest
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.primary.web.routers.channels import (
-    router,
     ChannelConfigCreate,
-    ChannelConfigUpdate,
     ChannelConfigResponse,
+    ChannelConfigUpdate,
+    list_all_connection_status,
+    router,
     to_response,
     verify_project_access,
 )
@@ -97,6 +99,9 @@ class TestRouterRegistration:
         assert "/channels/projects/{project_id}/configs" in routes
         assert "/channels/configs/{config_id}" in routes
         assert "/channels/configs/{config_id}/test" in routes
+        assert "/channels/projects/{project_id}/observability/summary" in routes
+        assert "/channels/projects/{project_id}/observability/outbox" in routes
+        assert "/channels/projects/{project_id}/observability/session-bindings" in routes
 
 
 class TestEndpointAccessibility:
@@ -241,7 +246,6 @@ class TestCredentialEncryption:
     @pytest.mark.asyncio
     async def test_app_secret_encrypted_on_create(self, mock_db_session, mock_current_user):
         """app_secret should be encrypted before storing in database."""
-        from src.infrastructure.adapters.primary.web.routers.channels import create_config
         from src.infrastructure.security.encryption_service import get_encryption_service
 
         encryption_service = get_encryption_service()
@@ -263,7 +267,7 @@ class TestCredentialEncryption:
             mock_repo_class.return_value = mock_repo
 
             # The implementation should encrypt app_secret
-            data = ChannelConfigCreate(
+            ChannelConfigCreate(
                 channel_type="feishu",
                 name="Test Channel",
                 app_secret="my-secret",
@@ -373,14 +377,6 @@ class TestPermissionVerification:
             email="test@example.com",
             hashed_password="hash",
         )
-        # User with 'viewer' role - should not be in the required_role list
-        user_project = UserProject(
-            id="up-123",
-            user_id="user-123",
-            project_id="project-456",
-            role="viewer",
-        )
-
         # When required_role is specified, the query filters by role
         # So if viewer is not in ["owner", "admin"], the query returns None
         mock_result = MagicMock()
@@ -413,3 +409,118 @@ class TestChannelConfigModelConstraints:
                 index_names.append(arg.name)
 
         assert "ix_channel_configs_project_type" in index_names
+
+
+class TestGlobalConnectionStatusAccess:
+    """Test /channels/status admin access behavior."""
+
+    @pytest.mark.asyncio
+    async def test_list_all_connection_status_allows_superuser(self, mock_db_session):
+        """Superuser should pass without relying on missing current_user.role attribute."""
+        current_user = User(
+            id="user-admin",
+            email="admin@example.com",
+            hashed_password="hash",
+            is_superuser=True,
+        )
+        mock_manager = MagicMock()
+        mock_manager.get_all_status.return_value = [
+            {
+                "config_id": "cfg-1",
+                "project_id": "proj-1",
+                "channel_type": "feishu",
+                "status": "connected",
+                "connected": True,
+                "last_heartbeat": None,
+                "last_error": None,
+                "reconnect_attempts": 0,
+            }
+        ]
+
+        with patch(
+            "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+            return_value=mock_manager,
+        ):
+            response = await list_all_connection_status(
+                db=mock_db_session, current_user=current_user
+            )
+
+        assert len(response) == 1
+        assert response[0].config_id == "cfg-1"
+
+    @pytest.mark.asyncio
+    async def test_list_all_connection_status_denies_non_admin(self, mock_db_session):
+        """Non-superuser without admin role should be denied."""
+        current_user = User(
+            id="user-member",
+            email="member@example.com",
+            hashed_password="hash",
+            is_superuser=False,
+        )
+
+        role_count_result = MagicMock()
+        role_count_result.scalar.return_value = 0
+        mock_db_session.execute = AsyncMock(return_value=role_count_result)
+
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc_info:
+            await list_all_connection_status(db=mock_db_session, current_user=current_user)
+
+        assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_list_all_connection_status_allows_global_admin_role(self, mock_db_session):
+        """Global system admin role (tenant_id is null) should be allowed."""
+        current_user = User(
+            id="user-global-admin",
+            email="global-admin@example.com",
+            hashed_password="hash",
+            is_superuser=False,
+        )
+        role_count_result = MagicMock()
+        role_count_result.scalar.return_value = 1
+        mock_db_session.execute = AsyncMock(return_value=role_count_result)
+
+        mock_manager = MagicMock()
+        mock_manager.get_all_status.return_value = []
+
+        with patch(
+            "src.infrastructure.adapters.primary.web.routers.channels.get_channel_manager",
+            return_value=mock_manager,
+        ):
+            response = await list_all_connection_status(
+                db=mock_db_session, current_user=current_user
+            )
+
+        query_sql = str(mock_db_session.execute.call_args.args[0])
+        assert "user_roles.tenant_id IS NULL" in query_sql
+        compiled_params = mock_db_session.execute.call_args.args[0].compile().params
+        role_values = next(
+            (value for key, value in compiled_params.items() if key.startswith("name_")),
+            [],
+        )
+        assert "system_admin" in role_values
+        assert response == []
+
+    @pytest.mark.asyncio
+    async def test_list_all_connection_status_denies_tenant_scoped_admin(self, mock_db_session):
+        """Tenant-scoped admin should not pass global status endpoint authorization."""
+        current_user = User(
+            id="user-tenant-admin",
+            email="tenant-admin@example.com",
+            hashed_password="hash",
+            is_superuser=False,
+        )
+        role_count_result = MagicMock()
+        role_count_result.scalar.return_value = 0
+        mock_db_session.execute = AsyncMock(return_value=role_count_result)
+
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc_info:
+            await list_all_connection_status(db=mock_db_session, current_user=current_user)
+
+        query_sql = str(mock_db_session.execute.call_args.args[0])
+        assert "user_roles.tenant_id IS NULL" in query_sql
+        assert exc_info.value.status_code == 403
