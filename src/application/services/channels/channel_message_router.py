@@ -102,17 +102,18 @@ class ChannelMessageRouter:
             return None
 
         channel_config_id = self._extract_channel_config_id(message)
+        if not channel_config_id:
+            logger.warning(
+                "[MessageRouter] Missing channel_config_id in routing metadata, "
+                "cannot resolve deterministic channel session"
+            )
+            return None
 
-        # Create a composite key for the chat
-        chat_scope = channel_config_id or "default"
-        chat_key = f"{message.project_id}:{message.channel}:{chat_scope}:{message.chat_id}"
-        legacy_chat_key = f"{message.project_id}:{message.channel}:{message.chat_id}"
+        session_key = self._build_session_key(message, channel_config_id)
 
         # Check cache first
-        if chat_key in self._chat_to_conversation:
-            return self._chat_to_conversation[chat_key]
-        if legacy_chat_key in self._chat_to_conversation:
-            return self._chat_to_conversation[legacy_chat_key]
+        if session_key in self._chat_to_conversation:
+            return self._chat_to_conversation[session_key]
 
         # Look up or create conversation in database
         try:
@@ -124,15 +125,13 @@ class ChannelMessageRouter:
                 conversation_id = await self._find_or_create_conversation_db(
                     session=session,
                     message=message,
-                    chat_key=chat_key,
-                    legacy_chat_key=legacy_chat_key,
+                    session_key=session_key,
                     channel_config_id=channel_config_id,
                 )
                 await session.commit()
 
                 if conversation_id:
-                    self._chat_to_conversation[chat_key] = conversation_id
-                    self._chat_to_conversation[legacy_chat_key] = conversation_id
+                    self._chat_to_conversation[session_key] = conversation_id
 
                 return conversation_id
 
@@ -144,8 +143,7 @@ class ChannelMessageRouter:
         self,
         session: "AsyncSession",
         message: Message,
-        chat_key: str,
-        legacy_chat_key: str,
+        session_key: str,
         channel_config_id: Optional[str],
     ) -> Optional[str]:
         """Find or create conversation in database.
@@ -153,7 +151,7 @@ class ChannelMessageRouter:
         Args:
             session: Database session.
             message: The incoming message.
-            chat_key: Composite key for the chat.
+            session_key: Deterministic session key for the chat/thread.
 
         Returns:
             The conversation ID.
@@ -163,46 +161,40 @@ class ChannelMessageRouter:
         from src.infrastructure.adapters.secondary.persistence.channel_models import (
             ChannelConfigModel,
         )
+        from src.infrastructure.adapters.secondary.persistence.channel_repository import (
+            ChannelSessionBindingRepository,
+        )
         from src.infrastructure.adapters.secondary.persistence.models import (
             Conversation,
             Project,
         )
-
-        # Try to find existing conversation with matching metadata
-        # We store the channel chat info in conversation metadata
-        query = select(Conversation).where(
-            Conversation.project_id == message.project_id,
-        )
-        result = await session.execute(query)
-        conversations = result.scalars().all()
-
-        # Look for conversation with matching channel metadata
-        for conv in conversations:
-            if conv.meta:
-                conv_chat_key = conv.meta.get("channel_chat_key")
-                if conv_chat_key in {chat_key, legacy_chat_key}:
-                    return conv.id
 
         project = await session.get(Project, message.project_id)
         if not project:
             logger.error(f"[MessageRouter] Project not found: {message.project_id}")
             return None
 
+        if not channel_config_id:
+            logger.error("[MessageRouter] Missing channel_config_id when creating conversation")
+            return None
+
+        config = await session.get(ChannelConfigModel, channel_config_id)
+        if not config or config.project_id != project.id:
+            logger.error(
+                f"[MessageRouter] Invalid channel config for project routing: {channel_config_id}"
+            )
+            return None
+
+        binding_repo = ChannelSessionBindingRepository(session)
+        existing_binding = await binding_repo.get_by_session_key(project.id, session_key)
+        if existing_binding:
+            conversation = await session.get(Conversation, existing_binding.conversation_id)
+            if conversation:
+                return conversation.id
+
         effective_user_id = project.owner_id
-        if channel_config_id:
-            config = await session.get(ChannelConfigModel, channel_config_id)
-            if config and config.project_id == project.id and config.created_by:
-                effective_user_id = config.created_by
-            elif not config:
-                logger.warning(
-                    f"[MessageRouter] Channel config {channel_config_id} not found, "
-                    "falling back to project owner"
-                )
-            elif config.project_id != project.id:
-                logger.warning(
-                    f"[MessageRouter] Channel config {channel_config_id} does not belong to "
-                    f"project {project.id}; falling back to project owner"
-                )
+        if config.created_by:
+            effective_user_id = config.created_by
 
         # Create new conversation
         title = self._generate_conversation_title(message)
@@ -214,12 +206,13 @@ class ChannelMessageRouter:
             user_id=effective_user_id,
             title=title,
             meta={
-                "channel_chat_key": chat_key,
-                "legacy_channel_chat_key": legacy_chat_key,
+                "channel_session_key": session_key,
                 "channel_type": message.channel,
                 "channel_config_id": channel_config_id,
                 "chat_id": message.chat_id,
                 "chat_type": message.chat_type.value,
+                "thread_id": self._extract_thread_id(message),
+                "topic_id": self._extract_topic_id(message),
                 "sender_id": message.sender.id,
                 "sender_name": message.sender.name,
             },
@@ -227,6 +220,17 @@ class ChannelMessageRouter:
 
         session.add(new_conversation)
         await session.flush()
+        await binding_repo.upsert(
+            project_id=project.id,
+            channel_config_id=config.id,
+            channel_type=message.channel,
+            chat_id=message.chat_id,
+            chat_type=message.chat_type.value,
+            thread_id=self._extract_thread_id(message),
+            topic_id=self._extract_topic_id(message),
+            session_key=session_key,
+            conversation_id=new_conversation.id,
+        )
 
         logger.info(
             f"[MessageRouter] Created new conversation {new_conversation.id} "
@@ -622,6 +626,8 @@ class ChannelMessageRouter:
             "mentions": message.mentions,
             "channel_config_id": self._extract_channel_config_id(message),
             "channel_message_id": self._extract_channel_message_id(message),
+            "thread_id": self._extract_thread_id(message),
+            "topic_id": self._extract_topic_id(message),
         }
 
     async def _get_conversation_channel_config_id(self, conversation_id: str) -> Optional[str]:
@@ -630,9 +636,16 @@ class ChannelMessageRouter:
             from src.infrastructure.adapters.secondary.persistence.database import (
                 async_session_factory,
             )
+            from src.infrastructure.adapters.secondary.persistence.channel_repository import (
+                ChannelSessionBindingRepository,
+            )
             from src.infrastructure.adapters.secondary.persistence.models import Conversation
 
             async with async_session_factory() as session:
+                binding_repo = ChannelSessionBindingRepository(session)
+                binding = await binding_repo.get_by_conversation_id(conversation_id)
+                if binding:
+                    return binding.channel_config_id
                 conversation = await session.get(Conversation, conversation_id)
                 if conversation and isinstance(conversation.meta, dict):
                     config_id = conversation.meta.get("channel_config_id")
@@ -643,6 +656,58 @@ class ChannelMessageRouter:
                 "[MessageRouter] Failed to load channel_config_id from conversation metadata: "
                 f"{e}"
             )
+        return None
+
+    def _build_session_key(self, message: Message, channel_config_id: str) -> str:
+        """Build deterministic session key for channel routing."""
+        scope = "dm" if message.chat_type == ChatType.P2P else "group"
+        session_key = (
+            f"project:{message.project_id}:channel:{message.channel}:config:{channel_config_id}:"
+            f"{scope}:{message.chat_id}"
+        )
+        topic_id = self._extract_topic_id(message)
+        if topic_id:
+            session_key = f"{session_key}:topic:{topic_id}"
+        thread_id = self._extract_thread_id(message)
+        if thread_id:
+            session_key = f"{session_key}:thread:{thread_id}"
+        return session_key
+
+    def _extract_thread_id(self, message: Message) -> Optional[str]:
+        """Extract thread identifier from channel message payload."""
+        if not isinstance(message.raw_data, dict):
+            return None
+        routing_meta = message.raw_data.get("_routing")
+        if isinstance(routing_meta, dict):
+            routing_thread_id = routing_meta.get("thread_id")
+            if isinstance(routing_thread_id, str) and routing_thread_id:
+                return routing_thread_id
+        event = message.raw_data.get("event")
+        if isinstance(event, dict):
+            event_message = event.get("message")
+            if isinstance(event_message, dict):
+                for key in ("thread_id", "message_thread_id"):
+                    value = event_message.get(key)
+                    if isinstance(value, str) and value:
+                        return value
+        return None
+
+    def _extract_topic_id(self, message: Message) -> Optional[str]:
+        """Extract topic identifier from channel message payload."""
+        if not isinstance(message.raw_data, dict):
+            return None
+        routing_meta = message.raw_data.get("_routing")
+        if isinstance(routing_meta, dict):
+            routing_topic_id = routing_meta.get("topic_id")
+            if isinstance(routing_topic_id, str) and routing_topic_id:
+                return routing_topic_id
+        event = message.raw_data.get("event")
+        if isinstance(event, dict):
+            event_message = event.get("message")
+            if isinstance(event_message, dict):
+                value = event_message.get("topic_id")
+                if isinstance(value, str) and value:
+                    return value
         return None
 
 

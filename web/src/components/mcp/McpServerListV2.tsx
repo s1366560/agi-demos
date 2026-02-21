@@ -86,6 +86,9 @@ export const McpServerListV2: React.FC = () => {
 
   // Computed stats
   const stats = useMemo(() => {
+    // Convert apps record to array for filtering
+    const appsArray = Object.values(apps);
+    
     const serverStats: ServerStats = {
       total: servers.length,
       running: 0,
@@ -103,10 +106,10 @@ export const McpServerListV2: React.FC = () => {
     });
 
     const appStats: AppStats = {
-      total: apps.length,
-      ready: apps.filter((a) => a.status === 'Ready').length,
-      error: apps.filter((a) => a.status === 'Error').length,
-      disabled: apps.filter((a) => a.enabled === false).length,
+      total: appsArray.length,
+      ready: appsArray.filter((a) => a.status === 'Ready').length,
+      error: appsArray.filter((a) => a.status === 'Error').length,
+      disabled: appsArray.filter((a) => a.enabled === false).length,
     };
 
     const toolStats: ToolStats = {
