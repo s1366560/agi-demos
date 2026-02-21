@@ -745,6 +745,37 @@ class FeishuAdapter:
         except ImportError:
             raise ImportError("Feishu SDK not installed")
 
+    async def health_check(self) -> bool:
+        """Verify connection is alive by calling Feishu bot info API."""
+        try:
+            from lark_oapi import Client
+
+            client = Client(
+                app_id=self._config.app_id,
+                app_secret=self._config.app_secret,
+            )
+            response = client.bot.bot_info.get()
+            code = getattr(response, "code", None)
+            if code is None and isinstance(response, dict):
+                code = response.get("code")
+            return code == 0
+        except Exception as e:
+            logger.warning(f"[Feishu] Health check failed: {e}")
+            return False
+
+    async def send_markdown_card(
+        self,
+        to: str,
+        markdown: str,
+        reply_to: Optional[str] = None,
+    ) -> str:
+        """Send markdown content as an interactive card."""
+        card = {
+            "config": {"wide_screen_mode": True},
+            "elements": [{"tag": "markdown", "content": markdown}],
+        }
+        return await self.send_card(to, card, reply_to)
+
 
 # Make FeishuAdapter implement ChannelAdapter protocol
 if hasattr(FeishuAdapter, "__init__"):

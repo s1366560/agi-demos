@@ -180,6 +180,19 @@ class ChannelAdapter(Protocol):
         """Send an interactive card message."""
         ...
 
+    async def health_check(self) -> bool:
+        """Verify the connection is alive (e.g. API ping). Returns True if healthy."""
+        ...
+
+    async def send_markdown_card(
+        self,
+        to: str,
+        markdown: str,
+        reply_to: Optional[str] = None,
+    ) -> str:
+        """Send markdown content as an interactive card."""
+        ...
+
 
 # Domain Events
 

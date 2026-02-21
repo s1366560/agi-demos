@@ -4,7 +4,7 @@ import logging
 from typing import Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import and_, desc, func, nullslast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -117,6 +117,14 @@ class ChannelConfigCreate(BaseModel):
     domain: Optional[str] = Field("feishu", description="Domain")
     extra_settings: Optional[dict] = Field(None, description="Extra settings")
     description: Optional[str] = Field(None, description="Description")
+
+    @model_validator(mode="after")
+    def _validate_webhook_requires_token(self) -> "ChannelConfigCreate":
+        if self.connection_mode == "webhook" and not self.verification_token:
+            raise ValueError(
+                "verification_token is required when connection_mode is 'webhook'"
+            )
+        return self
 
 
 class ChannelConfigUpdate(BaseModel):

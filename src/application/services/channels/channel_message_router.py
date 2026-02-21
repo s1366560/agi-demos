@@ -7,6 +7,7 @@ This module provides the routing logic to bridge incoming channel messages
 import collections
 import logging
 import math
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -660,7 +661,8 @@ class ChannelMessageRouter:
                 )
                 return
 
-            sent_message_id = await connection.adapter.send_text(
+            sent_message_id = await self._smart_send(
+                connection.adapter,
                 message.chat_id,
                 response,
                 reply_to=inbound_message_id,
@@ -683,6 +685,35 @@ class ChannelMessageRouter:
             if outbox_id:
                 await self._mark_outbox_failed(outbox_id, str(e))
             logger.error(f"[MessageRouter] Error sending response: {e}")
+
+    # Patterns that indicate rich markdown (code fences, tables, headers, lists)
+    _RICH_MD_RE = re.compile(
+        r"```|"                # code fences
+        r"^\|.*\|.*\|$|"       # table rows
+        r"^#{1,6}\s|"          # headings
+        r"^\s*[-*]\s|"         # unordered lists
+        r"^\s*\d+\.\s",        # ordered lists
+        re.MULTILINE,
+    )
+
+    async def _smart_send(
+        self,
+        adapter: Any,
+        chat_id: str,
+        text: str,
+        reply_to: Optional[str] = None,
+    ) -> Optional[str]:
+        """Send response as card when it contains rich markdown, otherwise as text."""
+        if self._contains_rich_markdown(text) and hasattr(adapter, "send_markdown_card"):
+            try:
+                return await adapter.send_markdown_card(chat_id, text, reply_to=reply_to)
+            except Exception:
+                logger.debug("[MessageRouter] Card send failed, falling back to text")
+        return await adapter.send_text(chat_id, text, reply_to=reply_to)
+
+    def _contains_rich_markdown(self, text: str) -> bool:
+        """Return True if text contains markdown structures that benefit from card rendering."""
+        return bool(self._RICH_MD_RE.search(text))
 
     async def _store_outbound_message_history(
         self,

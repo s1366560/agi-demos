@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 MAX_RECONNECT_DELAY = 60  # Maximum reconnect delay in seconds
 INITIAL_RECONNECT_DELAY = 2  # Initial reconnect delay in seconds
 HEALTH_CHECK_INTERVAL = 30  # Health check interval in seconds
+API_PING_CYCLE = 10  # Ping Feishu API every Nth health check cycle
 MAX_RECONNECT_ATTEMPTS = 20  # Max attempts before circuit breaker opens
 
 
@@ -554,14 +555,26 @@ class ChannelConnectionManager:
 
     async def _health_check_loop(self) -> None:
         """Periodic health check for all connections."""
+        cycle = 0
         while self._started:
             try:
                 await asyncio.sleep(HEALTH_CHECK_INTERVAL)
+                cycle += 1
+                deep_ping = (cycle % API_PING_CYCLE == 0)
 
                 for connection in list(self._connections.values()):
                     if connection.status == "connected":
-                        # Update heartbeat if connected
                         if connection.adapter.connected:
+                            if deep_ping and hasattr(connection.adapter, "health_check"):
+                                alive = await connection.adapter.health_check()
+                                if not alive:
+                                    logger.warning(
+                                        "[ChannelManager] API ping failed for %s, "
+                                        "marking disconnected",
+                                        connection.config_id,
+                                    )
+                                    connection.status = "disconnected"
+                                    continue
                             connection.last_heartbeat = datetime.now(timezone.utc)
                         else:
                             # Connection lost, will be handled by connection loop
