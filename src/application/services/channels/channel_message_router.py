@@ -219,7 +219,7 @@ class ChannelMessageRouter:
 
         session.add(new_conversation)
         await session.flush()
-        await binding_repo.upsert(
+        binding = await binding_repo.upsert(
             project_id=project.id,
             channel_config_id=config.id,
             channel_type=message.channel,
@@ -230,6 +230,10 @@ class ChannelMessageRouter:
             session_key=session_key,
             conversation_id=new_conversation.id,
         )
+        if binding.conversation_id != new_conversation.id:
+            await session.delete(new_conversation)
+            await session.flush()
+            return binding.conversation_id
 
         logger.info(
             f"[MessageRouter] Created new conversation {new_conversation.id} "
@@ -438,6 +442,7 @@ class ChannelMessageRouter:
             conversation_id: The associated conversation ID.
             response: The agent's response text.
         """
+        outbox_id: Optional[str] = None
         try:
             from src.infrastructure.adapters.primary.web.startup import get_channel_manager
 
@@ -468,11 +473,20 @@ class ChannelMessageRouter:
                 return
 
             inbound_message_id = self._extract_channel_message_id(message)
+            outbox_id = await self._create_outbox_record(
+                message=message,
+                conversation_id=conversation_id,
+                channel_config_id=channel_config_id,
+                response=response,
+                reply_to=inbound_message_id,
+            )
             sent_message_id = await connection.adapter.send_text(
                 message.chat_id,
                 response,
                 reply_to=inbound_message_id,
             )
+            if outbox_id:
+                await self._mark_outbox_sent(outbox_id, sent_message_id)
             logger.info(
                 f"[MessageRouter] Sent response to chat {message.chat_id}, "
                 f"message_id={sent_message_id}"
@@ -486,6 +500,8 @@ class ChannelMessageRouter:
             )
 
         except Exception as e:
+            if outbox_id:
+                await self._mark_outbox_failed(outbox_id, str(e))
             logger.error(f"[MessageRouter] Error sending response: {e}")
 
     async def _store_outbound_message_history(
@@ -538,6 +554,88 @@ class ChannelMessageRouter:
 
         except Exception as e:
             logger.warning(f"[MessageRouter] Failed to store outbound message history: {e}")
+
+    async def _create_outbox_record(
+        self,
+        message: Message,
+        conversation_id: str,
+        channel_config_id: str,
+        response: str,
+        reply_to: Optional[str],
+    ) -> Optional[str]:
+        """Create pending outbox record for outbound channel response."""
+        try:
+            from src.infrastructure.adapters.secondary.persistence.channel_models import (
+                ChannelOutboxModel,
+            )
+            from src.infrastructure.adapters.secondary.persistence.channel_repository import (
+                ChannelOutboxRepository,
+            )
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+
+            async with async_session_factory() as session:
+                repo = ChannelOutboxRepository(session)
+                outbox = ChannelOutboxModel(
+                    project_id=message.project_id or "",
+                    channel_config_id=channel_config_id,
+                    conversation_id=conversation_id,
+                    chat_id=message.chat_id,
+                    reply_to_channel_message_id=reply_to,
+                    content_text=response,
+                    status="pending",
+                    metadata_json={
+                        "channel": message.channel,
+                        "chat_type": message.chat_type.value,
+                    },
+                )
+                await repo.create(outbox)
+                await session.commit()
+                return outbox.id
+        except Exception as e:
+            logger.warning(f"[MessageRouter] Failed to create outbox record: {e}")
+            return None
+
+    async def _mark_outbox_sent(
+        self,
+        outbox_id: str,
+        sent_channel_message_id: Optional[str],
+    ) -> None:
+        """Mark outbox record as sent."""
+        try:
+            from src.infrastructure.adapters.secondary.persistence.channel_repository import (
+                ChannelOutboxRepository,
+            )
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+
+            async with async_session_factory() as session:
+                repo = ChannelOutboxRepository(session)
+                updated = await repo.mark_sent(outbox_id, sent_channel_message_id)
+                if updated:
+                    await session.commit()
+        except Exception as e:
+            logger.warning(f"[MessageRouter] Failed to mark outbox sent: {e}")
+
+    async def _mark_outbox_failed(self, outbox_id: str, error_message: str) -> None:
+        """Mark outbox record as failed/dead-letter."""
+        try:
+            from src.infrastructure.adapters.secondary.persistence.channel_repository import (
+                ChannelOutboxRepository,
+            )
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+
+            async with async_session_factory() as session:
+                repo = ChannelOutboxRepository(session)
+                updated = await repo.mark_failed(outbox_id, error_message)
+                if updated:
+                    await session.commit()
+        except Exception as e:
+            logger.warning(f"[MessageRouter] Failed to mark outbox failed: {e}")
 
     async def _resolve_channel_config_id(
         self,

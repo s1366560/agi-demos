@@ -23,7 +23,7 @@ export const McpToolsDrawer: React.FC<McpToolsDrawerProps> = ({ open, server, on
       title={server ? `${server.name} - Tools` : 'Server Tools'}
       open={open}
       onClose={onClose}
-      width={480}
+      size="large"
       destroyOnClose
     >
       {tools.length === 0 ? (

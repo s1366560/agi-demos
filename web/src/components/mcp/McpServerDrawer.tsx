@@ -79,7 +79,6 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
       setJsonConfig(JSON.stringify(server.transport_config, null, 2));
       setJsonError(null);
     } else {
-      form.resetFields();
       form.setFieldsValue({
         server_type: 'stdio',
         enabled: true,
@@ -154,7 +153,7 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
       title={isEdit ? 'Edit MCP Server' : 'Create MCP Server'}
       open={open}
       onClose={onClose}
-      width={520}
+      size="large"
       destroyOnClose
       extra={
         <Button type="primary" onClick={handleSubmit} loading={isSubmitting}>
@@ -162,7 +161,7 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
         </Button>
       }
     >
-      <Form form={form} layout="vertical">
+      <Form form={form} layout="vertical" onValuesChange={() => {}}>
         <Form.Item
           label="Project"
           name="project_id"

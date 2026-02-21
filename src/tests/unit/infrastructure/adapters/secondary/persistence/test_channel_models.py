@@ -11,6 +11,7 @@ from sqlalchemy import inspect
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelConfigModel,
     ChannelMessageModel,
+    ChannelOutboxModel,
     ChannelSessionBindingModel,
 )
 
@@ -230,3 +231,36 @@ class TestChannelSessionBindingModel:
         index_names = [arg.name for arg in table_args if hasattr(arg, "name")]
         assert "ix_channel_session_bindings_project_chat" in index_names
         assert "ix_channel_session_bindings_config_chat" in index_names
+
+
+class TestChannelOutboxModel:
+    """Tests for ChannelOutboxModel."""
+
+    def test_table_name(self):
+        """ChannelOutboxModel should have correct table name."""
+        assert ChannelOutboxModel.__tablename__ == "channel_outbox"
+
+    def test_required_fields(self):
+        """ChannelOutboxModel should have required delivery fields."""
+        mapper = inspect(ChannelOutboxModel)
+        column_names = {col.key for col in mapper.columns}
+        required_fields = {
+            "id",
+            "project_id",
+            "channel_config_id",
+            "conversation_id",
+            "chat_id",
+            "content_text",
+            "status",
+            "attempt_count",
+            "max_attempts",
+        }
+        for field in required_fields:
+            assert field in column_names, f"Missing required field: {field}"
+
+    def test_indexes(self):
+        """ChannelOutboxModel should define retry and project-time indexes."""
+        table_args = ChannelOutboxModel.__table_args__
+        index_names = [arg.name for arg in table_args if hasattr(arg, "name")]
+        assert "ix_channel_outbox_status_retry" in index_names
+        assert "ix_channel_outbox_project_created" in index_names

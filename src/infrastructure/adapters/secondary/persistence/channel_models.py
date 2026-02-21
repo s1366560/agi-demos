@@ -332,3 +332,71 @@ class ChannelSessionBindingModel(IdGeneratorMixin, Base):
             "chat_id",
         ),
     )
+
+
+class ChannelOutboxModel(IdGeneratorMixin, Base):
+    """Outbound message queue for reliable channel delivery."""
+
+    __tablename__ = "channel_outbox"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    channel_config_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("channel_configs.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    chat_id: Mapped[str] = mapped_column(String, nullable=False)
+    reply_to_channel_message_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    content_text: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="pending",
+        nullable=False,
+        comment="pending | sent | failed | dead_letter",
+    )
+    attempt_count: Mapped[int] = mapped_column(default=0, nullable=False)
+    max_attempts: Mapped[int] = mapped_column(default=3, nullable=False)
+    sent_channel_message_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    next_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        onupdate=func.now(),
+        nullable=True,
+    )
+
+    project = relationship("Project")
+    channel_config = relationship("ChannelConfigModel")
+    conversation = relationship("Conversation")
+
+    __table_args__ = (
+        Index(
+            "ix_channel_outbox_status_retry",
+            "status",
+            "next_retry_at",
+        ),
+        Index(
+            "ix_channel_outbox_project_created",
+            "project_id",
+            "created_at",
+        ),
+    )

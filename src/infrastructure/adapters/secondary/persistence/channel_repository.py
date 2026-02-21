@@ -1,19 +1,21 @@
 """Channel configuration repository."""
 
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelConfigModel,
+    ChannelOutboxModel,
     ChannelSessionBindingModel,
 )
 
 if TYPE_CHECKING:
     from src.infrastructure.adapters.secondary.persistence.channel_models import (
         ChannelMessageModel,
-        ChannelSessionBindingModel,
     )
 
 
@@ -184,17 +186,9 @@ class ChannelSessionBindingRepository:
         thread_id: Optional[str] = None,
         topic_id: Optional[str] = None,
     ) -> ChannelSessionBindingModel:
-        """Create or update a deterministic session binding."""
+        """Create a deterministic session binding if absent."""
         existing = await self.get_by_session_key(project_id, session_key)
         if existing:
-            existing.channel_config_id = channel_config_id
-            existing.conversation_id = conversation_id
-            existing.channel_type = channel_type
-            existing.chat_id = chat_id
-            existing.chat_type = chat_type
-            existing.thread_id = thread_id
-            existing.topic_id = topic_id
-            await self._session.flush()
             return existing
 
         binding = ChannelSessionBindingModel(
@@ -210,6 +204,66 @@ class ChannelSessionBindingRepository:
         )
         if not binding.id:
             binding.id = ChannelSessionBindingModel.generate_id()
-        self._session.add(binding)
+        try:
+            async with self._session.begin_nested():
+                self._session.add(binding)
+                await self._session.flush()
+            return binding
+        except IntegrityError:
+            existing = await self.get_by_session_key(project_id, session_key)
+            if existing:
+                return existing
+            raise
+
+
+class ChannelOutboxRepository:
+    """Repository for outbound delivery queue records."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def create(self, item: ChannelOutboxModel) -> ChannelOutboxModel:
+        """Create a new outbox message record."""
+        if not item.id:
+            item.id = ChannelOutboxModel.generate_id()
+        self._session.add(item)
         await self._session.flush()
-        return binding
+        return item
+
+    async def get_by_id(self, outbox_id: str) -> Optional[ChannelOutboxModel]:
+        """Get outbox record by ID."""
+        result = await self._session.execute(
+            select(ChannelOutboxModel).where(ChannelOutboxModel.id == outbox_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def mark_sent(self, outbox_id: str, sent_channel_message_id: Optional[str]) -> bool:
+        """Mark outbox message as sent."""
+        outbox_item = await self.get_by_id(outbox_id)
+        if not outbox_item:
+            return False
+        outbox_item.status = "sent"
+        outbox_item.sent_channel_message_id = sent_channel_message_id
+        outbox_item.last_error = None
+        outbox_item.next_retry_at = None
+        await self._session.flush()
+        return True
+
+    async def mark_failed(self, outbox_id: str, error_message: str) -> bool:
+        """Mark outbox message as failed/dead-letter with retry backoff."""
+        outbox_item = await self.get_by_id(outbox_id)
+        if not outbox_item:
+            return False
+
+        attempts = outbox_item.attempt_count + 1
+        outbox_item.attempt_count = attempts
+        outbox_item.last_error = error_message
+        if attempts >= outbox_item.max_attempts:
+            outbox_item.status = "dead_letter"
+            outbox_item.next_retry_at = None
+        else:
+            outbox_item.status = "failed"
+            retry_seconds = min(2**attempts, 300)
+            outbox_item.next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=retry_seconds)
+        await self._session.flush()
+        return True

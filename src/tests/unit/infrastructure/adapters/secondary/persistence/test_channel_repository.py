@@ -15,11 +15,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelConfigModel,
     ChannelMessageModel,
+    ChannelOutboxModel,
     ChannelSessionBindingModel,
 )
 from src.infrastructure.adapters.secondary.persistence.channel_repository import (
     ChannelConfigRepository,
     ChannelMessageRepository,
+    ChannelOutboxRepository,
     ChannelSessionBindingRepository,
 )
 
@@ -393,8 +395,8 @@ class TestChannelSessionBindingRepository:
         mock_session.flush.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_upsert_updates_existing_binding(self, mock_session, sample_binding):
-        """Upsert should update conversation_id when binding already exists."""
+    async def test_upsert_returns_existing_binding(self, mock_session, sample_binding):
+        """Upsert should preserve existing canonical binding."""
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = sample_binding
         mock_session.execute.return_value = mock_result
@@ -411,4 +413,88 @@ class TestChannelSessionBindingRepository:
         )
 
         assert result is sample_binding
-        assert sample_binding.conversation_id == "conv-2"
+        assert sample_binding.conversation_id == "conv-1"
+
+
+class TestChannelOutboxRepository:
+    """Tests for ChannelOutboxRepository."""
+
+    @pytest.fixture
+    def mock_session(self):
+        """Create a mock database session."""
+        session = MagicMock(spec=AsyncSession)
+        session.execute = AsyncMock()
+        session.add = MagicMock()
+        session.flush = AsyncMock()
+        return session
+
+    @pytest.fixture
+    def sample_outbox(self):
+        """Create a sample outbox record."""
+        return ChannelOutboxModel(
+            id="outbox-1",
+            project_id="project-1",
+            channel_config_id="config-1",
+            conversation_id="conv-1",
+            chat_id="chat-1",
+            content_text="hello",
+            status="pending",
+            attempt_count=0,
+            max_attempts=3,
+        )
+
+    @pytest.mark.asyncio
+    async def test_create_outbox_record(self, mock_session, sample_outbox):
+        """Should create outbox record."""
+        repo = ChannelOutboxRepository(mock_session)
+        result = await repo.create(sample_outbox)
+
+        assert result == sample_outbox
+        mock_session.add.assert_called_once_with(sample_outbox)
+        mock_session.flush.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_mark_sent(self, mock_session, sample_outbox):
+        """Should mark outbox as sent and clear retry fields."""
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = sample_outbox
+        mock_session.execute.return_value = mock_result
+
+        repo = ChannelOutboxRepository(mock_session)
+        result = await repo.mark_sent("outbox-1", "sent-123")
+
+        assert result is True
+        assert sample_outbox.status == "sent"
+        assert sample_outbox.sent_channel_message_id == "sent-123"
+        assert sample_outbox.next_retry_at is None
+
+    @pytest.mark.asyncio
+    async def test_mark_failed_sets_retry(self, mock_session, sample_outbox):
+        """Should increment attempts and mark as failed before max attempts."""
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = sample_outbox
+        mock_session.execute.return_value = mock_result
+
+        repo = ChannelOutboxRepository(mock_session)
+        result = await repo.mark_failed("outbox-1", "network timeout")
+
+        assert result is True
+        assert sample_outbox.status == "failed"
+        assert sample_outbox.attempt_count == 1
+        assert sample_outbox.next_retry_at is not None
+
+    @pytest.mark.asyncio
+    async def test_mark_failed_dead_letter_after_max_attempts(self, mock_session, sample_outbox):
+        """Should move record to dead_letter when max attempts reached."""
+        sample_outbox.attempt_count = 2
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = sample_outbox
+        mock_session.execute.return_value = mock_result
+
+        repo = ChannelOutboxRepository(mock_session)
+        result = await repo.mark_failed("outbox-1", "permanent failure")
+
+        assert result is True
+        assert sample_outbox.status == "dead_letter"
+        assert sample_outbox.attempt_count == 3
+        assert sample_outbox.next_retry_at is None
