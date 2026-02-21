@@ -23,6 +23,7 @@ class TestTaskProgressCard:
         ]
         card = builder.build_task_progress_card(tasks)
         assert card is not None
+        assert card["config"] == {"wide_screen_mode": True}
         assert card["header"]["template"] == "green"
         assert "2/2" in card["elements"][0]["content"]
 

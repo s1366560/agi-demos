@@ -72,6 +72,11 @@ class ChannelEventBridge:
         if not event_type or event_type not in self._FORWARDED_EVENTS:
             return
 
+        logger.info(
+            f"[EventBridge] Received forwarded event: type={event_type}, "
+            f"conversation_id={conversation_id}"
+        )
+
         handler = self._handlers.get(event_type)
         if not handler:
             return
@@ -90,6 +95,8 @@ class ChannelEventBridge:
 
             chat_id = binding.chat_id
             event_data = event.get("data") or {}
+            if isinstance(event_data, dict):
+                event_data = {**event_data, "_event_type": event_type}
             await handler(adapter, chat_id, event_data)
         except Exception as e:
             logger.warning(
@@ -152,8 +159,16 @@ class ChannelEventBridge:
             builder = HITLCardBuilder()
             event_type = event_data.get("_event_type", "clarification")
             request_id = event_data.get("request_id", "")
+            logger.info(
+                f"[EventBridge] Building HITL card: type={event_type}, "
+                f"request_id={request_id}, chat_id={chat_id}"
+            )
             card = builder.build_card(event_type, request_id, event_data)
             if not card:
+                logger.warning(
+                    f"[EventBridge] HITLCardBuilder returned None for "
+                    f"type={event_type}, falling back"
+                )
                 card = self._build_hitl_card(event_data)
 
             if card:
@@ -164,9 +179,12 @@ class ChannelEventBridge:
                 options = event_data.get("options", [])
                 text = self._format_hitl_text(question, options)
                 if text:
+                    logger.info(f"[EventBridge] Falling back to text for HITL: {chat_id}")
                     await adapter.send_text(chat_id, text)
         except Exception as e:
-            logger.warning(f"[EventBridge] HITL card send failed: {e}")
+            logger.warning(
+                f"[EventBridge] HITL card send failed: {e}", exc_info=True
+            )
 
     async def _handle_task_update(
         self,

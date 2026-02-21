@@ -352,7 +352,7 @@ class FeishuAdapter:
 
             logger.info(
                 f"[Feishu] Card action: request_id={hitl_request_id}, "
-                f"user={user_id}"
+                f"user={user_id}, response={response_data}"
             )
 
             # Schedule async HITL response on the event loop
@@ -379,7 +379,13 @@ class FeishuAdapter:
         except Exception as e:
             logger.error(f"[Feishu] Card action handling failed: {e}", exc_info=True)
 
-        return P2CardActionTriggerResponse()
+        # Return toast to acknowledge the click
+        return P2CardActionTriggerResponse({
+            "toast": {
+                "type": "info",
+                "content": "Response received",
+            }
+        })
 
     async def _connect_webhook(self) -> None:
         """Connect via Webhook (HTTP server mode)."""

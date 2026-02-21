@@ -104,6 +104,37 @@ async def test_hitl_event_sends_card_with_options() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_decision_event_sends_decision_card() -> None:
+    """Verify _event_type injection routes decision_asked to decision card."""
+    adapter = _make_adapter()
+    binding = _make_binding()
+    bridge = ChannelEventBridge()
+    bridge._lookup_binding = AsyncMock(return_value=binding)
+    bridge._get_adapter = MagicMock(return_value=adapter)
+
+    await bridge.on_agent_event("conv-1", {
+        "type": "decision_asked",
+        "data": {
+            "question": "Which approach?",
+            "options": ["A", "B", "C"],
+            "risk_level": "high",
+            "request_id": "hitl-456",
+        },
+    })
+
+    adapter.send_card.assert_awaited_once()
+    card = adapter.send_card.call_args[0][1]
+    assert card["header"]["title"]["content"] == "Agent needs a decision"
+    assert card["header"]["template"] == "orange"
+    assert card["config"] == {"wide_screen_mode": True}
+    assert "[!]" in card["elements"][0]["content"]
+    actions = card["elements"][1]["actions"]
+    assert len(actions) == 3
+    assert actions[0]["value"]["hitl_request_id"] == "hitl-456"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_hitl_event_falls_back_to_text_when_no_question() -> None:
     adapter = _make_adapter()
     binding = _make_binding()

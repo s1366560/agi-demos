@@ -90,6 +90,7 @@ class RichCardBuilder:
             template = "grey"
 
         return {
+            "config": {"wide_screen_mode": True},
             "header": {
                 "template": template,
                 "title": {"tag": "plain_text", "content": title},
@@ -154,6 +155,7 @@ class RichCardBuilder:
             )
 
         return {
+            "config": {"wide_screen_mode": True},
             "header": {
                 "template": "green",
                 "title": {"tag": "plain_text", "content": "Artifact Ready"},
@@ -207,6 +209,7 @@ class RichCardBuilder:
             )
 
         return {
+            "config": {"wide_screen_mode": True},
             "header": {
                 "template": "red",
                 "title": {"tag": "plain_text", "content": "Error"},
