@@ -173,3 +173,132 @@ class TestHITLCardBuilder:
         card = builder.build_responded_card("permission")
         assert "Selected" not in card["elements"][0]["content"]
         assert "submitted" in card["elements"][0]["content"].lower()
+
+
+@pytest.mark.unit
+class TestHITLCardBuilderCardKit:
+    """Tests for CardKit-compatible card entity builders."""
+
+    def test_build_card_entity_data_clarification(self, builder: HITLCardBuilder) -> None:
+        card = builder.build_card_entity_data(
+            "clarification_asked", "req-ck1",
+            {"question": "Which DB?"},
+        )
+        assert card is not None
+        assert card["schema"] == "2.0"
+        assert card["config"]["update_multi"] is True
+        assert card["header"]["template"] == "blue"
+        body_elements = card["body"]["elements"]
+        assert len(body_elements) == 1
+        assert body_elements[0]["tag"] == "markdown"
+        assert body_elements[0]["content"] == "Which DB?"
+        assert body_elements[0]["element_id"].startswith("hitl_q_")
+
+    def test_build_card_entity_data_decision_with_risk(
+        self, builder: HITLCardBuilder
+    ) -> None:
+        card = builder.build_card_entity_data(
+            "decision", "req-ck2",
+            {"question": "Delete prod?", "risk_level": "high"},
+        )
+        assert card is not None
+        assert card["header"]["template"] == "orange"
+        assert "Risk: high" in card["body"]["elements"][0]["content"]
+
+    def test_build_card_entity_data_permission(self, builder: HITLCardBuilder) -> None:
+        card = builder.build_card_entity_data(
+            "permission_asked", "req-ck3",
+            {"tool_name": "terminal", "description": "Run shell"},
+        )
+        assert card is not None
+        assert card["header"]["template"] == "red"
+        assert "terminal" in card["body"]["elements"][0]["content"]
+
+    def test_build_card_entity_data_env_var(self, builder: HITLCardBuilder) -> None:
+        card = builder.build_card_entity_data(
+            "env_var_requested", "req-ck4",
+            {"tool_name": "github", "fields": [{"name": "TOKEN", "description": "PAT"}]},
+        )
+        assert card is not None
+        assert card["header"]["template"] == "yellow"
+        assert "TOKEN" in card["body"]["elements"][0]["content"]
+
+    def test_build_card_entity_data_empty_returns_none(
+        self, builder: HITLCardBuilder
+    ) -> None:
+        assert builder.build_card_entity_data("clarification", "req-ck5", {}) is None
+        assert builder.build_card_entity_data("unknown_type", "req-ck6", {}) is None
+
+    def test_build_hitl_action_elements_options(
+        self, builder: HITLCardBuilder
+    ) -> None:
+        elements = builder.build_hitl_action_elements(
+            "clarification", "req-ck7",
+            {"options": ["PostgreSQL", "MySQL"]},
+        )
+        assert len(elements) == 2
+        assert elements[0]["tag"] == "button"
+        assert elements[0]["element_id"].startswith("hitl_btn_")
+        assert elements[0]["type"] == "primary"
+        assert elements[0]["value"]["hitl_request_id"] == "req-ck7"
+        assert elements[0]["value"]["hitl_type"] == "clarification"
+        assert elements[0]["value"]["response_data"]["answer"] == "PostgreSQL"
+        assert elements[1]["type"] == "default"
+
+    def test_build_hitl_action_elements_permission(
+        self, builder: HITLCardBuilder
+    ) -> None:
+        elements = builder.build_hitl_action_elements(
+            "permission_asked", "req-ck8", {},
+        )
+        assert len(elements) == 2
+        assert elements[0]["text"]["content"] == "Allow"
+        assert elements[0]["type"] == "primary"
+        assert elements[1]["text"]["content"] == "Deny"
+        assert elements[1]["type"] == "danger"
+
+    def test_build_hitl_action_elements_no_options(
+        self, builder: HITLCardBuilder
+    ) -> None:
+        elements = builder.build_hitl_action_elements(
+            "clarification", "req-ck9", {"question": "What?"},
+        )
+        assert elements == []
+
+    def test_build_hitl_action_elements_env_var_empty(
+        self, builder: HITLCardBuilder
+    ) -> None:
+        elements = builder.build_hitl_action_elements(
+            "env_var", "req-ck10", {"fields": [{"name": "X"}]},
+        )
+        assert elements == []
+
+    def test_build_hitl_action_elements_dict_options(
+        self, builder: HITLCardBuilder
+    ) -> None:
+        elements = builder.build_hitl_action_elements(
+            "decision", "req-ck11",
+            {"options": [{"label": "A", "value": "a"}, {"label": "B", "value": "b"}]},
+        )
+        assert len(elements) == 2
+        assert elements[0]["text"]["content"] == "A"
+        assert elements[0]["value"]["response_data"]["answer"] == "a"
+
+    def test_build_hitl_action_elements_max_5(
+        self, builder: HITLCardBuilder
+    ) -> None:
+        elements = builder.build_hitl_action_elements(
+            "clarification", "req-ck12",
+            {"options": [f"opt{i}" for i in range(10)]},
+        )
+        assert len(elements) == 5
+
+    def test_wrap_card_v2_structure(self, builder: HITLCardBuilder) -> None:
+        card = builder._wrap_card_v2(
+            title="Test", template="blue",
+            elements=[{"tag": "markdown", "content": "hello"}],
+        )
+        assert card["schema"] == "2.0"
+        assert card["config"]["update_multi"] is True
+        assert card["body"]["direction"] == "vertical"
+        assert card["body"]["elements"][0]["content"] == "hello"

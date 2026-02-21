@@ -14,6 +14,8 @@ def _make_adapter(**overrides) -> MagicMock:
     adapter.send_card = AsyncMock(return_value="card_msg_1")
     adapter.send_text = AsyncMock(return_value="text_msg_1")
     adapter.send_markdown_card = AsyncMock(return_value="md_msg_1")
+    # CardKit flow returns None by default (falls back to static card)
+    adapter.send_hitl_card_via_cardkit = AsyncMock(return_value=None)
     for k, v in overrides.items():
         setattr(adapter, k, v)
     return adapter
@@ -253,3 +255,57 @@ def test_format_hitl_text_with_options() -> None:
 def test_format_hitl_text_empty_question() -> None:
     bridge = ChannelEventBridge()
     assert bridge._format_hitl_text("", []) == ""
+
+
+@pytest.mark.unit
+async def test_hitl_event_tries_cardkit_first() -> None:
+    """Event bridge should try CardKit flow before falling back to static card."""
+    adapter = _make_adapter(
+        send_hitl_card_via_cardkit=AsyncMock(return_value="ck_msg_1"),
+    )
+    bridge = ChannelEventBridge()
+
+    with patch.object(bridge, "_lookup_binding", new_callable=AsyncMock) as mock_bind:
+        mock_bind.return_value = _make_binding()
+        with patch.object(bridge, "_get_adapter", return_value=adapter):
+            await bridge.on_agent_event(
+                "conv-ck1",
+                {
+                    "type": "decision_asked",
+                    "data": {
+                        "request_id": "req-ck1",
+                        "question": "Which?",
+                        "options": ["A", "B"],
+                    },
+                },
+            )
+
+    adapter.send_hitl_card_via_cardkit.assert_called_once()
+    adapter.send_card.assert_not_called()
+
+
+@pytest.mark.unit
+async def test_hitl_event_falls_back_when_cardkit_fails() -> None:
+    """Event bridge should fall back to static card if CardKit returns None."""
+    adapter = _make_adapter(
+        send_hitl_card_via_cardkit=AsyncMock(return_value=None),
+    )
+    bridge = ChannelEventBridge()
+
+    with patch.object(bridge, "_lookup_binding", new_callable=AsyncMock) as mock_bind:
+        mock_bind.return_value = _make_binding()
+        with patch.object(bridge, "_get_adapter", return_value=adapter):
+            await bridge.on_agent_event(
+                "conv-ck2",
+                {
+                    "type": "clarification_asked",
+                    "data": {
+                        "request_id": "req-ck2",
+                        "question": "What DB?",
+                        "options": ["PG", "MySQL"],
+                    },
+                },
+            )
+
+    adapter.send_hitl_card_via_cardkit.assert_called_once()
+    adapter.send_card.assert_called_once()  # Fallback to static card

@@ -302,3 +302,273 @@ class HITLCardBuilder:
             template="green",
             elements=[{"tag": "markdown", "content": content}],
         )
+
+    # ------------------------------------------------------------------
+    # CardKit-compatible builders (Card JSON 2.0)
+    # ------------------------------------------------------------------
+
+    def build_card_entity_data(
+        self,
+        hitl_type: str,
+        request_id: str,
+        data: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        """Build a card entity structure (JSON 2.0) with question text only.
+
+        This creates the base card (header + question/description) without
+        interactive buttons.  Buttons are added separately via the CardKit
+        ``add_card_elements`` API so they can be managed independently.
+
+        Args:
+            hitl_type: HITL event type (or its ``_asked`` variant).
+            request_id: The HITL request ID.
+            data: Event data with question, tool_name, fields, etc.
+
+        Returns:
+            Card JSON 2.0 dict suitable for ``create_card_entity()``,
+            or ``None`` if the data is insufficient.
+        """
+        canonical = self._TYPE_MAP.get(hitl_type)
+        if not canonical:
+            return None
+
+        builders = {
+            "clarification": self._entity_clarification,
+            "decision": self._entity_decision,
+            "permission": self._entity_permission,
+            "env_var": self._entity_env_var,
+        }
+        builder = builders.get(canonical)
+        if not builder:
+            return None
+        return builder(request_id, canonical, data)
+
+    def build_hitl_action_elements(
+        self,
+        hitl_type: str,
+        request_id: str,
+        data: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """Build interactive button elements for the CardKit Add Elements API.
+
+        Returns a flat list of button element dicts (card JSON 2.0 format)
+        with ``element_id`` set for each button.
+
+        Args:
+            hitl_type: HITL event type.
+            request_id: The HITL request ID.
+            data: Event data with options, etc.
+
+        Returns:
+            List of button element dicts, empty if no buttons are needed.
+        """
+        canonical = self._TYPE_MAP.get(hitl_type)
+        if not canonical:
+            return []
+
+        if canonical in ("clarification", "decision"):
+            options = data.get("options") or []
+            if not options:
+                return []
+            return self._build_cardkit_option_buttons(request_id, canonical, options)
+
+        if canonical == "permission":
+            return self._build_cardkit_permission_buttons(request_id, canonical)
+
+        # env_var has no buttons (user replies with text)
+        return []
+
+    # ------------------------------------------------------------------
+    # CardKit entity builders (JSON 2.0 base cards, no buttons)
+    # ------------------------------------------------------------------
+
+    def _entity_clarification(
+        self, request_id: str, hitl_type: str, data: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        question = data.get("question", "")
+        if not question:
+            return None
+        return self._wrap_card_v2(
+            title="Agent needs clarification",
+            template="blue",
+            elements=[{
+                "tag": "markdown",
+                "element_id": f"hitl_q_{request_id[:8]}",
+                "content": question,
+            }],
+        )
+
+    def _entity_decision(
+        self, request_id: str, hitl_type: str, data: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        question = data.get("question", "")
+        if not question:
+            return None
+        risk_level = data.get("risk_level", "")
+        content = question
+        if risk_level:
+            risk_icon = {"high": "[!]", "medium": "[~]", "low": ""}.get(
+                risk_level.lower(), ""
+            )
+            if risk_icon:
+                content = f"{risk_icon} **Risk: {risk_level}**\n\n{question}"
+        return self._wrap_card_v2(
+            title="Agent needs a decision",
+            template="orange",
+            elements=[{
+                "tag": "markdown",
+                "element_id": f"hitl_q_{request_id[:8]}",
+                "content": content,
+            }],
+        )
+
+    def _entity_permission(
+        self, request_id: str, hitl_type: str, data: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        tool_name = data.get("tool_name", "unknown tool")
+        description = data.get("description") or data.get("message") or ""
+        content = f"The agent wants to use **{tool_name}**."
+        if description:
+            content += f"\n\n{description}"
+        return self._wrap_card_v2(
+            title="Permission Request",
+            template="red",
+            elements=[{
+                "tag": "markdown",
+                "element_id": f"hitl_q_{request_id[:8]}",
+                "content": content,
+            }],
+        )
+
+    def _entity_env_var(
+        self, request_id: str, hitl_type: str, data: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        tool_name = data.get("tool_name", "")
+        fields = data.get("fields") or []
+        message = data.get("message") or ""
+
+        field_lines = []
+        for field in fields:
+            name = field.get("name", "") if isinstance(field, dict) else str(field)
+            desc = field.get("description", "") if isinstance(field, dict) else ""
+            line = f"- `{name}`"
+            if desc:
+                line += f": {desc}"
+            field_lines.append(line)
+
+        content = ""
+        if tool_name:
+            content += f"**Tool**: {tool_name}\n\n"
+        if message:
+            content += f"{message}\n\n"
+        if field_lines:
+            content += "**Required variables:**\n" + "\n".join(field_lines)
+            content += "\n\nPlease reply with the values in format:\n"
+            content += "`VAR_NAME=value` (one per line)"
+        if not content.strip():
+            return None
+        return self._wrap_card_v2(
+            title="Environment Variables Needed",
+            template="yellow",
+            elements=[{
+                "tag": "markdown",
+                "element_id": f"hitl_q_{request_id[:8]}",
+                "content": content,
+            }],
+        )
+
+    # ------------------------------------------------------------------
+    # CardKit button element builders
+    # ------------------------------------------------------------------
+
+    def _build_cardkit_option_buttons(
+        self,
+        request_id: str,
+        hitl_type: str,
+        options: List[Any],
+        max_buttons: int = 5,
+    ) -> List[Dict[str, Any]]:
+        """Build button elements (JSON 2.0) for option selection."""
+        buttons: List[Dict[str, Any]] = []
+        for i, opt in enumerate(options[:max_buttons]):
+            if isinstance(opt, dict):
+                label = str(opt.get("label", opt.get("text", opt.get("value", ""))))
+                value = str(opt.get("value", opt.get("id", label)))
+            else:
+                label = str(opt)
+                value = str(opt)
+
+            buttons.append({
+                "tag": "button",
+                "element_id": f"hitl_btn_{request_id[:8]}_{i}",
+                "text": {"tag": "plain_text", "content": label},
+                "type": "primary" if i == 0 else "default",
+                "width": "default",
+                "size": "medium",
+                "value": {
+                    "hitl_request_id": request_id,
+                    "hitl_type": hitl_type,
+                    "response_data": {"answer": value},
+                },
+            })
+        return buttons
+
+    def _build_cardkit_permission_buttons(
+        self,
+        request_id: str,
+        hitl_type: str,
+    ) -> List[Dict[str, Any]]:
+        """Build Allow/Deny button elements (JSON 2.0) for permission requests."""
+        return [
+            {
+                "tag": "button",
+                "element_id": f"hitl_allow_{request_id[:8]}",
+                "text": {"tag": "plain_text", "content": "Allow"},
+                "type": "primary",
+                "width": "default",
+                "size": "medium",
+                "value": {
+                    "hitl_request_id": request_id,
+                    "hitl_type": hitl_type,
+                    "response_data": {"action": "allow"},
+                },
+            },
+            {
+                "tag": "button",
+                "element_id": f"hitl_deny_{request_id[:8]}",
+                "text": {"tag": "plain_text", "content": "Deny"},
+                "type": "danger",
+                "width": "default",
+                "size": "medium",
+                "value": {
+                    "hitl_request_id": request_id,
+                    "hitl_type": hitl_type,
+                    "response_data": {"action": "deny"},
+                },
+            },
+        ]
+
+    def _wrap_card_v2(
+        self,
+        title: str,
+        template: str,
+        elements: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Wrap elements in a Feishu Card JSON 2.0 envelope.
+
+        Card JSON 2.0 uses ``schema: "2.0"``, ``body`` instead of top-level
+        ``elements``, and requires ``update_multi: true`` for CardKit updates.
+        """
+        return {
+            "schema": "2.0",
+            "config": {"update_multi": True},
+            "header": {
+                "title": {"tag": "plain_text", "content": title},
+                "template": template,
+            },
+            "body": {
+                "direction": "vertical",
+                "padding": "12px 12px 12px 12px",
+                "elements": elements,
+            },
+        }

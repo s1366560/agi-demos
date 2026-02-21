@@ -150,19 +150,39 @@ class ChannelEventBridge:
         chat_id: str,
         event_data: Dict[str, Any],
     ) -> None:
-        """Forward HITL request to channel as an interactive card."""
-        try:
-            from src.infrastructure.adapters.secondary.channels.feishu.hitl_cards import (
-                HITLCardBuilder,
-            )
+        """Forward HITL request to channel as an interactive card.
 
-            builder = HITLCardBuilder()
+        Attempts CardKit flow first (dynamic element management), then
+        falls back to static card JSON if CardKit is unavailable.
+        """
+        try:
             event_type = event_data.get("_event_type", "clarification")
             request_id = event_data.get("request_id", "")
             logger.info(
                 f"[EventBridge] Building HITL card: type={event_type}, "
                 f"request_id={request_id}, chat_id={chat_id}"
             )
+
+            # Try CardKit flow (creates card entity + adds buttons dynamically)
+            if hasattr(adapter, "send_hitl_card_via_cardkit"):
+                message_id = await adapter.send_hitl_card_via_cardkit(
+                    chat_id, event_type, request_id, event_data
+                )
+                if message_id:
+                    logger.info(
+                        f"[EventBridge] Sent HITL card via CardKit to {chat_id}"
+                    )
+                    return
+                logger.info(
+                    "[EventBridge] CardKit HITL failed, falling back to static card"
+                )
+
+            # Fallback: build static card and send as regular interactive message
+            from src.infrastructure.adapters.secondary.channels.feishu.hitl_cards import (
+                HITLCardBuilder,
+            )
+
+            builder = HITLCardBuilder()
             card = builder.build_card(event_type, request_id, event_data)
             if not card:
                 logger.warning(

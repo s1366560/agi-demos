@@ -1012,3 +1012,259 @@ class FeishuAdapter:
         except Exception as e:
             logger.error(f"[Feishu] Send streaming card failed: {e}")
             return None
+
+    # ------------------------------------------------------------------
+    # CardKit API (card entity management)
+    # ------------------------------------------------------------------
+
+    async def create_card_entity(self, card_data: Dict[str, Any]) -> Optional[str]:
+        """Create a card entity via CardKit API.
+
+        The card entity is a server-side object that can be independently
+        updated (add/remove elements, change settings) after creation.
+        Returns the ``card_id`` on success, ``None`` on failure.
+
+        Args:
+            card_data: Card JSON 2.0 structure (must include ``schema: "2.0"``).
+        """
+        try:
+            from lark_oapi.api.cardkit.v1 import (
+                CreateCardRequest,
+                CreateCardRequestBody,
+            )
+
+            client = self._build_rest_client()
+            request = (
+                CreateCardRequest.builder()
+                .request_body(
+                    CreateCardRequestBody.builder()
+                    .type("raw")
+                    .data(json.dumps(card_data))
+                    .build()
+                )
+                .build()
+            )
+            response = await client.cardkit.v1.card.acreate(request)
+            if not response.success():
+                logger.warning(
+                    f"[Feishu] Create card entity failed: "
+                    f"code={response.code}, msg={response.msg}"
+                )
+                return None
+            card_id = response.data.card_id
+            logger.info(f"[Feishu] Created card entity: {card_id}")
+            return card_id
+        except Exception as e:
+            logger.error(f"[Feishu] Create card entity error: {e}")
+            return None
+
+    async def add_card_elements(
+        self,
+        card_id: str,
+        elements: List[Dict[str, Any]],
+        *,
+        position: str = "append",
+        target_element_id: str = "",
+        sequence: int = 1,
+    ) -> bool:
+        """Add elements to an existing card entity via CardKit API.
+
+        Args:
+            card_id: The card entity ID from ``create_card_entity()``.
+            elements: List of element dicts (card JSON 2.0 components).
+            position: ``"append"`` | ``"insert_before"`` | ``"insert_after"``.
+            target_element_id: Required for insert_before/insert_after.
+            sequence: Strictly increasing operation sequence number.
+
+        Returns:
+            True on success, False on failure.
+        """
+        try:
+            import uuid as uuid_mod
+
+            from lark_oapi.api.cardkit.v1 import (
+                CreateCardElementRequest,
+                CreateCardElementRequestBody,
+            )
+
+            client = self._build_rest_client()
+            body_builder = (
+                CreateCardElementRequestBody.builder()
+                .type(position)
+                .sequence(sequence)
+                .elements(json.dumps(elements))
+                .uuid(str(uuid_mod.uuid4()))
+            )
+            if target_element_id:
+                body_builder = body_builder.target_element_id(target_element_id)
+
+            request = (
+                CreateCardElementRequest.builder()
+                .card_id(card_id)
+                .request_body(body_builder.build())
+                .build()
+            )
+            response = await client.cardkit.v1.card_element.acreate(request)
+            if not response.success():
+                logger.warning(
+                    f"[Feishu] Add card elements failed: "
+                    f"code={response.code}, msg={response.msg}"
+                )
+                return False
+            logger.info(
+                f"[Feishu] Added {len(elements)} element(s) to card {card_id}"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"[Feishu] Add card elements error: {e}")
+            return False
+
+    async def send_card_entity_message(
+        self,
+        to: str,
+        card_id: str,
+        reply_to: Optional[str] = None,
+    ) -> str:
+        """Send a card entity as a message.
+
+        Uses ``msg_type: "card"`` with ``content: {"card_id": "..."}``
+        to reference a server-side card entity created by CardKit.
+
+        Args:
+            to: Chat ID or user open_id.
+            card_id: The card entity ID.
+            reply_to: Optional message_id to reply in thread.
+
+        Returns:
+            The message_id of the sent message.
+        """
+        from lark_oapi.api.im.v1 import (
+            CreateMessageRequest,
+            CreateMessageRequestBody,
+            ReplyMessageRequest,
+            ReplyMessageRequestBody,
+        )
+
+        client = self._build_rest_client()
+        msg_content = json.dumps({"card_id": card_id})
+
+        if reply_to:
+            try:
+                request = (
+                    ReplyMessageRequest.builder()
+                    .message_id(reply_to)
+                    .request_body(
+                        ReplyMessageRequestBody.builder()
+                        .msg_type("card")
+                        .content(msg_content)
+                        .build()
+                    )
+                    .build()
+                )
+                response = await client.im.v1.message.areply(request)
+                if response.success() and response.data and response.data.message_id:
+                    return response.data.message_id
+                logger.warning(
+                    f"[Feishu] Card entity reply failed, fallback: "
+                    f"code={response.code}, msg={response.msg}"
+                )
+            except Exception as e:
+                logger.warning(f"[Feishu] Card entity reply error, fallback: {e}")
+
+        receive_id_type = "open_id" if to.startswith("ou_") else "chat_id"
+        request = (
+            CreateMessageRequest.builder()
+            .receive_id_type(receive_id_type)
+            .request_body(
+                CreateMessageRequestBody.builder()
+                .receive_id(to)
+                .msg_type("card")
+                .content(msg_content)
+                .build()
+            )
+            .build()
+        )
+        response = await client.im.v1.message.acreate(request)
+        if not response.success():
+            raise RuntimeError(
+                f"Feishu card entity send failed "
+                f"(code={response.code}): {response.msg}"
+            )
+        if not response.data or not response.data.message_id:
+            raise RuntimeError("No message_id in card entity response")
+        return response.data.message_id
+
+    async def send_hitl_card_via_cardkit(
+        self,
+        chat_id: str,
+        hitl_type: str,
+        request_id: str,
+        event_data: Dict[str, Any],
+        reply_to: Optional[str] = None,
+    ) -> Optional[str]:
+        """Send an HITL card using CardKit API for dynamic element management.
+
+        Creates a card entity with the question/description, adds interactive
+        buttons via the CardKit Add Elements API, then sends the card entity
+        as a message.
+
+        Args:
+            chat_id: Target chat ID.
+            hitl_type: HITL event type (clarification_asked, decision_asked, etc.).
+            request_id: The HITL request ID for routing responses.
+            event_data: Event data containing question, options, fields, etc.
+            reply_to: Optional message_id for threaded reply.
+
+        Returns:
+            The message_id on success, None on failure.
+        """
+        try:
+            from src.infrastructure.adapters.secondary.channels.feishu.hitl_cards import (
+                HITLCardBuilder,
+            )
+
+            builder = HITLCardBuilder()
+
+            # 1. Build base card (header + question, no buttons)
+            base_card = builder.build_card_entity_data(hitl_type, request_id, event_data)
+            if not base_card:
+                logger.warning(
+                    f"[Feishu] CardKit HITL: no base card for type={hitl_type}"
+                )
+                return None
+
+            # 2. Create card entity
+            card_id = await self.create_card_entity(base_card)
+            if not card_id:
+                logger.warning("[Feishu] CardKit HITL: card entity creation failed")
+                return None
+
+            # 3. Add interactive buttons
+            button_elements = builder.build_hitl_action_elements(
+                hitl_type, request_id, event_data
+            )
+            if button_elements:
+                added = await self.add_card_elements(
+                    card_id,
+                    button_elements,
+                    position="append",
+                    sequence=1,
+                )
+                if not added:
+                    logger.warning(
+                        "[Feishu] CardKit HITL: add buttons failed, "
+                        "card sent without buttons"
+                    )
+
+            # 4. Send card entity message
+            message_id = await self.send_card_entity_message(
+                chat_id, card_id, reply_to
+            )
+            logger.info(
+                f"[Feishu] Sent HITL card via CardKit: "
+                f"card_id={card_id}, message_id={message_id}"
+            )
+            return message_id
+        except Exception as e:
+            logger.error(f"[Feishu] CardKit HITL send failed: {e}")
+            return None

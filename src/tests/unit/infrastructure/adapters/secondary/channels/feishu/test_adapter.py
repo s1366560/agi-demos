@@ -855,3 +855,148 @@ def test_on_card_action_with_none_event(adapter: FeishuAdapter) -> None:
     event = SimpleNamespace(event=None)
     response = adapter._on_card_action(event)
     assert response is not None
+
+
+# ------------------------------------------------------------------
+# CardKit API method tests
+# ------------------------------------------------------------------
+
+
+@pytest.mark.unit
+async def test_create_card_entity_success(adapter: FeishuAdapter) -> None:
+    """create_card_entity should return card_id on success."""
+    mock_response = SimpleNamespace(
+        success=lambda: True,
+        data=SimpleNamespace(card_id="card_123456"),
+        code=0,
+        msg="success",
+    )
+    with patch.object(adapter, "_build_rest_client") as mock_client:
+        cardkit_mock = AsyncMock()
+        cardkit_mock.card.acreate.return_value = mock_response
+        mock_client.return_value = SimpleNamespace(
+            cardkit=SimpleNamespace(v1=cardkit_mock)
+        )
+        adapter._connected = True
+
+        card_id = await adapter.create_card_entity({
+            "schema": "2.0",
+            "header": {"title": {"tag": "plain_text", "content": "Test"}},
+            "body": {"elements": []},
+        })
+        assert card_id == "card_123456"
+        cardkit_mock.card.acreate.assert_called_once()
+
+
+@pytest.mark.unit
+async def test_create_card_entity_failure(adapter: FeishuAdapter) -> None:
+    """create_card_entity should return None on API failure."""
+    mock_response = SimpleNamespace(
+        success=lambda: False, code=400, msg="bad request", data=None
+    )
+    with patch.object(adapter, "_build_rest_client") as mock_client:
+        cardkit_mock = AsyncMock()
+        cardkit_mock.card.acreate.return_value = mock_response
+        mock_client.return_value = SimpleNamespace(
+            cardkit=SimpleNamespace(v1=cardkit_mock)
+        )
+        result = await adapter.create_card_entity({"schema": "2.0"})
+        assert result is None
+
+
+@pytest.mark.unit
+async def test_add_card_elements_success(adapter: FeishuAdapter) -> None:
+    """add_card_elements should return True on success."""
+    mock_response = SimpleNamespace(
+        success=lambda: True, code=0, msg="success"
+    )
+    with patch.object(adapter, "_build_rest_client") as mock_client:
+        cardkit_mock = AsyncMock()
+        cardkit_mock.card_element.acreate.return_value = mock_response
+        mock_client.return_value = SimpleNamespace(
+            cardkit=SimpleNamespace(v1=cardkit_mock)
+        )
+        result = await adapter.add_card_elements(
+            "card_123",
+            [{"tag": "button", "element_id": "btn1", "text": {"tag": "plain_text", "content": "Click"}}],
+            position="append",
+            sequence=1,
+        )
+        assert result is True
+
+
+@pytest.mark.unit
+async def test_add_card_elements_with_target(adapter: FeishuAdapter) -> None:
+    """add_card_elements should pass target_element_id when specified."""
+    mock_response = SimpleNamespace(
+        success=lambda: True, code=0, msg="success"
+    )
+    with patch.object(adapter, "_build_rest_client") as mock_client:
+        cardkit_mock = AsyncMock()
+        cardkit_mock.card_element.acreate.return_value = mock_response
+        mock_client.return_value = SimpleNamespace(
+            cardkit=SimpleNamespace(v1=cardkit_mock)
+        )
+        result = await adapter.add_card_elements(
+            "card_123",
+            [{"tag": "button", "element_id": "btn2"}],
+            position="insert_after",
+            target_element_id="question_md",
+            sequence=2,
+        )
+        assert result is True
+
+
+@pytest.mark.unit
+async def test_send_hitl_card_via_cardkit_success(adapter: FeishuAdapter) -> None:
+    """send_hitl_card_via_cardkit should orchestrate create+add+send."""
+    adapter._connected = True
+
+    with (
+        patch.object(adapter, "create_card_entity", new_callable=AsyncMock, return_value="ck_001"),
+        patch.object(adapter, "add_card_elements", new_callable=AsyncMock, return_value=True),
+        patch.object(adapter, "send_card_entity_message", new_callable=AsyncMock, return_value="msg_001"),
+    ):
+        msg_id = await adapter.send_hitl_card_via_cardkit(
+            "oc_chat1",
+            "decision_asked",
+            "req-001",
+            {"question": "Which approach?", "options": ["A", "B"]},
+        )
+        assert msg_id == "msg_001"
+        adapter.create_card_entity.assert_called_once()
+        adapter.add_card_elements.assert_called_once()
+        adapter.send_card_entity_message.assert_called_once_with(
+            "oc_chat1", "ck_001", None
+        )
+
+
+@pytest.mark.unit
+async def test_send_hitl_card_via_cardkit_no_buttons(adapter: FeishuAdapter) -> None:
+    """send_hitl_card_via_cardkit should still send card if no buttons."""
+    adapter._connected = True
+
+    with (
+        patch.object(adapter, "create_card_entity", new_callable=AsyncMock, return_value="ck_002"),
+        patch.object(adapter, "add_card_elements", new_callable=AsyncMock) as mock_add,
+        patch.object(adapter, "send_card_entity_message", new_callable=AsyncMock, return_value="msg_002"),
+    ):
+        msg_id = await adapter.send_hitl_card_via_cardkit(
+            "oc_chat1", "env_var", "req-002",
+            {"tool_name": "gh", "fields": [{"name": "TOKEN"}]},
+        )
+        assert msg_id == "msg_002"
+        mock_add.assert_not_called()  # env_var has no buttons
+
+
+@pytest.mark.unit
+async def test_send_hitl_card_via_cardkit_entity_fails(adapter: FeishuAdapter) -> None:
+    """send_hitl_card_via_cardkit should return None if entity creation fails."""
+    adapter._connected = True
+
+    with patch.object(adapter, "create_card_entity", new_callable=AsyncMock, return_value=None):
+        result = await adapter.send_hitl_card_via_cardkit(
+            "oc_chat1", "clarification", "req-003",
+            {"question": "What?", "options": ["A"]},
+        )
+        assert result is None
