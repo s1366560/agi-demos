@@ -1,5 +1,7 @@
 """Tests for HITLChannelResponder."""
 
+import json
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -48,7 +50,9 @@ class TestHITLChannelResponder:
         mock_redis.xadd.assert_awaited_once()
         call_args = mock_redis.xadd.call_args
         assert call_args[0][0] == "hitl:response:t-1:p-1"
-        payload = call_args[0][1]
+        envelope = call_args[0][1]
+        assert "data" in envelope
+        payload = json.loads(envelope["data"])
         assert payload["request_id"] == "req-direct"
         assert payload["source"] == "channel"
 
@@ -137,7 +141,9 @@ class TestHITLChannelResponder:
         mock_redis.xadd.assert_awaited_once()
         call_args = mock_redis.xadd.call_args
         assert call_args[0][0] == "hitl:response:t-1:p-1"
-        payload = call_args[0][1]
+        envelope = call_args[0][1]
+        assert "data" in envelope
+        payload = json.loads(envelope["data"])
         assert payload["request_id"] == "req-1"
         assert payload["source"] == "channel"
         assert payload["responder_id"] == "user-123"

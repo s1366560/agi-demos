@@ -119,7 +119,12 @@ class HITLChannelResponder:
         project_id: str,
         responder_id: Optional[str],
     ) -> bool:
-        """Publish HITL response to the Redis stream."""
+        """Publish HITL response to the Redis stream.
+
+        Uses the same ``{"data": json.dumps(payload)}`` envelope as the
+        WebSocket and REST HITL handlers so that
+        ``LocalHITLResumeConsumer._handle_message()`` can parse it.
+        """
         try:
             from src.configuration.config import get_settings
 
@@ -133,15 +138,19 @@ class HITLChannelResponder:
                 decode_responses=True,
             )
             try:
+                message_data = {
+                    "request_id": request_id,
+                    "hitl_type": hitl_type,
+                    "response_data": json.dumps(response_data),
+                    "source": "channel",
+                    "responder_id": responder_id or "",
+                    "tenant_id": tenant_id,
+                    "project_id": project_id,
+                }
                 await redis_client.xadd(
                     redis_key,
-                    {
-                        "request_id": request_id,
-                        "hitl_type": hitl_type,
-                        "response_data": json.dumps(response_data),
-                        "source": "channel",
-                        "responder_id": responder_id or "",
-                    },
+                    {"data": json.dumps(message_data)},
+                    maxlen=1000,
                 )
                 logger.info(
                     f"[HITLChannelResponder] Published response for {request_id} to {redis_key}"

@@ -19,8 +19,11 @@ import type {
   ThoughtEventData,
   CompleteEventData,
   ClarificationAskedEventData,
+  ClarificationAnsweredEventData,
   DecisionAskedEventData,
+  DecisionAnsweredEventData,
   EnvVarRequestedEventData,
+  EnvVarProvidedEventData,
   PermissionAskedEventData,
   CostUpdateEventData,
   ToolCall,
@@ -486,6 +489,45 @@ export function createStreamEventHandlers(
         timeline: updatedTimeline,
         pendingDecision: event.data,
         agentState: 'awaiting_input',
+      });
+    },
+
+    onClarificationAnswered: (event) => {
+      const { updateConversationState, getConversationState } = get();
+
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+        pendingClarification: null,
+        agentState: 'thinking',
+      });
+    },
+
+    onDecisionAnswered: (event) => {
+      const { updateConversationState, getConversationState } = get();
+
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+        pendingDecision: null,
+        agentState: 'thinking',
+      });
+    },
+
+    onEnvVarProvided: (event) => {
+      const { updateConversationState, getConversationState } = get();
+
+      const convState = getConversationState(handlerConversationId);
+      const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
+
+      updateConversationState(handlerConversationId, {
+        timeline: updatedTimeline,
+        pendingEnvVarRequest: null,
+        agentState: 'thinking',
       });
     },
 
