@@ -332,7 +332,7 @@ export const ProviderList: React.FC = () => {
             </div>
           </div>
         ) : viewMode === 'cards' ? (
-          /* Card View */}
+          /* Card View */
           <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 bg-slate-50/50 dark:bg-slate-800/30">
             {filteredAndSortedProviders.map((provider) => (
               <ProviderCard
@@ -350,7 +350,7 @@ export const ProviderList: React.FC = () => {
             ))}
           </div>
         ) : (
-          /* Table View */}
+          /* Table View */
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
               <thead className="bg-slate-50 dark:bg-slate-800/50">
