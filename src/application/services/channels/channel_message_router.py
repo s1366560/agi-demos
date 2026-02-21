@@ -568,7 +568,7 @@ class ChannelMessageRouter:
                                     last_snapshot = display
                         # Final patch: authoritative content or fallback
                         final_display = _final_content or _delta_text
-                        if final_display.strip() and final_display != last_snapshot:
+                        if final_display.strip():
                             await self._patch_streaming_card(
                                 streaming_adapter, _card_msg_id,
                                 final_display, loading=False,
