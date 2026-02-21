@@ -780,7 +780,7 @@ def test_on_card_action_with_typed_event(adapter: FeishuAdapter) -> None:
         value={
             "hitl_request_id": "req-001",
             "hitl_type": "decision",
-            "response_data": {"answer": "Option B"},
+            "response_data": '{"answer": "Option B"}',
         },
         tag="button",
         option=None,

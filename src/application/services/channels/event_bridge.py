@@ -7,6 +7,7 @@ events to the appropriate channel adapter (Feishu, Slack, etc.).
 The agent core remains unchanged; the bridge is purely additive.
 """
 
+import json
 import logging
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
@@ -458,7 +459,7 @@ class ChannelEventBridge:
                         "type": "primary" if len(actions) == 0 else "default",
                         "value": {
                             "hitl_request_id": request_id,
-                            "response_data": {"answer": opt_value},
+                            "response_data": json.dumps({"answer": opt_value}),
                         },
                     }
                 )

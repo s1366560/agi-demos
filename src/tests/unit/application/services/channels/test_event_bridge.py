@@ -1,4 +1,6 @@
 """Tests for ChannelEventBridge."""
+import json
+
 import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -239,7 +241,7 @@ def test_build_hitl_card_structure() -> None:
     assert actions[0]["type"] == "primary"  # First button is primary
     assert actions[1]["type"] == "default"
     assert actions[0]["value"]["hitl_request_id"] == "req-42"
-    assert actions[0]["value"]["response_data"]["answer"] == "Red"
+    assert actions[0]["value"]["response_data"] == json.dumps({"answer": "Red"})
 
 
 @pytest.mark.unit

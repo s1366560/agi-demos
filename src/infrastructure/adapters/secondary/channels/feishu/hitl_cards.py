@@ -4,6 +4,7 @@ Builds card JSON compatible with Feishu Card 2.0 schema for
 clarification, decision, environment variable, and permission requests.
 """
 
+import json
 from typing import Any, Dict, List, Optional
 
 
@@ -171,7 +172,7 @@ class HITLCardBuilder:
                         "value": {
                             "hitl_request_id": request_id,
                             "hitl_type": hitl_type,
-                            "response_data": {"action": "allow"},
+                            "response_data": json.dumps({"action": "allow"}),
                             "tenant_id": tenant_id,
                             "project_id": project_id,
                         },
@@ -183,7 +184,7 @@ class HITLCardBuilder:
                         "value": {
                             "hitl_request_id": request_id,
                             "hitl_type": hitl_type,
-                            "response_data": {"action": "deny"},
+                            "response_data": json.dumps({"action": "deny"}),
                             "tenant_id": tenant_id,
                             "project_id": project_id,
                         },
@@ -280,7 +281,7 @@ class HITLCardBuilder:
                     "value": {
                         "hitl_request_id": request_id,
                         "hitl_type": hitl_type,
-                        "response_data": {"answer": value},
+                        "response_data": json.dumps({"answer": value}),
                         "tenant_id": tenant_id,
                         "project_id": project_id,
                     },
@@ -584,7 +585,7 @@ class HITLCardBuilder:
                     "value": {
                         "hitl_request_id": request_id,
                         "hitl_type": hitl_type,
-                        "response_data": {"answer": value},
+                        "response_data": json.dumps({"answer": value}),
                         "tenant_id": tenant_id,
                         "project_id": project_id,
                     },
@@ -612,7 +613,7 @@ class HITLCardBuilder:
                 "value": {
                     "hitl_request_id": request_id,
                     "hitl_type": hitl_type,
-                    "response_data": {"action": "allow"},
+                    "response_data": json.dumps({"action": "allow"}),
                     "tenant_id": tenant_id,
                     "project_id": project_id,
                 },
@@ -627,7 +628,7 @@ class HITLCardBuilder:
                 "value": {
                     "hitl_request_id": request_id,
                     "hitl_type": hitl_type,
-                    "response_data": {"action": "deny"},
+                    "response_data": json.dumps({"action": "deny"}),
                     "tenant_id": tenant_id,
                     "project_id": project_id,
                 },

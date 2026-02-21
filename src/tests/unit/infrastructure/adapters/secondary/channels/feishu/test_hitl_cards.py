@@ -1,4 +1,6 @@
 """Tests for HITLCardBuilder."""
+import json
+
 import pytest
 
 from src.infrastructure.adapters.secondary.channels.feishu.hitl_cards import (
@@ -25,7 +27,7 @@ class TestHITLCardBuilder:
         actions = card["elements"][1]["actions"]
         assert len(actions) == 2
         assert actions[0]["value"]["hitl_request_id"] == "req-1"
-        assert actions[0]["value"]["response_data"]["answer"] == "Postgres"
+        assert actions[0]["value"]["response_data"] == json.dumps({"answer": "Postgres"})
         assert actions[0]["type"] == "primary"
         assert actions[1]["type"] == "default"
 
@@ -79,8 +81,8 @@ class TestHITLCardBuilder:
         assert actions[0]["type"] == "primary"
         assert actions[1]["text"]["content"] == "Deny"
         assert actions[1]["type"] == "danger"
-        assert actions[0]["value"]["response_data"]["action"] == "allow"
-        assert actions[1]["value"]["response_data"]["action"] == "deny"
+        assert actions[0]["value"]["response_data"] == json.dumps({"action": "allow"})
+        assert actions[1]["value"]["response_data"] == json.dumps({"action": "deny"})
 
     def test_env_var_card(self, builder: HITLCardBuilder) -> None:
         card = builder.build_card(
@@ -132,7 +134,7 @@ class TestHITLCardBuilder:
         assert card is not None
         actions = card["elements"][1]["actions"]
         assert actions[0]["text"]["content"] == "Option A"
-        assert actions[0]["value"]["response_data"]["answer"] == "a"
+        assert actions[0]["value"]["response_data"] == json.dumps({"answer": "a"})
 
     def test_buttons_include_hitl_type(self, builder: HITLCardBuilder) -> None:
         """All buttons should include hitl_type in their value payload."""
@@ -242,7 +244,7 @@ class TestHITLCardBuilderCardKit:
         assert elements[0]["type"] == "primary"
         assert elements[0]["value"]["hitl_request_id"] == "req-ck7"
         assert elements[0]["value"]["hitl_type"] == "clarification"
-        assert elements[0]["value"]["response_data"]["answer"] == "PostgreSQL"
+        assert elements[0]["value"]["response_data"] == json.dumps({"answer": "PostgreSQL"})
         assert elements[1]["type"] == "default"
 
     def test_build_hitl_action_elements_permission(
@@ -282,7 +284,7 @@ class TestHITLCardBuilderCardKit:
         )
         assert len(elements) == 2
         assert elements[0]["text"]["content"] == "A"
-        assert elements[0]["value"]["response_data"]["answer"] == "a"
+        assert elements[0]["value"]["response_data"] == json.dumps({"answer": "a"})
 
     def test_build_hitl_action_elements_max_5(
         self, builder: HITLCardBuilder

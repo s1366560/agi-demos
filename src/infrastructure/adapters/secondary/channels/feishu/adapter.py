@@ -353,7 +353,14 @@ class FeishuAdapter:
                 logger.debug("[Feishu] Card action without hitl_request_id, ignoring")
                 return P2CardActionTriggerResponse()
 
-            response_data = value.get("response_data", {}) if isinstance(value, dict) else {}
+            response_data_raw = value.get("response_data", "{}") if isinstance(value, dict) else "{}"
+            if isinstance(response_data_raw, str):
+                try:
+                    response_data = json.loads(response_data_raw)
+                except (json.JSONDecodeError, TypeError):
+                    response_data = {"answer": response_data_raw}
+            else:
+                response_data = response_data_raw if isinstance(response_data_raw, dict) else {}
             hitl_type = (
                 value.get("hitl_type", "clarification")
                 if isinstance(value, dict)
