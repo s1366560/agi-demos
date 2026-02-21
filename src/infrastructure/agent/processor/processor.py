@@ -576,6 +576,15 @@ class SessionProcessor:
                                 status=f"goal_achieved:{goal_check.source}"
                             )
                             result = ProcessorResult.COMPLETE
+                        elif self._is_conversational_response():
+                            # Text-only response without tool calls and without an
+                            # explicit goal_achieved=false signal — treat as a
+                            # deliberate conversational reply.
+                            self._no_progress_steps = 0
+                            yield AgentStatusEvent(
+                                status="goal_achieved:conversational_response"
+                            )
+                            result = ProcessorResult.COMPLETE
                         elif goal_check.should_stop:
                             yield AgentErrorEvent(
                                 message=goal_check.reason or "Goal cannot be completed",
@@ -657,6 +666,26 @@ class SessionProcessor:
     def _extract_user_query(self, messages: List[Dict[str, Any]]) -> Optional[str]:
         """Extract the latest user query from messages."""
         return extract_user_query(messages)
+
+    def _is_conversational_response(self) -> bool:
+        """Check if the current turn is a conversational text-only response.
+
+        When the LLM produces substantive text without requesting any tool calls
+        and without an explicit goal_achieved=false signal, it has deliberately
+        chosen to respond conversationally. This should be treated as
+        goal-achieved to avoid unnecessary no-progress loops for simple queries
+        like greetings or questions that don't require tool use.
+        """
+        if not self._current_message:
+            return False
+        full_text = self._current_message.get_full_text().strip()
+        if len(full_text) < 2:
+            return False
+        # If the text contains a goal_achieved JSON signal, it's a structured
+        # goal-check response, not conversational text.
+        if "goal_achieved" in full_text:
+            return False
+        return True
 
     async def _evaluate_goal_completion(
         self,

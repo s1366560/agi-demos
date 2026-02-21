@@ -353,6 +353,15 @@ class ReActLoop:
                             self._no_progress_steps = 0
                             yield AgentStatusEvent(status=f"goal_achieved:{goal_check.source}")
                             step_result.result = LoopResult.COMPLETE
+                        elif self._is_conversational_text(last_thought):
+                            # Text-only response without tool calls and without an
+                            # explicit goal_achieved=false signal — treat as a
+                            # deliberate conversational reply.
+                            self._no_progress_steps = 0
+                            yield AgentStatusEvent(
+                                status="goal_achieved:conversational_response"
+                            )
+                            step_result.result = LoopResult.COMPLETE
                         elif goal_check.should_stop:
                             yield AgentErrorEvent(
                                 message=goal_check.reason or "Goal cannot be completed",
@@ -626,6 +635,21 @@ class ReActLoop:
             self._state = LoopState.OBSERVING
             self._current_plan_step += 1
 
+    def _is_conversational_text(self, text: str) -> bool:
+        """Check if text is a conversational response (not a goal-check JSON).
+
+        Returns True when the LLM produced substantive text that is NOT a
+        structured goal_achieved signal, indicating a deliberate conversational
+        reply that should terminate the loop.
+        """
+        stripped = text.strip()
+        if len(stripped) < 2:
+            return False
+        # If the text contains a goal_achieved JSON signal, it's a goal-check
+        # response, not conversational text.
+        if "goal_achieved" in stripped:
+            return False
+        return True
 
     def _extract_user_query(self, messages: List[Dict[str, Any]]) -> Optional[str]:
         """Extract user query from messages."""
