@@ -475,8 +475,12 @@ class ChannelMessageRouter:
     async def _invoke_agent(self, message: Message, conversation_id: str) -> None:
         """Invoke the agent to process the message.
 
-        This method triggers the agent to process the incoming message
-        and generate a response.
+        Supports streaming card updates: when a channel adapter supports
+        ``send_streaming_card`` and ``patch_card``, the router sends an
+        initial "Thinking..." card on the first text_delta and periodically
+        patches it with accumulated content.  This gives the end-user
+        real-time feedback in Feishu/Lark instead of waiting for the full
+        response.
 
         Args:
             message: The incoming message.
@@ -518,6 +522,12 @@ class ChannelMessageRouter:
                     f"[MessageRouter] Invoking agent for conversation {conversation_id}"
                 )
 
+                # Resolve the channel adapter for streaming card support
+                streaming_adapter = self._get_streaming_adapter(message)
+                streaming_msg_id: Optional[str] = None
+                last_patch_time = 0.0
+                _PATCH_INTERVAL = 2.0  # seconds between card patches
+
                 response_text = ""
                 error_message: Optional[str] = None
                 # Event types that produce full-text messages in the frontend.
@@ -547,6 +557,22 @@ class ChannelMessageRouter:
                         delta = event_data.get("delta", "")
                         if isinstance(delta, str):
                             response_text += delta
+
+                        # Streaming card: send initial card on first delta, patch periodically
+                        if streaming_adapter and response_text.strip():
+                            now = time.monotonic()
+                            if streaming_msg_id is None:
+                                streaming_msg_id = await self._send_initial_streaming_card(
+                                    streaming_adapter, message
+                                )
+                                last_patch_time = now
+                            elif now - last_patch_time >= _PATCH_INTERVAL:
+                                await self._patch_streaming_card(
+                                    streaming_adapter, streaming_msg_id, response_text,
+                                    loading=True,
+                                )
+                                last_patch_time = now
+
                     elif event_type == "assistant_message":
                         assistant_content = event_data.get("content")
                         if isinstance(assistant_content, str) and assistant_content.strip():
@@ -557,6 +583,20 @@ class ChannelMessageRouter:
                             response_text = complete_content
                     elif event_type == "error":
                         error_message = event_data.get("message") or "Unknown agent error"
+
+                # Finalize streaming card with complete content
+                if streaming_msg_id and response_text.strip():
+                    await self._patch_streaming_card(
+                        streaming_adapter, streaming_msg_id, response_text, loading=False,
+                    )
+                    await self._record_streaming_outbox(
+                        message, conversation_id, response_text, streaming_msg_id,
+                    )
+                    if error_message:
+                        logger.warning(
+                            f"[MessageRouter] Agent error after streaming: {error_message}"
+                        )
+                    return
 
                 if error_message:
                     logger.warning(
@@ -726,6 +766,103 @@ class ChannelMessageRouter:
     def _contains_rich_markdown(self, text: str) -> bool:
         """Return True if text contains markdown structures that benefit from card rendering."""
         return bool(self._RICH_MD_RE.search(text))
+
+    # ------------------------------------------------------------------
+    # Streaming card helpers
+    # ------------------------------------------------------------------
+
+    def _get_streaming_adapter(self, message: Message) -> Any:
+        """Return the channel adapter if it supports streaming card updates."""
+        try:
+            from src.infrastructure.adapters.primary.web.startup import get_channel_manager
+
+            channel_config_id = self._extract_channel_config_id(message)
+            if not channel_config_id:
+                return None
+
+            channel_manager = get_channel_manager()
+            if not channel_manager:
+                return None
+
+            connection = channel_manager.connections.get(channel_config_id)
+            if not connection:
+                return None
+
+            adapter = connection.adapter
+            if hasattr(adapter, "send_streaming_card") and hasattr(adapter, "patch_card"):
+                return adapter
+            return None
+        except Exception:
+            return None
+
+    async def _send_initial_streaming_card(
+        self, adapter: Any, message: Message
+    ) -> Optional[str]:
+        """Send the initial 'Thinking...' card and return its message_id."""
+        try:
+            reply_to = self._extract_channel_message_id(message)
+            msg_id = await adapter.send_streaming_card(
+                message.chat_id, initial_text="", reply_to=reply_to,
+            )
+            if msg_id:
+                logger.debug(f"[MessageRouter] Streaming card sent: {msg_id}")
+            return msg_id
+        except Exception as e:
+            logger.warning(f"[MessageRouter] Failed to send streaming card: {e}")
+            return None
+
+    async def _patch_streaming_card(
+        self,
+        adapter: Any,
+        message_id: str,
+        text: str,
+        *,
+        loading: bool = False,
+    ) -> None:
+        """Patch the streaming card with accumulated text."""
+        try:
+            card_json = adapter._build_streaming_card(text, loading=loading)
+            await adapter.patch_card(message_id, card_json)
+        except Exception as e:
+            logger.debug(f"[MessageRouter] Streaming card patch failed: {e}")
+
+    async def _record_streaming_outbox(
+        self,
+        message: Message,
+        conversation_id: str,
+        response_text: str,
+        streaming_msg_id: str,
+    ) -> None:
+        """Record the streaming response in outbox and history for traceability."""
+        try:
+            channel_config_id = self._extract_channel_config_id(message)
+            if not channel_config_id:
+                channel_config_id = await self._get_conversation_channel_config_id(
+                    conversation_id
+                )
+            if channel_config_id:
+                outbox_id = await self._create_outbox_record(
+                    message=message,
+                    conversation_id=conversation_id,
+                    channel_config_id=channel_config_id,
+                    response=response_text,
+                    reply_to=self._extract_channel_message_id(message),
+                )
+                if outbox_id:
+                    await self._mark_outbox_sent(outbox_id, streaming_msg_id)
+                await self._store_outbound_message_history(
+                    message=message,
+                    conversation_id=conversation_id,
+                    response=response_text,
+                    channel_config_id=channel_config_id,
+                    outbound_message_id=streaming_msg_id,
+                )
+                logger.info(
+                    f"[MessageRouter] Streaming response recorded: "
+                    f"chat={message.chat_id}, msg_id={streaming_msg_id}"
+                )
+        except Exception as e:
+            logger.warning(f"[MessageRouter] Failed to record streaming outbox: {e}")
 
     async def _store_outbound_message_history(
         self,

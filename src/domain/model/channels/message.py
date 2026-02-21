@@ -184,6 +184,18 @@ class ChannelAdapter(Protocol):
         """Verify the connection is alive (e.g. API ping). Returns True if healthy."""
         ...
 
+    async def patch_card(self, message_id: str, card_content: str) -> bool:
+        """Update (patch) an existing interactive card message.
+
+        Args:
+            message_id: The message_id of the card to update.
+            card_content: JSON string of the new card content.
+
+        Returns:
+            True on success, False on failure.
+        """
+        ...
+
     async def send_markdown_card(
         self,
         to: str,

@@ -426,21 +426,33 @@ class _FakeResponse:
 
 
 class _FakeMessageAPI:
-    """Mimics client.im.v1.message with create() and reply()."""
+    """Mimics client.im.v1.message with create(), reply(), patch(), update(), delete()."""
 
     def __init__(
         self,
         create_response: _FakeResponse | None = None,
         reply_response: _FakeResponse | None = None,
+        patch_response: _FakeResponse | None = None,
+        update_response: _FakeResponse | None = None,
+        delete_response: _FakeResponse | None = None,
         *,
         has_reply: bool = True,
     ) -> None:
         self.create_called = False
         self.reply_called = False
+        self.patch_called = False
+        self.update_called = False
+        self.delete_called = False
         self.create_request = None
         self.reply_request = None
+        self.patch_request = None
+        self.update_request = None
+        self.delete_request = None
         self._create_response = create_response or _FakeResponse(message_id="om_default")
         self._reply_response = reply_response
+        self._patch_response = patch_response or _FakeResponse()
+        self._update_response = update_response or _FakeResponse()
+        self._delete_response = delete_response or _FakeResponse()
         self._has_reply = has_reply
 
     def create(self, request, option=None):
@@ -454,6 +466,21 @@ class _FakeMessageAPI:
         self.reply_called = True
         self.reply_request = request
         return self._reply_response or _FakeResponse(message_id="om_reply_default")
+
+    def patch(self, request, option=None):
+        self.patch_called = True
+        self.patch_request = request
+        return self._patch_response
+
+    def update(self, request, option=None):
+        self.update_called = True
+        self.update_request = request
+        return self._update_response
+
+    def delete(self, request, option=None):
+        self.delete_called = True
+        self.delete_request = request
+        return self._delete_response
 
 
 def _build_fake_client(message_api: _FakeMessageAPI) -> SimpleNamespace:
@@ -547,3 +574,147 @@ async def test_send_message_falls_back_to_create_when_reply_returns_error(
     assert message_id == "om_create_fallback"
     assert msg_api.reply_called is True
     assert msg_api.create_called is True
+
+
+# -- patch_card tests -------------------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_patch_card_success(adapter: FeishuAdapter) -> None:
+    """patch_card should call patch API and return True on success."""
+    msg_api = _FakeMessageAPI(patch_response=_FakeResponse())
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    result = await adapter.patch_card("om_card_1", '{"elements": []}')
+
+    assert result is True
+    assert msg_api.patch_called is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_patch_card_returns_false_on_failure(adapter: FeishuAdapter) -> None:
+    """patch_card should return False when Feishu API returns error."""
+    msg_api = _FakeMessageAPI(
+        patch_response=_FakeResponse(code=999, msg="patch failed")
+    )
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    result = await adapter.patch_card("om_card_1", '{"elements": []}')
+
+    assert result is False
+    assert msg_api.patch_called is True
+
+
+# -- edit_message tests (v2 SDK) -------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_edit_message_success(adapter: FeishuAdapter) -> None:
+    """edit_message should use UpdateMessageRequest via v2 SDK."""
+    msg_api = _FakeMessageAPI(update_response=_FakeResponse())
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    from src.domain.model.channels.message import MessageContent, MessageType
+
+    result = await adapter.edit_message(
+        "om_1", MessageContent(type=MessageType.TEXT, text="updated")
+    )
+
+    assert result is True
+    assert msg_api.update_called is True
+
+
+# -- delete_message tests (v2 SDK) -----------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_delete_message_success(adapter: FeishuAdapter) -> None:
+    """delete_message should use DeleteMessageRequest via v2 SDK."""
+    msg_api = _FakeMessageAPI(delete_response=_FakeResponse())
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    result = await adapter.delete_message("om_1")
+
+    assert result is True
+    assert msg_api.delete_called is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_delete_message_returns_false_on_failure(adapter: FeishuAdapter) -> None:
+    """delete_message should return False when API returns error."""
+    msg_api = _FakeMessageAPI(
+        delete_response=_FakeResponse(code=999, msg="not found")
+    )
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    result = await adapter.delete_message("om_1")
+
+    assert result is False
+
+
+# -- send_streaming_card tests ---------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_streaming_card_returns_message_id(adapter: FeishuAdapter) -> None:
+    """send_streaming_card should send a card and return its message_id."""
+    msg_api = _FakeMessageAPI(create_response=_FakeResponse(message_id="om_stream_1"))
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    msg_id = await adapter.send_streaming_card("oc_chat_1")
+
+    assert msg_id == "om_stream_1"
+    assert msg_api.create_called is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_streaming_card_returns_none_on_error(adapter: FeishuAdapter) -> None:
+    """send_streaming_card should return None when send fails."""
+    msg_api = _FakeMessageAPI(
+        create_response=_FakeResponse(code=999, msg="fail")
+    )
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    msg_id = await adapter.send_streaming_card("oc_chat_1")
+
+    assert msg_id is None
+
+
+# -- _build_streaming_card tests -------------------------------------------
+
+
+@pytest.mark.unit
+def test_build_streaming_card_without_loading(adapter: FeishuAdapter) -> None:
+    """_build_streaming_card should produce a card JSON without loading indicator."""
+    import json
+
+    card_json = adapter._build_streaming_card("Hello world")
+    card = json.loads(card_json)
+
+    assert card["elements"][0]["content"] == "Hello world"
+
+
+@pytest.mark.unit
+def test_build_streaming_card_with_loading(adapter: FeishuAdapter) -> None:
+    """_build_streaming_card should append loading indicator when loading=True."""
+    import json
+
+    card_json = adapter._build_streaming_card("Partial text", loading=True)
+    card = json.loads(card_json)
+
+    assert "Generating..." in card["elements"][0]["content"]
+    assert "Partial text" in card["elements"][0]["content"]

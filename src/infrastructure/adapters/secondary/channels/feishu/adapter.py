@@ -640,39 +640,59 @@ class FeishuAdapter:
         return await self.send_message(to, content, reply_to)
 
     async def edit_message(self, message_id: str, content: MessageContent) -> bool:
-        """Edit a previously sent message."""
+        """Edit a previously sent message using lark_oapi v2 SDK."""
         try:
-            from src.infrastructure.adapters.secondary.channels.feishu.client import FeishuClient
+            from lark_oapi.api.im.v1 import UpdateMessageRequest, UpdateMessageRequestBody
 
-            client = FeishuClient(
-                app_id=self._config.app_id or "",
-                app_secret=self._config.app_secret or "",
-            )
+            client = self._build_rest_client()
             if content.type == MessageType.TEXT:
                 msg_type = "text"
                 msg_content = json.dumps({"text": content.text})
+            elif content.type == MessageType.CARD:
+                msg_type = "interactive"
+                msg_content = json.dumps(content.card or {})
             else:
                 msg_type = "text"
                 msg_content = json.dumps({"text": str(content.text or "")})
-            await client.edit_message(message_id, msg_type, msg_content)
+
+            request = (
+                UpdateMessageRequest.builder()
+                .message_id(message_id)
+                .request_body(
+                    UpdateMessageRequestBody.builder()
+                    .msg_type(msg_type)
+                    .content(msg_content)
+                    .build()
+                )
+                .build()
+            )
+            response = client.im.v1.message.update(request)
+            if not response.success():
+                logger.warning(
+                    f"[Feishu] Edit message failed: code={response.code}, msg={response.msg}"
+                )
+                return False
             return True
         except Exception as e:
-            logger.error(f"[Feishu] Edit message failed: {e}")
+            logger.error(f"[Feishu] Edit message error: {e}")
             return False
 
     async def delete_message(self, message_id: str) -> bool:
-        """Delete/recall a message."""
+        """Delete/recall a message using lark_oapi v2 SDK."""
         try:
-            from src.infrastructure.adapters.secondary.channels.feishu.client import FeishuClient
+            from lark_oapi.api.im.v1 import DeleteMessageRequest
 
-            client = FeishuClient(
-                app_id=self._config.app_id or "",
-                app_secret=self._config.app_secret or "",
-            )
-            await client.recall_message(message_id)
+            client = self._build_rest_client()
+            request = DeleteMessageRequest.builder().message_id(message_id).build()
+            response = client.im.v1.message.delete(request)
+            if not response.success():
+                logger.warning(
+                    f"[Feishu] Delete message failed: code={response.code}, msg={response.msg}"
+                )
+                return False
             return True
         except Exception as e:
-            logger.error(f"[Feishu] Delete message failed: {e}")
+            logger.error(f"[Feishu] Delete message error: {e}")
             return False
 
     def on_message(self, handler: MessageHandler) -> Callable[[], None]:
@@ -759,7 +779,80 @@ class FeishuAdapter:
         }
         return await self.send_card(to, card, reply_to)
 
+    async def patch_card(self, message_id: str, card_content: str) -> bool:
+        """Update (patch) an existing interactive card message.
 
-# Make FeishuAdapter implement ChannelAdapter protocol
-if hasattr(FeishuAdapter, "__init__"):
-    pass  # Class is complete
+        Uses the lark_oapi v2 PatchMessageRequest to update card content
+        in-place, enabling streaming "typing" effects for AI responses.
+
+        Args:
+            message_id: The message_id of the card to update.
+            card_content: JSON string of the new card content.
+
+        Returns:
+            True on success, False on failure.
+        """
+        try:
+            from lark_oapi.api.im.v1 import PatchMessageRequest, PatchMessageRequestBody
+
+            client = self._build_rest_client()
+            request = (
+                PatchMessageRequest.builder()
+                .message_id(message_id)
+                .request_body(
+                    PatchMessageRequestBody.builder()
+                    .content(card_content)
+                    .build()
+                )
+                .build()
+            )
+            response = client.im.v1.message.patch(request)
+            if not response.success():
+                logger.warning(
+                    f"[Feishu] Patch card failed: code={response.code}, msg={response.msg}"
+                )
+                return False
+            return True
+        except Exception as e:
+            logger.error(f"[Feishu] Patch card error: {e}")
+            return False
+
+    def _build_streaming_card(self, markdown: str, *, loading: bool = False) -> str:
+        """Build a card JSON string for streaming updates.
+
+        Args:
+            markdown: The markdown content to display.
+            loading: If True, append a loading indicator.
+
+        Returns:
+            JSON string of the interactive card.
+        """
+        content = markdown
+        if loading:
+            content += "\n\n_Generating..._"
+        card = {
+            "config": {"wide_screen_mode": True},
+            "elements": [{"tag": "markdown", "content": content}],
+        }
+        return json.dumps(card)
+
+    async def send_streaming_card(
+        self,
+        to: str,
+        initial_text: str = "",
+        reply_to: Optional[str] = None,
+    ) -> Optional[str]:
+        """Send an initial loading card for streaming updates.
+
+        Returns the message_id for subsequent patch_card calls.
+        """
+        content = initial_text or "_Thinking..._"
+        card = {
+            "config": {"wide_screen_mode": True},
+            "elements": [{"tag": "markdown", "content": content}],
+        }
+        try:
+            return await self.send_card(to, card, reply_to)
+        except Exception as e:
+            logger.error(f"[Feishu] Send streaming card failed: {e}")
+            return None
