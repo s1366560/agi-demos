@@ -1,11 +1,7 @@
 import React from 'react';
 
-import {
-  ProviderConfig,
-  ProviderStatus,
-  CircuitBreakerState,
-  ProviderType,
-} from '../../types/memory';
+import { ProviderConfig, CircuitBreakerState } from '../../types/memory';
+import { ProviderIcon } from './ProviderIcon';
 
 export interface ProviderCardProps {
   provider: ProviderConfig;
@@ -18,65 +14,73 @@ export interface ProviderCardProps {
   isResettingCircuitBreaker?: boolean;
 }
 
-const PROVIDER_ICONS: Record<ProviderType, string> = {
-  openai: '🤖',
-  anthropic: '🧠',
-  gemini: '✨',
-  dashscope: '🌐',
-  kimi: '🌙',
-  groq: '⚡',
-  azure_openai: '☁️',
-  cohere: '🔮',
-  mistral: '🌪️',
-  bedrock: '🏔️',
-  vertex: '📊',
-  deepseek: '🔍',
-  zai: '🐲',
-  ollama: '🦙',
-  lmstudio: '🖥️',
-};
-
-const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
-  openai: 'OpenAI',
-  dashscope: 'Dashscope',
-  kimi: 'Moonshot Kimi',
-  gemini: 'Google Gemini',
-  anthropic: 'Anthropic',
-  groq: 'Groq',
-  azure_openai: 'Azure OpenAI',
-  cohere: 'Cohere',
-  mistral: 'Mistral',
-  bedrock: 'AWS Bedrock',
-  vertex: 'Google Vertex AI',
-  deepseek: 'Deepseek',
-  zai: 'ZhipuAI',
-  ollama: 'Ollama',
-  lmstudio: 'LM Studio',
-};
-
-const getStatusColor = (status?: ProviderStatus) => {
-  switch (status) {
+const getStatusConfig = (healthStatus?: string) => {
+  switch (healthStatus) {
     case 'healthy':
-      return 'bg-green-500';
+      return {
+        bg: 'bg-green-500',
+        text: 'text-green-700',
+        bgSoft: 'bg-green-50 dark:bg-green-900/20',
+        border: 'border-green-200 dark:border-green-800',
+        icon: 'check_circle',
+        label: 'Healthy',
+      };
     case 'degraded':
-      return 'bg-yellow-500';
+      return {
+        bg: 'bg-yellow-500',
+        text: 'text-yellow-700',
+        bgSoft: 'bg-yellow-50 dark:bg-yellow-900/20',
+        border: 'border-yellow-200 dark:border-yellow-800',
+        icon: 'warning',
+        label: 'Degraded',
+      };
     case 'unhealthy':
-      return 'bg-red-500';
+      return {
+        bg: 'bg-red-500',
+        text: 'text-red-700',
+        bgSoft: 'bg-red-50 dark:bg-red-900/20',
+        border: 'border-red-200 dark:border-red-800',
+        icon: 'error',
+        label: 'Unhealthy',
+      };
     default:
-      return 'bg-slate-400';
+      return {
+        bg: 'bg-slate-400',
+        text: 'text-slate-500',
+        bgSoft: 'bg-slate-50 dark:bg-slate-800/20',
+        border: 'border-slate-200 dark:border-slate-700',
+        icon: 'help',
+        label: 'Unknown',
+      };
   }
 };
 
-const getCircuitBreakerColor = (state?: CircuitBreakerState) => {
+const getCircuitBreakerConfig = (state?: CircuitBreakerState) => {
   switch (state) {
     case 'closed':
-      return 'text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400';
+      return {
+        color: 'text-green-700 bg-green-100 dark:bg-green-900/30 dark:text-green-400',
+        icon: 'shield',
+        label: 'Closed',
+      };
     case 'open':
-      return 'text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400';
+      return {
+        color: 'text-red-700 bg-red-100 dark:bg-red-900/30 dark:text-red-400',
+        icon: 'electric_bolt',
+        label: 'Open',
+      };
     case 'half_open':
-      return 'text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-400';
+      return {
+        color: 'text-yellow-700 bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-400',
+        icon: 'halfway_full',
+        label: 'Half Open',
+      };
     default:
-      return 'text-slate-600 bg-slate-100 dark:bg-slate-700 dark:text-slate-400';
+      return {
+        color: 'text-slate-600 bg-slate-100 dark:bg-slate-700 dark:text-slate-400',
+        icon: 'help',
+        label: 'Unknown',
+      };
   }
 };
 
@@ -90,102 +94,128 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
   isCheckingHealth = false,
   isResettingCircuitBreaker = false,
 }) => {
-  const circuitBreakerState = provider.resilience?.circuit_breaker_state;
+  const statusConfig = getStatusConfig(provider.health_status);
+  const cbConfig = getCircuitBreakerConfig(provider.resilience?.circuit_breaker_state);
 
   return (
-    <div className="group relative bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden">
-      {/* Status Indicator Bar */}
-      <div
-        className={`absolute top-0 left-0 right-0 h-1 ${getStatusColor(provider.health_status)}`}
-      />
+    <div className="group relative bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-xl hover:border-primary/30 transition-all duration-300 overflow-hidden">
+      {/* Top gradient bar based on health status */}
+      <div className={`h-1.5 w-full ${statusConfig.bg}`} />
 
-      {/* Card Content */}
       <div className="p-5">
         {/* Header */}
         <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="text-3xl">{PROVIDER_ICONS[provider.provider_type] || '🤖'}</div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-slate-900 dark:text-white">{provider.name}</h3>
+          <div className="flex items-center gap-3 flex-1">
+            <ProviderIcon providerType={provider.provider_type} size="lg" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-semibold text-slate-900 dark:text-white truncate">
+                  {provider.name}
+                </h3>
                 {provider.is_default && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-sm">
+                    <span className="material-symbols-outlined text-[12px] mr-0.5">star</span>
                     Default
                   </span>
                 )}
               </div>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                {PROVIDER_TYPE_LABELS[provider.provider_type]}
+                {provider.provider_type}
               </p>
             </div>
           </div>
 
           {/* Active Toggle */}
-          <div
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${
-              provider.is_active
-                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
-            }`}
-          >
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${provider.is_active ? 'bg-green-500' : 'bg-slate-400'}`}
+          <label className="relative inline-flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={provider.is_active}
+              onChange={(e) => {
+                e.stopPropagation();
+                // Handle toggle in parent component
+              }}
+              className="sr-only peer"
             />
-            {provider.is_active ? 'Active' : 'Inactive'}
-          </div>
+            <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary/20 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-green-400 peer-checked:to-green-500"></div>
+          </label>
         </div>
 
         {/* Models Info */}
         <div className="space-y-2 mb-4">
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-slate-500 dark:text-slate-400 w-20">LLM:</span>
-            <code className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-slate-700 dark:text-slate-300 font-mono text-xs">
+            <span className="text-slate-400 dark:text-slate-500 w-16 shrink-0">LLM:</span>
+            <code className="flex-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-700/50 rounded-lg text-slate-700 dark:text-slate-300 font-mono text-xs truncate">
               {provider.llm_model}
             </code>
           </div>
+          {provider.llm_small_model && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-slate-400 dark:text-slate-500 w-16 shrink-0">Small:</span>
+              <code className="flex-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-700/50 rounded-lg text-slate-700 dark:text-slate-300 font-mono text-xs truncate">
+                {provider.llm_small_model}
+              </code>
+            </div>
+          )}
           {provider.embedding_model && (
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-slate-500 dark:text-slate-400 w-20">Embed:</span>
-              <code className="px-2 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-slate-700 dark:text-slate-300 font-mono text-xs">
+              <span className="text-slate-400 dark:text-slate-500 w-16 shrink-0">Embed:</span>
+              <code className="flex-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-700/50 rounded-lg text-slate-700 dark:text-slate-300 font-mono text-xs truncate">
                 {provider.embedding_model}
               </code>
               {provider.embedding_config?.dimensions && (
-                <span className="text-xs text-slate-500">
+                <span className="text-xs text-slate-400 shrink-0">
                   {provider.embedding_config.dimensions}d
                 </span>
               )}
             </div>
           )}
+          {provider.reranker_model && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-slate-400 dark:text-slate-500 w-16 shrink-0">Rerank:</span>
+              <code className="flex-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-700/50 rounded-lg text-slate-700 dark:text-slate-300 font-mono text-xs truncate">
+                {provider.reranker_model}
+              </code>
+            </div>
+          )}
         </div>
 
-        {/* Health & Circuit Breaker */}
-        <div className="flex items-center gap-3 mb-4">
+        {/* Status Bar */}
+        <div
+          className={`flex items-center justify-between p-3 rounded-xl border ${statusConfig.bgSoft} ${statusConfig.border} mb-3`}
+        >
           {/* Health Status */}
           <div className="flex items-center gap-2">
-            <span className={`h-2 w-2 rounded-full ${getStatusColor(provider.health_status)}`} />
-            <span className="text-sm text-slate-600 dark:text-slate-300 capitalize">
-              {provider.health_status || 'Unknown'}
+            <span
+              className={`material-symbols-outlined text-lg ${statusConfig.text}`}
+            >
+              {statusConfig.icon}
             </span>
-            {provider.response_time_ms && (
-              <span className="text-xs text-slate-400">{provider.response_time_ms}ms</span>
-            )}
+            <div>
+              <p className={`text-xs font-medium ${statusConfig.text}`}>{statusConfig.label}</p>
+              {provider.response_time_ms && (
+                <p className="text-xs text-slate-500">{provider.response_time_ms}ms</p>
+              )}
+            </div>
           </div>
 
           {/* Divider */}
-          <div className="h-4 w-px bg-slate-200 dark:bg-slate-600" />
+          <div className="h-8 w-px bg-slate-200 dark:bg-slate-600" />
 
           {/* Circuit Breaker */}
           <div className="flex items-center gap-2">
             <span
-              className={`px-2 py-0.5 rounded text-xs font-medium ${getCircuitBreakerColor(circuitBreakerState)}`}
+              className={`material-symbols-outlined text-lg ${cbConfig.color.split(' ')[0]}`}
             >
-              CB: {circuitBreakerState || 'Unknown'}
+              {cbConfig.icon}
             </span>
-            {provider.resilience?.failure_count ? (
-              <span className="text-xs text-red-500">
-                {provider.resilience.failure_count} failures
-              </span>
-            ) : null}
+            <div>
+              <p className={`text-xs font-medium ${cbConfig.color.split(' ')[0]}`}>
+                {cbConfig.label}
+              </p>
+              {provider.resilience?.failure_count ? (
+                <p className="text-xs text-red-500">{provider.resilience.failure_count} fails</p>
+              ) : null}
+            </div>
           </div>
         </div>
 
@@ -194,38 +224,39 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           <button
             onClick={() => onCheckHealth(provider.id)}
             disabled={isCheckingHealth}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-primary/10 hover:text-primary rounded-lg transition-all disabled:opacity-50"
             title="Check Health"
           >
             <span
-              className={`material-symbols-outlined text-[16px] ${isCheckingHealth ? 'animate-spin' : ''}`}
+              className={`material-symbols-outlined text-[18px] ${isCheckingHealth ? 'animate-spin' : ''}`}
             >
               {isCheckingHealth ? 'progress_activity' : 'monitor_heart'}
             </span>
             Health
           </button>
 
-          {circuitBreakerState && circuitBreakerState !== 'closed' && (
-            <button
-              onClick={() => onResetCircuitBreaker(provider.provider_type)}
-              disabled={isResettingCircuitBreaker}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-lg transition-colors disabled:opacity-50"
-              title="Reset Circuit Breaker"
-            >
-              <span
-                className={`material-symbols-outlined text-[16px] ${isResettingCircuitBreaker ? 'animate-spin' : ''}`}
+          {provider.resilience?.circuit_breaker_state &&
+            provider.resilience.circuit_breaker_state !== 'closed' && (
+              <button
+                onClick={() => onResetCircuitBreaker(provider.provider_type)}
+                disabled={isResettingCircuitBreaker}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded-lg transition-all disabled:opacity-50"
+                title="Reset Circuit Breaker"
               >
-                {isResettingCircuitBreaker ? 'progress_activity' : 'refresh'}
-              </span>
-              Reset CB
-            </button>
-          )}
+                <span
+                  className={`material-symbols-outlined text-[18px] ${isResettingCircuitBreaker ? 'animate-spin' : ''}`}
+                >
+                  {isResettingCircuitBreaker ? 'progress_activity' : 'refresh'}
+                </span>
+                Reset
+              </button>
+            )}
 
           <div className="flex-1" />
 
           <button
             onClick={() => onAssign(provider)}
-            className="p-1.5 text-slate-400 hover:text-blue-500 transition-colors"
+            className="p-2 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-all"
             title="Assign to Tenant"
           >
             <span className="material-symbols-outlined text-[18px]">assignment_ind</span>
@@ -233,7 +264,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
           <button
             onClick={() => onEdit(provider)}
-            className="p-1.5 text-slate-400 hover:text-primary transition-colors"
+            className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
             title="Edit"
           >
             <span className="material-symbols-outlined text-[18px]">edit</span>
@@ -241,7 +272,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
           <button
             onClick={() => onDelete(provider.id)}
-            className="p-1.5 text-slate-400 hover:text-red-500 transition-colors"
+            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
             title="Delete"
           >
             <span className="material-symbols-outlined text-[18px]">delete</span>

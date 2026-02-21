@@ -3,6 +3,12 @@
 Contains modular initialization functions for various services.
 """
 
+from .channels import (
+    get_channel_manager,
+    initialize_channel_manager,
+    set_message_router,
+    shutdown_channel_manager,
+)
 from .container import initialize_container
 from .database import initialize_database_schema
 from .docker import initialize_docker_services, shutdown_docker_services
@@ -25,4 +31,8 @@ __all__ = [
     "initialize_websocket_manager",
     "initialize_docker_services",
     "shutdown_docker_services",
+    "initialize_channel_manager",
+    "shutdown_channel_manager",
+    "get_channel_manager",
+    "set_message_router",
 ]

@@ -69,6 +69,7 @@ export interface UserMessageProps {
   content: string;
   onReply?: () => void;
   forcedSkillName?: string;
+  forcedSubAgentName?: string;
   fileMetadata?: UserMessageFileMetadata[];
 }
 

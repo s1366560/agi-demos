@@ -4,10 +4,9 @@ Tests that ReActAgent correctly routes to parallel/chain/single SubAgent
 execution based on TaskDecomposer results.
 """
 
-import asyncio
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
@@ -215,7 +214,7 @@ class TestStreamOrchestration:
 
             mock_parallel.return_value = mock_events()
 
-            events = await self._collect_events(
+            await self._collect_events(
                 agent,
                 conversation_id="c1",
                 user_message="research and code",
@@ -266,7 +265,7 @@ class TestStreamOrchestration:
 
             mock_chain.return_value = mock_events()
 
-            events = await self._collect_events(
+            await self._collect_events(
                 agent,
                 conversation_id="c1",
                 user_message="research then write",
@@ -306,7 +305,7 @@ class TestStreamOrchestration:
 
             mock_single.return_value = mock_events()
 
-            events = await self._collect_events(
+            await self._collect_events(
                 agent,
                 conversation_id="c1",
                 user_message="research AI",
@@ -344,7 +343,7 @@ class TestStreamOrchestration:
 
             mock_single.return_value = mock_events()
 
-            events = await self._collect_events(
+            await self._collect_events(
                 agent,
                 conversation_id="c1",
                 user_message="research AI",
@@ -376,7 +375,7 @@ class TestStreamOrchestration:
 
             mock_single.return_value = mock_events()
 
-            events = await self._collect_events(
+            await self._collect_events(
                 agent,
                 conversation_id="c1",
                 user_message="research AI",
@@ -390,6 +389,38 @@ class TestStreamOrchestration:
         # _task_decomposer should NOT have been set since only 1 subagent
         # (but it was created since llm_client and subagents were both present)
         # The guard in stream() checks len(self.subagents) > 1
+
+    async def test_forced_subagent_skips_decomposition_and_strips_instruction(self):
+        """Forced delegation must bypass decomposition and keep only user task text."""
+        llm = MagicMock()
+        researcher = _make_subagent("researcher")
+        writer = _make_subagent("writer")
+        agent = _make_react_agent(llm_client=llm, subagents=[researcher, writer])
+
+        with (
+            patch.object(agent._task_decomposer, "decompose") as mock_decompose,
+            patch.object(agent, "_execute_subagent") as mock_exec,
+        ):
+            async def mock_events(*a, **kw):
+                yield {"type": "subagent_started", "data": {}, "timestamp": "t"}
+                yield {"type": "complete", "data": {"content": "done"}, "timestamp": "t"}
+
+            mock_exec.return_value = mock_events()
+
+            events = await self._collect_events(
+                agent,
+                conversation_id="c1",
+                user_message='[System Instruction: Delegate this task strictly to SubAgent "researcher"] write summary',
+                project_id="p1",
+                user_id="u1",
+                tenant_id="t1",
+            )
+
+        mock_decompose.assert_not_called()
+        mock_exec.assert_called_once()
+        assert mock_exec.call_args.kwargs["subagent"] == researcher
+        assert mock_exec.call_args.kwargs["user_message"] == "write summary"
+        assert any(event["type"] == "subagent_routed" for event in events)
 
 
 # === _execute_parallel Tests ===

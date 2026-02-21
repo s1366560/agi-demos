@@ -1,9 +1,10 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { InputBar } from '@/components/agent/InputBar';
 import { mentionService } from '@/services/mentionService';
 import { skillAPI } from '@/services/skillService';
+
+import { InputBar } from '@/components/agent/InputBar';
 
 import type { SkillResponse } from '@/types/agent';
 

@@ -84,8 +84,8 @@ const TemplateMarketplace = lazy(() =>
   }))
 );
 const McpServerList = lazy(() =>
-  import('./pages/tenant/McpServerList').then((m) => ({
-    default: m.McpServerList,
+  import('./components/mcp/McpServerListV2').then((m) => ({
+    default: m.McpServerListV2,
   }))
 );
 const AgentWorkspace = lazy(() =>
@@ -101,6 +101,11 @@ const PoolDashboard = lazy(() => import('./pages/admin/PoolDashboard'));
 const ProjectOverview = lazy(() =>
   import('./pages/project/ProjectOverview').then((m) => ({
     default: m.ProjectOverview,
+  }))
+);
+const ChannelConfig = lazy(() =>
+  import('./pages/project/ChannelConfig').then((m) => ({
+    default: m.default,
   }))
 );
 const MemoryList = lazy(() =>
@@ -636,6 +641,14 @@ function App() {
                   }
                 />
               </Route>
+              <Route
+                path="channels"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <ChannelConfig />
+                  </Suspense>
+                }
+              />
               <Route
                 path="team"
                 element={

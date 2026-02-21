@@ -1912,17 +1912,21 @@ class SessionProcessor:
                 except Exception as task_err:
                     logger.error(f"Task event emission failed: {task_err}", exc_info=True)
 
-            # Emit pending SSE events from register_mcp_server tool
+            # Emit pending SSE events from tools that support event buffering
             if (
-                tool_name == "register_mcp_server"
+                tool_name in {
+                    "register_mcp_server",
+                    "delegate_to_subagent",
+                    "parallel_delegate_subagents",
+                }
                 and tool_instance
                 and hasattr(tool_instance, "consume_pending_events")
             ):
                 try:
                     for event in tool_instance.consume_pending_events():
                         yield event
-                except Exception as reg_err:
-                    logger.error(f"{tool_name} event emission failed: {reg_err}")
+                except Exception as pending_err:
+                    logger.error(f"{tool_name} event emission failed: {pending_err}")
 
             # Refresh tools after successful register_mcp_server execution
             # This enables immediate access to newly registered MCP tools

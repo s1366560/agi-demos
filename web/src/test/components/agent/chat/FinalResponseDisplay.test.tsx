@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { FinalResponseDisplay } from '@/components/agent/chat/FinalResponseDisplay';
 
 // Mock html2pdf.js dynamic import

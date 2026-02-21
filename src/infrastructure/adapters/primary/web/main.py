@@ -32,6 +32,7 @@ from src.infrastructure.adapters.primary.web.routers import (  # noqa: E402
     auth,
     background_tasks,
     billing,
+    channels,
     data_export,
     enhanced_search,
     episodes,
@@ -59,6 +60,8 @@ from src.infrastructure.adapters.primary.web.routers.agent import (  # noqa: E40
     router as agent_router,
 )
 from src.infrastructure.adapters.primary.web.startup import (  # noqa: E402
+    get_channel_manager,
+    initialize_channel_manager,
     initialize_container,
     initialize_database_schema,
     initialize_docker_services,
@@ -68,6 +71,7 @@ from src.infrastructure.adapters.primary.web.startup import (  # noqa: E402
     initialize_telemetry,
     initialize_websocket_manager,
     initialize_workflow_engine,
+    shutdown_channel_manager,
     shutdown_docker_services,
     shutdown_telemetry_services,
 )
@@ -137,10 +141,19 @@ async def lifespan(app: FastAPI):
     # Initialize Docker services (sandbox sync and event monitor)
     await initialize_docker_services(container)
 
+    # Initialize Channel Connection Manager for IM integrations
+    channel_manager = await initialize_channel_manager()
+    if channel_manager:
+        app.state.channel_manager = channel_manager
+        logger.info("Channel connection manager initialized")
+
     yield
 
     # Shutdown
     logger.info("Shutting down...")
+
+    # Shutdown channel manager (close all IM connections)
+    await shutdown_channel_manager()
 
     # Stop Docker event monitor
     await shutdown_docker_services()
@@ -326,6 +339,9 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     # Attachments (File upload for agent chat)
     app.include_router(attachments_upload.router)
+
+    # Channel Configuration (IM integrations: Feishu, DingTalk, WeCom)
+    app.include_router(channels.router, prefix="/api/v1")
 
     # Agent Pool Admin API (always registered, returns disabled status when pool not enabled)
     from src.infrastructure.agent.pool import create_pool_router

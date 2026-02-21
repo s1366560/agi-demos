@@ -6,18 +6,17 @@ Tests for:
 - SubAgentProcess (independent ReAct loop)
 """
 
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
+from src.domain.model.agent.subagent import AgentModel, SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
 from src.infrastructure.agent.subagent.context_bridge import (
     ContextBridge,
     SubAgentContext,
 )
-
 
 # ============================================================================
 # Fixtures
@@ -388,6 +387,27 @@ class TestSubAgentProcess:
             base_model="qwen-max",
         )
         assert process._extract_summary("") == "No output produced."
+
+    async def test_relay_event_accepts_dict_events(self, sample_subagent):
+        from src.infrastructure.agent.subagent.process import SubAgentProcess
+
+        ctx = SubAgentContext(
+            task_description="Task",
+            system_prompt="Prompt",
+        )
+        process = SubAgentProcess(
+            subagent=sample_subagent,
+            context=ctx,
+            tools=[],
+            base_model="qwen-max",
+        )
+
+        relayed = process._relay_event(
+            {"type": "subagent_started", "data": {"foo": "bar"}, "timestamp": "t"}
+        )
+        assert relayed is not None
+        assert relayed["type"] == "subagent.subagent_started"
+        assert relayed["data"]["subagent_id"] == sample_subagent.id
 
     async def test_process_execute_yields_lifecycle_events(self, sample_subagent):
         """Test that execute yields subagent_started and subagent_completed events."""

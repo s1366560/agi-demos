@@ -19,10 +19,11 @@ Reference: OpenCode SessionProcessor architecture
 
 import asyncio
 import logging
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Optional
 
 from src.domain.events.agent_events import (
     AgentDomainEvent,
@@ -694,25 +695,93 @@ class ReActAgent:
                 f"[ReActAgent] Plan Mode suggested (confidence={suggestion.confidence:.2f})"
             )
 
+        # Check for forced SubAgent delegation via system instruction
+        # Format: [System Instruction: Delegate this task strictly to SubAgent "NAME"]
+        forced_subagent_name = None
+        processed_user_message = user_message
+        forced_prefix = '[System Instruction: Delegate this task strictly to SubAgent "'
+        if user_message.startswith(forced_prefix):
+            try:
+                match = re.match(
+                    r'^\[System Instruction: Delegate this task strictly to SubAgent "([^"]+)"\]',
+                    user_message,
+                )
+                if match:
+                    forced_subagent_name = match.group(1)
+                    processed_user_message = user_message.replace(match.group(0), "", 1).strip()
+                    if not processed_user_message:
+                        processed_user_message = user_message
+            except Exception as e:
+                logger.warning(f"[ReActAgent] Failed to parse forced subagent instruction: {e}")
+
         # Check for SubAgent routing (L3)
         # When enable_subagent_as_tool is True, skip pre-routing and let the LLM
         # decide via the delegate_to_subagent tool in the ReAct loop.
         # When False, use legacy pre-routing with keyword/LLM hybrid matching.
-        if not self._enable_subagent_as_tool:
-            subagent_match = await self._match_subagent_async(user_message, conversation_context)
-            active_subagent = subagent_match.subagent
+        # BUT if forced_subagent_name is present, we override everything.
+        if forced_subagent_name or not self._enable_subagent_as_tool:
+            active_subagent = None
+            subagent_match = None
+
+            if forced_subagent_name:
+                # Find the subagent
+                for sa in (self.subagents or []):
+                    if (
+                        sa.enabled
+                        and (
+                            sa.name == forced_subagent_name
+                            or sa.display_name == forced_subagent_name
+                        )
+                    ):
+                        active_subagent = sa
+                        break
+
+                if active_subagent:
+                    yield {
+                        "type": "subagent_routed",
+                        "data": {
+                            "subagent_id": active_subagent.id,
+                            "subagent_name": active_subagent.display_name,
+                            "confidence": 1.0,
+                            "reason": "Forced delegation via user instruction",
+                        },
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                else:
+                    logger.warning(
+                        f"[ReActAgent] Forced subagent '{forced_subagent_name}' not found"
+                    )
+            else:
+                # Normal pre-routing
+                subagent_match = await self._match_subagent_async(
+                    processed_user_message, conversation_context
+                )
+                active_subagent = subagent_match.subagent
+
+                if active_subagent:
+                    yield {
+                        "type": "subagent_routed",
+                        "data": {
+                            "subagent_id": active_subagent.id,
+                            "subagent_name": active_subagent.display_name,
+                            "confidence": subagent_match.confidence,
+                            "reason": subagent_match.match_reason,
+                        },
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
 
             if active_subagent:
-                yield {
-                    "type": "subagent_routed",
-                    "data": {
-                        "subagent_id": active_subagent.id,
-                        "subagent_name": active_subagent.display_name,
-                        "confidence": subagent_match.confidence,
-                        "reason": subagent_match.match_reason,
-                    },
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
+                if forced_subagent_name:
+                    async for event in self._execute_subagent(
+                        subagent=active_subagent,
+                        user_message=processed_user_message,
+                        conversation_context=conversation_context,
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        abort_signal=abort_signal,
+                    ):
+                        yield event
+                    return  # Forced SubAgent completed, exit early
 
                 # Multi-SubAgent orchestration: decompose task if possible
                 if self._task_decomposer and len(self.subagents) > 1:
@@ -725,7 +794,7 @@ class ReActAgent:
                                 for m in recent
                             )
                         decomposition = await self._task_decomposer.decompose(
-                            user_message, conversation_context=context_str
+                            processed_user_message, conversation_context=context_str
                         )
 
                         if decomposition.is_decomposed:
@@ -739,7 +808,7 @@ class ReActAgent:
                                 # Chain execution (sequential pipeline)
                                 async for event in self._execute_chain(
                                     subtasks=list(decomposition.subtasks),
-                                    user_message=user_message,
+                                    user_message=processed_user_message,
                                     conversation_context=conversation_context,
                                     project_id=project_id,
                                     tenant_id=tenant_id,
@@ -751,7 +820,7 @@ class ReActAgent:
                                 # Parallel execution
                                 async for event in self._execute_parallel(
                                     subtasks=list(decomposition.subtasks),
-                                    user_message=user_message,
+                                    user_message=processed_user_message,
                                     conversation_context=conversation_context,
                                     project_id=project_id,
                                     tenant_id=tenant_id,
@@ -768,7 +837,7 @@ class ReActAgent:
                 # Single SubAgent delegation (default path)
                 async for event in self._execute_subagent(
                     subagent=active_subagent,
-                    user_message=user_message,
+                    user_message=processed_user_message,
                     conversation_context=conversation_context,
                     project_id=project_id,
                     tenant_id=tenant_id,
@@ -795,9 +864,9 @@ class ReActAgent:
                     },
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
-                matched_skill, skill_score = self._match_skill(user_message)
+                matched_skill, skill_score = self._match_skill(processed_user_message)
         else:
-            matched_skill, skill_score = self._match_skill(user_message)
+            matched_skill, skill_score = self._match_skill(processed_user_message)
 
         # All skill execution goes through prompt injection into the ReAct loop.
         # Forced skills use mandatory injection; confidence-based uses recommendation.
@@ -869,7 +938,9 @@ class ReActAgent:
         memory_context = None
         if self._memory_recall:
             try:
-                memory_context = await self._memory_recall.recall(user_message, project_id)
+                memory_context = await self._memory_recall.recall(
+                    processed_user_message, project_id
+                )
                 if memory_context and self._memory_recall.last_results:
                     from src.domain.events.agent_events import AgentMemoryRecalledEvent
 
@@ -882,7 +953,7 @@ class ReActAgent:
                 logger.warning(f"[ReActAgent] Memory recall failed: {e}")
 
         system_prompt = await self._build_system_prompt(
-            user_message,
+            processed_user_message,
             conversation_context,
             matched_skill=matched_skill if should_inject_prompt else None,
             subagent=None,
@@ -909,7 +980,7 @@ class ReActAgent:
         context_request = ContextBuildRequest(
             system_prompt=system_prompt,
             conversation_context=conversation_context,
-            user_message=user_message,
+            user_message=processed_user_message,
             attachment_metadata=attachment_metadata,
             attachment_content=attachment_content,
             is_hitl_resume=False,
@@ -1015,7 +1086,11 @@ class ReActAgent:
                 }
 
                 # Create delegation callback that captures stream-scoped context
-                async def _delegate_callback(subagent_name: str, task: str) -> str:
+                async def _delegate_callback(
+                    subagent_name: str,
+                    task: str,
+                    on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
+                ) -> str:
                     target = subagent_map.get(subagent_name)
                     if not target:
                         return f"SubAgent '{subagent_name}' not found"
@@ -1029,6 +1104,10 @@ class ReActAgent:
                         tenant_id=tenant_id,
                         abort_signal=abort_signal,
                     ):
+                        if on_event:
+                            event_type = evt.get("type")
+                            if event_type not in {"complete", "error"}:
+                                on_event(evt)
                         events.append(evt)
 
                     # Extract result from the complete event
@@ -1063,6 +1142,7 @@ class ReActAgent:
                     description=delegate_tool.description,
                     parameters=delegate_tool.get_parameters_schema(),
                     execute=delegate_tool.execute,
+                    _tool_instance=delegate_tool,
                 )
                 tools_to_use.append(delegate_td)
 
@@ -1080,6 +1160,7 @@ class ReActAgent:
                         description=parallel_tool.description,
                         parameters=parallel_tool.get_parameters_schema(),
                         execute=parallel_tool.execute,
+                        _tool_instance=parallel_tool,
                     )
                     tools_to_use.append(parallel_td)
 
@@ -1171,7 +1252,7 @@ class ReActAgent:
             if self._memory_capture and success:
                 try:
                     captured = await self._memory_capture.capture(
-                        user_message=user_message,
+                        user_message=processed_user_message,
                         assistant_response=final_content or "",
                         project_id=project_id,
                         conversation_id=conversation_id or "unknown",
@@ -1225,6 +1306,7 @@ class ReActAgent:
             # Record execution statistics
             end_time = time.time()
             execution_time_ms = int((end_time - start_time) * 1000)
+            logger.debug(f"[ReActAgent] Stream finished in {execution_time_ms}ms")
 
             if matched_skill:
                 matched_skill.record_usage(success)
@@ -1240,6 +1322,7 @@ class ReActAgent:
         project_id: str,
         tenant_id: str,
         abort_signal: Optional[asyncio.Event] = None,
+        delegation_depth: int = 0,
     ) -> AsyncIterator[Dict[str, Any]]:
         """Execute a SubAgent in an independent ReAct loop.
 
@@ -1262,8 +1345,6 @@ class ReActAgent:
         """
         from ..subagent.context_bridge import ContextBridge
         from ..subagent.process import SubAgentProcess
-
-        start_time = time.time()
 
         # Search for relevant memories if graph service is available
         memory_context = ""
@@ -1301,9 +1382,108 @@ class ReActAgent:
         current_raw_tools, current_tool_definitions = self._get_current_tools()
         if self.subagent_router:
             filtered_raw = self.subagent_router.filter_tools(subagent, current_raw_tools)
-            filtered_tools = convert_tools(filtered_raw)
+            filtered_tools = list(convert_tools(filtered_raw))
         else:
-            filtered_tools = current_tool_definitions
+            filtered_tools = list(current_tool_definitions)
+
+        # Inject SubAgent delegation tools for nested orchestration (bounded depth).
+        max_delegation_depth = 2
+        if (
+            self.subagents
+            and self._enable_subagent_as_tool
+            and delegation_depth < max_delegation_depth
+        ):
+            from ..tools.delegate_subagent import (
+                DelegateSubAgentTool,
+                ParallelDelegateSubAgentTool,
+            )
+
+            nested_candidates = [
+                sa for sa in self.subagents if sa.enabled and sa.id != subagent.id
+            ]
+            if nested_candidates:
+                nested_map = {sa.name: sa for sa in nested_candidates}
+                nested_descriptions = {
+                    sa.name: (sa.trigger.description if sa.trigger else sa.display_name)
+                    for sa in nested_candidates
+                }
+
+                async def _nested_delegate_callback(
+                    subagent_name: str,
+                    task: str,
+                    on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
+                ) -> str:
+                    target = nested_map.get(subagent_name)
+                    if not target:
+                        return f"SubAgent '{subagent_name}' not found"
+
+                    events = []
+                    async for evt in self._execute_subagent(
+                        subagent=target,
+                        user_message=task,
+                        conversation_context=conversation_context,
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        abort_signal=abort_signal,
+                        delegation_depth=delegation_depth + 1,
+                    ):
+                        if on_event:
+                            event_type = evt.get("type")
+                            if event_type not in {"complete", "error"}:
+                                on_event(evt)
+                        events.append(evt)
+
+                    complete_evt = next(
+                        (event for event in events if event.get("type") == "complete"),
+                        None,
+                    )
+                    if not complete_evt:
+                        return "SubAgent execution completed but no result returned"
+
+                    data = complete_evt.get("data", {})
+                    content = data.get("content", "")
+                    subagent_result = data.get("subagent_result")
+                    if subagent_result:
+                        summary = subagent_result.get("summary", content)
+                        tokens = subagent_result.get("tokens_used", 0)
+                        return (
+                            f"[SubAgent '{subagent_name}' completed]\n"
+                            f"Result: {summary}\n"
+                            f"Tokens used: {tokens}"
+                        )
+
+                    return content or "SubAgent completed with no output"
+
+                nested_delegate_tool = DelegateSubAgentTool(
+                    subagent_names=list(nested_map.keys()),
+                    subagent_descriptions=nested_descriptions,
+                    execute_callback=_nested_delegate_callback,
+                )
+                filtered_tools.append(
+                    ToolDefinition(
+                        name=nested_delegate_tool.name,
+                        description=nested_delegate_tool.description,
+                        parameters=nested_delegate_tool.get_parameters_schema(),
+                        execute=nested_delegate_tool.execute,
+                        _tool_instance=nested_delegate_tool,
+                    )
+                )
+
+                if len(nested_candidates) >= 2:
+                    nested_parallel_tool = ParallelDelegateSubAgentTool(
+                        subagent_names=list(nested_map.keys()),
+                        subagent_descriptions=nested_descriptions,
+                        execute_callback=_nested_delegate_callback,
+                    )
+                    filtered_tools.append(
+                        ToolDefinition(
+                            name=nested_parallel_tool.name,
+                            description=nested_parallel_tool.description,
+                            parameters=nested_parallel_tool.get_parameters_schema(),
+                            execute=nested_parallel_tool.execute,
+                            _tool_instance=nested_parallel_tool,
+                        )
+                    )
 
         # Create independent SubAgent process
         process = SubAgentProcess(
@@ -1638,7 +1818,9 @@ class ReActAgent:
                 return tool.sandbox_id
         return None
 
-    def _convert_domain_event(self, domain_event: AgentDomainEvent) -> Optional[Dict[str, Any]]:
+    def _convert_domain_event(
+        self, domain_event: AgentDomainEvent | Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
         """
         Convert AgentDomainEvent to event dictionary format.
 
@@ -1650,6 +1832,9 @@ class ReActAgent:
         Returns:
             Event dict or None to skip
         """
+        if isinstance(domain_event, dict):
+            return domain_event
+
         # Delegate to EventConverter
         return self._event_converter.convert(domain_event)
 

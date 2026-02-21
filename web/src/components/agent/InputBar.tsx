@@ -31,6 +31,7 @@ import {
   MessageSquare,
   Terminal,
   ListChecks,
+  Workflow,
 } from 'lucide-react';
 
 import type { MentionItem } from '@/services/mentionService';
@@ -51,7 +52,7 @@ import type { MentionPopoverHandle } from './chat/MentionPopover';
 import type { SlashCommandDropdownHandle } from './SlashCommandDropdown';
 
 interface InputBarProps {
-  onSend: (content: string, fileMetadata?: FileMetadata[], forcedSkillName?: string) => void;
+  onSend: (content: string, fileMetadata?: FileMetadata[], forcedSkillName?: string, forcedSubAgentName?: string) => void;
   onAbort: () => void;
   isStreaming: boolean;
   disabled?: boolean;
@@ -81,6 +82,7 @@ export const InputBar = memo<InputBarProps>(
     const [isFocused, setIsFocused] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const [selectedSkill, setSelectedSkill] = useState<SkillResponse | null>(null);
+    const [selectedSubAgent, setSelectedSubAgent] = useState<string | null>(null);
     const [slashDropdownVisible, setSlashDropdownVisible] = useState(false);
     const [slashQuery, setSlashQuery] = useState('');
     const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
@@ -138,10 +140,12 @@ export const InputBar = memo<InputBarProps>(
       onSend(
         messageContent,
         fileMetadataList.length > 0 ? fileMetadataList : undefined,
-        selectedSkill?.name
+        selectedSkill?.name,
+        selectedSubAgent || undefined
       );
       setContent('');
       setSelectedSkill(null);
+      setSelectedSubAgent(null);
       setSlashDropdownVisible(false);
       setMentionVisible(false);
       setMentionQuery('');
@@ -158,6 +162,7 @@ export const InputBar = memo<InputBarProps>(
       onSend,
       clearAll,
       selectedSkill,
+      selectedSubAgent,
       inputMode,
     ]);
 
@@ -182,6 +187,25 @@ export const InputBar = memo<InputBarProps>(
         // Find the "@" trigger position before cursor
         const atIndex = textBefore.lastIndexOf('@');
         if (atIndex === -1) return;
+
+        // Special handling for SubAgents: select as "force delegate" instead of inserting text
+        if (item.type === 'subagent') {
+          setSelectedSubAgent(item.name);
+          setMentionVisible(false);
+          setMentionQuery('');
+
+          // Remove the trigger text (e.g. "@sub")
+          const before = content.slice(0, atIndex);
+          const newContent = before + textAfter;
+          setContent(newContent);
+
+          // Restore cursor position (at the deleted point)
+          setTimeout(() => {
+            textarea.focus();
+            textarea.setSelectionRange(atIndex, atIndex);
+          }, 50);
+          return;
+        }
 
         const before = content.slice(0, atIndex);
         const replacement = `@${item.name} `;
@@ -266,6 +290,10 @@ export const InputBar = memo<InputBarProps>(
 
     const handleRemoveSkill = useCallback(() => {
       setSelectedSkill(null);
+    }, []);
+
+    const handleRemoveSubAgent = useCallback(() => {
+      setSelectedSubAgent(null);
     }, []);
 
     const handleKeyDown = useCallback(
@@ -373,6 +401,9 @@ export const InputBar = memo<InputBarProps>(
         }
 
         // @-mention detection: find "@" before cursor followed by non-space chars
+        // We allow mentions even if subagent is selected (e.g. to mention entities)
+        // But the MentionPopover should probably filter out subagents if one is already selected?
+        // For now, let's just allow it. If they select another subagent, it replaces the current one.
         const cursorPos = target.selectionStart;
         const textBefore = value.slice(0, cursorPos);
         const mentionMatch = textBefore.match(/@([^\s@]*)$/);
@@ -385,7 +416,7 @@ export const InputBar = memo<InputBarProps>(
           setMentionQuery('');
         }
       },
-      [selectedSkill, slashDropdownVisible, mentionVisible, resizeTextarea]
+      [selectedSkill, selectedSubAgent, slashDropdownVisible, mentionVisible, resizeTextarea]
     );
 
     useEffect(() => {
@@ -571,6 +602,23 @@ export const InputBar = memo<InputBarProps>(
                   type="button"
                   onClick={handleRemoveSkill}
                   className="ml-0.5 p-0.5 hover:bg-primary/10 rounded-full transition-colors"
+                >
+                  <X size={10} />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Selected SubAgent Badge */}
+          {selectedSubAgent && (
+            <div className="px-4 pt-3 flex-shrink-0">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500/5 to-purple-500/10 dark:from-purple-500/10 dark:to-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/20 dark:border-purple-500/30 rounded-full text-xs font-medium">
+                <Workflow size={12} />
+                <span>@{selectedSubAgent}</span>
+                <button
+                  type="button"
+                  onClick={handleRemoveSubAgent}
+                  className="ml-0.5 p-0.5 hover:bg-purple-500/10 rounded-full transition-colors"
                 >
                   <X size={10} />
                 </button>

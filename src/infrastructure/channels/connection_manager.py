@@ -1,0 +1,519 @@
+"""Channel connection manager for managing IM channel long connections.
+
+This module provides a centralized manager for WebSocket connections to various
+IM platforms (Feishu, DingTalk, WeCom, etc.). It handles connection lifecycle,
+automatic reconnection with exponential backoff, health checks, and message routing.
+"""
+
+import asyncio
+import logging
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.domain.model.channels.message import (
+    ChannelConfig,
+    Message,
+)
+from src.infrastructure.adapters.secondary.persistence.channel_models import (
+    ChannelConfigModel,
+)
+from src.infrastructure.adapters.secondary.persistence.channel_repository import (
+    ChannelConfigRepository,
+)
+
+logger = logging.getLogger(__name__)
+
+# Constants
+MAX_RECONNECT_DELAY = 60  # Maximum reconnect delay in seconds
+INITIAL_RECONNECT_DELAY = 2  # Initial reconnect delay in seconds
+HEALTH_CHECK_INTERVAL = 30  # Health check interval in seconds
+
+
+@dataclass
+class ManagedConnection:
+    """Represents a managed channel connection.
+
+    Attributes:
+        config_id: Unique identifier for the channel configuration.
+        project_id: Project ID this channel belongs to.
+        channel_type: Type of channel (feishu, dingtalk, wecom, etc.).
+        adapter: The channel adapter instance.
+        task: The asyncio task running the connection.
+        status: Current connection status.
+        last_heartbeat: Timestamp of last successful heartbeat.
+        last_error: Last error message if any.
+        reconnect_attempts: Number of reconnection attempts.
+    """
+
+    config_id: str
+    project_id: str
+    channel_type: str
+    adapter: Any  # ChannelAdapter instance
+    task: Optional[asyncio.Task] = None
+    status: str = "disconnected"
+    last_heartbeat: Optional[datetime] = None
+    last_error: Optional[str] = None
+    reconnect_attempts: int = 0
+    _stop_event: asyncio.Event = field(default_factory=asyncio.Event)
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API responses."""
+        return {
+            "config_id": self.config_id,
+            "project_id": self.project_id,
+            "channel_type": self.channel_type,
+            "status": self.status,
+            "connected": self.status == "connected",
+            "last_heartbeat": self.last_heartbeat.isoformat() if self.last_heartbeat else None,
+            "last_error": self.last_error,
+            "reconnect_attempts": self.reconnect_attempts,
+        }
+
+
+class ChannelConnectionManager:
+    """Manages long-lived connections to IM channels.
+
+    This singleton manager handles:
+    - Loading enabled configurations at startup
+    - Establishing WebSocket connections
+    - Automatic reconnection with exponential backoff
+    - Health monitoring
+    - Message routing to the agent system
+    - Graceful shutdown
+
+    Usage:
+        manager = ChannelConnectionManager(message_router=my_router)
+        await manager.start_all(async_session_factory)
+
+        # Later, when adding a new config:
+        await manager.add_connection(config_model)
+
+        # On shutdown:
+        await manager.shutdown_all()
+    """
+
+    def __init__(
+        self,
+        message_router: Optional[Callable[[Message], None]] = None,
+        session_factory: Optional[Callable[[], AsyncSession]] = None,
+    ) -> None:
+        """Initialize the connection manager.
+
+        Args:
+            message_router: Optional callback to route incoming messages.
+            session_factory: Factory function to create database sessions.
+        """
+        self._connections: Dict[str, ManagedConnection] = {}
+        self._message_router = message_router
+        self._session_factory = session_factory
+        self._health_check_task: Optional[asyncio.Task] = None
+        self._started = False
+
+    @property
+    def connections(self) -> Dict[str, ManagedConnection]:
+        """Get all managed connections."""
+        return self._connections
+
+    async def start_all(
+        self,
+        session_factory: Optional[Callable[[], AsyncSession]] = None,
+    ) -> int:
+        """Load all enabled configurations and establish connections.
+
+        Args:
+            session_factory: Factory function to create database sessions.
+                If not provided, uses the factory passed to __init__.
+
+        Returns:
+            Number of connections started.
+        """
+        if self._started:
+            logger.warning("[ChannelManager] Already started, skipping start_all")
+            return 0
+
+        if session_factory:
+            self._session_factory = session_factory
+
+        if not self._session_factory:
+            logger.error("[ChannelManager] No session factory provided")
+            return 0
+
+        logger.info("[ChannelManager] Starting all channel connections...")
+        self._started = True
+
+        # Load all enabled configurations
+        async with self._session_factory() as session:
+            repo = ChannelConfigRepository(session)
+            configs = await self._list_all_enabled(repo)
+
+        logger.info(f"[ChannelManager] Found {len(configs)} enabled configurations")
+
+        # Start connections
+        started = 0
+        for config in configs:
+            try:
+                await self.add_connection(config)
+                started += 1
+            except Exception as e:
+                logger.error(f"[ChannelManager] Failed to start connection {config.id}: {e}")
+
+        # Start health check loop
+        self._health_check_task = asyncio.create_task(self._health_check_loop())
+
+        logger.info(f"[ChannelManager] Started {started}/{len(configs)} connections")
+        return started
+
+    async def _list_all_enabled(self, repo: ChannelConfigRepository) -> List[ChannelConfigModel]:
+        """List all enabled configurations."""
+        from sqlalchemy import select
+
+        query = select(ChannelConfigModel).where(ChannelConfigModel.enabled.is_(True))
+        result = await repo._session.execute(query)
+        return list(result.scalars().all())
+
+    async def add_connection(self, config: ChannelConfigModel) -> ManagedConnection:
+        """Add and establish a new connection.
+
+        Args:
+            config: The channel configuration model.
+
+        Returns:
+            The managed connection instance.
+
+        Raises:
+            ValueError: If config already exists or is invalid.
+        """
+        if config.id in self._connections:
+            raise ValueError(f"Connection {config.id} already exists")
+
+        if not config.enabled:
+            raise ValueError(f"Configuration {config.id} is not enabled")
+
+        logger.info(f"[ChannelManager] Adding connection {config.id} ({config.channel_type})")
+
+        # Create adapter based on channel type
+        adapter = await self._create_adapter(config)
+
+        # Create managed connection
+        connection = ManagedConnection(
+            config_id=config.id,
+            project_id=config.project_id,
+            channel_type=config.channel_type,
+            adapter=adapter,
+            status="connecting",
+        )
+
+        self._connections[config.id] = connection
+
+        # Start connection task
+        connection.task = asyncio.create_task(
+            self._connection_loop(connection, config)
+        )
+
+        return connection
+
+    async def _create_adapter(self, config: ChannelConfigModel) -> Any:
+        """Create a channel adapter based on configuration.
+
+        Args:
+            config: The channel configuration.
+
+        Returns:
+            The created adapter instance.
+
+        Raises:
+            ValueError: If channel type is not supported.
+        """
+        # Decrypt app_secret if needed
+        app_secret = config.app_secret or ""
+        if app_secret:
+            try:
+                from src.infrastructure.security.encryption_service import get_encryption_service
+
+                encryption_service = get_encryption_service()
+                app_secret = encryption_service.decrypt(app_secret)
+            except Exception as e:
+                logger.warning(f"[ChannelManager] Failed to decrypt app_secret: {e}")
+
+        channel_config = ChannelConfig(
+            enabled=config.enabled,
+            app_id=config.app_id,
+            app_secret=app_secret,
+            encrypt_key=config.encrypt_key,
+            verification_token=config.verification_token,
+            connection_mode=config.connection_mode,
+            webhook_port=config.webhook_port,
+            webhook_path=config.webhook_path,
+            domain=config.domain,
+            extra=config.extra_settings or {},
+        )
+
+        if config.channel_type == "feishu":
+            from src.infrastructure.adapters.secondary.channels.feishu import FeishuAdapter
+
+            return FeishuAdapter(channel_config)
+        else:
+            raise ValueError(f"Unsupported channel type: {config.channel_type}")
+
+    async def _connection_loop(
+        self,
+        connection: ManagedConnection,
+        config: ChannelConfigModel,
+    ) -> None:
+        """Run the connection loop with automatic reconnection.
+
+        Args:
+            connection: The managed connection.
+            config: The channel configuration.
+        """
+        while not connection._stop_event.is_set():
+            try:
+                # Attempt to connect
+                connection.status = "connecting"
+                await self._update_db_status(config.id, "connecting")
+
+                # Set up message handler
+                def message_handler(message: Message) -> None:
+                    message.project_id = config.project_id
+                    if self._message_router:
+                        try:
+                            asyncio.create_task(self._safe_route_message(message))
+                        except Exception as e:
+                            logger.error(f"[ChannelManager] Error routing message: {e}")
+
+                connection.adapter.on_message(message_handler)
+
+                # Connect
+                await connection.adapter.connect()
+
+                connection.status = "connected"
+                connection.last_heartbeat = datetime.now(timezone.utc)
+                connection.reconnect_attempts = 0
+                connection.last_error = None
+
+                await self._update_db_status(config.id, "connected")
+
+                logger.info(f"[ChannelManager] Connected: {config.id} ({config.channel_type})")
+
+                # Wait for disconnect or stop signal
+                while (
+                    connection.adapter.connected
+                    and not connection._stop_event.is_set()
+                ):
+                    await asyncio.sleep(1)
+
+                if connection._stop_event.is_set():
+                    break
+
+                # Disconnected unexpectedly
+                logger.warning(f"[ChannelManager] Connection lost: {config.id}")
+                connection.status = "disconnected"
+
+            except Exception as e:
+                logger.error(f"[ChannelManager] Connection error for {config.id}: {e}")
+                connection.status = "error"
+                connection.last_error = str(e)
+
+                await self._update_db_status(config.id, "error", str(e))
+
+            # Reconnect with exponential backoff
+            if not connection._stop_event.is_set():
+                connection.reconnect_attempts += 1
+                delay = min(
+                    INITIAL_RECONNECT_DELAY ** connection.reconnect_attempts,
+                    MAX_RECONNECT_DELAY,
+                )
+                logger.info(
+                    f"[ChannelManager] Reconnecting {config.id} in {delay}s "
+                    f"(attempt {connection.reconnect_attempts})"
+                )
+                await asyncio.sleep(delay)
+
+        # Clean up
+        try:
+            await connection.adapter.disconnect()
+        except Exception as e:
+            logger.warning(f"[ChannelManager] Error disconnecting {config.id}: {e}")
+
+        connection.status = "disconnected"
+        logger.info(f"[ChannelManager] Connection loop ended: {config.id}")
+
+    async def _safe_route_message(self, message: Message) -> None:
+        """Safely route a message to the handler."""
+        try:
+            if self._message_router:
+                if asyncio.iscoroutinefunction(self._message_router):
+                    await self._message_router(message)
+                else:
+                    self._message_router(message)
+        except Exception as e:
+            logger.error(f"[ChannelManager] Message routing error: {e}")
+
+    async def _update_db_status(
+        self,
+        config_id: str,
+        status: str,
+        error: Optional[str] = None,
+    ) -> None:
+        """Update connection status in database."""
+        if not self._session_factory:
+            return
+
+        try:
+            async with self._session_factory() as session:
+                repo = ChannelConfigRepository(session)
+                await repo.update_status(config_id, status, error)
+                await session.commit()
+        except Exception as e:
+            logger.warning(f"[ChannelManager] Failed to update DB status: {e}")
+
+    async def remove_connection(self, config_id: str) -> bool:
+        """Remove and disconnect a connection.
+
+        Args:
+            config_id: The configuration ID to remove.
+
+        Returns:
+            True if removed, False if not found.
+        """
+        connection = self._connections.get(config_id)
+        if not connection:
+            return False
+
+        logger.info(f"[ChannelManager] Removing connection {config_id}")
+
+        # Signal stop
+        connection._stop_event.set()
+
+        # Wait for task to complete
+        if connection.task and not connection.task.done():
+            try:
+                await asyncio.wait_for(connection.task, timeout=5.0)
+            except asyncio.TimeoutError:
+                connection.task.cancel()
+
+        del self._connections[config_id]
+
+        await self._update_db_status(config_id, "disconnected")
+
+        return True
+
+    async def restart_connection(self, config_id: str) -> bool:
+        """Restart a connection (e.g., after config update).
+
+        Args:
+            config_id: The configuration ID to restart.
+
+        Returns:
+            True if restarted, False if not found.
+        """
+        connection = self._connections.get(config_id)
+        if not connection:
+            return False
+
+        logger.info(f"[ChannelManager] Restarting connection {config_id}")
+
+        # Get fresh config from DB
+        if not self._session_factory:
+            logger.error("[ChannelManager] No session factory for restart")
+            return False
+
+        async with self._session_factory() as session:
+            repo = ChannelConfigRepository(session)
+            config = await repo.get_by_id(config_id)
+
+        if not config:
+            logger.error(f"[ChannelManager] Config {config_id} not found in DB")
+            return False
+
+        # Remove old connection
+        await self.remove_connection(config_id)
+
+        # Add new connection with fresh config
+        if config.enabled:
+            try:
+                await self.add_connection(config)
+                return True
+            except Exception as e:
+                logger.error(f"[ChannelManager] Failed to restart {config_id}: {e}")
+                return False
+
+        return True
+
+    async def shutdown_all(self) -> None:
+        """Shutdown all connections gracefully."""
+        logger.info("[ChannelManager] Shutting down all connections...")
+
+        # Stop health check
+        if self._health_check_task and not self._health_check_task.done():
+            self._health_check_task.cancel()
+            try:
+                await self._health_check_task
+            except asyncio.CancelledError:
+                pass
+
+        # Stop all connections
+        stop_tasks = []
+        for config_id in list(self._connections.keys()):
+            stop_tasks.append(self.remove_connection(config_id))
+
+        if stop_tasks:
+            await asyncio.gather(*stop_tasks, return_exceptions=True)
+
+        self._started = False
+        logger.info("[ChannelManager] All connections shut down")
+
+    async def _health_check_loop(self) -> None:
+        """Periodic health check for all connections."""
+        while self._started:
+            try:
+                await asyncio.sleep(HEALTH_CHECK_INTERVAL)
+
+                for connection in list(self._connections.values()):
+                    if connection.status == "connected":
+                        # Update heartbeat if connected
+                        if connection.adapter.connected:
+                            connection.last_heartbeat = datetime.now(timezone.utc)
+                        else:
+                            # Connection lost, will be handled by connection loop
+                            logger.warning(
+                                f"[ChannelManager] Health check: {connection.config_id} disconnected"
+                            )
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"[ChannelManager] Health check error: {e}")
+
+    def get_status(self, config_id: str) -> Optional[Dict[str, Any]]:
+        """Get the status of a specific connection.
+
+        Args:
+            config_id: The configuration ID.
+
+        Returns:
+            Connection status dict or None if not found.
+        """
+        connection = self._connections.get(config_id)
+        if connection:
+            return connection.to_dict()
+        return None
+
+    def get_all_status(self) -> List[Dict[str, Any]]:
+        """Get the status of all connections.
+
+        Returns:
+            List of connection status dicts.
+        """
+        return [conn.to_dict() for conn in self._connections.values()]
+
+    def set_message_router(self, router: Callable[[Message], None]) -> None:
+        """Set the message router callback.
+
+        Args:
+            router: The callback function to route incoming messages.
+        """
+        self._message_router = router

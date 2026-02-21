@@ -8,6 +8,7 @@ import {
   ProviderType,
   ProviderUpdate,
 } from '../../types/memory';
+import { ProviderIcon } from './ProviderIcon';
 
 interface ProviderConfigModalProps {
   isOpen: boolean;
@@ -16,7 +17,6 @@ interface ProviderConfigModalProps {
   provider?: ProviderConfig | null;
 }
 
-// Provider metadata with full LiteLLM support info
 interface ProviderMeta {
   value: ProviderType;
   label: string;
@@ -218,6 +218,8 @@ const OPTIONAL_API_KEY_PROVIDERS: ProviderType[] = ['ollama', 'lmstudio'];
 const providerTypeRequiresApiKey = (type: ProviderType) =>
   !OPTIONAL_API_KEY_PROVIDERS.includes(type);
 
+type Step = 'provider' | 'credentials' | 'models' | 'review';
+
 // Model presets by provider
 const MODEL_PRESETS: Record<
   ProviderType,
@@ -412,9 +414,7 @@ const MODEL_PRESETS: Record<
     embedding: [{ name: 'text-embedding-nomic-embed-text-v1.5', dimension: 768 }],
     reranker: [{ name: 'local-model', description: 'LLM-based reranking' }],
   },
-};
-
-type Step = 'provider' | 'credentials' | 'models' | 'review';
+} as const;
 
 const resolveEmbeddingConfig = (provider: ProviderConfig): EmbeddingConfig | undefined => {
   if (provider.embedding_config) {
@@ -442,7 +442,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [configJson, setConfigJson] = useState('{}');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [fetchedModels, setFetchedModels] = useState<string[]>([]);
 
@@ -466,24 +465,14 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     use_custom_base_url: false,
   });
 
-  const selectedProvider = PROVIDERS.find((p) => p.value === formData.provider_type);
-  const presets = MODEL_PRESETS[formData.provider_type];
+  const steps: { key: Step; label: string; icon: string; description: string }[] = [
+    { key: 'provider', label: 'Select Provider', icon: 'smart_toy', description: 'Choose LLM provider' },
+    { key: 'credentials', label: 'Credentials', icon: 'key', description: 'API key & config' },
+    { key: 'models', label: 'Models', icon: 'psychology', description: 'Configure models' },
+    { key: 'review', label: 'Review', icon: 'check_circle', description: 'Review & save' },
+  ];
 
-  // Fetch models from backend when provider type changes
-  useEffect(() => {
-    if (formData.provider_type && isOpen) {
-      providerAPI
-        .listModels(formData.provider_type)
-        .then((res) => {
-          setFetchedModels(res.models || []);
-        })
-        .catch((err) => {
-          console.error('Failed to fetch models:', err);
-          setFetchedModels([]);
-        });
-    }
-  }, [formData.provider_type, isOpen]);
-
+  // Initialize form data
   useEffect(() => {
     if (provider) {
       const embeddingConfig = resolveEmbeddingConfig(provider);
@@ -512,7 +501,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         is_default: provider.is_default,
         use_custom_base_url: !!provider.base_url,
       });
-      setConfigJson(JSON.stringify(provider.config || {}, null, 2));
       setCurrentStep('credentials');
     } else {
       setFormData({
@@ -534,7 +522,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         is_default: false,
         use_custom_base_url: false,
       });
-      setConfigJson('{}');
       setCurrentStep('provider');
     }
     setError(null);
@@ -542,21 +529,18 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   }, [provider, isOpen]);
 
   const handleProviderSelect = (type: ProviderType) => {
+    const providerMeta = PROVIDERS.find((p) => p.value === type);
     const presets = MODEL_PRESETS[type];
     setFormData((prev) => ({
       ...prev,
       provider_type: type,
-      name: prev.name || PROVIDERS.find((p) => p.value === type)?.label || '',
+      name: prev.name || providerMeta?.label || '',
       llm_model: presets?.llm[0]?.name || '',
       llm_small_model: presets?.small[0]?.name || '',
       embedding_model: presets?.embedding[0]?.name || '',
       embedding_dimensions: presets?.embedding[0]?.dimension
         ? String(presets.embedding[0].dimension)
         : '',
-      embedding_encoding_format: type === 'dashscope' ? 'float' : '',
-      embedding_user: '',
-      embedding_timeout: '',
-      embedding_provider_options_json: '{}',
       reranker_model: presets?.reranker[0]?.name || '',
     }));
     setTestResult(null);
@@ -572,7 +556,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     setTestResult(null);
 
     try {
-      // Simulate API test - in real implementation, call backend
       await new Promise((resolve) => setTimeout(resolve, 1500));
       setTestResult({ success: true, message: 'Connection successful! API key is valid.' });
     } catch (_err) {
@@ -581,144 +564,6 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
       setIsTesting(false);
     }
   }, [formData.api_key, formData.provider_type, isEditing]);
-
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    setError(null);
-
-    // Parse and validate config JSON
-    let config: Record<string, any> = {};
-    try {
-      config = JSON.parse(configJson);
-    } catch (_e) {
-      setError('Invalid JSON in Advanced Configuration');
-      setIsSubmitting(false);
-      return;
-    }
-    if (typeof config !== 'object' || Array.isArray(config) || config === null) {
-      setError('Advanced Configuration must be a JSON object');
-      setIsSubmitting(false);
-      return;
-    }
-
-    let embeddingProviderOptions: Record<string, any> = {};
-    try {
-      embeddingProviderOptions = JSON.parse(formData.embedding_provider_options_json || '{}');
-    } catch (_e) {
-      setError('Embedding provider options must be valid JSON');
-      setIsSubmitting(false);
-      return;
-    }
-    if (
-      typeof embeddingProviderOptions !== 'object' ||
-      embeddingProviderOptions === null ||
-      Array.isArray(embeddingProviderOptions)
-    ) {
-      setError('Embedding provider options must be a JSON object');
-      setIsSubmitting(false);
-      return;
-    }
-
-    let embeddingDimensions: number | undefined;
-    if (formData.embedding_dimensions.trim()) {
-      embeddingDimensions = Number(formData.embedding_dimensions);
-      if (!Number.isInteger(embeddingDimensions) || embeddingDimensions <= 0) {
-        setError('Embedding dimensions must be a positive integer');
-        setIsSubmitting(false);
-        return;
-      }
-    }
-
-    let embeddingTimeout: number | undefined;
-    if (formData.embedding_timeout.trim()) {
-      embeddingTimeout = Number(formData.embedding_timeout);
-      if (!Number.isFinite(embeddingTimeout) || embeddingTimeout <= 0) {
-        setError('Embedding timeout must be a positive number');
-        setIsSubmitting(false);
-        return;
-      }
-    }
-
-    const embeddingConfig: EmbeddingConfig = {};
-    if (formData.embedding_model.trim()) {
-      embeddingConfig.model = formData.embedding_model.trim();
-    }
-    if (embeddingDimensions !== undefined) {
-      embeddingConfig.dimensions = embeddingDimensions;
-    }
-    if (formData.embedding_encoding_format) {
-      embeddingConfig.encoding_format = formData.embedding_encoding_format;
-    }
-    if (formData.embedding_user.trim()) {
-      embeddingConfig.user = formData.embedding_user.trim();
-    }
-    if (embeddingTimeout !== undefined) {
-      embeddingConfig.timeout = embeddingTimeout;
-    }
-    if (Object.keys(embeddingProviderOptions).length > 0) {
-      embeddingConfig.provider_options = embeddingProviderOptions;
-    }
-
-    const normalizedEmbeddingConfig =
-      Object.keys(embeddingConfig).length > 0 ? embeddingConfig : undefined;
-    if (normalizedEmbeddingConfig) {
-      config = { ...config, embedding: normalizedEmbeddingConfig };
-    } else {
-      const nextConfig = { ...config };
-      delete nextConfig.embedding;
-      config = nextConfig;
-    }
-
-    try {
-      if (isEditing && provider) {
-        const updateData: ProviderUpdate = {
-          name: formData.name,
-          provider_type: formData.provider_type,
-          base_url: formData.base_url || undefined,
-          llm_model: formData.llm_model,
-          llm_small_model: formData.llm_small_model || undefined,
-          embedding_model: formData.embedding_model || undefined,
-          embedding_config: normalizedEmbeddingConfig,
-          reranker_model: formData.reranker_model || undefined,
-          config: config,
-          is_active: formData.is_active,
-          is_default: formData.is_default,
-        };
-        if (formData.api_key) {
-          updateData.api_key = formData.api_key;
-        }
-        await providerAPI.update(provider.id, updateData);
-      } else {
-        const createData: ProviderCreate = {
-          name: formData.name,
-          provider_type: formData.provider_type,
-          api_key: formData.api_key,
-          base_url: formData.base_url || undefined,
-          llm_model: formData.llm_model,
-          llm_small_model: formData.llm_small_model || undefined,
-          embedding_model: formData.embedding_model || undefined,
-          embedding_config: normalizedEmbeddingConfig,
-          reranker_model: formData.reranker_model || undefined,
-          config: config,
-          is_active: formData.is_active,
-          is_default: formData.is_default,
-        };
-        await providerAPI.create(createData);
-      }
-      onSuccess();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to save provider');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const steps: { key: Step; label: string; icon: string }[] = [
-    { key: 'provider', label: 'Provider', icon: 'smart_toy' },
-    { key: 'credentials', label: 'Credentials', icon: 'key' },
-    { key: 'models', label: 'Models', icon: 'psychology' },
-    { key: 'review', label: 'Review', icon: 'check_circle' },
-  ];
 
   const canProceed = () => {
     switch (currentStep) {
@@ -738,754 +583,436 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     }
   };
 
-  const goNext = () => {
-    const stepIndex = steps.findIndex((s) => s.key === currentStep);
-    if (stepIndex < steps.length - 1) {
-      setCurrentStep(steps[stepIndex + 1].key);
-    }
-  };
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setError(null);
 
-  const goBack = () => {
-    const stepIndex = steps.findIndex((s) => s.key === currentStep);
-    if (stepIndex > 0) {
-      setCurrentStep(steps[stepIndex - 1].key);
+    try {
+      const embeddingProviderOptions = JSON.parse(formData.embedding_provider_options_json || '{}');
+      const embeddingDimensions = formData.embedding_dimensions.trim()
+        ? Number(formData.embedding_dimensions)
+        : undefined;
+      const embeddingTimeout = formData.embedding_timeout.trim()
+        ? Number(formData.embedding_timeout)
+        : undefined;
+
+      const embeddingConfig: EmbeddingConfig = {};
+      if (formData.embedding_model.trim()) {
+        embeddingConfig.model = formData.embedding_model.trim();
+      }
+      if (embeddingDimensions !== undefined) {
+        embeddingConfig.dimensions = embeddingDimensions;
+      }
+      if (formData.embedding_encoding_format) {
+        embeddingConfig.encoding_format = formData.embedding_encoding_format;
+      }
+      if (formData.embedding_user.trim()) {
+        embeddingConfig.user = formData.embedding_user.trim();
+      }
+      if (embeddingTimeout !== undefined) {
+        embeddingConfig.timeout = embeddingTimeout;
+      }
+      if (Object.keys(embeddingProviderOptions).length > 0) {
+        embeddingConfig.provider_options = embeddingProviderOptions;
+      }
+
+      const config = { ...formData.config };
+      if (Object.keys(embeddingConfig).length > 0) {
+        config.embedding = embeddingConfig;
+      } else {
+        delete config.embedding;
+      }
+
+      if (isEditing && provider) {
+        const updateData: ProviderUpdate = {
+          name: formData.name,
+          provider_type: formData.provider_type,
+          base_url: formData.base_url || undefined,
+          llm_model: formData.llm_model,
+          llm_small_model: formData.llm_small_model || undefined,
+          embedding_model: formData.embedding_model || undefined,
+          embedding_config: Object.keys(embeddingConfig).length > 0 ? embeddingConfig : undefined,
+          reranker_model: formData.reranker_model || undefined,
+          config: config,
+          is_active: formData.is_active,
+          is_default: formData.is_default,
+        };
+        if (formData.api_key) {
+          updateData.api_key = formData.api_key;
+        }
+        await providerAPI.update(provider.id, updateData);
+      } else {
+        const createData: ProviderCreate = {
+          name: formData.name,
+          provider_type: formData.provider_type,
+          api_key: formData.api_key,
+          base_url: formData.base_url || undefined,
+          llm_model: formData.llm_model,
+          llm_small_model: formData.llm_small_model || undefined,
+          embedding_model: formData.embedding_model || undefined,
+          embedding_config: Object.keys(embeddingConfig).length > 0 ? embeddingConfig : undefined,
+          reranker_model: formData.reranker_model || undefined,
+          config: config,
+          is_active: formData.is_active,
+          is_default: formData.is_default,
+        };
+        await providerAPI.create(createData);
+      }
+      onSuccess();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to save provider');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-primary/20 to-purple-500/20 rounded-xl">
-              <span className="material-symbols-outlined text-primary text-2xl">add_circle</span>
-            </div>
+    <div className="fixed inset-0 z-50 overflow-y-auto">
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"
+        onClick={onClose}
+      />
+
+      {/* Modal */}
+      <div className="flex min-h-full items-center justify-center p-4">
+        <div className="relative w-full max-w-4xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-gradient-to-r from-primary/5 to-transparent">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-                {isEditing ? 'Edit Provider' : 'Add LLM Provider'}
+              <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
+                {isEditing ? 'Edit Provider' : 'Add New Provider'}
               </h2>
-              <p className="text-sm text-slate-500">Configure via LiteLLM unified interface</p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 transition-colors rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-          >
-            <span className="material-symbols-outlined">close</span>
-          </button>
-        </div>
-
-        {/* Progress Steps */}
-        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
-          <div className="flex items-center justify-between">
-            {steps.map((step, index) => {
-              const isActive = step.key === currentStep;
-              const isPast = steps.findIndex((s) => s.key === currentStep) > index;
-              return (
-                <React.Fragment key={step.key}>
-                  <button
-                    onClick={() => isPast && setCurrentStep(step.key)}
-                    disabled={!isPast && !isActive}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
-                      isActive
-                        ? 'bg-primary text-white shadow-lg shadow-primary/25'
-                        : isPast
-                          ? 'text-primary hover:bg-primary/10 cursor-pointer'
-                          : 'text-slate-400 cursor-not-allowed'
-                    }`}
-                  >
-                    <span
-                      className={`material-symbols-outlined text-lg ${isPast && !isActive ? 'text-green-500' : ''}`}
-                    >
-                      {isPast && !isActive ? 'check_circle' : step.icon}
-                    </span>
-                    <span className="text-sm font-medium hidden sm:inline">{step.label}</span>
-                  </button>
-                  {index < steps.length - 1 && (
-                    <div
-                      className={`flex-1 h-0.5 mx-2 ${isPast ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-700'}`}
-                    />
-                  )}
-                </React.Fragment>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {error && (
-            <div className="mb-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3">
-              <span className="material-symbols-outlined text-red-600">error</span>
-              <span className="text-red-800 dark:text-red-200 text-sm">{error}</span>
-            </div>
-          )}
-
-          {/* Step 1: Provider Selection */}
-          {currentStep === 'provider' && (
-            <div className="space-y-4">
-              <p className="text-slate-600 dark:text-slate-400 mb-4">
-                Select your LLM provider. All providers are accessed through LiteLLM's unified
-                interface.
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                Configure your LLM provider settings
               </p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {PROVIDERS.map((provider) => (
-                  <button
-                    key={provider.value}
-                    onClick={() => handleProviderSelect(provider.value)}
-                    className={`p-4 rounded-xl border-2 text-left transition-all hover:shadow-md ${
-                      formData.provider_type === provider.value
-                        ? 'border-primary bg-primary/5 shadow-md'
-                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
-                    }`}
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="text-2xl">{provider.icon}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-slate-900 dark:text-white">
-                          {provider.label}
-                        </div>
-                        <div className="text-xs text-slate-500 mt-1 line-clamp-2">
-                          {provider.description}
-                        </div>
-                        <div className="flex gap-1 mt-2">
-                          {provider.hasEmbedding && (
-                            <span className="px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 text-[10px] rounded">
-                              Embed
-                            </span>
-                          )}
-                          {provider.hasNativeRerank && (
-                            <span className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-[10px] rounded">
-                              Rerank
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
             </div>
-          )}
+            <button
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
 
-          {/* Step 2: Credentials */}
-          {currentStep === 'credentials' && selectedProvider && (
-            <div className="space-y-6">
-              <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-800 rounded-xl">
-                <span className="text-3xl">{selectedProvider.icon}</span>
-                <div>
-                  <div className="font-semibold text-slate-900 dark:text-white">
-                    {selectedProvider.label}
-                  </div>
-                  <div className="text-sm text-slate-500">{selectedProvider.description}</div>
-                </div>
-              </div>
+          {/* Progress Steps */}
+          <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50">
+            <div className="flex items-center justify-between">
+              {steps.map((step, index) => {
+                const isCompleted = steps.findIndex((s) => s.key === currentStep) > index;
+                const isCurrent = step.key === currentStep;
 
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  Provider Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-                  placeholder={`My ${selectedProvider.label} Provider`}
-                  className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                  API Key {!isEditing && providerTypeRequiresApiKey(formData.provider_type) && '*'}
-                </label>
-                <div className="relative">
-                  <input
-                    type="password"
-                    value={formData.api_key}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, api_key: e.target.value }))}
-                    placeholder={
-                      isEditing
-                        ? 'Leave empty to keep current'
-                        : providerTypeRequiresApiKey(formData.provider_type)
-                          ? selectedProvider.apiKeyPlaceholder
-                          : 'Optional'
-                    }
-                    className="w-full px-4 py-2.5 pr-24 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleTestConnection}
-                    disabled={isTesting}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/10 rounded transition-colors disabled:opacity-50"
-                  >
-                    {isTesting ? 'Testing...' : 'Test'}
-                  </button>
-                </div>
-                <p className="mt-1.5 text-xs text-slate-500 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-sm">info</span>
-                  Environment variable:{' '}
-                  <code className="px-1 bg-slate-100 dark:bg-slate-700 rounded">
-                    {selectedProvider.apiKeyEnvVar}
-                  </code>
-                </p>
-                {!providerTypeRequiresApiKey(formData.provider_type) && (
-                  <p className="mt-1 text-xs text-slate-500">
-                    API key is optional for local providers.
-                  </p>
-                )}
-                {testResult && (
-                  <div
-                    className={`mt-2 p-2 rounded-lg text-sm flex items-center gap-2 ${
-                      testResult.success
-                        ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400'
-                        : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400'
-                    }`}
-                  >
-                    <span className="material-symbols-outlined text-lg">
-                      {testResult.success ? 'check_circle' : 'error'}
-                    </span>
-                    {testResult.message}
-                  </div>
-                )}
-              </div>
-
-              {/* Custom Base URL Toggle */}
-              {!selectedProvider.baseUrlRequired && (
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.use_custom_base_url}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          use_custom_base_url: e.target.checked,
-                          base_url: e.target.checked ? prev.base_url : '',
-                        }))
-                      }
-                      className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
-                    />
-                    <span className="text-sm text-slate-700 dark:text-slate-300">
-                      Use custom base URL
-                    </span>
-                  </label>
-                  <span
-                    className="material-symbols-outlined text-slate-400 text-sm cursor-help"
-                    title="Override the default API endpoint URL for this provider (e.g., for proxy services or self-hosted instances)"
-                  >
-                    help_outline
-                  </span>
-                </div>
-              )}
-
-              {/* Base URL Input - shown when required by provider or when custom URL is enabled */}
-              {(selectedProvider.baseUrlRequired || formData.use_custom_base_url) && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-                    Base URL {selectedProvider.baseUrlRequired && '*'}
-                  </label>
-                  <input
-                    type="url"
-                    value={formData.base_url}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, base_url: e.target.value }))}
-                    placeholder={
-                      selectedProvider.value === 'azure_openai'
-                        ? 'https://your-resource.openai.azure.com'
-                        : selectedProvider.value === 'openai'
-                          ? 'https://api.openai.com/v1'
-                          : selectedProvider.value === 'anthropic'
-                            ? 'https://api.anthropic.com'
-                            : selectedProvider.value === 'deepseek'
-                              ? 'https://api.deepseek.com/v1'
-                              : 'https://api.example.com/v1'
-                    }
-                    className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                  <p className="mt-1.5 text-xs text-slate-500">
-                    {selectedProvider.baseUrlRequired
-                      ? 'Required for this provider type'
-                      : 'Optional: Override the default API endpoint'}
-                  </p>
-                </div>
-              )}
-
-              <div className="flex items-center gap-6">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.is_active}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, is_active: e.target.checked }))
-                    }
-                    className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
-                  />
-                  <span className="text-sm text-slate-700 dark:text-slate-300">Active</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.is_default}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, is_default: e.target.checked }))
-                    }
-                    className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
-                  />
-                  <span className="text-sm text-slate-700 dark:text-slate-300">Set as default</span>
-                </label>
-              </div>
-
-              <a
-                href={selectedProvider.documentationUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-              >
-                <span className="material-symbols-outlined text-sm">open_in_new</span>
-                View {selectedProvider.label} documentation
-              </a>
-            </div>
-          )}
-
-          {/* Step 3: Models */}
-          {currentStep === 'models' && presets && (
-            <div className="space-y-6">
-              {/* LLM Model */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Primary LLM Model *
-                </label>
-                <div className="grid grid-cols-1 gap-2">
-                  {presets.llm.map((model) => (
-                    <button
-                      key={model.name}
-                      type="button"
-                      onClick={() => setFormData((prev) => ({ ...prev, llm_model: model.name }))}
-                      className={`p-3 rounded-lg border text-left transition-all ${
-                        formData.llm_model === model.name
-                          ? 'border-primary bg-primary/5'
-                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <code className="text-sm font-mono text-slate-900 dark:text-white">
-                          {model.name}
-                        </code>
-                        {formData.llm_model === model.name && (
-                          <span className="material-symbols-outlined text-primary">
-                            check_circle
-                          </span>
+                return (
+                  <React.Fragment key={step.key}>
+                    <div className="flex items-center">
+                      <div
+                        className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all ${
+                          isCompleted
+                            ? 'bg-primary border-primary text-white'
+                            : isCurrent
+                              ? 'border-primary text-primary bg-white dark:bg-slate-800'
+                              : 'border-slate-300 dark:border-slate-600 text-slate-400'
+                        }`}
+                      >
+                        {isCompleted ? (
+                          <span className="material-symbols-outlined text-sm">check</span>
+                        ) : (
+                          <span className="material-symbols-outlined text-sm">{step.icon}</span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-500 mt-1">{model.description}</p>
+                      <div className="ml-3 hidden sm:block">
+                        <p
+                          className={`text-sm font-medium ${
+                            isCurrent ? 'text-primary' : 'text-slate-500 dark:text-slate-400'
+                          }`}
+                        >
+                          {step.label}
+                        </p>
+                        <p className="text-xs text-slate-400">{step.description}</p>
+                      </div>
+                    </div>
+                    {index < steps.length - 1 && (
+                      <div
+                        className={`flex-1 h-0.5 mx-4 ${
+                          isCompleted ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-600'
+                        }`}
+                      />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="p-6 max-h-[60vh] overflow-y-auto">
+            {/* Step 1: Provider Selection */}
+            {currentStep === 'provider' && (
+              <div className="space-y-4">
+                <div className="text-center mb-6">
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-2">
+                    Choose Your LLM Provider
+                  </h3>
+                  <p className="text-slate-500 dark:text-slate-400">
+                    Select from supported AI model providers
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {PROVIDERS.map((p) => (
+                    <button
+                      key={p.value}
+                      onClick={() => handleProviderSelect(p.value)}
+                      className={`p-4 rounded-xl border-2 transition-all text-left hover:shadow-md ${
+                        formData.provider_type === p.value
+                          ? 'border-primary bg-primary/5 dark:bg-primary/10'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-primary/50'
+                      }`}
+                    >
+                      <ProviderIcon providerType={p.value} size="lg" className="mb-3" />
+                      <h4 className="font-medium text-slate-900 dark:text-white mt-3">{p.label}</h4>
+                      <p className="text-xs text-slate-500 mt-1 line-clamp-2">{p.description}</p>
                     </button>
                   ))}
                 </div>
-                <input
-                  type="text"
-                  list="llm-models-list"
-                  value={formData.llm_model}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, llm_model: e.target.value }))}
-                  placeholder="Or enter custom model name"
-                  className="mt-2 w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
-                <datalist id="llm-models-list">
-                  {fetchedModels.map((model) => (
-                    <option key={model} value={model} />
-                  ))}
-                </datalist>
               </div>
+            )}
 
-              {/* Small Model */}
-              {presets.small.length > 0 && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Small/Fast Model <span className="text-slate-400">(optional)</span>
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {presets.small.map((model) => (
-                      <button
-                        key={model.name}
-                        type="button"
-                        onClick={() =>
-                          setFormData((prev) => ({ ...prev, llm_small_model: model.name }))
-                        }
-                        className={`px-3 py-2 rounded-lg border text-sm transition-all ${
-                          formData.llm_small_model === model.name
-                            ? 'border-primary bg-primary/5 text-primary'
-                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 text-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        {model.name}
-                      </button>
-                    ))}
+            {/* Step 2: Credentials */}
+            {currentStep === 'credentials' && (
+              <div className="space-y-4">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Provider Name
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                      placeholder="My OpenAI Provider"
+                    />
                   </div>
-                </div>
-              )}
 
-              {/* Embedding Model */}
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  Embedding Model <span className="text-slate-400">(optional)</span>
-                </label>
-                {presets.embedding && presets.embedding.length > 0 && (
-                  <div className="grid grid-cols-1 gap-2 mb-2">
-                    {presets.embedding.map((model) => (
-                      <button
-                        key={model.name}
-                        type="button"
-                        onClick={() =>
-                          setFormData((prev) => ({
-                            ...prev,
-                            embedding_model: model.name,
-                            embedding_dimensions: String(model.dimension),
-                          }))
-                        }
-                        className={`p-3 rounded-lg border text-left transition-all ${
-                          formData.embedding_model === model.name
-                            ? 'border-primary bg-primary/5'
-                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <code className="text-sm font-mono">{model.name}</code>
-                          <span className="text-xs text-slate-500">{model.dimension} dims</span>
+                  {providerTypeRequiresApiKey(formData.provider_type) && (
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                        API Key
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="password"
+                          value={formData.api_key}
+                          onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                          className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                          placeholder={PROVIDERS.find((p) => p.value === formData.provider_type)?.apiKeyPlaceholder || 'sk-...'}
+                        />
+                        <button
+                          onClick={handleTestConnection}
+                          disabled={isTesting || !formData.api_key}
+                          className="px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors disabled:opacity-50 font-medium"
+                        >
+                          {isTesting ? (
+                            <span className="material-symbols-outlined animate-spin text-[18px]">
+                              progress_activity
+                            </span>
+                          ) : (
+                            'Test'
+                          )}
+                        </button>
+                      </div>
+                      {testResult && (
+                        <div
+                          className={`mt-2 px-3 py-2 rounded-lg text-sm ${
+                            testResult.success
+                              ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400'
+                              : 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                          }`}
+                        >
+                          {testResult.message}
                         </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-                <input
-                  type="text"
-                  list={
-                    (presets.embedding && presets.embedding.length > 0) || fetchedModels.length > 0
-                      ? 'embedding-models-list'
-                      : undefined
-                  }
-                  value={formData.embedding_model}
-                  onChange={(e) =>
-                    setFormData((prev) => ({ ...prev, embedding_model: e.target.value }))
-                  }
-                  autoComplete="off"
-                  placeholder="Or enter custom embedding model"
-                  className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
-                <datalist id="embedding-models-list">
-                  {[...new Set([...(presets.embedding?.map((m) => m.name) || []), ...fetchedModels])].map(
-                    (modelName) => (
-                      <option key={modelName} value={modelName} />
-                    )
+                      )}
+                    </div>
                   )}
-                </datalist>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Embedding Dimensions
-                  </label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={formData.embedding_dimensions}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, embedding_dimensions: e.target.value }))
-                    }
-                    placeholder="e.g., 1024"
-                    className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Base URL (Optional)
+                    </label>
+                    <input
+                      type="url"
+                      value={formData.base_url}
+                      onChange={(e) => setFormData({ ...formData, base_url: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                      placeholder="https://api.example.com"
+                    />
+                  </div>
                 </div>
+              </div>
+            )}
+
+            {/* Step 3: Models */}
+            {currentStep === 'models' && (
+              <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Encoding Format
+                    Primary LLM Model
                   </label>
                   <select
-                    value={formData.embedding_encoding_format}
-                    onChange={(e) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        embedding_encoding_format: e.target.value as '' | 'float' | 'base64',
-                      }))
-                    }
-                    className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    value={formData.llm_model}
+                    onChange={(e) => setFormData({ ...formData, llm_model: e.target.value })}
+                    className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
                   >
-                    <option value="">Default</option>
-                    <option value="float">float</option>
-                    <option value="base64">base64</option>
+                    {MODEL_PRESETS[formData.provider_type]?.llm.map((m) => (
+                      <option key={m.name} value={m.name}>
+                        {m.name} - {m.description}
+                      </option>
+                    ))}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Embedding User
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.embedding_user}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, embedding_user: e.target.value }))
-                    }
-                    placeholder="Optional user identifier"
-                    className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Embedding Timeout (s)
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.1"
-                    value={formData.embedding_timeout}
-                    onChange={(e) =>
-                      setFormData((prev) => ({ ...prev, embedding_timeout: e.target.value }))
-                    }
-                    placeholder="Optional override"
-                    className="w-full px-4 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                  />
-                </div>
-              </div>
 
-              {/* Reranker Model */}
-              {presets.reranker.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                    Reranker Model <span className="text-slate-400">(optional)</span>
+                    Small/Fast Model (Optional)
                   </label>
-                  <div className="flex flex-wrap gap-2">
-                    {presets.reranker.map((model) => (
-                      <button
-                        key={model.name}
-                        type="button"
-                        onClick={() =>
-                          setFormData((prev) => ({ ...prev, reranker_model: model.name }))
-                        }
-                        className={`px-3 py-2 rounded-lg border text-sm transition-all ${
-                          formData.reranker_model === model.name
-                            ? 'border-primary bg-primary/5 text-primary'
-                            : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 text-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        {model.name}
-                        {model.description.includes('Native') && (
-                          <span className="ml-1 text-[10px] bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-1 rounded">
-                            Native
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Advanced Configuration (JSON) */}
-              <div className="pt-6 border-t border-slate-200 dark:border-slate-700">
-                <button
-                  type="button"
-                  onClick={() => setShowAdvanced(!showAdvanced)}
-                  className="flex items-center gap-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:text-primary transition-colors w-full"
-                >
-                  <span
-                    className="material-symbols-outlined text-lg transform transition-transform duration-200"
-                    style={{ transform: showAdvanced ? 'rotate(90deg)' : 'rotate(0deg)' }}
+                  <select
+                    value={formData.llm_small_model}
+                    onChange={(e) =>
+                      setFormData({ ...formData, llm_small_model: e.target.value })
+                    }
+                    className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
                   >
-                    chevron_right
-                  </span>
-                  Advanced Configuration (JSON)
-                </button>
+                    <option value="">None</option>
+                    {MODEL_PRESETS[formData.provider_type]?.small.map((m) => (
+                      <option key={m.name} value={m.name}>
+                        {m.name} - {m.description}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                {showAdvanced && (
-                  <div className="mt-4">
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mb-2">
-                      Override model limits or provider-specific settings. Example:{' '}
-                      <code>{'{ "max_tokens": 8192, "timeout": 60 }'}</code>
-                    </p>
-                    <textarea
-                      value={configJson}
-                      onChange={(e) => setConfigJson(e.target.value)}
-                      className="w-full h-40 p-3 font-mono text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-y"
-                      placeholder="{}"
-                      spellCheck={false}
-                    />
-                    <label className="block text-xs text-slate-500 dark:text-slate-400 mt-4 mb-2">
-                      Embedding Provider Options (JSON object)
+                {MODEL_PRESETS[formData.provider_type]?.embedding && MODEL_PRESETS[formData.provider_type].embedding.length > 0 && (
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Embedding Model (Optional)
                     </label>
-                    <textarea
-                      value={formData.embedding_provider_options_json}
-                      onChange={(e) =>
-                        setFormData((prev) => ({
-                          ...prev,
-                          embedding_provider_options_json: e.target.value,
-                        }))
-                      }
-                      className="w-full h-28 p-3 font-mono text-sm bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none resize-y"
-                      placeholder="{}"
-                      spellCheck={false}
-                    />
+                    <select
+                      value={formData.embedding_model}
+                      onChange={(e) => setFormData({ ...formData, embedding_model: e.target.value })}
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                    >
+                      <option value="">None</option>
+                      {MODEL_PRESETS[formData.provider_type].embedding.map((m) => (
+                        <option key={m.name} value={m.name}>
+                          {m.name} ({m.dimension}d)
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Step 4: Review */}
-          {currentStep === 'review' && selectedProvider && (
-            <div className="space-y-4">
-              <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-6">
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="text-4xl">{selectedProvider.icon}</span>
-                  <div>
-                    <h3 className="text-xl font-semibold text-slate-900 dark:text-white">
-                      {formData.name}
-                    </h3>
-                    <p className="text-sm text-slate-500">{selectedProvider.label} Provider</p>
+            {/* Step 4: Review */}
+            {currentStep === 'review' && (
+              <div className="space-y-4">
+                <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <ProviderIcon providerType={formData.provider_type} size="lg" />
+                    <div>
+                      <h4 className="font-semibold text-slate-900 dark:text-white">
+                        {formData.name}
+                      </h4>
+                      <p className="text-sm text-slate-500">{formData.provider_type}</p>
+                    </div>
                   </div>
-                  {formData.is_default && (
-                    <span className="ml-auto px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 text-sm font-medium rounded-full">
-                      Default
-                    </span>
-                  )}
-                </div>
 
-                <div className="grid grid-cols-2 gap-4 mt-4">
-                  <div>
-                    <p className="text-xs text-slate-500 uppercase tracking-wider">Primary Model</p>
-                    <code className="text-sm font-mono text-slate-900 dark:text-white">
-                      {formData.llm_model}
-                    </code>
-                  </div>
-                  {formData.llm_small_model && (
-                    <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-wider">Small Model</p>
-                      <code className="text-sm font-mono text-slate-900 dark:text-white">
-                        {formData.llm_small_model}
-                      </code>
+                  <div className="border-t border-slate-200 dark:border-slate-600 pt-3 space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-500">Primary Model:</span>
+                      <span className="font-medium text-slate-900 dark:text-white">
+                        {formData.llm_model}
+                      </span>
                     </div>
-                  )}
-                  {formData.embedding_model && (
-                    <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-wider">
-                        Embedding Model
-                      </p>
-                      <code className="text-sm font-mono text-slate-900 dark:text-white">
-                        {formData.embedding_model}
-                      </code>
+                    {formData.llm_small_model && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Small Model:</span>
+                        <span className="font-medium text-slate-900 dark:text-white">
+                          {formData.llm_small_model}
+                        </span>
+                      </div>
+                    )}
+                    {formData.embedding_model && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Embedding:</span>
+                        <span className="font-medium text-slate-900 dark:text-white">
+                          {formData.embedding_model}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-500">Status:</span>
+                      <span
+                        className={`font-medium ${
+                          formData.is_active ? 'text-green-600' : 'text-slate-500'
+                        }`}
+                      >
+                        {formData.is_active ? 'Active' : 'Inactive'}
+                      </span>
                     </div>
-                  )}
-                  {formData.embedding_dimensions && (
-                    <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-wider">
-                        Embedding Dimensions
-                      </p>
-                      <code className="text-sm font-mono text-slate-900 dark:text-white">
-                        {formData.embedding_dimensions}
-                      </code>
-                    </div>
-                  )}
-                  {formData.embedding_encoding_format && (
-                    <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-wider">
-                        Embedding Encoding
-                      </p>
-                      <code className="text-sm font-mono text-slate-900 dark:text-white">
-                        {formData.embedding_encoding_format}
-                      </code>
-                    </div>
-                  )}
-                  {formData.reranker_model && (
-                    <div>
-                      <p className="text-xs text-slate-500 uppercase tracking-wider">
-                        Reranker Model
-                      </p>
-                      <code className="text-sm font-mono text-slate-900 dark:text-white">
-                        {formData.reranker_model}
-                      </code>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-4 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${
-                      formData.is_active
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                        : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400'
-                    }`}
-                  >
-                    <span
-                      className={`h-1.5 w-1.5 rounded-full ${formData.is_active ? 'bg-green-500' : 'bg-slate-400'}`}
-                    />
-                    {formData.is_active ? 'Active' : 'Inactive'}
-                  </span>
-                  {formData.api_key && (
-                    <span className="text-xs text-slate-500">
-                      API Key: ••••••{formData.api_key.slice(-4)}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <div className="flex items-start gap-3">
-                  <span className="material-symbols-outlined text-blue-600">info</span>
-                  <div className="text-sm text-blue-800 dark:text-blue-200">
-                    <p className="font-medium">LiteLLM Integration</p>
-                    <p className="mt-1 text-blue-700 dark:text-blue-300">
-                      This provider will be accessible through LiteLLM's unified API. Model names
-                      are automatically prefixed for correct routing.
-                    </p>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={currentStep === 'provider' ? onClose : goBack}
-            disabled={isSubmitting}
-            className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            {currentStep === 'provider' ? 'Cancel' : 'Back'}
-          </button>
+            {error && (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-red-700 dark:text-red-400 text-sm">
+                {error}
+              </div>
+            )}
+          </div>
 
-          {currentStep === 'review' ? (
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 flex items-center justify-between">
             <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={isSubmitting}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              onClick={currentStep === 'provider' ? onClose : () => setCurrentStep(steps[steps.findIndex((s) => s.key === currentStep) - 1].key)}
+              className="px-4 py-2 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
             >
-              {isSubmitting ? (
-                <>
-                  <span className="material-symbols-outlined animate-spin text-lg">
-                    progress_activity
-                  </span>
-                  Saving...
-                </>
+              {currentStep === 'provider' ? 'Cancel' : 'Back'}
+            </button>
+
+            <div className="flex items-center gap-3">
+              {currentStep === 'review' ? (
+                <button
+                  onClick={handleSubmit}
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? (
+                    <span className="flex items-center gap-2">
+                      <span className="material-symbols-outlined animate-spin text-[18px]">
+                        progress_activity
+                      </span>
+                      Saving...
+                    </span>
+                  ) : (
+                    'Save Provider'
+                  )}
+                </button>
               ) : (
-                <>
-                  <span className="material-symbols-outlined text-lg">check</span>
-                  {isEditing ? 'Update Provider' : 'Create Provider'}
-                </>
+                <button
+                  onClick={() => setCurrentStep(steps[steps.findIndex((s) => s.key === currentStep) + 1].key)}
+                  disabled={!canProceed()}
+                  className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
               )}
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={goNext}
-              disabled={!canProceed()}
-              className="inline-flex items-center gap-2 px-6 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-            >
-              Continue
-              <span className="material-symbols-outlined text-lg">arrow_forward</span>
-            </button>
-          )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

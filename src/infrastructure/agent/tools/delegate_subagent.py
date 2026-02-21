@@ -14,6 +14,7 @@ Includes:
 """
 
 import asyncio
+import inspect
 import json
 import logging
 import time
@@ -22,6 +23,27 @@ from typing import Any, Callable, Coroutine, Dict, List
 from src.infrastructure.agent.tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
+
+
+def _supports_on_event_arg(callback: Callable[..., Coroutine[Any, Any, str]]) -> bool:
+    """Check whether callback supports on_event kwarg (or **kwargs)."""
+    target = callback
+    side_effect = getattr(callback, "side_effect", None)
+    if callable(side_effect):
+        target = side_effect
+
+    try:
+        signature = inspect.signature(target)
+    except (TypeError, ValueError):
+        return True
+
+    if "on_event" in signature.parameters:
+        return True
+
+    return any(
+        param.kind == inspect.Parameter.VAR_KEYWORD
+        for param in signature.parameters.values()
+    )
 
 
 class DelegateSubAgentTool(AgentTool):
@@ -58,6 +80,14 @@ class DelegateSubAgentTool(AgentTool):
         self._subagent_names = subagent_names
         self._subagent_descriptions = subagent_descriptions
         self._execute_fn = execute_callback
+        self._supports_on_event = _supports_on_event_arg(execute_callback)
+        self._pending_events: List[Dict[str, Any]] = []
+
+    def consume_pending_events(self) -> List[Dict[str, Any]]:
+        """Consume and return pending streaming events from last execute()."""
+        events = list(self._pending_events)
+        self._pending_events.clear()
+        return events
 
     def get_parameters_schema(self) -> Dict[str, Any]:
         """Get parameters schema for LLM function calling."""
@@ -105,12 +135,21 @@ class DelegateSubAgentTool(AgentTool):
         if not task:
             return "Error: task description is required"
 
+        self._pending_events.clear()
+
         logger.info(
             f"[DelegateSubAgentTool] Delegating to '{subagent_name}': {task[:100]}..."
         )
 
         try:
-            result = await self._execute_fn(subagent_name, task)
+            if self._supports_on_event:
+                result = await self._execute_fn(
+                    subagent_name,
+                    task,
+                    on_event=self._pending_events.append,
+                )
+            else:
+                result = await self._execute_fn(subagent_name, task)
             return result
         except Exception as e:
             logger.error(f"[DelegateSubAgentTool] Execution failed: {e}")
@@ -156,7 +195,15 @@ class ParallelDelegateSubAgentTool(AgentTool):
         self._subagent_names = subagent_names
         self._subagent_descriptions = subagent_descriptions
         self._execute_fn = execute_callback
+        self._supports_on_event = _supports_on_event_arg(execute_callback)
         self._max_concurrency = max_concurrency
+        self._pending_events: List[Dict[str, Any]] = []
+
+    def consume_pending_events(self) -> List[Dict[str, Any]]:
+        """Consume and return pending streaming events from last execute()."""
+        events = list(self._pending_events)
+        self._pending_events.clear()
+        return events
 
     def get_parameters_schema(self) -> Dict[str, Any]:
         """Get parameters schema for LLM function calling."""
@@ -200,6 +247,8 @@ class ParallelDelegateSubAgentTool(AgentTool):
         Returns:
             JSON-formatted aggregated results from all SubAgents.
         """
+        self._pending_events.clear()
+
         # Handle JSON string input (some LLM parsers pass raw strings)
         if isinstance(tasks, str):
             try:
@@ -240,7 +289,14 @@ class ParallelDelegateSubAgentTool(AgentTool):
             task_desc = item["task"]
             async with semaphore:
                 try:
-                    result = await self._execute_fn(name, task_desc)
+                    if self._supports_on_event:
+                        result = await self._execute_fn(
+                            name,
+                            task_desc,
+                            on_event=self._pending_events.append,
+                        )
+                    else:
+                        result = await self._execute_fn(name, task_desc)
                     return {
                         "index": index,
                         "subagent": name,

@@ -219,6 +219,9 @@ class Project(Base):
     edge_maps: Mapped[List["EdgeTypeMap"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
+    channel_configs: Mapped[List["ChannelConfigModel"]] = relationship(
+        back_populates="project", cascade="all, delete-orphan"
+    )
 
     @property
     def member_ids(self) -> List[str]:

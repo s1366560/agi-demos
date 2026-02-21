@@ -4,12 +4,11 @@ Tests that ReActAgent correctly wires MemoryAccessor, BackgroundExecutor,
 and TemplateRegistry when graph_service is available.
 """
 
-import asyncio
-
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.domain.model.agent.subagent import AgentModel, SubAgent
+import pytest
+
+from src.domain.model.agent.subagent import SubAgent
 
 
 def _make_subagent(name: str = "test-agent") -> SubAgent:
@@ -228,6 +227,81 @@ class TestReActAgentMemoryIntegration:
 
         # graph.search should NOT have been called
         graph.search.assert_not_called()
+
+    async def test_execute_subagent_injects_nested_delegate_tool(self):
+        """Nested SubAgent execution should include delegate_to_subagent tool."""
+        researcher = _make_subagent("researcher")
+        coder = _make_subagent("coder")
+        agent = _make_react_agent(
+            subagents=[researcher, coder],
+            enable_subagent_as_tool=True,
+        )
+
+        with patch(
+            "src.infrastructure.agent.subagent.process.SubAgentProcess"
+        ) as MockProcess:
+            mock_result = MagicMock()
+            mock_result.final_content = "Output"
+            mock_result.to_event_data.return_value = {}
+
+            instance = MockProcess.return_value
+            instance.result = mock_result
+
+            async def mock_execute():
+                yield {"type": "subagent_started", "data": {}, "timestamp": "t"}
+                yield {"type": "subagent_completed", "data": {}, "timestamp": "t"}
+
+            instance.execute = mock_execute
+
+            async for _ in agent._execute_subagent(
+                subagent=researcher,
+                user_message="Do work",
+                conversation_context=[],
+                project_id="proj-1",
+                tenant_id="tenant-1",
+            ):
+                pass
+
+        tool_names = [tool.name for tool in MockProcess.call_args.kwargs["tools"]]
+        assert "delegate_to_subagent" in tool_names
+
+    async def test_execute_subagent_skips_nested_delegate_tool_at_max_depth(self):
+        """Nested delegation tools should not be injected at max recursion depth."""
+        researcher = _make_subagent("researcher")
+        coder = _make_subagent("coder")
+        agent = _make_react_agent(
+            subagents=[researcher, coder],
+            enable_subagent_as_tool=True,
+        )
+
+        with patch(
+            "src.infrastructure.agent.subagent.process.SubAgentProcess"
+        ) as MockProcess:
+            mock_result = MagicMock()
+            mock_result.final_content = "Output"
+            mock_result.to_event_data.return_value = {}
+
+            instance = MockProcess.return_value
+            instance.result = mock_result
+
+            async def mock_execute():
+                yield {"type": "subagent_started", "data": {}, "timestamp": "t"}
+                yield {"type": "subagent_completed", "data": {}, "timestamp": "t"}
+
+            instance.execute = mock_execute
+
+            async for _ in agent._execute_subagent(
+                subagent=researcher,
+                user_message="Do work",
+                conversation_context=[],
+                project_id="proj-1",
+                tenant_id="tenant-1",
+                delegation_depth=2,
+            ):
+                pass
+
+        tool_names = [tool.name for tool in MockProcess.call_args.kwargs["tools"]]
+        assert "delegate_to_subagent" not in tool_names
 
 
 @pytest.mark.unit

@@ -23,9 +23,19 @@ import {
 import { X } from 'lucide-react';
 
 
+import { agentService } from '../../services/agentService';
+import { mcpAPI } from '../../services/mcpService';
+import { skillAPI } from '../../services/skillService';
 import { useSubAgentStore, useSubAgentSubmitting } from '../../stores/subagent';
 
-import type { SubAgentResponse, SubAgentCreate, SubAgentUpdate } from '../../types/agent';
+import type { 
+  SubAgentResponse, 
+  SubAgentCreate, 
+  SubAgentUpdate,
+  SkillResponse,
+  MCPServerResponse,
+  ToolInfo
+} from '../../types/agent';
 import type { Color } from 'antd/es/color-picker';
 
 const { TextArea } = Input;
@@ -79,6 +89,12 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
   const [keywordInput, setKeywordInput] = useState('');
   const [exampleInput, setExampleInput] = useState('');
   const [selectedColor, setSelectedColor] = useState('#3B82F6');
+  
+  // Available resources state
+  const [availableTools, setAvailableTools] = useState<ToolInfo[]>([]);
+  const [availableSkills, setAvailableSkills] = useState<SkillResponse[]>([]);
+  const [availableMcpServers, setAvailableMcpServers] = useState<MCPServerResponse[]>([]);
+  const [loadingResources, setLoadingResources] = useState(false);
 
   const isSubmitting = useSubAgentSubmitting();
   const { createSubAgent, updateSubAgent } = useSubAgentStore();
@@ -88,6 +104,33 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
   // Track previous state to only update when values actually change
   const prevSubagentRef = useRef<SubAgentResponse | null>(null);
   const prevIsOpenRef = useRef(false);
+
+  // Fetch available resources
+  useEffect(() => {
+    if (isOpen) {
+      const fetchResources = async () => {
+        setLoadingResources(true);
+        try {
+          const [toolsRes, skillsRes, mcpRes] = await Promise.all([
+            agentService.listTools(),
+            skillAPI.list({ limit: 100 }),
+            mcpAPI.list({ limit: 100 })
+          ]);
+          
+          setAvailableTools(toolsRes.tools || []);
+          setAvailableSkills(skillsRes.skills || []); // skillAPI returns { skills: [], total: number }
+          setAvailableMcpServers(mcpRes || []); // mcpAPI returns MCPServerResponse[]
+        } catch (error) {
+          console.error('Failed to fetch resources:', error);
+          message.error(t('tenant.subagents.modal.resourceFetchError', 'Failed to load available tools/skills'));
+        } finally {
+          setLoadingResources(false);
+        }
+      };
+      
+      fetchResources();
+    }
+  }, [isOpen, t]);
 
   // Reset form when modal opens/closes or subagent changes
   useEffect(() => {
@@ -106,9 +149,9 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           max_tokens: subagent.max_tokens,
           temperature: subagent.temperature,
           max_iterations: subagent.max_iterations,
-          allowed_tools: subagent.allowed_tools.join(', '),
-          allowed_skills: subagent.allowed_skills.join(', '),
-          allowed_mcp_servers: subagent.allowed_mcp_servers?.join(', ') || '',
+          allowed_tools: subagent.allowed_tools,
+          allowed_skills: subagent.allowed_skills,
+          allowed_mcp_servers: subagent.allowed_mcp_servers || [],
         });
       } else {
         // Create mode - reset form
@@ -149,15 +192,6 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
     try {
       const values = await form.validateFields();
 
-      // Parse tools and skills from comma-separated string
-      const parseList = (str: string | undefined): string[] => {
-        if (!str) return [];
-        return str
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-      };
-
       const data: SubAgentCreate | SubAgentUpdate = {
         name: values.name,
         display_name: values.display_name,
@@ -170,9 +204,9 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
         max_tokens: values.max_tokens || 4096,
         temperature: values.temperature ?? 0.7,
         max_iterations: values.max_iterations || 10,
-        allowed_tools: parseList(values.allowed_tools) || ['*'],
-        allowed_skills: parseList(values.allowed_skills),
-        allowed_mcp_servers: parseList(values.allowed_mcp_servers),
+        allowed_tools: values.allowed_tools || ['*'],
+        allowed_skills: values.allowed_skills || [],
+        allowed_mcp_servers: values.allowed_mcp_servers || [],
       };
 
       if (isEditMode && subagent) {
@@ -243,6 +277,32 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
     },
     [examples]
   );
+
+  // Keyword Test State
+  const [testQuery, setTestQuery] = useState('');
+  const [testResult, setTestResult] = useState<{ matched: boolean; keyword?: string } | null>(null);
+
+  const handleTestKeyword = useCallback(() => {
+    if (!testQuery.trim()) {
+      setTestResult(null);
+      return;
+    }
+    const queryLower = testQuery.toLowerCase();
+    const queryWords = queryLower.split(/\s+/);
+    
+    // Backend logic: strict word matching
+    // Check if any keyword matches exactly one of the words in the query
+    const matchedKeyword = keywords.find(k => {
+       const kLower = k.toLowerCase();
+       return queryWords.includes(kLower);
+    });
+    
+    if (matchedKeyword) {
+      setTestResult({ matched: true, keyword: matchedKeyword });
+    } else {
+      setTestResult({ matched: false });
+    }
+  }, [testQuery, keywords]);
 
   // Handle color change
   const handleColorChange = useCallback((color: Color) => {
@@ -432,6 +492,42 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               )}
             </div>
           </div>
+
+          {/* Keyword Tester */}
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-700 mt-4">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              {t('tenant.subagents.modal.testKeywords', 'Test Keyword Match')}
+            </label>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Enter query to test match..."
+                value={testQuery}
+                onChange={(e) => {
+                  setTestQuery(e.target.value);
+                  setTestResult(null); // Clear result on change
+                }}
+                onPressEnter={handleTestKeyword}
+              />
+              <button
+                type="button"
+                onClick={handleTestKeyword}
+                className="px-3 py-1 bg-slate-200 dark:bg-slate-700 rounded hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors"
+              >
+                {t('common.test', 'Test')}
+              </button>
+            </div>
+            {testResult && (
+              <div
+                className={`mt-2 text-sm ${
+                  testResult.matched ? 'text-green-600 font-medium' : 'text-amber-600'
+                }`}
+              >
+                {testResult.matched
+                  ? `✅ Matches keyword: "${testResult.keyword}"`
+                  : '⚠️ No exact keyword match found (Note: LLM may still route based on description)'}
+              </div>
+            )}
+          </div>
         </div>
       ),
     },
@@ -444,9 +540,24 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
             name="allowed_tools"
             label={t('tenant.subagents.modal.allowedTools')}
             tooltip={t('tenant.subagents.modal.allowedToolsTooltip')}
-            initialValue="*"
+            initialValue={['*']}
           >
-            <Input placeholder="* (all) or tool1, tool2, tool3" />
+            <Select
+              mode="multiple"
+              placeholder="Select tools"
+              loading={loadingResources}
+              filterOption={(input, option) =>
+                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+              }
+              options={[
+                { label: 'All Tools (*)', value: '*' },
+                ...(availableTools || []).map((t) => ({
+                  label: t.name,
+                  value: t.name,
+                  title: t.description,
+                })),
+              ]}
+            />
           </Form.Item>
 
           <Form.Item
@@ -454,15 +565,42 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
             label={t('tenant.subagents.modal.allowedSkills')}
             tooltip={t('tenant.subagents.modal.allowedSkillsTooltip')}
           >
-            <Input placeholder="skill1, skill2 (leave empty for none)" />
+            <Select
+              mode="multiple"
+              placeholder="Select skills (leave empty for none)"
+              loading={loadingResources}
+              filterOption={(input, option) =>
+                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+              }
+              options={(availableSkills || []).map((s) => ({
+                label: s.name,
+                value: s.id,
+                title: s.description,
+              }))}
+            />
           </Form.Item>
 
           <Form.Item
             name="allowed_mcp_servers"
             label={t('tenant.subagents.modal.allowedMcpServers', 'MCP Servers')}
-            tooltip={t('tenant.subagents.modal.allowedMcpServersTooltip', 'Comma-separated MCP server names this SubAgent can access')}
+            tooltip={t(
+              'tenant.subagents.modal.allowedMcpServersTooltip',
+              'Select MCP servers this SubAgent can access'
+            )}
           >
-            <Input placeholder="server1, server2 (leave empty for none)" />
+            <Select
+              mode="multiple"
+              placeholder="Select servers (leave empty for none)"
+              loading={loadingResources}
+              filterOption={(input, option) =>
+                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+              }
+              options={(availableMcpServers || []).map((s) => ({
+                label: s.name,
+                value: s.name,
+                title: s.description,
+              }))}
+            />
           </Form.Item>
 
           <div className="grid grid-cols-3 gap-4">

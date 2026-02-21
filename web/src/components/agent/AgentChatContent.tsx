@@ -376,9 +376,20 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(({
   }, [projectId, createNewConversation, navigate, basePath, customBasePath, queryProjectId]);
 
   const handleSend = useCallback(
-    async (content: string, fileMetadata?: FileMetadata[], forcedSkillName?: string) => {
+    async (
+      content: string,
+      fileMetadata?: FileMetadata[],
+      forcedSkillName?: string,
+      forcedSubAgentName?: string
+    ) => {
       if (!projectId) return;
-      const newId = await sendMessage(content, projectId, {
+
+      let finalContent = content;
+      if (forcedSubAgentName) {
+        finalContent = `[System Instruction: Delegate this task strictly to SubAgent "${forcedSubAgentName}"]\n${content}`;
+      }
+
+      const newId = await sendMessage(finalContent, projectId, {
         onAct,
         onObserve,
         fileMetadata,

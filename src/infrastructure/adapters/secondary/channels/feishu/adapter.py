@@ -98,101 +98,127 @@ class FeishuAdapter:
     async def _connect_websocket(self) -> None:
         """Connect via WebSocket."""
         try:
-            from lark_oapi import WSClient, EventDispatcher, LoggerLevel
-            
+            from lark_oapi.ws import Client as WSClient
+            from lark_oapi import LogLevel
+            from lark_oapi.event.dispatcher_handler import EventDispatcherHandlerBuilder
+
+            # Build event handler
+            event_handler = (
+                EventDispatcherHandlerBuilder(
+                    encrypt_key=self._config.encrypt_key or "",
+                    verification_token=self._config.verification_token or "",
+                )
+                .register_p2_im_message_receive_v1(self._on_message_receive)
+                .register_p2_im_message_recalled_v1(self._on_message_recalled)
+                .register_p2_im_chat_member_bot_added_v1(self._on_bot_added)
+                .register_p2_im_chat_member_bot_deleted_v1(self._on_bot_deleted)
+                .build()
+            )
+
+            # Determine domain based on config
+            domain = "https://open.feishu.cn"
+            if self._config.domain == "lark":
+                domain = "https://open.larksuite.com"
+
             self._ws_client = WSClient(
                 app_id=self._config.app_id,
                 app_secret=self._config.app_secret,
-                logger_level=LoggerLevel.INFO,
+                log_level=LogLevel.INFO,
+                event_handler=event_handler,
+                domain=domain,
             )
-            
-            self._event_dispatcher = EventDispatcher(
-                encrypt_key=self._config.encrypt_key,
-                verification_token=self._config.verification_token,
-            )
-            
-            self._register_event_handlers()
-            
+
+            self._event_dispatcher = event_handler
+
             # Start WebSocket in background
             asyncio.create_task(self._run_websocket())
-            
-        except ImportError:
+
+        except ImportError as e:
             raise ImportError(
-                "Feishu SDK not installed. "
+                f"Feishu SDK not installed or import error: {e}. "
                 "Install with: pip install lark_oapi"
             )
     
     async def _run_websocket(self) -> None:
         """Run WebSocket client."""
         try:
-            self._ws_client.start({"eventDispatcher": self._event_dispatcher})
+            self._ws_client.start()
         except Exception as e:
             logger.error(f"[Feishu] WebSocket error: {e}")
             self._handle_error(e)
-    
-    async def _connect_webhook(self) -> None:
-        """Connect via Webhook (HTTP server mode)."""
-        logger.warning("[Feishu] Webhook mode not yet implemented")
-        # TODO: Implement HTTP server for receiving webhooks
-    
-    def _register_event_handlers(self) -> None:
-        """Register Feishu event handlers."""
-        if not self._event_dispatcher:
-            return
-        
-        @self._event_dispatcher.register("im.message.receive_v1")
-        def on_message(data: Dict[str, Any]) -> None:
-            self._process_message_event(data)
-        
-        @self._event_dispatcher.register("im.message.updated_v1")
-        def on_message_updated(data: Dict[str, Any]) -> None:
-            logger.debug(f"[Feishu] Message edited: {data.get('message', {}).get('message_id')}")
-        
-        @self._event_dispatcher.register("im.message.deleted_v1")
-        def on_message_deleted(data: Dict[str, Any]) -> None:
-            logger.debug(f"[Feishu] Message deleted: {data.get('message_id')}")
-        
-        @self._event_dispatcher.register("im.chat.member.bot.added_v1")
-        def on_bot_added(data: Dict[str, Any]) -> None:
-            logger.info(f"[Feishu] Bot added to chat: {data.get('chat_id')}")
-        
-        @self._event_dispatcher.register("im.chat.member.bot.deleted_v1")
-        def on_bot_deleted(data: Dict[str, Any]) -> None:
-            logger.info(f"[Feishu] Bot removed from chat: {data.get('chat_id')}")
-    
-    def _process_message_event(self, data: Dict[str, Any]) -> None:
-        """Process incoming message event."""
+
+    def _on_message_receive(self, event: Any) -> None:
+        """Handle incoming message event from WebSocket."""
         try:
-            event = data.get("event", {})
-            message_data = event.get("message", {})
-            sender_data = event.get("sender", {})
-            
-            message_id = message_data.get("message_id")
-            
+            message_data = event.event.message if hasattr(event, 'event') else {}
+            sender_data = event.event.sender if hasattr(event, 'event') else {}
+
+            message_id = message_data.message_id if hasattr(message_data, 'message_id') else None
+
+            if not message_id:
+                return
+
             # Deduplication
             if message_id in self._message_history:
                 return
             self._message_history[message_id] = True
-            
+
             # Limit history size
             if len(self._message_history) > 10000:
                 oldest = next(iter(self._message_history))
                 del self._message_history[oldest]
-            
+
+            # Convert to dict for parsing
+            message_dict = {
+                "message_id": message_id,
+                "chat_id": getattr(message_data, 'chat_id', ''),
+                "chat_type": getattr(message_data, 'chat_type', 'p2p'),
+                "content": getattr(message_data, 'content', ''),
+                "message_type": getattr(message_data, 'message_type', 'text'),
+                "parent_id": getattr(message_data, 'parent_id', None),
+                "mentions": getattr(message_data, 'mentions', []),
+            }
+
+            sender_dict = {
+                "sender_id": {
+                    "open_id": getattr(sender_data, 'sender_id', {}).get('open_id', '') if isinstance(getattr(sender_data, 'sender_id', None), dict) else ''
+                },
+                "sender_type": getattr(sender_data, 'sender_type', ''),
+            }
+
             # Parse message
-            message = self._parse_message(message_data, sender_data)
-            
+            message = self._parse_message(message_dict, sender_dict)
+
             # Notify handlers
             for handler in self._message_handlers:
                 try:
                     handler(message)
                 except Exception as e:
                     logger.error(f"[Feishu] Message handler error: {e}")
-        
+
         except Exception as e:
             logger.error(f"[Feishu] Error processing message: {e}")
             self._handle_error(e)
+
+    def _on_message_recalled(self, event: Any) -> None:
+        """Handle message recalled event."""
+        logger.debug(f"[Feishu] Message recalled")
+
+    def _on_bot_added(self, event: Any) -> None:
+        """Handle bot added to chat event."""
+        chat_id = getattr(event.event, 'chat_id', '') if hasattr(event, 'event') else ''
+        logger.info(f"[Feishu] Bot added to chat: {chat_id}")
+
+    def _on_bot_deleted(self, event: Any) -> None:
+        """Handle bot removed from chat event."""
+        chat_id = getattr(event.event, 'chat_id', '') if hasattr(event, 'event') else ''
+        logger.info(f"[Feishu] Bot removed from chat: {chat_id}")
     
+    async def _connect_webhook(self) -> None:
+        """Connect via Webhook (HTTP server mode)."""
+        logger.warning("[Feishu] Webhook mode not yet implemented")
+        # TODO: Implement HTTP server for receiving webhooks
+
     def _parse_message(
         self,
         message_data: Dict[str, Any],

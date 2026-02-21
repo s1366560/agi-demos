@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
 import { createStreamEventHandlers } from '../../../stores/agent/streamEventHandlers';
+
 import type { DeltaBufferState, StreamHandlerDeps } from '../../../stores/agent/streamEventHandlers';
-import type { ConversationState } from '../../../types/conversationState';
 import type { 
   AgentEvent, 
   ThoughtEventData, 
@@ -9,6 +10,7 @@ import type {
   ObserveEventData, 
   TextDeltaEventData 
 } from '../../../types/agent';
+import type { ConversationState } from '../../../types/conversationState';
 
 describe('streamEventHandlers', () => {
   const conversationId = 'conv-1';

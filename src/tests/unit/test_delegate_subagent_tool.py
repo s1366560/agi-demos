@@ -3,14 +3,15 @@
 Tests the DelegateSubAgentTool, ParallelDelegateSubAgentTool, and integration.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
+import pytest
+
+from src.domain.model.agent.subagent import AgentTrigger, SubAgent
 from src.infrastructure.agent.tools.delegate_subagent import (
     DelegateSubAgentTool,
     ParallelDelegateSubAgentTool,
 )
-from src.domain.model.agent.subagent import SubAgent, AgentTrigger
 
 
 @pytest.mark.unit
@@ -53,7 +54,38 @@ class TestDelegateSubAgentTool:
         tool = self._make_tool(callback)
         result = await tool.execute(subagent_name="researcher", task="Find info about X")
         assert result == "Research findings: ..."
-        callback.assert_called_once_with("researcher", "Find info about X")
+        callback.assert_awaited_once()
+        assert callback.await_args.args == ("researcher", "Find info about X")
+        assert "on_event" in callback.await_args.kwargs
+
+    async def test_execute_callback_without_on_event_called_once(self):
+        called = 0
+
+        async def _callback(name, task):
+            nonlocal called
+            called += 1
+            return f"{name}:{task}"
+
+        tool = self._make_tool(_callback)
+        result = await tool.execute(subagent_name="researcher", task="Find info about X")
+        assert result == "researcher:Find info about X"
+        assert called == 1
+
+    async def test_consume_pending_events(self):
+        async def _callback(name, task, on_event=None):
+            if on_event:
+                on_event({"type": "subagent_started", "data": {"name": name}})
+                on_event({"type": "subagent_completed", "data": {"task": task}})
+            return "done"
+
+        tool = self._make_tool(_callback)
+        await tool.execute(subagent_name="researcher", task="Find info")
+
+        events = tool.consume_pending_events()
+        assert len(events) == 2
+        assert events[0]["type"] == "subagent_started"
+        assert events[1]["type"] == "subagent_completed"
+        assert tool.consume_pending_events() == []
 
     async def test_execute_missing_name(self):
         tool = self._make_tool()
@@ -123,9 +155,9 @@ class TestSubAgentAsToolIntegration:
         """Test that system prompt includes SubAgent descriptions."""
         from src.infrastructure.agent.prompts.manager import (
             PromptContext,
+            PromptMode,
             SystemPromptManager,
         )
-        from src.infrastructure.agent.prompts.manager import PromptMode
 
         manager = SystemPromptManager()
         context = PromptContext(
@@ -156,9 +188,9 @@ class TestSubAgentAsToolIntegration:
         """Test that system prompt doesn't include SubAgent section when empty."""
         from src.infrastructure.agent.prompts.manager import (
             PromptContext,
+            PromptMode,
             SystemPromptManager,
         )
-        from src.infrastructure.agent.prompts.manager import PromptMode
 
         manager = SystemPromptManager()
         context = PromptContext(

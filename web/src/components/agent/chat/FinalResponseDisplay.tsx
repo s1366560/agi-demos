@@ -8,9 +8,10 @@
 
 import { useRef, useState } from 'react';
 
-import { Check, Copy, Download, Share2, Clock } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import type { Components } from 'react-markdown';
+
+import { Check, Copy, Download, Share2, Clock } from 'lucide-react';
 
 import { formatDateOnly } from '@/utils/date';
 

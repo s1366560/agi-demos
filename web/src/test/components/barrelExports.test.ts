@@ -29,7 +29,7 @@ import {
   MessageBubble as AgentMessageBubble,
   InputBar as AgentInputBar,
 } from '../../components/agent';
-import { IdleState, FloatingInputBar, MarkdownContent } from '../../components/agent/chat';
+import { IdleState, MarkdownContent } from '../../components/agent/chat';
 import {
   ToolExecutionLive,
   ReasoningLog,
@@ -111,10 +111,6 @@ describe('Barrel Exports', () => {
   describe('Agent Chat Barrel', () => {
     it('exports IdleState component', () => {
       expect(IdleState).toBeDefined();
-    });
-
-    it('exports FloatingInputBar component', () => {
-      expect(FloatingInputBar).toBeDefined();
     });
 
     it('exports MarkdownContent component', () => {

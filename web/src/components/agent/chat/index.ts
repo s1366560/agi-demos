@@ -1,5 +1,4 @@
 export { IdleState } from './IdleState';
-export { FloatingInputBar } from './FloatingInputBar';
 export { MarkdownContent } from './MarkdownContent';
 export { TimelineEventRenderer } from './TimelineEventRenderer';
 export { MessageActionBar, CodeBlockCopyButton } from './MessageActionBar';
@@ -24,10 +23,5 @@ export { MentionPopover } from './MentionPopover';
 export { SaveTemplateModal } from './SaveTemplateModal';
 export { VariableInputModal } from './VariableInputModal';
 export type { StarterTile, IdleStateProps } from './IdleState';
-export type {
-  FloatingInputBarProps,
-  FloatingInputBarConfig,
-  FloatingInputBarPlanModeConfig,
-} from './FloatingInputBar';
 export type { MarkdownContentProps } from './MarkdownContent';
 export type { MessageRole, MessageAction } from './MessageActionBar';

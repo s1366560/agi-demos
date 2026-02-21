@@ -42,7 +42,7 @@ export { SkillExecutionCard } from './SkillExecutionCard';
 
 // Layout & Chat Components
 export { WorkspaceSidebar, TopNavigation, ChatHistorySidebar } from './layout';
-export { IdleState, FloatingInputBar } from './chat';
+export { IdleState } from './chat';
 export { TimelineEventItem } from './TimelineEventItem';
 export {
   ToolExecutionLive,

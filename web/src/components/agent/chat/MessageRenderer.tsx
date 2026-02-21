@@ -22,8 +22,8 @@ import React from 'react';
 import { ChatMessage, UserMessage, AssistantMessage, SystemMessage, ToolMessage } from '../types/message';
 
 import { AssistantMessage as AssistantMessageComponent } from './AssistantMessage';
-import { UserMessage as UserMessageComponent } from './MessageStream';
 import { MessageErrorBoundary } from './MessageErrorBoundary';
+import { UserMessage as UserMessageComponent } from './MessageStream';
 
 export interface MessageRendererProps {
   /** Message to render */

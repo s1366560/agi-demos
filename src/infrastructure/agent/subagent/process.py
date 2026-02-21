@@ -15,7 +15,7 @@ import asyncio
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional
 
 from src.domain.model.agent.subagent import AgentModel, SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
@@ -227,10 +227,12 @@ class SubAgentProcess:
         Returns:
             Dict event with subagent prefix, or None to skip.
         """
-        if not hasattr(domain_event, "to_event_dict"):
+        if isinstance(domain_event, dict):
+            event_dict = domain_event
+        elif hasattr(domain_event, "to_event_dict"):
+            event_dict = domain_event.to_event_dict()
+        else:
             return None
-
-        event_dict = domain_event.to_event_dict()
         original_type = event_dict.get("type", "unknown")
 
         # Prefix with subagent namespace

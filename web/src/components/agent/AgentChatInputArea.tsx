@@ -26,7 +26,12 @@ export interface AgentChatInputAreaProps {
   /** Callback when height changes */
   onHeightChange: (height: number) => void;
   /** Callback when user sends a message */
-  onSend: (content: string, fileMetadata?: FileMetadata[]) => void | Promise<void>;
+  onSend: (
+    content: string,
+    fileMetadata?: FileMetadata[],
+    forcedSkillName?: string,
+    forcedSubAgentName?: string
+  ) => void | Promise<void>;
   /** Callback when user aborts streaming */
   onAbort: () => void;
   /** Whether agent is currently streaming */

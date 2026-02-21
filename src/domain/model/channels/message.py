@@ -164,36 +164,42 @@ class ChannelAdapter(Protocol):
 
 # Domain Events
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, kw_only=True)
 class MessageReceivedEvent(DomainEvent):
     """Event emitted when a message is received from a channel."""
+
     message: Message
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class MessageSentEvent(DomainEvent):
     """Event emitted when a message is sent to a channel."""
+
     channel: str
     message_id: str
     to: str
     content: MessageContent
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ChannelConnectedEvent(DomainEvent):
     """Event emitted when a channel connects."""
+
     channel: str
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ChannelDisconnectedEvent(DomainEvent):
     """Event emitted when a channel disconnects."""
+
     channel: str
     reason: Optional[str] = None
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class ChannelErrorEvent(DomainEvent):
     """Event emitted when a channel encounters an error."""
+
     channel: str
     error: str

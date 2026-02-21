@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import bindparam, delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.secondary.persistence.models import MemoryChunk
@@ -87,6 +87,7 @@ class SqlChunkRepository:
 
         Returns list of dicts with id, content, metadata, score, created_at.
         """
+        # Use bindparams() to avoid asyncpg parameter binding conflicts with ::vector cast
         sql = text("""
             SELECT id, content, metadata, created_at, category,
                    source_type, source_id,
@@ -96,15 +97,12 @@ class SqlChunkRepository:
               AND embedding IS NOT NULL
             ORDER BY embedding <=> :query_vec::vector
             LIMIT :limit
-        """)
-        result = await self._session.execute(
-            sql,
-            {
-                "query_vec": str(query_embedding),
-                "project_id": project_id,
-                "limit": limit,
-            },
+        """).bindparams(
+            bindparam("query_vec", value=str(query_embedding)),
+            bindparam("project_id", value=project_id),
+            bindparam("limit", value=limit),
         )
+        result = await self._session.execute(sql)
         return [
             {
                 "id": row.id,
@@ -198,6 +196,7 @@ class SqlChunkRepository:
         limit: int = 1,
     ) -> list[dict]:
         """Find chunks with similarity above threshold (for dedup)."""
+        # Use bindparams() to avoid asyncpg parameter binding conflicts with ::vector cast
         sql = text("""
             SELECT id, content,
                    1 - (embedding <=> :query_vec::vector) AS similarity
@@ -207,16 +206,13 @@ class SqlChunkRepository:
               AND 1 - (embedding <=> :query_vec::vector) >= :threshold
             ORDER BY embedding <=> :query_vec::vector
             LIMIT :limit
-        """)
-        result = await self._session.execute(
-            sql,
-            {
-                "query_vec": str(embedding),
-                "project_id": project_id,
-                "threshold": threshold,
-                "limit": limit,
-            },
+        """).bindparams(
+            bindparam("query_vec", value=str(embedding)),
+            bindparam("project_id", value=project_id),
+            bindparam("threshold", value=threshold),
+            bindparam("limit", value=limit),
         )
+        result = await self._session.execute(sql)
         return [
             {
                 "id": row.id,

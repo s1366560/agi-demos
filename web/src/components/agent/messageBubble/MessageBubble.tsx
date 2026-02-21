@@ -260,9 +260,22 @@ function getFileIconForMime(mimeType: string): string {
 }
 
 // User Message Component - Modern floating style with action bar
-const UserMessage: React.FC<UserMessageProps> = memo(({ content, onReply, forcedSkillName, fileMetadata }) => {
+const UserMessage: React.FC<UserMessageProps> = memo(({ content, onReply, forcedSkillName, forcedSubAgentName, fileMetadata }) => {
   if (!content) return null;
   const hasFiles = fileMetadata && fileMetadata.length > 0;
+  
+  // Determine bubble style based on forced type
+  const isSkill = !!forcedSkillName;
+  const isSubAgent = !!forcedSubAgentName;
+  const isForced = isSkill || isSubAgent;
+
+  let gradientClass = '';
+  if (isSubAgent) {
+    gradientClass = 'bg-gradient-to-r from-purple-400 via-purple-500/80 to-purple-400';
+  } else if (isSkill) {
+    gradientClass = 'bg-gradient-to-r from-indigo-400 via-primary/80 to-indigo-400';
+  }
+
   return (
     <div className="group flex flex-col items-end gap-1 mb-2 animate-fade-in-up">
       {/* Main row: bubble + avatar */}
@@ -270,24 +283,35 @@ const UserMessage: React.FC<UserMessageProps> = memo(({ content, onReply, forced
         <div className="max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
           <div
             className={
-              forcedSkillName
-                ? 'relative bg-gradient-to-r from-indigo-400 via-primary/80 to-indigo-400 rounded-xl rounded-br-sm p-px'
+              isForced
+                ? `relative ${gradientClass} rounded-xl rounded-br-sm p-px`
                 : 'relative'
             }
           >
-            {!forcedSkillName && (
+            {!isForced && (
               <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-xl rounded-br-sm blur-sm -z-10" />
             )}
-            {forcedSkillName && (
-              <div className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-gradient-to-br from-indigo-400 to-primary/90 flex items-center justify-center ring-2 ring-white dark:ring-slate-800 z-10">
-                <svg className="w-[9px] h-[9px] text-white" viewBox="0 0 16 16" fill="currentColor">
-                  <path d="M9.5 0L4 9h4l-1.5 7L13 7H9l.5-7z" />
-                </svg>
+            
+            {/* Badge Icon for Forced Execution */}
+            {isForced && (
+              <div className={`absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-800 z-10 ${isSubAgent ? 'bg-gradient-to-br from-purple-400 to-purple-600' : 'bg-gradient-to-br from-indigo-400 to-primary/90'}`}>
+                {isSubAgent ? (
+                  <svg className="w-[9px] h-[9px] text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                    <line x1="8" y1="21" x2="16" y2="21" />
+                    <line x1="12" y1="17" x2="12" y2="21" />
+                  </svg>
+                ) : (
+                  <svg className="w-[9px] h-[9px] text-white" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M9.5 0L4 9h4l-1.5 7L13 7H9l.5-7z" />
+                  </svg>
+                )}
               </div>
             )}
+
             <div
               className={
-                forcedSkillName
+                isForced
                   ? 'bg-white dark:bg-slate-800 rounded-xl rounded-br-sm px-4 py-2.5'
                   : 'bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl rounded-br-sm px-4 py-2.5 shadow-sm hover:shadow-md transition-shadow duration-200'
               }
@@ -300,9 +324,11 @@ const UserMessage: React.FC<UserMessageProps> = memo(({ content, onReply, forced
             <div className="absolute -top-3 right-2 z-10">
               <MessageActionBar role="user" content={content} onReply={onReply} />
             </div>
-            {forcedSkillName && (
-              <div className="absolute bottom-0 right-4 translate-y-1/2 px-1.5 bg-white dark:bg-slate-800 text-[10px] text-primary/70 font-medium leading-none tracking-wide">
-                {forcedSkillName}
+            
+            {/* Badge Label */}
+            {isForced && (
+              <div className={`absolute bottom-0 right-4 translate-y-1/2 px-1.5 bg-white dark:bg-slate-800 text-[10px] font-medium leading-none tracking-wide ${isSubAgent ? 'text-purple-600 dark:text-purple-400' : 'text-primary/70'}`}>
+                {isSubAgent ? `@${forcedSubAgentName}` : forcedSkillName}
               </div>
             )}
           </div>
@@ -313,7 +339,7 @@ const UserMessage: React.FC<UserMessageProps> = memo(({ content, onReply, forced
       </div>
       {/* Attachment row: below bubble, aligned under bubble (offset by avatar width) */}
       {hasFiles && (
-        <div className={`flex flex-col items-end gap-1 mr-11 ${forcedSkillName ? 'mt-2' : 'mt-0.5'}`}>
+        <div className={`flex flex-col items-end gap-1 mr-11 ${isForced ? 'mt-2' : 'mt-0.5'}`}>
           {fileMetadata.map((file, idx) => (
             <div
               key={idx}
@@ -994,12 +1020,26 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
     if (!event) return null;
 
     switch (event.type) {
-      case 'user_message':
+      case 'user_message': {
+        const rawContent = getContent(event);
+        // Check for System Instruction prefix for SubAgent delegation
+        // Format: [System Instruction: Delegate this task strictly to SubAgent "NAME"]\nCONTENT
+        const systemInstructionMatch = rawContent.match(/^\[System Instruction: Delegate this task strictly to SubAgent "([^"]+)"\]\n/);
+        
+        let content = rawContent;
+        let forcedSubAgentName: string | undefined = undefined;
+
+        if (systemInstructionMatch) {
+          forcedSubAgentName = systemInstructionMatch[1];
+          content = rawContent.slice(systemInstructionMatch[0].length);
+        }
+
         return (
           <UserMessage
-            content={getContent(event)}
+            content={content}
             onReply={onReply}
             forcedSkillName={event.metadata?.forcedSkillName as string | undefined}
+            forcedSubAgentName={forcedSubAgentName}
             fileMetadata={
               event.metadata?.fileMetadata as
                 | Array<{
@@ -1012,6 +1052,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
             }
           />
         );
+      }
 
       case 'assistant_message':
         return <AssistantMessage content={getContent(event)} isStreaming={isStreaming} isPinned={isPinned} onPin={onPin} onReply={onReply} />;

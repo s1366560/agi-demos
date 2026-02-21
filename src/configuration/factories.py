@@ -64,7 +64,7 @@ async def create_native_graph_adapter(
         operation_type=OperationType.EMBEDDING,
     )
     embedder = factory.create_embedder(provider_config)
-    
+
     # Wrap in EmbeddingService if needed, but NativeGraphAdapter expects EmbeddingService
     # and LiteLLMEmbedder is likely compatible or wrapped inside EmbeddingService
     # Let's check if LiteLLMEmbedder is an EmbeddingService or needs wrapping.
@@ -72,6 +72,17 @@ async def create_native_graph_adapter(
     # Looking at old code, it wrapped it: embedding_service = EmbeddingService(embedder=embedder)
     from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
     embedding_service = EmbeddingService(embedder=embedder)
+
+    # Create vector index for entity name embeddings
+    embedding_dim = embedding_service.embedding_dim
+    await neo4j_client.create_vector_index(
+        index_name="entity_name_vector",
+        label="Entity",
+        property_name="name_embedding",
+        dimensions=embedding_dim,
+        similarity_function="cosine",
+    )
+    logger.info(f"Created entity_name_vector index with dimensions={embedding_dim}")
 
     # Create NativeGraphAdapter
     adapter = NativeGraphAdapter(

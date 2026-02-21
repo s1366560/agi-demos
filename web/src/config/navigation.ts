@@ -231,6 +231,7 @@ const PROJECT_SIDEBAR_CONFIG: SidebarConfig = {
       defaultOpen: true,
       items: [
         { id: 'schema', icon: 'code', label: 'nav.schema', path: '/schema' },
+        { id: 'channels', icon: 'chat', label: 'nav.channels', path: '/channels' },
         { id: 'maintenance', icon: 'build', label: 'nav.maintenance', path: '/maintenance' },
         { id: 'team', icon: 'manage_accounts', label: 'nav.team', path: '/team' },
         { id: 'settings', icon: 'settings', label: 'nav.settings', path: '/settings' },

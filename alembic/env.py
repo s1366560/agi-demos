@@ -19,6 +19,7 @@ from alembic import context
 # Import models to ensure they're registered with Base.metadata
 # This must happen before accessing Base.metadata
 import src.infrastructure.adapters.secondary.persistence.attachment_model  # noqa: F401
+import src.infrastructure.adapters.secondary.persistence.channel_models  # noqa: F401
 from src.infrastructure.adapters.secondary.persistence.models import Base
 
 # Import settings to get database URL

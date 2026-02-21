@@ -17,9 +17,10 @@ import {
 
 import { useTranslation } from 'react-i18next';
 
-import { Hash, FileText, Loader2 } from 'lucide-react';
+import { Hash, FileText, Loader2, Workflow } from 'lucide-react';
 
 import { mentionService, type MentionItem } from '@/services/mentionService';
+import { useSubAgentStore } from '@/stores/subagent';
 
 export interface MentionPopoverHandle {
   getSelectedItem: () => MentionItem | null;
@@ -45,6 +46,14 @@ export const MentionPopover = memo(
       const [items, setItems] = useState<MentionItem[]>([]);
       const [loading, setLoading] = useState(false);
       const listRef = useRef<HTMLDivElement>(null);
+      const { subagents, listSubAgents } = useSubAgentStore();
+
+      // Ensure subagents are loaded
+      useEffect(() => {
+        if (subagents.length === 0) {
+          listSubAgents({ enabled_only: true }).catch(() => {});
+        }
+      }, [subagents.length, listSubAgents]);
 
       useImperativeHandle(ref, () => ({
         getSelectedItem: () => items[selectedIndex] ?? null,
@@ -61,8 +70,28 @@ export const MentionPopover = memo(
         const timer = setTimeout(async () => {
           setLoading(true);
           try {
-            const results = await mentionService.search(query, projectId);
-            setItems(results);
+            // Parallel fetch: mention search + subagent filtering
+            const [mentionResults, _] = await Promise.all([
+              mentionService.search(query, projectId).catch(() => []),
+              Promise.resolve(), // Subagents are already in store
+            ]);
+
+            // Filter subagents locally
+            const subagentResults: MentionItem[] = subagents
+              .filter(sa =>
+                sa.name.toLowerCase().includes(query.toLowerCase()) ||
+                sa.display_name.toLowerCase().includes(query.toLowerCase())
+              )
+              .map(sa => ({
+                id: sa.id,
+                name: sa.name, // Use system name for mention ID
+                type: 'subagent',
+                summary: sa.trigger.description,
+                entityType: 'SubAgent',
+              }));
+
+            // Combine results: SubAgents first, then others
+            setItems([...subagentResults, ...mentionResults]);
             onSelectedIndexChange(0);
           } catch {
             setItems([]);
@@ -73,7 +102,7 @@ export const MentionPopover = memo(
         }, 200);
 
         return () => clearTimeout(timer);
-      }, [query, projectId, visible, onSelectedIndexChange]);
+      }, [query, projectId, visible, onSelectedIndexChange, subagents]);
 
       // Scroll selected item into view
       useEffect(() => {
@@ -87,6 +116,8 @@ export const MentionPopover = memo(
       if (!visible) return null;
 
       const typeIcon = (item: MentionItem) => {
+        if (item.type === 'subagent')
+          return <Workflow size={14} className="text-purple-500" />;
         if (item.type === 'entity')
           return <Hash size={14} className="text-primary" />;
         return <FileText size={14} className="text-slate-500" />;
