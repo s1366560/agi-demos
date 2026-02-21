@@ -132,6 +132,7 @@ class FeishuAdapter:
                 )
                 .register_p2_im_message_receive_v1(self._on_message_receive)
                 .register_p2_im_message_recalled_v1(self._on_message_recalled)
+                .register_p2_im_message_message_read_v1(self._on_message_read)
                 .register_p2_im_chat_member_bot_added_v1(self._on_bot_added)
                 .register_p2_im_chat_member_bot_deleted_v1(self._on_bot_deleted)
                 .build()
@@ -305,6 +306,10 @@ class FeishuAdapter:
     def _on_message_recalled(self, event: Any) -> None:
         """Handle message recalled event."""
         logger.debug("[Feishu] Message recalled")
+
+    def _on_message_read(self, event: Any) -> None:
+        """Handle message read receipt event (no-op, suppresses SDK warning)."""
+        logger.debug("[Feishu] Message read receipt received")
 
     def _on_bot_added(self, event: Any) -> None:
         """Handle bot added to chat event."""

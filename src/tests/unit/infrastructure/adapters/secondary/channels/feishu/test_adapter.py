@@ -143,6 +143,9 @@ async def test_connect_websocket_starts_dedicated_thread(adapter: FeishuAdapter)
         def register_p2_im_message_recalled_v1(self, _handler):
             return self
 
+        def register_p2_im_message_message_read_v1(self, _handler):
+            return self
+
         def register_p2_im_chat_member_bot_added_v1(self, _handler):
             return self
 
@@ -200,6 +203,9 @@ async def test_connect_websocket_cleans_up_when_wait_fails(
             return self
 
         def register_p2_im_message_recalled_v1(self, _handler):
+            return self
+
+        def register_p2_im_message_message_read_v1(self, _handler):
             return self
 
         def register_p2_im_chat_member_bot_added_v1(self, _handler):
