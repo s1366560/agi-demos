@@ -10,6 +10,7 @@ import { tabSync } from '../../utils/tabSync';
 import { useBackgroundStore } from '../backgroundStore';
 import { useCanvasStore } from '../canvasStore';
 import { useContextStore } from '../contextStore';
+import { useUnifiedHITLStore } from '../hitlStore.unified';
 import { useLayoutModeStore } from '../layoutMode';
 
 import type {
@@ -473,6 +474,10 @@ export function createStreamEventHandlers(
         pendingClarification: event.data,
         agentState: 'awaiting_input',
       });
+
+      useUnifiedHITLStore
+        .getState()
+        .handleSSEEvent('clarification_asked', event.data as Record<string, unknown>, handlerConversationId);
     },
 
     onDecisionAsked: (event) => {
@@ -490,6 +495,10 @@ export function createStreamEventHandlers(
         pendingDecision: event.data,
         agentState: 'awaiting_input',
       });
+
+      useUnifiedHITLStore
+        .getState()
+        .handleSSEEvent('decision_asked', event.data as Record<string, unknown>, handlerConversationId);
     },
 
     onClarificationAnswered: (event) => {
@@ -503,6 +512,11 @@ export function createStreamEventHandlers(
         pendingClarification: null,
         agentState: 'thinking',
       });
+
+      // Forward to unified HITL store to mark request as completed
+      useUnifiedHITLStore
+        .getState()
+        .handleSSEEvent('clarification_answered', event.data as Record<string, unknown>, handlerConversationId);
     },
 
     onDecisionAnswered: (event) => {
@@ -516,6 +530,10 @@ export function createStreamEventHandlers(
         pendingDecision: null,
         agentState: 'thinking',
       });
+
+      useUnifiedHITLStore
+        .getState()
+        .handleSSEEvent('decision_answered', event.data as Record<string, unknown>, handlerConversationId);
     },
 
     onEnvVarProvided: (event) => {
@@ -529,6 +547,10 @@ export function createStreamEventHandlers(
         pendingEnvVarRequest: null,
         agentState: 'thinking',
       });
+
+      useUnifiedHITLStore
+        .getState()
+        .handleSSEEvent('env_var_provided', event.data as Record<string, unknown>, handlerConversationId);
     },
 
     onDoomLoopDetected: (event) => {
@@ -554,6 +576,10 @@ export function createStreamEventHandlers(
         pendingEnvVarRequest: event.data,
         agentState: 'awaiting_input',
       });
+
+      useUnifiedHITLStore
+        .getState()
+        .handleSSEEvent('env_var_requested', event.data as Record<string, unknown>, handlerConversationId);
     },
 
     onPermissionAsked: (event) => {
@@ -571,6 +597,10 @@ export function createStreamEventHandlers(
         pendingPermission: event.data,
         agentState: 'awaiting_input',
       });
+
+      useUnifiedHITLStore
+        .getState()
+        .handleSSEEvent('permission_asked', event.data as Record<string, unknown>, handlerConversationId);
     },
 
     onPermissionReplied: (event) => {
@@ -584,6 +614,10 @@ export function createStreamEventHandlers(
         pendingPermission: null,
         agentState: event.data.granted ? 'thinking' : 'idle',
       });
+
+      useUnifiedHITLStore
+        .getState()
+        .handleSSEEvent('permission_replied', event.data as Record<string, unknown>, handlerConversationId);
     },
 
     onDoomLoopIntervened: (event) => {
