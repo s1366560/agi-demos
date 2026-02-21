@@ -212,7 +212,8 @@ async def test_invoke_agent_sends_response_text_on_no_progress_error() -> None:
     session_ctx.__aexit__.return_value = None
 
     async def fake_stream(**_):
-        yield {"type": "assistant_message", "data": {"content": "Hello! How can I help?"}}
+        yield {"type": "text_delta", "data": {"delta": "Hello! How can I help?"}}
+        yield {"type": "text_end", "data": {"full_text": "Hello! How can I help?"}}
         yield {"type": "error", "data": {"message": "Goal not achieved after 3 no-progress turns."}}
 
     agent_service = MagicMock()

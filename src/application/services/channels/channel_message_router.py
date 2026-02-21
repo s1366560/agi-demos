@@ -474,18 +474,23 @@ class ChannelMessageRouter:
         return str(value)
 
     async def _invoke_agent(self, message: Message, conversation_id: str) -> None:
-        """Invoke the agent to process the message.
+        """Invoke the agent and send the final response to the channel.
 
-        Supports streaming card updates: when a channel adapter supports
-        ``send_streaming_card`` and ``patch_card``, the router sends an
-        initial "Thinking..." card on the first text_delta and periodically
-        patches it with accumulated content.  This gives the end-user
-        real-time feedback in Feishu/Lark instead of waiting for the full
-        response.
+        Event flow from ``stream_chat_v2``::
 
-        Args:
-            message: The incoming message.
-            conversation_id: The conversation to add the message to.
+            message -> [thought -> act -> observe]* -> text_delta* -> text_end -> complete
+
+        Key design decisions:
+
+        * The **authoritative** final answer comes from the ``complete`` event's
+          ``content`` field (which uses ``text_end.full_text`` internally).
+          Accumulated ``text_delta`` is only a fallback.
+        * A background ``asyncio.Task`` handles streaming card updates so the
+          main loop never awaits Feishu HTTP calls.
+        * A global **timeout** (180 s) prevents the loop from blocking forever
+          if the agent or sandbox hangs.
+        * During tool execution the card shows status (``Running: tool_name``)
+          so the user knows the agent is working, not stuck.
         """
         try:
             from src.configuration.factories import create_llm_client
@@ -495,9 +500,7 @@ class ChannelMessageRouter:
             )
             from src.infrastructure.adapters.secondary.persistence.models import Conversation
 
-            # Get the message text
             text = message.content.text or ""
-
             if not text.strip():
                 logger.debug("[MessageRouter] Empty message, skipping agent invocation")
                 return
@@ -506,7 +509,7 @@ class ChannelMessageRouter:
                 conversation = await session.get(Conversation, conversation_id)
                 if not conversation:
                     logger.error(
-                        f"[MessageRouter] Conversation not found when invoking agent: {conversation_id}"
+                        f"[MessageRouter] Conversation not found: {conversation_id}"
                     )
                     return
 
@@ -523,87 +526,121 @@ class ChannelMessageRouter:
                     f"[MessageRouter] Invoking agent for conversation {conversation_id}"
                 )
 
-                response_text = ""
+                # --- Shared state between main loop and card updater ---------
+                _delta_text = ""          # accumulated text_delta (preview)
+                _card_status = ""         # tool-execution status line
+                _final_content = ""       # authoritative answer from complete
                 error_message: Optional[str] = None
-                # Event types that produce full-text messages in the frontend.
-                # Broadcasting these causes duplicate bubbles when the ReAct loop
-                # runs multiple turns, each emitting its own assistant_message.
-                _SKIP_BROADCAST = {"assistant_message", "text_end", "complete"}
-
-                # Streaming card: run card updates in a background task so the
-                # stream loop has ZERO HTTP calls and never blocks on I/O.
-                streaming_adapter = self._get_streaming_adapter(message)
-                _card_updater_task: Optional[asyncio.Task] = None
                 _stream_done = False
+
+                _SKIP_BROADCAST = {"assistant_message", "text_end", "complete"}
+                _STREAM_TIMEOUT = 180.0
+
+                # --- Background card updater (Feishu streaming) --------------
+                streaming_adapter = self._get_streaming_adapter(message)
                 _card_msg_id: Optional[str] = None
+                _card_updater_task: Optional[asyncio.Task] = None
 
                 if streaming_adapter:
 
                     async def _card_updater() -> None:
-                        """Background task: sends initial card, patches periodically."""
                         nonlocal _card_msg_id
-                        # Send initial "Thinking..." card
                         _card_msg_id = await self._send_initial_streaming_card(
                             streaming_adapter, message,
                         )
                         if not _card_msg_id:
                             return
-                        last_patched = ""
+                        last_snapshot = ""
                         while not _stream_done:
                             await asyncio.sleep(1.5)
-                            current = response_text
-                            if current != last_patched and current.strip():
+                            # Build display: status + text
+                            display = _delta_text
+                            if _card_status and not _delta_text:
+                                display = f"_{_card_status}_"
+                            elif _card_status:
+                                display = f"_{_card_status}_\n\n{_delta_text}"
+                            if display != last_snapshot and display.strip():
                                 ok = await self._patch_streaming_card(
                                     streaming_adapter, _card_msg_id,
-                                    current, loading=True,
+                                    display, loading=True,
                                 )
                                 if ok:
-                                    last_patched = current
-                        # Final patch with complete content
-                        if response_text.strip() and response_text != last_patched:
+                                    last_snapshot = display
+                        # Final patch: authoritative content or fallback
+                        final_display = _final_content or _delta_text
+                        if final_display.strip() and final_display != last_snapshot:
                             await self._patch_streaming_card(
                                 streaming_adapter, _card_msg_id,
-                                response_text, loading=False,
+                                final_display, loading=False,
                             )
 
                     _card_updater_task = asyncio.create_task(_card_updater())
 
-                async for event in agent_service.stream_chat_v2(
-                    conversation_id=conversation_id,
-                    user_message=text,
-                    project_id=conversation.project_id,
-                    user_id=conversation.user_id,
-                    tenant_id=conversation.tenant_id,
-                    app_model_context=self._build_app_model_context(message),
-                ):
-                    event_type = event.get("type")
-                    event_data = event.get("data") or {}
-
-                    if event_type not in _SKIP_BROADCAST:
-                        await self._broadcast_workspace_event(
+                # --- Consume agent stream (with timeout) ---------------------
+                try:
+                    async with asyncio.timeout(_STREAM_TIMEOUT):
+                        async for event in agent_service.stream_chat_v2(
                             conversation_id=conversation_id,
-                            event_type=event_type,
-                            event_data=event_data if isinstance(event_data, dict) else {},
-                            raw_event=event,
-                        )
+                            user_message=text,
+                            project_id=conversation.project_id,
+                            user_id=conversation.user_id,
+                            tenant_id=conversation.tenant_id,
+                            app_model_context=self._build_app_model_context(message),
+                        ):
+                            event_type = event.get("type")
+                            event_data = event.get("data") or {}
 
-                    if event_type == "text_delta":
-                        delta = event_data.get("delta", "")
-                        if isinstance(delta, str):
-                            response_text += delta
-                    elif event_type == "assistant_message":
-                        assistant_content = event_data.get("content")
-                        if isinstance(assistant_content, str) and assistant_content.strip():
-                            response_text = assistant_content
-                    elif event_type == "complete":
-                        complete_content = event_data.get("content") or event_data.get("result")
-                        if isinstance(complete_content, str) and complete_content.strip():
-                            response_text = complete_content
-                    elif event_type == "error":
-                        error_message = event_data.get("message") or "Unknown agent error"
+                            if event_type not in _SKIP_BROADCAST:
+                                await self._broadcast_workspace_event(
+                                    conversation_id=conversation_id,
+                                    event_type=event_type,
+                                    event_data=(
+                                        event_data if isinstance(event_data, dict) else {}
+                                    ),
+                                    raw_event=event,
+                                )
 
-                # Signal background card updater to finish
+                            if event_type == "text_delta":
+                                delta = event_data.get("delta", "")
+                                if isinstance(delta, str):
+                                    _delta_text += delta
+                            elif event_type == "text_end":
+                                # text_end carries the complete text for this turn;
+                                # reset delta accumulator so multi-turn planning
+                                # text doesn't leak into the final response.
+                                full = event_data.get("full_text", "")
+                                if isinstance(full, str) and full.strip():
+                                    _delta_text = full
+                                _card_status = ""
+                            elif event_type == "thought":
+                                _card_status = "Thinking..."
+                            elif event_type == "act":
+                                tool = event_data.get("tool_name", "tool")
+                                _card_status = f"Running: {tool}"
+                            elif event_type == "observe":
+                                _card_status = ""
+                            elif event_type == "complete":
+                                content = (
+                                    event_data.get("content")
+                                    or event_data.get("result")
+                                )
+                                if isinstance(content, str) and content.strip():
+                                    _final_content = content
+                            elif event_type == "error":
+                                error_message = (
+                                    event_data.get("message") or "Unknown agent error"
+                                )
+
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        f"[MessageRouter] Stream timeout ({_STREAM_TIMEOUT}s) "
+                        f"for conversation {conversation_id}"
+                    )
+
+                # --- Finalize ------------------------------------------------
                 _stream_done = True
+                response = _final_content or _delta_text
+
                 if _card_updater_task:
                     try:
                         await asyncio.wait_for(_card_updater_task, timeout=15.0)
@@ -611,10 +648,10 @@ class ChannelMessageRouter:
                         logger.warning(f"[MessageRouter] Card updater error: {e}")
                         _card_updater_task.cancel()
 
-                # If streaming card was successfully used, we're done
-                if _card_msg_id and response_text.strip():
+                # If streaming card was used successfully, we're done
+                if _card_msg_id and response.strip():
                     await self._record_streaming_outbox(
-                        message, conversation_id, response_text, _card_msg_id,
+                        message, conversation_id, response, _card_msg_id,
                     )
                     if error_message:
                         logger.warning(
@@ -622,27 +659,22 @@ class ChannelMessageRouter:
                         )
                     return
 
+                # Fallback: regular send
                 if error_message:
                     logger.warning(
-                        f"[MessageRouter] Agent returned error for conversation "
-                        f"{conversation_id}: {error_message}"
+                        f"[MessageRouter] Agent error for {conversation_id}: {error_message}"
                     )
-                    # If the agent accumulated a response before erroring (e.g. the
-                    # ReAct loop's "no-progress" detector fires after generating
-                    # valid text), prefer sending the real response over a generic
-                    # error message.
-                    if response_text.strip():
-                        await self._send_response(message, conversation_id, response_text)
+                    if response.strip():
+                        await self._send_response(message, conversation_id, response)
                     else:
                         await self._send_error_feedback(message, conversation_id)
                     return
 
-                if response_text.strip():
-                    await self._send_response(message, conversation_id, response_text)
+                if response.strip():
+                    await self._send_response(message, conversation_id, response)
                 else:
                     logger.warning(
-                        f"[MessageRouter] Agent produced empty response for conversation "
-                        f"{conversation_id}"
+                        f"[MessageRouter] Agent produced empty response for {conversation_id}"
                     )
                     await self._send_error_feedback(message, conversation_id)
 
