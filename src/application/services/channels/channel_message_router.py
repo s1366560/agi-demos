@@ -586,17 +586,23 @@ class ChannelMessageRouter:
 
                 # Finalize streaming card with complete content
                 if streaming_msg_id and response_text.strip():
-                    await self._patch_streaming_card(
+                    patched = await self._patch_streaming_card(
                         streaming_adapter, streaming_msg_id, response_text, loading=False,
                     )
-                    await self._record_streaming_outbox(
-                        message, conversation_id, response_text, streaming_msg_id,
-                    )
-                    if error_message:
-                        logger.warning(
-                            f"[MessageRouter] Agent error after streaming: {error_message}"
+                    if patched:
+                        await self._record_streaming_outbox(
+                            message, conversation_id, response_text, streaming_msg_id,
                         )
-                    return
+                        if error_message:
+                            logger.warning(
+                                f"[MessageRouter] Agent error after streaming: {error_message}"
+                            )
+                        return
+                    # Patch failed -- fall through to send a new message instead
+                    logger.warning(
+                        "[MessageRouter] Streaming card patch failed, "
+                        "falling back to regular send"
+                    )
 
                 if error_message:
                     logger.warning(
@@ -818,13 +824,14 @@ class ChannelMessageRouter:
         text: str,
         *,
         loading: bool = False,
-    ) -> None:
-        """Patch the streaming card with accumulated text."""
+    ) -> bool:
+        """Patch the streaming card with accumulated text. Returns True on success."""
         try:
             card_json = adapter._build_streaming_card(text, loading=loading)
-            await adapter.patch_card(message_id, card_json)
+            return await adapter.patch_card(message_id, card_json)
         except Exception as e:
             logger.debug(f"[MessageRouter] Streaming card patch failed: {e}")
+            return False
 
     async def _record_streaming_outbox(
         self,
