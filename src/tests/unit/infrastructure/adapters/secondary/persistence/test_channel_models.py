@@ -6,13 +6,12 @@ Tests cover:
 - Index constraints
 """
 
-import pytest
 from sqlalchemy import inspect
-from sqlalchemy.orm import Session
 
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelConfigModel,
     ChannelMessageModel,
+    ChannelSessionBindingModel,
 )
 
 
@@ -69,7 +68,6 @@ class TestChannelConfigModel:
 
     def test_has_project_foreign_key(self):
         """ChannelConfigModel should have foreign key to projects."""
-        from sqlalchemy import ForeignKey
 
         mapper = inspect(ChannelConfigModel)
         fk_columns = []
@@ -193,3 +191,42 @@ class TestModelIndexes:
         assert (
             "ix_channel_messages_project_chat" in index_names
         ), "Missing composite index on (project_id, chat_id)"
+
+
+class TestChannelSessionBindingModel:
+    """Tests for ChannelSessionBindingModel."""
+
+    def test_table_name(self):
+        """ChannelSessionBindingModel should have correct table name."""
+        assert ChannelSessionBindingModel.__tablename__ == "channel_session_bindings"
+
+    def test_required_fields(self):
+        """ChannelSessionBindingModel should have required fields."""
+        mapper = inspect(ChannelSessionBindingModel)
+        column_names = {col.key for col in mapper.columns}
+        required_fields = {
+            "id",
+            "project_id",
+            "channel_config_id",
+            "conversation_id",
+            "channel_type",
+            "chat_id",
+            "chat_type",
+            "session_key",
+        }
+        for field in required_fields:
+            assert field in column_names, f"Missing required field: {field}"
+
+    def test_unique_constraints(self):
+        """ChannelSessionBindingModel should define expected unique constraints."""
+        table_args = ChannelSessionBindingModel.__table_args__
+        constraint_names = [getattr(arg, "name", None) for arg in table_args]
+        assert "uq_channel_session_bindings_project_session_key" in constraint_names
+        assert "uq_channel_session_bindings_conversation_id" in constraint_names
+
+    def test_indexes(self):
+        """ChannelSessionBindingModel should define project/chat and config/chat indexes."""
+        table_args = ChannelSessionBindingModel.__table_args__
+        index_names = [arg.name for arg in table_args if hasattr(arg, "name")]
+        assert "ix_channel_session_bindings_project_chat" in index_names
+        assert "ix_channel_session_bindings_config_chat" in index_names

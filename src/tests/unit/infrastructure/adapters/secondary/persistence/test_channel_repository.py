@@ -6,22 +6,22 @@ Tests cover:
 - CRUD operations
 """
 
-import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
-from sqlalchemy import select
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.infrastructure.adapters.secondary.persistence.channel_repository import (
-    ChannelConfigRepository,
-    ChannelMessageRepository,
-)
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelConfigModel,
     ChannelMessageModel,
+    ChannelSessionBindingModel,
 )
-from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
+from src.infrastructure.adapters.secondary.persistence.channel_repository import (
+    ChannelConfigRepository,
+    ChannelMessageRepository,
+    ChannelSessionBindingRepository,
+)
 
 
 class TestChannelConfigRepositoryInheritance:
@@ -329,3 +329,86 @@ class TestCredentialEncryption:
         assert encrypted1 != encrypted2
         assert service.decrypt(encrypted1) == secret
         assert service.decrypt(encrypted2) == secret
+
+
+class TestChannelSessionBindingRepository:
+    """Tests for ChannelSessionBindingRepository."""
+
+    @pytest.fixture
+    def mock_session(self):
+        """Create a mock database session."""
+        session = MagicMock(spec=AsyncSession)
+        session.execute = AsyncMock()
+        session.add = MagicMock()
+        session.flush = AsyncMock()
+        return session
+
+    @pytest.fixture
+    def sample_binding(self):
+        """Create a sample channel session binding."""
+        return ChannelSessionBindingModel(
+            id="bind-123",
+            project_id="project-1",
+            channel_config_id="config-1",
+            conversation_id="conv-1",
+            channel_type="feishu",
+            chat_id="chat-1",
+            chat_type="group",
+            session_key="project:project-1:channel:feishu:config:config-1:group:chat-1",
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_by_session_key(self, mock_session, sample_binding):
+        """Should load binding by project/session key."""
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = sample_binding
+        mock_session.execute.return_value = mock_result
+
+        repo = ChannelSessionBindingRepository(mock_session)
+        result = await repo.get_by_session_key("project-1", sample_binding.session_key)
+
+        assert result == sample_binding
+
+    @pytest.mark.asyncio
+    async def test_upsert_creates_when_absent(self, mock_session):
+        """Upsert should create new binding when no existing row is found."""
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = mock_result
+
+        repo = ChannelSessionBindingRepository(mock_session)
+        binding = await repo.upsert(
+            project_id="project-1",
+            channel_config_id="config-1",
+            conversation_id="conv-1",
+            channel_type="feishu",
+            chat_id="chat-1",
+            chat_type="group",
+            session_key="session-key-1",
+        )
+
+        assert binding.project_id == "project-1"
+        assert binding.conversation_id == "conv-1"
+        mock_session.add.assert_called_once()
+        mock_session.flush.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_upsert_updates_existing_binding(self, mock_session, sample_binding):
+        """Upsert should update conversation_id when binding already exists."""
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = sample_binding
+        mock_session.execute.return_value = mock_result
+
+        repo = ChannelSessionBindingRepository(mock_session)
+        result = await repo.upsert(
+            project_id="project-1",
+            channel_config_id="config-1",
+            conversation_id="conv-2",
+            channel_type="feishu",
+            chat_id="chat-1",
+            chat_type="group",
+            session_key=sample_binding.session_key,
+        )
+
+        assert result is sample_binding
+        assert sample_binding.conversation_id == "conv-2"

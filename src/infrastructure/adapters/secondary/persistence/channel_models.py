@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -259,5 +259,76 @@ class ChannelMessageModel(IdGeneratorMixin, Base):
             "ix_channel_messages_config_time",
             "channel_config_id",
             "created_at",
+        ),
+    )
+
+
+class ChannelSessionBindingModel(IdGeneratorMixin, Base):
+    """Channel session key to conversation binding.
+
+    Provides deterministic routing from channel session identity to a stable
+    agent conversation without scanning conversation metadata.
+    """
+
+    __tablename__ = "channel_session_bindings"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    project_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    channel_config_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("channel_configs.id", ondelete="CASCADE"),
+        index=True,
+        nullable=False,
+    )
+    conversation_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    channel_type: Mapped[str] = mapped_column(String, nullable=False)
+    chat_id: Mapped[str] = mapped_column(String, nullable=False)
+    chat_type: Mapped[str] = mapped_column(String, nullable=False)
+    thread_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    topic_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    session_key: Mapped[str] = mapped_column(String(512), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        onupdate=func.now(),
+        nullable=True,
+    )
+
+    project = relationship("Project")
+    channel_config = relationship("ChannelConfigModel")
+    conversation = relationship("Conversation")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "project_id",
+            "session_key",
+            name="uq_channel_session_bindings_project_session_key",
+        ),
+        UniqueConstraint(
+            "conversation_id",
+            name="uq_channel_session_bindings_conversation_id",
+        ),
+        Index(
+            "ix_channel_session_bindings_project_chat",
+            "project_id",
+            "chat_id",
+        ),
+        Index(
+            "ix_channel_session_bindings_config_chat",
+            "channel_config_id",
+            "chat_id",
         ),
     )

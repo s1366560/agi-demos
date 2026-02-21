@@ -156,7 +156,6 @@ class ChannelMessageRouter:
         Returns:
             The conversation ID.
         """
-        from sqlalchemy import select
 
         from src.infrastructure.adapters.secondary.persistence.channel_models import (
             ChannelConfigModel,
@@ -633,11 +632,11 @@ class ChannelMessageRouter:
     async def _get_conversation_channel_config_id(self, conversation_id: str) -> Optional[str]:
         """Load channel_config_id from conversation metadata as fallback."""
         try:
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
             from src.infrastructure.adapters.secondary.persistence.channel_repository import (
                 ChannelSessionBindingRepository,
+            )
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
             )
             from src.infrastructure.adapters.secondary.persistence.models import Conversation
 

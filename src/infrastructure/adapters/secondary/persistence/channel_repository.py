@@ -7,11 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelConfigModel,
+    ChannelSessionBindingModel,
 )
 
 if TYPE_CHECKING:
     from src.infrastructure.adapters.secondary.persistence.channel_models import (
         ChannelMessageModel,
+        ChannelSessionBindingModel,
     )
 
 
@@ -135,3 +137,79 @@ class ChannelMessageRepository:
             .offset(offset)
         )
         return list(result.scalars().all())
+
+
+class ChannelSessionBindingRepository:
+    """Repository for deterministic channel session bindings."""
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def get_by_session_key(
+        self,
+        project_id: str,
+        session_key: str,
+    ) -> Optional[ChannelSessionBindingModel]:
+        """Get binding by project and deterministic session key."""
+        result = await self._session.execute(
+            select(ChannelSessionBindingModel).where(
+                ChannelSessionBindingModel.project_id == project_id,
+                ChannelSessionBindingModel.session_key == session_key,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_conversation_id(
+        self,
+        conversation_id: str,
+    ) -> Optional[ChannelSessionBindingModel]:
+        """Get binding by conversation ID."""
+        result = await self._session.execute(
+            select(ChannelSessionBindingModel).where(
+                ChannelSessionBindingModel.conversation_id == conversation_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def upsert(
+        self,
+        *,
+        project_id: str,
+        channel_config_id: str,
+        conversation_id: str,
+        channel_type: str,
+        chat_id: str,
+        chat_type: str,
+        session_key: str,
+        thread_id: Optional[str] = None,
+        topic_id: Optional[str] = None,
+    ) -> ChannelSessionBindingModel:
+        """Create or update a deterministic session binding."""
+        existing = await self.get_by_session_key(project_id, session_key)
+        if existing:
+            existing.channel_config_id = channel_config_id
+            existing.conversation_id = conversation_id
+            existing.channel_type = channel_type
+            existing.chat_id = chat_id
+            existing.chat_type = chat_type
+            existing.thread_id = thread_id
+            existing.topic_id = topic_id
+            await self._session.flush()
+            return existing
+
+        binding = ChannelSessionBindingModel(
+            project_id=project_id,
+            channel_config_id=channel_config_id,
+            conversation_id=conversation_id,
+            channel_type=channel_type,
+            chat_id=chat_id,
+            chat_type=chat_type,
+            thread_id=thread_id,
+            topic_id=topic_id,
+            session_key=session_key,
+        )
+        if not binding.id:
+            binding.id = ChannelSessionBindingModel.generate_id()
+        self._session.add(binding)
+        await self._session.flush()
+        return binding

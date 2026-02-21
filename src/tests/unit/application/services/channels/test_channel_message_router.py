@@ -41,6 +41,27 @@ def test_extract_channel_config_id_rejects_untrusted_top_level_payload() -> None
 
 
 @pytest.mark.unit
+def test_build_session_key_includes_topic_and_thread() -> None:
+    """Session key should deterministically include topic/thread when present."""
+    router = ChannelMessageRouter()
+    message = _build_message(
+        text="hello",
+        raw_data={
+            "_routing": {
+                "channel_config_id": "cfg-1",
+                "topic_id": "topic-42",
+                "thread_id": "thread-99",
+            }
+        },
+    )
+
+    session_key = router._build_session_key(message, "cfg-1")
+    assert "config:cfg-1" in session_key
+    assert ":topic:topic-42" in session_key
+    assert ":thread:thread-99" in session_key
+
+
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_route_message_skips_bot_echo_messages() -> None:
     """Router should skip app/bot sender messages to avoid echo loops."""

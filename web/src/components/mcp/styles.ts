@@ -128,13 +128,25 @@ export const APP_STATUS_STYLES: Record<string, {
     icon: 'block',
     label: 'Disabled',
   },
+  discovered: {
+    color: 'text-cyan-600 dark:text-cyan-400',
+    bgColor: 'bg-cyan-50 dark:bg-cyan-900/20',
+    borderColor: 'border-cyan-200 dark:border-cyan-800',
+    icon: 'search',
+    label: 'Discovered',
+  },
 };
 
 // ============================================================================
 // Source Styles
 // ============================================================================
 
-export const SOURCE_STYLES = {
+export const SOURCE_STYLES: Record<string, {
+  bgColor: string;
+  textColor: string;
+  icon: string;
+  label: string;
+}> = {
   user_added: {
     bgColor: 'bg-cyan-50 dark:bg-cyan-900/20',
     textColor: 'text-cyan-700 dark:text-cyan-400',
