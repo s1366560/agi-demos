@@ -309,3 +309,62 @@ async def test_hitl_event_falls_back_when_cardkit_fails() -> None:
 
     adapter.send_hitl_card_via_cardkit.assert_called_once()
     adapter.send_card.assert_called_once()  # Fallback to static card
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_unified_hitl_adds_buttons_to_streaming_card() -> None:
+    """When card_state is registered, HITL buttons go onto the streaming card."""
+    adapter = _make_adapter(
+        add_card_elements=AsyncMock(return_value=True),
+        update_card_settings=AsyncMock(return_value=True),
+    )
+    bridge = ChannelEventBridge()
+
+    # Simulate a CardStreamState
+    card_state = SimpleNamespace(
+        card_id="card_unified",
+        message_id="msg_unified",
+        streaming_active=False,
+        last_content="Some response",
+    )
+    card_state.next_seq = MagicMock(side_effect=[1, 2, 3, 4])
+
+    bridge.register_card_state("conv-unified", card_state)
+
+    with (
+        patch.object(bridge, "_lookup_binding", new_callable=AsyncMock) as mock_bind,
+        patch.object(bridge, "_get_adapter", return_value=adapter),
+    ):
+        mock_bind.return_value = _make_binding()
+        await bridge.on_agent_event(
+            "conv-unified",
+            {
+                "type": "decision_asked",
+                "data": {
+                    "request_id": "req-unified",
+                    "question": "Pick one",
+                    "options": ["A", "B"],
+                },
+            },
+        )
+
+    # Should have added elements to existing card, NOT created standalone
+    adapter.add_card_elements.assert_called_once()
+    adapter.send_hitl_card_via_cardkit.assert_not_called()
+    adapter.send_card.assert_not_called()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_card_state_lifecycle() -> None:
+    """register/unregister/get card state methods work correctly."""
+    bridge = ChannelEventBridge()
+    assert bridge.get_card_state("conv-1") is None
+
+    state = SimpleNamespace(card_id="card_1")
+    bridge.register_card_state("conv-1", state)
+    assert bridge.get_card_state("conv-1") is state
+
+    bridge.unregister_card_state("conv-1")
+    assert bridge.get_card_state("conv-1") is None

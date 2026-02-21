@@ -256,7 +256,7 @@ async def test_invoke_agent_streams_via_card_when_adapter_supports_it() -> None:
     router._broadcast_workspace_event = AsyncMock()
     router._record_streaming_outbox = AsyncMock()
 
-    fake_adapter = MagicMock()
+    fake_adapter = MagicMock(spec=["send_streaming_card", "patch_card", "_build_streaming_card"])
     fake_adapter.send_streaming_card = AsyncMock(return_value="om_stream_1")
     fake_adapter.patch_card = AsyncMock(return_value=True)
     fake_adapter._build_streaming_card = MagicMock(return_value='{"elements":[]}')
@@ -291,6 +291,7 @@ async def test_invoke_agent_streams_via_card_when_adapter_supports_it() -> None:
     app_container = MagicMock()
     app_container.with_db.return_value = scoped_container
 
+    # Return an adapter that supports legacy streaming but NOT CardKit
     router._get_streaming_adapter = MagicMock(return_value=fake_adapter)
 
     with (
@@ -326,7 +327,7 @@ async def test_invoke_agent_falls_back_when_initial_card_fails() -> None:
     router._broadcast_workspace_event = AsyncMock()
     router._record_streaming_outbox = AsyncMock()
 
-    fake_adapter = MagicMock()
+    fake_adapter = MagicMock(spec=["send_streaming_card", "patch_card", "_build_streaming_card"])
     fake_adapter.send_streaming_card = AsyncMock(return_value=None)  # card send fails
     fake_adapter.patch_card = AsyncMock(return_value=True)
     fake_adapter._build_streaming_card = MagicMock(return_value='{"elements":[]}')
@@ -378,9 +379,86 @@ async def test_invoke_agent_falls_back_when_initial_card_fails() -> None:
     ):
         await router._invoke_agent(message, "conv-1")
 
-    # Initial card failed (_card_msg_id=None) → falls through to regular send
+    # Initial card failed (_card_msg_id=None) -> falls through to regular send
     router._send_response.assert_awaited_once_with(message, "conv-1", "Hello world")
     router._record_streaming_outbox.assert_not_awaited()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_invoke_agent_uses_cardkit_streaming_when_available() -> None:
+    """When adapter supports CardKit, the CardKit streaming path is used."""
+    router = ChannelMessageRouter()
+    router._send_response = AsyncMock()
+    router._send_error_feedback = AsyncMock()
+    router._broadcast_workspace_event = AsyncMock()
+    router._record_streaming_outbox = AsyncMock()
+
+    # Adapter that supports CardKit
+    fake_adapter = MagicMock(spec=[
+        "create_card_entity", "update_card_settings",
+        "stream_text_content", "send_card_entity_message",
+    ])
+    fake_adapter.create_card_entity = AsyncMock(return_value="card_999")
+    fake_adapter.update_card_settings = AsyncMock(return_value=True)
+    fake_adapter.send_card_entity_message = AsyncMock(return_value="msg_999")
+    fake_adapter.stream_text_content = AsyncMock(return_value=True)
+
+    message = _build_message(
+        text="Hello CardKit",
+        raw_data={
+            "_routing": {"channel_config_id": "cfg-1", "channel_message_id": "msg-1"},
+            "event": {"sender": {"sender_type": "user"}},
+        },
+    )
+
+    conversation = SimpleNamespace(
+        id="conv-1", project_id="project-1", user_id="user-1", tenant_id="tenant-1",
+    )
+
+    session = MagicMock()
+    session.get = AsyncMock(return_value=conversation)
+    session_ctx = AsyncMock()
+    session_ctx.__aenter__.return_value = session
+    session_ctx.__aexit__.return_value = None
+
+    async def fake_stream(**_):
+        yield {"type": "text_delta", "data": {"delta": "Answer "}}
+        yield {"type": "text_delta", "data": {"delta": "here"}}
+        yield {"type": "complete", "data": {"content": "Answer here"}}
+
+    agent_service = MagicMock()
+    agent_service.stream_chat_v2 = fake_stream
+    scoped_container = MagicMock()
+    scoped_container.agent_service.return_value = agent_service
+    app_container = MagicMock()
+    app_container.with_db.return_value = scoped_container
+
+    router._get_streaming_adapter = MagicMock(return_value=fake_adapter)
+
+    with (
+        patch(
+            "src.infrastructure.adapters.secondary.persistence.database.async_session_factory",
+            return_value=session_ctx,
+        ),
+        patch(
+            "src.configuration.factories.create_llm_client",
+            new=AsyncMock(return_value=object()),
+        ),
+        patch(
+            "src.infrastructure.adapters.primary.web.startup.container.get_app_container",
+            return_value=app_container,
+        ),
+    ):
+        await router._invoke_agent(message, "conv-1")
+
+    # CardKit flow: card entity was created, settings were updated, card was sent
+    fake_adapter.create_card_entity.assert_awaited_once()
+    fake_adapter.update_card_settings.assert_awaited()  # enable + disable
+    fake_adapter.send_card_entity_message.assert_awaited_once()
+    # Streaming path handled response -- _send_response NOT called
+    router._send_response.assert_not_awaited()
+    router._record_streaming_outbox.assert_awaited_once()
 
 
 @pytest.mark.unit

@@ -1000,3 +1000,126 @@ async def test_send_hitl_card_via_cardkit_entity_fails(adapter: FeishuAdapter) -
             {"question": "What?", "options": ["A"]},
         )
         assert result is None
+
+
+# ------------------------------------------------------------------
+# CardKit streaming adapter methods
+# ------------------------------------------------------------------
+
+
+def _mock_cardkit_response(success: bool = True, code: int = 0, msg: str = "success"):
+    """Build a mock response for CardKit SDK calls."""
+    resp = SimpleNamespace()
+    resp.success = lambda: success
+    resp.code = code
+    resp.msg = msg
+    resp.data = SimpleNamespace()
+    return resp
+
+
+@pytest.mark.unit
+async def test_update_card_settings_success(adapter: FeishuAdapter) -> None:
+    """update_card_settings should call asettings and return True."""
+    adapter._connected = True
+    mock_response = _mock_cardkit_response(success=True)
+
+    mock_client = SimpleNamespace()
+    mock_client.cardkit = SimpleNamespace()
+    mock_client.cardkit.v1 = SimpleNamespace()
+    mock_client.cardkit.v1.card = SimpleNamespace()
+    mock_client.cardkit.v1.card.asettings = AsyncMock(return_value=mock_response)
+
+    with patch.object(adapter, "_build_rest_client", return_value=mock_client):
+        result = await adapter.update_card_settings(
+            "card_001", {"config": {"streaming_mode": True}}, sequence=1
+        )
+        assert result is True
+        mock_client.cardkit.v1.card.asettings.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_update_card_settings_failure(adapter: FeishuAdapter) -> None:
+    """update_card_settings returns False on API failure."""
+    adapter._connected = True
+    mock_response = _mock_cardkit_response(success=False, code=400, msg="bad")
+
+    mock_client = SimpleNamespace()
+    mock_client.cardkit = SimpleNamespace()
+    mock_client.cardkit.v1 = SimpleNamespace()
+    mock_client.cardkit.v1.card = SimpleNamespace()
+    mock_client.cardkit.v1.card.asettings = AsyncMock(return_value=mock_response)
+
+    with patch.object(adapter, "_build_rest_client", return_value=mock_client):
+        result = await adapter.update_card_settings("card_001", {}, sequence=1)
+        assert result is False
+
+
+@pytest.mark.unit
+async def test_stream_text_content_success(adapter: FeishuAdapter) -> None:
+    """stream_text_content should call acontent and return True."""
+    adapter._connected = True
+    mock_response = _mock_cardkit_response(success=True)
+
+    mock_client = SimpleNamespace()
+    mock_client.cardkit = SimpleNamespace()
+    mock_client.cardkit.v1 = SimpleNamespace()
+    mock_client.cardkit.v1.card_element = SimpleNamespace()
+    mock_client.cardkit.v1.card_element.acontent = AsyncMock(return_value=mock_response)
+
+    with patch.object(adapter, "_build_rest_client", return_value=mock_client):
+        result = await adapter.stream_text_content(
+            "card_001", "content", "Hello world", sequence=2
+        )
+        assert result is True
+        mock_client.cardkit.v1.card_element.acontent.assert_awaited_once()
+
+
+@pytest.mark.unit
+async def test_stream_text_content_failure(adapter: FeishuAdapter) -> None:
+    """stream_text_content returns False on API failure."""
+    adapter._connected = True
+    mock_response = _mock_cardkit_response(success=False, code=300309, msg="closed")
+
+    mock_client = SimpleNamespace()
+    mock_client.cardkit = SimpleNamespace()
+    mock_client.cardkit.v1 = SimpleNamespace()
+    mock_client.cardkit.v1.card_element = SimpleNamespace()
+    mock_client.cardkit.v1.card_element.acontent = AsyncMock(return_value=mock_response)
+
+    with patch.object(adapter, "_build_rest_client", return_value=mock_client):
+        result = await adapter.stream_text_content("card_001", "content", "Hi", sequence=1)
+        assert result is False
+
+
+@pytest.mark.unit
+async def test_delete_card_element_success(adapter: FeishuAdapter) -> None:
+    """delete_card_element should call adelete and return True."""
+    adapter._connected = True
+    mock_response = _mock_cardkit_response(success=True)
+
+    mock_client = SimpleNamespace()
+    mock_client.cardkit = SimpleNamespace()
+    mock_client.cardkit.v1 = SimpleNamespace()
+    mock_client.cardkit.v1.card_element = SimpleNamespace()
+    mock_client.cardkit.v1.card_element.adelete = AsyncMock(return_value=mock_response)
+
+    with patch.object(adapter, "_build_rest_client", return_value=mock_client):
+        result = await adapter.delete_card_element("card_001", "btn_1", sequence=3)
+        assert result is True
+
+
+@pytest.mark.unit
+async def test_delete_card_element_failure(adapter: FeishuAdapter) -> None:
+    """delete_card_element returns False on API failure."""
+    adapter._connected = True
+    mock_response = _mock_cardkit_response(success=False)
+
+    mock_client = SimpleNamespace()
+    mock_client.cardkit = SimpleNamespace()
+    mock_client.cardkit.v1 = SimpleNamespace()
+    mock_client.cardkit.v1.card_element = SimpleNamespace()
+    mock_client.cardkit.v1.card_element.adelete = AsyncMock(return_value=mock_response)
+
+    with patch.object(adapter, "_build_rest_client", return_value=mock_client):
+        result = await adapter.delete_card_element("card_001", "btn_1", sequence=3)
+        assert result is False

@@ -1268,3 +1268,164 @@ class FeishuAdapter:
         except Exception as e:
             logger.error(f"[Feishu] CardKit HITL send failed: {e}")
             return None
+
+    # ------------------------------------------------------------------
+    # CardKit streaming & element operations
+    # ------------------------------------------------------------------
+
+    async def update_card_settings(
+        self,
+        card_id: str,
+        settings: Dict[str, Any],
+        sequence: int,
+    ) -> bool:
+        """Update card entity settings (e.g. streaming_mode).
+
+        Args:
+            card_id: Card entity ID.
+            settings: Settings dict, e.g. ``{"config": {"streaming_mode": true}}``.
+            sequence: Strictly increasing operation sequence number.
+
+        Returns:
+            True on success.
+        """
+        try:
+            import uuid as uuid_mod
+
+            from lark_oapi.api.cardkit.v1 import (
+                SettingsCardRequest,
+                SettingsCardRequestBody,
+            )
+
+            client = self._build_rest_client()
+            request = (
+                SettingsCardRequest.builder()
+                .card_id(card_id)
+                .request_body(
+                    SettingsCardRequestBody.builder()
+                    .settings(json.dumps(settings))
+                    .uuid(str(uuid_mod.uuid4()))
+                    .sequence(sequence)
+                    .build()
+                )
+                .build()
+            )
+            response = await client.cardkit.v1.card.asettings(request)
+            if not response.success():
+                logger.warning(
+                    f"[Feishu] Update card settings failed: "
+                    f"code={response.code}, msg={response.msg}"
+                )
+                return False
+            return True
+        except Exception as e:
+            logger.error(f"[Feishu] Update card settings error: {e}")
+            return False
+
+    async def stream_text_content(
+        self,
+        card_id: str,
+        element_id: str,
+        content: str,
+        sequence: int,
+    ) -> bool:
+        """Stream text content to a card element (typewriter effect).
+
+        Sends full text content; Feishu calculates the diff and renders
+        new characters with typewriter effect if the new text is a
+        prefix-extension of the old text.
+
+        Args:
+            card_id: Card entity ID.
+            element_id: The ``element_id`` of a plain_text or markdown element.
+            content: Full text content (not a delta).
+            sequence: Strictly increasing operation sequence number.
+
+        Returns:
+            True on success.
+        """
+        try:
+            import uuid as uuid_mod
+
+            from lark_oapi.api.cardkit.v1 import (
+                ContentCardElementRequest,
+                ContentCardElementRequestBody,
+            )
+
+            client = self._build_rest_client()
+            request = (
+                ContentCardElementRequest.builder()
+                .card_id(card_id)
+                .element_id(element_id)
+                .request_body(
+                    ContentCardElementRequestBody.builder()
+                    .content(content)
+                    .uuid(str(uuid_mod.uuid4()))
+                    .sequence(sequence)
+                    .build()
+                )
+                .build()
+            )
+            response = await client.cardkit.v1.card_element.acontent(request)
+            if not response.success():
+                logger.warning(
+                    f"[Feishu] Stream text content failed: "
+                    f"code={response.code}, msg={response.msg}"
+                )
+                return False
+            return True
+        except Exception as e:
+            logger.error(f"[Feishu] Stream text content error: {e}")
+            return False
+
+    async def delete_card_element(
+        self,
+        card_id: str,
+        element_id: str,
+        sequence: int,
+    ) -> bool:
+        """Delete an element from a card entity.
+
+        Args:
+            card_id: Card entity ID.
+            element_id: The ``element_id`` to delete.
+            sequence: Strictly increasing operation sequence number.
+
+        Returns:
+            True on success.
+        """
+        try:
+            import uuid as uuid_mod
+
+            from lark_oapi.api.cardkit.v1 import (
+                DeleteCardElementRequest,
+                DeleteCardElementRequestBody,
+            )
+
+            client = self._build_rest_client()
+            request = (
+                DeleteCardElementRequest.builder()
+                .card_id(card_id)
+                .element_id(element_id)
+                .request_body(
+                    DeleteCardElementRequestBody.builder()
+                    .uuid(str(uuid_mod.uuid4()))
+                    .sequence(sequence)
+                    .build()
+                )
+                .build()
+            )
+            response = await client.cardkit.v1.card_element.adelete(request)
+            if not response.success():
+                logger.warning(
+                    f"[Feishu] Delete card element failed: "
+                    f"code={response.code}, msg={response.msg}"
+                )
+                return False
+            logger.info(
+                f"[Feishu] Deleted element {element_id} from card {card_id}"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"[Feishu] Delete card element error: {e}")
+            return False

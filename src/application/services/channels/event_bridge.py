@@ -56,6 +56,8 @@ class ChannelEventBridge:
             "artifact_ready": self._handle_artifact_ready,
             "error": self._handle_error,
         }
+        # card_id → CardStreamState for unified HITL (set by streaming flow)
+        self._card_states: Dict[str, Any] = {}  # conversation_id → CardStreamState
 
     async def on_agent_event(
         self,
@@ -96,7 +98,11 @@ class ChannelEventBridge:
             chat_id = binding.chat_id
             event_data = event.get("data") or {}
             if isinstance(event_data, dict):
-                event_data = {**event_data, "_event_type": event_type}
+                event_data = {
+                    **event_data,
+                    "_event_type": event_type,
+                    "_conversation_id": conversation_id,
+                }
             await handler(adapter, chat_id, event_data)
         except Exception as e:
             logger.warning(
@@ -141,6 +147,26 @@ class ChannelEventBridge:
         return None
 
     # ------------------------------------------------------------------
+    # Card state management (for unified CardKit HITL)
+    # ------------------------------------------------------------------
+
+    def register_card_state(self, conversation_id: str, card_state: Any) -> None:
+        """Register a CardStreamState for unified HITL on a streaming card.
+
+        Called by ``_invoke_agent()`` when CardKit streaming starts so HITL
+        buttons can be appended to the same card entity.
+        """
+        self._card_states[conversation_id] = card_state
+
+    def unregister_card_state(self, conversation_id: str) -> None:
+        """Remove card state tracking for a conversation."""
+        self._card_states.pop(conversation_id, None)
+
+    def get_card_state(self, conversation_id: str) -> Any:
+        """Get the active CardStreamState for a conversation (or None)."""
+        return self._card_states.get(conversation_id)
+
+    # ------------------------------------------------------------------
     # Event handlers
     # ------------------------------------------------------------------
 
@@ -152,18 +178,36 @@ class ChannelEventBridge:
     ) -> None:
         """Forward HITL request to channel as an interactive card.
 
-        Attempts CardKit flow first (dynamic element management), then
-        falls back to static card JSON if CardKit is unavailable.
+        Priority order:
+        1. Unified CardKit flow: add buttons to the active streaming card
+        2. Standalone CardKit flow: create new card entity + buttons
+        3. Static card JSON fallback
+        4. Plain text fallback
         """
         try:
             event_type = event_data.get("_event_type", "clarification")
             request_id = event_data.get("request_id", "")
+            conversation_id = event_data.get("_conversation_id", "")
             logger.info(
                 f"[EventBridge] Building HITL card: type={event_type}, "
                 f"request_id={request_id}, chat_id={chat_id}"
             )
 
-            # Try CardKit flow (creates card entity + adds buttons dynamically)
+            # 1. Try unified flow: add buttons to the active streaming card
+            if conversation_id and hasattr(adapter, "add_card_elements"):
+                card_state = self.get_card_state(conversation_id)
+                if card_state and card_state.card_id:
+                    ok = await self._add_hitl_to_streaming_card(
+                        adapter, card_state, event_type, request_id, event_data
+                    )
+                    if ok:
+                        logger.info(
+                            f"[EventBridge] Added HITL buttons to streaming card "
+                            f"{card_state.card_id}"
+                        )
+                        return
+
+            # 2. Try standalone CardKit flow
             if hasattr(adapter, "send_hitl_card_via_cardkit"):
                 message_id = await adapter.send_hitl_card_via_cardkit(
                     chat_id, event_type, request_id, event_data
@@ -177,7 +221,7 @@ class ChannelEventBridge:
                     "[EventBridge] CardKit HITL failed, falling back to static card"
                 )
 
-            # Fallback: build static card and send as regular interactive message
+            # 3. Fallback: build static card and send as regular interactive message
             from src.infrastructure.adapters.secondary.channels.feishu.hitl_cards import (
                 HITLCardBuilder,
             )
@@ -205,6 +249,40 @@ class ChannelEventBridge:
             logger.warning(
                 f"[EventBridge] HITL card send failed: {e}", exc_info=True
             )
+
+    async def _add_hitl_to_streaming_card(
+        self,
+        adapter: ChannelAdapter,
+        card_state: Any,
+        event_type: str,
+        request_id: str,
+        event_data: Dict[str, Any],
+    ) -> bool:
+        """Add HITL action elements to an existing streaming card.
+
+        Closes streaming mode first (required for card callbacks), then
+        appends button/select elements to the card via CardKit API.
+        """
+        try:
+            from src.infrastructure.adapters.secondary.channels.feishu.cardkit_streaming import (
+                CardKitStreamingManager,
+            )
+            from src.infrastructure.adapters.secondary.channels.feishu.hitl_cards import (
+                HITLCardBuilder,
+            )
+
+            builder = HITLCardBuilder()
+            elements = builder.build_hitl_action_elements(
+                event_type, request_id, event_data
+            )
+            if not elements:
+                return False
+
+            mgr = CardKitStreamingManager(adapter)
+            return await mgr.add_hitl_buttons(card_state, elements)
+        except Exception as e:
+            logger.warning(f"[EventBridge] Unified HITL failed: {e}")
+            return False
 
     async def _handle_task_update(
         self,

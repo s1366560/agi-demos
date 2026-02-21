@@ -540,39 +540,101 @@ class ChannelMessageRouter:
                 streaming_adapter = self._get_streaming_adapter(message)
                 _card_msg_id: Optional[str] = None
                 _card_updater_task: Optional[asyncio.Task] = None
+                _card_stream_state: Any = None  # CardStreamState when using CardKit
 
                 if streaming_adapter:
+                    use_cardkit = self._supports_cardkit_streaming(streaming_adapter)
 
-                    async def _card_updater() -> None:
-                        nonlocal _card_msg_id
-                        _card_msg_id = await self._send_initial_streaming_card(
-                            streaming_adapter, message,
-                        )
-                        if not _card_msg_id:
-                            return
-                        last_snapshot = ""
-                        while not _stream_done:
-                            await asyncio.sleep(1.5)
-                            # Build display: status + text
-                            display = _delta_text
-                            if _card_status and not _delta_text:
-                                display = f"_{_card_status}_"
-                            elif _card_status:
-                                display = f"_{_card_status}_\n\n{_delta_text}"
-                            if display != last_snapshot and display.strip():
-                                ok = await self._patch_streaming_card(
-                                    streaming_adapter, _card_msg_id,
-                                    display, loading=True,
-                                )
-                                if ok:
-                                    last_snapshot = display
-                        # Final patch: authoritative content or fallback
-                        final_display = _final_content or _delta_text
-                        if final_display.strip():
-                            await self._patch_streaming_card(
-                                streaming_adapter, _card_msg_id,
-                                final_display, loading=False,
+                    if use_cardkit:
+
+                        async def _card_updater() -> None:
+                            nonlocal _card_msg_id, _card_stream_state
+                            from src.infrastructure.adapters.secondary.channels.feishu.cardkit_streaming import (  # noqa: E501
+                                CardKitStreamingManager,
                             )
+
+                            mgr = CardKitStreamingManager(streaming_adapter)
+                            reply_to = self._extract_channel_message_id(message)
+                            state = await mgr.start_streaming(
+                                message.chat_id, reply_to=reply_to,
+                            )
+                            if not state:
+                                return
+                            _card_msg_id = state.message_id
+                            _card_stream_state = state
+
+                            # Register with event bridge for unified HITL
+                            try:
+                                from src.application.services.channels.event_bridge import (
+                                    get_channel_event_bridge,
+                                )
+                                get_channel_event_bridge().register_card_state(
+                                    conversation_id, state
+                                )
+                            except Exception:
+                                pass
+
+                            last_snapshot = ""
+                            while not _stream_done:
+                                await asyncio.sleep(0.5)
+                                display = _delta_text
+                                if _card_status and not _delta_text:
+                                    display = f"_{_card_status}_"
+                                elif _card_status:
+                                    display = f"_{_card_status}_\n\n{_delta_text}"
+                                if display != last_snapshot and display.strip():
+                                    ok = await mgr.update_text(state, display)
+                                    if ok:
+                                        last_snapshot = display
+                            # Finalize
+                            final_display = _final_content or _delta_text
+                            if final_display.strip():
+                                await mgr.finish_streaming(state, final_display)
+                            else:
+                                await mgr.finish_streaming(state, last_snapshot)
+
+                            # Unregister card state
+                            try:
+                                from src.application.services.channels.event_bridge import (
+                                    get_channel_event_bridge,
+                                )
+                                get_channel_event_bridge().unregister_card_state(
+                                    conversation_id
+                                )
+                            except Exception:
+                                pass
+
+                    else:
+
+                        async def _card_updater() -> None:
+                            nonlocal _card_msg_id
+                            _card_msg_id = await self._send_initial_streaming_card(
+                                streaming_adapter, message,
+                            )
+                            if not _card_msg_id:
+                                return
+                            last_snapshot = ""
+                            while not _stream_done:
+                                await asyncio.sleep(1.5)
+                                display = _delta_text
+                                if _card_status and not _delta_text:
+                                    display = f"_{_card_status}_"
+                                elif _card_status:
+                                    display = f"_{_card_status}_\n\n{_delta_text}"
+                                if display != last_snapshot and display.strip():
+                                    ok = await self._patch_streaming_card(
+                                        streaming_adapter, _card_msg_id,
+                                        display, loading=True,
+                                    )
+                                    if ok:
+                                        last_snapshot = display
+                            # Final patch: authoritative content or fallback
+                            final_display = _final_content or _delta_text
+                            if final_display.strip():
+                                await self._patch_streaming_card(
+                                    streaming_adapter, _card_msg_id,
+                                    final_display, loading=False,
+                                )
 
                     _card_updater_task = asyncio.create_task(_card_updater())
 
@@ -963,11 +1025,24 @@ class ChannelMessageRouter:
                 return None
 
             adapter = connection.adapter
+            # CardKit streaming (preferred) or legacy patch streaming
+            if self._supports_cardkit_streaming(adapter):
+                return adapter
             if hasattr(adapter, "send_streaming_card") and hasattr(adapter, "patch_card"):
                 return adapter
             return None
         except Exception:
             return None
+
+    @staticmethod
+    def _supports_cardkit_streaming(adapter: Any) -> bool:
+        """Check if adapter supports CardKit streaming APIs."""
+        return (
+            hasattr(adapter, "create_card_entity")
+            and hasattr(adapter, "update_card_settings")
+            and hasattr(adapter, "stream_text_content")
+            and hasattr(adapter, "send_card_entity_message")
+        )
 
     async def _send_initial_streaming_card(
         self, adapter: Any, message: Message
