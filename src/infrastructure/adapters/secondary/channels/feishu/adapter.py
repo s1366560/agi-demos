@@ -727,46 +727,67 @@ class FeishuAdapter:
                 pass
 
     async def get_chat_members(self, chat_id: str) -> List[SenderInfo]:
-        """Get chat members."""
+        """Get chat members using lark_oapi v2 SDK."""
         try:
+            from lark_oapi.api.im.v1 import GetChatMembersRequest
+
             client = self._build_rest_client()
-
-            response = client.im.chatMembers.get(
-                {"chat_id": chat_id}, {"member_id_type": "open_id"}
+            request = (
+                GetChatMembersRequest.builder()
+                .chat_id(chat_id)
+                .member_id_type("open_id")
+                .build()
             )
-
-            members = response.get("data", {}).get("items", [])
-            return [SenderInfo(id=m.get("member_id"), name=m.get("name")) for m in members]
-
-        except ImportError:
-            raise ImportError("Feishu SDK not installed")
+            response = client.im.v1.chat_members.get(request)
+            if not response.success() or not response.data:
+                return []
+            items = response.data.items or []
+            return [
+                SenderInfo(id=m.member_id or "", name=m.name)
+                for m in items
+                if m.member_id
+            ]
+        except Exception as e:
+            logger.warning(f"[Feishu] Get chat members failed: {e}")
+            return []
 
     async def get_user_info(self, user_id: str) -> Optional[SenderInfo]:
-        """Get user info."""
+        """Get user info using lark_oapi v2 SDK."""
         try:
+            from lark_oapi.api.contact.v3 import GetUserRequest
+
             client = self._build_rest_client()
-
-            response = client.contact.user.get({"user_id": user_id}, {"user_id_type": "open_id"})
-
-            user = response.get("data", {}).get("user", {})
-            return SenderInfo(
-                id=user.get("open_id", user_id),
-                name=user.get("name"),
-                avatar=user.get("avatar", {}).get("avatar_origin"),
+            request = (
+                GetUserRequest.builder()
+                .user_id(user_id)
+                .user_id_type("open_id")
+                .build()
             )
-
-        except ImportError:
-            raise ImportError("Feishu SDK not installed")
+            response = client.contact.v3.user.get(request)
+            if not response.success() or not response.data or not response.data.user:
+                return None
+            user = response.data.user
+            avatar_url = None
+            if user.avatar:
+                avatar_url = getattr(user.avatar, "avatar_origin", None)
+            return SenderInfo(
+                id=user.open_id or user_id,
+                name=user.name,
+                avatar=avatar_url,
+            )
+        except Exception as e:
+            logger.warning(f"[Feishu] Get user info failed: {e}")
+            return None
 
     async def health_check(self) -> bool:
-        """Verify connection is alive by calling Feishu bot info API."""
+        """Verify connection is alive by listing chats (page_size=1)."""
         try:
+            from lark_oapi.api.im.v1 import ListChatRequest
+
             client = self._build_rest_client()
-            response = client.bot.bot_info.get()
-            code = getattr(response, "code", None)
-            if code is None and isinstance(response, dict):
-                code = response.get("code")
-            return code == 0
+            request = ListChatRequest.builder().page_size(1).build()
+            response = client.im.v1.chat.list(request)
+            return response.success()
         except Exception as e:
             logger.warning(f"[Feishu] Health check failed: {e}")
             return False
