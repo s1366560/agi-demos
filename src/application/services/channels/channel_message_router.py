@@ -5,9 +5,10 @@ This module provides the routing logic to bridge incoming channel messages
 """
 
 import logging
+import uuid
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from src.domain.model.channels.message import Message, ChatType
+from src.domain.model.channels.message import ChatType, Message
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,6 +50,10 @@ class ChannelMessageRouter:
             message: The incoming channel message.
         """
         try:
+            if self._is_bot_message(message):
+                logger.debug("[MessageRouter] Skipping bot/app echo message")
+                return
+
             logger.info(
                 f"[MessageRouter] Routing message from {message.channel}: "
                 f"chat_id={message.chat_id}, sender={message.sender.id}"
@@ -96,12 +101,18 @@ class ChannelMessageRouter:
             logger.error("[MessageRouter] Message has no project_id")
             return None
 
+        channel_config_id = self._extract_channel_config_id(message)
+
         # Create a composite key for the chat
-        chat_key = f"{message.project_id}:{message.channel}:{message.chat_id}"
+        chat_scope = channel_config_id or "default"
+        chat_key = f"{message.project_id}:{message.channel}:{chat_scope}:{message.chat_id}"
+        legacy_chat_key = f"{message.project_id}:{message.channel}:{message.chat_id}"
 
         # Check cache first
         if chat_key in self._chat_to_conversation:
             return self._chat_to_conversation[chat_key]
+        if legacy_chat_key in self._chat_to_conversation:
+            return self._chat_to_conversation[legacy_chat_key]
 
         # Look up or create conversation in database
         try:
@@ -111,12 +122,17 @@ class ChannelMessageRouter:
 
             async with async_session_factory() as session:
                 conversation_id = await self._find_or_create_conversation_db(
-                    session, message, chat_key
+                    session=session,
+                    message=message,
+                    chat_key=chat_key,
+                    legacy_chat_key=legacy_chat_key,
+                    channel_config_id=channel_config_id,
                 )
                 await session.commit()
 
                 if conversation_id:
                     self._chat_to_conversation[chat_key] = conversation_id
+                    self._chat_to_conversation[legacy_chat_key] = conversation_id
 
                 return conversation_id
 
@@ -129,6 +145,8 @@ class ChannelMessageRouter:
         session: "AsyncSession",
         message: Message,
         chat_key: str,
+        legacy_chat_key: str,
+        channel_config_id: Optional[str],
     ) -> Optional[str]:
         """Find or create conversation in database.
 
@@ -142,8 +160,12 @@ class ChannelMessageRouter:
         """
         from sqlalchemy import select
 
+        from src.infrastructure.adapters.secondary.persistence.channel_models import (
+            ChannelConfigModel,
+        )
         from src.infrastructure.adapters.secondary.persistence.models import (
             Conversation,
+            Project,
         )
 
         # Try to find existing conversation with matching metadata
@@ -158,18 +180,44 @@ class ChannelMessageRouter:
         for conv in conversations:
             if conv.meta:
                 conv_chat_key = conv.meta.get("channel_chat_key")
-                if conv_chat_key == chat_key:
+                if conv_chat_key in {chat_key, legacy_chat_key}:
                     return conv.id
+
+        project = await session.get(Project, message.project_id)
+        if not project:
+            logger.error(f"[MessageRouter] Project not found: {message.project_id}")
+            return None
+
+        effective_user_id = project.owner_id
+        if channel_config_id:
+            config = await session.get(ChannelConfigModel, channel_config_id)
+            if config and config.project_id == project.id and config.created_by:
+                effective_user_id = config.created_by
+            elif not config:
+                logger.warning(
+                    f"[MessageRouter] Channel config {channel_config_id} not found, "
+                    "falling back to project owner"
+                )
+            elif config.project_id != project.id:
+                logger.warning(
+                    f"[MessageRouter] Channel config {channel_config_id} does not belong to "
+                    f"project {project.id}; falling back to project owner"
+                )
 
         # Create new conversation
         title = self._generate_conversation_title(message)
 
         new_conversation = Conversation(
+            id=str(uuid.uuid4()),
             project_id=message.project_id,
+            tenant_id=project.tenant_id,
+            user_id=effective_user_id,
             title=title,
             meta={
                 "channel_chat_key": chat_key,
+                "legacy_channel_chat_key": legacy_chat_key,
                 "channel_type": message.channel,
+                "channel_config_id": channel_config_id,
                 "chat_id": message.chat_id,
                 "chat_type": message.chat_type.value,
                 "sender_id": message.sender.id,
@@ -216,6 +264,8 @@ class ChannelMessageRouter:
             conversation_id: The associated conversation ID.
         """
         try:
+            from sqlalchemy import select
+
             from src.infrastructure.adapters.secondary.persistence.channel_models import (
                 ChannelMessageModel,
             )
@@ -228,11 +278,39 @@ class ChannelMessageRouter:
 
             async with async_session_factory() as session:
                 repo = ChannelMessageRepository(session)
+                channel_config_id = await self._resolve_channel_config_id(session, message)
+
+                if not channel_config_id:
+                    logger.warning(
+                        "[MessageRouter] Skip storing message history: no channel config id resolved"
+                    )
+                    return
+
+                channel_message_id = self._extract_channel_message_id(message)
+                if not channel_message_id:
+                    channel_message_id = f"generated-{uuid.uuid4().hex}"
+                    logger.warning(
+                        "[MessageRouter] Missing channel_message_id in inbound payload; "
+                        f"using synthetic id {channel_message_id}"
+                    )
+
+                dedupe_query = select(ChannelMessageModel.id).where(
+                    ChannelMessageModel.channel_config_id == channel_config_id,
+                    ChannelMessageModel.channel_message_id == channel_message_id,
+                    ChannelMessageModel.direction == "inbound",
+                )
+                dedupe_result = await session.execute(dedupe_query)
+                if dedupe_result.scalar_one_or_none():
+                    logger.debug(
+                        "[MessageRouter] Duplicate inbound message skipped: "
+                        f"{channel_config_id}/{channel_message_id}"
+                    )
+                    return
 
                 channel_message = ChannelMessageModel(
-                    channel_config_id=message.channel,  # This should be the config ID
+                    channel_config_id=channel_config_id,
                     project_id=message.project_id or "",
-                    channel_message_id="",  # Original message ID if available
+                    channel_message_id=channel_message_id,
                     chat_id=message.chat_id,
                     chat_type=message.chat_type.value,
                     sender_id=message.sender.id,
@@ -241,6 +319,7 @@ class ChannelMessageRouter:
                     content_text=message.content.text,
                     content_data={
                         "conversation_id": conversation_id,
+                        "channel_config_id": channel_config_id,
                         "reply_to": message.reply_to,
                         "mentions": message.mentions,
                     },
@@ -267,10 +346,12 @@ class ChannelMessageRouter:
             conversation_id: The conversation to add the message to.
         """
         try:
-            from src.application.services.agent_service import AgentService
+            from src.configuration.factories import create_llm_client
+            from src.infrastructure.adapters.primary.web.startup.container import get_app_container
             from src.infrastructure.adapters.secondary.persistence.database import (
                 async_session_factory,
             )
+            from src.infrastructure.adapters.secondary.persistence.models import Conversation
 
             # Get the message text
             text = message.content.text or ""
@@ -280,44 +361,78 @@ class ChannelMessageRouter:
                 return
 
             async with async_session_factory() as session:
-                agent_service = AgentService(session)
+                conversation = await session.get(Conversation, conversation_id)
+                if not conversation:
+                    logger.error(
+                        f"[MessageRouter] Conversation not found when invoking agent: {conversation_id}"
+                    )
+                    return
 
-                # Call agent chat
-                # Note: This is a simplified implementation
-                # In production, you might want to:
-                # 1. Stream the response
-                # 2. Send the response back to the channel
-                # 3. Handle errors gracefully
+                app_container = get_app_container()
+                if not app_container:
+                    logger.error("[MessageRouter] App container is not initialized")
+                    return
+
+                llm = await create_llm_client(conversation.tenant_id)
+                container = app_container.with_db(session)
+                agent_service = container.agent_service(llm)
 
                 logger.info(
                     f"[MessageRouter] Invoking agent for conversation {conversation_id}"
                 )
 
-                # For now, just log that we would invoke the agent
-                # The actual implementation depends on how you want to handle
-                # agent responses in the channel context
-                logger.info(
-                    f"[MessageRouter] Would process message: {text[:100]}..."
-                )
+                response_text = ""
+                error_message: Optional[str] = None
+                async for event in agent_service.stream_chat_v2(
+                    conversation_id=conversation_id,
+                    user_message=text,
+                    project_id=conversation.project_id,
+                    user_id=conversation.user_id,
+                    tenant_id=conversation.tenant_id,
+                    app_model_context=self._build_app_model_context(message),
+                ):
+                    event_type = event.get("type")
+                    event_data = event.get("data") or {}
 
-                # TODO: Implement actual agent invocation and response handling
-                # response = await agent_service.chat(
-                #     conversation_id=conversation_id,
-                #     message=text,
-                #     project_id=message.project_id,
-                # )
-                #
-                # # Send response back to channel
-                # await self._send_response(message, response)
+                    if event_type == "text_delta":
+                        delta = event_data.get("delta", "")
+                        if isinstance(delta, str):
+                            response_text += delta
+                    elif event_type == "assistant_message":
+                        assistant_content = event_data.get("content")
+                        if isinstance(assistant_content, str) and assistant_content.strip():
+                            response_text = assistant_content
+                    elif event_type == "complete":
+                        complete_content = event_data.get("content") or event_data.get("result")
+                        if isinstance(complete_content, str) and complete_content.strip():
+                            response_text = complete_content
+                    elif event_type == "error":
+                        error_message = event_data.get("message") or "Unknown agent error"
+
+                if error_message:
+                    logger.error(
+                        f"[MessageRouter] Agent returned error for conversation "
+                        f"{conversation_id}: {error_message}"
+                    )
+                    return
+
+                if response_text.strip():
+                    await self._send_response(message, conversation_id, response_text)
+                else:
+                    logger.warning(
+                        f"[MessageRouter] Agent produced empty response for conversation "
+                        f"{conversation_id}"
+                    )
 
         except Exception as e:
             logger.error(f"[MessageRouter] Agent invocation error: {e}", exc_info=True)
 
-    async def _send_response(self, message: Message, response: str) -> None:
+    async def _send_response(self, message: Message, conversation_id: str, response: str) -> None:
         """Send agent response back to the channel.
 
         Args:
             message: The original message (contains sender info).
+            conversation_id: The associated conversation ID.
             response: The agent's response text.
         """
         try:
@@ -328,22 +443,207 @@ class ChannelMessageRouter:
                 logger.warning("[MessageRouter] No channel manager available")
                 return
 
-            # Find the connection for this channel
-            # Note: This is a simplified implementation
-            # In production, you'd need to map channel type to config ID
+            channel_config_id = self._extract_channel_config_id(message)
+            if not channel_config_id:
+                channel_config_id = await self._get_conversation_channel_config_id(
+                    conversation_id
+                )
 
-            logger.info(
-                f"[MessageRouter] Would send response to {message.chat_id}: "
-                f"{response[:100]}..."
+            if not channel_config_id:
+                logger.warning(
+                    "[MessageRouter] Missing channel_config_id; refusing outbound response to "
+                    "avoid ambiguous routing"
+                )
+                return
+
+            connection = channel_manager.connections.get(channel_config_id)
+            if not connection:
+                logger.warning(
+                    "[MessageRouter] No active connection for outbound response: "
+                    f"channel_config_id={channel_config_id}"
+                )
+                return
+
+            inbound_message_id = self._extract_channel_message_id(message)
+            sent_message_id = await connection.adapter.send_text(
+                message.chat_id,
+                response,
+                reply_to=inbound_message_id,
             )
-
-            # TODO: Implement actual response sending
-            # connection = channel_manager.connections.get(config_id)
-            # if connection and connection.adapter:
-            #     await connection.adapter.send_text(message.chat_id, response)
+            logger.info(
+                f"[MessageRouter] Sent response to chat {message.chat_id}, "
+                f"message_id={sent_message_id}"
+            )
+            await self._store_outbound_message_history(
+                message=message,
+                conversation_id=conversation_id,
+                response=response,
+                channel_config_id=connection.config_id,
+                outbound_message_id=sent_message_id,
+            )
 
         except Exception as e:
             logger.error(f"[MessageRouter] Error sending response: {e}")
+
+    async def _store_outbound_message_history(
+        self,
+        message: Message,
+        conversation_id: str,
+        response: str,
+        channel_config_id: str,
+        outbound_message_id: Optional[str],
+    ) -> None:
+        """Persist outbound agent response for traceability."""
+        try:
+            from src.infrastructure.adapters.secondary.persistence.channel_models import (
+                ChannelMessageModel,
+            )
+            from src.infrastructure.adapters.secondary.persistence.channel_repository import (
+                ChannelMessageRepository,
+            )
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+
+            async with async_session_factory() as session:
+                repo = ChannelMessageRepository(session)
+                outbound_id = outbound_message_id or f"generated-{uuid.uuid4().hex}"
+                inbound_message_id = self._extract_channel_message_id(message)
+
+                channel_message = ChannelMessageModel(
+                    channel_config_id=channel_config_id,
+                    project_id=message.project_id or "",
+                    channel_message_id=outbound_id,
+                    chat_id=message.chat_id,
+                    chat_type=message.chat_type.value,
+                    sender_id="memstack-agent",
+                    sender_name="MemStack Agent",
+                    message_type="text",
+                    content_text=response,
+                    content_data={
+                        "conversation_id": conversation_id,
+                        "reply_to": inbound_message_id,
+                    },
+                    reply_to=inbound_message_id,
+                    mentions=[],
+                    direction="outbound",
+                    raw_data={"source": "channel_message_router"},
+                )
+
+                await repo.create(channel_message)
+                await session.commit()
+
+        except Exception as e:
+            logger.warning(f"[MessageRouter] Failed to store outbound message history: {e}")
+
+    async def _resolve_channel_config_id(
+        self,
+        session: "AsyncSession",
+        message: Message,
+    ) -> Optional[str]:
+        """Resolve channel config ID strictly from trusted routing metadata."""
+
+        from src.infrastructure.adapters.secondary.persistence.channel_models import (
+            ChannelConfigModel,
+        )
+
+        explicit_config_id = self._extract_channel_config_id(message)
+        if not explicit_config_id:
+            return None
+
+        config = await session.get(ChannelConfigModel, explicit_config_id)
+        if config and config.project_id == (message.project_id or ""):
+            return config.id
+
+        logger.warning(
+            "[MessageRouter] Explicit channel config id is invalid for this message: "
+            f"{explicit_config_id}"
+        )
+        return None
+
+    def _extract_channel_config_id(self, message: Message) -> Optional[str]:
+        """Extract channel config ID from message routing metadata."""
+        if not isinstance(message.raw_data, dict):
+            return None
+
+        routing_meta = message.raw_data.get("_routing")
+        if isinstance(routing_meta, dict):
+            config_id = routing_meta.get("channel_config_id")
+            if isinstance(config_id, str) and config_id:
+                return config_id
+        return None
+
+    def _extract_channel_message_id(self, message: Message) -> Optional[str]:
+        """Extract source channel message ID from message payload."""
+        if not isinstance(message.raw_data, dict):
+            return None
+
+        routing_meta = message.raw_data.get("_routing")
+        if isinstance(routing_meta, dict):
+            routed_message_id = routing_meta.get("channel_message_id")
+            if isinstance(routed_message_id, str) and routed_message_id:
+                return routed_message_id
+
+        event = message.raw_data.get("event")
+        if isinstance(event, dict):
+            event_message = event.get("message")
+            if isinstance(event_message, dict):
+                event_message_id = event_message.get("message_id")
+                if isinstance(event_message_id, str) and event_message_id:
+                    return event_message_id
+
+        return None
+
+    def _is_bot_message(self, message: Message) -> bool:
+        """Best-effort detection to skip bot echo messages and prevent loops."""
+        if not isinstance(message.raw_data, dict):
+            return False
+        event = message.raw_data.get("event")
+        if not isinstance(event, dict):
+            return False
+        sender = event.get("sender")
+        if not isinstance(sender, dict):
+            return False
+        sender_type = sender.get("sender_type")
+        if not isinstance(sender_type, str):
+            return False
+        return sender_type.lower() in {"app", "bot"}
+
+    def _build_app_model_context(self, message: Message) -> Dict[str, Any]:
+        """Build structured channel context for Agent runtime."""
+        return {
+            "source": "channel",
+            "channel": message.channel,
+            "chat_id": message.chat_id,
+            "chat_type": message.chat_type.value,
+            "sender_id": message.sender.id,
+            "sender_name": message.sender.name,
+            "reply_to": message.reply_to,
+            "mentions": message.mentions,
+            "channel_config_id": self._extract_channel_config_id(message),
+            "channel_message_id": self._extract_channel_message_id(message),
+        }
+
+    async def _get_conversation_channel_config_id(self, conversation_id: str) -> Optional[str]:
+        """Load channel_config_id from conversation metadata as fallback."""
+        try:
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+            from src.infrastructure.adapters.secondary.persistence.models import Conversation
+
+            async with async_session_factory() as session:
+                conversation = await session.get(Conversation, conversation_id)
+                if conversation and isinstance(conversation.meta, dict):
+                    config_id = conversation.meta.get("channel_config_id")
+                    if isinstance(config_id, str) and config_id:
+                        return config_id
+        except Exception as e:
+            logger.warning(
+                "[MessageRouter] Failed to load channel_config_id from conversation metadata: "
+                f"{e}"
+            )
+        return None
 
 
 # Singleton instance

@@ -8,6 +8,13 @@ from src.infrastructure.adapters.secondary.persistence.database import async_ses
 
 logger = logging.getLogger(__name__)
 
+_app_container: Optional[DIContainer] = None
+
+
+def get_app_container() -> Optional[DIContainer]:
+    """Get the initialized application DI container."""
+    return _app_container
+
 
 def initialize_container(
     graph_service: Any,
@@ -25,6 +32,7 @@ def initialize_container(
     Returns:
         Configured DIContainer instance.
     """
+    global _app_container
     logger.info("Initializing DI container...")
     container = DIContainer(
         session_factory=async_session_factory,
@@ -32,5 +40,6 @@ def initialize_container(
         redis_client=redis_client,
         workflow_engine=workflow_engine,
     )
+    _app_container = container
     logger.info("DI container initialized")
     return container

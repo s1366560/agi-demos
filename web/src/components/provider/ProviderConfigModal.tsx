@@ -9,6 +9,7 @@ import {
   ProviderUpdate,
 } from '../../types/memory';
 import { ProviderIcon } from './ProviderIcon';
+import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
 interface ProviderConfigModalProps {
   isOpen: boolean;
@@ -693,7 +694,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
               onClick={onClose}
               className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             >
-              <span className="material-symbols-outlined">close</span>
+              <MaterialIcon name="close" size={20} />
             </button>
           </div>
 
@@ -708,18 +709,18 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                   <React.Fragment key={step.key}>
                     <div className="flex items-center">
                       <div
-                        className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all ${
+                        className={`flex items-center justify-center w-8 h-8 rounded-lg border-2 transition-all ${
                           isCompleted
                             ? 'bg-primary border-primary text-white'
                             : isCurrent
                               ? 'border-primary text-primary bg-white dark:bg-slate-800'
-                              : 'border-slate-300 dark:border-slate-600 text-slate-400'
+                              : 'border-slate-200 dark:border-slate-700 text-slate-400'
                         }`}
                       >
                         {isCompleted ? (
-                          <span className="material-symbols-outlined text-sm">check</span>
+                          <MaterialIcon name="check" size={16} />
                         ) : (
-                          <span className="material-symbols-outlined text-sm">{step.icon}</span>
+                          <MaterialIcon name={step.icon} size={16} />
                         )}
                       </div>
                       <div className="ml-3 hidden sm:block">
@@ -816,9 +817,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           className="px-4 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors disabled:opacity-50 font-medium"
                         >
                           {isTesting ? (
-                            <span className="material-symbols-outlined animate-spin text-[18px]">
-                              progress_activity
-                            </span>
+                            <MaterialIcon name="progress_activity" size={18} className="animate-spin" />
                           ) : (
                             'Test'
                           )}
@@ -993,9 +992,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 >
                   {isSubmitting ? (
                     <span className="flex items-center gap-2">
-                      <span className="material-symbols-outlined animate-spin text-[18px]">
-                        progress_activity
-                      </span>
+                      <MaterialIcon name="progress_activity" size={18} className="animate-spin" />
                       Saving...
                     </span>
                   ) : (

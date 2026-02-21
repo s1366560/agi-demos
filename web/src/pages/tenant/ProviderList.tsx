@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ProviderCard, ProviderHealthPanel, ProviderConfigModal, ProviderUsageStats } from '@/components/provider';
+import { MaterialIcon } from '@/components/agent/shared/MaterialIcon';
 
 import { providerAPI } from '../../services/api';
 import { ProviderConfig, ProviderType, SystemResilienceStatus } from '../../types/memory';
@@ -189,7 +190,7 @@ export const ProviderList: React.FC = () => {
       {/* Header Area */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
             {t('tenant.providers.title')}
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
@@ -198,9 +199,9 @@ export const ProviderList: React.FC = () => {
         </div>
         <button
           onClick={handleCreate}
-          className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary to-primary-dark hover:from-primary-dark hover:to-primary text-white px-6 py-3 rounded-xl text-sm font-medium transition-all shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+          className="inline-flex items-center justify-center gap-2 bg-primary hover:bg-primary-dark text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
         >
-          <span className="material-symbols-outlined text-[20px]">add</span>
+          <MaterialIcon name="add" size={20} />
           {t('tenant.providers.addProvider')}
         </button>
       </div>
@@ -214,8 +215,8 @@ export const ProviderList: React.FC = () => {
 
       {/* Error State */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-4 flex items-center gap-3">
-          <span className="material-symbols-outlined text-red-600">error</span>
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-center gap-3">
+          <MaterialIcon name="error" size={20} className="text-red-600" />
           <span className="text-red-800 dark:text-red-200">{error}</span>
           <button
             onClick={loadProviders}
@@ -227,15 +228,15 @@ export const ProviderList: React.FC = () => {
       )}
 
       {/* Main Content Card */}
-      <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col overflow-hidden">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col overflow-hidden">
         {/* Filters Toolbar */}
-        <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex flex-col lg:flex-row gap-4 justify-between items-start lg:items-center bg-gradient-to-r from-slate-50/50 to-transparent dark:from-slate-800/50">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col lg:flex-row gap-4 justify-between items-start lg:items-center bg-slate-50/50 dark:bg-slate-800/30">
           <div className="relative w-full lg:w-96">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <span className="material-symbols-outlined text-slate-400 text-[20px]">search</span>
+              <MaterialIcon name="search" size={20} className="text-slate-400" />
             </div>
             <input
-              className="block w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-xl leading-5 bg-white dark:bg-slate-700 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
+              className="block w-full pl-10 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-lg leading-5 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
               placeholder={t('tenant.providers.searchPlaceholder')}
               type="text"
               value={search}
@@ -245,7 +246,7 @@ export const ProviderList: React.FC = () => {
           <div className="flex items-center gap-3 w-full lg:w-auto overflow-x-auto">
             <div className="relative shrink-0">
               <select
-                className="appearance-none bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 py-2.5 pl-4 pr-10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent cursor-pointer"
+                className="appearance-none bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 py-2.5 pl-4 pr-8 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent cursor-pointer"
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
               >
@@ -261,12 +262,12 @@ export const ProviderList: React.FC = () => {
                 <option value="mistral">Mistral</option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-                <span className="material-symbols-outlined text-[16px]">expand_more</span>
+                <MaterialIcon name="expand_more" size={16} />
               </div>
             </div>
             <div className="relative shrink-0">
               <select
-                className="appearance-none bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 py-2.5 pl-4 pr-10 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent cursor-pointer"
+                className="appearance-none bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 py-2.5 pl-4 pr-8 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent cursor-pointer"
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
               >
@@ -277,25 +278,25 @@ export const ProviderList: React.FC = () => {
                 <option value="unhealthy">{t('common.status.unhealthy')}</option>
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
-                <span className="material-symbols-outlined text-[16px]">expand_more</span>
+                <MaterialIcon name="expand_more" size={16} />
               </div>
             </div>
 
             {/* View Mode Toggle */}
-            <div className="flex items-center bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded-xl overflow-hidden shrink-0">
+            <div className="flex items-center bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden shrink-0">
               <button
                 onClick={() => setViewMode('cards')}
-                className={`p-2.5 transition-colors ${viewMode === 'cards' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600'}`}
+                className={`p-2 transition-colors ${viewMode === 'cards' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
                 title="Card View"
               >
-                <span className="material-symbols-outlined text-[18px]">grid_view</span>
+                <MaterialIcon name="grid_view" size={18} />
               </button>
               <button
                 onClick={() => setViewMode('table')}
-                className={`p-2.5 transition-colors ${viewMode === 'table' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-600'}`}
+                className={`p-2 transition-colors ${viewMode === 'table' ? 'bg-primary text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}
                 title="Table View"
               >
-                <span className="material-symbols-outlined text-[18px]">view_list</span>
+                <MaterialIcon name="view_list" size={18} />
               </button>
             </div>
           </div>
@@ -304,16 +305,14 @@ export const ProviderList: React.FC = () => {
         {/* Content Area */}
         {isLoading ? (
           <div className="p-12 text-center">
-            <span className="material-symbols-outlined animate-spin text-4xl text-primary">
-              progress_activity
-            </span>
+            <MaterialIcon name="progress_activity" size={32} className="animate-spin text-primary mx-auto" />
             <p className="mt-4 text-slate-500 dark:text-slate-400">{t('common.loading')}</p>
           </div>
         ) : filteredAndSortedProviders.length === 0 ? (
           <div className="p-12 text-center">
             <div className="flex flex-col items-center gap-4">
-              <div className="p-4 bg-slate-100 dark:bg-slate-700 rounded-full">
-                <span className="material-symbols-outlined text-4xl text-slate-400">smart_toy</span>
+              <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full">
+                <MaterialIcon name="smart_toy" size={32} className="text-slate-400" />
               </div>
               <div>
                 <p className="text-lg font-medium text-slate-900 dark:text-white">
@@ -327,14 +326,14 @@ export const ProviderList: React.FC = () => {
                 onClick={handleCreate}
                 className="mt-2 inline-flex items-center gap-2 text-primary hover:text-primary-dark font-medium"
               >
-                <span className="material-symbols-outlined text-[18px]">add</span>
+                <MaterialIcon name="add" size={18} />
                 {t('tenant.providers.addFirstProvider')}
               </button>
             </div>
           </div>
         ) : viewMode === 'cards' ? (
-          /* Card View */
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 bg-slate-50/50 dark:bg-slate-900/50">
+          /* Card View */}
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 bg-slate-50/50 dark:bg-slate-800/30">
             {filteredAndSortedProviders.map((provider) => (
               <ProviderCard
                 key={provider.id}
@@ -344,16 +343,17 @@ export const ProviderList: React.FC = () => {
                 onDelete={handleDelete}
                 onCheckHealth={handleCheckHealth}
                 onResetCircuitBreaker={handleResetCircuitBreaker}
+                onViewStats={setViewingStats}
                 isCheckingHealth={checkingHealth === provider.id}
                 isResettingCircuitBreaker={resettingCircuitBreaker === provider.provider_type}
               />
             ))}
           </div>
         ) : (
-          /* Table View */
+          /* Table View */}
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
-              <thead className="bg-slate-50 dark:bg-slate-700/50">
+            <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-800">
+              <thead className="bg-slate-50 dark:bg-slate-800/50">
                 <tr>
                   <th
                     className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider cursor-pointer hover:text-primary"
@@ -361,9 +361,10 @@ export const ProviderList: React.FC = () => {
                   >
                     <div className="flex items-center gap-2">
                       Provider
-                      <span className="material-symbols-outlined text-[14px]">
-                        {sortField === 'name' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'swap_vert'}
-                      </span>
+                      <MaterialIcon
+                        name={sortField === 'name' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'swap_vert'}
+                        size={14}
+                      />
                     </div>
                   </th>
                   <th
@@ -384,9 +385,10 @@ export const ProviderList: React.FC = () => {
                   >
                     <div className="flex items-center gap-2">
                       {t('common.stats.healthStatus')}
-                      <span className="material-symbols-outlined text-[14px]">
-                        {sortField === 'health' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'swap_vert'}
-                      </span>
+                      <MaterialIcon
+                        name={sortField === 'health' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'swap_vert'}
+                        size={14}
+                      />
                     </div>
                   </th>
                   <th
@@ -395,9 +397,10 @@ export const ProviderList: React.FC = () => {
                   >
                     <div className="flex items-center gap-2">
                       Response Time
-                      <span className="material-symbols-outlined text-[14px]">
-                        {sortField === 'responseTime' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'swap_vert'}
-                      </span>
+                      <MaterialIcon
+                        name={sortField === 'responseTime' ? (sortOrder === 'asc' ? 'arrow_upward' : 'arrow_downward') : 'swap_vert'}
+                        size={14}
+                      />
                     </div>
                   </th>
                   <th className="relative px-6 py-3" scope="col">
@@ -405,17 +408,17 @@ export const ProviderList: React.FC = () => {
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
+              <tbody className="bg-white dark:bg-slate-900 divide-y divide-slate-200 dark:divide-slate-800">
                 {filteredAndSortedProviders.map((provider) => (
                   <tr
                     key={provider.id}
-                    className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
+                    className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-3">
                         <div className="flex-shrink-0">
                           <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary/20 to-primary/10 flex items-center justify-center">
-                            <span className="material-symbols-outlined text-primary">smart_toy</span>
+                            <MaterialIcon name="smart_toy" size={20} className="text-primary" />
                           </div>
                         </div>
                         <div>
@@ -424,9 +427,9 @@ export const ProviderList: React.FC = () => {
                               {provider.name}
                             </span>
                             {provider.is_default && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gradient-to-r from-purple-500 to-pink-500 text-white">
-                                <span className="material-symbols-outlined text-[12px] mr-0.5">star</span>
-                                Default
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary border border-primary/20">
+                                <MaterialIcon name="star" size={10} filled />
+                                <span className="ml-0.5">Default</span>
                               </span>
                             )}
                           </div>
@@ -435,7 +438,7 @@ export const ProviderList: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                         {PROVIDER_TYPE_LABELS[provider.provider_type] || provider.provider_type}
                       </span>
                     </td>
@@ -449,25 +452,25 @@ export const ProviderList: React.FC = () => {
                         <span
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
                             provider.health_status === 'healthy'
-                              ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                              ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
                               : provider.health_status === 'degraded'
-                                ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
+                                ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800'
                                 : provider.health_status === 'unhealthy'
-                                  ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                                  : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                                  ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800'
+                                  : 'bg-slate-50 dark:bg-slate-800/50 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700'
                           }`}
                         >
                           <span
                             className={`h-2 w-2 rounded-full ${
                               provider.health_status === 'healthy'
-                                ? 'bg-green-500'
+                                ? 'bg-emerald-500'
                                 : provider.health_status === 'degraded'
-                                  ? 'bg-yellow-500'
+                                  ? 'bg-amber-500'
                                   : provider.health_status === 'unhealthy'
                                     ? 'bg-red-500'
                                     : 'bg-slate-400'
                             }`}
-                          ></span>
+                          />
                           {provider.health_status || t('common.status.unknown')}
                         </span>
                         {provider.response_time_ms && (
@@ -488,25 +491,25 @@ export const ProviderList: React.FC = () => {
                           className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-all disabled:opacity-50"
                           title={t('common.actions.checkHealth')}
                         >
-                          <span
-                            className={`material-symbols-outlined text-[18px] ${checkingHealth === provider.id ? 'animate-spin' : ''}`}
-                          >
-                            {checkingHealth === provider.id ? 'progress_activity' : 'monitor_heart'}
-                          </span>
+                          <MaterialIcon
+                            name={checkingHealth === provider.id ? 'progress_activity' : 'monitor_heart'}
+                            size={18}
+                            className={checkingHealth === provider.id ? 'animate-spin' : ''}
+                          />
                         </button>
                         <button
                           onClick={() => handleEdit(provider)}
                           className="p-2 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-all"
                           title={t('common.edit')}
                         >
-                          <span className="material-symbols-outlined text-[18px]">edit</span>
+                          <MaterialIcon name="edit" size={18} />
                         </button>
                         <button
                           onClick={() => handleDelete(provider.id)}
                           className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
                           title={t('common.delete')}
                         >
-                          <span className="material-symbols-outlined text-[18px]">delete</span>
+                          <MaterialIcon name="delete" size={18} />
                         </button>
                       </div>
                     </td>

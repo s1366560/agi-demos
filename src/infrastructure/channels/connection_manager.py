@@ -278,6 +278,25 @@ class ChannelConnectionManager:
                 # Set up message handler
                 def message_handler(message: Message) -> None:
                     message.project_id = config.project_id
+
+                    raw_data = message.raw_data if isinstance(message.raw_data, dict) else {}
+                    routing_meta = raw_data.get("_routing")
+                    if not isinstance(routing_meta, dict):
+                        routing_meta = {}
+
+                    event = raw_data.get("event")
+                    event_message = event.get("message") if isinstance(event, dict) else None
+                    if isinstance(event_message, dict):
+                        source_message_id = event_message.get("message_id")
+                        if isinstance(source_message_id, str) and source_message_id:
+                            routing_meta["channel_message_id"] = source_message_id
+
+                    routing_meta["channel_config_id"] = config.id
+                    routing_meta["project_id"] = config.project_id
+                    routing_meta["channel_type"] = config.channel_type
+                    raw_data["_routing"] = routing_meta
+                    message.raw_data = raw_data
+
                     if self._message_router:
                         try:
                             asyncio.create_task(self._safe_route_message(message))
