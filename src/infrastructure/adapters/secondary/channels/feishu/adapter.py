@@ -354,7 +354,13 @@ class FeishuAdapter:
                 return P2CardActionTriggerResponse()
 
             response_data = value.get("response_data", {}) if isinstance(value, dict) else {}
-            hitl_type = value.get("hitl_type", "clarification") if isinstance(value, dict) else "clarification"
+            hitl_type = (
+                value.get("hitl_type", "clarification")
+                if isinstance(value, dict)
+                else "clarification"
+            )
+            tenant_id = value.get("tenant_id", "") if isinstance(value, dict) else ""
+            project_id = value.get("project_id", "") if isinstance(value, dict) else ""
 
             # Extract operator info
             operator = event_data.operator
@@ -386,6 +392,8 @@ class FeishuAdapter:
                         request_id=hitl_request_id,
                         hitl_type=hitl_type,
                         response_data=response_data,
+                        tenant_id=tenant_id,
+                        project_id=project_id,
                         responder_id=user_id,
                     )
                 )
@@ -420,12 +428,14 @@ class FeishuAdapter:
         except Exception as e:
             logger.error(f"[Feishu] Card action handling failed: {e}", exc_info=True)
 
-        return P2CardActionTriggerResponse({
-            "toast": {
-                "type": "error",
-                "content": "Processing failed, please try again",
+        return P2CardActionTriggerResponse(
+            {
+                "toast": {
+                    "type": "error",
+                    "content": "Processing failed, please try again",
+                }
             }
-        })
+        )
 
     def _extract_selected_label(self, response_data: Dict[str, Any]) -> str:
         """Extract a human-readable label from the HITL response data."""
@@ -486,9 +496,7 @@ class FeishuAdapter:
             raw_data={"event": {"message": message_data, "sender": sender_data}},
         )
 
-    def _resolve_sender_name(
-        self, sender_data: Dict[str, Any], sender_id: str
-    ) -> str:
+    def _resolve_sender_name(self, sender_data: Dict[str, Any], sender_id: str) -> str:
         """Resolve sender display name with cache."""
         if sender_id in self._sender_name_cache:
             return self._sender_name_cache[sender_id]
@@ -863,20 +871,13 @@ class FeishuAdapter:
 
             client = self._build_rest_client()
             request = (
-                GetChatMembersRequest.builder()
-                .chat_id(chat_id)
-                .member_id_type("open_id")
-                .build()
+                GetChatMembersRequest.builder().chat_id(chat_id).member_id_type("open_id").build()
             )
             response = await client.im.v1.chat_members.aget(request)
             if not response.success() or not response.data:
                 return []
             items = response.data.items or []
-            return [
-                SenderInfo(id=m.member_id or "", name=m.name)
-                for m in items
-                if m.member_id
-            ]
+            return [SenderInfo(id=m.member_id or "", name=m.name) for m in items if m.member_id]
         except Exception as e:
             logger.warning(f"[Feishu] Get chat members failed: {e}")
             return []
@@ -887,12 +888,7 @@ class FeishuAdapter:
             from lark_oapi.api.contact.v3 import GetUserRequest
 
             client = self._build_rest_client()
-            request = (
-                GetUserRequest.builder()
-                .user_id(user_id)
-                .user_id_type("open_id")
-                .build()
-            )
+            request = GetUserRequest.builder().user_id(user_id).user_id_type("open_id").build()
             response = await client.contact.v3.user.aget(request)
             if not response.success() or not response.data or not response.data.user:
                 return None
@@ -955,11 +951,7 @@ class FeishuAdapter:
             request = (
                 PatchMessageRequest.builder()
                 .message_id(message_id)
-                .request_body(
-                    PatchMessageRequestBody.builder()
-                    .content(card_content)
-                    .build()
-                )
+                .request_body(PatchMessageRequestBody.builder().content(card_content).build())
                 .build()
             )
             response = await client.im.v1.message.apatch(request)
@@ -1047,8 +1039,7 @@ class FeishuAdapter:
             response = await client.cardkit.v1.card.acreate(request)
             if not response.success():
                 logger.warning(
-                    f"[Feishu] Create card entity failed: "
-                    f"code={response.code}, msg={response.msg}"
+                    f"[Feishu] Create card entity failed: code={response.code}, msg={response.msg}"
                 )
                 return None
             card_id = response.data.card_id
@@ -1107,13 +1098,10 @@ class FeishuAdapter:
             response = await client.cardkit.v1.card_element.acreate(request)
             if not response.success():
                 logger.warning(
-                    f"[Feishu] Add card elements failed: "
-                    f"code={response.code}, msg={response.msg}"
+                    f"[Feishu] Add card elements failed: code={response.code}, msg={response.msg}"
                 )
                 return False
-            logger.info(
-                f"[Feishu] Added {len(elements)} element(s) to card {card_id}"
-            )
+            logger.info(f"[Feishu] Added {len(elements)} element(s) to card {card_id}")
             return True
         except Exception as e:
             logger.error(f"[Feishu] Add card elements error: {e}")
@@ -1187,8 +1175,7 @@ class FeishuAdapter:
         response = await client.im.v1.message.acreate(request)
         if not response.success():
             raise RuntimeError(
-                f"Feishu card entity send failed "
-                f"(code={response.code}): {response.msg}"
+                f"Feishu card entity send failed (code={response.code}): {response.msg}"
             )
         if not response.data or not response.data.message_id:
             raise RuntimeError("No message_id in card entity response")
@@ -1201,6 +1188,9 @@ class FeishuAdapter:
         request_id: str,
         event_data: Dict[str, Any],
         reply_to: Optional[str] = None,
+        *,
+        tenant_id: str = "",
+        project_id: str = "",
     ) -> Optional[str]:
         """Send an HITL card using CardKit API for dynamic element management.
 
@@ -1214,6 +1204,8 @@ class FeishuAdapter:
             request_id: The HITL request ID for routing responses.
             event_data: Event data containing question, options, fields, etc.
             reply_to: Optional message_id for threaded reply.
+            tenant_id: Tenant ID to embed in button values.
+            project_id: Project ID to embed in button values.
 
         Returns:
             The message_id on success, None on failure.
@@ -1228,9 +1220,7 @@ class FeishuAdapter:
             # 1. Build base card (header + question, no buttons)
             base_card = builder.build_card_entity_data(hitl_type, request_id, event_data)
             if not base_card:
-                logger.warning(
-                    f"[Feishu] CardKit HITL: no base card for type={hitl_type}"
-                )
+                logger.warning(f"[Feishu] CardKit HITL: no base card for type={hitl_type}")
                 return None
 
             # 2. Create card entity
@@ -1241,7 +1231,11 @@ class FeishuAdapter:
 
             # 3. Add interactive buttons
             button_elements = builder.build_hitl_action_elements(
-                hitl_type, request_id, event_data
+                hitl_type,
+                request_id,
+                event_data,
+                tenant_id=tenant_id,
+                project_id=project_id,
             )
             if button_elements:
                 added = await self.add_card_elements(
@@ -1252,17 +1246,13 @@ class FeishuAdapter:
                 )
                 if not added:
                     logger.warning(
-                        "[Feishu] CardKit HITL: add buttons failed, "
-                        "card sent without buttons"
+                        "[Feishu] CardKit HITL: add buttons failed, card sent without buttons"
                     )
 
             # 4. Send card entity message
-            message_id = await self.send_card_entity_message(
-                chat_id, card_id, reply_to
-            )
+            message_id = await self.send_card_entity_message(chat_id, card_id, reply_to)
             logger.info(
-                f"[Feishu] Sent HITL card via CardKit: "
-                f"card_id={card_id}, message_id={message_id}"
+                f"[Feishu] Sent HITL card via CardKit: card_id={card_id}, message_id={message_id}"
             )
             return message_id
         except Exception as e:
@@ -1369,8 +1359,7 @@ class FeishuAdapter:
             response = await client.cardkit.v1.card_element.acontent(request)
             if not response.success():
                 logger.warning(
-                    f"[Feishu] Stream text content failed: "
-                    f"code={response.code}, msg={response.msg}"
+                    f"[Feishu] Stream text content failed: code={response.code}, msg={response.msg}"
                 )
                 return False
             return True
@@ -1418,13 +1407,10 @@ class FeishuAdapter:
             response = await client.cardkit.v1.card_element.adelete(request)
             if not response.success():
                 logger.warning(
-                    f"[Feishu] Delete card element failed: "
-                    f"code={response.code}, msg={response.msg}"
+                    f"[Feishu] Delete card element failed: code={response.code}, msg={response.msg}"
                 )
                 return False
-            logger.info(
-                f"[Feishu] Deleted element {element_id} from card {card_id}"
-            )
+            logger.info(f"[Feishu] Deleted element {element_id} from card {card_id}")
             return True
         except Exception as e:
             logger.error(f"[Feishu] Delete card element error: {e}")

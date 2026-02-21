@@ -3,7 +3,7 @@
 Builds card JSON compatible with Feishu Card 2.0 schema for
 clarification, decision, environment variable, and permission requests.
 """
-import json
+
 from typing import Any, Dict, List, Optional
 
 
@@ -32,6 +32,9 @@ class HITLCardBuilder:
         hitl_type: str,
         request_id: str,
         data: Dict[str, Any],
+        *,
+        tenant_id: str = "",
+        project_id: str = "",
     ) -> Optional[Dict[str, Any]]:
         """Build a card for the given HITL type.
 
@@ -40,6 +43,8 @@ class HITLCardBuilder:
                        (or their ``_asked`` variants).
             request_id: The HITL request ID for routing responses.
             data: Event data containing question, options, fields, etc.
+            tenant_id: Tenant ID embedded in button values for direct Redis publish.
+            project_id: Project ID embedded in button values for direct Redis publish.
 
         Returns:
             Card dict compatible with Feishu interactive message, or None.
@@ -57,13 +62,16 @@ class HITLCardBuilder:
         builder = builders.get(canonical)
         if not builder:
             return None
-        return builder(request_id, canonical, data)
+        return builder(request_id, canonical, data, tenant_id=tenant_id, project_id=project_id)
 
     def _build_clarification(
         self,
         request_id: str,
         hitl_type: str,
         data: Dict[str, Any],
+        *,
+        tenant_id: str = "",
+        project_id: str = "",
     ) -> Optional[Dict[str, Any]]:
         """Card with question text + option buttons."""
         question = data.get("question", "")
@@ -76,7 +84,13 @@ class HITLCardBuilder:
         ]
 
         if options:
-            actions = self._build_option_buttons(request_id, hitl_type, options)
+            actions = self._build_option_buttons(
+                request_id,
+                hitl_type,
+                options,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
             elements.append({"tag": "action", "actions": actions})
 
         return self._wrap_card(
@@ -90,6 +104,9 @@ class HITLCardBuilder:
         request_id: str,
         hitl_type: str,
         data: Dict[str, Any],
+        *,
+        tenant_id: str = "",
+        project_id: str = "",
     ) -> Optional[Dict[str, Any]]:
         """Card with options as buttons + risk indicator."""
         question = data.get("question", "")
@@ -101,9 +118,7 @@ class HITLCardBuilder:
 
         content = question
         if risk_level:
-            risk_icon = {"high": "[!]", "medium": "[~]", "low": ""}.get(
-                risk_level.lower(), ""
-            )
+            risk_icon = {"high": "[!]", "medium": "[~]", "low": ""}.get(risk_level.lower(), "")
             if risk_icon:
                 content = f"{risk_icon} **Risk: {risk_level}**\n\n{question}"
 
@@ -112,7 +127,13 @@ class HITLCardBuilder:
         ]
 
         if options:
-            actions = self._build_option_buttons(request_id, hitl_type, options)
+            actions = self._build_option_buttons(
+                request_id,
+                hitl_type,
+                options,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
             elements.append({"tag": "action", "actions": actions})
 
         return self._wrap_card(
@@ -126,6 +147,9 @@ class HITLCardBuilder:
         request_id: str,
         hitl_type: str,
         data: Dict[str, Any],
+        *,
+        tenant_id: str = "",
+        project_id: str = "",
     ) -> Optional[Dict[str, Any]]:
         """Card with Allow/Deny buttons + tool description."""
         tool_name = data.get("tool_name", "unknown tool")
@@ -148,6 +172,8 @@ class HITLCardBuilder:
                             "hitl_request_id": request_id,
                             "hitl_type": hitl_type,
                             "response_data": {"action": "allow"},
+                            "tenant_id": tenant_id,
+                            "project_id": project_id,
                         },
                     },
                     {
@@ -158,6 +184,8 @@ class HITLCardBuilder:
                             "hitl_request_id": request_id,
                             "hitl_type": hitl_type,
                             "response_data": {"action": "deny"},
+                            "tenant_id": tenant_id,
+                            "project_id": project_id,
                         },
                     },
                 ],
@@ -175,6 +203,9 @@ class HITLCardBuilder:
         request_id: str,
         hitl_type: str,
         data: Dict[str, Any],
+        *,
+        tenant_id: str = "",
+        project_id: str = "",
     ) -> Optional[Dict[str, Any]]:
         """Card showing requested env vars (text-only, no form input in Feishu cards).
 
@@ -227,6 +258,9 @@ class HITLCardBuilder:
         hitl_type: str,
         options: List[Any],
         max_buttons: int = 5,
+        *,
+        tenant_id: str = "",
+        project_id: str = "",
     ) -> List[Dict[str, Any]]:
         """Build button elements from option list."""
         actions: List[Dict[str, Any]] = []
@@ -238,16 +272,20 @@ class HITLCardBuilder:
                 label = str(opt)
                 value = str(opt)
 
-            actions.append({
-                "tag": "button",
-                "text": {"tag": "plain_text", "content": label},
-                "type": "primary" if i == 0 else "default",
-                "value": {
-                    "hitl_request_id": request_id,
-                    "hitl_type": hitl_type,
-                    "response_data": {"answer": value},
-                },
-            })
+            actions.append(
+                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": label},
+                    "type": "primary" if i == 0 else "default",
+                    "value": {
+                        "hitl_request_id": request_id,
+                        "hitl_type": hitl_type,
+                        "response_data": {"answer": value},
+                        "tenant_id": tenant_id,
+                        "project_id": project_id,
+                    },
+                }
+            )
         return actions
 
     def _wrap_card(
@@ -348,6 +386,9 @@ class HITLCardBuilder:
         hitl_type: str,
         request_id: str,
         data: Dict[str, Any],
+        *,
+        tenant_id: str = "",
+        project_id: str = "",
     ) -> List[Dict[str, Any]]:
         """Build interactive button elements for the CardKit Add Elements API.
 
@@ -358,6 +399,8 @@ class HITLCardBuilder:
             hitl_type: HITL event type.
             request_id: The HITL request ID.
             data: Event data with options, etc.
+            tenant_id: Tenant ID embedded in button values for direct Redis publish.
+            project_id: Project ID embedded in button values for direct Redis publish.
 
         Returns:
             List of button element dicts, empty if no buttons are needed.
@@ -370,10 +413,21 @@ class HITLCardBuilder:
             options = data.get("options") or []
             if not options:
                 return []
-            return self._build_cardkit_option_buttons(request_id, canonical, options)
+            return self._build_cardkit_option_buttons(
+                request_id,
+                canonical,
+                options,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
 
         if canonical == "permission":
-            return self._build_cardkit_permission_buttons(request_id, canonical)
+            return self._build_cardkit_permission_buttons(
+                request_id,
+                canonical,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
 
         # env_var has no buttons (user replies with text)
         return []
@@ -383,7 +437,10 @@ class HITLCardBuilder:
     # ------------------------------------------------------------------
 
     def _entity_clarification(
-        self, request_id: str, hitl_type: str, data: Dict[str, Any],
+        self,
+        request_id: str,
+        hitl_type: str,
+        data: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         question = data.get("question", "")
         if not question:
@@ -391,15 +448,20 @@ class HITLCardBuilder:
         return self._wrap_card_v2(
             title="Agent needs clarification",
             template="blue",
-            elements=[{
-                "tag": "markdown",
-                "element_id": f"hitl_q_{request_id[:8]}",
-                "content": question,
-            }],
+            elements=[
+                {
+                    "tag": "markdown",
+                    "element_id": f"hitl_q_{request_id[:8]}",
+                    "content": question,
+                }
+            ],
         )
 
     def _entity_decision(
-        self, request_id: str, hitl_type: str, data: Dict[str, Any],
+        self,
+        request_id: str,
+        hitl_type: str,
+        data: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         question = data.get("question", "")
         if not question:
@@ -407,23 +469,26 @@ class HITLCardBuilder:
         risk_level = data.get("risk_level", "")
         content = question
         if risk_level:
-            risk_icon = {"high": "[!]", "medium": "[~]", "low": ""}.get(
-                risk_level.lower(), ""
-            )
+            risk_icon = {"high": "[!]", "medium": "[~]", "low": ""}.get(risk_level.lower(), "")
             if risk_icon:
                 content = f"{risk_icon} **Risk: {risk_level}**\n\n{question}"
         return self._wrap_card_v2(
             title="Agent needs a decision",
             template="orange",
-            elements=[{
-                "tag": "markdown",
-                "element_id": f"hitl_q_{request_id[:8]}",
-                "content": content,
-            }],
+            elements=[
+                {
+                    "tag": "markdown",
+                    "element_id": f"hitl_q_{request_id[:8]}",
+                    "content": content,
+                }
+            ],
         )
 
     def _entity_permission(
-        self, request_id: str, hitl_type: str, data: Dict[str, Any],
+        self,
+        request_id: str,
+        hitl_type: str,
+        data: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         tool_name = data.get("tool_name", "unknown tool")
         description = data.get("description") or data.get("message") or ""
@@ -433,15 +498,20 @@ class HITLCardBuilder:
         return self._wrap_card_v2(
             title="Permission Request",
             template="red",
-            elements=[{
-                "tag": "markdown",
-                "element_id": f"hitl_q_{request_id[:8]}",
-                "content": content,
-            }],
+            elements=[
+                {
+                    "tag": "markdown",
+                    "element_id": f"hitl_q_{request_id[:8]}",
+                    "content": content,
+                }
+            ],
         )
 
     def _entity_env_var(
-        self, request_id: str, hitl_type: str, data: Dict[str, Any],
+        self,
+        request_id: str,
+        hitl_type: str,
+        data: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         tool_name = data.get("tool_name", "")
         fields = data.get("fields") or []
@@ -470,11 +540,13 @@ class HITLCardBuilder:
         return self._wrap_card_v2(
             title="Environment Variables Needed",
             template="yellow",
-            elements=[{
-                "tag": "markdown",
-                "element_id": f"hitl_q_{request_id[:8]}",
-                "content": content,
-            }],
+            elements=[
+                {
+                    "tag": "markdown",
+                    "element_id": f"hitl_q_{request_id[:8]}",
+                    "content": content,
+                }
+            ],
         )
 
     # ------------------------------------------------------------------
@@ -487,6 +559,9 @@ class HITLCardBuilder:
         hitl_type: str,
         options: List[Any],
         max_buttons: int = 5,
+        *,
+        tenant_id: str = "",
+        project_id: str = "",
     ) -> List[Dict[str, Any]]:
         """Build button elements (JSON 2.0) for option selection."""
         buttons: List[Dict[str, Any]] = []
@@ -498,25 +573,32 @@ class HITLCardBuilder:
                 label = str(opt)
                 value = str(opt)
 
-            buttons.append({
-                "tag": "button",
-                "element_id": f"hitl_btn_{request_id[:8]}_{i}",
-                "text": {"tag": "plain_text", "content": label},
-                "type": "primary" if i == 0 else "default",
-                "width": "default",
-                "size": "medium",
-                "value": {
-                    "hitl_request_id": request_id,
-                    "hitl_type": hitl_type,
-                    "response_data": {"answer": value},
-                },
-            })
+            buttons.append(
+                {
+                    "tag": "button",
+                    "element_id": f"hitl_btn_{request_id[:8]}_{i}",
+                    "text": {"tag": "plain_text", "content": label},
+                    "type": "primary" if i == 0 else "default",
+                    "width": "default",
+                    "size": "medium",
+                    "value": {
+                        "hitl_request_id": request_id,
+                        "hitl_type": hitl_type,
+                        "response_data": {"answer": value},
+                        "tenant_id": tenant_id,
+                        "project_id": project_id,
+                    },
+                }
+            )
         return buttons
 
     def _build_cardkit_permission_buttons(
         self,
         request_id: str,
         hitl_type: str,
+        *,
+        tenant_id: str = "",
+        project_id: str = "",
     ) -> List[Dict[str, Any]]:
         """Build Allow/Deny button elements (JSON 2.0) for permission requests."""
         return [
@@ -531,6 +613,8 @@ class HITLCardBuilder:
                     "hitl_request_id": request_id,
                     "hitl_type": hitl_type,
                     "response_data": {"action": "allow"},
+                    "tenant_id": tenant_id,
+                    "project_id": project_id,
                 },
             },
             {
@@ -544,6 +628,8 @@ class HITLCardBuilder:
                     "hitl_request_id": request_id,
                     "hitl_type": hitl_type,
                     "response_data": {"action": "deny"},
+                    "tenant_id": tenant_id,
+                    "project_id": project_id,
                 },
             },
         ]

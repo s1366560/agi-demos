@@ -77,9 +77,7 @@ class ChannelMessageRouter:
     """
 
     def __init__(self) -> None:
-        self._chat_to_conversation: collections.OrderedDict[str, str] = (
-            collections.OrderedDict()
-        )
+        self._chat_to_conversation: collections.OrderedDict[str, str] = collections.OrderedDict()
         self._rate_limiter = _SlidingWindowRateLimiter()
 
     async def route_message(self, message: Message) -> None:
@@ -108,9 +106,7 @@ class ChannelMessageRouter:
 
             # Rate limiting check
             if not self._check_rate_limit(message):
-                logger.warning(
-                    f"[MessageRouter] Rate limited: chat_id={message.chat_id}"
-                )
+                logger.warning(f"[MessageRouter] Rate limited: chat_id={message.chat_id}")
                 return
 
             logger.info(
@@ -156,9 +152,7 @@ class ChannelMessageRouter:
             # Route to agent system
             await self._invoke_agent(message, conversation_id)
 
-            logger.info(
-                f"[MessageRouter] Message routed to conversation {conversation_id}"
-            )
+            logger.info(f"[MessageRouter] Message routed to conversation {conversation_id}")
 
         except Exception as e:
             logger.error(f"[MessageRouter] Error routing message: {e}", exc_info=True)
@@ -445,8 +439,7 @@ class ChannelMessageRouter:
 
         if isinstance(value, dict):
             return {
-                str(key): self._to_json_safe(item, _depth=_depth + 1)
-                for key, item in value.items()
+                str(key): self._to_json_safe(item, _depth=_depth + 1) for key, item in value.items()
             }
 
         if isinstance(value, (list, tuple, set)):
@@ -508,9 +501,7 @@ class ChannelMessageRouter:
             async with async_session_factory() as session:
                 conversation = await session.get(Conversation, conversation_id)
                 if not conversation:
-                    logger.error(
-                        f"[MessageRouter] Conversation not found: {conversation_id}"
-                    )
+                    logger.error(f"[MessageRouter] Conversation not found: {conversation_id}")
                     return
 
                 app_container = get_app_container()
@@ -522,14 +513,12 @@ class ChannelMessageRouter:
                 container = app_container.with_db(session)
                 agent_service = container.agent_service(llm)
 
-                logger.info(
-                    f"[MessageRouter] Invoking agent for conversation {conversation_id}"
-                )
+                logger.info(f"[MessageRouter] Invoking agent for conversation {conversation_id}")
 
                 # --- Shared state between main loop and card updater ---------
-                _delta_text = ""          # accumulated text_delta (preview)
-                _card_status = ""         # tool-execution status line
-                _final_content = ""       # authoritative answer from complete
+                _delta_text = ""  # accumulated text_delta (preview)
+                _card_status = ""  # tool-execution status line
+                _final_content = ""  # authoritative answer from complete
                 error_message: Optional[str] = None
                 _stream_done = False
 
@@ -558,14 +547,14 @@ class ChannelMessageRouter:
                                 from src.infrastructure.adapters.secondary.channels.feishu.cardkit_streaming import (  # noqa: E501
                                     CardKitStreamingManager,
                                 )
+
                                 cardkit_mgr = CardKitStreamingManager(streaming_adapter)
                                 cardkit_state = await cardkit_mgr.start_streaming(
-                                    message.chat_id, reply_to=reply_to,
+                                    message.chat_id,
+                                    reply_to=reply_to,
                                 )
                             except Exception as e:
-                                logger.warning(
-                                    f"[MessageRouter] CardKit start failed: {e}"
-                                )
+                                logger.warning(f"[MessageRouter] CardKit start failed: {e}")
 
                         if cardkit_state:
                             # CardKit streaming path
@@ -577,6 +566,7 @@ class ChannelMessageRouter:
                                 from src.application.services.channels.event_bridge import (
                                     get_channel_event_bridge,
                                 )
+
                                 get_channel_event_bridge().register_card_state(
                                     conversation_id, cardkit_state
                                 )
@@ -592,37 +582,31 @@ class ChannelMessageRouter:
                                 elif _card_status:
                                     display = f"_{_card_status}_\n\n{_delta_text}"
                                 if display != last_snapshot and display.strip():
-                                    ok = await cardkit_mgr.update_text(
-                                        cardkit_state, display
-                                    )
+                                    ok = await cardkit_mgr.update_text(cardkit_state, display)
                                     if ok:
                                         last_snapshot = display
                             # Finalize
                             final_display = _final_content or _delta_text
                             if final_display.strip():
-                                await cardkit_mgr.finish_streaming(
-                                    cardkit_state, final_display
-                                )
+                                await cardkit_mgr.finish_streaming(cardkit_state, final_display)
                             else:
-                                await cardkit_mgr.finish_streaming(
-                                    cardkit_state, last_snapshot
-                                )
+                                await cardkit_mgr.finish_streaming(cardkit_state, last_snapshot)
 
                             # Unregister card state
                             try:
                                 from src.application.services.channels.event_bridge import (
                                     get_channel_event_bridge,
                                 )
-                                get_channel_event_bridge().unregister_card_state(
-                                    conversation_id
-                                )
+
+                                get_channel_event_bridge().unregister_card_state(conversation_id)
                             except Exception:
                                 pass
 
                         else:
                             # Legacy streaming fallback
                             _card_msg_id = await self._send_initial_streaming_card(
-                                streaming_adapter, message,
+                                streaming_adapter,
+                                message,
                             )
                             if not _card_msg_id:
                                 return
@@ -636,16 +620,20 @@ class ChannelMessageRouter:
                                     display = f"_{_card_status}_\n\n{_delta_text}"
                                 if display != last_snapshot and display.strip():
                                     ok = await self._patch_streaming_card(
-                                        streaming_adapter, _card_msg_id,
-                                        display, loading=True,
+                                        streaming_adapter,
+                                        _card_msg_id,
+                                        display,
+                                        loading=True,
                                     )
                                     if ok:
                                         last_snapshot = display
                             final_display = _final_content or _delta_text
                             if final_display.strip():
                                 await self._patch_streaming_card(
-                                    streaming_adapter, _card_msg_id,
-                                    final_display, loading=False,
+                                    streaming_adapter,
+                                    _card_msg_id,
+                                    final_display,
+                                    loading=False,
                                 )
 
                     _card_updater_task = asyncio.create_task(_card_updater())
@@ -668,10 +656,10 @@ class ChannelMessageRouter:
                                 await self._broadcast_workspace_event(
                                     conversation_id=conversation_id,
                                     event_type=event_type,
-                                    event_data=(
-                                        event_data if isinstance(event_data, dict) else {}
-                                    ),
+                                    event_data=(event_data if isinstance(event_data, dict) else {}),
                                     raw_event=event,
+                                    tenant_id=conversation.tenant_id,
+                                    project_id=conversation.project_id,
                                 )
 
                             if event_type == "text_delta":
@@ -694,16 +682,11 @@ class ChannelMessageRouter:
                             elif event_type == "observe":
                                 _card_status = ""
                             elif event_type == "complete":
-                                content = (
-                                    event_data.get("content")
-                                    or event_data.get("result")
-                                )
+                                content = event_data.get("content") or event_data.get("result")
                                 if isinstance(content, str) and content.strip():
                                     _final_content = content
                             elif event_type == "error":
-                                error_message = (
-                                    event_data.get("message") or "Unknown agent error"
-                                )
+                                error_message = event_data.get("message") or "Unknown agent error"
 
                 except asyncio.TimeoutError:
                     logger.warning(
@@ -725,7 +708,10 @@ class ChannelMessageRouter:
                 # If streaming card was used successfully, we're done
                 if _card_msg_id and response.strip():
                     await self._record_streaming_outbox(
-                        message, conversation_id, response, _card_msg_id,
+                        message,
+                        conversation_id,
+                        response,
+                        _card_msg_id,
                     )
                     if error_message:
                         logger.warning(
@@ -796,9 +782,7 @@ class ChannelMessageRouter:
 
             adapter = bridge._get_adapter(binding.channel_config_id)
             if not adapter:
-                logger.warning(
-                    f"[MessageRouter] No adapter for config {binding.channel_config_id}"
-                )
+                logger.warning(f"[MessageRouter] No adapter for config {binding.channel_config_id}")
                 return False
 
             chat_id = binding.chat_id
@@ -868,6 +852,9 @@ class ChannelMessageRouter:
         event_type: Optional[str],
         event_data: Dict[str, Any],
         raw_event: Dict[str, Any],
+        *,
+        tenant_id: Optional[str] = None,
+        project_id: Optional[str] = None,
     ) -> None:
         """Forward agent stream events to subscribed workspace WebSocket sessions."""
         if not event_type:
@@ -906,7 +893,12 @@ class ChannelMessageRouter:
             )
 
             bridge = get_channel_event_bridge()
-            await bridge.on_agent_event(conversation_id, raw_event)
+            await bridge.on_agent_event(
+                conversation_id,
+                raw_event,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
         except Exception as e:
             logger.debug(f"[MessageRouter] Channel bridge forward failed: {e}")
 
@@ -924,9 +916,7 @@ class ChannelMessageRouter:
 
             channel_config_id = self._extract_channel_config_id(message)
             if not channel_config_id:
-                channel_config_id = await self._get_conversation_channel_config_id(
-                    conversation_id
-                )
+                channel_config_id = await self._get_conversation_channel_config_id(conversation_id)
 
             if not channel_config_id:
                 logger.warning(
@@ -988,11 +978,11 @@ class ChannelMessageRouter:
 
     # Patterns that indicate rich markdown (code fences, tables, headers, lists)
     _RICH_MD_RE = re.compile(
-        r"```|"                # code fences
-        r"^\|.*\|.*\|$|"       # table rows
-        r"^#{1,6}\s|"          # headings
-        r"^\s*[-*]\s|"         # unordered lists
-        r"^\s*\d+\.\s",        # ordered lists
+        r"```|"  # code fences
+        r"^\|.*\|.*\|$|"  # table rows
+        r"^#{1,6}\s|"  # headings
+        r"^\s*[-*]\s|"  # unordered lists
+        r"^\s*\d+\.\s",  # ordered lists
         re.MULTILINE,
     )
 
@@ -1056,14 +1046,14 @@ class ChannelMessageRouter:
             and hasattr(adapter, "send_card_entity_message")
         )
 
-    async def _send_initial_streaming_card(
-        self, adapter: Any, message: Message
-    ) -> Optional[str]:
+    async def _send_initial_streaming_card(self, adapter: Any, message: Message) -> Optional[str]:
         """Send the initial 'Thinking...' card and return its message_id."""
         try:
             reply_to = self._extract_channel_message_id(message)
             msg_id = await adapter.send_streaming_card(
-                message.chat_id, initial_text="", reply_to=reply_to,
+                message.chat_id,
+                initial_text="",
+                reply_to=reply_to,
             )
             if msg_id:
                 logger.debug(f"[MessageRouter] Streaming card sent: {msg_id}")
@@ -1099,9 +1089,7 @@ class ChannelMessageRouter:
         try:
             channel_config_id = self._extract_channel_config_id(message)
             if not channel_config_id:
-                channel_config_id = await self._get_conversation_channel_config_id(
-                    conversation_id
-                )
+                channel_config_id = await self._get_conversation_channel_config_id(conversation_id)
             if channel_config_id:
                 outbox_id = await self._create_outbox_record(
                     message=message,
@@ -1372,8 +1360,7 @@ class ChannelMessageRouter:
                         return config_id
         except Exception as e:
             logger.warning(
-                "[MessageRouter] Failed to load channel_config_id from conversation metadata: "
-                f"{e}"
+                f"[MessageRouter] Failed to load channel_config_id from conversation metadata: {e}"
             )
         return None
 
@@ -1438,14 +1425,11 @@ class ChannelMessageRouter:
             logger.warning(f"[MessageRouter] Failed to load channel config: {e}")
             return None
 
-    async def _send_error_feedback(
-        self, message: Message, conversation_id: str
-    ) -> None:
+    async def _send_error_feedback(self, message: Message, conversation_id: str) -> None:
         """Send a user-friendly error message back to the channel."""
         try:
             error_text = (
-                "Sorry, I encountered an error processing your message. "
-                "Please try again later."
+                "Sorry, I encountered an error processing your message. Please try again later."
             )
             await self._send_response(message, conversation_id, error_text)
         except Exception as e:

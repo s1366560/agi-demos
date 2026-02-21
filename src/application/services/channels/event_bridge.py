@@ -6,8 +6,8 @@ events to the appropriate channel adapter (Feishu, Slack, etc.).
 
 The agent core remains unchanged; the bridge is purely additive.
 """
+
 import logging
-from datetime import datetime, timezone
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 from src.domain.model.channels.message import ChannelAdapter
@@ -35,15 +35,17 @@ class ChannelEventBridge:
     """
 
     # Event types that should be forwarded to channels
-    _FORWARDED_EVENTS = frozenset({
-        "clarification_asked",
-        "decision_asked",
-        "env_var_requested",
-        "permission_asked",
-        "task_list_updated",
-        "artifact_ready",
-        "error",
-    })
+    _FORWARDED_EVENTS = frozenset(
+        {
+            "clarification_asked",
+            "decision_asked",
+            "env_var_requested",
+            "permission_asked",
+            "task_list_updated",
+            "artifact_ready",
+            "error",
+        }
+    )
 
     def __init__(self, channel_manager: Any = None) -> None:
         self._channel_manager = channel_manager
@@ -63,12 +65,17 @@ class ChannelEventBridge:
         self,
         conversation_id: str,
         event: Dict[str, Any],
+        *,
+        tenant_id: Optional[str] = None,
+        project_id: Optional[str] = None,
     ) -> None:
         """Route an agent event to the bound channel (if any).
 
         Args:
             conversation_id: The conversation that produced this event.
             event: Raw event dict with ``type`` and ``data`` keys.
+            tenant_id: Tenant ID (passed through to HITL card buttons).
+            project_id: Project ID (passed through to HITL card buttons).
         """
         event_type = event.get("type")
         if not event_type or event_type not in self._FORWARDED_EVENTS:
@@ -107,6 +114,8 @@ class ChannelEventBridge:
                     **event_data,
                     "_event_type": event_type,
                     "_conversation_id": conversation_id,
+                    "_tenant_id": tenant_id,
+                    "_project_id": project_id,
                 }
             await handler(adapter, chat_id, event_data)
         except Exception as e:
@@ -118,11 +127,11 @@ class ChannelEventBridge:
     async def _lookup_binding(self, conversation_id: str) -> Any:
         """Reverse-lookup channel binding from conversation_id."""
         try:
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
             from src.infrastructure.adapters.secondary.persistence.channel_repository import (
                 ChannelSessionBindingRepository,
+            )
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
             )
 
             async with async_session_factory() as session:
@@ -139,6 +148,7 @@ class ChannelEventBridge:
                 from src.infrastructure.adapters.primary.web.startup.channels import (
                     get_channel_manager,
                 )
+
                 self._channel_manager = get_channel_manager()
             except Exception:
                 return None
@@ -193,6 +203,8 @@ class ChannelEventBridge:
             event_type = event_data.get("_event_type", "clarification")
             request_id = event_data.get("request_id", "")
             conversation_id = event_data.get("_conversation_id", "")
+            tenant_id = event_data.get("_tenant_id", "")
+            project_id = event_data.get("_project_id", "")
             logger.info(
                 f"[EventBridge] Building HITL card: type={event_type}, "
                 f"request_id={request_id}, chat_id={chat_id}"
@@ -203,7 +215,13 @@ class ChannelEventBridge:
                 card_state = self.get_card_state(conversation_id)
                 if card_state and card_state.card_id:
                     ok = await self._add_hitl_to_streaming_card(
-                        adapter, card_state, event_type, request_id, event_data
+                        adapter,
+                        card_state,
+                        event_type,
+                        request_id,
+                        event_data,
+                        tenant_id=tenant_id,
+                        project_id=project_id,
                     )
                     if ok:
                         logger.info(
@@ -215,16 +233,17 @@ class ChannelEventBridge:
             # 2. Try standalone CardKit flow
             if hasattr(adapter, "send_hitl_card_via_cardkit"):
                 message_id = await adapter.send_hitl_card_via_cardkit(
-                    chat_id, event_type, request_id, event_data
+                    chat_id,
+                    event_type,
+                    request_id,
+                    event_data,
+                    tenant_id=tenant_id,
+                    project_id=project_id,
                 )
                 if message_id:
-                    logger.info(
-                        f"[EventBridge] Sent HITL card via CardKit to {chat_id}"
-                    )
+                    logger.info(f"[EventBridge] Sent HITL card via CardKit to {chat_id}")
                     return
-                logger.info(
-                    "[EventBridge] CardKit HITL failed, falling back to static card"
-                )
+                logger.info("[EventBridge] CardKit HITL failed, falling back to static card")
 
             # 3. Fallback: build static card and send as regular interactive message
             from src.infrastructure.adapters.secondary.channels.feishu.hitl_cards import (
@@ -232,7 +251,13 @@ class ChannelEventBridge:
             )
 
             builder = HITLCardBuilder()
-            card = builder.build_card(event_type, request_id, event_data)
+            card = builder.build_card(
+                event_type,
+                request_id,
+                event_data,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
             if not card:
                 logger.warning(
                     f"[EventBridge] HITLCardBuilder returned None for "
@@ -251,9 +276,7 @@ class ChannelEventBridge:
                     logger.info(f"[EventBridge] Falling back to text for HITL: {chat_id}")
                     await adapter.send_text(chat_id, text)
         except Exception as e:
-            logger.warning(
-                f"[EventBridge] HITL card send failed: {e}", exc_info=True
-            )
+            logger.warning(f"[EventBridge] HITL card send failed: {e}", exc_info=True)
 
     async def _add_hitl_to_streaming_card(
         self,
@@ -262,6 +285,9 @@ class ChannelEventBridge:
         event_type: str,
         request_id: str,
         event_data: Dict[str, Any],
+        *,
+        tenant_id: str = "",
+        project_id: str = "",
     ) -> bool:
         """Add HITL action elements to an existing streaming card.
 
@@ -278,7 +304,11 @@ class ChannelEventBridge:
 
             builder = HITLCardBuilder()
             elements = builder.build_hitl_action_elements(
-                event_type, request_id, event_data
+                event_type,
+                request_id,
+                event_data,
+                tenant_id=tenant_id,
+                project_id=project_id,
             )
             if not elements:
                 return False
@@ -421,15 +451,17 @@ class ChannelEventBridge:
             for opt in options[:5]:  # Limit to 5 buttons
                 opt_text = opt if isinstance(opt, str) else str(opt.get("label", opt))
                 opt_value = opt if isinstance(opt, str) else str(opt.get("value", opt))
-                actions.append({
-                    "tag": "button",
-                    "text": {"tag": "plain_text", "content": opt_text},
-                    "type": "primary" if len(actions) == 0 else "default",
-                    "value": {
-                        "hitl_request_id": request_id,
-                        "response_data": {"answer": opt_value},
-                    },
-                })
+                actions.append(
+                    {
+                        "tag": "button",
+                        "text": {"tag": "plain_text", "content": opt_text},
+                        "type": "primary" if len(actions) == 0 else "default",
+                        "value": {
+                            "hitl_request_id": request_id,
+                            "response_data": {"answer": opt_value},
+                        },
+                    }
+                )
             elements.append({"tag": "action", "actions": actions})
 
         return {
@@ -441,9 +473,7 @@ class ChannelEventBridge:
             "elements": elements,
         }
 
-    def _format_hitl_text(
-        self, question: str, options: List[Any]
-    ) -> str:
+    def _format_hitl_text(self, question: str, options: List[Any]) -> str:
         """Format HITL request as plain text (fallback)."""
         if not question:
             return ""

@@ -1,12 +1,11 @@
 """Tests for HITLChannelResponder."""
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.application.services.channels.hitl_responder import HITLChannelResponder
 
-DB_FACTORY_PATH = (
-    "src.infrastructure.adapters.secondary.persistence.database.async_session_factory"
-)
+DB_FACTORY_PATH = "src.infrastructure.adapters.secondary.persistence.database.async_session_factory"
 HITL_REPO_PATH = (
     "src.infrastructure.adapters.secondary.persistence."
     "sql_hitl_request_repository.SqlHITLRequestRepository"
@@ -21,6 +20,38 @@ def responder() -> HITLChannelResponder:
 
 @pytest.mark.unit
 class TestHITLChannelResponder:
+    async def test_respond_direct_redis_with_tenant_project(
+        self, responder: HITLChannelResponder
+    ) -> None:
+        """Skips DB query when tenant_id and project_id are provided."""
+        mock_redis = AsyncMock()
+        mock_redis.xadd = AsyncMock()
+        mock_redis.aclose = AsyncMock()
+
+        with (
+            patch(SETTINGS_PATH) as mock_settings,
+            patch("redis.asyncio.from_url", return_value=mock_redis),
+        ):
+            mock_settings.return_value.REDIS_HOST = "localhost"
+            mock_settings.return_value.REDIS_PORT = 6379
+
+            result = await responder.respond(
+                request_id="req-direct",
+                hitl_type="clarification",
+                response_data={"answer": "test"},
+                tenant_id="t-1",
+                project_id="p-1",
+                responder_id="user-1",
+            )
+
+        assert result is True
+        mock_redis.xadd.assert_awaited_once()
+        call_args = mock_redis.xadd.call_args
+        assert call_args[0][0] == "hitl:response:t-1:p-1"
+        payload = call_args[0][1]
+        assert payload["request_id"] == "req-direct"
+        assert payload["source"] == "channel"
+
     async def test_respond_request_not_found(self, responder: HITLChannelResponder) -> None:
         """Returns False if HITL request not found in DB."""
         mock_session = AsyncMock()
@@ -31,8 +62,9 @@ class TestHITLChannelResponder:
         mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
         mock_ctx.__aexit__ = AsyncMock(return_value=False)
 
-        with patch(DB_FACTORY_PATH, return_value=mock_ctx), patch(
-            HITL_REPO_PATH, return_value=mock_repo
+        with (
+            patch(DB_FACTORY_PATH, return_value=mock_ctx),
+            patch(HITL_REPO_PATH, return_value=mock_repo),
         ):
             result = await responder.respond(
                 request_id="missing-id",
@@ -55,8 +87,9 @@ class TestHITLChannelResponder:
         mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
         mock_ctx.__aexit__ = AsyncMock(return_value=False)
 
-        with patch(DB_FACTORY_PATH, return_value=mock_ctx), patch(
-            HITL_REPO_PATH, return_value=mock_repo
+        with (
+            patch(DB_FACTORY_PATH, return_value=mock_ctx),
+            patch(HITL_REPO_PATH, return_value=mock_repo),
         ):
             result = await responder.respond(
                 request_id="resolved-id",
@@ -84,10 +117,11 @@ class TestHITLChannelResponder:
         mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
         mock_ctx.__aexit__ = AsyncMock(return_value=False)
 
-        with patch(DB_FACTORY_PATH, return_value=mock_ctx), patch(
-            HITL_REPO_PATH, return_value=mock_repo
-        ), patch(SETTINGS_PATH) as mock_settings, patch(
-            "redis.asyncio.from_url", return_value=mock_redis
+        with (
+            patch(DB_FACTORY_PATH, return_value=mock_ctx),
+            patch(HITL_REPO_PATH, return_value=mock_repo),
+            patch(SETTINGS_PATH) as mock_settings,
+            patch("redis.asyncio.from_url", return_value=mock_redis),
         ):
             mock_settings.return_value.REDIS_HOST = "localhost"
             mock_settings.return_value.REDIS_PORT = 6379
