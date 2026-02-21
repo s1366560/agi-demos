@@ -55,7 +55,7 @@ async def test_on_agent_event_skips_when_no_binding() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_error_event_sends_text() -> None:
+async def test_error_event_sends_card() -> None:
     adapter = _make_adapter()
     binding = _make_binding()
     bridge = ChannelEventBridge()
@@ -67,11 +67,11 @@ async def test_error_event_sends_text() -> None:
         "data": {"message": "Something broke", "code": "INTERNAL"},
     })
 
-    adapter.send_text.assert_awaited_once()
-    call_args = adapter.send_text.call_args
-    assert call_args[0][0] == "chat-abc"
-    assert "Something broke" in call_args[0][1]
-    assert "INTERNAL" in call_args[0][1]
+    adapter.send_card.assert_awaited_once()
+    card = adapter.send_card.call_args[0][1]
+    assert card["header"]["template"] == "red"
+    assert "Something broke" in card["elements"][0]["content"]
+    assert "INTERNAL" in card["elements"][0]["content"]
 
 
 @pytest.mark.unit
@@ -123,7 +123,7 @@ async def test_hitl_event_falls_back_to_text_when_no_question() -> None:
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_task_update_sends_markdown_card() -> None:
+async def test_task_update_sends_rich_card() -> None:
     adapter = _make_adapter()
     binding = _make_binding()
     bridge = ChannelEventBridge()
@@ -140,15 +140,16 @@ async def test_task_update_sends_markdown_card() -> None:
         },
     })
 
-    adapter.send_markdown_card.assert_awaited_once()
-    text = adapter.send_markdown_card.call_args[0][1]
-    assert "Setup DB" in text
-    assert "Write tests" in text
+    adapter.send_card.assert_awaited_once()
+    card = adapter.send_card.call_args[0][1]
+    task_text = card["elements"][2]["content"]
+    assert "Setup DB" in task_text
+    assert "Write tests" in task_text
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_artifact_ready_sends_markdown() -> None:
+async def test_artifact_ready_sends_rich_card() -> None:
     adapter = _make_adapter()
     binding = _make_binding()
     bridge = ChannelEventBridge()
@@ -160,10 +161,12 @@ async def test_artifact_ready_sends_markdown() -> None:
         "data": {"name": "report.pdf", "url": "https://example.com/dl"},
     })
 
-    adapter.send_markdown_card.assert_awaited_once()
-    text = adapter.send_markdown_card.call_args[0][1]
-    assert "report.pdf" in text
-    assert "https://example.com/dl" in text
+    adapter.send_card.assert_awaited_once()
+    card = adapter.send_card.call_args[0][1]
+    assert card["header"]["template"] == "green"
+    assert "report.pdf" in card["elements"][0]["content"]
+    # Download button present
+    assert card["elements"][1]["actions"][0]["url"] == "https://example.com/dl"
 
 
 @pytest.mark.unit

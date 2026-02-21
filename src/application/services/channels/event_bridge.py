@@ -174,13 +174,26 @@ class ChannelEventBridge:
         chat_id: str,
         event_data: Dict[str, Any],
     ) -> None:
-        """Forward task list update to channel."""
+        """Forward task list update to channel as a rich card."""
         tasks = event_data.get("tasks") or event_data.get("todos") or []
         if not tasks:
             return
 
+        try:
+            from src.infrastructure.adapters.secondary.channels.feishu.rich_cards import (
+                RichCardBuilder,
+            )
+
+            card = RichCardBuilder().build_task_progress_card(tasks)
+            if card:
+                await adapter.send_card(chat_id, card)
+                return
+        except Exception:
+            pass
+
+        # Fallback to plain text
         lines: List[str] = []
-        for task in tasks[:10]:  # Limit to 10 tasks
+        for task in tasks[:10]:
             status = task.get("status", "pending")
             title = task.get("title", "Untitled")
             icon = {"completed": "[done]", "in_progress": "[...]", "failed": "[X]"}.get(
@@ -201,16 +214,31 @@ class ChannelEventBridge:
         chat_id: str,
         event_data: Dict[str, Any],
     ) -> None:
-        """Forward artifact availability notification to channel."""
+        """Forward artifact availability notification as a rich card."""
         name = event_data.get("name") or event_data.get("filename") or "Artifact"
         url = event_data.get("url") or event_data.get("download_url") or ""
-        text = f"**Artifact Ready**: {name}"
-        if url:
-            text += f"\n[Download]({url})"
+
         try:
-            await adapter.send_markdown_card(chat_id, text)
+            from src.infrastructure.adapters.secondary.channels.feishu.rich_cards import (
+                RichCardBuilder,
+            )
+
+            card = RichCardBuilder().build_artifact_card(
+                name,
+                url=url,
+                file_type=event_data.get("file_type", ""),
+                size=event_data.get("size", ""),
+                description=event_data.get("description", ""),
+            )
+            await adapter.send_card(chat_id, card)
         except Exception:
-            await adapter.send_text(chat_id, text)
+            text = f"**Artifact Ready**: {name}"
+            if url:
+                text += f"\n[Download]({url})"
+            try:
+                await adapter.send_markdown_card(chat_id, text)
+            except Exception:
+                await adapter.send_text(chat_id, text)
 
     async def _handle_error(
         self,
@@ -218,16 +246,31 @@ class ChannelEventBridge:
         chat_id: str,
         event_data: Dict[str, Any],
     ) -> None:
-        """Forward error notification to channel."""
+        """Forward error notification as a rich card."""
         message = event_data.get("message") or "An error occurred"
         code = event_data.get("code") or ""
-        text = f"Error: {message}"
-        if code:
-            text += f" ({code})"
+        conversation_id = event_data.get("conversation_id", "")
+
         try:
-            await adapter.send_text(chat_id, text)
-        except Exception as e:
-            logger.debug(f"[EventBridge] Error send failed: {e}")
+            from src.infrastructure.adapters.secondary.channels.feishu.rich_cards import (
+                RichCardBuilder,
+            )
+
+            card = RichCardBuilder().build_error_card(
+                message,
+                error_code=code,
+                conversation_id=conversation_id,
+                retryable=event_data.get("retryable", False),
+            )
+            await adapter.send_card(chat_id, card)
+        except Exception:
+            text = f"Error: {message}"
+            if code:
+                text += f" ({code})"
+            try:
+                await adapter.send_text(chat_id, text)
+            except Exception as e:
+                logger.debug(f"[EventBridge] Error send failed: {e}")
 
     # ------------------------------------------------------------------
     # Card builders

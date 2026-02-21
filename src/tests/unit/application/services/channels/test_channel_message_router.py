@@ -532,3 +532,126 @@ async def test_store_message_history_sanitizes_non_serializable_raw_data() -> No
     saved_message = mock_repo.create.await_args.args[0]
     assert saved_message.raw_data["event"]["sender"]["sender_id"]["open_id"] == "ou_x"
     json.dumps(saved_message.raw_data, allow_nan=False)
+
+
+# ------------------------------------------------------------------
+# send_to_channel tests
+# ------------------------------------------------------------------
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_to_channel_text_success():
+    """send_to_channel dispatches text to the adapter."""
+    router = ChannelMessageRouter()
+    mock_adapter = AsyncMock()
+    mock_adapter.send_text = AsyncMock(return_value="msg-1")
+
+    mock_binding = SimpleNamespace(
+        channel_config_id="cfg-1", chat_id="chat-42"
+    )
+    mock_bridge = MagicMock()
+    mock_bridge._lookup_binding = AsyncMock(return_value=mock_binding)
+    mock_bridge._get_adapter = MagicMock(return_value=mock_adapter)
+
+    with patch(
+        "src.application.services.channels.event_bridge.get_channel_event_bridge",
+        return_value=mock_bridge,
+    ), patch.object(router, "_track_push_outbox", new_callable=AsyncMock):
+        result = await router.send_to_channel("conv-1", "Hello from agent")
+
+    assert result is True
+    mock_adapter.send_text.assert_awaited_once_with("chat-42", "Hello from agent")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_to_channel_markdown():
+    """send_to_channel dispatches markdown card."""
+    router = ChannelMessageRouter()
+    mock_adapter = AsyncMock()
+    mock_adapter.send_markdown_card = AsyncMock(return_value="msg-2")
+
+    mock_binding = SimpleNamespace(
+        channel_config_id="cfg-1", chat_id="chat-42"
+    )
+    mock_bridge = MagicMock()
+    mock_bridge._lookup_binding = AsyncMock(return_value=mock_binding)
+    mock_bridge._get_adapter = MagicMock(return_value=mock_adapter)
+
+    with patch(
+        "src.application.services.channels.event_bridge.get_channel_event_bridge",
+        return_value=mock_bridge,
+    ), patch.object(router, "_track_push_outbox", new_callable=AsyncMock):
+        result = await router.send_to_channel(
+            "conv-1", "# Title\nBody", content_type="markdown"
+        )
+
+    assert result is True
+    mock_adapter.send_markdown_card.assert_awaited_once_with("chat-42", "# Title\nBody")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_to_channel_card():
+    """send_to_channel dispatches card JSON."""
+    router = ChannelMessageRouter()
+    mock_adapter = AsyncMock()
+    mock_adapter.send_card = AsyncMock(return_value="msg-3")
+
+    card_data = {"header": {"title": {"content": "Test"}}, "elements": []}
+    mock_binding = SimpleNamespace(
+        channel_config_id="cfg-1", chat_id="chat-42"
+    )
+    mock_bridge = MagicMock()
+    mock_bridge._lookup_binding = AsyncMock(return_value=mock_binding)
+    mock_bridge._get_adapter = MagicMock(return_value=mock_adapter)
+
+    with patch(
+        "src.application.services.channels.event_bridge.get_channel_event_bridge",
+        return_value=mock_bridge,
+    ), patch.object(router, "_track_push_outbox", new_callable=AsyncMock):
+        result = await router.send_to_channel(
+            "conv-1", "", content_type="card", card=card_data
+        )
+
+    assert result is True
+    mock_adapter.send_card.assert_awaited_once_with("chat-42", card_data)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_to_channel_no_binding():
+    """send_to_channel returns False when no binding exists."""
+    router = ChannelMessageRouter()
+    mock_bridge = MagicMock()
+    mock_bridge._lookup_binding = AsyncMock(return_value=None)
+
+    with patch(
+        "src.application.services.channels.event_bridge.get_channel_event_bridge",
+        return_value=mock_bridge,
+    ):
+        result = await router.send_to_channel("conv-missing", "Hello")
+
+    assert result is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_to_channel_no_adapter():
+    """send_to_channel returns False when adapter not found."""
+    router = ChannelMessageRouter()
+    mock_binding = SimpleNamespace(
+        channel_config_id="cfg-dead", chat_id="chat-42"
+    )
+    mock_bridge = MagicMock()
+    mock_bridge._lookup_binding = AsyncMock(return_value=mock_binding)
+    mock_bridge._get_adapter = MagicMock(return_value=None)
+
+    with patch(
+        "src.application.services.channels.event_bridge.get_channel_event_bridge",
+        return_value=mock_bridge,
+    ):
+        result = await router.send_to_channel("conv-1", "Hello")
+
+    assert result is False

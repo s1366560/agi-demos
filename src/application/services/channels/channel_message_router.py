@@ -681,6 +681,113 @@ class ChannelMessageRouter:
         except Exception as e:
             logger.error(f"[MessageRouter] Agent invocation error: {e}", exc_info=True)
 
+    # ------------------------------------------------------------------
+    # Public push API
+    # ------------------------------------------------------------------
+
+    async def send_to_channel(
+        self,
+        conversation_id: str,
+        content: str,
+        *,
+        content_type: str = "text",
+        card: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """Send a message to the channel bound to a conversation.
+
+        This is the public API for agent-initiated (push) messages,
+        e.g. proactive notifications, task summaries, artifact links.
+
+        Args:
+            conversation_id: The conversation whose bound channel will receive the message.
+            content: Text content to send (used for text/markdown types).
+            content_type: One of ``text``, ``markdown``, ``card``.
+            card: Card JSON payload (required when content_type is ``card``).
+
+        Returns:
+            True if the message was sent successfully.
+        """
+        try:
+            from src.application.services.channels.event_bridge import (
+                get_channel_event_bridge,
+            )
+
+            bridge = get_channel_event_bridge()
+            binding = await bridge._lookup_binding(conversation_id)
+            if not binding:
+                logger.debug(
+                    f"[MessageRouter] No channel binding for conversation {conversation_id}"
+                )
+                return False
+
+            adapter = bridge._get_adapter(binding.channel_config_id)
+            if not adapter:
+                logger.warning(
+                    f"[MessageRouter] No adapter for config {binding.channel_config_id}"
+                )
+                return False
+
+            chat_id = binding.chat_id
+
+            if content_type == "card" and card:
+                await adapter.send_card(chat_id, card)
+            elif content_type == "markdown":
+                await adapter.send_markdown_card(chat_id, content)
+            else:
+                await adapter.send_text(chat_id, content)
+
+            # Track in outbox
+            await self._track_push_outbox(
+                conversation_id=conversation_id,
+                channel_config_id=binding.channel_config_id,
+                chat_id=chat_id,
+                content=content,
+                content_type=content_type,
+            )
+
+            logger.info(
+                f"[MessageRouter] Push message sent to {chat_id} "
+                f"(conversation={conversation_id}, type={content_type})"
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                f"[MessageRouter] Push message failed for {conversation_id}: {e}",
+                exc_info=True,
+            )
+            return False
+
+    async def _track_push_outbox(
+        self,
+        conversation_id: str,
+        channel_config_id: str,
+        chat_id: str,
+        content: str,
+        content_type: str,
+    ) -> None:
+        """Record a push message in the outbox for observability."""
+        try:
+            from src.infrastructure.adapters.secondary.persistence.channel_repository import (
+                ChannelOutboxRepository,
+            )
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+
+            async with async_session_factory() as session:
+                repo = ChannelOutboxRepository(session)
+                await repo.create(
+                    channel_config_id=channel_config_id,
+                    conversation_id=conversation_id,
+                    chat_id=chat_id,
+                    message_type=content_type,
+                    content=content[:500],
+                    status="sent",
+                )
+                await session.commit()
+        except Exception as e:
+            logger.debug(f"[MessageRouter] Outbox tracking failed: {e}")
+
     async def _broadcast_workspace_event(
         self,
         conversation_id: str,

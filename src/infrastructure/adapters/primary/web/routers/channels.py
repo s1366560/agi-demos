@@ -818,3 +818,84 @@ async def list_all_connection_status(
         ]
 
     return []
+
+
+# ------------------------------------------------------------------
+# Push API — agent-initiated outbound messages
+# ------------------------------------------------------------------
+
+
+class PushMessageRequest(BaseModel):
+    """Request body for pushing a message to a bound channel."""
+
+    content: str = Field(..., max_length=4000, description="Text content to send")
+    content_type: Literal["text", "markdown", "card"] = Field(
+        default="text",
+        description="Content format: text, markdown, or card (JSON)",
+    )
+    card: Optional[Dict] = Field(
+        default=None,
+        description="Card JSON payload (required when content_type is 'card')",
+    )
+
+
+class PushMessageResponse(BaseModel):
+    success: bool
+    message: str
+
+
+@router.post(
+    "/conversations/{conversation_id}/push",
+    response_model=PushMessageResponse,
+    summary="Push message to channel",
+    description="Send an agent-initiated message to the channel bound to a conversation.",
+)
+async def push_message_to_channel(
+    conversation_id: str,
+    body: PushMessageRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PushMessageResponse:
+    """Push a message to the channel bound to a conversation."""
+    # Verify conversation exists and user has access
+    binding = await db.execute(
+        select(ChannelSessionBindingModel).where(
+            ChannelSessionBindingModel.conversation_id == conversation_id
+        )
+    )
+    binding_row = binding.scalar_one_or_none()
+    if not binding_row:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No channel binding found for this conversation",
+        )
+
+    # Verify user has access to the channel's project
+    config = await db.execute(
+        select(ChannelConfigModel).where(
+            ChannelConfigModel.id == binding_row.channel_config_id
+        )
+    )
+    config_row = config.scalar_one_or_none()
+    if config_row:
+        await verify_project_access(config_row.project_id, user, db)
+
+    from src.application.services.channels.channel_message_router import (
+        get_channel_message_router,
+    )
+
+    router_instance = get_channel_message_router()
+    success = await router_instance.send_to_channel(
+        conversation_id=conversation_id,
+        content=body.content,
+        content_type=body.content_type,
+        card=body.card,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to deliver message to channel",
+        )
+
+    return PushMessageResponse(success=True, message="Message sent")
