@@ -98,10 +98,19 @@ class TestHITLCardBuilder:
         )
         assert card is not None
         assert card["header"]["template"] == "yellow"
+        # Description markdown
         content = card["elements"][0]["content"]
-        assert "GITHUB_TOKEN" in content
-        assert "GITHUB_ORG" in content
         assert "github_api" in content
+        # Form container with input fields
+        form = card["elements"][1]
+        assert form["tag"] == "form"
+        inputs = [e for e in form["elements"] if e["tag"] == "input"]
+        assert len(inputs) == 2
+        assert inputs[0]["name"] == "GITHUB_TOKEN"
+        assert inputs[1]["name"] == "GITHUB_ORG"
+        # Submit button
+        submit = [e for e in form["elements"] if e.get("action_type") == "form_submit"]
+        assert len(submit) == 1
 
     def test_env_var_card_empty(self, builder: HITLCardBuilder) -> None:
         card = builder.build_card("env_var", "req-8", {})
@@ -223,7 +232,7 @@ class TestHITLCardBuilderCardKit:
         )
         assert card is not None
         assert card["header"]["template"] == "yellow"
-        assert "TOKEN" in card["body"]["elements"][0]["content"]
+        assert "github" in card["body"]["elements"][0]["content"]
 
     def test_build_card_entity_data_empty_returns_none(
         self, builder: HITLCardBuilder
@@ -267,11 +276,30 @@ class TestHITLCardBuilderCardKit:
         )
         assert elements == []
 
+    def test_build_hitl_action_elements_env_var_form(
+        self, builder: HITLCardBuilder
+    ) -> None:
+        elements = builder.build_hitl_action_elements(
+            "env_var", "req-ck10",
+            {"fields": [{"name": "API_KEY", "description": "Key", "required": True}]},
+        )
+        assert len(elements) == 1
+        form = elements[0]
+        assert form["tag"] == "form"
+        inputs = [e for e in form["elements"] if e["tag"] == "input"]
+        assert len(inputs) == 1
+        assert inputs[0]["name"] == "API_KEY"
+        assert inputs[0]["required"] is True
+        submit = [e for e in form["elements"] if e.get("action_type") == "form_submit"]
+        assert len(submit) == 1
+        assert submit[0]["value"]["hitl_request_id"] == "req-ck10"
+        assert submit[0]["value"]["hitl_type"] == "env_var"
+
     def test_build_hitl_action_elements_env_var_empty(
         self, builder: HITLCardBuilder
     ) -> None:
         elements = builder.build_hitl_action_elements(
-            "env_var", "req-ck10", {"fields": [{"name": "X"}]},
+            "env_var", "req-ck11", {"fields": []},
         )
         assert elements == []
 

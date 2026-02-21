@@ -361,6 +361,12 @@ class FeishuAdapter:
                     response_data = {"answer": response_data_raw}
             else:
                 response_data = response_data_raw if isinstance(response_data_raw, dict) else {}
+
+            # For form submissions, form_value contains input field values
+            form_value = getattr(action, "form_value", None)
+            if form_value and isinstance(form_value, dict):
+                response_data = {"values": form_value}
+
             hitl_type = (
                 value.get("hitl_type", "clarification")
                 if isinstance(value, dict)
@@ -454,6 +460,11 @@ class FeishuAdapter:
         action = response_data.get("action", "")
         if action:
             return str(action).capitalize()
+        # Form submissions: show field names
+        values = response_data.get("values")
+        if isinstance(values, dict) and values:
+            names = ", ".join(values.keys())
+            return f"Provided: {names}"
         return str(next(iter(response_data.values()), ""))
 
     def _build_responded_card(

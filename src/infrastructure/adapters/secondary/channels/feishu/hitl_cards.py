@@ -208,40 +208,82 @@ class HITLCardBuilder:
         tenant_id: str = "",
         project_id: str = "",
     ) -> Optional[Dict[str, Any]]:
-        """Card showing requested env vars (text-only, no form input in Feishu cards).
-
-        Since Feishu cards don't support free-text input fields, we show the
-        request details and ask the user to reply with the values as a message.
-        """
+        """Card with form inputs for environment variable collection."""
         tool_name = data.get("tool_name", "")
         fields = data.get("fields") or []
         message = data.get("message") or ""
 
-        field_lines = []
-        for field in fields:
-            name = field.get("name", "") if isinstance(field, dict) else str(field)
-            desc = field.get("description", "") if isinstance(field, dict) else ""
-            line = f"- `{name}`"
-            if desc:
-                line += f": {desc}"
-            field_lines.append(line)
+        if not fields and not message:
+            return None
 
         content = ""
         if tool_name:
             content += f"**Tool**: {tool_name}\n\n"
         if message:
-            content += f"{message}\n\n"
-        if field_lines:
-            content += "**Required variables:**\n" + "\n".join(field_lines)
-            content += "\n\nPlease reply with the values in format:\n"
-            content += "`VAR_NAME=value` (one per line)"
+            content += message
 
-        if not content.strip():
-            return None
+        elements: List[Dict[str, Any]] = []
+        if content.strip():
+            elements.append({"tag": "markdown", "content": content})
 
-        elements: List[Dict[str, Any]] = [
-            {"tag": "markdown", "content": content},
-        ]
+        # Build form with input fields
+        form_elements: List[Dict[str, Any]] = []
+        for field in fields:
+            if isinstance(field, dict):
+                name = field.get("name", "")
+                label = field.get("label", name)
+                desc = field.get("description", "")
+                required = field.get("required", False)
+                input_type = field.get("input_type", "text")
+            else:
+                name = str(field)
+                label = name
+                desc = ""
+                required = False
+                input_type = "text"
+
+            feishu_input_type = "password" if input_type == "password" else "text"
+            input_el: Dict[str, Any] = {
+                "tag": "input",
+                "name": name,
+                "required": required,
+                "input_type": feishu_input_type,
+                "label": {"tag": "plain_text", "content": label},
+                "label_position": "top",
+                "placeholder": {
+                    "tag": "plain_text",
+                    "content": desc or f"Enter {label}",
+                },
+            }
+            default_value = field.get("default_value") if isinstance(field, dict) else None
+            if default_value:
+                input_el["default_value"] = str(default_value)
+            form_elements.append(input_el)
+
+        # Submit button
+        form_elements.append(
+            {
+                "tag": "button",
+                "action_type": "form_submit",
+                "name": "submit_env_vars",
+                "text": {"tag": "plain_text", "content": "Submit"},
+                "type": "primary",
+                "value": {
+                    "hitl_request_id": request_id,
+                    "hitl_type": hitl_type,
+                    "tenant_id": tenant_id,
+                    "project_id": project_id,
+                },
+            }
+        )
+
+        elements.append(
+            {
+                "tag": "form",
+                "name": f"env_form_{request_id[:8]}",
+                "elements": form_elements,
+            }
+        )
 
         return self._wrap_card(
             title="Environment Variables Needed",
@@ -430,8 +472,15 @@ class HITLCardBuilder:
                 project_id=project_id,
             )
 
-        # env_var has no buttons (user replies with text)
-        return []
+        # env_var uses form container with input fields
+        if canonical == "env_var":
+            return self._build_cardkit_env_var_form(
+                request_id,
+                canonical,
+                data,
+                tenant_id=tenant_id,
+                project_id=project_id,
+            )
 
     # ------------------------------------------------------------------
     # CardKit entity builders (JSON 2.0 base cards, no buttons)
@@ -515,29 +564,16 @@ class HITLCardBuilder:
         data: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         tool_name = data.get("tool_name", "")
-        fields = data.get("fields") or []
         message = data.get("message") or ""
-
-        field_lines = []
-        for field in fields:
-            name = field.get("name", "") if isinstance(field, dict) else str(field)
-            desc = field.get("description", "") if isinstance(field, dict) else ""
-            line = f"- `{name}`"
-            if desc:
-                line += f": {desc}"
-            field_lines.append(line)
 
         content = ""
         if tool_name:
             content += f"**Tool**: {tool_name}\n\n"
         if message:
-            content += f"{message}\n\n"
-        if field_lines:
-            content += "**Required variables:**\n" + "\n".join(field_lines)
-            content += "\n\nPlease reply with the values in format:\n"
-            content += "`VAR_NAME=value` (one per line)"
+            content += message
         if not content.strip():
-            return None
+            content = "Please provide the required environment variables."
+
         return self._wrap_card_v2(
             title="Environment Variables Needed",
             template="yellow",
@@ -633,6 +669,84 @@ class HITLCardBuilder:
                     "project_id": project_id,
                 },
             },
+        ]
+
+    def _build_cardkit_env_var_form(
+        self,
+        request_id: str,
+        hitl_type: str,
+        data: Dict[str, Any],
+        *,
+        tenant_id: str = "",
+        project_id: str = "",
+    ) -> List[Dict[str, Any]]:
+        """Build a form container with input fields (JSON 2.0) for env var collection."""
+        fields = data.get("fields") or []
+        if not fields:
+            return []
+
+        form_elements: List[Dict[str, Any]] = []
+        for i, field in enumerate(fields):
+            if isinstance(field, dict):
+                name = field.get("name", f"var_{i}")
+                label = field.get("label", name)
+                desc = field.get("description", "")
+                required = field.get("required", False)
+                input_type = field.get("input_type", "text")
+            else:
+                name = str(field)
+                label = name
+                desc = ""
+                required = False
+                input_type = "text"
+
+            feishu_input_type = "password" if input_type == "password" else "text"
+            input_el: Dict[str, Any] = {
+                "tag": "input",
+                "element_id": f"hitl_input_{request_id[:8]}_{i}",
+                "name": name,
+                "required": required,
+                "input_type": feishu_input_type,
+                "label": {"tag": "plain_text", "content": label},
+                "label_position": "top",
+                "placeholder": {
+                    "tag": "plain_text",
+                    "content": desc or f"Enter {label}",
+                },
+            }
+            default_value = field.get("default_value") if isinstance(field, dict) else None
+            if default_value:
+                input_el["default_value"] = str(default_value)
+            form_elements.append(input_el)
+
+        # Submit button
+        form_elements.append(
+            {
+                "tag": "button",
+                "element_id": f"hitl_submit_{request_id[:8]}",
+                "action_type": "form_submit",
+                "name": "submit_env_vars",
+                "text": {"tag": "plain_text", "content": "Submit"},
+                "type": "primary",
+                "width": "default",
+                "size": "medium",
+                "value": {
+                    "hitl_request_id": request_id,
+                    "hitl_type": hitl_type,
+                    "tenant_id": tenant_id,
+                    "project_id": project_id,
+                },
+            }
+        )
+
+        # Return a single form container element
+        return [
+            {
+                "tag": "form",
+                "element_id": f"hitl_form_{request_id[:8]}",
+                "name": f"env_form_{request_id[:8]}",
+                "elements": form_elements,
+            }
         ]
 
     def _wrap_card_v2(

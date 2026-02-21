@@ -972,8 +972,8 @@ async def test_send_hitl_card_via_cardkit_success(adapter: FeishuAdapter) -> Non
 
 
 @pytest.mark.unit
-async def test_send_hitl_card_via_cardkit_no_buttons(adapter: FeishuAdapter) -> None:
-    """send_hitl_card_via_cardkit should still send card if no buttons."""
+async def test_send_hitl_card_via_cardkit_env_var_with_form(adapter: FeishuAdapter) -> None:
+    """send_hitl_card_via_cardkit should send card with form for env_var."""
     adapter._connected = True
 
     with (
@@ -986,7 +986,13 @@ async def test_send_hitl_card_via_cardkit_no_buttons(adapter: FeishuAdapter) -> 
             {"tool_name": "gh", "fields": [{"name": "TOKEN"}]},
         )
         assert msg_id == "msg_002"
-        mock_add.assert_not_called()  # env_var has no buttons
+        # env_var now adds a form element
+        mock_add.assert_called_once()
+        call_args = mock_add.call_args
+        assert call_args[0][0] == "ck_002"
+        elements = call_args[0][1]
+        assert len(elements) == 1
+        assert elements[0]["tag"] == "form"
 
 
 @pytest.mark.unit
