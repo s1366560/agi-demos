@@ -339,8 +339,10 @@ async def get_conversation_messages(
             elif event_type == "env_var_requested":
                 request_id = data.get("request_id", "")
                 item["requestId"] = request_id
-                item["variables"] = data.get("variables", [])
-                item["reason"] = data.get("reason", "")
+                item["toolName"] = data.get("tool_name", "")
+                item["fields"] = data.get("fields", [])
+                item["message"] = data.get("message", "")
+                item["context"] = data.get("context", {})
                 # Check if answered
                 answered = False
                 values = {}
@@ -351,14 +353,16 @@ async def get_conversation_messages(
                     status_info = hitl_status_map[request_id]
                     if status_info["status"] in ("answered", "completed"):
                         answered = True
-                        # For env_var, values are stored in response_metadata
                         values = status_info.get("response_metadata", {}).get("values", {})
                 item["answered"] = answered
                 item["values"] = values
 
             elif event_type == "env_var_provided":
                 item["requestId"] = data.get("request_id", "")
-                item["variables"] = list(data.get("values", {}).keys())
+                item["toolName"] = data.get("tool_name", "")
+                item["variableNames"] = data.get("saved_variables", [])
+                if not item["variableNames"]:
+                    item["variableNames"] = list(data.get("values", {}).keys())
 
             elif event_type in ("permission_requested", "permission_asked"):
                 request_id = data.get("request_id", "")

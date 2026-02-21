@@ -562,7 +562,7 @@ export function sseEventToTimeline(
         timestamp,
         requestId: data.request_id,
         toolName: data.tool_name,
-        variableNames: data.variable_names,
+        variableNames: data.saved_variables,
       };
     }
 

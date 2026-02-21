@@ -618,7 +618,7 @@ export interface EnvVarRequestedEventData {
 export interface EnvVarProvidedEventData {
   request_id: string;
   tool_name: string;
-  variable_names: string[];
+  saved_variables: string[];
 }
 
 /**

@@ -550,7 +550,7 @@ export function createStreamEventHandlers(
 
       const updatedTimeline = convState.timeline.map((te) =>
         te.type === 'env_var_requested' && (te as any).requestId === requestId
-          ? { ...te, answered: true, variableNames: event.data.variable_names }
+          ? { ...te, answered: true, providedVariables: event.data.saved_variables }
           : te
       );
 

@@ -1178,14 +1178,20 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
           createdAt?: string;
           answered?: boolean;
           values?: Record<string, string>;
+          providedVariables?: string[];
         };
+        const answeredVal = e.values
+          ? Object.keys(e.values).join(', ')
+          : e.providedVariables
+            ? e.providedVariables.join(', ')
+            : undefined;
         return (
           <InlineHITLCard
             hitlType="env_var"
             requestId={e.requestId || envVarData?.request_id || ''}
             envVarData={envVarData}
             isAnswered={e.answered === true}
-            answeredValue={e.values ? Object.keys(e.values).join(', ') : undefined}
+            answeredValue={answeredVal}
             expiresAt={e.expiresAt}
             createdAt={e.createdAt || String(event.timestamp)}
           />

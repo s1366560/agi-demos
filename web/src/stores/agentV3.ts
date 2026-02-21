@@ -302,7 +302,7 @@ function mergeHITLResponseEvents(timeline: TimelineEvent[]): TimelineEvent[] {
     },
     env_var_provided: {
       requestType: 'env_var_requested',
-      mapFn: (r) => ({ answered: true, variableNames: r.variableNames, values: r.values }),
+      mapFn: (r) => ({ answered: true, providedVariables: r.variableNames, values: r.values }),
     },
     permission_replied: {
       requestType: 'permission_asked',
