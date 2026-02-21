@@ -32,8 +32,8 @@ class TestHITLChannelResponder:
             patch(SETTINGS_PATH) as mock_settings,
             patch("redis.asyncio.from_url", return_value=mock_redis),
         ):
-            mock_settings.return_value.REDIS_HOST = "localhost"
-            mock_settings.return_value.REDIS_PORT = 6379
+            mock_settings.return_value.redis_host = "localhost"
+            mock_settings.return_value.redis_port = 6379
 
             result = await responder.respond(
                 request_id="req-direct",
@@ -123,8 +123,8 @@ class TestHITLChannelResponder:
             patch(SETTINGS_PATH) as mock_settings,
             patch("redis.asyncio.from_url", return_value=mock_redis),
         ):
-            mock_settings.return_value.REDIS_HOST = "localhost"
-            mock_settings.return_value.REDIS_PORT = 6379
+            mock_settings.return_value.redis_host = "localhost"
+            mock_settings.return_value.redis_port = 6379
 
             result = await responder.respond(
                 request_id="req-1",

@@ -129,7 +129,7 @@ class HITLChannelResponder:
             import redis.asyncio as aioredis
 
             redis_client = aioredis.from_url(
-                f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}",
+                f"redis://{settings.redis_host}:{settings.redis_port}",
                 decode_responses=True,
             )
             try:
