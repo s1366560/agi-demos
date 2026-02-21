@@ -140,3 +140,6 @@ screenshots/plan-mode-modal-from-input-bar.png
 
 # Local Sandbox App (Electron build outputs)
 local-sandbox-app/
+.reports/
+.volumes/
+.copilot/
