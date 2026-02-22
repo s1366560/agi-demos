@@ -283,15 +283,6 @@ class HybridSearch:
             params["index_name"] = dimension_specific_index
             result = await self._neo4j_client.execute_query(cypher_query, **params)
 
-            # If no results with dimension-specific index, try default index
-            if not result.records:
-                logger.debug(
-                    f"No results from dimension-specific index {dimension_specific_index}, "
-                    f"trying default index {self._vector_index_name}"
-                )
-                params["index_name"] = self._vector_index_name
-                result = await self._neo4j_client.execute_query(cypher_query, **params)
-
             items = []
             for record in result.records:
                 item = SearchResultItem(
@@ -311,13 +302,33 @@ class HybridSearch:
 
         except Exception as e:
             error_str = str(e)
+            # If dimension-specific index not found, try default index
+            if "no such vector schema index" in error_str.lower():
+                try:
+                    params["index_name"] = self._vector_index_name
+                    result = await self._neo4j_client.execute_query(cypher_query, **params)
+                    return [
+                        SearchResultItem(
+                            type="entity",
+                            uuid=record.get("uuid", ""),
+                            name=record.get("name"),
+                            summary=record.get("summary"),
+                            score=float(record.get("score", 0)),
+                            metadata={
+                                "entity_type": record.get("entity_type"),
+                                "search_type": "vector",
+                            },
+                        )
+                        for record in result.records
+                    ]
+                except Exception:
+                    pass  # Fall through to error handling below
             # Check for dimension mismatch errors
             if "dimensions" in error_str.lower() or "vector has" in error_str.lower():
                 logger.warning(
                     f"Vector dimension mismatch detected. Falling back to keyword search. "
                     f"Error: {e}"
                 )
-                # Return empty list - RRF fusion will use keyword results only
                 return []
             logger.error(f"Vector search query failed: {e}")
             return []
