@@ -168,6 +168,7 @@ const TENANT_SIDEBAR_CONFIG: SidebarConfig = {
         { id: 'agents', icon: 'support_agent', label: 'nav.agents', path: '/agents' },
         { id: 'subagents', icon: 'smart_toy', label: 'nav.subagents', path: '/subagents' },
         { id: 'skills', icon: 'psychology', label: 'nav.skills', path: '/skills' },
+        { id: 'plugins', icon: 'extension', label: 'nav.plugins', path: '/plugins' },
         { id: 'templates', icon: 'widgets', label: 'nav.templates', path: '/templates' },
         { id: 'mcp-servers', icon: 'cable', label: 'nav.mcpServers', path: '/mcp-servers' },
         { id: 'patterns', icon: 'account_tree', label: 'Workflow Patterns', path: '/patterns' },

@@ -1,14 +1,13 @@
 """Tests for ChannelEventBridge."""
+import asyncio
 import json
-
-import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.application.services.channels.event_bridge import (
-    ChannelEventBridge,
-    get_channel_event_bridge,
-)
+import pytest
+
+from src.application.services.channels import event_bridge as event_bridge_module
+from src.application.services.channels.event_bridge import ChannelEventBridge
 
 
 def _make_adapter(**overrides) -> MagicMock:
@@ -27,11 +26,13 @@ def _make_binding(
     channel_config_id: str = "cfg-1",
     chat_id: str = "chat-abc",
     channel_type: str = "feishu",
+    thread_id: str | None = None,
 ) -> SimpleNamespace:
     return SimpleNamespace(
         channel_config_id=channel_config_id,
         chat_id=chat_id,
         channel_type=channel_type,
+        thread_id=thread_id,
     )
 
 
@@ -370,3 +371,166 @@ async def test_card_state_lifecycle() -> None:
 
     bridge.unregister_card_state("conv-1")
     assert bridge.get_card_state("conv-1") is None
+
+
+@pytest.mark.unit
+def test_channel_event_bridge_accepts_configured_focus_ttl() -> None:
+    bridge = ChannelEventBridge(subagent_focus_ttl_seconds=42.5)
+    assert bridge._subagent_focus_ttl_seconds == 42.5
+
+
+@pytest.mark.unit
+def test_get_channel_event_bridge_uses_settings_focus_ttl() -> None:
+    event_bridge_module._bridge = None
+    with patch.object(
+        event_bridge_module,
+        "get_settings",
+        return_value=SimpleNamespace(agent_subagent_focus_ttl_seconds=12.0),
+    ):
+        bridge = event_bridge_module.get_channel_event_bridge()
+        assert bridge._subagent_focus_ttl_seconds == 12.0
+    event_bridge_module._bridge = None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_subagent_spawned_binds_to_thread_and_tracks_focus() -> None:
+    adapter = _make_adapter()
+    binding = _make_binding(thread_id="root-msg-1")
+    bridge = ChannelEventBridge()
+    bridge._lookup_binding = AsyncMock(return_value=binding)
+    bridge._get_adapter = MagicMock(return_value=adapter)
+
+    await bridge.on_agent_event(
+        "conv-sub-1",
+        {
+            "type": "subagent_session_spawned",
+            "data": {
+                "run_id": "run-sub-1",
+                "conversation_id": "conv-sub-1",
+                "subagent_name": "researcher",
+            },
+        },
+    )
+
+    adapter.send_markdown_card.assert_awaited_once()
+    assert adapter.send_markdown_card.await_args.kwargs["reply_to"] == "root-msg-1"
+    assert bridge._subagent_focus["conv-sub-1"]["run_id"] == "run-sub-1"
+    bridge._clear_subagent_focus(conversation_id="conv-sub-1", run_id="run-sub-1")
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_subagent_completion_clears_focus_and_replies_in_thread() -> None:
+    adapter = _make_adapter()
+    binding = _make_binding(thread_id="root-msg-2")
+    bridge = ChannelEventBridge()
+    bridge._lookup_binding = AsyncMock(return_value=binding)
+    bridge._get_adapter = MagicMock(return_value=adapter)
+
+    await bridge.on_agent_event(
+        "conv-sub-2",
+        {
+            "type": "subagent_session_spawned",
+            "data": {
+                "run_id": "run-sub-2",
+                "conversation_id": "conv-sub-2",
+                "subagent_name": "coder",
+            },
+        },
+    )
+    adapter.send_markdown_card.reset_mock()
+
+    await bridge.on_agent_event(
+        "conv-sub-2",
+        {
+            "type": "subagent_run_completed",
+            "data": {
+                "run_id": "run-sub-2",
+                "conversation_id": "conv-sub-2",
+                "subagent_name": "coder",
+                "summary": "done",
+            },
+        },
+    )
+
+    adapter.send_markdown_card.assert_awaited_once()
+    sent_markdown = adapter.send_markdown_card.await_args.args[1]
+    assert "completed" in sent_markdown.lower()
+    assert "done" in sent_markdown
+    assert adapter.send_markdown_card.await_args.kwargs["reply_to"] == "root-msg-2"
+    assert "conv-sub-2" not in bridge._subagent_focus
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_subagent_focus_timeout_auto_unfocuses() -> None:
+    adapter = _make_adapter()
+    binding = _make_binding(thread_id="root-msg-3")
+    bridge = ChannelEventBridge()
+    bridge._subagent_focus_ttl_seconds = 0.01
+    bridge._lookup_binding = AsyncMock(return_value=binding)
+    bridge._get_adapter = MagicMock(return_value=adapter)
+
+    await bridge.on_agent_event(
+        "conv-sub-3",
+        {
+            "type": "subagent_session_spawned",
+            "data": {
+                "run_id": "run-sub-3",
+                "conversation_id": "conv-sub-3",
+                "subagent_name": "planner",
+            },
+        },
+    )
+
+    timeout_task = bridge._subagent_focus_timeout_tasks["conv-sub-3"]
+    await timeout_task
+    await asyncio.sleep(0)
+
+    assert adapter.send_markdown_card.await_count == 2
+    timeout_markdown = adapter.send_markdown_card.await_args_list[-1].args[1]
+    assert "auto-cleared" in timeout_markdown
+    assert "conv-sub-3" not in bridge._subagent_focus
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_subagent_retry_refreshes_focus_timeout() -> None:
+    adapter = _make_adapter()
+    binding = _make_binding(thread_id="root-msg-4")
+    bridge = ChannelEventBridge()
+    bridge._subagent_focus_ttl_seconds = 0.2
+    bridge._lookup_binding = AsyncMock(return_value=binding)
+    bridge._get_adapter = MagicMock(return_value=adapter)
+
+    await bridge.on_agent_event(
+        "conv-sub-4",
+        {
+            "type": "subagent_session_spawned",
+            "data": {
+                "run_id": "run-sub-4",
+                "conversation_id": "conv-sub-4",
+                "subagent_name": "worker",
+            },
+        },
+    )
+    original_task = bridge._subagent_focus_timeout_tasks["conv-sub-4"]
+
+    await bridge.on_agent_event(
+        "conv-sub-4",
+        {
+            "type": "subagent_announce_retry",
+            "data": {
+                "run_id": "run-sub-4",
+                "conversation_id": "conv-sub-4",
+                "subagent_name": "worker",
+            },
+        },
+    )
+
+    refreshed_task = bridge._subagent_focus_timeout_tasks["conv-sub-4"]
+    await asyncio.sleep(0)
+    assert refreshed_task is not original_task
+    assert original_task.cancelled()
+    bridge._clear_subagent_focus(conversation_id="conv-sub-4", run_id="run-sub-4")

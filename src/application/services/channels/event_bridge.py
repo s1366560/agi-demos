@@ -7,10 +7,12 @@ events to the appropriate channel adapter (Feishu, Slack, etc.).
 The agent core remains unchanged; the bridge is purely additive.
 """
 
+import asyncio
 import json
 import logging
 from typing import Any, Callable, Coroutine, Dict, List, Optional
 
+from src.configuration.config import get_settings
 from src.domain.model.channels.message import ChannelAdapter
 
 logger = logging.getLogger(__name__)
@@ -45,10 +47,23 @@ class ChannelEventBridge:
             "task_list_updated",
             "artifact_ready",
             "error",
+            "subagent_session_spawned",
+            "subagent_run_completed",
+            "subagent_run_failed",
+            "subagent_announce_retry",
+            "subagent_announce_giveup",
+            "subagent_killed",
         }
     )
 
-    def __init__(self, channel_manager: Any = None) -> None:
+    _DEFAULT_SUBAGENT_FOCUS_TTL_SECONDS = 300.0
+
+    def __init__(
+        self,
+        channel_manager: Any = None,
+        *,
+        subagent_focus_ttl_seconds: Optional[float] = None,
+    ) -> None:
         self._channel_manager = channel_manager
         self._handlers: Dict[str, EventHandler] = {
             "clarification_asked": self._handle_hitl_event,
@@ -58,9 +73,24 @@ class ChannelEventBridge:
             "task_list_updated": self._handle_task_update,
             "artifact_ready": self._handle_artifact_ready,
             "error": self._handle_error,
+            "subagent_session_spawned": self._handle_subagent_focus_event,
+            "subagent_run_completed": self._handle_subagent_focus_event,
+            "subagent_run_failed": self._handle_subagent_focus_event,
+            "subagent_announce_retry": self._handle_subagent_focus_event,
+            "subagent_announce_giveup": self._handle_subagent_focus_event,
+            "subagent_killed": self._handle_subagent_focus_event,
         }
         # card_id → CardStreamState for unified HITL (set by streaming flow)
         self._card_states: Dict[str, Any] = {}  # conversation_id → CardStreamState
+        # conversation_id -> detached subagent thread focus state
+        self._subagent_focus: Dict[str, Dict[str, Any]] = {}
+        self._subagent_focus_timeout_tasks: Dict[str, asyncio.Task] = {}
+        configured_focus_ttl_seconds = (
+            self._DEFAULT_SUBAGENT_FOCUS_TTL_SECONDS
+            if subagent_focus_ttl_seconds is None
+            else subagent_focus_ttl_seconds
+        )
+        self._subagent_focus_ttl_seconds = max(float(configured_focus_ttl_seconds), 0.0)
 
     async def on_agent_event(
         self,
@@ -117,6 +147,7 @@ class ChannelEventBridge:
                     "_conversation_id": conversation_id,
                     "_tenant_id": tenant_id,
                     "_project_id": project_id,
+                    "_thread_id": getattr(binding, "thread_id", None),
                 }
             await handler(adapter, chat_id, event_data)
         except Exception as e:
@@ -424,6 +455,185 @@ class ChannelEventBridge:
             except Exception as e:
                 logger.debug(f"[EventBridge] Error send failed: {e}")
 
+    async def _handle_subagent_focus_event(
+        self,
+        adapter: ChannelAdapter,
+        chat_id: str,
+        event_data: Dict[str, Any],
+    ) -> None:
+        """Forward detached subagent lifecycle updates with thread focus + TTL unfocus."""
+        event_type_raw = event_data.get("_event_type")
+        event_type = event_type_raw if isinstance(event_type_raw, str) else ""
+        conversation_id_raw = event_data.get("_conversation_id")
+        conversation_id = conversation_id_raw if isinstance(conversation_id_raw, str) else ""
+        run_id_raw = event_data.get("run_id")
+        run_id = run_id_raw if isinstance(run_id_raw, str) else ""
+        subagent_name_raw = event_data.get("subagent_name")
+        subagent_name = (
+            subagent_name_raw.strip()
+            if isinstance(subagent_name_raw, str) and subagent_name_raw.strip()
+            else "subagent"
+        )
+        thread_id = event_data.get("_thread_id")
+        thread_reply_to = thread_id if isinstance(thread_id, str) and thread_id else None
+        summary = event_data.get("summary")
+        error = event_data.get("error")
+
+        if not conversation_id or not run_id:
+            return
+
+        if event_type == "subagent_session_spawned":
+            self._set_subagent_focus(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                subagent_name=subagent_name,
+            )
+            self._arm_subagent_focus_timeout(
+                conversation_id=conversation_id,
+                run_id=run_id,
+                subagent_name=subagent_name,
+                adapter=adapter,
+                chat_id=chat_id,
+                reply_to=thread_reply_to,
+            )
+            await self._send_thread_markdown(
+                adapter=adapter,
+                chat_id=chat_id,
+                text=f"SubAgent `{subagent_name}` started (run `{run_id}`).",
+                reply_to=thread_reply_to,
+            )
+            return
+
+        if event_type == "subagent_announce_retry":
+            focus = self._subagent_focus.get(conversation_id)
+            if focus and focus.get("run_id") == run_id:
+                self._arm_subagent_focus_timeout(
+                    conversation_id=conversation_id,
+                    run_id=run_id,
+                    subagent_name=subagent_name,
+                    adapter=adapter,
+                    chat_id=chat_id,
+                    reply_to=thread_reply_to,
+                )
+            return
+
+        if event_type == "subagent_run_completed":
+            self._clear_subagent_focus(conversation_id=conversation_id, run_id=run_id)
+            completion_text = f"SubAgent `{subagent_name}` completed."
+            if isinstance(summary, str) and summary.strip():
+                completion_text = f"{completion_text}\n\n{summary.strip()}"
+            await self._send_thread_markdown(
+                adapter=adapter,
+                chat_id=chat_id,
+                text=completion_text,
+                reply_to=thread_reply_to,
+            )
+            return
+
+        if event_type in {"subagent_run_failed", "subagent_announce_giveup", "subagent_killed"}:
+            self._clear_subagent_focus(conversation_id=conversation_id, run_id=run_id)
+            failure_reason = (
+                error.strip()
+                if isinstance(error, str) and error.strip()
+                else str(event_data.get("status", "failed"))
+            )
+            await self._send_thread_markdown(
+                adapter=adapter,
+                chat_id=chat_id,
+                text=f"SubAgent `{subagent_name}` failed: {failure_reason}",
+                reply_to=thread_reply_to,
+            )
+
+    async def _send_thread_markdown(
+        self,
+        *,
+        adapter: ChannelAdapter,
+        chat_id: str,
+        text: str,
+        reply_to: Optional[str],
+    ) -> None:
+        """Send markdown card in thread when possible, with text fallback."""
+        if hasattr(adapter, "send_markdown_card"):
+            try:
+                await adapter.send_markdown_card(chat_id, text, reply_to=reply_to)
+                return
+            except Exception:
+                logger.debug("[EventBridge] send_markdown_card failed, fallback to send_text")
+
+        await adapter.send_text(chat_id, text, reply_to=reply_to)
+
+    def _set_subagent_focus(
+        self,
+        *,
+        conversation_id: str,
+        run_id: str,
+        subagent_name: str,
+    ) -> None:
+        """Track active detached subagent focus per conversation."""
+        self._subagent_focus[conversation_id] = {
+            "run_id": run_id,
+            "subagent_name": subagent_name,
+        }
+
+    def _clear_subagent_focus(self, *, conversation_id: str, run_id: str) -> bool:
+        """Clear detached subagent focus and cancel timeout task."""
+        focus = self._subagent_focus.get(conversation_id)
+        if not focus or focus.get("run_id") != run_id:
+            return False
+        self._subagent_focus.pop(conversation_id, None)
+        self._cancel_subagent_focus_timeout(conversation_id)
+        return True
+
+    def _cancel_subagent_focus_timeout(self, conversation_id: str) -> None:
+        """Cancel pending subagent focus timeout task for a conversation."""
+        timeout_task = self._subagent_focus_timeout_tasks.pop(conversation_id, None)
+        if timeout_task and not timeout_task.done():
+            timeout_task.cancel()
+
+    def _arm_subagent_focus_timeout(
+        self,
+        *,
+        conversation_id: str,
+        run_id: str,
+        subagent_name: str,
+        adapter: ChannelAdapter,
+        chat_id: str,
+        reply_to: Optional[str],
+    ) -> None:
+        """Arm (or refresh) auto-unfocus timeout for an active detached subagent."""
+        self._cancel_subagent_focus_timeout(conversation_id)
+        ttl_seconds = max(float(self._subagent_focus_ttl_seconds), 0.0)
+
+        async def _expire_focus() -> None:
+            try:
+                await asyncio.sleep(ttl_seconds)
+                focus = self._subagent_focus.get(conversation_id)
+                if not focus or focus.get("run_id") != run_id:
+                    return
+                self._subagent_focus.pop(conversation_id, None)
+                await self._send_thread_markdown(
+                    adapter=adapter,
+                    chat_id=chat_id,
+                    text=(
+                        f"SubAgent `{subagent_name}` is still running; "
+                        "focus auto-cleared after TTL."
+                    ),
+                    reply_to=reply_to,
+                )
+            except asyncio.CancelledError:
+                return
+            except Exception as e:
+                logger.debug(f"[EventBridge] Subagent focus timeout handling failed: {e}")
+            finally:
+                current = self._subagent_focus_timeout_tasks.get(conversation_id)
+                if current is asyncio.current_task():
+                    self._subagent_focus_timeout_tasks.pop(conversation_id, None)
+
+        self._subagent_focus_timeout_tasks[conversation_id] = asyncio.create_task(
+            _expire_focus(),
+            name=f"subagent-focus-timeout-{conversation_id}",
+        )
+
     # ------------------------------------------------------------------
     # Card builders
     # ------------------------------------------------------------------
@@ -498,5 +708,8 @@ def get_channel_event_bridge() -> ChannelEventBridge:
     """Get or create the singleton ChannelEventBridge."""
     global _bridge
     if _bridge is None:
-        _bridge = ChannelEventBridge()
+        settings = get_settings()
+        _bridge = ChannelEventBridge(
+            subagent_focus_ttl_seconds=settings.agent_subagent_focus_ttl_seconds
+        )
     return _bridge

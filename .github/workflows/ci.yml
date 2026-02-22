@@ -67,6 +67,60 @@ jobs:
       - name: Install dependencies
         run: |
           uv sync --extra dev --extra neo4j
+
+      - name: Validate plugin template packaging
+        run: |
+          uv build examples/plugins/memstack-plugin-template --wheel --out-dir /tmp/plugin-template-wheels
+          ls -1 /tmp/plugin-template-wheels/*.whl
+          python - <<'PY'
+          import glob
+          import os
+          import zipfile
+
+          wheels = glob.glob("/tmp/plugin-template-wheels/*.whl")
+          assert wheels, (
+              "No wheel was generated in /tmp/plugin-template-wheels; "
+              f"contents={os.listdir('/tmp/plugin-template-wheels')}"
+          )
+          with zipfile.ZipFile(wheels[0]) as archive:
+              entry_files = [
+                  name for name in archive.namelist() if name.endswith(".dist-info/entry_points.txt")
+              ]
+              assert entry_files, (
+                  "entry_points.txt missing from wheel; "
+                  f"wheel={wheels[0]}"
+              )
+              content = archive.read(entry_files[0]).decode("utf-8")
+              assert "[memstack.agent_plugins]" in content, (
+                  "memstack.agent_plugins entry point group missing"
+              )
+          print("Plugin template entry point verified")
+          PY
+
+      - name: Validate local Feishu plugin discovery
+        run: |
+          test -f .memstack/plugins/feishu/plugin.py
+          uv run python - <<'PY'
+          from pathlib import Path
+
+          from src.infrastructure.agent.plugins.discovery import discover_plugins
+          from src.infrastructure.agent.plugins.state_store import PluginStateStore
+
+          root = Path.cwd()
+          store = PluginStateStore(base_path=root)
+          discovered, diagnostics = discover_plugins(
+              state_store=store,
+              include_builtins=False,
+              include_entrypoints=False,
+              include_local_paths=True,
+          )
+          names = [item.name for item in discovered]
+          assert "feishu-channel-plugin" in names, (
+              "feishu-channel-plugin was not discovered from .memstack/plugins"
+          )
+          assert all(d.code != "plugin_discovery_failed" for d in diagnostics)
+          print("Local Feishu plugin discovery verified")
+          PY
       
       - name: Run linters
         run: |

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
 import { useParams } from 'react-router-dom';
 
@@ -33,17 +33,28 @@ import { useShallow } from 'zustand/react/shallow';
 
 import { useChannelStore } from '@/stores/channel';
 
-import type { ChannelConfig, CreateChannelConfig, UpdateChannelConfig } from '@/types/channel';
+import { channelService } from '@/services/channelService';
+
+import type {
+  ChannelConfig,
+  CreateChannelConfig,
+  UpdateChannelConfig,
+  ChannelPluginConfigSchema,
+  RuntimePlugin,
+  PluginDiagnostic,
+  ChannelPluginCatalogItem,
+} from '@/types/channel';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
 
-const CHANNEL_TYPES = [
-  { value: 'feishu', label: 'Feishu (Lark)', color: 'blue' },
-  { value: 'dingtalk', label: 'DingTalk', color: 'orange', disabled: true },
-  { value: 'wecom', label: 'WeCom', color: 'green', disabled: true },
-  { value: 'slack', label: 'Slack', color: 'purple', disabled: true },
-];
+const CHANNEL_TYPE_META: Record<string, { label: string; color: string }> = {
+  feishu: { label: 'Feishu (Lark)', color: 'blue' },
+  dingtalk: { label: 'DingTalk', color: 'orange' },
+  wecom: { label: 'WeCom', color: 'green' },
+  slack: { label: 'Slack', color: 'purple' },
+  telegram: { label: 'Telegram', color: 'cyan' },
+};
 
 const CONNECTION_MODES = [
   { value: 'websocket', label: 'WebSocket (Recommended)' },
@@ -57,6 +68,32 @@ const POLICY_OPTIONS = [
 ];
 
 const STATUS_REFRESH_INTERVAL = 10_000;
+const SECRET_UNCHANGED_SENTINEL = '__MEMSTACK_SECRET_UNCHANGED__';
+const CHANNEL_SETTING_FIELDS = new Set([
+  'app_id',
+  'app_secret',
+  'encrypt_key',
+  'verification_token',
+  'connection_mode',
+  'webhook_url',
+  'webhook_port',
+  'webhook_path',
+  'domain',
+]);
+
+const humanizeChannelType = (channelType: string): string =>
+  channelType
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(' ');
+
+const humanizeFieldName = (fieldName: string): string =>
+  fieldName
+    .split(/[-_]/g)
+    .filter(Boolean)
+    .map((part) => part[0]?.toUpperCase() + part.slice(1))
+    .join(' ');
 
 const ChannelConfigPage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -64,6 +101,14 @@ const ChannelConfigPage: React.FC = () => {
   const [editingConfig, setEditingConfig] = useState<ChannelConfig | null>(null);
   const [form] = Form.useForm();
   const [testingConfig, setTestingConfig] = useState<string | null>(null);
+  const [plugins, setPlugins] = useState<RuntimePlugin[]>([]);
+  const [pluginDiagnostics, setPluginDiagnostics] = useState<PluginDiagnostic[]>([]);
+  const [channelPluginCatalog, setChannelPluginCatalog] = useState<ChannelPluginCatalogItem[]>([]);
+  const [channelSchemas, setChannelSchemas] = useState<Record<string, ChannelPluginConfigSchema>>({});
+  const [pluginsLoading, setPluginsLoading] = useState(false);
+  const [schemaLoading, setSchemaLoading] = useState(false);
+  const [pluginActionKey, setPluginActionKey] = useState<string | null>(null);
+  const [installRequirement, setInstallRequirement] = useState('');
 
   const {
     configs,
@@ -84,12 +129,100 @@ const ChannelConfigPage: React.FC = () => {
       testConfig: state.testConfig,
     }))
   );
+  const selectedChannelType = Form.useWatch('channel_type', form);
+  const activeChannelSchema = selectedChannelType ? channelSchemas[selectedChannelType] : undefined;
+
+  const loadPluginRuntime = useCallback(async () => {
+    if (!projectId) return;
+    setPluginsLoading(true);
+    try {
+      const [pluginRes, catalogRes] = await Promise.all([
+        channelService.listPlugins(projectId),
+        channelService.listChannelPluginCatalog(projectId),
+      ]);
+      setPlugins(pluginRes.items);
+      setPluginDiagnostics(pluginRes.diagnostics);
+      setChannelPluginCatalog(catalogRes.items);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to load plugin runtime');
+    } finally {
+      setPluginsLoading(false);
+    }
+  }, [projectId]);
+
+  const loadChannelSchema = useCallback(async (channelType: string) => {
+    if (!projectId || !channelType) return;
+    if (channelSchemas[channelType]) return;
+
+    const catalogEntry = channelPluginCatalog.find((item) => item.channel_type === channelType);
+    if (!catalogEntry?.schema_supported) return;
+
+    setSchemaLoading(true);
+    try {
+      const schema = await channelService.getChannelPluginSchema(projectId, channelType);
+      setChannelSchemas((prev) => ({ ...prev, [channelType]: schema }));
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Failed to load channel schema');
+    } finally {
+      setSchemaLoading(false);
+    }
+  }, [channelPluginCatalog, channelSchemas, projectId]);
+
+  const channelTypeOptions = useMemo(() => {
+    if (channelPluginCatalog.length === 0) {
+      return Object.entries(CHANNEL_TYPE_META).map(([value, meta]) => ({
+        value,
+        label: meta.label,
+        color: meta.color,
+      }));
+    }
+    return channelPluginCatalog.map((entry) => {
+      const known = CHANNEL_TYPE_META[entry.channel_type];
+      return {
+        value: entry.channel_type,
+        label: known?.label || humanizeChannelType(entry.channel_type),
+        color: known?.color || 'geekblue',
+      };
+    });
+  }, [channelPluginCatalog]);
 
   useEffect(() => {
     if (projectId) {
       fetchConfigs(projectId);
     }
   }, [projectId, fetchConfigs]);
+
+  useEffect(() => {
+    loadPluginRuntime();
+  }, [loadPluginRuntime]);
+
+  useEffect(() => {
+    if (!selectedChannelType || !isModalVisible) return;
+    void loadChannelSchema(selectedChannelType);
+  }, [isModalVisible, loadChannelSchema, selectedChannelType]);
+
+  useEffect(() => {
+    if (!isModalVisible || editingConfig || !activeChannelSchema?.defaults) return;
+    const defaults = activeChannelSchema.defaults;
+    if (!defaults || typeof defaults !== 'object') return;
+
+    const initialValues: Record<string, unknown> = {};
+    const initialExtraSettings: Record<string, unknown> = {};
+    Object.entries(defaults).forEach(([key, value]) => {
+      if (CHANNEL_SETTING_FIELDS.has(key)) {
+        initialValues[key] = value;
+      } else {
+        initialExtraSettings[key] = value;
+      }
+    });
+    if (Object.keys(initialExtraSettings).length > 0) {
+      initialValues.extra_settings = {
+        ...(form.getFieldValue('extra_settings') || {}),
+        ...initialExtraSettings,
+      };
+    }
+    form.setFieldsValue(initialValues);
+  }, [activeChannelSchema, editingConfig, form, isModalVisible]);
 
   // Auto-refresh status every 10s
   const intervalRef = useRef<ReturnType<typeof setInterval>>();
@@ -112,19 +245,20 @@ const ChannelConfigPage: React.FC = () => {
 
   const handleEdit = useCallback((config: ChannelConfig) => {
     setEditingConfig(config);
+    void loadChannelSchema(config.channel_type);
     form.setFieldsValue({
       ...config,
       // Don't populate app_secret for security
       app_secret: undefined,
     });
     setIsModalVisible(true);
-  }, [form]);
+  }, [form, loadChannelSchema]);
 
   const handleDelete = useCallback(async (id: string) => {
     try {
       await deleteConfig(id);
       message.success('Configuration deleted');
-    } catch (error) {
+    } catch (_error) {
       message.error('Failed to delete configuration');
     }
   }, [deleteConfig]);
@@ -138,12 +272,63 @@ const ChannelConfigPage: React.FC = () => {
       } else {
         message.error(result.message);
       }
-    } catch (error) {
+    } catch (_error) {
       message.error('Test failed');
     } finally {
       setTestingConfig(null);
     }
   }, [testConfig]);
+
+  const handleInstallPlugin = useCallback(async () => {
+    if (!projectId) return;
+    if (!installRequirement.trim()) {
+      message.warning('Please enter a plugin requirement');
+      return;
+    }
+    setPluginActionKey('install');
+    try {
+      const response = await channelService.installPlugin(projectId, installRequirement.trim());
+      message.success(response.message);
+      setInstallRequirement('');
+      await loadPluginRuntime();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Plugin install failed');
+    } finally {
+      setPluginActionKey(null);
+    }
+  }, [installRequirement, loadPluginRuntime, projectId]);
+
+  const handleTogglePlugin = useCallback(async (plugin: RuntimePlugin, enabled: boolean) => {
+    if (!projectId) return;
+    setPluginActionKey(`${plugin.name}:${enabled ? 'enable' : 'disable'}`);
+    try {
+      if (enabled) {
+        await channelService.enablePlugin(projectId, plugin.name);
+      } else {
+        await channelService.disablePlugin(projectId, plugin.name);
+      }
+      message.success(`Plugin ${enabled ? 'enabled' : 'disabled'}: ${plugin.name}`);
+      await loadPluginRuntime();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Plugin action failed');
+    } finally {
+      setPluginActionKey(null);
+    }
+  }, [loadPluginRuntime, projectId]);
+
+  const handleReloadPlugins = useCallback(async () => {
+    if (!projectId) return;
+    setPluginActionKey('reload');
+    try {
+      const response = await channelService.reloadPlugins(projectId);
+      message.success(response.message);
+      await loadPluginRuntime();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : 'Plugin reload failed');
+    } finally {
+      setPluginActionKey(null);
+    }
+  }, [loadPluginRuntime, projectId]);
 
   const handleSubmit = useCallback(async (values: CreateChannelConfig | UpdateChannelConfig) => {
     try {
@@ -165,7 +350,7 @@ const ChannelConfigPage: React.FC = () => {
       }
       setIsModalVisible(false);
       form.resetFields();
-    } catch (error) {
+    } catch (_error) {
       message.error('Failed to save configuration');
     }
   }, [editingConfig, projectId, createConfig, updateConfig, form]);
@@ -204,10 +389,10 @@ const ChannelConfigPage: React.FC = () => {
       dataIndex: 'channel_type',
       key: 'channel_type',
       render: (type: string) => {
-        const channelType = CHANNEL_TYPES.find((t) => t.value === type);
+        const channelType = channelTypeOptions.find((option) => option.value === type);
         return (
           <Tag color={channelType?.color || 'default'}>
-            {channelType?.label || type}
+            {channelType?.label || humanizeChannelType(type)}
           </Tag>
         );
       },
@@ -279,14 +464,228 @@ const ChannelConfigPage: React.FC = () => {
     },
   ];
 
+  const pluginColumns = [
+    {
+      title: 'Plugin',
+      dataIndex: 'name',
+      key: 'name',
+      render: (name: string, record: RuntimePlugin) => (
+        <Space direction="vertical" size={0}>
+          <Text strong>{name}</Text>
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {record.package || 'local'}
+            {record.version ? `@${record.version}` : ''}
+          </Text>
+        </Space>
+      ),
+    },
+    {
+      title: 'Source',
+      dataIndex: 'source',
+      key: 'source',
+      render: (source: string) => <Tag>{source}</Tag>,
+    },
+    {
+      title: 'Channels',
+      dataIndex: 'channel_types',
+      key: 'channel_types',
+      render: (channelTypes: string[]) =>
+        channelTypes.length > 0 ? (
+          <Space wrap>
+            {channelTypes.map((channelType) => (
+              <Tag key={channelType} color="blue">
+                {humanizeChannelType(channelType)}
+              </Tag>
+            ))}
+          </Space>
+        ) : (
+          <Text type="secondary">Tool-only plugin</Text>
+        ),
+    },
+    {
+      title: 'Status',
+      key: 'status',
+      render: (_: unknown, record: RuntimePlugin) =>
+        record.enabled ? <Badge status="success" text="Enabled" /> : <Badge status="default" text="Disabled" />,
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      render: (_: unknown, record: RuntimePlugin) => (
+        <Space>
+          {record.enabled ? (
+            <Button
+              size="small"
+              loading={pluginActionKey === `${record.name}:disable`}
+              onClick={() => handleTogglePlugin(record, false)}
+            >
+              Disable
+            </Button>
+          ) : (
+            <Button
+              size="small"
+              type="primary"
+              ghost
+              loading={pluginActionKey === `${record.name}:enable`}
+              onClick={() => handleTogglePlugin(record, true)}
+            >
+              Enable
+            </Button>
+          )}
+        </Space>
+      ),
+    },
+  ];
+
+  const dynamicSchemaFields = useMemo(() => {
+    if (!activeChannelSchema?.schema_supported) return [];
+    const properties = activeChannelSchema.config_schema?.properties || {};
+    const requiredFields = new Set(activeChannelSchema.config_schema?.required || []);
+    const uiHints = activeChannelSchema.config_ui_hints || {};
+    const secretPaths = new Set(activeChannelSchema.secret_paths || []);
+
+    return Object.entries(properties).map(([fieldName, fieldSchema]) => {
+      if (['channel_type', 'name', 'enabled'].includes(fieldName)) {
+        return null;
+      }
+
+      const hint = uiHints[fieldName] || {};
+      const isSensitive = Boolean(hint.sensitive) || secretPaths.has(fieldName);
+      const isRequired = requiredFields.has(fieldName) && !(editingConfig && isSensitive);
+      const formFieldName = CHANNEL_SETTING_FIELDS.has(fieldName)
+        ? fieldName
+        : ['extra_settings', fieldName];
+      const label = hint.label || fieldSchema?.title || humanizeFieldName(fieldName);
+      const placeholder = hint.placeholder || fieldSchema?.description;
+      const rules = isRequired
+        ? [{ required: true, message: `Please enter ${label}` }]
+        : [];
+
+      if (fieldSchema?.type === 'boolean') {
+        return (
+          <Form.Item key={fieldName} name={formFieldName} label={label} valuePropName="checked">
+            <Switch />
+          </Form.Item>
+        );
+      }
+
+      if (fieldSchema?.enum && fieldSchema.enum.length > 0) {
+        return (
+          <Form.Item key={fieldName} name={formFieldName} label={label} rules={rules}>
+            <Select
+              options={fieldSchema.enum.map((value) => ({
+                label: String(value),
+                value,
+              }))}
+            />
+          </Form.Item>
+        );
+      }
+
+      if (fieldSchema?.type === 'integer' || fieldSchema?.type === 'number') {
+        return (
+          <Form.Item key={fieldName} name={formFieldName} label={label} rules={rules}>
+            <InputNumber
+              style={{ width: '100%' }}
+              min={fieldSchema.minimum}
+              max={fieldSchema.maximum}
+              placeholder={placeholder}
+            />
+          </Form.Item>
+        );
+      }
+
+      return (
+        <Form.Item key={fieldName} name={formFieldName} label={label} rules={rules}>
+          {isSensitive ? (
+            <Input.Password
+              placeholder={
+                editingConfig
+                  ? `Leave unchanged to keep existing secret (${SECRET_UNCHANGED_SENTINEL})`
+                  : placeholder
+              }
+            />
+          ) : (
+            <Input placeholder={placeholder} />
+          )}
+        </Form.Item>
+      );
+    });
+  }, [activeChannelSchema, editingConfig]);
+
   return (
     <div style={{ padding: 24 }}>
+      <Card
+        style={{ marginBottom: 16 }}
+        title={
+          <Space>
+            <MessageOutlined />
+            <Title level={4} style={{ margin: 0 }}>
+              Plugin Hub
+            </Title>
+          </Space>
+        }
+        extra={
+          <Space>
+            <Input
+              placeholder="my-plugin-package==0.1.0"
+              value={installRequirement}
+              onChange={(event) => setInstallRequirement(event.target.value)}
+              style={{ width: 280 }}
+            />
+            <Button
+              type="primary"
+              loading={pluginActionKey === 'install'}
+              onClick={handleInstallPlugin}
+            >
+              Install
+            </Button>
+            <Button
+              icon={<ReloadOutlined />}
+              loading={pluginActionKey === 'reload'}
+              onClick={handleReloadPlugins}
+            >
+              Reload
+            </Button>
+          </Space>
+        }
+      >
+        <Text type="secondary" style={{ marginBottom: 16, display: 'block' }}>
+          Discover, install, enable/disable, and manage channel plugins before creating channel
+          configurations.
+        </Text>
+
+        {channelPluginCatalog.length > 0 && (
+          <Space wrap style={{ marginBottom: 12 }}>
+            {channelPluginCatalog.map((entry) => (
+              <Tag key={`${entry.plugin_name}:${entry.channel_type}`} color="processing">
+                {humanizeChannelType(entry.channel_type)} · {entry.plugin_name}
+              </Tag>
+            ))}
+          </Space>
+        )}
+
+        {pluginDiagnostics.length > 0 && (
+          <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+            Diagnostics: {pluginDiagnostics.map((item) => item.code).join(', ')}
+          </Text>
+        )}
+
+        <Table
+          dataSource={plugins}
+          columns={pluginColumns}
+          rowKey="name"
+          loading={pluginsLoading}
+          pagination={{ pageSize: 8 }}
+        />
+      </Card>
+
       <Card
         title={
           <Space>
             <MessageOutlined />
             <Title level={4} style={{ margin: 0 }}>
-              Channel Integrations
+              Channel Configurations
             </Title>
           </Space>
         }
@@ -337,10 +736,9 @@ const ChannelConfigPage: React.FC = () => {
             rules={[{ required: true }]}
           >
             <Select placeholder="Select channel type">
-              {CHANNEL_TYPES.map((type) => (
-                <Option key={type.value} value={type.value} disabled={type.disabled}>
+              {channelTypeOptions.map((type) => (
+                <Option key={type.value} value={type.value}>
                   <Tag color={type.color}>{type.label}</Tag>
-                  {type.disabled && <Text type="secondary"> (Coming soon)</Text>}
                 </Option>
               ))}
             </Select>
@@ -358,54 +756,67 @@ const ChannelConfigPage: React.FC = () => {
             <Switch />
           </Form.Item>
 
-          <Form.Item
-            name="connection_mode"
-            label="Connection Mode"
-            rules={[{ required: true }]}
-          >
-            <Select>
-              {CONNECTION_MODES.map((mode) => (
-                <Option key={mode.value} value={mode.value}>
-                  {mode.label}
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
+          {activeChannelSchema?.schema_supported ? (
+            <>
+              {schemaLoading && (
+                <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                  Loading plugin schema...
+                </Text>
+              )}
+              {dynamicSchemaFields}
+            </>
+          ) : (
+            <>
+              <Form.Item
+                name="connection_mode"
+                label="Connection Mode"
+                rules={[{ required: true }]}
+              >
+                <Select>
+                  {CONNECTION_MODES.map((mode) => (
+                    <Option key={mode.value} value={mode.value}>
+                      {mode.label}
+                    </Option>
+                  ))}
+                </Select>
+              </Form.Item>
 
-          <Form.Item
-            name="app_id"
-            label="App ID"
-            rules={[{ required: true, message: 'Please enter App ID' }]}
-          >
-            <Input placeholder="cli_xxx" />
-          </Form.Item>
+              <Form.Item
+                name="app_id"
+                label="App ID"
+                rules={[{ required: true, message: 'Please enter App ID' }]}
+              >
+                <Input placeholder="cli_xxx" />
+              </Form.Item>
 
-          <Form.Item
-            name="app_secret"
-            label={`App Secret ${editingConfig ? '(leave blank to keep unchanged)' : ''}`}
-            rules={editingConfig ? [] : [{ required: true, message: 'Please enter App Secret' }]}
-          >
-            <Input.Password placeholder="Enter app secret" />
-          </Form.Item>
+              <Form.Item
+                name="app_secret"
+                label={`App Secret ${editingConfig ? '(leave blank to keep unchanged)' : ''}`}
+                rules={editingConfig ? [] : [{ required: true, message: 'Please enter App Secret' }]}
+              >
+                <Input.Password placeholder="Enter app secret" />
+              </Form.Item>
 
-          <Form.Item name="encrypt_key" label="Encrypt Key (Optional)">
-            <Input.Password placeholder="For webhook verification" />
-          </Form.Item>
+              <Form.Item name="encrypt_key" label="Encrypt Key (Optional)">
+                <Input.Password placeholder="For webhook verification" />
+              </Form.Item>
 
-          <Form.Item name="verification_token" label="Verification Token (Optional)">
-            <Input.Password placeholder="For webhook verification" />
-          </Form.Item>
+              <Form.Item name="verification_token" label="Verification Token (Optional)">
+                <Input.Password placeholder="For webhook verification" />
+              </Form.Item>
 
-          <Form.Item name="webhook_url" label="Webhook URL (Optional)">
-            <Input placeholder="https://your-domain.com/webhook" />
-          </Form.Item>
+              <Form.Item name="webhook_url" label="Webhook URL (Optional)">
+                <Input placeholder="https://your-domain.com/webhook" />
+              </Form.Item>
 
-          <Form.Item name="domain" label="Domain" initialValue="feishu">
-            <Select>
-              <Option value="feishu">Feishu (China)</Option>
-              <Option value="lark">Lark (International)</Option>
-            </Select>
-          </Form.Item>
+              <Form.Item name="domain" label="Domain" initialValue="feishu">
+                <Select>
+                  <Option value="feishu">Feishu (China)</Option>
+                  <Option value="lark">Lark (International)</Option>
+                </Select>
+              </Form.Item>
+            </>
+          )}
 
           <Form.Item name="description" label="Description (Optional)">
             <Input.TextArea rows={2} placeholder="Optional description" />

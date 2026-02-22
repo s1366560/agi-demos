@@ -1,0 +1,18 @@
+{
+  "plugins": {
+    "feishu-channel-plugin": {
+      "enabled": true,
+      "updated_at": "2026-02-22T14:29:02.291721+00:00"
+    }
+  },
+  "tenants": {
+    "d76c3bdb-d8a6-407b-8c70-dd455e5df3a4": {
+      "plugins": {
+        "feishu-channel-plugin": {
+          "enabled": true,
+          "updated_at": "2026-02-22T15:39:45.809203+00:00"
+        }
+      }
+    }
+  }
+}

@@ -22,6 +22,7 @@ import {
   Folder,
   Brain,
   Bot,
+  Cpu,
   Cable,
   ToyBrick,
   MoreHorizontal,
@@ -69,12 +70,13 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
       { id: 'skills', label: t('nav.skills', 'Skills'), path: `${basePath}/skills`, icon: <Brain size={16} /> },
       { id: 'subagents', label: t('nav.subagents', 'Agents'), path: `${basePath}/subagents`, icon: <Bot size={16} /> },
       { id: 'mcp-servers', label: t('nav.mcpServers', 'MCP'), path: `${basePath}/mcp-servers`, icon: <Cable size={16} /> },
-      { id: 'providers', label: t('nav.providers', 'Model Services'), path: `${basePath}/providers`, icon: <ToyBrick size={16} /> },
+      { id: 'plugins', label: t('nav.plugins', 'Plugins'), path: `${basePath}/plugins`, icon: <ToyBrick size={16} /> },
+      { id: 'providers', label: t('nav.providers', 'Model Services'), path: `${basePath}/providers`, icon: <Cpu size={16} /> },
     ],
     [basePath, t],
   );
 
-  // With 5 items, all fit on md+ screens; overflow only if needed
+  // With 6 items, all fit on md+ screens; overflow only if needed
   const visibleNav = allNav;
   const overflowNav: NavItem[] = [];
 

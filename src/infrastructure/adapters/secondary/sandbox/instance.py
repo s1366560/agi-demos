@@ -68,12 +68,12 @@ class MCPSandboxInstance(SandboxInstance):
     @property
     def project_id(self) -> Optional[str]:
         """Get project ID from labels."""
-        return self.labels.get("memstack.project.id")
+        return self.labels.get("memstack.project_id") or self.labels.get("memstack.project.id")
 
     @property
     def tenant_id(self) -> Optional[str]:
         """Get tenant ID from labels."""
-        return self.labels.get("memstack.tenant.id")
+        return self.labels.get("memstack.tenant_id") or self.labels.get("memstack.tenant.id")
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert instance to dictionary for API responses."""
@@ -83,7 +83,9 @@ class MCPSandboxInstance(SandboxInstance):
             "tenant_id": self.tenant_id,
             "status": self.status.value if isinstance(self.status, SandboxStatus) else self.status,
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "last_activity_at": self.last_activity_at.isoformat() if self.last_activity_at else None,
+            "last_activity_at": self.last_activity_at.isoformat()
+            if self.last_activity_at
+            else None,
             "websocket_url": self.websocket_url,
             "mcp_port": self.mcp_port,
             "desktop_port": self.desktop_port,

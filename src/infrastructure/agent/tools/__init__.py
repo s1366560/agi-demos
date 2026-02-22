@@ -13,6 +13,7 @@ from src.infrastructure.agent.tools.env_var_tools import (
     GetEnvVarTool,
     RequestEnvVarTool,
 )
+from src.infrastructure.agent.tools.plugin_manager import PluginManagerTool
 from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
 from src.infrastructure.agent.tools.skill_installer import SkillInstallerTool
 from src.infrastructure.agent.tools.skill_loader import SkillLoaderTool
@@ -42,6 +43,7 @@ __all__ = [
     # Environment Variable Tools
     "CheckEnvVarsTool",
     "GetEnvVarTool",
+    "PluginManagerTool",
     "RequestEnvVarTool",
     "SandboxMCPToolWrapper",
     "SkillInstallerTool",

@@ -8,7 +8,7 @@ export type GroupPolicy = 'open' | 'allowlist' | 'disabled';
 export interface ChannelConfig {
   id: string;
   project_id: string;
-  channel_type: 'feishu' | 'dingtalk' | 'wecom' | 'slack';
+  channel_type: string;
   name: string;
   enabled: boolean;
   connection_mode: 'websocket' | 'webhook';
@@ -31,7 +31,7 @@ export interface ChannelConfig {
 }
 
 export interface CreateChannelConfig {
-  channel_type: 'feishu' | 'dingtalk' | 'wecom' | 'slack';
+  channel_type: string;
   name: string;
   enabled?: boolean;
   connection_mode?: 'websocket' | 'webhook';
@@ -71,6 +71,84 @@ export interface UpdateChannelConfig {
   allow_from?: string[];
   group_allow_from?: string[];
   rate_limit_per_minute?: number;
+}
+
+export interface PluginDiagnostic {
+  plugin_name: string;
+  code: string;
+  message: string;
+  level: string;
+}
+
+export interface RuntimePlugin {
+  name: string;
+  source: string;
+  package?: string;
+  version?: string;
+  enabled: boolean;
+  discovered: boolean;
+  channel_types: string[];
+}
+
+export interface RuntimePluginList {
+  items: RuntimePlugin[];
+  diagnostics: PluginDiagnostic[];
+}
+
+export interface PluginActionResponse {
+  success: boolean;
+  message: string;
+  details?: Record<string, unknown>;
+}
+
+export interface ChannelPluginCatalogItem {
+  channel_type: string;
+  plugin_name: string;
+  source: string;
+  package?: string;
+  version?: string;
+  enabled: boolean;
+  discovered: boolean;
+  schema_supported: boolean;
+}
+
+export interface ChannelPluginCatalog {
+  items: ChannelPluginCatalogItem[];
+}
+
+export interface ChannelPluginSchemaProperty {
+  type?: string;
+  title?: string;
+  description?: string;
+  enum?: Array<string | number | boolean>;
+  minimum?: number;
+  maximum?: number;
+}
+
+export interface ChannelPluginConfigSchema {
+  channel_type: string;
+  plugin_name: string;
+  source: string;
+  package?: string;
+  version?: string;
+  schema_supported: boolean;
+  config_schema?: {
+    type?: string;
+    properties?: Record<string, ChannelPluginSchemaProperty>;
+    required?: string[];
+  };
+  config_ui_hints?: Record<
+    string,
+    {
+      label?: string;
+      help?: string;
+      placeholder?: string;
+      sensitive?: boolean;
+      advanced?: boolean;
+    }
+  >;
+  defaults?: Record<string, unknown>;
+  secret_paths: string[];
 }
 
 export interface ChannelConfigList {

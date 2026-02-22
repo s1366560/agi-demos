@@ -112,7 +112,7 @@ async def test_route_message_broadcasts_inbound_user_message_to_workspace() -> N
     broadcast_call = message_calls[0]
     assert broadcast_call["event_data"]["metadata"]["source"] == "channel_inbound"
     assert broadcast_call["event_data"]["content"] == "hello from feishu"
-    router._invoke_agent.assert_awaited_once_with(message, "conv-1")
+    router._invoke_agent.assert_awaited_once_with(message, "conv-1", None)
 
 
 @pytest.mark.unit
@@ -270,7 +270,10 @@ async def test_invoke_agent_streams_via_card_when_adapter_supports_it() -> None:
     )
 
     conversation = SimpleNamespace(
-        id="conv-1", project_id="project-1", user_id="user-1", tenant_id="tenant-1",
+        id="conv-1",
+        project_id="project-1",
+        user_id="user-1",
+        tenant_id="tenant-1",
     )
 
     session = MagicMock()
@@ -341,7 +344,10 @@ async def test_invoke_agent_falls_back_when_initial_card_fails() -> None:
     )
 
     conversation = SimpleNamespace(
-        id="conv-1", project_id="project-1", user_id="user-1", tenant_id="tenant-1",
+        id="conv-1",
+        project_id="project-1",
+        user_id="user-1",
+        tenant_id="tenant-1",
     )
 
     session = MagicMock()
@@ -395,10 +401,14 @@ async def test_invoke_agent_uses_cardkit_streaming_when_available() -> None:
     router._record_streaming_outbox = AsyncMock()
 
     # Adapter that supports CardKit
-    fake_adapter = MagicMock(spec=[
-        "create_card_entity", "update_card_settings",
-        "stream_text_content", "send_card_entity_message",
-    ])
+    fake_adapter = MagicMock(
+        spec=[
+            "create_card_entity",
+            "update_card_settings",
+            "stream_text_content",
+            "send_card_entity_message",
+        ]
+    )
     fake_adapter.create_card_entity = AsyncMock(return_value="card_999")
     fake_adapter.update_card_settings = AsyncMock(return_value=True)
     fake_adapter.send_card_entity_message = AsyncMock(return_value="msg_999")
@@ -413,7 +423,10 @@ async def test_invoke_agent_uses_cardkit_streaming_when_available() -> None:
     )
 
     conversation = SimpleNamespace(
-        id="conv-1", project_id="project-1", user_id="user-1", tenant_id="tenant-1",
+        id="conv-1",
+        project_id="project-1",
+        user_id="user-1",
+        tenant_id="tenant-1",
     )
 
     session = MagicMock()
@@ -625,17 +638,18 @@ async def test_send_to_channel_text_success():
     mock_adapter = AsyncMock()
     mock_adapter.send_text = AsyncMock(return_value="msg-1")
 
-    mock_binding = SimpleNamespace(
-        channel_config_id="cfg-1", chat_id="chat-42"
-    )
+    mock_binding = SimpleNamespace(channel_config_id="cfg-1", chat_id="chat-42")
     mock_bridge = MagicMock()
     mock_bridge._lookup_binding = AsyncMock(return_value=mock_binding)
     mock_bridge._get_adapter = MagicMock(return_value=mock_adapter)
 
-    with patch(
-        "src.application.services.channels.event_bridge.get_channel_event_bridge",
-        return_value=mock_bridge,
-    ), patch.object(router, "_track_push_outbox", new_callable=AsyncMock):
+    with (
+        patch(
+            "src.application.services.channels.event_bridge.get_channel_event_bridge",
+            return_value=mock_bridge,
+        ),
+        patch.object(router, "_track_push_outbox", new_callable=AsyncMock),
+    ):
         result = await router.send_to_channel("conv-1", "Hello from agent")
 
     assert result is True
@@ -650,20 +664,19 @@ async def test_send_to_channel_markdown():
     mock_adapter = AsyncMock()
     mock_adapter.send_markdown_card = AsyncMock(return_value="msg-2")
 
-    mock_binding = SimpleNamespace(
-        channel_config_id="cfg-1", chat_id="chat-42"
-    )
+    mock_binding = SimpleNamespace(channel_config_id="cfg-1", chat_id="chat-42")
     mock_bridge = MagicMock()
     mock_bridge._lookup_binding = AsyncMock(return_value=mock_binding)
     mock_bridge._get_adapter = MagicMock(return_value=mock_adapter)
 
-    with patch(
-        "src.application.services.channels.event_bridge.get_channel_event_bridge",
-        return_value=mock_bridge,
-    ), patch.object(router, "_track_push_outbox", new_callable=AsyncMock):
-        result = await router.send_to_channel(
-            "conv-1", "# Title\nBody", content_type="markdown"
-        )
+    with (
+        patch(
+            "src.application.services.channels.event_bridge.get_channel_event_bridge",
+            return_value=mock_bridge,
+        ),
+        patch.object(router, "_track_push_outbox", new_callable=AsyncMock),
+    ):
+        result = await router.send_to_channel("conv-1", "# Title\nBody", content_type="markdown")
 
     assert result is True
     mock_adapter.send_markdown_card.assert_awaited_once_with("chat-42", "# Title\nBody")
@@ -678,20 +691,19 @@ async def test_send_to_channel_card():
     mock_adapter.send_card = AsyncMock(return_value="msg-3")
 
     card_data = {"header": {"title": {"content": "Test"}}, "elements": []}
-    mock_binding = SimpleNamespace(
-        channel_config_id="cfg-1", chat_id="chat-42"
-    )
+    mock_binding = SimpleNamespace(channel_config_id="cfg-1", chat_id="chat-42")
     mock_bridge = MagicMock()
     mock_bridge._lookup_binding = AsyncMock(return_value=mock_binding)
     mock_bridge._get_adapter = MagicMock(return_value=mock_adapter)
 
-    with patch(
-        "src.application.services.channels.event_bridge.get_channel_event_bridge",
-        return_value=mock_bridge,
-    ), patch.object(router, "_track_push_outbox", new_callable=AsyncMock):
-        result = await router.send_to_channel(
-            "conv-1", "", content_type="card", card=card_data
-        )
+    with (
+        patch(
+            "src.application.services.channels.event_bridge.get_channel_event_bridge",
+            return_value=mock_bridge,
+        ),
+        patch.object(router, "_track_push_outbox", new_callable=AsyncMock),
+    ):
+        result = await router.send_to_channel("conv-1", "", content_type="card", card=card_data)
 
     assert result is True
     mock_adapter.send_card.assert_awaited_once_with("chat-42", card_data)
@@ -719,9 +731,7 @@ async def test_send_to_channel_no_binding():
 async def test_send_to_channel_no_adapter():
     """send_to_channel returns False when adapter not found."""
     router = ChannelMessageRouter()
-    mock_binding = SimpleNamespace(
-        channel_config_id="cfg-dead", chat_id="chat-42"
-    )
+    mock_binding = SimpleNamespace(channel_config_id="cfg-dead", chat_id="chat-42")
     mock_bridge = MagicMock()
     mock_bridge._lookup_binding = AsyncMock(return_value=mock_binding)
     mock_bridge._get_adapter = MagicMock(return_value=None)

@@ -9,6 +9,9 @@ from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
+SelectionContextProvider = Callable[[], Dict[str, Any]]
+SelectionPipeline = Callable[[Dict[str, Any], Optional[Dict[str, Any]]], Dict[str, Any]]
+
 
 def create_cached_tool_provider(
     project_id: str,
@@ -70,6 +73,35 @@ def create_composite_tool_provider(
             except Exception as e:
                 logger.warning(f"Tool provider failed: {e}")
         return tools
+
+    return provider
+
+
+def create_pipeline_tool_provider(
+    base_provider: Callable[[], Dict[str, Any]],
+    selection_pipeline: SelectionPipeline,
+    context_provider: Optional[SelectionContextProvider] = None,
+) -> Callable[[], Dict[str, Any]]:
+    """Wrap a provider with a selection pipeline.
+
+    Args:
+        base_provider: Upstream provider returning a full tool set.
+        selection_pipeline: Pipeline that filters/reorders tools.
+        context_provider: Optional callback to provide pipeline context.
+
+    Returns:
+        Provider callable that applies selection pipeline.
+    """
+
+    def provider() -> Dict[str, Any]:
+        tools = base_provider()
+        context = context_provider() if context_provider else None
+        selected = selection_pipeline(tools, context)
+
+        if isinstance(selected, dict):
+            return selected
+
+        raise TypeError("Tool selection pipeline must return Dict[str, Any]")
 
     return provider
 

@@ -18,6 +18,7 @@ Reference: OpenCode SessionProcessor architecture
 """
 
 import asyncio
+import inspect
 import logging
 import os
 import re
@@ -34,12 +35,24 @@ from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
 from src.domain.ports.agent.context_manager_port import ContextBuildRequest
 
+from ..config import ExecutionConfig
 from ..context import ContextFacade, ContextWindowConfig, ContextWindowManager
 from ..events import EventConverter
 from ..permission import PermissionManager
 from ..planning.plan_detector import PlanDetector
+from ..plugins.selection_pipeline import (
+    ToolSelectionContext,
+    ToolSelectionTraceStep,
+    build_default_tool_selection_pipeline,
+)
 from ..prompts import PromptContext, PromptMode, SystemPromptManager
-from ..routing import SubAgentOrchestrator, SubAgentOrchestratorConfig
+from ..routing import (
+    ExecutionPath,
+    ExecutionRouter,
+    RoutingDecision,
+    SubAgentOrchestrator,
+    SubAgentOrchestratorConfig,
+)
 from ..routing.hybrid_router import HybridRouter
 from ..skill import SkillExecutionConfig, SkillExecutionContext, SkillOrchestrator
 from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
@@ -87,6 +100,10 @@ class ReActAgent:
             yield event
     """
 
+    _SUBAGENT_ANNOUNCE_MAX_EVENTS = 20
+    _SUBAGENT_ANNOUNCE_MAX_RETRIES = 2
+    _SUBAGENT_ANNOUNCE_RETRY_DELAY_MS = 200
+
     def __init__(
         self,
         model: str,
@@ -112,8 +129,17 @@ class ReActAgent:
         max_subagent_delegation_depth: int = 2,
         max_subagent_active_runs: int = 16,
         max_subagent_children_per_requester: int = 8,
+        max_subagent_lane_concurrency: int = 8,
         subagent_run_registry_path: Optional[str] = None,
+        subagent_run_postgres_dsn: Optional[str] = None,
+        subagent_run_sqlite_path: Optional[str] = None,
+        subagent_run_redis_cache_url: Optional[str] = None,
+        subagent_run_redis_cache_ttl_seconds: int = 60,
         subagent_terminal_retention_seconds: int = 86400,
+        subagent_announce_max_events: int = 20,
+        subagent_announce_max_retries: int = 2,
+        subagent_announce_retry_delay_ms: int = 200,
+        subagent_lifecycle_hook: Optional[Callable[[Dict[str, Any]], Any]] = None,
         # Context window management
         context_window_config: Optional[ContextWindowConfig] = None,
         max_context_tokens: int = 128000,
@@ -149,6 +175,8 @@ class ReActAgent:
         memory_recall: Optional[Any] = None,
         memory_capture: Optional[Any] = None,
         memory_flush: Optional[Any] = None,
+        tool_selection_pipeline: Optional[Any] = None,
+        tool_selection_max_tools: int = 40,
     ):
         """
         Initialize ReAct Agent.
@@ -178,8 +206,17 @@ class ReActAgent:
             max_subagent_delegation_depth: Maximum nested delegation depth.
             max_subagent_active_runs: Maximum active subagent runs per conversation.
             max_subagent_children_per_requester: Maximum active child runs per requester key.
+            max_subagent_lane_concurrency: Maximum concurrent detached SubAgent sessions.
             subagent_run_registry_path: Optional persistence path for SubAgent run registry.
+            subagent_run_postgres_dsn: Optional PostgreSQL DSN for DB-backed run repository.
+            subagent_run_sqlite_path: Optional SQLite path for DB-backed run repository.
+            subagent_run_redis_cache_url: Optional Redis URL for run snapshot cache.
+            subagent_run_redis_cache_ttl_seconds: TTL for run snapshot cache.
             subagent_terminal_retention_seconds: Terminal run retention TTL in seconds.
+            subagent_announce_max_events: Max retained announce events in run metadata.
+            subagent_announce_max_retries: Max retries for completion announce metadata updates.
+            subagent_announce_retry_delay_ms: Base retry delay in milliseconds.
+            subagent_lifecycle_hook: Optional callback for detached subagent lifecycle events.
             context_window_config: Optional context window configuration
             max_context_tokens: Maximum context tokens (default: 128000)
             agent_mode: Agent mode for skill filtering (default: "default")
@@ -219,6 +256,11 @@ class ReActAgent:
         self._resource_sync_service = resource_sync_service  # Skill resource sync
         self._graph_service = graph_service  # Graph service for SubAgent memory sharing
         self._plan_detector = plan_detector or PlanDetector()
+        self._tool_selection_pipeline = (
+            tool_selection_pipeline or build_default_tool_selection_pipeline()
+        )
+        self._tool_selection_max_tools = max(8, int(tool_selection_max_tools))
+        self._last_tool_selection_trace: tuple[ToolSelectionTraceStep, ...] = ()
 
         # Memory auto-recall / auto-capture (optional, injected from DI)
         self._memory_recall = memory_recall
@@ -262,6 +304,13 @@ class ReActAgent:
         self._max_subagent_delegation_depth = max(1, max_subagent_delegation_depth)
         self._max_subagent_active_runs = max(1, max_subagent_active_runs)
         self._max_subagent_children_per_requester = max(1, max_subagent_children_per_requester)
+        self._max_subagent_lane_concurrency = max(1, max_subagent_lane_concurrency)
+        self._subagent_announce_max_events = max(1, int(subagent_announce_max_events))
+        self._subagent_announce_max_retries = max(0, int(subagent_announce_max_retries))
+        self._subagent_announce_retry_delay_ms = max(0, int(subagent_announce_retry_delay_ms))
+        self._subagent_lane_semaphore = asyncio.Semaphore(self._max_subagent_lane_concurrency)
+        self._subagent_lifecycle_hook = subagent_lifecycle_hook
+        self._subagent_lifecycle_hook_failures = 0
         if _cached_subagent_router is not None:
             self.subagent_router = _cached_subagent_router
             logger.debug("ReActAgent: Using cached SubAgentRouter")
@@ -285,8 +334,25 @@ class ReActAgent:
         resolved_registry_path = subagent_run_registry_path or os.getenv(
             "AGENT_SUBAGENT_RUN_REGISTRY_PATH"
         )
+        resolved_postgres_registry_dsn = subagent_run_postgres_dsn or os.getenv(
+            "AGENT_SUBAGENT_RUN_POSTGRES_DSN"
+        )
+        resolved_sqlite_registry_path = subagent_run_sqlite_path or os.getenv(
+            "AGENT_SUBAGENT_RUN_SQLITE_PATH"
+        )
+        resolved_run_cache_url = subagent_run_redis_cache_url or os.getenv(
+            "AGENT_SUBAGENT_RUN_REDIS_CACHE_URL"
+        )
         self._subagent_run_registry = SubAgentRunRegistry(
-            persistence_path=resolved_registry_path,
+            persistence_path=(
+                resolved_registry_path
+                if not resolved_postgres_registry_dsn and not resolved_sqlite_registry_path
+                else None
+            ),
+            postgres_persistence_dsn=resolved_postgres_registry_dsn,
+            sqlite_persistence_path=resolved_sqlite_registry_path,
+            redis_cache_url=resolved_run_cache_url,
+            redis_cache_ttl_seconds=subagent_run_redis_cache_ttl_seconds,
             terminal_retention_seconds=subagent_terminal_retention_seconds,
         )
         self._subagent_session_tasks: Dict[str, asyncio.Task] = {}
@@ -324,6 +390,19 @@ class ReActAgent:
             base_api_key=api_key,
             base_url=base_url,
             debug_logging=False,
+        )
+
+        self._execution_router = ExecutionRouter(
+            config=ExecutionConfig(
+                skill_match_threshold=skill_direct_execute_threshold,
+                subagent_match_threshold=subagent_match_threshold,
+                allow_direct_execution=True,
+                enable_plan_mode=True,
+                enable_subagent_routing=not enable_subagent_as_tool,
+            ),
+            skill_matcher=self._ExecutionRouterSkillMatcher(self),
+            subagent_matcher=self._ExecutionRouterSubAgentMatcher(self),
+            plan_evaluator=self._ExecutionRouterPlanEvaluator(self._plan_detector),
         )
 
         # Background SubAgent executor for non-blocking execution
@@ -382,7 +461,123 @@ class ReActAgent:
             llm_client=self._llm_client,
         )
 
-    def _get_current_tools(self) -> tuple[Dict[str, Any], List[ToolDefinition]]:
+    class _ExecutionRouterSkillMatcher:
+        """Skill matcher adapter for ExecutionRouter."""
+
+        def __init__(self, agent: "ReActAgent") -> None:
+            self._agent = agent
+
+        def match(self, query: str, context: Dict[str, Any]) -> Optional[str]:
+            matched_skill, _ = self._agent._match_skill(query)
+            return matched_skill.name if matched_skill else None
+
+        def can_execute_directly(self, skill_name: str) -> bool:
+            result = self._agent._skill_orchestrator.find_by_name(skill_name)
+            return result.matched
+
+    class _ExecutionRouterSubAgentMatcher:
+        """SubAgent matcher adapter for ExecutionRouter."""
+
+        def __init__(self, agent: "ReActAgent") -> None:
+            self._agent = agent
+
+        def match(self, query: str, context: Dict[str, Any]) -> Optional[str]:
+            match = self._agent._match_subagent(query)
+            return match.subagent.name if match.subagent else None
+
+        def get_subagent(self, name: str) -> Any:
+            for subagent in self._agent.subagents:
+                if subagent.name == name:
+                    return subagent
+            return None
+
+    class _ExecutionRouterPlanEvaluator:
+        """Plan evaluator adapter for ExecutionRouter."""
+
+        def __init__(self, detector: PlanDetector) -> None:
+            self._detector = detector
+
+        def should_use_plan_mode(self, query: str, context: Dict[str, Any]) -> bool:
+            return self._detector.detect(query).should_suggest
+
+        def estimate_plan_complexity(self, query: str) -> float:
+            return self._detector.detect(query).confidence
+
+    def _build_tool_selection_context(
+        self,
+        *,
+        tenant_id: str,
+        project_id: str,
+        user_message: str,
+        conversation_context: List[Dict[str, str]],
+        effective_mode: str,
+    ) -> ToolSelectionContext:
+        """Build selection context for context/intent/semantic/policy pipeline."""
+        deny_tools: List[str] = []
+        if effective_mode == "plan":
+            deny_tools = ["plugin_manager", "register_mcp_server", "skill_installer", "skill_sync"]
+        return ToolSelectionContext(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            metadata={
+                "user_message": user_message,
+                "conversation_history": conversation_context,
+                "effective_mode": effective_mode,
+                "agent_mode": self.agent_mode,
+                "max_tools": self._tool_selection_max_tools,
+                "deny_tools": deny_tools,
+            },
+        )
+
+    def _decide_execution_path(
+        self,
+        *,
+        message: str,
+        conversation_context: List[Dict[str, str]],
+        forced_subagent_name: Optional[str] = None,
+        forced_skill_name: Optional[str] = None,
+        plan_mode_requested: bool = False,
+    ) -> RoutingDecision:
+        """Decide execution path via centralized ExecutionRouter."""
+        if forced_subagent_name:
+            return RoutingDecision(
+                path=ExecutionPath.SUBAGENT,
+                confidence=1.0,
+                reason="Forced delegation via system instruction",
+                target=forced_subagent_name,
+            )
+        if forced_skill_name:
+            return RoutingDecision(
+                path=ExecutionPath.DIRECT_SKILL,
+                confidence=1.0,
+                reason="Forced skill execution requested",
+                target=forced_skill_name,
+            )
+        if plan_mode_requested:
+            return RoutingDecision(
+                path=ExecutionPath.PLAN_MODE,
+                confidence=1.0,
+                reason="Plan mode explicitly requested",
+            )
+        if self.subagents and not self._enable_subagent_as_tool:
+            # Preserve legacy pre-routing behavior: when subagent-as-tool is disabled,
+            # stream() should attempt subagent matching before the ReAct loop.
+            return RoutingDecision(
+                path=ExecutionPath.SUBAGENT,
+                confidence=0.6,
+                reason="Legacy subagent pre-routing enabled",
+                metadata={"legacy_preroute": True},
+            )
+
+        routing_context = {
+            "recent_messages": [m.get("content", "") for m in conversation_context[-3:]],
+        }
+        return self._execution_router.decide(message, routing_context)
+
+    def _get_current_tools(
+        self,
+        selection_context: Optional[ToolSelectionContext] = None,
+    ) -> tuple[Dict[str, Any], List[ToolDefinition]]:
         """
         Get current tools - either from static tools or dynamic tool_provider.
 
@@ -390,14 +585,34 @@ class ReActAgent:
             Tuple of (raw_tools dict, tool_definitions list)
         """
         if self._use_dynamic_tools and self._tool_provider is not None:
-            # Hot-plug mode: fetch tools dynamically
             raw_tools = self._tool_provider()
-            tool_definitions = convert_tools(raw_tools)
-            logger.debug(f"ReActAgent: Dynamically loaded {len(tool_definitions)} tools")
-            return raw_tools, tool_definitions
         else:
-            # Static mode: use pre-converted tools
-            return self.raw_tools, self.tool_definitions
+            raw_tools = self.raw_tools
+
+        # Apply tool selection pipeline when context is provided.
+        # Context-free calls (e.g. cache maintenance) keep full toolset.
+        if selection_context and self._tool_selection_pipeline is not None:
+            selection_result = self._tool_selection_pipeline.select_with_trace(
+                raw_tools,
+                selection_context,
+            )
+            selected_raw_tools = selection_result.tools
+            self._last_tool_selection_trace = selection_result.trace
+            tool_definitions = convert_tools(selected_raw_tools)
+            logger.debug(
+                "ReActAgent: Selected %d/%d tools via pipeline",
+                len(selected_raw_tools),
+                len(raw_tools),
+            )
+            return selected_raw_tools, tool_definitions
+
+        self._last_tool_selection_trace = ()
+        if self._use_dynamic_tools and self._tool_provider is not None:
+            tool_definitions = convert_tools(raw_tools)
+            logger.debug("ReActAgent: Dynamically loaded %d tools", len(tool_definitions))
+            return raw_tools, tool_definitions
+
+        return self.raw_tools, self.tool_definitions
 
     def _match_skill(self, query: str) -> tuple[Optional[Skill], float]:
         """
@@ -547,6 +762,7 @@ class ReActAgent:
         tenant_id: str = "",
         force_execution: bool = False,
         memory_context: Optional[str] = None,
+        selection_context: Optional[ToolSelectionContext] = None,
     ) -> str:
         """
         Build system prompt for the agent using SystemPromptManager.
@@ -594,7 +810,7 @@ class ReActAgent:
             }
 
         # Convert tool definitions to dict format - use current tools (hot-plug support)
-        _, current_tool_definitions = self._get_current_tools()
+        _, current_tool_definitions = self._get_current_tools(selection_context=selection_context)
         # When a forced skill is active, exclude skill_loader from tool list
         # to prevent the LLM from calling it and loading a different skill.
         if force_execution and matched_skill:
@@ -738,12 +954,41 @@ class ReActAgent:
             except Exception as e:
                 logger.warning(f"[ReActAgent] Failed to parse forced subagent instruction: {e}")
 
+        routing_decision = self._decide_execution_path(
+            message=processed_user_message,
+            conversation_context=conversation_context,
+            forced_subagent_name=forced_subagent_name,
+            forced_skill_name=forced_skill_name,
+            plan_mode_requested=plan_mode,
+        )
+        yield {
+            "type": "execution_path_decided",
+            "data": {
+                "path": routing_decision.path.value,
+                "confidence": routing_decision.confidence,
+                "reason": routing_decision.reason,
+                "target": routing_decision.target,
+                "metadata": routing_decision.metadata,
+            },
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        if (
+            not forced_skill_name
+            and routing_decision.path == ExecutionPath.DIRECT_SKILL
+            and routing_decision.target
+        ):
+            forced_skill_name = routing_decision.target
+
         # Check for SubAgent routing (L3)
         # When enable_subagent_as_tool is True, skip pre-routing and let the LLM
         # decide via the delegate_to_subagent tool in the ReAct loop.
         # When False, use legacy pre-routing with keyword/LLM hybrid matching.
         # BUT if forced_subagent_name is present, we override everything.
-        if forced_subagent_name or not self._enable_subagent_as_tool:
+        should_preroute_subagent = (
+            routing_decision.path == ExecutionPath.SUBAGENT
+            and (forced_subagent_name is not None or not self._enable_subagent_as_tool)
+        )
+        if should_preroute_subagent:
             active_subagent = None
             subagent_match = None
 
@@ -940,10 +1185,18 @@ class ReActAgent:
                     )
 
         # Determine agent mode: plan mode overrides default
+        plan_mode = plan_mode or routing_decision.path == ExecutionPath.PLAN_MODE
         effective_mode = (
             "plan"
             if plan_mode
             else (self.agent_mode if self.agent_mode in ["build", "plan"] else "build")
+        )
+        selection_context = self._build_tool_selection_context(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            user_message=processed_user_message,
+            conversation_context=conversation_context,
+            effective_mode=effective_mode,
         )
 
         # Set permission manager mode to enforce tool restrictions
@@ -985,6 +1238,7 @@ class ReActAgent:
             tenant_id=tenant_id,
             force_execution=is_forced,
             memory_context=memory_context,
+            selection_context=selection_context,
         )
 
         # Build context using ContextFacade - replaces inline message building
@@ -1086,7 +1340,39 @@ class ReActAgent:
         }
 
         # Determine tools to use - hot-plug support: fetch current tools
-        current_raw_tools, current_tool_definitions = self._get_current_tools()
+        current_raw_tools, current_tool_definitions = self._get_current_tools(
+            selection_context=selection_context
+        )
+        if self._last_tool_selection_trace:
+            removed_total = sum(len(step.removed_tools) for step in self._last_tool_selection_trace)
+            trace_data = [
+                {
+                    "stage": step.stage,
+                    "before_count": step.before_count,
+                    "after_count": step.after_count,
+                    "removed_count": len(step.removed_tools),
+                }
+                for step in self._last_tool_selection_trace
+            ]
+            yield {
+                "type": "selection_trace",
+                "data": {
+                    "initial_count": trace_data[0]["before_count"],
+                    "final_count": trace_data[-1]["after_count"],
+                    "removed_total": removed_total,
+                    "stages": trace_data,
+                },
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            if removed_total > 0:
+                yield {
+                    "type": "policy_filtered",
+                    "data": {
+                        "removed_total": removed_total,
+                        "stage_count": len(trace_data),
+                    },
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
         tools_to_use = list(current_tool_definitions)
 
         # When a forced skill is active, remove skill_loader from the tool list
@@ -1102,10 +1388,14 @@ class ReActAgent:
                 ParallelDelegateSubAgentTool,
             )
             from ..tools.subagent_sessions import (
+                SessionsAckTool,
                 SessionsHistoryTool,
                 SessionsListTool,
+                SessionsOverviewTool,
                 SessionsSendTool,
                 SessionsSpawnTool,
+                SessionsTimelineTool,
+                SessionsWaitTool,
                 SubAgentsControlTool,
             )
 
@@ -1164,7 +1454,12 @@ class ReActAgent:
 
                     return "SubAgent execution completed but no result returned"
 
-                async def _spawn_callback(subagent_name: str, task: str, run_id: str) -> str:
+                async def _spawn_callback(
+                    subagent_name: str,
+                    task: str,
+                    run_id: str,
+                    **spawn_options: Any,
+                ) -> str:
                     target = subagent_map.get(subagent_name)
                     if not target:
                         raise ValueError(f"SubAgent '{subagent_name}' not found")
@@ -1177,6 +1472,13 @@ class ReActAgent:
                         project_id=project_id,
                         tenant_id=tenant_id,
                         abort_signal=abort_signal,
+                        model_override=(str(spawn_options.get("model") or "").strip() or None),
+                        thinking_override=(
+                            str(spawn_options.get("thinking") or "").strip() or None
+                        ),
+                        spawn_mode=str(spawn_options.get("spawn_mode") or "run"),
+                        thread_requested=bool(spawn_options.get("thread_requested")),
+                        cleanup=str(spawn_options.get("cleanup") or "keep"),
                     )
                     return run_id
 
@@ -1247,6 +1549,8 @@ class ReActAgent:
                 sessions_list_tool = SessionsListTool(
                     run_registry=self._subagent_run_registry,
                     conversation_id=conversation_id,
+                    requester_session_key=conversation_id,
+                    visibility_default="tree",
                 )
                 tools_to_use.append(
                     ToolDefinition(
@@ -1261,6 +1565,8 @@ class ReActAgent:
                 sessions_history_tool = SessionsHistoryTool(
                     run_registry=self._subagent_run_registry,
                     conversation_id=conversation_id,
+                    requester_session_key=conversation_id,
+                    visibility_default="tree",
                 )
                 tools_to_use.append(
                     ToolDefinition(
@@ -1272,6 +1578,66 @@ class ReActAgent:
                     )
                 )
 
+                sessions_wait_tool = SessionsWaitTool(
+                    run_registry=self._subagent_run_registry,
+                    conversation_id=conversation_id,
+                )
+                tools_to_use.append(
+                    ToolDefinition(
+                        name=sessions_wait_tool.name,
+                        description=sessions_wait_tool.description,
+                        parameters=sessions_wait_tool.get_parameters_schema(),
+                        execute=sessions_wait_tool.execute,
+                        _tool_instance=sessions_wait_tool,
+                    )
+                )
+
+                sessions_ack_tool = SessionsAckTool(
+                    run_registry=self._subagent_run_registry,
+                    conversation_id=conversation_id,
+                    requester_session_key=conversation_id,
+                )
+                tools_to_use.append(
+                    ToolDefinition(
+                        name=sessions_ack_tool.name,
+                        description=sessions_ack_tool.description,
+                        parameters=sessions_ack_tool.get_parameters_schema(),
+                        execute=sessions_ack_tool.execute,
+                        _tool_instance=sessions_ack_tool,
+                    )
+                )
+
+                sessions_timeline_tool = SessionsTimelineTool(
+                    run_registry=self._subagent_run_registry,
+                    conversation_id=conversation_id,
+                )
+                tools_to_use.append(
+                    ToolDefinition(
+                        name=sessions_timeline_tool.name,
+                        description=sessions_timeline_tool.description,
+                        parameters=sessions_timeline_tool.get_parameters_schema(),
+                        execute=sessions_timeline_tool.execute,
+                        _tool_instance=sessions_timeline_tool,
+                    )
+                )
+
+                sessions_overview_tool = SessionsOverviewTool(
+                    run_registry=self._subagent_run_registry,
+                    conversation_id=conversation_id,
+                    requester_session_key=conversation_id,
+                    visibility_default="tree",
+                    observability_stats_provider=self._get_subagent_observability_stats,
+                )
+                tools_to_use.append(
+                    ToolDefinition(
+                        name=sessions_overview_tool.name,
+                        description=sessions_overview_tool.description,
+                        parameters=sessions_overview_tool.get_parameters_schema(),
+                        execute=sessions_overview_tool.execute,
+                        _tool_instance=sessions_overview_tool,
+                    )
+                )
+
                 subagents_control_tool = SubAgentsControlTool(
                     run_registry=self._subagent_run_registry,
                     conversation_id=conversation_id,
@@ -1279,6 +1645,11 @@ class ReActAgent:
                     subagent_descriptions=subagent_descriptions,
                     cancel_callback=_cancel_spawn_callback,
                     restart_callback=_spawn_callback,
+                    max_active_runs=self._max_subagent_active_runs,
+                    max_children_per_requester=self._max_subagent_children_per_requester,
+                    requester_session_key=conversation_id,
+                    delegation_depth=0,
+                    max_delegation_depth=self._max_subagent_delegation_depth,
                 )
                 tools_to_use.append(
                     ToolDefinition(
@@ -1325,7 +1696,7 @@ class ReActAgent:
         if self._use_dynamic_tools and self._tool_provider is not None:
             # Create a wrapper that converts raw tools to ToolDefinitions
             def _tool_provider_wrapper() -> List[ToolDefinition]:
-                _, tool_defs = self._get_current_tools()
+                _, tool_defs = self._get_current_tools(selection_context=selection_context)
                 return list(tool_defs)
 
             # Create config copy with tool_provider
@@ -1471,6 +1842,8 @@ class ReActAgent:
         conversation_id: str = "",
         abort_signal: Optional[asyncio.Event] = None,
         delegation_depth: int = 0,
+        model_override: Optional[str] = None,
+        thinking_override: Optional[str] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """Execute a SubAgent in an independent ReAct loop.
 
@@ -1534,6 +1907,21 @@ class ReActAgent:
             filtered_tools = list(convert_tools(filtered_raw))
         else:
             filtered_tools = list(current_tool_definitions)
+        existing_tool_names = {tool.name for tool in filtered_tools}
+
+        def _append_nested_tool(tool_instance: Any) -> None:
+            if tool_instance.name in existing_tool_names:
+                return
+            filtered_tools.append(
+                ToolDefinition(
+                    name=tool_instance.name,
+                    description=tool_instance.description,
+                    parameters=tool_instance.get_parameters_schema(),
+                    execute=tool_instance.execute,
+                    _tool_instance=tool_instance,
+                )
+            )
+            existing_tool_names.add(tool_instance.name)
 
         # Inject SubAgent delegation tools for nested orchestration (bounded depth).
         max_delegation_depth = self._max_subagent_delegation_depth
@@ -1546,6 +1934,14 @@ class ReActAgent:
                 DelegateSubAgentTool,
                 ParallelDelegateSubAgentTool,
             )
+            from ..tools.subagent_sessions import (
+                SessionsHistoryTool,
+                SessionsListTool,
+                SessionsOverviewTool,
+                SessionsTimelineTool,
+                SessionsWaitTool,
+                SubAgentsControlTool,
+            )
 
             nested_candidates = [sa for sa in self.subagents if sa.enabled and sa.id != subagent.id]
             if nested_candidates:
@@ -1554,6 +1950,7 @@ class ReActAgent:
                     sa.name: (sa.trigger.description if sa.trigger else sa.display_name)
                     for sa in nested_candidates
                 }
+                nested_depth = delegation_depth + 1
 
                 async def _nested_delegate_callback(
                     subagent_name: str,
@@ -1602,24 +1999,99 @@ class ReActAgent:
 
                     return content or "SubAgent completed with no output"
 
+                async def _nested_spawn_callback(
+                    subagent_name: str,
+                    task: str,
+                    run_id: str,
+                    **spawn_options: Any,
+                ) -> str:
+                    target = nested_map.get(subagent_name)
+                    if not target:
+                        raise ValueError(f"SubAgent '{subagent_name}' not found")
+                    await self._launch_subagent_session(
+                        run_id=run_id,
+                        subagent=target,
+                        user_message=task,
+                        conversation_id=conversation_id,
+                        conversation_context=conversation_context,
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        abort_signal=abort_signal,
+                        model_override=(str(spawn_options.get("model") or "").strip() or None),
+                        thinking_override=(str(spawn_options.get("thinking") or "").strip() or None),
+                        spawn_mode=str(spawn_options.get("spawn_mode") or "run"),
+                        thread_requested=bool(spawn_options.get("thread_requested")),
+                        cleanup=str(spawn_options.get("cleanup") or "keep"),
+                    )
+                    return run_id
+
+                async def _nested_cancel_callback(run_id: str) -> bool:
+                    return await self._cancel_subagent_session(run_id)
+
+                nested_visibility = "tree" if nested_depth < max_delegation_depth else "self"
+                _append_nested_tool(
+                    SessionsListTool(
+                        run_registry=self._subagent_run_registry,
+                        conversation_id=conversation_id,
+                        requester_session_key=conversation_id,
+                        visibility_default=nested_visibility,
+                    )
+                )
+                _append_nested_tool(
+                    SessionsHistoryTool(
+                        run_registry=self._subagent_run_registry,
+                        conversation_id=conversation_id,
+                        requester_session_key=conversation_id,
+                        visibility_default=nested_visibility,
+                    )
+                )
+                _append_nested_tool(
+                    SessionsWaitTool(
+                        run_registry=self._subagent_run_registry,
+                        conversation_id=conversation_id,
+                    )
+                )
+                _append_nested_tool(
+                    SessionsTimelineTool(
+                        run_registry=self._subagent_run_registry,
+                        conversation_id=conversation_id,
+                    )
+                )
+                _append_nested_tool(
+                    SessionsOverviewTool(
+                        run_registry=self._subagent_run_registry,
+                        conversation_id=conversation_id,
+                        requester_session_key=conversation_id,
+                        visibility_default=nested_visibility,
+                        observability_stats_provider=self._get_subagent_observability_stats,
+                    )
+                )
+                _append_nested_tool(
+                    SubAgentsControlTool(
+                        run_registry=self._subagent_run_registry,
+                        conversation_id=conversation_id,
+                        subagent_names=list(nested_map.keys()),
+                        subagent_descriptions=nested_descriptions,
+                        cancel_callback=_nested_cancel_callback,
+                        restart_callback=_nested_spawn_callback,
+                        max_active_runs=self._max_subagent_active_runs,
+                        max_children_per_requester=self._max_subagent_children_per_requester,
+                        requester_session_key=conversation_id,
+                        delegation_depth=nested_depth,
+                        max_delegation_depth=max_delegation_depth,
+                    )
+                )
+
                 nested_delegate_tool = DelegateSubAgentTool(
                     subagent_names=list(nested_map.keys()),
                     subagent_descriptions=nested_descriptions,
                     execute_callback=_nested_delegate_callback,
                     run_registry=self._subagent_run_registry,
                     conversation_id=conversation_id,
-                    delegation_depth=delegation_depth + 1,
+                    delegation_depth=nested_depth,
                     max_active_runs=self._max_subagent_active_runs,
                 )
-                filtered_tools.append(
-                    ToolDefinition(
-                        name=nested_delegate_tool.name,
-                        description=nested_delegate_tool.description,
-                        parameters=nested_delegate_tool.get_parameters_schema(),
-                        execute=nested_delegate_tool.execute,
-                        _tool_instance=nested_delegate_tool,
-                    )
-                )
+                _append_nested_tool(nested_delegate_tool)
 
                 if len(nested_candidates) >= 2:
                     nested_parallel_tool = ParallelDelegateSubAgentTool(
@@ -1628,25 +2100,17 @@ class ReActAgent:
                         execute_callback=_nested_delegate_callback,
                         run_registry=self._subagent_run_registry,
                         conversation_id=conversation_id,
-                        delegation_depth=delegation_depth + 1,
+                        delegation_depth=nested_depth,
                         max_active_runs=self._max_subagent_active_runs,
                     )
-                    filtered_tools.append(
-                        ToolDefinition(
-                            name=nested_parallel_tool.name,
-                            description=nested_parallel_tool.description,
-                            parameters=nested_parallel_tool.get_parameters_schema(),
-                            execute=nested_parallel_tool.execute,
-                            _tool_instance=nested_parallel_tool,
-                        )
-                    )
+                    _append_nested_tool(nested_parallel_tool)
 
         # Create independent SubAgent process
         process = SubAgentProcess(
             subagent=subagent,
             context=subagent_context,
             tools=filtered_tools,
-            base_model=self.model,
+            base_model=(model_override or self.model),
             base_api_key=self.api_key,
             base_url=self.base_url,
             llm_client=self._llm_client,
@@ -1911,6 +2375,26 @@ class ReActAgent:
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
+    async def _emit_subagent_lifecycle_hook(self, event: Dict[str, Any]) -> None:
+        """Emit detached SubAgent lifecycle hook event if callback is configured."""
+        if not self._subagent_lifecycle_hook:
+            return
+        try:
+            result = self._subagent_lifecycle_hook(event)
+            if inspect.isawaitable(result):
+                await result
+        except Exception:
+            self._subagent_lifecycle_hook_failures += 1
+            logger.warning(
+                "SubAgent lifecycle hook failed",
+                extra={"event_type": event.get("type"), "run_id": event.get("run_id")},
+                exc_info=True,
+            )
+
+    def _get_subagent_observability_stats(self) -> Dict[str, int]:
+        """Return subagent lifecycle observability counters for overview tools."""
+        return {"hook_failures": int(self._subagent_lifecycle_hook_failures)}
+
     async def _launch_subagent_session(
         self,
         run_id: str,
@@ -1921,14 +2405,26 @@ class ReActAgent:
         project_id: str,
         tenant_id: str,
         abort_signal: Optional[asyncio.Event] = None,
+        model_override: Optional[str] = None,
+        thinking_override: Optional[str] = None,
+        spawn_mode: str = "run",
+        thread_requested: bool = False,
+        cleanup: str = "keep",
     ) -> None:
         """Launch a detached SubAgent session tied to a run_id."""
         if run_id in self._subagent_session_tasks:
             raise ValueError(f"Run {run_id} is already running")
 
+        normalized_spawn_mode = (spawn_mode or "run").strip().lower() or "run"
+        normalized_cleanup = (cleanup or "keep").strip().lower() or "keep"
+        requested_model_override = (model_override or "").strip() or None
+        requested_thinking_override = (thinking_override or "").strip() or None
+        start_gate = asyncio.Event()
+
         async def _runner() -> None:
             from src.domain.model.agent.subagent_run import SubAgentRunStatus
 
+            await start_gate.wait()
             started_at = time.time()
             summary = ""
             tokens_used: Optional[int] = None
@@ -1936,12 +2432,44 @@ class ReActAgent:
             result_success = True
             result_error: Optional[str] = None
             configured_timeout = 0.0
+            cancelled_by_control = False
+            resolved_model_override = requested_model_override
+            resolved_thinking_override = requested_thinking_override
             run_state = self._subagent_run_registry.get_run(conversation_id, run_id)
             if run_state:
                 try:
                     configured_timeout = float(run_state.metadata.get("run_timeout_seconds") or 0)
                 except (TypeError, ValueError):
                     configured_timeout = 0.0
+                if not resolved_model_override:
+                    resolved_model_override = (
+                        str(
+                            run_state.metadata.get("model")
+                            or run_state.metadata.get("model_override")
+                            or ""
+                        ).strip()
+                        or None
+                    )
+                if not resolved_thinking_override:
+                    resolved_thinking_override = (
+                        str(
+                            run_state.metadata.get("thinking")
+                            or run_state.metadata.get("thinking_override")
+                            or ""
+                        ).strip()
+                        or None
+                    )
+                self._subagent_run_registry.attach_metadata(
+                    conversation_id=conversation_id,
+                    run_id=run_id,
+                    metadata={
+                        "spawn_mode": normalized_spawn_mode,
+                        "thread_requested": bool(thread_requested),
+                        "cleanup": normalized_cleanup,
+                        "model_override": resolved_model_override,
+                        "thinking_override": resolved_thinking_override,
+                    },
+                )
 
             async def _consume_subagent_events() -> None:
                 nonlocal summary, tokens_used, execution_time_ms, result_success, result_error
@@ -1953,6 +2481,8 @@ class ReActAgent:
                     tenant_id=tenant_id,
                     conversation_id=conversation_id,
                     abort_signal=abort_signal,
+                    model_override=resolved_model_override,
+                    thinking_override=resolved_thinking_override,
                 ):
                     if evt.get("type") != "complete":
                         continue
@@ -1966,10 +2496,21 @@ class ReActAgent:
                         result_error = subagent_result.get("error")
 
             try:
-                if configured_timeout > 0:
-                    await asyncio.wait_for(_consume_subagent_events(), timeout=configured_timeout)
-                else:
-                    await _consume_subagent_events()
+                lane_wait_start = time.time()
+                async with self._subagent_lane_semaphore:
+                    lane_wait_ms = int((time.time() - lane_wait_start) * 1000)
+                    if lane_wait_ms > 0:
+                        self._subagent_run_registry.attach_metadata(
+                            conversation_id=conversation_id,
+                            run_id=run_id,
+                            metadata={"lane_wait_ms": lane_wait_ms},
+                        )
+                    if configured_timeout > 0:
+                        await asyncio.wait_for(
+                            _consume_subagent_events(), timeout=configured_timeout
+                        )
+                    else:
+                        await _consume_subagent_events()
 
                 current = self._subagent_run_registry.get_run(conversation_id, run_id)
                 if current and current.status in {
@@ -2009,14 +2550,12 @@ class ReActAgent:
                     self._subagent_run_registry.mark_timed_out(
                         conversation_id=conversation_id,
                         run_id=run_id,
-                        reason=(
-                            f"SubAgent session exceeded timeout "
-                            f"({configured_timeout}s)"
-                        ),
+                        reason=(f"SubAgent session exceeded timeout ({configured_timeout}s)"),
                         metadata={"timeout_seconds": configured_timeout},
                         expected_statuses=[SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING],
                     )
             except asyncio.CancelledError:
+                cancelled_by_control = True
                 current = self._subagent_run_registry.get_run(conversation_id, run_id)
                 if current and current.status in {
                     SubAgentRunStatus.PENDING,
@@ -2043,10 +2582,282 @@ class ReActAgent:
                         expected_statuses=[SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING],
                     )
             finally:
+                if not cancelled_by_control:
+                    try:
+                        await self._persist_subagent_completion_announce(
+                            conversation_id=conversation_id,
+                            run_id=run_id,
+                            fallback_summary=summary,
+                            fallback_tokens_used=tokens_used,
+                            fallback_execution_time_ms=execution_time_ms,
+                            spawn_mode=normalized_spawn_mode,
+                            thread_requested=bool(thread_requested),
+                            cleanup=normalized_cleanup,
+                            model_override=resolved_model_override,
+                            thinking_override=resolved_thinking_override,
+                            max_retries=self._subagent_announce_max_retries,
+                        )
+                    except Exception:
+                        logger.warning(
+                            "Failed to persist completion announce metadata",
+                            extra={"conversation_id": conversation_id, "run_id": run_id},
+                            exc_info=True,
+                        )
+                final_run = self._subagent_run_registry.get_run(conversation_id, run_id)
+                await self._emit_subagent_lifecycle_hook(
+                    {
+                        "type": "subagent_ended",
+                        "conversation_id": conversation_id,
+                        "run_id": run_id,
+                        "subagent_name": subagent.name,
+                        "status": final_run.status.value if final_run else "unknown",
+                        "summary": (final_run.summary if final_run else summary) or "",
+                        "error": (final_run.error if final_run else result_error) or "",
+                        "spawn_mode": normalized_spawn_mode,
+                        "thread_requested": bool(thread_requested),
+                        "cleanup": normalized_cleanup,
+                    }
+                )
                 self._subagent_session_tasks.pop(run_id, None)
 
         task = asyncio.create_task(_runner(), name=f"subagent-session-{run_id}")
         self._subagent_session_tasks[run_id] = task
+        await self._emit_subagent_lifecycle_hook(
+            {
+                "type": "subagent_spawning",
+                "conversation_id": conversation_id,
+                "run_id": run_id,
+                "subagent_name": subagent.name,
+                "spawn_mode": normalized_spawn_mode,
+                "thread_requested": bool(thread_requested),
+                "cleanup": normalized_cleanup,
+                "model_override": requested_model_override,
+                "thinking_override": requested_thinking_override,
+            }
+        )
+        await self._emit_subagent_lifecycle_hook(
+            {
+                "type": "subagent_spawned",
+                "conversation_id": conversation_id,
+                "run_id": run_id,
+                "subagent_name": subagent.name,
+                "spawn_mode": normalized_spawn_mode,
+                "thread_requested": bool(thread_requested),
+                "cleanup": normalized_cleanup,
+            }
+        )
+        start_gate.set()
+
+    @staticmethod
+    def _resolve_subagent_completion_outcome(status: str) -> tuple[str, str]:
+        """Map terminal run status to announce outcome labels."""
+        status_key = (status or "").strip().lower()
+        if status_key == "completed":
+            return "success", "completed successfully"
+        if status_key == "failed":
+            return "error", "failed"
+        if status_key == "timed_out":
+            return "timeout", "timed out"
+        if status_key == "cancelled":
+            return "cancelled", "cancelled"
+        return "unknown", status_key or "unknown"
+
+    def _append_capped_announce_event(
+        self,
+        events: List[Dict[str, Any]],
+        dropped_count: int,
+        event: Dict[str, Any],
+    ) -> tuple[List[Dict[str, Any]], int]:
+        """Append announce event while enforcing bounded history size."""
+        normalized_events = list(events)
+        if len(normalized_events) >= self._subagent_announce_max_events:
+            normalized_events = normalized_events[-(self._subagent_announce_max_events - 1) :]
+            dropped_count += 1
+        normalized_events.append(event)
+        return normalized_events, dropped_count
+
+    @classmethod
+    def _build_subagent_completion_payload(
+        cls,
+        *,
+        run: Any,
+        fallback_summary: str,
+        fallback_tokens_used: Optional[int],
+        fallback_execution_time_ms: Optional[int],
+        spawn_mode: str,
+        thread_requested: bool,
+        cleanup: str,
+        model_override: Optional[str],
+        thinking_override: Optional[str],
+    ) -> Dict[str, Any]:
+        """Build normalized completion announce payload from terminal run state."""
+        outcome, status_text = cls._resolve_subagent_completion_outcome(run.status.value)
+        result_text = (run.summary or fallback_summary or "").strip() or "(not available)"
+        execution_time_ms = (
+            run.execution_time_ms
+            if run.execution_time_ms is not None
+            else fallback_execution_time_ms
+        )
+        tokens_used = run.tokens_used if run.tokens_used is not None else fallback_tokens_used
+        return {
+            "run_id": run.run_id,
+            "conversation_id": run.conversation_id,
+            "subagent_name": run.subagent_name,
+            "status": run.status.value,
+            "outcome": outcome,
+            "status_text": status_text,
+            "result": result_text,
+            "notes": run.error or "",
+            "execution_time_ms": execution_time_ms,
+            "tokens_used": tokens_used,
+            "spawn_mode": spawn_mode,
+            "thread_requested": bool(thread_requested),
+            "cleanup": cleanup,
+            "model_override": model_override,
+            "thinking_override": thinking_override,
+            "completed_at": run.ended_at.isoformat() if run.ended_at else None,
+        }
+
+    async def _persist_subagent_completion_announce(
+        self,
+        *,
+        conversation_id: str,
+        run_id: str,
+        fallback_summary: str,
+        fallback_tokens_used: Optional[int],
+        fallback_execution_time_ms: Optional[int],
+        spawn_mode: str,
+        thread_requested: bool,
+        cleanup: str,
+        model_override: Optional[str],
+        thinking_override: Optional[str],
+        max_retries: int,
+    ) -> None:
+        """Persist terminal announce payload with retry/backoff and bounded metadata."""
+        from src.domain.model.agent.subagent_run import SubAgentRunStatus
+
+        terminal_statuses = [
+            SubAgentRunStatus.COMPLETED,
+            SubAgentRunStatus.FAILED,
+            SubAgentRunStatus.TIMED_OUT,
+            SubAgentRunStatus.CANCELLED,
+        ]
+        attempts_used = 0
+        last_error = "announce metadata update conflict"
+
+        for attempt in range(max_retries + 1):
+            attempts_used = attempt + 1
+            run = self._subagent_run_registry.get_run(conversation_id, run_id)
+            if not run or run.status not in terminal_statuses:
+                return
+
+            payload = self._build_subagent_completion_payload(
+                run=run,
+                fallback_summary=fallback_summary,
+                fallback_tokens_used=fallback_tokens_used,
+                fallback_execution_time_ms=fallback_execution_time_ms,
+                spawn_mode=spawn_mode,
+                thread_requested=thread_requested,
+                cleanup=cleanup,
+                model_override=model_override,
+                thinking_override=thinking_override,
+            )
+            announce_events = run.metadata.get("announce_events")
+            if not isinstance(announce_events, list):
+                announce_events = []
+            dropped_count = int(run.metadata.get("announce_events_dropped") or 0)
+
+            if attempt > 0:
+                retry_event = {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "type": "completion_retry",
+                    "attempt": attempt,
+                    "run_id": run_id,
+                    "reason": last_error,
+                }
+                announce_events, dropped_count = self._append_capped_announce_event(
+                    announce_events, dropped_count, retry_event
+                )
+
+            delivered_event = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "type": "completion_delivered",
+                "attempt": attempts_used,
+                "run_id": run_id,
+                "status": payload["status"],
+            }
+            announce_events, dropped_count = self._append_capped_announce_event(
+                announce_events, dropped_count, delivered_event
+            )
+
+            try:
+                updated_run = self._subagent_run_registry.attach_metadata(
+                    conversation_id=conversation_id,
+                    run_id=run_id,
+                    metadata={
+                        "announce_payload": payload,
+                        "announce_status": "delivered",
+                        "announce_attempt_count": attempts_used,
+                        "announce_completed_at": datetime.now(timezone.utc).isoformat(),
+                        "announce_last_error": "",
+                        "announce_events": announce_events,
+                        "announce_events_dropped": dropped_count,
+                    },
+                    expected_statuses=terminal_statuses,
+                )
+            except Exception as exc:
+                updated_run = None
+                last_error = str(exc)
+                logger.warning(
+                    "Failed to attach completion announce metadata",
+                    extra={
+                        "conversation_id": conversation_id,
+                        "run_id": run_id,
+                        "attempt": attempts_used,
+                    },
+                    exc_info=True,
+                )
+
+            if updated_run is not None:
+                return
+            if not last_error:
+                last_error = "announce metadata update conflict"
+
+            if attempt < max_retries:
+                delay_seconds = (
+                    self._subagent_announce_retry_delay_ms * (2**attempt)
+                ) / 1000.0
+                await asyncio.sleep(delay_seconds)
+
+        run = self._subagent_run_registry.get_run(conversation_id, run_id)
+        if not run or run.status not in terminal_statuses:
+            return
+        announce_events = run.metadata.get("announce_events")
+        if not isinstance(announce_events, list):
+            announce_events = []
+        dropped_count = int(run.metadata.get("announce_events_dropped") or 0)
+        giveup_event = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "type": "completion_giveup",
+            "attempt": attempts_used,
+            "run_id": run_id,
+            "reason": last_error,
+        }
+        announce_events, dropped_count = self._append_capped_announce_event(
+            announce_events, dropped_count, giveup_event
+        )
+        self._subagent_run_registry.attach_metadata(
+            conversation_id=conversation_id,
+            run_id=run_id,
+            metadata={
+                "announce_status": "giveup",
+                "announce_attempt_count": attempts_used,
+                "announce_last_error": last_error,
+                "announce_events": announce_events,
+                "announce_events_dropped": dropped_count,
+            },
+            expected_statuses=terminal_statuses,
+        )
 
     async def _cancel_subagent_session(self, run_id: str) -> bool:
         """Cancel a detached SubAgent session by run_id."""

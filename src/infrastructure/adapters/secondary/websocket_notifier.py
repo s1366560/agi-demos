@@ -157,6 +157,38 @@ class WebSocketNotifier:
             logger.error(f"[WSNotifier] Failed to notify lifecycle state: {e}")
             return 0
 
+    async def notify_subagent_lifecycle_event(
+        self,
+        tenant_id: str,
+        project_id: str,
+        event: Dict[str, Any],
+    ) -> int:
+        """Notify subscribers of detached subagent lifecycle hook events."""
+        try:
+            ws_message = {
+                "type": "subagent_lifecycle",
+                "project_id": project_id,
+                "tenant_id": tenant_id,
+                "data": dict(event),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+            count = await self._manager.broadcast_to_project(
+                tenant_id=tenant_id,
+                project_id=project_id,
+                message=ws_message,
+            )
+            if count > 0:
+                logger.debug(
+                    "[WSNotifier] Notified %s clients of subagent lifecycle event %s for project %s",
+                    count,
+                    event.get("type"),
+                    project_id,
+                )
+            return count
+        except Exception as e:
+            logger.error(f"[WSNotifier] Failed to notify subagent lifecycle event: {e}")
+            return 0
+
     async def notify_initializing(self, tenant_id: str, project_id: str) -> int:
         """
         Notify that agent is initializing.

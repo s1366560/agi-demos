@@ -217,3 +217,117 @@ async def test_shutdown_all_clears_main_loop() -> None:
     await manager.shutdown_all()
 
     assert manager._main_loop is None
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_create_adapter_prefers_plugin_factory() -> None:
+    """Channel adapter creation should prefer plugin-registered factories."""
+    manager = ChannelConnectionManager()
+    plugin_adapter = object()
+    plugin_registry = SimpleNamespace(
+        list_channel_type_metadata=lambda: {},
+        build_channel_adapter=AsyncMock(return_value=(plugin_adapter, []))
+    )
+    config = SimpleNamespace(
+        enabled=True,
+        app_id="cli_test",
+        app_secret="",
+        encrypt_key=None,
+        verification_token=None,
+        connection_mode="websocket",
+        webhook_port=None,
+        webhook_path=None,
+        domain="feishu",
+        extra_settings={},
+        channel_type="feishu",
+    )
+
+    with patch(
+        "src.infrastructure.agent.plugins.registry.get_plugin_registry",
+        return_value=plugin_registry,
+    ):
+        adapter = await manager._create_adapter(config)
+
+    assert adapter is plugin_adapter
+    plugin_registry.build_channel_adapter.assert_awaited_once()
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_create_adapter_decrypts_plugin_secret_paths() -> None:
+    """Channel adapter context should receive decrypted values for secret_paths."""
+    manager = ChannelConnectionManager()
+    captured_config = {}
+
+    async def _build_adapter(context):
+        captured_config["channel_config"] = context.channel_config
+        return object(), []
+
+    from src.infrastructure.security.encryption_service import get_encryption_service
+
+    encryption_service = get_encryption_service()
+    plugin_registry = SimpleNamespace(
+        list_channel_type_metadata=lambda: {
+            "feishu": SimpleNamespace(
+                secret_paths=["app_secret", "encrypt_key", "verification_token", "api_token"]
+            )
+        },
+        build_channel_adapter=AsyncMock(side_effect=_build_adapter),
+    )
+    config = SimpleNamespace(
+        enabled=True,
+        app_id="cli_test",
+        app_secret=encryption_service.encrypt("app-secret"),
+        encrypt_key=encryption_service.encrypt("encrypt-key"),
+        verification_token=encryption_service.encrypt("verify-token"),
+        connection_mode="websocket",
+        webhook_port=None,
+        webhook_path=None,
+        domain="feishu",
+        extra_settings={"api_token": encryption_service.encrypt("api-token")},
+        channel_type="feishu",
+    )
+
+    with patch(
+        "src.infrastructure.agent.plugins.registry.get_plugin_registry",
+        return_value=plugin_registry,
+    ):
+        await manager._create_adapter(config)
+
+    channel_config = captured_config["channel_config"]
+    assert channel_config.app_secret == "app-secret"
+    assert channel_config.encrypt_key == "encrypt-key"
+    assert channel_config.verification_token == "verify-token"
+    assert channel_config.extra["api_token"] == "api-token"
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_create_adapter_raises_when_plugin_adapter_missing() -> None:
+    """Manager should fail fast when no plugin provides requested channel adapter."""
+    manager = ChannelConnectionManager()
+    plugin_registry = SimpleNamespace(
+        list_channel_type_metadata=lambda: {},
+        build_channel_adapter=AsyncMock(return_value=(None, [])),
+    )
+    config = SimpleNamespace(
+        enabled=True,
+        app_id="cli_test",
+        app_secret="",
+        encrypt_key=None,
+        verification_token=None,
+        connection_mode="websocket",
+        webhook_port=None,
+        webhook_path=None,
+        domain="feishu",
+        extra_settings={},
+        channel_type="feishu",
+    )
+
+    with patch(
+        "src.infrastructure.agent.plugins.registry.get_plugin_registry",
+        return_value=plugin_registry,
+    ):
+        with pytest.raises(ValueError, match="Unsupported channel type"):
+            await manager._create_adapter(config)

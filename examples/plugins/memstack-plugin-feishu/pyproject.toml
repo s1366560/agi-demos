@@ -1,0 +1,21 @@
+[project]
+name = "memstack-plugin-feishu"
+version = "0.1.0"
+description = "Feishu channel plugin package for MemStack runtime"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "MemStack Team" }]
+dependencies = []
+
+[project.entry-points."memstack.agent_plugins"]
+feishu = "memstack_plugin_feishu.plugin:FeishuChannelPlugin"
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]

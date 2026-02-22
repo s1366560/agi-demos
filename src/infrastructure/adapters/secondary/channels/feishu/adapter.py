@@ -259,16 +259,29 @@ class FeishuAdapter:
     def _on_message_receive(self, event: Any) -> None:
         """Handle incoming message event from WebSocket."""
         try:
+            # DEBUG: Log raw event
+            logger.info(f"[FeishuAdapter] Raw event received - event_type={type(event).__name__}")
+
             message_data = event.event.message if hasattr(event, "event") else {}
             sender_data = event.event.sender if hasattr(event, "event") else {}
 
             message_id = message_data.message_id if hasattr(message_data, "message_id") else None
 
             if not message_id:
+                logger.warning("[FeishuAdapter] No message_id in event, skipping")
                 return
+
+            # DEBUG: Log message details
+            message_type = getattr(message_data, "message_type", "unknown")
+            logger.info(
+                f"[FeishuAdapter] Message received - "
+                f"id={message_id}, type={message_type}, "
+                f"chat_id={getattr(message_data, 'chat_id', 'N/A')}"
+            )
 
             # Deduplication
             if message_id in self._message_history:
+                logger.debug(f"[FeishuAdapter] Duplicate message {message_id}, skipping")
                 return
             self._message_history[message_id] = True
 
@@ -360,7 +373,9 @@ class FeishuAdapter:
                 logger.debug("[Feishu] Card action without hitl_request_id, ignoring")
                 return P2CardActionTriggerResponse()
 
-            response_data_raw = value.get("response_data", "{}") if isinstance(value, dict) else "{}"
+            response_data_raw = (
+                value.get("response_data", "{}") if isinstance(value, dict) else "{}"
+            )
             if isinstance(response_data_raw, str):
                 try:
                     response_data = json.loads(response_data_raw)
@@ -508,6 +523,13 @@ class FeishuAdapter:
             chat_type = ChatType.P2P
         mentions = self._extract_mentions(message_data.get("mentions"))
 
+        logger.info(
+            f"[FeishuAdapter] Creating Message - "
+            f"message_id={message_data.get('message_id')}, "
+            f"content_type={content.type.value}, "
+            f"raw_data_keys={list(message_data.keys())}"
+        )
+
         return Message(
             channel="feishu",
             chat_type=chat_type,
@@ -592,6 +614,11 @@ class FeishuAdapter:
 
     def _parse_content(self, content_data: Any, message_type: str) -> MessageContent:
         """Parse message content based on type."""
+        logger.info(
+            f"[FeishuAdapter] Parsing message - type={message_type}, "
+            f"content_data={str(content_data)[:200]}"
+        )
+
         parsed: Dict[str, Any]
         if isinstance(content_data, dict):
             parsed = content_data
@@ -616,29 +643,75 @@ class FeishuAdapter:
             return MessageContent(type=MessageType.TEXT, text=text)
 
         elif message_type == "image":
-            return MessageContent(type=MessageType.IMAGE, image_key=parsed.get("image_key"))
+            image_key = parsed.get("image_key")
+            return MessageContent(
+                type=MessageType.IMAGE,
+                image_key=image_key,
+                text=f"[图片消息: key={image_key}]",
+            )
 
         elif message_type == "file":
+            file_key = parsed.get("file_key")
+            file_name = parsed.get("file_name", "unknown")
+            logger.info(
+                f"[FeishuAdapter] Parsing file message - "
+                f"file_key={file_key}, file_name={file_name}, "
+                f"parsed_content={str(parsed)[:300]}"
+            )
             return MessageContent(
                 type=MessageType.FILE,
-                file_key=parsed.get("file_key"),
-                file_name=parsed.get("file_name"),
+                file_key=file_key,
+                file_name=file_name,
+                text=f"[文件: {file_name}, key={file_key}]",
+            )
+
+        elif message_type == "audio":
+            file_key = parsed.get("file_key")
+            duration_ms = parsed.get("duration", 0)
+            return MessageContent(
+                type=MessageType.AUDIO,
+                file_key=file_key,
+                duration=duration_ms // 1000,  # Convert to seconds
+                text=f"[语音消息: {duration_ms // 1000}秒]",
+            )
+
+        elif message_type == "video":
+            file_key = parsed.get("file_key")
+            duration_ms = parsed.get("duration", 0)
+            thumbnail_key = parsed.get("thumbnail", {}).get("file_key")
+            return MessageContent(
+                type=MessageType.VIDEO,
+                file_key=file_key,
+                duration=duration_ms // 1000,  # Convert to seconds
+                thumbnail_key=thumbnail_key,
+                text=f"[视频消息: {duration_ms // 1000}秒]",
+            )
+
+        elif message_type == "sticker":
+            file_key = parsed.get("file_key")
+            return MessageContent(
+                type=MessageType.STICKER,
+                file_key=file_key,
+                text="[表情消息]",
             )
 
         elif message_type == "post":
-            # Rich text post
-            text = self._parse_post_content(parsed)
-            return MessageContent(type=MessageType.POST, text=text)
+            # Rich text post - may contain images and text
+            # Always preserve the text content, and extract image_key if present
+            text, image_key = self._parse_post_content(parsed)
+            return MessageContent(
+                type=MessageType.POST,
+                text=text if text.strip() else None,
+                image_key=image_key,  # Will be used for media import if present
+            )
 
-        else:
-            return MessageContent(type=MessageType.TEXT, text=str(content_data or ""))
-
-    def _parse_post_content(self, content: Dict[str, Any]) -> str:
-        """Parse rich text post content."""
+    def _parse_post_content(self, content: Dict[str, Any]) -> tuple:
+        """Parse rich text post content. Returns (text, image_key)."""
         title = content.get("title", "")
         content_blocks = content.get("content", [])
 
         text_parts = [title] if title else []
+        extracted_image_key = None
 
         for paragraph in content_blocks:
             if isinstance(paragraph, list):
@@ -652,7 +725,12 @@ class FeishuAdapter:
                     elif tag == "at":
                         para_text += f"@{element.get('user_name', '')}"
                     elif tag == "img":
-                        para_text += "[image]"
+                        # Extract image_key from img tag - don't add placeholder text
+                        # The image will be imported separately via image_key
+                        img_key = element.get("image_key")
+                        if img_key and not extracted_image_key:
+                            extracted_image_key = img_key
+                        # No text placeholder - image is handled separately
                     elif tag == "media":
                         para_text += "[media]"
                     elif tag in ("code_block", "code"):
@@ -670,7 +748,7 @@ class FeishuAdapter:
                         para_text += f"@{element.get('name', element.get('key', ''))}"
                 text_parts.append(para_text)
 
-        return "\n".join(text_parts) or "[rich text message]"
+        return ("\n".join(text_parts) or "[rich text message]", extracted_image_key)
 
     async def disconnect(self) -> None:
         """Disconnect from Feishu."""
@@ -806,6 +884,278 @@ class FeishuAdapter:
         """Send an interactive card message."""
         content = MessageContent(type=MessageType.CARD, card=card)
         return await self.send_message(to, content, reply_to)
+
+    async def send_post(
+        self,
+        to: str,
+        title: str,
+        content: List[List[Dict[str, Any]]],
+        reply_to: Optional[str] = None,
+    ) -> str:
+        """Send a rich text (post) message.
+
+        Args:
+            to: Recipient chat_id or open_id
+            title: Post title
+            content: Post content as list of paragraphs, each paragraph is a list of elements.
+                     Each element is a dict with "tag" and tag-specific fields:
+                     - text: {"tag": "text", "text": "content"}
+                     - link: {"tag": "a", "text": "display", "href": "url"}
+                     - at: {"tag": "at", "user_id": "ou_xxx", "user_name": "name"}
+                     - image: {"tag": "img", "image_key": "img_xxx"}
+                     - media: {"tag": "media", "file_key": "file_xxx", "image_key": "img_xxx"}
+            reply_to: Optional message_id to reply in thread
+
+        Returns:
+            Message ID
+
+        Example:
+            await adapter.send_post(
+                to="oc_xxx",
+                title="Report",
+                content=[
+                    [{"tag": "text", "text": "Here is the result:"}],
+                    [{"tag": "img", "image_key": "img_xxx"}],
+                    [{"tag": "text", "text": "End of report."}]
+                ]
+            )
+        """
+        if not self._connected:
+            raise RuntimeError("Feishu adapter not connected")
+
+        try:
+            from lark_oapi.api.im.v1 import (
+                CreateMessageRequest,
+                CreateMessageRequestBody,
+                ReplyMessageRequest,
+                ReplyMessageRequestBody,
+            )
+
+            client = self._build_rest_client()
+            msg_type = "post"
+            msg_content = json.dumps({"title": title, "content": content})
+
+            receive_id_type = "open_id" if to.startswith("ou_") else "chat_id"
+
+            if reply_to:
+                try:
+                    request = (
+                        ReplyMessageRequest.builder()
+                        .message_id(reply_to)
+                        .request_body(
+                            ReplyMessageRequestBody.builder()
+                            .msg_type(msg_type)
+                            .content(msg_content)
+                            .build()
+                        )
+                        .build()
+                    )
+                    response = await client.im.v1.message.areply(request)
+                    if response.success() and response.data and response.data.message_id:
+                        return response.data.message_id
+                except Exception as e:
+                    logger.warning(f"[Feishu] Post reply failed, fallback to create: {e}")
+
+            request = (
+                CreateMessageRequest.builder()
+                .params(CreateMessageRequest.Params(receive_id_type=receive_id_type))
+                .request_body(
+                    CreateMessageRequestBody.builder()
+                    .receive_id(to)
+                    .msg_type(msg_type)
+                    .content(msg_content)
+                    .build()
+                )
+                .build()
+            )
+            response = await client.im.v1.message.acreate(request)
+            if response.success() and response.data and response.data.message_id:
+                return response.data.message_id
+            raise RuntimeError(f"Failed to send post: code={response.code}, msg={response.msg}")
+
+        except Exception as e:
+            logger.error(f"[Feishu] Send post error: {e}")
+            raise
+
+    async def upload_file(
+        self,
+        file_data: bytes,
+        file_name: str,
+        file_type: Optional[str] = None,
+    ) -> str:
+        """Upload a file to Feishu and return file_key.
+
+        Args:
+            file_data: File content as bytes
+            file_name: File name with extension
+            file_type: File type (opus, mp4, pdf, doc, xls, ppt, stream).
+                      Auto-detected from extension if not provided.
+
+        Returns:
+            file_key for sending the file
+        """
+        if not self._connected:
+            raise RuntimeError("Feishu adapter not connected")
+
+        try:
+            client = self._build_rest_client()
+
+            if file_type is None:
+                file_type = self._detect_file_type(file_name)
+
+            response = await client.im.file.acreate(
+                request={
+                    "file_type": file_type,
+                    "file_name": file_name,
+                    "file": file_data,
+                }
+            )
+
+            if response.success() and response.data and response.data.file_key:
+                logger.info(f"[Feishu] File uploaded: {file_name}, key={response.data.file_key}")
+                return response.data.file_key
+
+            raise RuntimeError(f"File upload failed: code={response.code}, msg={response.msg}")
+
+        except Exception as e:
+            logger.error(f"[Feishu] Upload file error: {e}")
+            raise
+
+    async def upload_image(
+        self,
+        image_data: bytes,
+        image_type: str = "message",
+    ) -> str:
+        """Upload an image to Feishu and return image_key.
+
+        Args:
+            image_data: Image content as bytes
+            image_type: "message" or "avatar"
+
+        Returns:
+            image_key for sending the image
+        """
+        if not self._connected:
+            raise RuntimeError("Feishu adapter not connected")
+
+        try:
+            client = self._build_rest_client()
+
+            response = await client.im.image.acreate(
+                request={
+                    "image_type": image_type,
+                    "image": image_data,
+                }
+            )
+
+            if response.success() and response.data and response.data.image_key:
+                logger.info(f"[Feishu] Image uploaded: key={response.data.image_key}")
+                return response.data.image_key
+
+            raise RuntimeError(f"Image upload failed: code={response.code}, msg={response.msg}")
+
+        except Exception as e:
+            logger.error(f"[Feishu] Upload image error: {e}")
+            raise
+
+    async def upload_and_send_file(
+        self,
+        to: str,
+        file_data: bytes,
+        file_name: str,
+        reply_to: Optional[str] = None,
+    ) -> str:
+        """Upload a file and send it as a message.
+
+        Args:
+            to: Recipient chat_id or open_id
+            file_data: File content as bytes
+            file_name: File name with extension
+            reply_to: Optional message_id to reply in thread
+
+        Returns:
+            Message ID
+        """
+        file_key = await self.upload_file(file_data, file_name)
+        content = MessageContent(type=MessageType.FILE, file_key=file_key, file_name=file_name)
+        return await self.send_message(to, content, reply_to)
+
+    async def upload_and_send_image(
+        self,
+        to: str,
+        image_data: bytes,
+        reply_to: Optional[str] = None,
+    ) -> str:
+        """Upload an image and send it as a message.
+
+        Args:
+            to: Recipient chat_id or open_id
+            image_data: Image content as bytes
+            reply_to: Optional message_id to reply in thread
+
+        Returns:
+            Message ID
+        """
+        image_key = await self.upload_image(image_data)
+        content = MessageContent(type=MessageType.IMAGE, image_key=image_key)
+        return await self.send_message(to, content, reply_to)
+
+    async def upload_and_send_post_with_image(
+        self,
+        to: str,
+        text: str,
+        image_data: Optional[bytes] = None,
+        title: str = "",
+        reply_to: Optional[str] = None,
+    ) -> str:
+        """Upload an image and send it embedded in a rich text message.
+
+        Args:
+            to: Recipient chat_id or open_id
+            text: Text content
+            image_data: Optional image content as bytes
+            title: Post title
+            reply_to: Optional message_id to reply in thread
+
+        Returns:
+            Message ID
+        """
+        content_elements = []
+
+        # Add text paragraph
+        if text.strip():
+            content_elements.append([{"tag": "text", "text": text}])
+
+        # Add image if provided
+        if image_data:
+            image_key = await self.upload_image(image_data)
+            content_elements.append([{"tag": "img", "image_key": image_key}])
+
+        if not content_elements:
+            content_elements.append([{"tag": "text", "text": "(empty message)"}])
+
+        return await self.send_post(to, title, content_elements, reply_to)
+
+    def _detect_file_type(self, file_name: str) -> str:
+        """Detect file type from extension for Feishu upload."""
+        from pathlib import Path
+
+        ext = Path(file_name).suffix.lower()
+        type_map = {
+            ".opus": "opus",
+            ".ogg": "opus",
+            ".mp4": "mp4",
+            ".mov": "mp4",
+            ".avi": "mp4",
+            ".pdf": "pdf",
+            ".doc": "doc",
+            ".docx": "doc",
+            ".xls": "xls",
+            ".xlsx": "xls",
+            ".ppt": "ppt",
+            ".pptx": "ppt",
+        }
+        return type_map.get(ext, "stream")
 
     async def edit_message(self, message_id: str, content: MessageContent) -> bool:
         """Edit a previously sent message using lark_oapi v2 SDK."""

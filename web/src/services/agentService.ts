@@ -188,6 +188,7 @@ export type WebSocketStatus = 'connecting' | 'connected' | 'disconnected' | 'err
 interface ServerMessage {
   type: string;
   conversation_id?: string;
+  project_id?: string;
   data?: unknown;
   event_time_us?: number;
   event_counter?: number;
@@ -567,6 +568,12 @@ class AgentServiceImpl implements AgentService {
       return;
     }
 
+    // Handle project-scoped detached subagent lifecycle events
+    if (type === 'subagent_lifecycle') {
+      this.routeSubagentLifecycleMessage(message);
+      return;
+    }
+
     // Route conversation-specific messages to handlers
     if (conversation_id) {
       const handler = this.handlers.get(conversation_id);
@@ -642,6 +649,93 @@ class AgentServiceImpl implements AgentService {
       isHealthy: Boolean(data.is_healthy),
       errorMessage: typeof data.error_message === 'string' ? data.error_message : undefined,
     };
+  }
+
+  /**
+   * Route project-scoped subagent lifecycle hooks to conversation handlers.
+   *
+   * Backend emits detached subagent lifecycle as:
+   * { type: 'subagent_lifecycle', data: { type: 'subagent_spawned|subagent_ended', conversation_id, ... } }
+   * This maps those payloads onto existing subagent event handlers used by timeline/background UI.
+   */
+  private routeSubagentLifecycleMessage(message: ServerMessage): void {
+    const payload =
+      message.data && typeof message.data === 'object' ? (message.data as Record<string, unknown>) : null;
+    if (!payload) {
+      return;
+    }
+
+    const lifecycleType = typeof payload.type === 'string' ? payload.type : '';
+    const conversationId =
+      typeof message.conversation_id === 'string' && message.conversation_id
+        ? message.conversation_id
+        : typeof payload.conversation_id === 'string'
+          ? payload.conversation_id
+          : '';
+    if (!conversationId) {
+      return;
+    }
+
+    const handler = this.handlers.get(conversationId);
+    if (!handler) {
+      logger.debug('[AgentWS] No handler found for subagent lifecycle conversation:', conversationId);
+      return;
+    }
+
+    const runId = typeof payload.run_id === 'string' ? payload.run_id : '';
+    const subagentName = typeof payload.subagent_name === 'string' ? payload.subagent_name : '';
+    const status = typeof payload.status === 'string' ? payload.status : '';
+    const summary = typeof payload.summary === 'string' ? payload.summary : '';
+    const error = typeof payload.error === 'string' ? payload.error : '';
+
+    if (lifecycleType === 'subagent_spawning') {
+      this.routeToHandler(
+        'subagent_started',
+        {
+          subagent_id: runId,
+          subagent_name: subagentName,
+          task: 'Spawning detached session',
+        },
+        handler
+      );
+      return;
+    }
+
+    if (lifecycleType === 'subagent_spawned') {
+      this.routeToHandler(
+        'subagent_session_spawned',
+        {
+          conversation_id: conversationId,
+          run_id: runId,
+          subagent_name: subagentName,
+        },
+        handler
+      );
+      return;
+    }
+
+    if (lifecycleType === 'subagent_ended') {
+      const runEvent: SubAgentRunEventData = {
+        run_id: runId,
+        conversation_id: conversationId,
+        subagent_name: subagentName,
+        task: 'Detached session',
+        status: status || 'unknown',
+        summary: summary || undefined,
+      };
+      if (status === 'completed') {
+        this.routeToHandler('subagent_run_completed', runEvent, handler);
+        return;
+      }
+      this.routeToHandler(
+        'subagent_run_failed',
+        {
+          ...runEvent,
+          error: error || `Subagent ended with status: ${status || 'unknown'}`,
+        },
+        handler
+      );
+    }
   }
 
   /**

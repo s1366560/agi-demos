@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from src.configuration.config import get_settings
 from src.infrastructure.adapters.secondary.websocket_notifier import (
     WebSocketNotifier,
 )
@@ -237,6 +238,124 @@ class TestProjectReActAgentLifecycleNotifications:
         ]
         assert len(error_calls) >= 1
         assert "error_message" in error_calls[0]["message"]["data"]
+
+    @pytest.mark.asyncio
+    async def test_initialize_wires_subagent_lifecycle_hook_to_notifier(
+        self,
+        agent_config,
+        mock_notifier,
+        mock_graph_service,
+        mock_redis_client,
+        mock_llm_client,
+        mock_provider_config,
+        mock_session_context,
+    ):
+        """Test ReActAgent receives subagent lifecycle hook connected to notifier."""
+        agent = ProjectReActAgent(agent_config)
+
+        mock_tools = {"test_tool": lambda x: x}
+        mock_skills = [MagicMock(name="skill1")]
+        mock_subagents = []
+
+        with patch(
+            f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
+            new_callable=AsyncMock,
+            return_value=mock_graph_service,
+        ):
+            with patch(
+                f"{WORKER_STATE_MODULE}.get_redis_client",
+                return_value=mock_redis_client,
+            ):
+                with patch(
+                    f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
+                    new_callable=AsyncMock,
+                    return_value=mock_provider_config,
+                ):
+                    with patch(
+                        f"{WORKER_STATE_MODULE}.get_or_create_llm_client",
+                        new_callable=AsyncMock,
+                        return_value=mock_llm_client,
+                    ):
+                        with patch(
+                            f"{WORKER_STATE_MODULE}.get_or_create_tools",
+                            new_callable=AsyncMock,
+                            return_value=mock_tools,
+                        ):
+                            with patch(
+                                f"{WORKER_STATE_MODULE}.get_or_create_skills",
+                                new_callable=AsyncMock,
+                                return_value=mock_skills,
+                            ):
+                                with patch.object(
+                                    agent,
+                                    "_load_subagents",
+                                    new_callable=AsyncMock,
+                                    return_value=mock_subagents,
+                                ):
+                                    with patch(
+                                        f"{WORKER_STATE_MODULE}.get_or_create_agent_session",
+                                        new_callable=AsyncMock,
+                                        return_value=mock_session_context,
+                                    ):
+                                        with patch(
+                                            "src.infrastructure.agent.core.react_agent.ReActAgent"
+                                        ) as mock_react_cls:
+                                            with patch(
+                                                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                                                return_value=mock_notifier,
+                                            ):
+                                                await agent.initialize()
+
+        lifecycle_hook = mock_react_cls.call_args.kwargs.get("subagent_lifecycle_hook")
+        assert callable(lifecycle_hook)
+        settings = get_settings()
+        assert (
+            mock_react_cls.call_args.kwargs["max_subagent_delegation_depth"]
+            == settings.agent_subagent_max_delegation_depth
+        )
+        assert (
+            mock_react_cls.call_args.kwargs["max_subagent_active_runs"]
+            == settings.agent_subagent_max_active_runs
+        )
+        assert (
+            mock_react_cls.call_args.kwargs["max_subagent_children_per_requester"]
+            == settings.agent_subagent_max_children_per_requester
+        )
+        assert (
+            mock_react_cls.call_args.kwargs["max_subagent_lane_concurrency"]
+            == settings.agent_subagent_lane_concurrency
+        )
+        assert (
+            mock_react_cls.call_args.kwargs["subagent_terminal_retention_seconds"]
+            == settings.agent_subagent_terminal_retention_seconds
+        )
+        assert (
+            mock_react_cls.call_args.kwargs["subagent_announce_max_events"]
+            == settings.agent_subagent_announce_max_events
+        )
+        assert (
+            mock_react_cls.call_args.kwargs["subagent_announce_max_retries"]
+            == settings.agent_subagent_announce_max_retries
+        )
+        assert (
+            mock_react_cls.call_args.kwargs["subagent_announce_retry_delay_ms"]
+            == settings.agent_subagent_announce_retry_delay_ms
+        )
+
+        mock_notifier._manager.broadcast_calls.clear()
+        await lifecycle_hook(
+            {
+                "type": "subagent_spawned",
+                "conversation_id": "conv-123",
+                "run_id": "run-456",
+                "subagent_name": "researcher",
+            }
+        )
+        calls = mock_notifier._manager.broadcast_calls
+        assert len(calls) == 1
+        assert calls[0]["message"]["type"] == "subagent_lifecycle"
+        assert calls[0]["message"]["data"]["type"] == "subagent_spawned"
+        assert calls[0]["message"]["data"]["run_id"] == "run-456"
 
     @pytest.mark.asyncio
     async def test_pause_sends_paused_notification(

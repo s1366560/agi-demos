@@ -12,29 +12,29 @@ Features:
 """
 
 from src.infrastructure.adapters.secondary.channels.feishu.adapter import FeishuAdapter
-from src.infrastructure.adapters.secondary.channels.feishu.client import (
-    FeishuClient,
-    send_feishu_text,
-    send_feishu_card,
-)
-from src.infrastructure.adapters.secondary.channels.feishu.media import (
-    FeishuMediaManager,
-    MediaUploadResult,
-)
 from src.infrastructure.adapters.secondary.channels.feishu.cards import (
     CardBuilder,
     PostBuilder,
     build_mentioned_message,
     extract_post_text,
 )
+from src.infrastructure.adapters.secondary.channels.feishu.client import (
+    FeishuClient,
+    send_feishu_card,
+    send_feishu_text,
+)
+from src.infrastructure.adapters.secondary.channels.feishu.media import (
+    FeishuMediaManager,
+    MediaUploadResult,
+)
 from src.infrastructure.adapters.secondary.channels.feishu.webhook import (
-    FeishuWebhookHandler,
-    FeishuEventDispatcher,
-    EVENT_MESSAGE_RECEIVE,
-    EVENT_MESSAGE_UPDATED,
-    EVENT_MESSAGE_DELETED,
     EVENT_BOT_ADDED,
     EVENT_BOT_DELETED,
+    EVENT_MESSAGE_DELETED,
+    EVENT_MESSAGE_RECEIVE,
+    EVENT_MESSAGE_UPDATED,
+    FeishuEventDispatcher,
+    FeishuWebhookHandler,
 )
 
 __all__ = [

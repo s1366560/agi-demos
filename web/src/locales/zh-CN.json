@@ -159,6 +159,7 @@
     "agents": "智能体管理",
     "subagents": "Agents",
     "skills": "技能",
+    "plugins": "插件",
     "templates": "模板市场",
     "providers": "模型服务",
     "platform": "平台",

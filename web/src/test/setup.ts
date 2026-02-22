@@ -525,6 +525,7 @@ const commonTranslations: Record<string, string> = {
   'nav.agents': 'Agent Management',
   'nav.subagents': 'SubAgents',
   'nav.skills': 'Skills',
+  'nav.plugins': 'Plugins',
   'nav.providers': 'LLM Providers',
   'nav.platform': 'Platform',
   'nav.administration': 'Administration',

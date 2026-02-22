@@ -21,6 +21,7 @@
 .PHONY: obs-start obs-stop obs-status obs-logs obs-ui
 .PHONY: sandbox-build sandbox-run sandbox-stop sandbox-restart sandbox-status sandbox-logs sandbox-shell sandbox-clean sandbox-reset sandbox-test
 .PHONY: ray-up ray-up-dev ray-down ray-reload agent-actor-up
+.PHONY: plugin-template-build plugin-feishu-validate plugin-build-all
 
 # =============================================================================
 # Default Target
@@ -65,6 +66,8 @@ help: ## Show this help message
 	@echo "  lint      - Lint all code"
 	@echo "  format    - Format all code"
 	@echo "  check     - Run format + lint + test"
+	@echo "  plugin-template-build - Build standalone plugin template wheel"
+	@echo "  plugin-feishu-validate - Validate local Feishu plugin discovery"
 	@echo ""
 	@echo " Database:"
 	@echo "  db-init   - Initialize database"
@@ -121,6 +124,8 @@ help-full: ## Show all available commands
 	@echo "  test-web         - Web tests"
 	@echo "  test-e2e         - End-to-end tests"
 	@echo "  test-coverage    - Tests with coverage"
+	@echo "  plugin-template-build - Build standalone plugin template wheel"
+	@echo "  plugin-feishu-validate - Validate local Feishu plugin discovery"
 	@echo ""
 	@echo " Code Quality:"
 	@echo "  format           - Format all code"
@@ -923,6 +928,22 @@ sdk-build: ## Build SDK package
 	@echo "  Building SDK..."
 	cd sdk/python && python -m build
 	@echo " SDK built"
+
+plugin-template-build: ## Build standalone plugin template wheel
+	@echo "  Building plugin template package..."
+	@mkdir -p .tmp/plugin-template-wheels
+	uv build examples/plugins/memstack-plugin-template --wheel --out-dir .tmp/plugin-template-wheels
+	@ls -1 .tmp/plugin-template-wheels/*.whl
+	@echo " Plugin template wheel build complete"
+
+plugin-feishu-validate: ## Validate local Feishu plugin discovery
+	@echo "  Validating local Feishu plugin directory..."
+	@test -f .memstack/plugins/feishu/plugin.py
+	@uv run python -c "from pathlib import Path; from src.infrastructure.agent.plugins.discovery import discover_plugins; from src.infrastructure.agent.plugins.state_store import PluginStateStore; store=PluginStateStore(base_path=Path.cwd()); discovered, diagnostics = discover_plugins(state_store=store, include_builtins=False, include_entrypoints=False, include_local_paths=True); names=[item.name for item in discovered]; assert 'feishu-channel-plugin' in names, 'feishu-channel-plugin not discovered from local plugins'; assert all(item.code != 'plugin_discovery_failed' for item in diagnostics); print('Local Feishu plugin discovery verified')"
+	@echo " Local Feishu plugin validation complete"
+
+plugin-build-all: plugin-template-build plugin-feishu-validate ## Build/validate plugin artifacts
+	@echo " Plugin build/validation complete"
 
 # =============================================================================
 # CI/CD Support

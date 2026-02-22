@@ -8,6 +8,12 @@ from .parallel_scheduler import ParallelScheduler, ParallelSchedulerConfig
 from .process import SubAgentProcess
 from .result_aggregator import AggregatedResult, ResultAggregator
 from .run_registry import SubAgentRunRegistry
+from .run_repository import (
+    HybridSubAgentRunRepository,
+    PostgresSubAgentRunRepository,
+    RedisRunSnapshotCache,
+    SqliteSubAgentRunRepository,
+)
 from .state_tracker import StateTracker, SubAgentState, SubAgentStatus
 from .task_decomposer import DecompositionResult, SubTask, TaskDecomposer
 from .template_registry import SubAgentTemplate, TemplateRegistry
@@ -15,6 +21,10 @@ from .template_registry import SubAgentTemplate, TemplateRegistry
 __all__ = [
     "ContextBridge",
     "SubAgentProcess",
+    "SqliteSubAgentRunRepository",
+    "PostgresSubAgentRunRepository",
+    "RedisRunSnapshotCache",
+    "HybridSubAgentRunRepository",
     "SubAgentRunRegistry",
     "TaskDecomposer",
     "SubTask",

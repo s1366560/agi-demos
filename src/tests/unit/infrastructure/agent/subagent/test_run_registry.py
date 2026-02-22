@@ -1,11 +1,17 @@
 """Tests for SubAgentRunRegistry."""
 
 import json
+import sqlite3
 
 import pytest
 
 from src.domain.model.agent.subagent_run import SubAgentRunStatus
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
+from src.infrastructure.agent.subagent.run_repository import (
+    HybridSubAgentRunRepository,
+    RedisRunSnapshotCache,
+    SqliteSubAgentRunRepository,
+)
 
 
 @pytest.mark.unit
@@ -149,3 +155,211 @@ class TestSubAgentRunRegistry:
         assert loaded is not None
         assert loaded.status == SubAgentRunStatus.TIMED_OUT
         assert loaded.metadata.get("recovered_on_startup") is True
+
+    def test_list_runs_for_requester_visibility_modes(self):
+        registry = SubAgentRunRegistry()
+        root = registry.create_run(
+            "conv-1",
+            "researcher",
+            "root",
+            requester_session_key="req-1",
+        )
+        registry.mark_running("conv-1", root.run_id)
+        child = registry.create_run(
+            "conv-1",
+            "coder",
+            "child",
+            requester_session_key="req-2",
+            parent_run_id=root.run_id,
+            lineage_root_run_id=root.run_id,
+        )
+        registry.mark_running("conv-1", child.run_id)
+        other = registry.create_run(
+            "conv-1",
+            "writer",
+            "other",
+            requester_session_key="req-3",
+        )
+        registry.mark_running("conv-1", other.run_id)
+
+        self_only = registry.list_runs_for_requester("conv-1", "req-1", visibility="self")
+        self_ids = {run.run_id for run in self_only}
+        assert self_ids == {root.run_id}
+
+        tree_runs = registry.list_runs_for_requester("conv-1", "req-1", visibility="tree")
+        tree_ids = {run.run_id for run in tree_runs}
+        assert tree_ids == {root.run_id, child.run_id}
+
+        all_runs = registry.list_runs_for_requester("conv-1", "req-1", visibility="all")
+        all_ids = {run.run_id for run in all_runs}
+        assert all_ids == {root.run_id, child.run_id, other.run_id}
+
+    def test_sync_across_processes_reads_latest_state(self, tmp_path):
+        persist_path = tmp_path / "subagent-runs-shared.json"
+        writer = SubAgentRunRegistry(
+            persistence_path=str(persist_path),
+            recover_inflight_on_boot=False,
+            sync_across_processes=True,
+        )
+        reader = SubAgentRunRegistry(
+            persistence_path=str(persist_path),
+            recover_inflight_on_boot=False,
+            sync_across_processes=True,
+        )
+
+        run = writer.create_run("conv-1", "researcher", "task-a")
+        writer.mark_running("conv-1", run.run_id)
+        writer.mark_completed("conv-1", run.run_id, summary="done")
+
+        loaded = reader.get_run("conv-1", run.run_id)
+        assert loaded is not None
+        assert loaded.status == SubAgentRunStatus.COMPLETED
+        assert loaded.summary == "done"
+
+    def test_sync_across_processes_prevents_stale_transition(self, tmp_path):
+        persist_path = tmp_path / "subagent-runs-shared.json"
+        registry_a = SubAgentRunRegistry(
+            persistence_path=str(persist_path),
+            recover_inflight_on_boot=False,
+            sync_across_processes=True,
+        )
+        registry_b = SubAgentRunRegistry(
+            persistence_path=str(persist_path),
+            recover_inflight_on_boot=False,
+            sync_across_processes=True,
+        )
+
+        run = registry_a.create_run("conv-1", "researcher", "task-a")
+        started = registry_b.mark_running(
+            "conv-1",
+            run.run_id,
+            expected_statuses=[SubAgentRunStatus.PENDING],
+        )
+        assert started is not None
+
+        stale_cancel = registry_a.mark_cancelled(
+            "conv-1",
+            run.run_id,
+            reason="stale action",
+            expected_statuses=[SubAgentRunStatus.PENDING],
+        )
+        assert stale_cancel is None
+        current = registry_a.get_run("conv-1", run.run_id)
+        assert current is not None
+        assert current.status == SubAgentRunStatus.RUNNING
+
+    def test_sqlite_repository_persists_latest_state(self, tmp_path):
+        sqlite_path = tmp_path / "subagent-runs.sqlite3"
+        writer_repo = SqliteSubAgentRunRepository(str(sqlite_path))
+        reader_repo = SqliteSubAgentRunRepository(str(sqlite_path))
+        writer = SubAgentRunRegistry(
+            repository=writer_repo,
+            recover_inflight_on_boot=False,
+            sync_across_processes=True,
+        )
+        reader = SubAgentRunRegistry(
+            repository=reader_repo,
+            recover_inflight_on_boot=False,
+            sync_across_processes=True,
+        )
+
+        run = writer.create_run("conv-1", "researcher", "task-a")
+        writer.mark_running("conv-1", run.run_id)
+        writer.mark_completed("conv-1", run.run_id, summary="done")
+
+        loaded = reader.get_run("conv-1", run.run_id)
+        assert loaded is not None
+        assert loaded.status == SubAgentRunStatus.COMPLETED
+        assert loaded.summary == "done"
+
+    def test_postgres_repository_wiring_uses_shared_state(self, monkeypatch):
+        shared_store = {}
+
+        class _FakePostgresRepository:
+            def __init__(self, postgres_dsn: str) -> None:
+                self._postgres_dsn = postgres_dsn
+
+            def load_runs(self):
+                runs = shared_store.get(self._postgres_dsn, {})
+                return {
+                    conversation_id: dict(bucket)
+                    for conversation_id, bucket in runs.items()
+                }
+
+            def save_runs(self, runs):
+                shared_store[self._postgres_dsn] = {
+                    conversation_id: dict(bucket)
+                    for conversation_id, bucket in runs.items()
+                }
+
+            def close(self) -> None:
+                return
+
+        monkeypatch.setattr(
+            "src.infrastructure.agent.subagent.run_registry.PostgresSubAgentRunRepository",
+            _FakePostgresRepository,
+        )
+
+        writer = SubAgentRunRegistry(
+            postgres_persistence_dsn="postgresql://memstack:test@localhost/memstack",
+            recover_inflight_on_boot=False,
+            sync_across_processes=True,
+        )
+        reader = SubAgentRunRegistry(
+            postgres_persistence_dsn="postgresql://memstack:test@localhost/memstack",
+            recover_inflight_on_boot=False,
+            sync_across_processes=True,
+        )
+
+        run = writer.create_run("conv-1", "researcher", "task-a")
+        writer.mark_running("conv-1", run.run_id)
+        writer.mark_completed("conv-1", run.run_id, summary="done")
+
+        loaded = reader.get_run("conv-1", run.run_id)
+        assert loaded is not None
+        assert loaded.status == SubAgentRunStatus.COMPLETED
+        assert loaded.summary == "done"
+
+    def test_hybrid_repository_uses_redis_cache_for_recovery(self, tmp_path):
+        sqlite_path = tmp_path / "subagent-runs.sqlite3"
+
+        class _FakeRedisClient:
+            def __init__(self) -> None:
+                self._store: dict[str, str] = {}
+
+            def get(self, key: str):
+                return self._store.get(key)
+
+            def setex(self, key: str, _ttl: int, value: str) -> None:
+                self._store[key] = value
+
+        fake_redis = _FakeRedisClient()
+        writer_repo = HybridSubAgentRunRepository(
+            db_repository=SqliteSubAgentRunRepository(str(sqlite_path)),
+            redis_cache=RedisRunSnapshotCache(client=fake_redis),
+        )
+        writer = SubAgentRunRegistry(
+            repository=writer_repo,
+            recover_inflight_on_boot=False,
+            sync_across_processes=True,
+        )
+        run = writer.create_run("conv-1", "researcher", "task-a")
+        writer.mark_running("conv-1", run.run_id)
+        writer.mark_completed("conv-1", run.run_id, summary="done")
+
+        with sqlite3.connect(sqlite_path) as conn:
+            conn.execute("DELETE FROM subagent_run_snapshots")
+            conn.commit()
+
+        reader_repo = HybridSubAgentRunRepository(
+            db_repository=SqliteSubAgentRunRepository(str(sqlite_path)),
+            redis_cache=RedisRunSnapshotCache(client=fake_redis),
+        )
+        reader = SubAgentRunRegistry(
+            repository=reader_repo,
+            recover_inflight_on_boot=False,
+            sync_across_processes=True,
+        )
+        loaded = reader.get_run("conv-1", run.run_id)
+        assert loaded is not None
+        assert loaded.status == SubAgentRunStatus.COMPLETED

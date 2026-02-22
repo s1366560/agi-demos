@@ -1,0 +1,21 @@
+[project]
+name = "memstack-plugin-template"
+version = "0.1.0"
+description = "Template plugin package for MemStack agent runtime"
+requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "MemStack Team" }]
+dependencies = []
+
+[project.entry-points."memstack.agent_plugins"]
+template = "memstack_plugin_template.plugin:TemplatePlugin"
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]

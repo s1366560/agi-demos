@@ -45,7 +45,9 @@ class Settings(BaseSettings):
     redis_password: Optional[str] = Field(default=None, alias="REDIS_PASSWORD")
 
     # Audit Log Settings
-    audit_log_backend: str = Field(default="database", alias="AUDIT_LOG_BACKEND")  # database, file, console
+    audit_log_backend: str = Field(
+        default="database", alias="AUDIT_LOG_BACKEND"
+    )  # database, file, console
     audit_log_file: Optional[str] = Field(default=None, alias="AUDIT_LOG_FILE")
 
     # Alerting Settings
@@ -159,6 +161,51 @@ class Settings(BaseSettings):
         default=86400,
         alias="AGENT_SESSION_TTL_SECONDS",  # 24 hours default
     )
+    agent_subagent_max_delegation_depth: int = Field(
+        default=2,
+        alias="AGENT_SUBAGENT_MAX_DELEGATION_DEPTH",
+        ge=1,
+    )
+    agent_subagent_max_active_runs: int = Field(
+        default=16,
+        alias="AGENT_SUBAGENT_MAX_ACTIVE_RUNS",
+        ge=1,
+    )
+    agent_subagent_max_children_per_requester: int = Field(
+        default=8,
+        alias="AGENT_SUBAGENT_MAX_CHILDREN_PER_REQUESTER",
+        ge=1,
+    )
+    agent_subagent_lane_concurrency: int = Field(
+        default=8,
+        alias="AGENT_SUBAGENT_LANE_CONCURRENCY",
+        ge=1,
+    )
+    agent_subagent_terminal_retention_seconds: int = Field(
+        default=86400,
+        alias="AGENT_SUBAGENT_TERMINAL_RETENTION_SECONDS",
+        ge=0,
+    )
+    agent_subagent_announce_max_events: int = Field(
+        default=20,
+        alias="AGENT_SUBAGENT_ANNOUNCE_MAX_EVENTS",
+        ge=1,
+    )
+    agent_subagent_announce_max_retries: int = Field(
+        default=2,
+        alias="AGENT_SUBAGENT_ANNOUNCE_MAX_RETRIES",
+        ge=0,
+    )
+    agent_subagent_announce_retry_delay_ms: int = Field(
+        default=200,
+        alias="AGENT_SUBAGENT_ANNOUNCE_RETRY_DELAY_MS",
+        ge=0,
+    )
+    agent_subagent_focus_ttl_seconds: float = Field(
+        default=300.0,
+        alias="AGENT_SUBAGENT_FOCUS_TTL_SECONDS",  # 5 minutes default
+        ge=0.0,
+    )
 
     # HITL (Human-in-the-Loop) Real-time Optimization
     # Uses Redis Streams for low-latency (~30ms) HITL response delivery
@@ -222,6 +269,9 @@ class Settings(BaseSettings):
     sandbox_default_image: str = Field(
         default="sandbox-mcp-server:latest", alias="SANDBOX_DEFAULT_IMAGE"
     )
+    sandbox_workspace_base: str = Field(
+        default="/tmp/memstack-sandbox", alias="SANDBOX_WORKSPACE_BASE"
+    )  # Base directory for sandbox workspaces (use /tmp for macOS compatibility)
     sandbox_timeout_seconds: int = Field(
         default=300, alias="SANDBOX_TIMEOUT_SECONDS"
     )  # Increased from 60 to 300 (5 minutes)

@@ -25,6 +25,13 @@ from typing import Any, Dict, List, Optional
 
 import redis.asyncio as redis
 
+from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
+from src.infrastructure.agent.plugins.registry import (
+    PluginDiagnostic,
+    PluginToolBuildContext,
+    get_plugin_registry,
+)
+
 # Import Agent Session Pool components
 from .agent_session_pool import (
     AgentSessionContext,
@@ -453,15 +460,27 @@ async def get_or_create_tools(
     try:
         from pathlib import Path
 
+        from src.infrastructure.agent.tools.plugin_manager import PluginManagerTool
         from src.infrastructure.agent.tools.skill_installer import SkillInstallerTool
 
         # Use the project path from config or fallback to current working directory
         project_path = Path.cwd()
-        skill_installer = SkillInstallerTool(project_path=project_path)
+        skill_installer = SkillInstallerTool(
+            project_path=project_path,
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
         tools["skill_installer"] = skill_installer
         logger.info(f"Agent Worker: SkillInstallerTool added for project {project_id}")
+
+        plugin_manager = PluginManagerTool(
+            tenant_id=tenant_id,
+            project_id=project_id,
+        )
+        tools["plugin_manager"] = plugin_manager
+        logger.info(f"Agent Worker: PluginManagerTool added for project {project_id}")
     except Exception as e:
-        logger.warning(f"Agent Worker: Failed to create SkillInstallerTool: {e}")
+        logger.warning(f"Agent Worker: Failed to create SkillInstallerTool/PluginManagerTool: {e}")
 
     # 5b. Add SkillSyncTool for syncing skills from sandbox back to the system
     try:
@@ -619,7 +638,48 @@ async def get_or_create_tools(
     except Exception as e:
         logger.debug(f"Agent Worker: Memory tools not available: {e}")
 
+    # 12. Ensure plugin runtime is loaded before building plugin-provided tools.
+    runtime_manager = get_plugin_runtime_manager()
+    runtime_diagnostics = await runtime_manager.ensure_loaded()
+    for diagnostic in runtime_diagnostics:
+        _log_plugin_diagnostic(diagnostic, context="runtime_load")
+
+    # 13. Add plugin tools registered via plugin runtime (phase-1 foundation).
+    # Default behavior stays unchanged when no plugins are registered.
+    plugin_registry = get_plugin_registry()
+    plugin_tools, diagnostics = await plugin_registry.build_tools(
+        PluginToolBuildContext(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            base_tools=tools,
+        )
+    )
+    for diagnostic in diagnostics:
+        _log_plugin_diagnostic(diagnostic, context="tool_build")
+    if plugin_tools:
+        tools.update(plugin_tools)
+        logger.info(
+            "Agent Worker: Added %d plugin tools for project %s",
+            len(plugin_tools),
+            project_id,
+        )
+
     return tools
+
+
+def _log_plugin_diagnostic(diagnostic: PluginDiagnostic, *, context: str) -> None:
+    """Log plugin runtime diagnostics consistently."""
+    message = (
+        f"[AgentWorker][Plugin:{diagnostic.plugin_name}][{context}] "
+        f"{diagnostic.code}: {diagnostic.message}"
+    )
+    if diagnostic.level == "error":
+        logger.error(message)
+        return
+    if diagnostic.level == "info":
+        logger.info(message)
+        return
+    logger.warning(message)
 
 
 async def _load_project_sandbox_tools(

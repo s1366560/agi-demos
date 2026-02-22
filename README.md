@@ -159,6 +159,15 @@ cp .env.example .env
 # - REDIS_URL
 # - LLM_PROVIDER (gemini, dashscope, deepseek, zhipu, openai)
 # - Corresponding LLM API keys
+#
+# Optional SubAgent runtime tuning:
+# - AGENT_SUBAGENT_MAX_DELEGATION_DEPTH
+# - AGENT_SUBAGENT_MAX_ACTIVE_RUNS
+# - AGENT_SUBAGENT_MAX_CHILDREN_PER_REQUESTER
+# - AGENT_SUBAGENT_LANE_CONCURRENCY
+# - AGENT_SUBAGENT_TERMINAL_RETENTION_SECONDS
+# - AGENT_SUBAGENT_ANNOUNCE_MAX_RETRIES / AGENT_SUBAGENT_ANNOUNCE_RETRY_DELAY_MS
+# - AGENT_SUBAGENT_FOCUS_TTL_SECONDS
 ```
 
 ### Start Services
@@ -344,6 +353,7 @@ make test-e2e             # E2E tests (Playwright)
 make format               # Format all code
 make lint                 # Lint all code
 make check                # Run format + lint + test
+make plugin-template-build # Build standalone plugin template wheel
 
 # Database Operations
 make db-init              # Initialize PostgreSQL database
@@ -387,6 +397,67 @@ open htmlcov/index.html
 
 ### SDK
 - **[Python SDK](sdk/python/README.md)** - Python SDK documentation
+
+### Plugin Runtime & Packaging
+- Runtime loader: `PluginRuntimeManager` discovers Python entry point plugins from group `memstack.agent_plugins`
+- Runtime loader also scans local plugin folders: `.memstack/plugins/<plugin_name>/plugin.py`
+- Plugin state: `.memstack/plugins/state.json` (enable/disable metadata)
+- Built-in management tool: `plugin_manager` (`list/install/enable/disable/reload`)
+- Channel plugins can register config metadata (`config_schema`, `config_ui_hints`, `defaults`, `secret_paths`) via `PluginRuntimeApi.register_channel_type(...)`
+- Tenant plugin hub APIs: `/api/v1/channels/tenants/{tenant_id}/plugins/*`
+- Project plugin APIs are still available for compatibility: `/api/v1/channels/projects/{project_id}/plugins/*`
+- Channel catalog/schema APIs:
+  - `/api/v1/channels/tenants/{tenant_id}/plugins/channel-catalog`
+  - `/api/v1/channels/tenants/{tenant_id}/plugins/channel-catalog/{channel_type}/schema`
+  - `/api/v1/channels/projects/{project_id}/plugins/channel-catalog`
+  - `/api/v1/channels/projects/{project_id}/plugins/channel-catalog/{channel_type}/schema`
+- Channel config form supports schema-driven fields; secret fields support sentinel `__MEMSTACK_SECRET_UNCHANGED__` for safe updates
+- Example external package template: `examples/plugins/memstack-plugin-template/`
+- Official Feishu local plugin directory: `.memstack/plugins/feishu/plugin.py`
+
+Plugin state example:
+```json
+{
+  "plugins": {
+    "template-plugin": {
+      "enabled": true,
+      "source": "entrypoint",
+      "package": "memstack-plugin-template",
+      "requirement": "memstack-plugin-template==0.1.0"
+    }
+  }
+}
+```
+
+Plugin package entry point contract:
+```toml
+[project.entry-points."memstack.agent_plugins"]
+my_plugin = "my_plugin_package.plugin:MyPlugin"
+```
+
+Agent tool usage examples:
+```python
+plugin_manager(action="list")
+plugin_manager(action="install", requirement="memstack-plugin-template==0.1.0")
+plugin_manager(action="enable", plugin_name="template-plugin")
+plugin_manager(action="reload")
+```
+
+Feishu local plugin activation example:
+```python
+plugin_manager(action="enable", plugin_name="feishu-channel-plugin")
+plugin_manager(action="reload")
+```
+
+Private index installation example (runtime environment):
+```bash
+PIP_INDEX_URL=https://pypi.example.com/simple \
+python -m pip install memstack-plugin-template==0.1.0
+```
+
+Security note for runtime installation:
+- `plugin_manager(action="install")` only accepts PyPI-style requirement specifiers.
+- URL/path/shell-token inputs are blocked before subprocess execution.
 
 ## Authentication
 
@@ -599,6 +670,7 @@ memstack/
 │
 ├── alembic/                      # Database migrations
 ├── docs/architecture/            # Architecture documentation
+├── examples/plugins/             # Standalone plugin packaging templates
 ├── scripts/                      # Utility scripts
 ├── Makefile                      # Development commands
 └── pyproject.toml               # Python dependencies

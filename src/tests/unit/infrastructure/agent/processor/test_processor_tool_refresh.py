@@ -425,3 +425,57 @@ class TestProcessorToolRefreshEdgeCases:
         # Order should be preserved (dicts maintain insertion order in Python 3.7+)
         names = list(processor.tools.keys())
         assert names == ["tool_a", "tool_b", "tool_c"]
+
+
+@pytest.mark.unit
+class TestProcessorPendingToolEvents:
+    """Tests for pending event emission from self-modifying tools."""
+
+    @pytest.mark.asyncio
+    async def test_execute_tool_emits_pending_events_for_skill_sync(self):
+        """Processor should emit toolset_changed dict events from skill_sync."""
+        config = ProcessorConfig(model="test-model")
+        processor = SessionProcessor(config=config, tools=[])
+
+        class _SkillSyncTool:
+            def __init__(self) -> None:
+                self._events = [{"type": "toolset_changed", "data": {"source": "skill_sync"}}]
+
+            async def execute(self, **kwargs):
+                return "Skill synced"
+
+            def consume_pending_events(self):
+                events = list(self._events)
+                self._events.clear()
+                return events
+
+        tool_instance = _SkillSyncTool()
+        processor.tools["skill_sync"] = ToolDefinition(
+            name="skill_sync",
+            description="Skill sync tool",
+            parameters={},
+            execute=tool_instance.execute,
+            _tool_instance=tool_instance,
+        )
+
+        from src.infrastructure.agent.core.message import ToolPart, ToolState
+
+        processor._pending_tool_calls["call-skill-sync"] = ToolPart(
+            call_id="call-skill-sync",
+            tool="skill_sync",
+            input={},
+            status=ToolState.RUNNING,
+        )
+
+        events = []
+        async for event in processor._execute_tool(
+            session_id="test-session",
+            call_id="call-skill-sync",
+            tool_name="skill_sync",
+            arguments={"skill_name": "demo-skill"},
+        ):
+            events.append(event)
+
+        assert any(
+            isinstance(event, dict) and event.get("type") == "toolset_changed" for event in events
+        )

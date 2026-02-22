@@ -30,6 +30,7 @@ import {
   Folder,
   Headphones,
   Brain,
+  ToyBrick,
   BarChart3,
   Settings,
 } from 'lucide-react';
@@ -241,12 +242,15 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   // Use controlled or internal state
   const collapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
-  const setCollapsed = (value: boolean) => {
-    if (controlledCollapsed === undefined) {
-      setInternalCollapsed(value);
-    }
-    onCollapsedChange?.(value);
-  };
+  const setCollapsed = useCallback(
+    (value: boolean) => {
+      if (controlledCollapsed === undefined) {
+        setInternalCollapsed(value);
+      }
+      onCollapsedChange?.(value);
+    },
+    [controlledCollapsed, onCollapsedChange]
+  );
 
   const {
     conversations,
@@ -714,6 +718,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             { path: `/tenant/${tenantId}/projects`, icon: <Folder size={16} />, label: t('nav.projects', 'Projects') },
             { path: `/tenant/${tenantId}/agents`, icon: <Headphones size={16} />, label: t('nav.agents', 'Agents') },
             { path: `/tenant/${tenantId}/skills`, icon: <Brain size={16} />, label: t('nav.skills', 'Skills') },
+            { path: `/tenant/${tenantId}/plugins`, icon: <ToyBrick size={16} />, label: t('nav.plugins', 'Plugins') },
             { path: `/tenant/${tenantId}/analytics`, icon: <BarChart3 size={16} />, label: t('nav.analytics', 'Analytics') },
             { path: `/tenant/${tenantId}/settings`, icon: <Settings size={16} />, label: t('nav.settings', 'Settings') },
           ].map((item) => (

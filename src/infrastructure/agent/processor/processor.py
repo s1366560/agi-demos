@@ -1986,7 +1986,10 @@ class SessionProcessor:
             if (
                 tool_name
                 in {
+                    "plugin_manager",
                     "register_mcp_server",
+                    "skill_sync",
+                    "skill_installer",
                     "delegate_to_subagent",
                     "parallel_delegate_subagents",
                     "sessions_spawn",
@@ -2002,17 +2005,15 @@ class SessionProcessor:
                 except Exception as pending_err:
                     logger.error(f"{tool_name} event emission failed: {pending_err}")
 
-            # Refresh tools after successful register_mcp_server execution
-            # This enables immediate access to newly registered MCP tools
-            if tool_name == "register_mcp_server":
-                # Check if registration succeeded (no error prefix in output)
+            # Refresh tools after successful self-modifying tool execution.
+            if tool_name in {"plugin_manager", "register_mcp_server"}:
                 if isinstance(output_str, str) and not output_str.startswith("Error:"):
-                    logger.info("[Processor] register_mcp_server succeeded, refreshing tools")
+                    logger.info("[Processor] %s succeeded, refreshing tools", tool_name)
                     self._refresh_tools()
                 else:
                     logger.debug(
-                        "[Processor] register_mcp_server failed or returned error, "
-                        "skipping tool refresh"
+                        "[Processor] %s failed or returned error, skipping tool refresh",
+                        tool_name,
                     )
 
         except Exception as e:

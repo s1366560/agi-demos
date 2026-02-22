@@ -6,6 +6,7 @@ Contains modular initialization functions for various services.
 from .channels import (
     get_channel_manager,
     initialize_channel_manager,
+    reload_channel_manager_connections,
     set_message_router,
     shutdown_channel_manager,
 )
@@ -16,8 +17,8 @@ from .graph import initialize_graph_service
 from .llm import initialize_llm_providers
 from .redis import initialize_redis_client
 from .telemetry import initialize_telemetry, shutdown_telemetry_services
-from .workflow import initialize_workflow_engine
 from .websocket import initialize_websocket_manager
+from .workflow import initialize_workflow_engine
 
 __all__ = [
     "initialize_database_schema",
@@ -32,6 +33,7 @@ __all__ = [
     "initialize_docker_services",
     "shutdown_docker_services",
     "initialize_channel_manager",
+    "reload_channel_manager_connections",
     "shutdown_channel_manager",
     "get_channel_manager",
     "set_message_router",

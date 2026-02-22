@@ -8,6 +8,7 @@ pipeline.
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from src.domain.events.agent_events import AgentMCPAppRegisteredEvent
@@ -231,23 +232,47 @@ class RegisterMCPServerTool(AgentTool):
             )
 
             # Step 5: Invalidate all caches for this project so new tools are available
-            # This clears: tools_cache, agent_sessions, tool_definitions, mcp_tools
-            try:
-                from src.infrastructure.agent.state.agent_worker_state import (
-                    invalidate_all_caches_for_project,
+            # This clears: tools_cache, agent_sessions, tool_definitions, mcp_tools.
+            from src.infrastructure.agent.tools.self_modifying_lifecycle import (
+                SelfModifyingLifecycleOrchestrator,
+            )
+
+            lifecycle_result = SelfModifyingLifecycleOrchestrator.run_post_change(
+                source=TOOL_NAME,
+                tenant_id=self._tenant_id,
+                project_id=self._project_id,
+                clear_tool_definitions=True,
+                expected_tool_names=namespaced_tool_names,
+                metadata={
+                    "server_name": server_name,
+                },
+            )
+            logger.info(
+                "register_mcp_server lifecycle completed for project %s: %s",
+                self._project_id,
+                lifecycle_result["cache_invalidation"],
+            )
+            self._pending_events.append(
+                {
+                    "type": "toolset_changed",
+                    "data": {
+                        "source": TOOL_NAME,
+                        "project_id": self._project_id,
+                        "tenant_id": self._tenant_id,
+                        "server_name": server_name,
+                        "tool_names": namespaced_tool_names,
+                        "lifecycle": lifecycle_result,
+                    },
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
+
+            if lifecycle_result["probe"].get("status") == "missing_tools":
+                logger.warning(
+                    "register_mcp_server probe detected missing tools for %s: %s",
+                    server_name,
+                    lifecycle_result["probe"].get("missing_tools"),
                 )
-                invalidation_result = invalidate_all_caches_for_project(
-                    project_id=self._project_id,
-                    tenant_id=self._tenant_id,
-                    clear_tool_definitions=True,
-                )
-                logger.info(
-                    "All caches invalidated for project %s: %s",
-                    self._project_id,
-                    invalidation_result["invalidated"],
-                )
-            except Exception as cache_err:
-                logger.warning("Failed to invalidate caches: %s", cache_err)
 
             result = (
                 f"MCP server '{server_name}' registered and started successfully.\n"

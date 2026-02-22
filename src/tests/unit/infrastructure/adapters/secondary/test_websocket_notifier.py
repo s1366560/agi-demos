@@ -4,16 +4,14 @@ Unit tests for WebSocketNotifier.
 Tests the lifecycle state change notification system for ProjectReActAgent.
 """
 
-import asyncio
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
 from src.infrastructure.adapters.secondary.websocket_notifier import (
-    WebSocketNotifier,
     LifecycleState,
     LifecycleStateChangeMessage,
+    WebSocketNotifier,
 )
 
 
@@ -238,6 +236,43 @@ class TestWebSocketNotifier:
         # Should still attempt broadcast
         mock_connection_manager.broadcast_to_project.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_notify_subagent_lifecycle_event(self, notifier, mock_connection_manager):
+        """Test notify_subagent_lifecycle_event message format."""
+        event = {
+            "type": "subagent_spawned",
+            "conversation_id": "conv-789",
+            "run_id": "run-001",
+            "subagent_name": "researcher",
+        }
+        await notifier.notify_subagent_lifecycle_event(
+            tenant_id="tenant-456",
+            project_id="proj-123",
+            event=event,
+        )
+
+        mock_connection_manager.broadcast_to_project.assert_called_once()
+        call_kwargs = mock_connection_manager.broadcast_to_project.call_args.kwargs
+        sent_message = call_kwargs["message"]
+        assert sent_message["type"] == "subagent_lifecycle"
+        assert sent_message["tenant_id"] == "tenant-456"
+        assert sent_message["project_id"] == "proj-123"
+        assert sent_message["data"]["type"] == "subagent_spawned"
+        assert sent_message["data"]["run_id"] == "run-001"
+
+    @pytest.mark.asyncio
+    async def test_notify_subagent_lifecycle_event_handles_errors(
+        self, notifier, mock_connection_manager
+    ):
+        """Test notify_subagent_lifecycle_event handles broadcast errors."""
+        mock_connection_manager.broadcast_to_project.side_effect = RuntimeError("ws down")
+        count = await notifier.notify_subagent_lifecycle_event(
+            tenant_id="tenant-456",
+            project_id="proj-123",
+            event={"type": "subagent_ended", "run_id": "run-001"},
+        )
+        assert count == 0
+
 
 class TestConnectionManagerIntegration:
     """Integration tests with ConnectionManager."""
@@ -265,8 +300,6 @@ class TestConnectionManagerIntegration:
         manager = ConnectionManager()
         user_id = "user-123"
         session_id = "session-456"
-        project_id = "proj-789"
-
         # Use a mock websocket
         ws = AsyncMock()
         ws.send_json = AsyncMock()

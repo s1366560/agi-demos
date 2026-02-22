@@ -1,16 +1,20 @@
 """Channel configuration API endpoints."""
 
 import logging
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from jsonschema import Draft7Validator
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import and_, desc, func, nullslast, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.auth.roles import RoleDefinition
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user
-from src.infrastructure.adapters.primary.web.startup import get_channel_manager
+from src.infrastructure.adapters.primary.web.startup import (
+    get_channel_manager,
+    reload_channel_manager_connections,
+)
 from src.infrastructure.adapters.secondary.persistence.channel_models import (
     ChannelConfigModel,
     ChannelOutboxModel,
@@ -21,11 +25,15 @@ from src.infrastructure.adapters.secondary.persistence.channel_repository import
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import (
+    Project,
     Role,
     User,
     UserProject,
     UserRole,
+    UserTenant,
 )
+from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
+from src.infrastructure.agent.plugins.registry import get_plugin_registry
 from src.infrastructure.security.encryption_service import get_encryption_service
 
 logger = logging.getLogger(__name__)
@@ -66,6 +74,42 @@ async def verify_project_access(
     return user_project
 
 
+async def verify_tenant_access(
+    tenant_id: str,
+    user: User,
+    db: AsyncSession,
+    required_role: Optional[List[str]] = None,
+):
+    """Verify that user has access to the tenant."""
+    if user.is_superuser:
+        return True
+
+    query = select(UserTenant).where(
+        and_(UserTenant.user_id == user.id, UserTenant.tenant_id == tenant_id)
+    )
+    if required_role:
+        query = query.where(UserTenant.role.in_(required_role))
+
+    result = await db.execute(query)
+    user_tenant = result.scalar_one_or_none()
+    if not user_tenant:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied to tenant",
+        )
+    return True
+
+
+async def _resolve_project_tenant_id(project_id: str, db: AsyncSession) -> Optional[str]:
+    """Resolve tenant_id for project-scoped compatibility routes."""
+    try:
+        result = await db.execute(select(Project.tenant_id).where(Project.id == project_id))
+    except Exception as exc:
+        logger.warning("Failed to resolve tenant_id for project=%s: %s", project_id, exc)
+        return None
+    return result.scalar_one_or_none()
+
+
 # Pydantic schemas
 
 
@@ -74,8 +118,8 @@ class ChannelConfigCreate(BaseModel):
 
     channel_type: str = Field(
         ...,
-        description="Channel type: feishu, dingtalk, wecom",
-        pattern=r"^(feishu|dingtalk|wecom|slack|telegram)$",
+        description="Channel type (plugin-provided, e.g. feishu)",
+        pattern=r"^[a-z][a-z0-9_-]{1,63}$",
     )
     name: str = Field(..., description="Display name")
     enabled: bool = Field(True, description="Whether enabled")
@@ -120,7 +164,10 @@ class ChannelConfigCreate(BaseModel):
 
     @model_validator(mode="after")
     def _validate_webhook_requires_token(self) -> "ChannelConfigCreate":
-        if self.connection_mode == "webhook" and not self.verification_token:
+        token = self.verification_token
+        if not token and isinstance(self.extra_settings, dict):
+            token = self.extra_settings.get("verification_token")
+        if self.connection_mode == "webhook" and not token:
             raise ValueError(
                 "verification_token is required when connection_mode is 'webhook'"
             )
@@ -192,8 +239,320 @@ class ChannelConfigList(BaseModel):
     total: int
 
 
+class PluginDiagnosticResponse(BaseModel):
+    """Plugin runtime diagnostic entry."""
+
+    plugin_name: str
+    code: str
+    message: str
+    level: str = "warning"
+
+
+class RuntimePluginResponse(BaseModel):
+    """Plugin runtime record for UI management."""
+
+    name: str
+    source: str
+    package: Optional[str] = None
+    version: Optional[str] = None
+    enabled: bool = True
+    discovered: bool = True
+    channel_types: List[str] = Field(default_factory=list)
+
+
+class RuntimePluginListResponse(BaseModel):
+    """List of runtime plugins and diagnostics."""
+
+    items: List[RuntimePluginResponse]
+    diagnostics: List[PluginDiagnosticResponse] = Field(default_factory=list)
+
+
+class PluginInstallRequest(BaseModel):
+    """Plugin install request body."""
+
+    requirement: str = Field(..., min_length=1, description="PyPI requirement string")
+
+
+class PluginActionResponse(BaseModel):
+    """Plugin action response payload."""
+
+    success: bool
+    message: str
+    details: Optional[Dict[str, Any]] = None
+
+
+class ChannelPluginCatalogItemResponse(BaseModel):
+    """Channel type catalog item sourced from plugin registry."""
+
+    channel_type: str
+    plugin_name: str
+    source: str
+    package: Optional[str] = None
+    version: Optional[str] = None
+    enabled: bool = True
+    discovered: bool = True
+    schema_supported: bool = False
+
+
+class ChannelPluginConfigSchemaResponse(BaseModel):
+    """Config schema payload for a plugin-provided channel type."""
+
+    channel_type: str
+    plugin_name: str
+    source: str
+    package: Optional[str] = None
+    version: Optional[str] = None
+    schema_supported: bool = False
+    config_schema: Optional[Dict[str, Any]] = None
+    config_ui_hints: Optional[Dict[str, Any]] = None
+    defaults: Optional[Dict[str, Any]] = None
+    secret_paths: List[str] = Field(default_factory=list)
+
+
+class ChannelPluginCatalogResponse(BaseModel):
+    """Catalog response for channel-capable plugins."""
+
+    items: List[ChannelPluginCatalogItemResponse]
+
+
+_CHANNEL_SETTING_FIELDS = {
+    "app_id",
+    "app_secret",
+    "encrypt_key",
+    "verification_token",
+    "connection_mode",
+    "webhook_url",
+    "webhook_port",
+    "webhook_path",
+    "domain",
+}
+_SECRET_UNCHANGED_SENTINEL = "__MEMSTACK_SECRET_UNCHANGED__"
+
+
+def _resolve_channel_metadata(channel_type: str) -> Any | None:
+    normalized = (channel_type or "").strip().lower()
+    if not normalized:
+        return None
+    return get_plugin_registry().list_channel_type_metadata().get(normalized)
+
+
+def _resolve_secret_paths(metadata: Any | None) -> List[str]:
+    secret_paths = getattr(metadata, "secret_paths", None) if metadata is not None else None
+    if not isinstance(secret_paths, list):
+        return []
+    normalized: List[str] = []
+    for path in secret_paths:
+        if isinstance(path, str) and path.strip():
+            normalized.append(path.strip())
+    return normalized
+
+
+def _decrypt_app_secret(encrypted_value: Optional[str]) -> Optional[str]:
+    if not encrypted_value:
+        return None
+    encryption_service = get_encryption_service()
+    try:
+        return encryption_service.decrypt(encrypted_value)
+    except Exception:
+        logger.warning("Failed to decrypt app_secret while building plugin settings", exc_info=True)
+        return encrypted_value
+
+
+def _split_path(path: str) -> List[str]:
+    return [segment for segment in path.split(".") if segment]
+
+
+_MISSING = object()
+
+
+def _get_path_value(data: Dict[str, Any], path: str) -> Any:
+    current: Any = data
+    for segment in _split_path(path):
+        if not isinstance(current, dict) or segment not in current:
+            return _MISSING
+        current = current[segment]
+    return current
+
+
+def _set_path_value(data: Dict[str, Any], path: str, value: Any) -> None:
+    segments = _split_path(path)
+    if not segments:
+        return
+    current: Dict[str, Any] = data
+    for segment in segments[:-1]:
+        child = current.get(segment)
+        if not isinstance(child, dict):
+            child = {}
+            current[segment] = child
+        current = child
+    current[segments[-1]] = value
+
+
+def _collect_settings_from_config(
+    config: ChannelConfigModel,
+    *,
+    secret_paths: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    settings: Dict[str, Any] = {}
+    for field in _CHANNEL_SETTING_FIELDS:
+        value = getattr(config, field, None)
+        if value is not None:
+            settings[field] = value
+    if isinstance(config.extra_settings, dict):
+        for key, value in config.extra_settings.items():
+            if value is not None:
+                settings[key] = value
+
+    resolved_secret_paths = secret_paths or ["app_secret"]
+    if "app_secret" in settings:
+        decrypted_secret = _decrypt_app_secret(settings.get("app_secret"))
+        if decrypted_secret is not None:
+            settings["app_secret"] = decrypted_secret
+    settings = _decrypt_secret_values(settings, resolved_secret_paths)
+    return settings
+
+
+def _build_plugin_settings_payload(
+    *,
+    payload: Dict[str, Any],
+    metadata: Any | None,
+    existing_config: Optional[ChannelConfigModel] = None,
+    secret_paths: Optional[List[str]] = None,
+    apply_defaults: bool = False,
+) -> Dict[str, Any]:
+    settings: Dict[str, Any] = {}
+    if existing_config is not None:
+        settings.update(_collect_settings_from_config(existing_config, secret_paths=secret_paths))
+    if apply_defaults and isinstance(getattr(metadata, "defaults", None), dict):
+        settings.update(metadata.defaults)
+
+    incoming_extra = payload.get("extra_settings")
+    if isinstance(incoming_extra, dict):
+        settings.update(incoming_extra)
+
+    for field in _CHANNEL_SETTING_FIELDS:
+        if field in payload:
+            settings[field] = payload.get(field)
+    return settings
+
+
+def _apply_secret_sentinel(
+    *,
+    settings: Dict[str, Any],
+    secret_paths: List[str],
+    existing_settings: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    normalized = dict(settings)
+    for path in secret_paths:
+        value = _get_path_value(normalized, path)
+        if value != _SECRET_UNCHANGED_SENTINEL:
+            continue
+        existing_value = (
+            _get_path_value(existing_settings, path) if isinstance(existing_settings, dict) else _MISSING
+        )
+        if existing_value is _MISSING:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": "Secret sentinel is only valid for existing configs",
+                    "errors": [{"path": path, "message": "No existing secret value found"}],
+                },
+            )
+        _set_path_value(normalized, path, existing_value)
+    return normalized
+
+
+def _decrypt_secret_values(settings: Dict[str, Any], secret_paths: List[str]) -> Dict[str, Any]:
+    if not secret_paths:
+        return dict(settings)
+    decrypted = dict(settings)
+    encryption_service = get_encryption_service()
+    for path in secret_paths:
+        value = _get_path_value(decrypted, path)
+        if value in (_MISSING, None, "") or not isinstance(value, str):
+            continue
+        if value == _SECRET_UNCHANGED_SENTINEL:
+            continue
+        try:
+            _set_path_value(decrypted, path, encryption_service.decrypt(value))
+        except Exception:
+            # Keep original value when already plaintext or not decryptable.
+            continue
+    return decrypted
+
+
+def _encrypt_secret_values(settings: Dict[str, Any], secret_paths: List[str]) -> Dict[str, Any]:
+    if not secret_paths:
+        return dict(settings)
+    encrypted = dict(settings)
+    encryption_service = get_encryption_service()
+    for path in secret_paths:
+        value = _get_path_value(encrypted, path)
+        if value in (_MISSING, None, ""):
+            continue
+        if value == _SECRET_UNCHANGED_SENTINEL:
+            continue
+        _set_path_value(encrypted, path, encryption_service.encrypt(str(value)))
+    return encrypted
+
+
+def _mask_secret_values_for_response(
+    settings: Optional[Dict[str, Any]],
+    secret_paths: List[str],
+) -> Optional[Dict[str, Any]]:
+    if not isinstance(settings, dict):
+        return settings
+    if not secret_paths:
+        return dict(settings)
+    masked = dict(settings)
+    for path in secret_paths:
+        if path in _CHANNEL_SETTING_FIELDS:
+            continue
+        if _get_path_value(masked, path) is not _MISSING:
+            _set_path_value(masked, path, _SECRET_UNCHANGED_SENTINEL)
+    return masked
+
+
+def _validate_plugin_settings_schema(
+    *,
+    channel_type: str,
+    metadata: Any | None,
+    settings: Dict[str, Any],
+) -> None:
+    schema = getattr(metadata, "config_schema", None) if metadata is not None else None
+    if not isinstance(schema, dict):
+        return
+
+    validator = Draft7Validator(schema)
+    errors = sorted(validator.iter_errors(settings), key=lambda item: list(item.path))
+    if not errors:
+        return
+
+    formatted_errors = []
+    for error in errors:
+        path = ".".join(str(segment) for segment in error.path) or "$"
+        formatted_errors.append({"path": path, "message": error.message})
+
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail={
+            "message": f"Invalid channel settings for channel_type={channel_type}",
+            "errors": formatted_errors,
+        },
+    )
+
+
+def _split_settings_to_model_fields(settings: Dict[str, Any]) -> tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+    model_fields = {key: settings.get(key) for key in _CHANNEL_SETTING_FIELDS if key in settings}
+    extras = {key: value for key, value in settings.items() if key not in _CHANNEL_SETTING_FIELDS}
+    return model_fields, extras or None
+
+
 # Helper function to convert model to response (excluding sensitive data)
 def to_response(config: ChannelConfigModel) -> ChannelConfigResponse:
+    metadata = _resolve_channel_metadata(config.channel_type)
+    secret_paths = _resolve_secret_paths(metadata)
+    masked_extra_settings = _mask_secret_values_for_response(config.extra_settings, secret_paths)
     return ChannelConfigResponse(
         id=config.id,
         project_id=config.project_id,
@@ -206,7 +565,7 @@ def to_response(config: ChannelConfigModel) -> ChannelConfigResponse:
         webhook_port=config.webhook_port,
         webhook_path=config.webhook_path,
         domain=config.domain,
-        extra_settings=config.extra_settings,
+        extra_settings=masked_extra_settings,
         dm_policy=getattr(config, "dm_policy", None) or "open",
         group_policy=getattr(config, "group_policy", None) or "open",
         allow_from=getattr(config, "allow_from", None),
@@ -220,7 +579,561 @@ def to_response(config: ChannelConfigModel) -> ChannelConfigResponse:
     )
 
 
+def _serialize_plugin_diagnostics(diagnostics: List[Any]) -> List[PluginDiagnosticResponse]:
+    """Serialize plugin diagnostics into API response models."""
+    serialized: List[PluginDiagnosticResponse] = []
+    for diagnostic in diagnostics:
+        serialized.append(
+            PluginDiagnosticResponse(
+                plugin_name=str(getattr(diagnostic, "plugin_name", "unknown")),
+                code=str(getattr(diagnostic, "code", "unknown")),
+                message=str(getattr(diagnostic, "message", "")),
+                level=str(getattr(diagnostic, "level", "warning")),
+            )
+        )
+    return serialized
+
+
+async def _load_runtime_plugins(
+    *,
+    tenant_id: Optional[str] = None,
+) -> tuple[
+    List[Dict[str, Any]],
+    List[PluginDiagnosticResponse],
+    Dict[str, List[str]],
+]:
+    """Load plugin runtime view enriched with channel adapter ownership."""
+    runtime_manager = get_plugin_runtime_manager()
+    await runtime_manager.ensure_loaded()
+    plugin_records, diagnostics = runtime_manager.list_plugins(tenant_id=tenant_id)
+    channel_factories = get_plugin_registry().list_channel_adapter_factories()
+
+    channel_types_by_plugin: Dict[str, List[str]] = {}
+    for channel_type, (plugin_name, _factory) in channel_factories.items():
+        channel_types_by_plugin.setdefault(plugin_name, []).append(channel_type)
+
+    for plugin_name, channel_types in channel_types_by_plugin.items():
+        channel_types_by_plugin[plugin_name] = sorted(set(channel_types))
+
+    for record in plugin_records:
+        record["channel_types"] = channel_types_by_plugin.get(record["name"], [])
+
+    return plugin_records, _serialize_plugin_diagnostics(diagnostics), channel_types_by_plugin
+
+
+async def _ensure_channel_plugin_enabled_for_project(
+    *,
+    project_id: str,
+    channel_type: str,
+    db: AsyncSession,
+) -> None:
+    """Ensure plugin backing channel_type is enabled for the project's tenant."""
+    metadata = _resolve_channel_metadata(channel_type)
+    if metadata is None:
+        return
+
+    tenant_id = await _resolve_project_tenant_id(project_id, db)
+    if not tenant_id:
+        return
+
+    plugin_name = str(getattr(metadata, "plugin_name", "")).strip()
+    if not plugin_name:
+        return
+
+    runtime_manager = get_plugin_runtime_manager()
+    plugin_records, _ = runtime_manager.list_plugins(tenant_id=tenant_id)
+    plugin_record = next((item for item in plugin_records if item.get("name") == plugin_name), None)
+    if plugin_record and not bool(plugin_record.get("enabled", True)):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Plugin '{plugin_name}' is disabled for tenant '{tenant_id}'. "
+                f"Enable it before configuring channel_type '{channel_type}'."
+            ),
+        )
+
+
+async def _reconcile_channel_runtime_after_plugin_change() -> Optional[Dict[str, int]]:
+    """Reconcile running channel connections after plugin runtime changes."""
+    if get_channel_manager() is None:
+        return None
+    try:
+        reload_plan = await reload_channel_manager_connections(apply_changes=True)
+    except Exception as exc:
+        logger.warning("Failed to reconcile channel runtime after plugin change: %s", exc)
+        return None
+    return reload_plan.summary() if reload_plan else None
+
+
+def _build_channel_catalog_items(
+    *,
+    plugin_records: List[Dict[str, Any]],
+) -> List[ChannelPluginCatalogItemResponse]:
+    plugin_by_name = {record["name"]: record for record in plugin_records}
+    plugin_registry = get_plugin_registry()
+    channel_factories = plugin_registry.list_channel_adapter_factories()
+    channel_metadata = plugin_registry.list_channel_type_metadata()
+
+    items: List[ChannelPluginCatalogItemResponse] = []
+    for channel_type, (plugin_name, _factory) in sorted(channel_factories.items()):
+        plugin_record = plugin_by_name.get(plugin_name, {})
+        metadata = channel_metadata.get(channel_type)
+        items.append(
+            ChannelPluginCatalogItemResponse(
+                channel_type=channel_type,
+                plugin_name=plugin_name,
+                source=str(plugin_record.get("source", "entrypoint")),
+                package=plugin_record.get("package"),
+                version=plugin_record.get("version"),
+                enabled=bool(plugin_record.get("enabled", True)),
+                discovered=bool(plugin_record.get("discovered", True)),
+                schema_supported=bool(metadata and metadata.config_schema),
+            )
+        )
+    return items
+
+
 # API Endpoints
+
+
+@router.get(
+    "/projects/{project_id}/plugins",
+    response_model=RuntimePluginListResponse,
+)
+async def list_project_plugins(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List runtime plugins available to the current deployment."""
+    await verify_project_access(project_id, current_user, db)
+    project_tenant_id = await _resolve_project_tenant_id(project_id, db)
+    plugin_records, diagnostics, _ = await _load_runtime_plugins(tenant_id=project_tenant_id)
+    return RuntimePluginListResponse(
+        items=[RuntimePluginResponse(**record) for record in plugin_records],
+        diagnostics=diagnostics,
+    )
+
+
+@router.get(
+    "/tenants/{tenant_id}/plugins",
+    response_model=RuntimePluginListResponse,
+)
+async def list_tenant_plugins(
+    tenant_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List runtime plugins for tenant-scoped plugin hub."""
+    await verify_tenant_access(tenant_id, current_user, db)
+    plugin_records, diagnostics, _ = await _load_runtime_plugins(tenant_id=tenant_id)
+    return RuntimePluginListResponse(
+        items=[RuntimePluginResponse(**record) for record in plugin_records],
+        diagnostics=diagnostics,
+    )
+
+
+@router.get(
+    "/tenants/{tenant_id}/plugins/channel-catalog",
+    response_model=ChannelPluginCatalogResponse,
+)
+async def list_tenant_channel_plugin_catalog(
+    tenant_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List channel plugin catalog for tenant-scoped plugin hub."""
+    await verify_tenant_access(tenant_id, current_user, db)
+    plugin_records, _, _ = await _load_runtime_plugins(tenant_id=tenant_id)
+    return ChannelPluginCatalogResponse(items=_build_channel_catalog_items(plugin_records=plugin_records))
+
+
+@router.get(
+    "/tenants/{tenant_id}/plugins/channel-catalog/{channel_type}/schema",
+    response_model=ChannelPluginConfigSchemaResponse,
+)
+async def get_tenant_channel_plugin_schema(
+    tenant_id: str,
+    channel_type: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return plugin channel schema metadata for tenant-scoped plugin hub."""
+    await verify_tenant_access(tenant_id, current_user, db)
+    plugin_records, _, _ = await _load_runtime_plugins(tenant_id=tenant_id)
+    plugin_by_name = {record["name"]: record for record in plugin_records}
+    metadata = get_plugin_registry().list_channel_type_metadata().get(channel_type)
+    if metadata is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Channel type not found in plugin catalog: {channel_type}",
+        )
+
+    plugin_record = plugin_by_name.get(metadata.plugin_name, {})
+    return ChannelPluginConfigSchemaResponse(
+        channel_type=metadata.channel_type,
+        plugin_name=metadata.plugin_name,
+        source=str(plugin_record.get("source", "entrypoint")),
+        package=plugin_record.get("package"),
+        version=plugin_record.get("version"),
+        schema_supported=bool(metadata.config_schema),
+        config_schema=metadata.config_schema,
+        config_ui_hints=metadata.config_ui_hints,
+        defaults=metadata.defaults,
+        secret_paths=list(metadata.secret_paths),
+    )
+
+
+@router.post(
+    "/tenants/{tenant_id}/plugins/install",
+    response_model=PluginActionResponse,
+)
+async def install_tenant_plugin(
+    tenant_id: str,
+    data: PluginInstallRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Install plugin package from tenant-scoped plugin hub."""
+    await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
+    manager = get_plugin_runtime_manager()
+    result = await manager.install_plugin(data.requirement)
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error", "Plugin install failed"),
+        )
+    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
+    details = dict(result)
+    if channel_reload_plan is not None:
+        details["channel_reload_plan"] = channel_reload_plan
+    return PluginActionResponse(
+        success=True,
+        message=f"Installed plugin requirement: {data.requirement}",
+        details=details,
+    )
+
+
+@router.post(
+    "/tenants/{tenant_id}/plugins/{plugin_name}/enable",
+    response_model=PluginActionResponse,
+)
+async def enable_tenant_plugin(
+    tenant_id: str,
+    plugin_name: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Enable plugin from tenant-scoped plugin hub."""
+    await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
+    manager = get_plugin_runtime_manager()
+    diagnostics = await manager.set_plugin_enabled(
+        plugin_name,
+        enabled=True,
+        tenant_id=tenant_id,
+    )
+    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
+    details: Dict[str, Any] = {
+        "diagnostics": [item.model_dump() for item in _serialize_plugin_diagnostics(diagnostics)]
+    }
+    if channel_reload_plan is not None:
+        details["channel_reload_plan"] = channel_reload_plan
+    return PluginActionResponse(
+        success=True,
+        message=f"Enabled plugin: {plugin_name}",
+        details=details,
+    )
+
+
+@router.post(
+    "/tenants/{tenant_id}/plugins/{plugin_name}/disable",
+    response_model=PluginActionResponse,
+)
+async def disable_tenant_plugin(
+    tenant_id: str,
+    plugin_name: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Disable plugin from tenant-scoped plugin hub."""
+    await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
+    manager = get_plugin_runtime_manager()
+    diagnostics = await manager.set_plugin_enabled(
+        plugin_name,
+        enabled=False,
+        tenant_id=tenant_id,
+    )
+    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
+    details: Dict[str, Any] = {
+        "diagnostics": [item.model_dump() for item in _serialize_plugin_diagnostics(diagnostics)]
+    }
+    if channel_reload_plan is not None:
+        details["channel_reload_plan"] = channel_reload_plan
+    return PluginActionResponse(
+        success=True,
+        message=f"Disabled plugin: {plugin_name}",
+        details=details,
+    )
+
+
+@router.post(
+    "/tenants/{tenant_id}/plugins/{plugin_name}/uninstall",
+    response_model=PluginActionResponse,
+)
+async def uninstall_tenant_plugin(
+    tenant_id: str,
+    plugin_name: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Uninstall plugin package from tenant-scoped plugin hub."""
+    await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
+    manager = get_plugin_runtime_manager()
+    result = await manager.uninstall_plugin(plugin_name)
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error", "Plugin uninstall failed"),
+        )
+    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
+    details = dict(result)
+    if channel_reload_plan is not None:
+        details["channel_reload_plan"] = channel_reload_plan
+    return PluginActionResponse(
+        success=True,
+        message=f"Uninstalled plugin: {plugin_name}",
+        details=details,
+    )
+
+
+@router.post(
+    "/tenants/{tenant_id}/plugins/reload",
+    response_model=PluginActionResponse,
+)
+async def reload_tenant_plugins(
+    tenant_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Reload plugins from tenant-scoped plugin hub."""
+    await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
+    manager = get_plugin_runtime_manager()
+    diagnostics = await manager.reload()
+    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
+    details: Dict[str, Any] = {
+        "diagnostics": [item.model_dump() for item in _serialize_plugin_diagnostics(diagnostics)]
+    }
+    if channel_reload_plan is not None:
+        details["channel_reload_plan"] = channel_reload_plan
+    return PluginActionResponse(
+        success=True,
+        message="Plugin runtime reloaded",
+        details=details,
+    )
+
+
+@router.get(
+    "/projects/{project_id}/plugins/channel-catalog",
+    response_model=ChannelPluginCatalogResponse,
+)
+async def list_project_channel_plugin_catalog(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List channel types currently provided by loaded plugins."""
+    await verify_project_access(project_id, current_user, db)
+    project_tenant_id = await _resolve_project_tenant_id(project_id, db)
+    plugin_records, _, _ = await _load_runtime_plugins(tenant_id=project_tenant_id)
+    return ChannelPluginCatalogResponse(items=_build_channel_catalog_items(plugin_records=plugin_records))
+
+
+@router.get(
+    "/projects/{project_id}/plugins/channel-catalog/{channel_type}/schema",
+    response_model=ChannelPluginConfigSchemaResponse,
+)
+async def get_project_channel_plugin_schema(
+    project_id: str,
+    channel_type: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return config schema metadata for a plugin-provided channel type."""
+    await verify_project_access(project_id, current_user, db)
+    project_tenant_id = await _resolve_project_tenant_id(project_id, db)
+    plugin_records, _, _ = await _load_runtime_plugins(tenant_id=project_tenant_id)
+    plugin_by_name = {record["name"]: record for record in plugin_records}
+    metadata = get_plugin_registry().list_channel_type_metadata().get(channel_type)
+
+    if metadata is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Channel type not found in plugin catalog: {channel_type}",
+        )
+
+    plugin_record = plugin_by_name.get(metadata.plugin_name, {})
+    return ChannelPluginConfigSchemaResponse(
+        channel_type=metadata.channel_type,
+        plugin_name=metadata.plugin_name,
+        source=str(plugin_record.get("source", "entrypoint")),
+        package=plugin_record.get("package"),
+        version=plugin_record.get("version"),
+        schema_supported=bool(metadata.config_schema),
+        config_schema=metadata.config_schema,
+        config_ui_hints=metadata.config_ui_hints,
+        defaults=metadata.defaults,
+        secret_paths=list(metadata.secret_paths),
+    )
+
+
+@router.post(
+    "/projects/{project_id}/plugins/install",
+    response_model=PluginActionResponse,
+)
+async def install_project_plugin(
+    project_id: str,
+    data: PluginInstallRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Install a plugin package and reload runtime plugin registry."""
+    await verify_project_access(project_id, current_user, db, ["owner", "admin"])
+    manager = get_plugin_runtime_manager()
+    result = await manager.install_plugin(data.requirement)
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error", "Plugin install failed"),
+        )
+    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
+    details = dict(result)
+    if channel_reload_plan is not None:
+        details["channel_reload_plan"] = channel_reload_plan
+    return PluginActionResponse(
+        success=True,
+        message=f"Installed plugin requirement: {data.requirement}",
+        details=details,
+    )
+
+
+@router.post(
+    "/projects/{project_id}/plugins/{plugin_name}/enable",
+    response_model=PluginActionResponse,
+)
+async def enable_project_plugin(
+    project_id: str,
+    plugin_name: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Enable plugin and reload runtime plugin registry."""
+    await verify_project_access(project_id, current_user, db, ["owner", "admin"])
+    manager = get_plugin_runtime_manager()
+    project_tenant_id = await _resolve_project_tenant_id(project_id, db)
+    diagnostics = await manager.set_plugin_enabled(
+        plugin_name,
+        enabled=True,
+        tenant_id=project_tenant_id,
+    )
+    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
+    details: Dict[str, Any] = {
+        "diagnostics": [item.model_dump() for item in _serialize_plugin_diagnostics(diagnostics)]
+    }
+    if channel_reload_plan is not None:
+        details["channel_reload_plan"] = channel_reload_plan
+    return PluginActionResponse(
+        success=True,
+        message=f"Enabled plugin: {plugin_name}",
+        details=details,
+    )
+
+
+@router.post(
+    "/projects/{project_id}/plugins/{plugin_name}/disable",
+    response_model=PluginActionResponse,
+)
+async def disable_project_plugin(
+    project_id: str,
+    plugin_name: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Disable plugin and reload runtime plugin registry."""
+    await verify_project_access(project_id, current_user, db, ["owner", "admin"])
+    manager = get_plugin_runtime_manager()
+    project_tenant_id = await _resolve_project_tenant_id(project_id, db)
+    diagnostics = await manager.set_plugin_enabled(
+        plugin_name,
+        enabled=False,
+        tenant_id=project_tenant_id,
+    )
+    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
+    details: Dict[str, Any] = {
+        "diagnostics": [item.model_dump() for item in _serialize_plugin_diagnostics(diagnostics)]
+    }
+    if channel_reload_plan is not None:
+        details["channel_reload_plan"] = channel_reload_plan
+    return PluginActionResponse(
+        success=True,
+        message=f"Disabled plugin: {plugin_name}",
+        details=details,
+    )
+
+
+@router.post(
+    "/projects/{project_id}/plugins/{plugin_name}/uninstall",
+    response_model=PluginActionResponse,
+)
+async def uninstall_project_plugin(
+    project_id: str,
+    plugin_name: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Uninstall plugin package and reload runtime plugin registry."""
+    await verify_project_access(project_id, current_user, db, ["owner", "admin"])
+    manager = get_plugin_runtime_manager()
+    result = await manager.uninstall_plugin(plugin_name)
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error", "Plugin uninstall failed"),
+        )
+    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
+    details = dict(result)
+    if channel_reload_plan is not None:
+        details["channel_reload_plan"] = channel_reload_plan
+    return PluginActionResponse(
+        success=True,
+        message=f"Uninstalled plugin: {plugin_name}",
+        details=details,
+    )
+
+
+@router.post(
+    "/projects/{project_id}/plugins/reload",
+    response_model=PluginActionResponse,
+)
+async def reload_project_plugins(
+    project_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Reload runtime plugin discovery and registrations."""
+    await verify_project_access(project_id, current_user, db, ["owner", "admin"])
+    manager = get_plugin_runtime_manager()
+    diagnostics = await manager.reload()
+    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
+    details: Dict[str, Any] = {
+        "diagnostics": [item.model_dump() for item in _serialize_plugin_diagnostics(diagnostics)]
+    }
+    if channel_reload_plan is not None:
+        details["channel_reload_plan"] = channel_reload_plan
+    return PluginActionResponse(
+        success=True,
+        message="Plugin runtime reloaded",
+        details=details,
+    )
 
 
 @router.post(
@@ -237,30 +1150,60 @@ async def create_config(
     """Create a new channel configuration for a project."""
     # Verify project access (requires admin or owner role)
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
+    await _ensure_channel_plugin_enabled_for_project(
+        project_id=project_id,
+        channel_type=data.channel_type,
+        db=db,
+    )
 
     repo = ChannelConfigRepository(db)
+    metadata = _resolve_channel_metadata(data.channel_type)
+    payload = data.model_dump(exclude_unset=True)
+    model_settings: Dict[str, Any] = {}
+    normalized_extra_settings = data.extra_settings
 
-    # Encrypt sensitive credentials before storage
-    encryption_service = get_encryption_service()
-    encrypted_secret = None
-    if data.app_secret:
-        encrypted_secret = encryption_service.encrypt(data.app_secret)
+    if metadata and isinstance(getattr(metadata, "config_schema", None), dict):
+        secret_paths = _resolve_secret_paths(metadata)
+        settings_payload = _build_plugin_settings_payload(
+            payload=payload,
+            metadata=metadata,
+            secret_paths=secret_paths,
+            apply_defaults=True,
+        )
+        settings_payload = _apply_secret_sentinel(
+            settings=settings_payload,
+            secret_paths=secret_paths,
+        )
+        _validate_plugin_settings_schema(
+            channel_type=data.channel_type,
+            metadata=metadata,
+            settings=settings_payload,
+        )
+        encrypted_settings = _encrypt_secret_values(settings_payload, secret_paths)
+        model_settings, normalized_extra_settings = _split_settings_to_model_fields(encrypted_settings)
+    else:
+        # Backward-compatible encryption for legacy non-schema channels.
+        encryption_service = get_encryption_service()
+        encrypted_secret = None
+        if data.app_secret:
+            encrypted_secret = encryption_service.encrypt(data.app_secret)
+        model_settings["app_secret"] = encrypted_secret
 
     config = ChannelConfigModel(
         project_id=project_id,
         channel_type=data.channel_type,
         name=data.name,
         enabled=data.enabled,
-        connection_mode=data.connection_mode,
-        app_id=data.app_id,
-        app_secret=encrypted_secret,  # Encrypted
-        encrypt_key=data.encrypt_key,
-        verification_token=data.verification_token,
-        webhook_url=data.webhook_url,
-        webhook_port=data.webhook_port,
-        webhook_path=data.webhook_path,
-        domain=data.domain,
-        extra_settings=data.extra_settings,
+        connection_mode=str(model_settings.get("connection_mode", data.connection_mode)),
+        app_id=model_settings.get("app_id", data.app_id),
+        app_secret=model_settings.get("app_secret"),  # Encrypted for schema channels
+        encrypt_key=model_settings.get("encrypt_key", data.encrypt_key),
+        verification_token=model_settings.get("verification_token", data.verification_token),
+        webhook_url=model_settings.get("webhook_url", data.webhook_url),
+        webhook_port=model_settings.get("webhook_port", data.webhook_port),
+        webhook_path=model_settings.get("webhook_path", data.webhook_path),
+        domain=model_settings.get("domain", data.domain),
+        extra_settings=normalized_extra_settings,
         dm_policy=data.dm_policy,
         group_policy=data.group_policy,
         allow_from=data.allow_from,
@@ -341,17 +1284,57 @@ async def update_config(
 
     # Verify project access (requires admin or owner role)
     await verify_project_access(config.project_id, current_user, db, ["owner", "admin"])
+    await _ensure_channel_plugin_enabled_for_project(
+        project_id=config.project_id,
+        channel_type=config.channel_type,
+        db=db,
+    )
 
-    # Update fields
     update_data = data.model_dump(exclude_unset=True)
+    metadata = _resolve_channel_metadata(config.channel_type)
+    if metadata and isinstance(getattr(metadata, "config_schema", None), dict):
+        secret_paths = _resolve_secret_paths(metadata)
+        existing_settings = _collect_settings_from_config(config, secret_paths=secret_paths)
+        settings_payload = _build_plugin_settings_payload(
+            payload=update_data,
+            metadata=metadata,
+            existing_config=config,
+            secret_paths=secret_paths,
+            apply_defaults=False,
+        )
+        settings_payload = _apply_secret_sentinel(
+            settings=settings_payload,
+            secret_paths=secret_paths,
+            existing_settings=existing_settings,
+        )
+        _validate_plugin_settings_schema(
+            channel_type=config.channel_type,
+            metadata=metadata,
+            settings=settings_payload,
+        )
+        encrypted_settings = _encrypt_secret_values(settings_payload, secret_paths)
+        model_settings, normalized_extra_settings = _split_settings_to_model_fields(encrypted_settings)
 
-    # Encrypt app_secret if provided
-    if update_data.get("app_secret"):
-        encryption_service = get_encryption_service()
-        update_data["app_secret"] = encryption_service.encrypt(update_data["app_secret"])
+        for field, value in update_data.items():
+            if field in _CHANNEL_SETTING_FIELDS or field == "extra_settings":
+                continue
+            setattr(config, field, value)
 
-    for field, value in update_data.items():
-        setattr(config, field, value)
+        for field, new_value in model_settings.items():
+            setattr(config, field, new_value)
+
+        existing_extra_settings = config.extra_settings if isinstance(config.extra_settings, dict) else None
+        if normalized_extra_settings != existing_extra_settings:
+            config.extra_settings = normalized_extra_settings
+    else:
+        # Update fields
+        # Encrypt app_secret if provided
+        if update_data.get("app_secret"):
+            encryption_service = get_encryption_service()
+            update_data["app_secret"] = encryption_service.encrypt(update_data["app_secret"])
+
+        for field, value in update_data.items():
+            setattr(config, field, value)
 
     updated = await repo.update(config)
     await db.commit()

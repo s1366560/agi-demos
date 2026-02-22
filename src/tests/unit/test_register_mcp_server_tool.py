@@ -181,7 +181,7 @@ class TestRegisterMCPServerTool:
 
         # Check events - should have AgentMCPAppRegisteredEvent and AgentToolsUpdatedEvent
         events = tool.consume_pending_events()
-        assert len(events) == 2
+        assert len(events) >= 2
 
         # Find the MCP app registered event
         app_events = [e for e in events if hasattr(e, "source")]
@@ -193,6 +193,8 @@ class TestRegisterMCPServerTool:
         tools_events = [e for e in events if hasattr(e, "tool_names")]
         assert len(tools_events) == 1
         assert "mcp__dashboard-server__render_dashboard" in tools_events[0].tool_names
+        toolset_events = [e for e in events if isinstance(e, dict) and e.get("type") == "toolset_changed"]
+        assert len(toolset_events) == 1
 
     async def test_execute_exception_handling(self):
         mock_adapter = AsyncMock()

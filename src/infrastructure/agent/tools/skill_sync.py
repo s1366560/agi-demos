@@ -10,6 +10,7 @@ all resource files.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, Union
 
 from src.infrastructure.agent.tools.base import AgentTool
@@ -49,6 +50,7 @@ class SkillSyncTool(AgentTool):
         self._sandbox_id = sandbox_id
         self._session_factory = session_factory
         self._skill_loader_tool = skill_loader_tool
+        self._pending_events: list[Any] = []
 
     def set_sandbox_id(self, sandbox_id: str) -> None:
         """Set the sandbox ID (called when sandbox becomes available)."""
@@ -65,6 +67,12 @@ class SkillSyncTool(AgentTool):
     def set_skill_loader_tool(self, tool: Any) -> None:
         """Set reference to SkillLoaderTool for cache invalidation."""
         self._skill_loader_tool = tool
+
+    def consume_pending_events(self) -> list[Any]:
+        """Consume pending SSE events buffered during execute()."""
+        events = list(self._pending_events)
+        self._pending_events.clear()
+        return events
 
     def get_parameters_schema(self) -> Dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
@@ -145,8 +153,21 @@ class SkillSyncTool(AgentTool):
 
                 await db_session.commit()
 
-            # Invalidate caches
-            self._invalidate_caches()
+            # Invalidate caches + run post-change lifecycle.
+            lifecycle_result = self._invalidate_caches(skill_name=skill_name)
+            self._pending_events.append(
+                {
+                    "type": "toolset_changed",
+                    "data": {
+                        "source": TOOL_NAME,
+                        "tenant_id": self._tenant_id,
+                        "project_id": self._project_id,
+                        "skill_name": skill_name,
+                        "lifecycle": lifecycle_result,
+                    },
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
 
             return {
                 "title": f"Skill '{skill_name}' synced successfully",
@@ -159,30 +180,38 @@ class SkillSyncTool(AgentTool):
                     f"The skill is now available in the system and "
                     f"can be used with /skill-name."
                 ),
-                "metadata": result,
+                "metadata": {
+                    **result,
+                    "lifecycle": lifecycle_result,
+                },
             }
 
         except Exception as e:
             logger.error(f"Skill sync failed for '{skill_name}': {e}", exc_info=True)
             return {"error": f"Skill sync failed: {e}"}
 
-    def _invalidate_caches(self) -> None:
+    def _invalidate_caches(self, *, skill_name: str) -> Dict[str, Any]:
         """Invalidate skill caches after sync."""
         # Refresh SkillLoaderTool cache
         if self._skill_loader_tool and hasattr(self._skill_loader_tool, "refresh_skills"):
-            try:
-                self._skill_loader_tool.refresh_skills()
-                logger.info("SkillLoaderTool cache invalidated after skill sync")
-            except Exception as e:
-                logger.warning(f"Failed to invalidate SkillLoaderTool cache: {e}")
+            self._skill_loader_tool.refresh_skills()
+            logger.info("SkillLoaderTool cache invalidated after skill sync")
 
-        # Invalidate worker-level caches
-        try:
-            from src.infrastructure.agent.state.agent_worker_state import (
-                invalidate_skill_loader_cache,
-            )
+        from src.infrastructure.agent.tools.self_modifying_lifecycle import (
+            SelfModifyingLifecycleOrchestrator,
+        )
 
-            invalidate_skill_loader_cache(self._tenant_id)
-            logger.info(f"Worker skill_loader cache invalidated for tenant {self._tenant_id}")
-        except Exception as e:
-            logger.warning(f"Failed to invalidate worker caches: {e}")
+        lifecycle_result = SelfModifyingLifecycleOrchestrator.run_post_change(
+            source=TOOL_NAME,
+            tenant_id=self._tenant_id,
+            project_id=self._project_id,
+            clear_tool_definitions=False,
+            metadata={"skill_name": skill_name},
+        )
+        logger.info(
+            "Skill sync lifecycle completed for tenant=%s project=%s: %s",
+            self._tenant_id,
+            self._project_id,
+            lifecycle_result["cache_invalidation"],
+        )
+        return lifecycle_result

@@ -463,6 +463,15 @@ class ProjectReActAgent:
                 truncate_system=app_settings.compression_truncate_system,
             )
 
+            async def _subagent_lifecycle_hook(event: Dict[str, Any]) -> None:
+                if not notifier:
+                    return
+                await notifier.notify_subagent_lifecycle_event(
+                    tenant_id=self.config.tenant_id,
+                    project_id=self.config.project_id,
+                    event=event,
+                )
+
             self._react_agent = ReActAgent(
                 model=provider_config.llm_model,
                 tools=self._tools,
@@ -483,6 +492,21 @@ class ProjectReActAgent:
                 memory_recall=memory_recall,
                 memory_capture=memory_capture,
                 memory_flush=memory_flush,
+                max_subagent_delegation_depth=app_settings.agent_subagent_max_delegation_depth,
+                max_subagent_active_runs=app_settings.agent_subagent_max_active_runs,
+                max_subagent_children_per_requester=(
+                    app_settings.agent_subagent_max_children_per_requester
+                ),
+                max_subagent_lane_concurrency=app_settings.agent_subagent_lane_concurrency,
+                subagent_terminal_retention_seconds=(
+                    app_settings.agent_subagent_terminal_retention_seconds
+                ),
+                subagent_announce_max_events=app_settings.agent_subagent_announce_max_events,
+                subagent_announce_max_retries=app_settings.agent_subagent_announce_max_retries,
+                subagent_announce_retry_delay_ms=(
+                    app_settings.agent_subagent_announce_retry_delay_ms
+                ),
+                subagent_lifecycle_hook=_subagent_lifecycle_hook,
                 # Use cached components from session pool
                 _cached_tool_definitions=self._session_context.tool_definitions,
                 _cached_system_prompt_manager=self._session_context.system_prompt_manager,

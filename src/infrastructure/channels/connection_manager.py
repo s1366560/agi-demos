@@ -248,36 +248,92 @@ class ChannelConnectionManager:
         Raises:
             ValueError: If channel type is not supported.
         """
-        # Decrypt app_secret if needed
-        app_secret = config.app_secret or ""
-        if app_secret:
-            try:
-                from src.infrastructure.security.encryption_service import get_encryption_service
+        from src.infrastructure.agent.plugins.registry import (
+            ChannelAdapterBuildContext,
+            get_plugin_registry,
+        )
+        from src.infrastructure.security.encryption_service import get_encryption_service
 
-                encryption_service = get_encryption_service()
-                app_secret = encryption_service.decrypt(app_secret)
-            except Exception as e:
-                logger.warning(f"[ChannelManager] Failed to decrypt app_secret: {e}")
+        plugin_registry = get_plugin_registry()
+        metadata = plugin_registry.list_channel_type_metadata().get((config.channel_type or "").lower())
+        secret_paths_raw = getattr(metadata, "secret_paths", None)
+        secret_paths = (
+            [path for path in secret_paths_raw if isinstance(path, str)]
+            if isinstance(secret_paths_raw, list)
+            else []
+        )
+        encryption_service = get_encryption_service()
+
+        def _decrypt_if_needed(value: Optional[str]) -> Optional[str]:
+            if not value:
+                return value
+            try:
+                return encryption_service.decrypt(value)
+            except Exception:
+                return value
+
+        app_secret = config.app_secret or ""
+        if app_secret and (not secret_paths or "app_secret" in secret_paths):
+            app_secret = _decrypt_if_needed(app_secret) or ""
+
+        encrypt_key = config.encrypt_key
+        if encrypt_key and "encrypt_key" in secret_paths:
+            encrypt_key = _decrypt_if_needed(encrypt_key)
+
+        verification_token = config.verification_token
+        if verification_token and "verification_token" in secret_paths:
+            verification_token = _decrypt_if_needed(verification_token)
+
+        extra_settings = dict(config.extra_settings or {})
+        for secret_path in secret_paths:
+            if secret_path in {"app_secret", "encrypt_key", "verification_token"}:
+                continue
+            if "." in secret_path:
+                continue
+            secret_value = extra_settings.get(secret_path)
+            if isinstance(secret_value, str) and secret_value:
+                extra_settings[secret_path] = _decrypt_if_needed(secret_value)
 
         channel_config = ChannelConfig(
             enabled=config.enabled,
             app_id=config.app_id,
             app_secret=app_secret,
-            encrypt_key=config.encrypt_key,
-            verification_token=config.verification_token,
+            encrypt_key=encrypt_key,
+            verification_token=verification_token,
             connection_mode=config.connection_mode,
             webhook_port=config.webhook_port,
             webhook_path=config.webhook_path,
             domain=config.domain,
-            extra=config.extra_settings or {},
+            extra=extra_settings,
         )
+        adapter, diagnostics = await plugin_registry.build_channel_adapter(
+            ChannelAdapterBuildContext(
+                channel_type=config.channel_type,
+                config_model=config,
+                channel_config=channel_config,
+            )
+        )
+        for diagnostic in diagnostics:
+            self._log_plugin_diagnostic(diagnostic)
+        if adapter is not None:
+            return adapter
 
-        if config.channel_type == "feishu":
-            from src.infrastructure.adapters.secondary.channels.feishu import FeishuAdapter
+        raise ValueError(f"Unsupported channel type: {config.channel_type}")
 
-            return FeishuAdapter(channel_config)
-        else:
-            raise ValueError(f"Unsupported channel type: {config.channel_type}")
+    @staticmethod
+    def _log_plugin_diagnostic(diagnostic: Any) -> None:
+        """Log plugin diagnostic records emitted during adapter creation."""
+        message = (
+            f"[ChannelManager][Plugin:{diagnostic.plugin_name}] "
+            f"{diagnostic.code}: {diagnostic.message}"
+        )
+        if diagnostic.level == "error":
+            logger.error(message)
+            return
+        if diagnostic.level == "info":
+            logger.info(message)
+            return
+        logger.warning(message)
 
     async def _connection_loop(
         self,
@@ -408,13 +464,31 @@ class ChannelConnectionManager:
 
     def _schedule_route_message(self, message: Message) -> None:
         """Schedule message routing on the manager's main event loop."""
+        # If main loop is not available, try to get current running loop
         if (
             self._main_loop is None
             or self._main_loop.is_closed()
             or not self._main_loop.is_running()
         ):
-            logger.error("[ChannelManager] Main event loop not initialized for routing")
-            return
+            try:
+                self._main_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # No running loop available - try to route synchronously if possible
+                logger.warning("[ChannelManager] No event loop available, attempting sync routing")
+                if self._message_router:
+                    try:
+                        # If it's a coroutine function, we can't run it sync
+                        if asyncio.iscoroutinefunction(self._message_router):
+                            logger.error(
+                                "[ChannelManager] Cannot route async function without event loop"
+                            )
+                            return
+                        # Otherwise run sync
+                        self._message_router(message)
+                        return
+                    except Exception as e:
+                        logger.error(f"[ChannelManager] Sync routing failed: {e}")
+                        return
 
         coro = self._safe_route_message(message)
         try:
@@ -560,7 +634,7 @@ class ChannelConnectionManager:
             try:
                 await asyncio.sleep(HEALTH_CHECK_INTERVAL)
                 cycle += 1
-                deep_ping = (cycle % API_PING_CYCLE == 0)
+                deep_ping = cycle % API_PING_CYCLE == 0
 
                 for connection in list(self._connections.values()):
                     if connection.status == "connected":

@@ -5,6 +5,7 @@ execution based on TaskDecomposer results.
 """
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -481,6 +482,13 @@ class TestSessionizedRuntime:
         assert final is not None
         assert final.status.value == "failed"
         assert final.error == "subagent failed"
+        assert final.metadata.get("announce_status") == "delivered"
+        announce_payload = final.metadata.get("announce_payload")
+        assert isinstance(announce_payload, dict)
+        assert announce_payload["status"] == "failed"
+        assert announce_payload["outcome"] == "error"
+        assert announce_payload["result"] == "failed summary"
+        assert announce_payload["notes"] == "subagent failed"
 
     async def test_launch_session_marks_completed_on_success(self):
         sa = _make_subagent("researcher")
@@ -525,6 +533,13 @@ class TestSessionizedRuntime:
         assert final is not None
         assert final.status.value == "completed"
         assert final.summary == "done"
+        assert final.metadata.get("announce_status") == "delivered"
+        announce_payload = final.metadata.get("announce_payload")
+        assert isinstance(announce_payload, dict)
+        assert announce_payload["status"] == "completed"
+        assert announce_payload["outcome"] == "success"
+        assert announce_payload["result"] == "done"
+        assert announce_payload["tokens_used"] == 7
 
     async def test_launch_session_marks_timed_out_when_timeout_exceeded(self):
         sa = _make_subagent("researcher")
@@ -571,6 +586,353 @@ class TestSessionizedRuntime:
         assert final is not None
         assert final.status.value == "timed_out"
         assert "timeout_seconds" in final.metadata
+        assert final.metadata.get("announce_status") == "delivered"
+        announce_payload = final.metadata.get("announce_payload")
+        assert isinstance(announce_payload, dict)
+        assert announce_payload["status"] == "timed_out"
+        assert announce_payload["outcome"] == "timeout"
+        assert announce_payload["notes"]
+
+    async def test_launch_session_retries_completion_announce_metadata(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
+
+        run = agent._subagent_run_registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Do work",
+            run_id="run-announce-retry",
+        )
+        agent._subagent_run_registry.mark_running("c1", run.run_id)
+
+        async def _mock_execute_subagent(*args, **kwargs):
+            yield {
+                "type": "complete",
+                "data": {
+                    "content": "all good",
+                    "subagent_result": {
+                        "success": True,
+                        "summary": "done",
+                        "execution_time_ms": 10,
+                        "tokens_used": 7,
+                    },
+                },
+                "timestamp": "t",
+            }
+
+        original_attach = agent._subagent_run_registry.attach_metadata
+        announce_attach_calls = {"count": 0}
+
+        def _flaky_attach(*args, **kwargs):
+            metadata = kwargs.get("metadata")
+            if metadata is None and len(args) >= 3:
+                metadata = args[2]
+            if isinstance(metadata, dict) and "announce_payload" in metadata:
+                announce_attach_calls["count"] += 1
+                if announce_attach_calls["count"] == 1:
+                    return None
+            return original_attach(*args, **kwargs)
+
+        with (
+            patch.object(agent, "_execute_subagent", side_effect=_mock_execute_subagent),
+            patch.object(agent._subagent_run_registry, "attach_metadata", side_effect=_flaky_attach),
+        ):
+            await agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=sa,
+                user_message="Do work",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+            await self._wait_session_finish(agent, run.run_id)
+
+        final = agent._subagent_run_registry.get_run("c1", run.run_id)
+        assert final is not None
+        assert final.metadata.get("announce_status") == "delivered"
+        assert final.metadata.get("announce_attempt_count") == 2
+        announce_events = final.metadata.get("announce_events")
+        assert isinstance(announce_events, list)
+        announce_types = [event.get("type") for event in announce_events]
+        assert "completion_retry" in announce_types
+        assert "completion_delivered" in announce_types
+
+    async def test_launch_session_respects_subagent_lane_concurrency(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(
+            subagents=[sa],
+            enable_subagent_as_tool=True,
+            max_subagent_lane_concurrency=1,
+        )
+
+        run1 = agent._subagent_run_registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Task one",
+            run_id="lane-run-1",
+        )
+        run2 = agent._subagent_run_registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Task two",
+            run_id="lane-run-2",
+        )
+        agent._subagent_run_registry.mark_running("c1", run1.run_id)
+        agent._subagent_run_registry.mark_running("c1", run2.run_id)
+
+        active_sessions = 0
+        max_parallel = 0
+
+        async def _mock_execute_subagent(*args, **kwargs):
+            nonlocal active_sessions, max_parallel
+            active_sessions += 1
+            max_parallel = max(max_parallel, active_sessions)
+            try:
+                await asyncio.sleep(0.05)
+                yield {
+                    "type": "complete",
+                    "data": {
+                        "content": "ok",
+                        "subagent_result": {
+                            "success": True,
+                            "summary": "ok",
+                            "execution_time_ms": 10,
+                            "tokens_used": 1,
+                        },
+                    },
+                    "timestamp": "t",
+                }
+            finally:
+                active_sessions -= 1
+
+        with patch.object(agent, "_execute_subagent", side_effect=_mock_execute_subagent):
+            await agent._launch_subagent_session(
+                run_id=run1.run_id,
+                subagent=sa,
+                user_message="Task one",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+            await agent._launch_subagent_session(
+                run_id=run2.run_id,
+                subagent=sa,
+                user_message="Task two",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+            await self._wait_session_finish(agent, run1.run_id)
+            await self._wait_session_finish(agent, run2.run_id)
+
+        final1 = agent._subagent_run_registry.get_run("c1", run1.run_id)
+        final2 = agent._subagent_run_registry.get_run("c1", run2.run_id)
+        assert final1 is not None and final1.status.value == "completed"
+        assert final2 is not None and final2.status.value == "completed"
+        assert max_parallel == 1
+        assert "lane_wait_ms" in final2.metadata
+
+    async def test_launch_session_emits_lifecycle_hooks(self):
+        sa = _make_subagent("researcher")
+        hook_events: list[dict] = []
+
+        async def _hook(event: dict) -> None:
+            hook_events.append(event)
+
+        agent = _make_react_agent(
+            subagents=[sa],
+            enable_subagent_as_tool=True,
+            subagent_lifecycle_hook=_hook,
+        )
+
+        run = agent._subagent_run_registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Hooked task",
+            run_id="run-hook",
+        )
+        agent._subagent_run_registry.mark_running("c1", run.run_id)
+
+        async def _mock_execute_subagent(*args, **kwargs):
+            yield {
+                "type": "complete",
+                "data": {
+                    "content": "ok",
+                    "subagent_result": {
+                        "success": True,
+                        "summary": "done",
+                        "execution_time_ms": 10,
+                        "tokens_used": 1,
+                    },
+                },
+                "timestamp": "t",
+            }
+
+        with patch.object(agent, "_execute_subagent", side_effect=_mock_execute_subagent):
+            await agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=sa,
+                user_message="Hooked task",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+                spawn_mode="session",
+                thread_requested=True,
+            )
+            await self._wait_session_finish(agent, run.run_id)
+
+        event_types = [event["type"] for event in hook_events]
+        assert event_types[0] == "subagent_spawning"
+        assert "subagent_spawned" in event_types
+        assert event_types[-1] == "subagent_ended"
+        ended_event = hook_events[-1]
+        assert ended_event["run_id"] == run.run_id
+        assert ended_event["status"] == "completed"
+
+    async def test_launch_session_ignores_lifecycle_hook_failures(self):
+        sa = _make_subagent("researcher")
+
+        async def _failing_hook(event: dict) -> None:
+            raise RuntimeError("hook down")
+
+        agent = _make_react_agent(
+            subagents=[sa],
+            enable_subagent_as_tool=True,
+            subagent_lifecycle_hook=_failing_hook,
+        )
+
+        run = agent._subagent_run_registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Task",
+            run_id="run-hook-fail",
+        )
+        agent._subagent_run_registry.mark_running("c1", run.run_id)
+
+        async def _mock_execute_subagent(*args, **kwargs):
+            yield {
+                "type": "complete",
+                "data": {
+                    "content": "ok",
+                    "subagent_result": {
+                        "success": True,
+                        "summary": "done",
+                        "execution_time_ms": 10,
+                        "tokens_used": 1,
+                    },
+                },
+                "timestamp": "t",
+            }
+
+        with patch.object(agent, "_execute_subagent", side_effect=_mock_execute_subagent):
+            await agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=sa,
+                user_message="Task",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+            await self._wait_session_finish(agent, run.run_id)
+
+        final = agent._subagent_run_registry.get_run("c1", run.run_id)
+        assert final is not None
+        assert final.status.value == "completed"
+
+
+@pytest.mark.unit
+class TestNestedSessionToolInjection:
+    """Test nested subagent tool injection behavior by delegation depth."""
+
+    async def test_execute_subagent_injects_nested_session_tools_at_depth_one(self):
+        researcher = _make_subagent("researcher")
+        coder = _make_subagent("coder")
+        agent = _make_react_agent(
+            subagents=[researcher, coder],
+            enable_subagent_as_tool=True,
+            max_subagent_delegation_depth=2,
+        )
+        captured_tool_names: list[str] = []
+
+        class FakeSubAgentProcess:
+            def __init__(self, *args, **kwargs):
+                nonlocal captured_tool_names
+                tools = kwargs["tools"]
+                captured_tool_names = [tool.name for tool in tools]
+                self.result = _make_result(kwargs["subagent"].name)
+
+            async def execute(self):
+                if False:
+                    yield {}
+
+        with patch("src.infrastructure.agent.subagent.process.SubAgentProcess", FakeSubAgentProcess):
+            events = []
+            async for event in agent._execute_subagent(
+                subagent=researcher,
+                user_message="delegate and monitor",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+                conversation_id="c1",
+                delegation_depth=1,
+            ):
+                events.append(event)
+
+        assert "delegate_to_subagent" in captured_tool_names
+        assert "subagents" in captured_tool_names
+        assert "sessions_list" in captured_tool_names
+        assert "sessions_history" in captured_tool_names
+        assert "sessions_wait" in captured_tool_names
+        assert "sessions_timeline" in captured_tool_names
+        assert "sessions_overview" in captured_tool_names
+        assert events[-1]["type"] == "complete"
+
+    async def test_execute_subagent_skips_nested_tools_at_depth_limit(self):
+        researcher = _make_subagent("researcher")
+        coder = _make_subagent("coder")
+        agent = _make_react_agent(
+            subagents=[researcher, coder],
+            enable_subagent_as_tool=True,
+            max_subagent_delegation_depth=2,
+        )
+        captured_tool_names: list[str] = []
+
+        class FakeSubAgentProcess:
+            def __init__(self, *args, **kwargs):
+                nonlocal captured_tool_names
+                tools = kwargs["tools"]
+                captured_tool_names = [tool.name for tool in tools]
+                self.result = SimpleNamespace(
+                    final_content="ok",
+                    to_event_data=lambda: {"summary": "ok", "success": True},
+                )
+
+            async def execute(self):
+                if False:
+                    yield {}
+
+        with patch("src.infrastructure.agent.subagent.process.SubAgentProcess", FakeSubAgentProcess):
+            events = []
+            async for event in agent._execute_subagent(
+                subagent=researcher,
+                user_message="depth limited",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+                conversation_id="c1",
+                delegation_depth=2,
+            ):
+                events.append(event)
+
+        assert "delegate_to_subagent" not in captured_tool_names
+        assert "subagents" not in captured_tool_names
+        assert "sessions_list" not in captured_tool_names
+        assert events[-1]["type"] == "complete"
 
 
 # === _execute_parallel Tests ===

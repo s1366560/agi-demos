@@ -1,15 +1,16 @@
 import { lazy, Suspense } from 'react';
 
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useParams } from 'react-router-dom';
 
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { LazySpin } from './components/ui/lazyAntd';
 import './i18n/config';
-import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { ProjectLayout } from './layouts/ProjectLayout';
 import { SchemaLayout } from './layouts/SchemaLayout';
 import { TenantLayout } from './layouts/TenantLayout';
 import { Login } from './pages/Login';
 import { useAuthStore } from './stores/auth';
+import { useTenantStore } from './stores/tenant';
 import { ThemeProvider } from './theme';
 import './App.css';
 
@@ -83,6 +84,11 @@ const TemplateMarketplace = lazy(() =>
     default: m.TemplateMarketplace,
   }))
 );
+const PluginHub = lazy(() =>
+  import('./pages/tenant/PluginHub').then((m) => ({
+    default: m.PluginHub,
+  }))
+);
 const McpServerList = lazy(() =>
   import('./components/mcp/McpServerListV2').then((m) => ({
     default: m.McpServerListV2,
@@ -101,11 +107,6 @@ const PoolDashboard = lazy(() => import('./pages/admin/PoolDashboard'));
 const ProjectOverview = lazy(() =>
   import('./pages/project/ProjectOverview').then((m) => ({
     default: m.ProjectOverview,
-  }))
-);
-const ChannelConfig = lazy(() =>
-  import('./pages/project/ChannelConfig').then((m) => ({
-    default: m.default,
   }))
 );
 const MemoryList = lazy(() =>
@@ -165,6 +166,17 @@ const PageLoader: React.FC = () => (
     <LazySpin size="large" />
   </div>
 );
+
+const ProjectChannelsRedirect: React.FC = () => {
+  const { projectId } = useParams<{ projectId: string }>();
+  const currentTenant = useTenantStore((state) => state.currentTenant);
+  const user = useAuthStore((state) => state.user);
+  const tenantId = currentTenant?.id || user?.tenant_id;
+  const basePath = tenantId ? `/tenant/${tenantId}/plugins` : '/tenant/plugins';
+  const projectQuery = projectId ? `?projectId=${encodeURIComponent(projectId)}` : '';
+
+  return <Navigate to={`${basePath}${projectQuery}`} replace />;
+};
 
 function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -357,6 +369,14 @@ function App() {
                 }
               />
               <Route
+                path="plugins"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <PluginHub />
+                  </Suspense>
+                }
+              />
+              <Route
                 path="mcp-servers"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -511,6 +531,14 @@ function App() {
                 }
               />
               <Route
+                path=":tenantId/plugins"
+                element={
+                  <Suspense fallback={<PageLoader />}>
+                    <PluginHub />
+                  </Suspense>
+                }
+              />
+              <Route
                 path=":tenantId/mcp-servers"
                 element={
                   <Suspense fallback={<PageLoader />}>
@@ -644,9 +672,7 @@ function App() {
               <Route
                 path="channels"
                 element={
-                  <Suspense fallback={<PageLoader />}>
-                    <ChannelConfig />
-                  </Suspense>
+                  <ProjectChannelsRedirect />
                 }
               />
               <Route

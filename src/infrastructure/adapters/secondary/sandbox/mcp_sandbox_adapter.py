@@ -54,6 +54,17 @@ class MCPSandboxInstance(SandboxInstance):
     # Service URLs
     desktop_url: Optional[str] = None
     terminal_url: Optional[str] = None
+    # Labels for identification
+    labels: Dict[str, str] = None
+
+    def __post_init__(self):
+        if self.labels is None:
+            self.labels = {}
+
+    @property
+    def project_id(self) -> Optional[str]:
+        """Get project ID from labels."""
+        return self.labels.get("memstack.project_id") or self.labels.get("memstack.project.id")
 
 
 class MCPSandboxAdapter(SandboxPort):
@@ -99,6 +110,7 @@ class MCPSandboxAdapter(SandboxPort):
         max_concurrent_sandboxes: int = 10,
         max_memory_mb: int = 16384,  # 16GB default
         max_cpu_cores: int = 16,
+        workspace_base: str = "/workspace",
     ):
         """
         Initialize MCP sandbox adapter.
@@ -114,6 +126,7 @@ class MCPSandboxAdapter(SandboxPort):
             max_concurrent_sandboxes: Maximum number of concurrent sandboxes
             max_memory_mb: Maximum total memory allocation across all sandboxes
             max_cpu_cores: Maximum total CPU cores across all sandboxes
+            workspace_base: Base directory for sandbox workspaces (e.g., /tmp/memstack-sandbox)
         """
         self._mcp_image = mcp_image
         self._default_timeout = default_timeout
@@ -122,6 +135,7 @@ class MCPSandboxAdapter(SandboxPort):
         self._host_port_start = host_port_start
         self._desktop_port_start = desktop_port_start
         self._terminal_port_start = terminal_port_start
+        self._workspace_base = workspace_base
 
         # Resource limits
         self._max_concurrent_sandboxes = max_concurrent_sandboxes
@@ -311,9 +325,10 @@ class MCPSandboxAdapter(SandboxPort):
         # Use provided sandbox_id or generate a new one
         sandbox_id = sandbox_id or f"mcp-sandbox-{uuid.uuid4().hex[:12]}"
 
-        # Check and cleanup any existing containers for this project
-        if project_id:
-            await self.cleanup_project_containers(project_id)
+        # Note: We don't cleanup project containers here anymore.
+        # The get_or_create_sandbox method already checks for existing sandboxes
+        # before calling create_sandbox. Cleanup was causing issues by removing
+        # valid running containers that should be reused.
 
         # Allocate ports for all services with lock protection
         async with self._port_allocation_lock:
@@ -611,9 +626,7 @@ class MCPSandboxAdapter(SandboxPort):
             result.append(tool_info)
         return result
 
-    async def read_resource(
-        self, sandbox_id: str, uri: str
-    ) -> Optional[str]:
+    async def read_resource(self, sandbox_id: str, uri: str) -> Optional[str]:
         """Read a resource from a sandbox MCP server via resources/read.
 
         Args:
@@ -642,7 +655,8 @@ class MCPSandboxAdapter(SandboxPort):
             except Exception as e:
                 logger.warning(
                     "read_resource: MCP client connect error for %s: %s",
-                    sandbox_id, e,
+                    sandbox_id,
+                    e,
                 )
                 return None
 
@@ -665,9 +679,7 @@ class MCPSandboxAdapter(SandboxPort):
             logger.warning("read_resource error for %s: %s", uri, e)
             return None
 
-    async def list_resources(
-        self, sandbox_id: str
-    ) -> list:
+    async def list_resources(self, sandbox_id: str) -> list:
         """List resources from sandbox MCP servers via resources/list.
 
         Returns:
@@ -701,7 +713,7 @@ class MCPSandboxAdapter(SandboxPort):
 
     async def get_sandbox(self, sandbox_id: str) -> Optional[MCPSandboxInstance]:
         """Get sandbox instance by ID.
-        
+
         If the sandbox is not in memory but exists in Docker, attempt to recover it.
         This handles API restarts where the in-memory cache is lost.
         """
@@ -743,9 +755,9 @@ class MCPSandboxAdapter(SandboxPort):
             # Container exists but not in memory - recover it
             if container.status == "running":
                 logger.info(f"Recovering sandbox {sandbox_id} from Docker (API restart)")
-                
+
                 labels = container.labels or {}
-                
+
                 # Extract port information from labels
                 mcp_port_str = labels.get("memstack.sandbox.mcp_port", "")
                 desktop_port_str = labels.get("memstack.sandbox.desktop_port", "")
@@ -772,6 +784,7 @@ class MCPSandboxAdapter(SandboxPort):
                         SandboxInstanceInfo,
                         SandboxUrlService,
                     )
+
                     url_service = SandboxUrlService()
                     instance_info = SandboxInstanceInfo(
                         mcp_port=mcp_port,
@@ -787,6 +800,7 @@ class MCPSandboxAdapter(SandboxPort):
 
                 # Create instance record
                 from datetime import datetime
+
                 now = datetime.now()
                 instance = MCPSandboxInstance(
                     id=sandbox_id,
@@ -818,7 +832,9 @@ class MCPSandboxAdapter(SandboxPort):
                     if terminal_port:
                         self._used_ports.add(terminal_port)
 
-                logger.info(f"Successfully recovered sandbox {sandbox_id} (MCP: {mcp_port}, Desktop: {desktop_port}, Terminal: {terminal_port})")
+                logger.info(
+                    f"Successfully recovered sandbox {sandbox_id} (MCP: {mcp_port}, Desktop: {desktop_port}, Terminal: {terminal_port})"
+                )
                 return instance
             else:
                 # Container exists but not running
@@ -1460,8 +1476,7 @@ class MCPSandboxAdapter(SandboxPort):
 
             if orphans_cleaned > 0:
                 logger.info(
-                    f"Cleaned up {orphans_cleaned} orphan sandbox containers "
-                    f"(no project_id label)"
+                    f"Cleaned up {orphans_cleaned} orphan sandbox containers (no project_id label)"
                 )
             if count > 0:
                 logger.info(f"Synced {count} existing sandbox containers from Docker")
@@ -2545,8 +2560,7 @@ class MCPSandboxAdapter(SandboxPort):
             # Check 2: Exited/dead status (stale)
             if remove_exited and status in ("exited", "dead"):
                 logger.info(
-                    f"Marking exited container for cleanup: {container_name} "
-                    f"(status={status})"
+                    f"Marking exited container for cleanup: {container_name} (status={status})"
                 )
                 containers_to_remove.append(container)
                 continue
@@ -2570,9 +2584,7 @@ class MCPSandboxAdapter(SandboxPort):
                                 # Container is tracked in DB, don't remove
                                 continue
                     except Exception as e:
-                        logger.warning(
-                            f"DB check failed for container {container_name}: {e}"
-                        )
+                        logger.warning(f"DB check failed for container {container_name}: {e}")
 
                 # Not tracked anywhere, mark for removal
                 logger.info(
@@ -2598,9 +2610,7 @@ class MCPSandboxAdapter(SandboxPort):
                             )
                             containers_to_remove.append(container)
                 except Exception as e:
-                    logger.warning(
-                        f"Failed to parse container creation time: {e}"
-                    )
+                    logger.warning(f"Failed to parse container creation time: {e}")
 
         # Remove marked containers
         count = 0
@@ -2609,17 +2619,13 @@ class MCPSandboxAdapter(SandboxPort):
             try:
                 # Stop if running
                 if container.status == "running":
-                    await loop.run_in_executor(
-                        None, lambda c=container: c.stop(timeout=5)
-                    )
+                    await loop.run_in_executor(None, lambda c=container: c.stop(timeout=5))
                 # Remove container
                 await loop.run_in_executor(None, container.remove)
                 count += 1
                 logger.info(f"Cleaned up orphan container: {container_name}")
             except Exception as e:
-                logger.warning(
-                    f"Failed to cleanup container {container_name}: {e}"
-                )
+                logger.warning(f"Failed to cleanup container {container_name}: {e}")
                 self._cleanup_stats["errors"] += 1
 
         # Update stats
@@ -2659,9 +2665,7 @@ class MCPSandboxAdapter(SandboxPort):
                     logger.error(f"Periodic cleanup error: {e}")
 
         self._cleanup_task = asyncio.create_task(cleanup_loop())
-        logger.info(
-            f"Started periodic cleanup task (interval={interval_seconds}s)"
-        )
+        logger.info(f"Started periodic cleanup task (interval={interval_seconds}s)")
 
     async def stop_periodic_cleanup(self) -> None:
         """Stop the periodic cleanup background task."""
@@ -2740,9 +2744,7 @@ class MCPSandboxAdapter(SandboxPort):
                     self._health_check_stats["errors"] += 1
 
         self._health_check_task = asyncio.create_task(health_check_loop())
-        logger.info(
-            f"Started MCP server health check task (interval={interval_seconds}s)"
-        )
+        logger.info(f"Started MCP server health check task (interval={interval_seconds}s)")
 
     async def stop_mcp_server_health_check(self) -> None:
         """Stop the MCP server health check background task."""
@@ -2804,9 +2806,7 @@ class MCPSandboxAdapter(SandboxPort):
                     result["crashed"].append(server_name)
 
                     if auto_restart:
-                        restarted = await self._restart_crashed_server(
-                            sandbox_id, server_name
-                        )
+                        restarted = await self._restart_crashed_server(sandbox_id, server_name)
                         if restarted:
                             result["restarted"].append(server_name)
                             self._health_check_stats["restarts_triggered"] += 1
@@ -2840,9 +2840,7 @@ class MCPSandboxAdapter(SandboxPort):
         config = self._mcp_server_configs.get(config_key)
 
         if not config:
-            logger.warning(
-                f"No config stored for server {server_name}, cannot restart"
-            )
+            logger.warning(f"No config stored for server {server_name}, cannot restart")
             return False
 
         try:
@@ -2860,9 +2858,7 @@ class MCPSandboxAdapter(SandboxPort):
 
             # Check result
             if start_result.get("isError"):
-                logger.warning(
-                    f"Failed to restart MCP server {server_name}: {start_result}"
-                )
+                logger.warning(f"Failed to restart MCP server {server_name}: {start_result}")
                 return False
 
             logger.info(f"Successfully restarted MCP server: {server_name}")
@@ -2921,3 +2917,62 @@ class MCPSandboxAdapter(SandboxPort):
             Dict with total_checks, restarts_triggered, last_check_at, errors
         """
         return dict(self._health_check_stats)
+
+    async def get_or_create_sandbox(
+        self,
+        project_id: str,
+        db_session: Optional[Any] = None,
+    ) -> Optional[MCPSandboxInstance]:
+        """Get existing active sandbox or create new one for project.
+
+        This method implements project-level sandbox reuse strategy.
+
+        Args:
+            project_id: Project ID to get/create sandbox for
+            db_session: Database session (optional, for future use)
+
+        Returns:
+            MCPSandboxInstance if successful, None otherwise
+        """
+        try:
+            # 1. Find project's existing sandbox
+            async with self._instance_lock:
+                for sandbox in self._active_sandboxes.values():
+                    if sandbox.project_id == project_id and sandbox.status == SandboxStatus.RUNNING:
+                        logger.info(
+                            f"Reusing existing sandbox {sandbox.id} for project {project_id}"
+                        )
+                        return sandbox
+
+            # 2. Create new sandbox
+            logger.info(f"Creating new sandbox for project {project_id}")
+
+            # Use workspace_base as host path, mapped to container's /workspace
+            host_workspace_path = f"{self._workspace_base}/{project_id}"
+
+            sandbox = await self.create_sandbox(
+                project_path=host_workspace_path,  # Host path mapped to container's /workspace
+                config=SandboxConfig(
+                    image=self._mcp_image,
+                    timeout_seconds=self._default_timeout,
+                    memory_limit=self._default_memory_limit,
+                    cpu_limit=self._default_cpu_limit,
+                ),
+                project_id=project_id,
+            )
+
+            if not sandbox:
+                logger.error(f"Failed to create sandbox for project {project_id}")
+                return None
+
+            # 3. Connect MCP
+            await self.connect_mcp(sandbox.id)
+
+            logger.info(f"Created and connected sandbox {sandbox.id} for project {project_id}")
+            return sandbox
+
+        except Exception as e:
+            logger.error(
+                f"Failed to get/create sandbox for project {project_id}: {e}", exc_info=True
+            )
+            return None

@@ -58,6 +58,7 @@ vi.mock('react-i18next', () => ({
         'nav.agents': 'Agents',
         'nav.subagents': 'Subagents',
         'nav.skills': 'Skills',
+        'nav.plugins': 'Plugins',
         'nav.mcpServers': 'MCP Servers',
         'nav.providers': 'Providers',
         'nav.administration': 'Administration',

@@ -23,6 +23,7 @@ Features:
 import logging
 import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union
 
@@ -67,6 +68,8 @@ class SkillInstallerTool(AgentTool):
     def __init__(
         self,
         project_path: Optional[Path] = None,
+        tenant_id: Optional[str] = None,
+        project_id: Optional[str] = None,
         permission_manager: Optional["PermissionManager"] = None,
         session_id: Optional[str] = None,
     ):
@@ -83,8 +86,11 @@ class SkillInstallerTool(AgentTool):
             description=self._build_description(),
         )
         self._project_path = project_path or Path.cwd()
+        self._tenant_id = tenant_id
+        self._project_id = project_id
         self._permission_manager = permission_manager
         self._session_id = session_id
+        self._pending_events: list[Any] = []
 
     def _build_description(self) -> str:
         """Build the tool description."""
@@ -103,6 +109,12 @@ Popular skills:
 - anthropic/claude-code-skills (Claude Code best practices)
 
 The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills/ (global)."""
+
+    def consume_pending_events(self) -> list[Any]:
+        """Consume pending SSE events buffered during execute()."""
+        events = list(self._pending_events)
+        self._pending_events.clear()
+        return events
 
     def get_parameters_schema(self) -> Dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
@@ -492,7 +504,20 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
 
             # Invalidate skill loader cache so new skill is discovered
             # This enables the skill to be immediately available without restart
-            self._invalidate_skill_cache()
+            lifecycle_result = self._invalidate_skill_cache(skill_name=skill_name)
+            self._pending_events.append(
+                {
+                    "type": "toolset_changed",
+                    "data": {
+                        "source": "skill_installer",
+                        "tenant_id": self._tenant_id,
+                        "project_id": self._project_id,
+                        "skill_name": skill_name,
+                        "lifecycle": lifecycle_result,
+                    },
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+            )
 
             return {
                 "title": f"Successfully installed skill: {skill_name}",
@@ -510,6 +535,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
                     "source": f"{owner}/{repo}",
                     "install_path": result["install_path"],
                     "files_installed": result["files_installed"],
+                    "lifecycle": lifecycle_result,
                 },
             }
 
@@ -517,30 +543,33 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
             return self._error_response(str(e))
         except Exception as e:
             logger.error(f"Failed to install skill from '{skill_source}': {e}")
-            return self._error_response(f"Installation failed: {str(e)}")
+            return self._error_response(f"Installation failed: {e!s}")
 
-    def _invalidate_skill_cache(self) -> None:
+    def _invalidate_skill_cache(self, *, skill_name: str) -> Dict[str, Any]:
         """
         Invalidate skill loader caches so newly installed skill is discovered.
 
         This enables the skill to be immediately available through skill_loader
         without requiring a restart of the agent worker.
         """
-        try:
-            # Import here to avoid circular dependency
-            from src.infrastructure.agent.state.agent_worker_state import (
-                invalidate_skill_loader_cache,
-            )
+        from src.infrastructure.agent.tools.self_modifying_lifecycle import (
+            SelfModifyingLifecycleOrchestrator,
+        )
 
-            # Invalidate all skill loader caches (new skill should be visible to all)
-            invalidate_skill_loader_cache()
-            logger.info("Skill loader cache invalidated after installation")
-        except ImportError:
-            # Not running in Temporal worker context, skip cache invalidation
-            logger.debug("Skill cache invalidation skipped (not in worker context)")
-        except Exception as e:
-            # Log but don't fail - cache will refresh on next request anyway
-            logger.warning(f"Failed to invalidate skill cache: {e}")
+        lifecycle_result = SelfModifyingLifecycleOrchestrator.run_post_change(
+            source="skill_installer",
+            tenant_id=self._tenant_id,
+            project_id=self._project_id,
+            clear_tool_definitions=False,
+            metadata={"skill_name": skill_name},
+        )
+        logger.info(
+            "Skill installer lifecycle completed for tenant=%s project=%s: %s",
+            self._tenant_id,
+            self._project_id,
+            lifecycle_result["cache_invalidation"],
+        )
+        return lifecycle_result
 
     def _error_response(self, message: str, **extra: Any) -> Dict[str, Any]:
         """

@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from src.domain.model.channels.message import ChatType, Message
+from src.domain.model.channels.message import ChatType, Message, MessageType
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -76,9 +76,10 @@ class ChannelMessageRouter:
         # 3. Trigger agent processing
     """
 
-    def __init__(self) -> None:
+    def __init__(self, media_import_service: Optional[Any] = None) -> None:
         self._chat_to_conversation: collections.OrderedDict[str, str] = collections.OrderedDict()
         self._rate_limiter = _SlidingWindowRateLimiter()
+        self._media_import_service = media_import_service
 
     async def route_message(self, message: Message) -> None:
         """Route an incoming channel message to the agent system.
@@ -126,31 +127,218 @@ class ChannelMessageRouter:
             # Store message in channel history
             await self._store_message_history(message, conversation_id)
 
+            # DEBUG: Log message content details
+            logger.info(
+                f"[MessageRouter] Message details - "
+                f"type={message.content.type.value}, "
+                f"has_media={message.content.has_media_to_import()}, "
+                f"image_key={message.content.image_key}, "
+                f"file_key={message.content.file_key}, "
+                f"file_name={message.content.file_name}"
+            )
+
+            # Import media to workspace if message contains media (including post with images)
+            if message.content.has_media_to_import():
+                # Lazily initialize MediaImportService if not available
+                if not self._media_import_service:
+                    logger.info(
+                        "[MessageRouter] Lazily initializing MediaImportService for media message"
+                    )
+                    try:
+                        from src.infrastructure.adapters.secondary.persistence.database import (
+                            async_session_factory,
+                        )
+                        from src.application.services.channels.channel_service_factory import (
+                            create_media_import_service_from_config,
+                        )
+
+                        async with async_session_factory() as init_session:
+                            self._media_import_service = (
+                                await create_media_import_service_from_config(init_session)
+                            )
+                            # Note: init_session closes here, but MediaImportService
+                            # no longer holds db session references
+
+                            if self._media_import_service:
+                                logger.info(
+                                    "[MessageRouter] MediaImportService initialized successfully"
+                                )
+                            else:
+                                logger.warning(
+                                    "[MessageRouter] MediaImportService initialization failed - "
+                                    "no enabled Feishu channel config found"
+                                )
+                    except Exception as e:
+                        logger.error(
+                            f"[MessageRouter] Failed to initialize MediaImportService: {e}",
+                            exc_info=True,
+                        )
+
+                if self._media_import_service:
+                    # Each call gets fresh session and dependencies
+                    try:
+                        from src.infrastructure.adapters.secondary.persistence.database import (
+                            async_session_factory,
+                        )
+                        from src.infrastructure.adapters.primary.web.startup.container import (
+                            get_app_container,
+                        )
+                        from src.application.services.artifact_service import ArtifactService
+
+                        async with async_session_factory() as db_session:
+                            # Get container and dependencies
+                            app_container = get_app_container()
+                            if not app_container:
+                                raise RuntimeError("Application container not initialized")
+
+                            mcp_adapter = app_container.sandbox_adapter()
+
+                            # Sync existing sandboxes from Docker to adapter's internal state
+                            await mcp_adapter.sync_from_docker()
+
+                            # Create artifact service
+                            storage = app_container.storage_service()
+                            artifact_service = ArtifactService(
+                                storage_service=storage,
+                                event_publisher=None,  # Not needed for channel imports
+                            )
+
+                            logger.info(
+                                f"[MessageRouter] Importing media message to workspace: "
+                                f"type={message.content.type.value}, message_id={message.id}"
+                            )
+
+                            # Call import with all dependencies
+                            sandbox_path = (
+                                await self._media_import_service.import_media_to_workspace(
+                                    message=message,
+                                    project_id=message.project_id,
+                                    tenant_id=message.raw_data.get("tenant_id", "")
+                                    if message.raw_data
+                                    else "",
+                                    conversation_id=conversation_id,
+                                    mcp_adapter=mcp_adapter,
+                                    artifact_service=artifact_service,
+                                    db_session=db_session,
+                                )
+                            )
+
+                            if sandbox_path:
+                                logger.info(
+                                    f"[MessageRouter] Media imported to sandbox: {sandbox_path}"
+                                )
+                                # Update message content with sandbox path
+                                from dataclasses import replace
+
+                                # For POST messages with images, preserve the original text
+                                # For pure media messages, show upload info
+                                original_text = message.content.text or ""
+                                if (
+                                    message.content.type == MessageType.POST
+                                    and original_text.strip()
+                                ):
+                                    # Post with image and text - keep original text, add sandbox path info
+                                    display_text = (
+                                        f"{original_text}\n\n[图片已上传: {sandbox_path}]"
+                                    )
+                                elif message.content.type.value == "image":
+                                    display_text = f"[图片已上传到沙箱: {sandbox_path}]"
+                                elif message.content.type.value == "file":
+                                    display_text = f"[文件已上传到沙箱: {sandbox_path}]"
+                                else:
+                                    display_text = f"[媒体已上传到沙箱: {sandbox_path}]"
+
+                                message.content = replace(
+                                    message.content,
+                                    sandbox_path=sandbox_path,
+                                    text=display_text,
+                                )
+                            else:
+                                error_msg = (
+                                    f"抱歉，文件导入失败。文件可能过大（超过50MB）或格式不支持。"
+                                    f"文件名: {message.content.file_name or '未知'}"
+                                )
+                                logger.warning(f"[MessageRouter] Media import failed - {error_msg}")
+                                # Send error message to user
+                                await self._send_error_reply(
+                                    message=message,
+                                    error_message=error_msg,
+                                )
+
+                    except Exception as e:
+                        logger.error(
+                            f"[MessageRouter] Media import failed: {e}",
+                            exc_info=True,
+                        )
+                        error_msg = f"抱歉，文件导入时发生错误: {str(e)}"
+                        await self._send_error_reply(message, error_msg)
+                else:
+                    logger.warning(
+                        f"[MessageRouter] MediaImportService not available - "
+                        f"cannot import media message {message.id}"
+                    )
+
             inbound_event_time_us = int(datetime.now(timezone.utc).timestamp() * 1_000_000)
             inbound_message_id = self._extract_channel_message_id(message) or (
                 f"channel-{uuid.uuid4().hex}"
             )
+
+            # Build event content with media metadata
+            event_content = message.content.generate_display_text()
+            event_metadata = {
+                "source": "channel_inbound",
+                "channel": message.channel,
+                "chat_id": message.chat_id,
+                "message_type": message.content.type.value,
+            }
+
+            # Add media-specific metadata
+            if message.content.is_media():
+                event_metadata.update(
+                    {
+                        "file_name": message.content.file_name,
+                        "sandbox_path": message.content.sandbox_path,
+                        "artifact_id": message.content.artifact_id,
+                        "duration": message.content.duration,
+                        "size": message.content.size,
+                        "mime_type": message.content.mime_type,
+                    }
+                )
+
             await self._broadcast_workspace_event(
                 conversation_id=conversation_id,
                 event_type="message",
                 event_data={
                     "id": inbound_message_id,
                     "role": "user",
-                    "content": message.content.text or "",
+                    "content": event_content,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                     "event_time_us": inbound_event_time_us,
                     "event_counter": 0,
-                    "metadata": {
-                        "source": "channel_inbound",
-                        "channel": message.channel,
-                        "chat_id": message.chat_id,
-                    },
+                    "metadata": event_metadata,
                 },
                 raw_event={},
             )
 
+            # Build file_metadata for agent if media was imported to sandbox
+            file_metadata = None
+            if message.content.is_media() and message.content.sandbox_path:
+                file_metadata = [
+                    {
+                        "filename": message.content.file_name or "unknown",
+                        "sandbox_path": message.content.sandbox_path,
+                        "mime_type": message.content.mime_type or "application/octet-stream",
+                        "size_bytes": message.content.size or 0,
+                    }
+                ]
+                logger.info(
+                    f"[MessageRouter] Passing file_metadata to agent: "
+                    f"filename={message.content.file_name}, "
+                    f"sandbox_path={message.content.sandbox_path}"
+                )
+
             # Route to agent system
-            await self._invoke_agent(message, conversation_id)
+            await self._invoke_agent(message, conversation_id, file_metadata)
 
             logger.info(f"[MessageRouter] Message routed to conversation {conversation_id}")
 
@@ -394,6 +582,33 @@ class ChannelMessageRouter:
                 mentions = safe_mentions if isinstance(safe_mentions, list) else []
                 raw_data = self._to_json_safe(message.raw_data)
 
+                # Build content_data with media metadata
+                content_data_dict = {
+                    "conversation_id": conversation_id,
+                    "channel_config_id": channel_config_id,
+                    "reply_to": message.reply_to,
+                    "mentions": mentions,
+                }
+
+                # Add media-specific fields
+                if message.content.is_media():
+                    content_data_dict.update(
+                        {
+                            "image_key": message.content.image_key,
+                            "file_key": message.content.file_key,
+                            "file_name": message.content.file_name,
+                            "duration": message.content.duration,
+                            "size": message.content.size,
+                            "mime_type": message.content.mime_type,
+                            "thumbnail_key": message.content.thumbnail_key,
+                            "sandbox_path": message.content.sandbox_path,
+                            "artifact_id": message.content.artifact_id,
+                            "extra_media_data": self._to_json_safe(
+                                message.content.extra_media_data
+                            ),
+                        }
+                    )
+
                 channel_message = ChannelMessageModel(
                     channel_config_id=channel_config_id,
                     project_id=message.project_id or "",
@@ -403,15 +618,8 @@ class ChannelMessageRouter:
                     sender_id=str(message.sender.id),
                     sender_name=message.sender.name,
                     message_type=message.content.type.value,
-                    content_text=message.content.text,
-                    content_data=self._to_json_safe(
-                        {
-                            "conversation_id": conversation_id,
-                            "channel_config_id": channel_config_id,
-                            "reply_to": message.reply_to,
-                            "mentions": mentions,
-                        }
-                    ),
+                    content_text=message.content.generate_display_text(),
+                    content_data=self._to_json_safe(content_data_dict),
                     reply_to=message.reply_to,
                     mentions=mentions,
                     direction="inbound",
@@ -466,7 +674,12 @@ class ChannelMessageRouter:
 
         return str(value)
 
-    async def _invoke_agent(self, message: Message, conversation_id: str) -> None:
+    async def _invoke_agent(
+        self,
+        message: Message,
+        conversation_id: str,
+        file_metadata: Optional[List[Dict[str, Any]]] = None,
+    ) -> None:
         """Invoke the agent and send the final response to the channel.
 
         Event flow from ``stream_chat_v2``::
@@ -493,7 +706,7 @@ class ChannelMessageRouter:
             )
             from src.infrastructure.adapters.secondary.persistence.models import Conversation
 
-            text = message.content.text or ""
+            text = message.content.generate_display_text()
             if not text.strip():
                 logger.debug("[MessageRouter] Empty message, skipping agent invocation")
                 return
@@ -544,7 +757,7 @@ class ChannelMessageRouter:
                         # Try CardKit streaming first
                         if use_cardkit:
                             try:
-                                from src.infrastructure.adapters.secondary.channels.feishu.cardkit_streaming import (  # noqa: E501
+                                from src.infrastructure.adapters.secondary.channels.feishu.cardkit_streaming import (
                                     CardKitStreamingManager,
                                 )
 
@@ -647,6 +860,7 @@ class ChannelMessageRouter:
                             project_id=conversation.project_id,
                             user_id=conversation.user_id,
                             tenant_id=conversation.tenant_id,
+                            file_metadata=file_metadata,
                             app_model_context=self._build_app_model_context(message),
                         ):
                             event_type = event.get("type")
@@ -1497,16 +1711,169 @@ class ChannelMessageRouter:
                     return value
         return None
 
+    async def _send_error_reply(
+        self,
+        message: Message,
+        error_message: str,
+    ) -> None:
+        """Send an error reply to the user via channel adapter.
+
+        Args:
+            message: Original message that caused the error
+            error_message: Error message to send to user
+        """
+        try:
+            # Get the channel adapter from connection manager
+            from src.infrastructure.adapters.primary.web.startup.channels import (
+                get_channel_manager,
+            )
+
+            manager = get_channel_manager()
+            if not manager:
+                logger.warning("[MessageRouter] Channel manager not available for error reply")
+                return
+
+            # Find the connection for this message's channel config
+            # Extract channel_config_id from message raw_data
+            channel_config_id = await self._resolve_channel_config_id_from_message(message)
+            if not channel_config_id:
+                logger.warning(
+                    f"[MessageRouter] Cannot send error reply: channel_config_id not found"
+                )
+                return
+
+            connection = manager.connections.get(channel_config_id)
+            if not connection or not connection.adapter:
+                logger.warning(
+                    f"[MessageRouter] Connection not found for config {channel_config_id}"
+                )
+                return
+
+            # Send error message
+            await connection.adapter.send_text(
+                to=message.chat_id,
+                text=error_message,
+                reply_to=self._extract_channel_message_id(message),
+            )
+            logger.info(f"[MessageRouter] Sent error reply to user: {error_message[:50]}...")
+
+        except Exception as e:
+            logger.error(
+                f"[MessageRouter] Failed to send error reply: {e}",
+                exc_info=True,
+            )
+
+    async def _resolve_channel_config_id_from_message(
+        self,
+        message: Message,
+    ) -> Optional[str]:
+        """Resolve channel config ID from message raw_data.
+
+        Args:
+            message: Channel message
+
+        Returns:
+            Channel config ID or None
+        """
+        try:
+            if not message.raw_data:
+                return None
+
+            # Try different locations based on event type
+            # Location 1: routing_metadata.channel_config_id
+            routing_metadata = message.raw_data.get("routing_metadata", {})
+            if isinstance(routing_metadata, dict):
+                config_id = routing_metadata.get("channel_config_id")
+                if isinstance(config_id, str) and config_id:
+                    return config_id
+
+            # Location 2: event.header.token (webhook)
+            event = message.raw_data.get("event", {})
+            if isinstance(event, dict):
+                header = event.get("header", {})
+                if isinstance(header, dict):
+                    token = header.get("token")
+                    if isinstance(token, str) and token:
+                        return token
+
+            return None
+
+        except Exception as e:
+            logger.error(f"[MessageRouter] Error resolving channel_config_id: {e}")
+            return None
+
 
 # Singleton instance
 _router_instance: Optional[ChannelMessageRouter] = None
 
 
 def get_channel_message_router() -> ChannelMessageRouter:
-    """Get the singleton message router instance."""
+    """Get the singleton message router instance.
+
+    This function creates the router with MediaImportService
+    if all dependencies are available.
+    """
     global _router_instance
     if _router_instance is None:
-        _router_instance = ChannelMessageRouter()
+        # Try to create MediaImportService
+        media_import_service = None
+        try:
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+            from src.application.services.channels.channel_service_factory import (
+                create_media_import_service_from_config,
+            )
+
+            async def _init_media_service():
+                """Initialize media import service asynchronously."""
+                try:
+                    async with async_session_factory() as session:
+                        service = await create_media_import_service_from_config(session)
+                        if service:
+                            logger.info(
+                                "[MessageRouter] MediaImportService initialized successfully"
+                            )
+                        else:
+                            logger.warning(
+                                "[MessageRouter] MediaImportService initialization returned None - "
+                                "no enabled Feishu channel config found"
+                            )
+                        return service
+                except Exception as e:
+                    logger.error(
+                        f"[MessageRouter] Failed to initialize MediaImportService: {e}",
+                        exc_info=True,
+                    )
+                    return None
+
+            # Try to initialize synchronously if event loop is running
+            try:
+                import asyncio
+
+                loop = asyncio.get_running_loop()
+                # Create task to initialize media service
+                # Note: This is a best-effort initialization; if it fails, media import will be disabled
+                logger.info("[MessageRouter] Attempting to initialize MediaImportService...")
+                # We can't await here in sync context, so we'll initialize lazily
+                logger.warning(
+                    "[MessageRouter] Cannot initialize MediaImportService in sync context - "
+                    "will be initialized on first media message"
+                )
+            except RuntimeError:
+                # No event loop running
+                logger.info(
+                    "[MessageRouter] No event loop running - "
+                    "MediaImportService will be initialized lazily"
+                )
+
+        except Exception as e:
+            logger.warning(
+                f"[MessageRouter] Failed to create MediaImportService: {e}. Media import disabled."
+            )
+
+        _router_instance = ChannelMessageRouter(media_import_service=media_import_service)
+
     return _router_instance
 
 

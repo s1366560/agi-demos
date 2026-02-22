@@ -143,3 +143,4 @@ local-sandbox-app/
 .reports/
 .volumes/
 .copilot/
+.mypy_cache/

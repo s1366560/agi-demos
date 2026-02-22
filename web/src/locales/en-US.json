@@ -159,6 +159,7 @@
     "agents": "Agent Management",
     "subagents": "Agents",
     "skills": "Skills",
+    "plugins": "Plugins",
     "templates": "Templates",
     "providers": "Model Services",
     "platform": "Platform",

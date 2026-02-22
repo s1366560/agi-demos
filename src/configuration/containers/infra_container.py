@@ -105,6 +105,7 @@ class InfraContainer:
             default_timeout=settings.sandbox_timeout_seconds,
             default_memory_limit=settings.sandbox_memory_limit,
             default_cpu_limit=settings.sandbox_cpu_limit,
+            workspace_base=settings.sandbox_workspace_base,
         )
 
     def sandbox_event_publisher(self):
