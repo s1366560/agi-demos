@@ -135,6 +135,9 @@ class FeishuAdapter:
                 .register_p2_im_message_message_read_v1(self._on_message_read)
                 .register_p2_im_chat_member_bot_added_v1(self._on_bot_added)
                 .register_p2_im_chat_member_bot_deleted_v1(self._on_bot_deleted)
+                .register_p2_im_chat_access_event_bot_p2p_chat_entered_v1(
+                    self._on_bot_p2p_chat_entered
+                )
                 .register_p2_card_action_trigger(self._on_card_action)
                 .build()
             )
@@ -321,6 +324,10 @@ class FeishuAdapter:
         """Handle bot removed from chat event."""
         chat_id = getattr(event.event, "chat_id", "") if hasattr(event, "event") else ""
         logger.info(f"[Feishu] Bot removed from chat: {chat_id}")
+
+    def _on_bot_p2p_chat_entered(self, event: Any) -> None:
+        """Handle user entering bot P2P chat (no-op, suppresses SDK warning)."""
+        logger.debug("[Feishu] User entered bot P2P chat")
 
     def _on_card_action(self, event: Any) -> Any:
         """Handle interactive card button click (card.action.trigger callback).
