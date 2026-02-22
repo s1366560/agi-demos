@@ -19,6 +19,7 @@ Reference: OpenCode SessionProcessor architecture
 
 import asyncio
 import logging
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -108,6 +109,11 @@ class ReActAgent:
         subagent_match_threshold: float = 0.5,
         # SubAgent-as-Tool: let LLM autonomously decide delegation
         enable_subagent_as_tool: bool = True,
+        max_subagent_delegation_depth: int = 2,
+        max_subagent_active_runs: int = 16,
+        max_subagent_children_per_requester: int = 8,
+        subagent_run_registry_path: Optional[str] = None,
+        subagent_terminal_retention_seconds: int = 86400,
         # Context window management
         context_window_config: Optional[ContextWindowConfig] = None,
         max_context_tokens: int = 128000,
@@ -169,6 +175,11 @@ class ReActAgent:
                 delegate_to_subagent tool in the ReAct loop, letting the LLM
                 decide when to delegate. When False, uses pre-routing keyword
                 matching (legacy behavior). Default: True.
+            max_subagent_delegation_depth: Maximum nested delegation depth.
+            max_subagent_active_runs: Maximum active subagent runs per conversation.
+            max_subagent_children_per_requester: Maximum active child runs per requester key.
+            subagent_run_registry_path: Optional persistence path for SubAgent run registry.
+            subagent_terminal_retention_seconds: Terminal run retention TTL in seconds.
             context_window_config: Optional context window configuration
             max_context_tokens: Maximum context tokens (default: 128000)
             agent_mode: Agent mode for skill filtering (default: "default")
@@ -248,6 +259,9 @@ class ReActAgent:
         self.subagents = subagents or []
         self.subagent_match_threshold = subagent_match_threshold
         self._enable_subagent_as_tool = enable_subagent_as_tool
+        self._max_subagent_delegation_depth = max(1, max_subagent_delegation_depth)
+        self._max_subagent_active_runs = max(1, max_subagent_active_runs)
+        self._max_subagent_children_per_requester = max(1, max_subagent_children_per_requester)
         if _cached_subagent_router is not None:
             self.subagent_router = _cached_subagent_router
             logger.debug("ReActAgent: Using cached SubAgentRouter")
@@ -266,6 +280,16 @@ class ReActAgent:
                 )
         else:
             self.subagent_router = None
+        from ..subagent.run_registry import SubAgentRunRegistry
+
+        resolved_registry_path = subagent_run_registry_path or os.getenv(
+            "AGENT_SUBAGENT_RUN_REGISTRY_PATH"
+        )
+        self._subagent_run_registry = SubAgentRunRegistry(
+            persistence_path=resolved_registry_path,
+            terminal_retention_seconds=subagent_terminal_retention_seconds,
+        )
+        self._subagent_session_tasks: Dict[str, asyncio.Task] = {}
 
         # ====================================================================
         # Phase 3 Refactoring: Initialize orchestrators for modular components
@@ -725,13 +749,9 @@ class ReActAgent:
 
             if forced_subagent_name:
                 # Find the subagent
-                for sa in (self.subagents or []):
-                    if (
-                        sa.enabled
-                        and (
-                            sa.name == forced_subagent_name
-                            or sa.display_name == forced_subagent_name
-                        )
+                for sa in self.subagents or []:
+                    if sa.enabled and (
+                        sa.name == forced_subagent_name or sa.display_name == forced_subagent_name
                     ):
                         active_subagent = sa
                         break
@@ -778,6 +798,7 @@ class ReActAgent:
                         conversation_context=conversation_context,
                         project_id=project_id,
                         tenant_id=tenant_id,
+                        conversation_id=conversation_id,
                         abort_signal=abort_signal,
                     ):
                         yield event
@@ -841,6 +862,7 @@ class ReActAgent:
                     conversation_context=conversation_context,
                     project_id=project_id,
                     tenant_id=tenant_id,
+                    conversation_id=conversation_id,
                     abort_signal=abort_signal,
                 ):
                     yield event
@@ -1075,7 +1097,17 @@ class ReActAgent:
 
         # Inject delegate_to_subagent tool when SubAgent-as-Tool mode is enabled
         if self.subagents and self._enable_subagent_as_tool:
-            from ..tools.delegate_subagent import DelegateSubAgentTool
+            from ..tools.delegate_subagent import (
+                DelegateSubAgentTool,
+                ParallelDelegateSubAgentTool,
+            )
+            from ..tools.subagent_sessions import (
+                SessionsHistoryTool,
+                SessionsListTool,
+                SessionsSendTool,
+                SessionsSpawnTool,
+                SubAgentsControlTool,
+            )
 
             enabled_subagents = [sa for sa in self.subagents if sa.enabled]
             if enabled_subagents:
@@ -1102,6 +1134,7 @@ class ReActAgent:
                         conversation_context=conversation_context,
                         project_id=project_id,
                         tenant_id=tenant_id,
+                        conversation_id=conversation_id,
                         abort_signal=abort_signal,
                     ):
                         if on_event:
@@ -1131,10 +1164,33 @@ class ReActAgent:
 
                     return "SubAgent execution completed but no result returned"
 
+                async def _spawn_callback(subagent_name: str, task: str, run_id: str) -> str:
+                    target = subagent_map.get(subagent_name)
+                    if not target:
+                        raise ValueError(f"SubAgent '{subagent_name}' not found")
+                    await self._launch_subagent_session(
+                        run_id=run_id,
+                        subagent=target,
+                        user_message=task,
+                        conversation_id=conversation_id,
+                        conversation_context=conversation_context,
+                        project_id=project_id,
+                        tenant_id=tenant_id,
+                        abort_signal=abort_signal,
+                    )
+                    return run_id
+
+                async def _cancel_spawn_callback(run_id: str) -> bool:
+                    return await self._cancel_subagent_session(run_id)
+
                 delegate_tool = DelegateSubAgentTool(
                     subagent_names=list(subagent_map.keys()),
                     subagent_descriptions=subagent_descriptions,
                     execute_callback=_delegate_callback,
+                    run_registry=self._subagent_run_registry,
+                    conversation_id=conversation_id,
+                    delegation_depth=0,
+                    max_active_runs=self._max_subagent_active_runs,
                 )
                 # Convert to ToolDefinition for SessionProcessor
                 delegate_td = ToolDefinition(
@@ -1146,14 +1202,104 @@ class ReActAgent:
                 )
                 tools_to_use.append(delegate_td)
 
+                sessions_spawn_tool = SessionsSpawnTool(
+                    subagent_names=list(subagent_map.keys()),
+                    subagent_descriptions=subagent_descriptions,
+                    spawn_callback=_spawn_callback,
+                    run_registry=self._subagent_run_registry,
+                    conversation_id=conversation_id,
+                    max_active_runs=self._max_subagent_active_runs,
+                    max_children_per_requester=self._max_subagent_children_per_requester,
+                    requester_session_key=conversation_id,
+                    delegation_depth=0,
+                    max_delegation_depth=self._max_subagent_delegation_depth,
+                )
+                tools_to_use.append(
+                    ToolDefinition(
+                        name=sessions_spawn_tool.name,
+                        description=sessions_spawn_tool.description,
+                        parameters=sessions_spawn_tool.get_parameters_schema(),
+                        execute=sessions_spawn_tool.execute,
+                        _tool_instance=sessions_spawn_tool,
+                    )
+                )
+
+                sessions_send_tool = SessionsSendTool(
+                    run_registry=self._subagent_run_registry,
+                    conversation_id=conversation_id,
+                    spawn_callback=_spawn_callback,
+                    max_active_runs=self._max_subagent_active_runs,
+                    max_children_per_requester=self._max_subagent_children_per_requester,
+                    requester_session_key=conversation_id,
+                    delegation_depth=0,
+                    max_delegation_depth=self._max_subagent_delegation_depth,
+                )
+                tools_to_use.append(
+                    ToolDefinition(
+                        name=sessions_send_tool.name,
+                        description=sessions_send_tool.description,
+                        parameters=sessions_send_tool.get_parameters_schema(),
+                        execute=sessions_send_tool.execute,
+                        _tool_instance=sessions_send_tool,
+                    )
+                )
+
+                sessions_list_tool = SessionsListTool(
+                    run_registry=self._subagent_run_registry,
+                    conversation_id=conversation_id,
+                )
+                tools_to_use.append(
+                    ToolDefinition(
+                        name=sessions_list_tool.name,
+                        description=sessions_list_tool.description,
+                        parameters=sessions_list_tool.get_parameters_schema(),
+                        execute=sessions_list_tool.execute,
+                        _tool_instance=sessions_list_tool,
+                    )
+                )
+
+                sessions_history_tool = SessionsHistoryTool(
+                    run_registry=self._subagent_run_registry,
+                    conversation_id=conversation_id,
+                )
+                tools_to_use.append(
+                    ToolDefinition(
+                        name=sessions_history_tool.name,
+                        description=sessions_history_tool.description,
+                        parameters=sessions_history_tool.get_parameters_schema(),
+                        execute=sessions_history_tool.execute,
+                        _tool_instance=sessions_history_tool,
+                    )
+                )
+
+                subagents_control_tool = SubAgentsControlTool(
+                    run_registry=self._subagent_run_registry,
+                    conversation_id=conversation_id,
+                    subagent_names=list(subagent_map.keys()),
+                    subagent_descriptions=subagent_descriptions,
+                    cancel_callback=_cancel_spawn_callback,
+                    restart_callback=_spawn_callback,
+                )
+                tools_to_use.append(
+                    ToolDefinition(
+                        name=subagents_control_tool.name,
+                        description=subagents_control_tool.description,
+                        parameters=subagents_control_tool.get_parameters_schema(),
+                        execute=subagents_control_tool.execute,
+                        _tool_instance=subagents_control_tool,
+                    )
+                )
+
                 # Inject parallel delegation tool when 2+ SubAgents available
                 if len(enabled_subagents) >= 2:
-                    from ..tools.delegate_subagent import ParallelDelegateSubAgentTool
-
                     parallel_tool = ParallelDelegateSubAgentTool(
                         subagent_names=list(subagent_map.keys()),
                         subagent_descriptions=subagent_descriptions,
                         execute_callback=_delegate_callback,
+                        run_registry=self._subagent_run_registry,
+                        conversation_id=conversation_id,
+                        delegation_depth=0,
+                        max_active_runs=self._max_subagent_active_runs,
                     )
                     parallel_td = ToolDefinition(
                         name=parallel_tool.name,
@@ -1167,7 +1313,8 @@ class ReActAgent:
                 logger.info(
                     f"[ReActAgent] Injected SubAgent delegation tools "
                     f"({len(enabled_subagents)} SubAgents, "
-                    f"parallel={'yes' if len(enabled_subagents) >= 2 else 'no'})"
+                    f"parallel={'yes' if len(enabled_subagents) >= 2 else 'no'}, "
+                    "sessions=yes)"
                 )
 
         # Use main agent config (SubAgent path returns early above)
@@ -1321,6 +1468,7 @@ class ReActAgent:
         conversation_context: List[Dict[str, str]],
         project_id: str,
         tenant_id: str,
+        conversation_id: str = "",
         abort_signal: Optional[asyncio.Event] = None,
         delegation_depth: int = 0,
     ) -> AsyncIterator[Dict[str, Any]]:
@@ -1338,6 +1486,7 @@ class ReActAgent:
             conversation_context: Recent conversation for context bridging.
             project_id: Project ID for scoping.
             tenant_id: Tenant ID for scoping.
+            conversation_id: Conversation ID used to track subagent run lifecycle.
             abort_signal: Optional signal to abort execution.
 
         Yields:
@@ -1387,7 +1536,7 @@ class ReActAgent:
             filtered_tools = list(current_tool_definitions)
 
         # Inject SubAgent delegation tools for nested orchestration (bounded depth).
-        max_delegation_depth = 2
+        max_delegation_depth = self._max_subagent_delegation_depth
         if (
             self.subagents
             and self._enable_subagent_as_tool
@@ -1398,9 +1547,7 @@ class ReActAgent:
                 ParallelDelegateSubAgentTool,
             )
 
-            nested_candidates = [
-                sa for sa in self.subagents if sa.enabled and sa.id != subagent.id
-            ]
+            nested_candidates = [sa for sa in self.subagents if sa.enabled and sa.id != subagent.id]
             if nested_candidates:
                 nested_map = {sa.name: sa for sa in nested_candidates}
                 nested_descriptions = {
@@ -1424,6 +1571,7 @@ class ReActAgent:
                         conversation_context=conversation_context,
                         project_id=project_id,
                         tenant_id=tenant_id,
+                        conversation_id=conversation_id,
                         abort_signal=abort_signal,
                         delegation_depth=delegation_depth + 1,
                     ):
@@ -1458,6 +1606,10 @@ class ReActAgent:
                     subagent_names=list(nested_map.keys()),
                     subagent_descriptions=nested_descriptions,
                     execute_callback=_nested_delegate_callback,
+                    run_registry=self._subagent_run_registry,
+                    conversation_id=conversation_id,
+                    delegation_depth=delegation_depth + 1,
+                    max_active_runs=self._max_subagent_active_runs,
                 )
                 filtered_tools.append(
                     ToolDefinition(
@@ -1474,6 +1626,10 @@ class ReActAgent:
                         subagent_names=list(nested_map.keys()),
                         subagent_descriptions=nested_descriptions,
                         execute_callback=_nested_delegate_callback,
+                        run_registry=self._subagent_run_registry,
+                        conversation_id=conversation_id,
+                        delegation_depth=delegation_depth + 1,
+                        max_active_runs=self._max_subagent_active_runs,
                     )
                     filtered_tools.append(
                         ToolDefinition(
@@ -1754,6 +1910,151 @@ class ReActAgent:
             },
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
+
+    async def _launch_subagent_session(
+        self,
+        run_id: str,
+        subagent: SubAgent,
+        user_message: str,
+        conversation_id: str,
+        conversation_context: List[Dict[str, str]],
+        project_id: str,
+        tenant_id: str,
+        abort_signal: Optional[asyncio.Event] = None,
+    ) -> None:
+        """Launch a detached SubAgent session tied to a run_id."""
+        if run_id in self._subagent_session_tasks:
+            raise ValueError(f"Run {run_id} is already running")
+
+        async def _runner() -> None:
+            from src.domain.model.agent.subagent_run import SubAgentRunStatus
+
+            started_at = time.time()
+            summary = ""
+            tokens_used: Optional[int] = None
+            execution_time_ms: Optional[int] = None
+            result_success = True
+            result_error: Optional[str] = None
+            configured_timeout = 0.0
+            run_state = self._subagent_run_registry.get_run(conversation_id, run_id)
+            if run_state:
+                try:
+                    configured_timeout = float(run_state.metadata.get("run_timeout_seconds") or 0)
+                except (TypeError, ValueError):
+                    configured_timeout = 0.0
+
+            async def _consume_subagent_events() -> None:
+                nonlocal summary, tokens_used, execution_time_ms, result_success, result_error
+                async for evt in self._execute_subagent(
+                    subagent=subagent,
+                    user_message=user_message,
+                    conversation_context=conversation_context,
+                    project_id=project_id,
+                    tenant_id=tenant_id,
+                    conversation_id=conversation_id,
+                    abort_signal=abort_signal,
+                ):
+                    if evt.get("type") != "complete":
+                        continue
+                    data = evt.get("data", {})
+                    subagent_result = data.get("subagent_result") or {}
+                    summary = subagent_result.get("summary") or data.get("content", "")
+                    tokens_used = subagent_result.get("tokens_used")
+                    execution_time_ms = subagent_result.get("execution_time_ms")
+                    if isinstance(subagent_result, dict):
+                        result_success = bool(subagent_result.get("success", True))
+                        result_error = subagent_result.get("error")
+
+            try:
+                if configured_timeout > 0:
+                    await asyncio.wait_for(_consume_subagent_events(), timeout=configured_timeout)
+                else:
+                    await _consume_subagent_events()
+
+                current = self._subagent_run_registry.get_run(conversation_id, run_id)
+                if current and current.status in {
+                    SubAgentRunStatus.PENDING,
+                    SubAgentRunStatus.RUNNING,
+                }:
+                    elapsed_ms = execution_time_ms or int((time.time() - started_at) * 1000)
+                    if result_success:
+                        self._subagent_run_registry.mark_completed(
+                            conversation_id=conversation_id,
+                            run_id=run_id,
+                            summary=summary,
+                            tokens_used=tokens_used,
+                            execution_time_ms=elapsed_ms,
+                            expected_statuses=[
+                                SubAgentRunStatus.PENDING,
+                                SubAgentRunStatus.RUNNING,
+                            ],
+                        )
+                    else:
+                        self._subagent_run_registry.mark_failed(
+                            conversation_id=conversation_id,
+                            run_id=run_id,
+                            error=result_error or "SubAgent session failed",
+                            execution_time_ms=elapsed_ms,
+                            expected_statuses=[
+                                SubAgentRunStatus.PENDING,
+                                SubAgentRunStatus.RUNNING,
+                            ],
+                        )
+            except asyncio.TimeoutError:
+                current = self._subagent_run_registry.get_run(conversation_id, run_id)
+                if current and current.status in {
+                    SubAgentRunStatus.PENDING,
+                    SubAgentRunStatus.RUNNING,
+                }:
+                    self._subagent_run_registry.mark_timed_out(
+                        conversation_id=conversation_id,
+                        run_id=run_id,
+                        reason=(
+                            f"SubAgent session exceeded timeout "
+                            f"({configured_timeout}s)"
+                        ),
+                        metadata={"timeout_seconds": configured_timeout},
+                        expected_statuses=[SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING],
+                    )
+            except asyncio.CancelledError:
+                current = self._subagent_run_registry.get_run(conversation_id, run_id)
+                if current and current.status in {
+                    SubAgentRunStatus.PENDING,
+                    SubAgentRunStatus.RUNNING,
+                }:
+                    self._subagent_run_registry.mark_cancelled(
+                        conversation_id=conversation_id,
+                        run_id=run_id,
+                        reason="Cancelled by control tool",
+                        expected_statuses=[SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING],
+                    )
+                raise
+            except Exception as exc:
+                current = self._subagent_run_registry.get_run(conversation_id, run_id)
+                if current and current.status in {
+                    SubAgentRunStatus.PENDING,
+                    SubAgentRunStatus.RUNNING,
+                }:
+                    self._subagent_run_registry.mark_failed(
+                        conversation_id=conversation_id,
+                        run_id=run_id,
+                        error=str(exc),
+                        execution_time_ms=int((time.time() - started_at) * 1000),
+                        expected_statuses=[SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING],
+                    )
+            finally:
+                self._subagent_session_tasks.pop(run_id, None)
+
+        task = asyncio.create_task(_runner(), name=f"subagent-session-{run_id}")
+        self._subagent_session_tasks[run_id] = task
+
+    async def _cancel_subagent_session(self, run_id: str) -> bool:
+        """Cancel a detached SubAgent session by run_id."""
+        task = self._subagent_session_tasks.get(run_id)
+        if task and not task.done():
+            task.cancel()
+            return True
+        return False
 
     @staticmethod
     def _topological_sort_subtasks(subtasks: List[Any]) -> List[Any]:

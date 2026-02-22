@@ -290,6 +290,9 @@ class ToolDefinition:
         }
 
 
+ProcessorEvent = AgentDomainEvent | Dict[str, Any]
+
+
 class SessionProcessor:
     """
     Core ReAct agent processing loop.
@@ -495,7 +498,7 @@ class SessionProcessor:
         messages: List[Dict[str, Any]],
         abort_signal: Optional[asyncio.Event] = None,
         langfuse_context: Optional[Dict[str, Any]] = None,
-    ) -> AsyncIterator[AgentDomainEvent]:
+    ) -> AsyncIterator[ProcessorEvent]:
         """
         Process a conversation turn.
 
@@ -517,7 +520,7 @@ class SessionProcessor:
                 - extra: Additional metadata dict
 
         Yields:
-            AgentDomainEvent objects for real-time streaming
+            AgentDomainEvent objects and dict passthrough events for real-time streaming
         """
         self._abort_event = abort_signal or asyncio.Event()
         self._step_count = 0
@@ -554,12 +557,22 @@ class SessionProcessor:
                     yield event
 
                     # Check for stop conditions in events
-                    if event.event_type == AgentEventType.ERROR:
+                    event_type_raw = (
+                        event.get("type")
+                        if isinstance(event, dict)
+                        else getattr(event, "event_type", None)
+                    )
+                    event_type = (
+                        event_type_raw.value
+                        if isinstance(event_type_raw, AgentEventType)
+                        else event_type_raw
+                    )
+                    if event_type == AgentEventType.ERROR.value:
                         result = ProcessorResult.STOP
                         break
-                    elif event.event_type == AgentEventType.ACT:
+                    elif event_type == AgentEventType.ACT.value:
                         had_tool_calls = True
-                    elif event.event_type == AgentEventType.COMPACT_NEEDED:
+                    elif event_type == AgentEventType.COMPACT_NEEDED.value:
                         result = ProcessorResult.COMPACT
                         break
 
@@ -572,18 +585,14 @@ class SessionProcessor:
                         goal_check = await self._evaluate_goal_completion(session_id, messages)
                         if goal_check.achieved:
                             self._no_progress_steps = 0
-                            yield AgentStatusEvent(
-                                status=f"goal_achieved:{goal_check.source}"
-                            )
+                            yield AgentStatusEvent(status=f"goal_achieved:{goal_check.source}")
                             result = ProcessorResult.COMPLETE
                         elif self._is_conversational_response():
                             # Text-only response without tool calls and without an
                             # explicit goal_achieved=false signal — treat as a
                             # deliberate conversational reply.
                             self._no_progress_steps = 0
-                            yield AgentStatusEvent(
-                                status="goal_achieved:conversational_response"
-                            )
+                            yield AgentStatusEvent(status="goal_achieved:conversational_response")
                             result = ProcessorResult.COMPLETE
                         elif goal_check.should_stop:
                             yield AgentErrorEvent(
@@ -594,9 +603,7 @@ class SessionProcessor:
                             result = ProcessorResult.STOP
                         else:
                             self._no_progress_steps += 1
-                            yield AgentStatusEvent(
-                                status=f"goal_pending:{goal_check.source}"
-                            )
+                            yield AgentStatusEvent(status=f"goal_pending:{goal_check.source}")
                             if self._no_progress_steps > 1:
                                 yield AgentStatusEvent(status="planning_recheck")
                             if self._no_progress_steps >= self.config.max_no_progress_steps:
@@ -1084,7 +1091,7 @@ class SessionProcessor:
         self,
         session_id: str,
         messages: List[Dict[str, Any]],
-    ) -> AsyncIterator[AgentDomainEvent]:
+    ) -> AsyncIterator[ProcessorEvent]:
         """
         Process a single step in the ReAct loop.
 
@@ -1093,7 +1100,7 @@ class SessionProcessor:
             messages: Current messages
 
         Yields:
-            AgentDomainEvent objects
+            AgentDomainEvent objects and dict passthrough events
         """
         logger.debug(f"[Processor] _process_step: session={session_id}, step={self._step_count}")
 
@@ -1410,7 +1417,7 @@ class SessionProcessor:
         call_id: str,
         tool_name: str,
         arguments: Dict[str, Any],
-    ) -> AsyncIterator[AgentDomainEvent]:
+    ) -> AsyncIterator[ProcessorEvent]:
         """
         Execute a tool call with permission checking and doom loop detection.
 
@@ -1421,7 +1428,7 @@ class SessionProcessor:
             arguments: Tool arguments
 
         Yields:
-            AgentDomainEvent objects for tool execution
+            AgentDomainEvent objects and dict passthrough events for tool execution
         """
         tool_part = self._pending_tool_calls.get(call_id)
         if not tool_part:
@@ -1977,10 +1984,14 @@ class SessionProcessor:
 
             # Emit pending SSE events from tools that support event buffering
             if (
-                tool_name in {
+                tool_name
+                in {
                     "register_mcp_server",
                     "delegate_to_subagent",
                     "parallel_delegate_subagents",
+                    "sessions_spawn",
+                    "sessions_send",
+                    "subagents",
                 }
                 and tool_instance
                 and hasattr(tool_instance, "consume_pending_events")

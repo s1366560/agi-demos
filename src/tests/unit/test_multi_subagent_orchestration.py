@@ -4,6 +4,7 @@ Tests that ReActAgent correctly routes to parallel/chain/single SubAgent
 execution based on TaskDecomposer results.
 """
 
+import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -421,6 +422,155 @@ class TestStreamOrchestration:
         assert mock_exec.call_args.kwargs["subagent"] == researcher
         assert mock_exec.call_args.kwargs["user_message"] == "write summary"
         assert any(event["type"] == "subagent_routed" for event in events)
+
+
+# === Sessionized Runtime Tests ===
+
+
+@pytest.mark.unit
+class TestSessionizedRuntime:
+    """Test detached session runtime behavior."""
+
+    async def _wait_session_finish(self, agent, run_id: str) -> None:
+        for _ in range(50):
+            if run_id not in agent._subagent_session_tasks:
+                return
+            await asyncio.sleep(0.01)
+
+    async def test_launch_session_marks_failed_when_subagent_result_failed(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
+
+        run = agent._subagent_run_registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Investigate issue",
+            run_id="run-1",
+        )
+        agent._subagent_run_registry.mark_running("c1", run.run_id)
+
+        async def _mock_execute_subagent(*args, **kwargs):
+            yield {
+                "type": "complete",
+                "data": {
+                    "content": "failed result",
+                    "subagent_result": {
+                        "success": False,
+                        "summary": "failed summary",
+                        "error": "subagent failed",
+                        "execution_time_ms": 12,
+                        "tokens_used": 5,
+                    },
+                },
+                "timestamp": "t",
+            }
+
+        with patch.object(agent, "_execute_subagent", side_effect=_mock_execute_subagent):
+            await agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=sa,
+                user_message="Investigate issue",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+            await self._wait_session_finish(agent, run.run_id)
+
+        final = agent._subagent_run_registry.get_run("c1", run.run_id)
+        assert final is not None
+        assert final.status.value == "failed"
+        assert final.error == "subagent failed"
+
+    async def test_launch_session_marks_completed_on_success(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
+
+        run = agent._subagent_run_registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Do work",
+            run_id="run-2",
+        )
+        agent._subagent_run_registry.mark_running("c1", run.run_id)
+
+        async def _mock_execute_subagent(*args, **kwargs):
+            yield {
+                "type": "complete",
+                "data": {
+                    "content": "all good",
+                    "subagent_result": {
+                        "success": True,
+                        "summary": "done",
+                        "execution_time_ms": 10,
+                        "tokens_used": 7,
+                    },
+                },
+                "timestamp": "t",
+            }
+
+        with patch.object(agent, "_execute_subagent", side_effect=_mock_execute_subagent):
+            await agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=sa,
+                user_message="Do work",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+            await self._wait_session_finish(agent, run.run_id)
+
+        final = agent._subagent_run_registry.get_run("c1", run.run_id)
+        assert final is not None
+        assert final.status.value == "completed"
+        assert final.summary == "done"
+
+    async def test_launch_session_marks_timed_out_when_timeout_exceeded(self):
+        sa = _make_subagent("researcher")
+        agent = _make_react_agent(subagents=[sa], enable_subagent_as_tool=True)
+
+        run = agent._subagent_run_registry.create_run(
+            conversation_id="c1",
+            subagent_name=sa.name,
+            task="Long running task",
+            run_id="run-timeout",
+            metadata={"run_timeout_seconds": 0.2},
+        )
+        agent._subagent_run_registry.mark_running("c1", run.run_id)
+
+        async def _mock_execute_subagent(*args, **kwargs):
+            await asyncio.sleep(0.6)
+            yield {
+                "type": "complete",
+                "data": {
+                    "content": "should not complete",
+                    "subagent_result": {
+                        "success": True,
+                        "summary": "late completion",
+                        "execution_time_ms": 1200,
+                        "tokens_used": 7,
+                    },
+                },
+                "timestamp": "t",
+            }
+
+        with patch.object(agent, "_execute_subagent", side_effect=_mock_execute_subagent):
+            await agent._launch_subagent_session(
+                run_id=run.run_id,
+                subagent=sa,
+                user_message="Long running task",
+                conversation_id="c1",
+                conversation_context=[],
+                project_id="p1",
+                tenant_id="t1",
+            )
+            await self._wait_session_finish(agent, run.run_id)
+
+        final = agent._subagent_run_registry.get_run("c1", run.run_id)
+        assert final is not None
+        assert final.status.value == "timed_out"
+        assert "timeout_seconds" in final.metadata
 
 
 # === _execute_parallel Tests ===

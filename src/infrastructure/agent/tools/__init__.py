@@ -16,6 +16,13 @@ from src.infrastructure.agent.tools.env_var_tools import (
 from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
 from src.infrastructure.agent.tools.skill_installer import SkillInstallerTool
 from src.infrastructure.agent.tools.skill_loader import SkillLoaderTool
+from src.infrastructure.agent.tools.subagent_sessions import (
+    SessionsHistoryTool,
+    SessionsListTool,
+    SessionsSendTool,
+    SessionsSpawnTool,
+    SubAgentsControlTool,
+)
 from src.infrastructure.agent.tools.terminal_tool import TerminalStatus, TerminalTool
 from src.infrastructure.agent.tools.todo_tools import (
     TodoReadTool,
@@ -39,6 +46,11 @@ __all__ = [
     "SandboxMCPToolWrapper",
     "SkillInstallerTool",
     "SkillLoaderTool",
+    "SessionsSpawnTool",
+    "SessionsListTool",
+    "SessionsHistoryTool",
+    "SessionsSendTool",
+    "SubAgentsControlTool",
     "TerminalTool",
     "TerminalStatus",
     "TodoReadTool",

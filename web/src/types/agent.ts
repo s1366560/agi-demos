@@ -368,6 +368,15 @@ export type AgentEventType =
   | 'subagent_started' // SubAgent execution started
   | 'subagent_completed' // SubAgent execution completed
   | 'subagent_failed' // SubAgent execution failed
+  | 'subagent_run_started' // Sessionized SubAgent run started
+  | 'subagent_run_completed' // Sessionized SubAgent run completed
+  | 'subagent_run_failed' // Sessionized SubAgent run failed
+  | 'subagent_session_spawned' // Sessionized SubAgent run spawned
+  | 'subagent_session_message_sent' // Follow-up task sent to session lineage
+  | 'subagent_announce_retry' // Session announce retry event
+  | 'subagent_announce_giveup' // Session announce gave up after retries
+  | 'subagent_killed' // Sessionized SubAgent run cancelled
+  | 'subagent_steered' // Steering instruction attached to a run
   | 'parallel_started' // Parallel SubAgent group started
   | 'parallel_completed' // Parallel SubAgent group completed
   | 'chain_started' // Chain execution started
@@ -2032,6 +2041,15 @@ export type TimelineEventType =
   | 'subagent_started'
   | 'subagent_completed'
   | 'subagent_failed'
+  | 'subagent_run_started'
+  | 'subagent_run_completed'
+  | 'subagent_run_failed'
+  | 'subagent_session_spawned'
+  | 'subagent_session_message_sent'
+  | 'subagent_announce_retry'
+  | 'subagent_announce_giveup'
+  | 'subagent_killed'
+  | 'subagent_steered'
   | 'parallel_started'
   | 'parallel_completed'
   | 'chain_started'
@@ -3302,6 +3320,49 @@ export interface SubAgentCompletedEventData {
 export interface SubAgentFailedEventData {
   subagent_id: string;
   subagent_name: string;
+  error: string;
+}
+
+export interface SubAgentRunEventData {
+  run_id: string;
+  conversation_id: string;
+  subagent_name: string;
+  task: string;
+  status: string;
+  summary?: string | null;
+  error?: string | null;
+  execution_time_ms?: number | null;
+  tokens_used?: number | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SubAgentSessionSpawnedEventData {
+  conversation_id: string;
+  run_id: string;
+  subagent_name: string;
+}
+
+export interface SubAgentSessionMessageSentEventData {
+  conversation_id: string;
+  parent_run_id: string;
+  run_id: string;
+  subagent_name: string;
+}
+
+export interface SubAgentAnnounceRetryEventData {
+  conversation_id: string;
+  run_id: string;
+  subagent_name: string;
+  attempt: number;
+  error: string;
+  next_delay_ms: number;
+}
+
+export interface SubAgentAnnounceGiveupEventData {
+  conversation_id: string;
+  run_id: string;
+  subagent_name: string;
+  attempts: number;
   error: string;
 }
 

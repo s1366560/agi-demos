@@ -81,6 +81,15 @@ export type AgentEventType =
   | 'subagent_started'
   | 'subagent_completed'
   | 'subagent_failed'
+  | 'subagent_run_started'
+  | 'subagent_run_completed'
+  | 'subagent_run_failed'
+  | 'subagent_session_spawned'
+  | 'subagent_session_message_sent'
+  | 'subagent_announce_retry'
+  | 'subagent_announce_giveup'
+  | 'subagent_killed'
+  | 'subagent_steered'
   | 'parallel_started'
   | 'parallel_completed'
   | 'chain_started'
@@ -194,6 +203,15 @@ export const EVENT_CATEGORIES: Record<AgentEventType, EventCategory> = {
   subagent_started: 'agent',
   subagent_completed: 'agent',
   subagent_failed: 'agent',
+  subagent_run_started: 'agent',
+  subagent_run_completed: 'agent',
+  subagent_run_failed: 'agent',
+  subagent_session_spawned: 'agent',
+  subagent_session_message_sent: 'agent',
+  subagent_announce_retry: 'agent',
+  subagent_announce_giveup: 'agent',
+  subagent_killed: 'agent',
+  subagent_steered: 'agent',
   parallel_started: 'agent',
   parallel_completed: 'agent',
   chain_started: 'agent',
@@ -280,6 +298,15 @@ export const ALL_EVENT_TYPES: AgentEventType[] = [
   'subagent_started',
   'subagent_completed',
   'subagent_failed',
+  'subagent_run_started',
+  'subagent_run_completed',
+  'subagent_run_failed',
+  'subagent_session_spawned',
+  'subagent_session_message_sent',
+  'subagent_announce_retry',
+  'subagent_announce_giveup',
+  'subagent_killed',
+  'subagent_steered',
   'parallel_started',
   'parallel_completed',
   'chain_started',

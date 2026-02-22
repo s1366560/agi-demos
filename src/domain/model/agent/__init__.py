@@ -73,6 +73,7 @@ from src.domain.model.agent.skill import (
 
 # Core concepts (kept at agent/ level)
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
+from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
 from src.domain.model.agent.workflow_pattern import WorkflowPattern
 
 __all__ = [
@@ -103,6 +104,8 @@ __all__ = [
     "SubAgent",
     "AgentModel",
     "AgentTrigger",
+    "SubAgentRun",
+    "SubAgentRunStatus",
     # Agent Mode
     "AgentMode",
     # Tool Environment Variables

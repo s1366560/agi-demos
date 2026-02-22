@@ -18,8 +18,9 @@ import inspect
 import json
 import logging
 import time
-from typing import Any, Callable, Coroutine, Dict, List
+from typing import Any, Callable, Coroutine, Dict, List, Optional
 
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
@@ -41,8 +42,7 @@ def _supports_on_event_arg(callback: Callable[..., Coroutine[Any, Any, str]]) ->
         return True
 
     return any(
-        param.kind == inspect.Parameter.VAR_KEYWORD
-        for param in signature.parameters.values()
+        param.kind == inspect.Parameter.VAR_KEYWORD for param in signature.parameters.values()
     )
 
 
@@ -59,6 +59,10 @@ class DelegateSubAgentTool(AgentTool):
         subagent_names: List[str],
         subagent_descriptions: Dict[str, str],
         execute_callback: Callable[..., Coroutine[Any, Any, str]],
+        run_registry: Optional[SubAgentRunRegistry] = None,
+        conversation_id: Optional[str] = None,
+        delegation_depth: int = 0,
+        max_active_runs: Optional[int] = None,
     ):
         """Initialize delegation tool.
 
@@ -82,6 +86,10 @@ class DelegateSubAgentTool(AgentTool):
         self._execute_fn = execute_callback
         self._supports_on_event = _supports_on_event_arg(execute_callback)
         self._pending_events: List[Dict[str, Any]] = []
+        self._run_registry = run_registry
+        self._conversation_id = conversation_id
+        self._delegation_depth = delegation_depth
+        self._max_active_runs = max_active_runs if max_active_runs and max_active_runs > 0 else None
 
     def consume_pending_events(self) -> List[Dict[str, Any]]:
         """Consume and return pending streaming events from last execute()."""
@@ -97,8 +105,7 @@ class DelegateSubAgentTool(AgentTool):
                 "subagent_name": {
                     "type": "string",
                     "description": (
-                        "Name of the SubAgent to delegate to. "
-                        "Choose the best match for the task."
+                        "Name of the SubAgent to delegate to. Choose the best match for the task."
                     ),
                     "enum": self._subagent_names,
                 },
@@ -136,10 +143,30 @@ class DelegateSubAgentTool(AgentTool):
             return "Error: task description is required"
 
         self._pending_events.clear()
+        started_at = time.time()
 
-        logger.info(
-            f"[DelegateSubAgentTool] Delegating to '{subagent_name}': {task[:100]}..."
-        )
+        run_id: Optional[str] = None
+        if self._run_registry and self._conversation_id:
+            active_runs = self._run_registry.count_active_runs(self._conversation_id)
+            if self._max_active_runs is not None and active_runs >= self._max_active_runs:
+                return (
+                    "Error: active SubAgent run limit reached "
+                    f"({active_runs}/{self._max_active_runs})"
+                )
+            run = self._run_registry.create_run(
+                conversation_id=self._conversation_id,
+                subagent_name=subagent_name,
+                task=task,
+                metadata={"delegation_depth": self._delegation_depth},
+            )
+            run_id = run.run_id
+            running = self._run_registry.mark_running(self._conversation_id, run_id)
+            if running:
+                self._pending_events.append(
+                    {"type": "subagent_run_started", "data": running.to_event_data()}
+                )
+
+        logger.info(f"[DelegateSubAgentTool] Delegating to '{subagent_name}': {task[:100]}...")
 
         try:
             if self._supports_on_event:
@@ -150,9 +177,34 @@ class DelegateSubAgentTool(AgentTool):
                 )
             else:
                 result = await self._execute_fn(subagent_name, task)
+
+            if self._run_registry and self._conversation_id and run_id:
+                elapsed_ms = int((time.time() - started_at) * 1000)
+                completed = self._run_registry.mark_completed(
+                    conversation_id=self._conversation_id,
+                    run_id=run_id,
+                    summary=result if isinstance(result, str) else str(result),
+                    execution_time_ms=elapsed_ms,
+                )
+                if completed:
+                    self._pending_events.append(
+                        {"type": "subagent_run_completed", "data": completed.to_event_data()}
+                    )
             return result
         except Exception as e:
             logger.error(f"[DelegateSubAgentTool] Execution failed: {e}")
+            if self._run_registry and self._conversation_id and run_id:
+                elapsed_ms = int((time.time() - started_at) * 1000)
+                failed = self._run_registry.mark_failed(
+                    conversation_id=self._conversation_id,
+                    run_id=run_id,
+                    error=str(e),
+                    execution_time_ms=elapsed_ms,
+                )
+                if failed:
+                    self._pending_events.append(
+                        {"type": "subagent_run_failed", "data": failed.to_event_data()}
+                    )
             return f"Error: SubAgent '{subagent_name}' execution failed: {e}"
 
 
@@ -172,6 +224,10 @@ class ParallelDelegateSubAgentTool(AgentTool):
         subagent_descriptions: Dict[str, str],
         execute_callback: Callable[..., Coroutine[Any, Any, str]],
         max_concurrency: int = 5,
+        run_registry: Optional[SubAgentRunRegistry] = None,
+        conversation_id: Optional[str] = None,
+        delegation_depth: int = 0,
+        max_active_runs: Optional[int] = None,
     ):
         """Initialize parallel delegation tool.
 
@@ -198,6 +254,10 @@ class ParallelDelegateSubAgentTool(AgentTool):
         self._supports_on_event = _supports_on_event_arg(execute_callback)
         self._max_concurrency = max_concurrency
         self._pending_events: List[Dict[str, Any]] = []
+        self._run_registry = run_registry
+        self._conversation_id = conversation_id
+        self._delegation_depth = delegation_depth
+        self._max_active_runs = max_active_runs if max_active_runs and max_active_runs > 0 else None
 
     def consume_pending_events(self) -> List[Dict[str, Any]]:
         """Consume and return pending streaming events from last execute()."""
@@ -276,9 +336,37 @@ class ParallelDelegateSubAgentTool(AgentTool):
                 return f"Error: task[{i}] is missing 'task' description"
 
         task_count = len(tasks)
-        logger.info(
-            f"[ParallelDelegate] Starting {task_count} parallel SubAgent executions"
-        )
+        run_ids_by_index: Dict[int, str] = {}
+
+        if self._run_registry and self._conversation_id:
+            active_runs = self._run_registry.count_active_runs(self._conversation_id)
+            if (
+                self._max_active_runs is not None
+                and active_runs + task_count > self._max_active_runs
+            ):
+                return (
+                    "Error: active SubAgent run limit reached "
+                    f"({active_runs + task_count}/{self._max_active_runs})"
+                )
+            for idx, item in enumerate(tasks):
+                run = self._run_registry.create_run(
+                    conversation_id=self._conversation_id,
+                    subagent_name=item["subagent_name"],
+                    task=item["task"],
+                    metadata={
+                        "delegation_depth": self._delegation_depth,
+                        "parallel_index": idx,
+                        "parallel_total": task_count,
+                    },
+                )
+                run_ids_by_index[idx] = run.run_id
+                running = self._run_registry.mark_running(self._conversation_id, run.run_id)
+                if running:
+                    self._pending_events.append(
+                        {"type": "subagent_run_started", "data": running.to_event_data()}
+                    )
+
+        logger.info(f"[ParallelDelegate] Starting {task_count} parallel SubAgent executions")
         start_time = time.time()
 
         # Create semaphore for concurrency control
@@ -287,6 +375,7 @@ class ParallelDelegateSubAgentTool(AgentTool):
         async def _run_one(index: int, item: Dict[str, Any]) -> Dict[str, Any]:
             name = item["subagent_name"]
             task_desc = item["task"]
+            subtask_start = time.time()
             async with semaphore:
                 try:
                     if self._supports_on_event:
@@ -297,6 +386,22 @@ class ParallelDelegateSubAgentTool(AgentTool):
                         )
                     else:
                         result = await self._execute_fn(name, task_desc)
+
+                    run_id = run_ids_by_index.get(index)
+                    if self._run_registry and self._conversation_id and run_id:
+                        completed = self._run_registry.mark_completed(
+                            conversation_id=self._conversation_id,
+                            run_id=run_id,
+                            summary=result if isinstance(result, str) else str(result),
+                            execution_time_ms=int((time.time() - subtask_start) * 1000),
+                        )
+                        if completed:
+                            self._pending_events.append(
+                                {
+                                    "type": "subagent_run_completed",
+                                    "data": completed.to_event_data(),
+                                }
+                            )
                     return {
                         "index": index,
                         "subagent": name,
@@ -304,9 +409,19 @@ class ParallelDelegateSubAgentTool(AgentTool):
                         "result": result,
                     }
                 except Exception as e:
-                    logger.error(
-                        f"[ParallelDelegate] SubAgent '{name}' failed: {e}"
-                    )
+                    logger.error(f"[ParallelDelegate] SubAgent '{name}' failed: {e}")
+                    run_id = run_ids_by_index.get(index)
+                    if self._run_registry and self._conversation_id and run_id:
+                        failed = self._run_registry.mark_failed(
+                            conversation_id=self._conversation_id,
+                            run_id=run_id,
+                            error=str(e),
+                            execution_time_ms=int((time.time() - subtask_start) * 1000),
+                        )
+                        if failed:
+                            self._pending_events.append(
+                                {"type": "subagent_run_failed", "data": failed.to_event_data()}
+                            )
                     return {
                         "index": index,
                         "subagent": name,
@@ -322,12 +437,14 @@ class ParallelDelegateSubAgentTool(AgentTool):
         processed = []
         for i, r in enumerate(results):
             if isinstance(r, Exception):
-                processed.append({
-                    "index": i,
-                    "subagent": tasks[i].get("subagent_name", "unknown"),
-                    "success": False,
-                    "error": str(r),
-                })
+                processed.append(
+                    {
+                        "index": i,
+                        "subagent": tasks[i].get("subagent_name", "unknown"),
+                        "success": False,
+                        "error": str(r),
+                    }
+                )
             else:
                 processed.append(r)
 

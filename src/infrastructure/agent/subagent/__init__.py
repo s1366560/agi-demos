@@ -7,6 +7,7 @@ from .memory_accessor import MemoryAccessor, MemoryItem, MemoryWriteResult
 from .parallel_scheduler import ParallelScheduler, ParallelSchedulerConfig
 from .process import SubAgentProcess
 from .result_aggregator import AggregatedResult, ResultAggregator
+from .run_registry import SubAgentRunRegistry
 from .state_tracker import StateTracker, SubAgentState, SubAgentStatus
 from .task_decomposer import DecompositionResult, SubTask, TaskDecomposer
 from .template_registry import SubAgentTemplate, TemplateRegistry
@@ -14,6 +15,7 @@ from .template_registry import SubAgentTemplate, TemplateRegistry
 __all__ = [
     "ContextBridge",
     "SubAgentProcess",
+    "SubAgentRunRegistry",
     "TaskDecomposer",
     "SubTask",
     "DecompositionResult",

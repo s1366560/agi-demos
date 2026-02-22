@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.domain.model.agent.subagent import AgentTrigger, SubAgent
+from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.tools.delegate_subagent import (
     DelegateSubAgentTool,
     ParallelDelegateSubAgentTool,
@@ -112,6 +113,76 @@ class TestDelegateSubAgentTool:
         result = await tool.execute(subagent_name="researcher", task="test")
         assert "Error" in result
         assert "LLM timeout" in result
+
+    async def test_execute_emits_run_lifecycle_events(self):
+        callback = self._make_callback("done")
+        tool = DelegateSubAgentTool(
+            subagent_names=["researcher", "coder"],
+            subagent_descriptions={
+                "researcher": "Handles research tasks",
+                "coder": "Writes and debugs code",
+            },
+            execute_callback=callback,
+            run_registry=SubAgentRunRegistry(),
+            conversation_id="conv-1",
+        )
+
+        await tool.execute(subagent_name="researcher", task="Find info about X")
+        events = tool.consume_pending_events()
+
+        assert [event["type"] for event in events] == [
+            "subagent_run_started",
+            "subagent_run_completed",
+        ]
+        assert events[0]["data"]["conversation_id"] == "conv-1"
+        assert events[1]["data"]["status"] == "completed"
+
+    async def test_execute_emits_run_failed_event(self):
+        callback = AsyncMock(side_effect=RuntimeError("boom"))
+        tool = DelegateSubAgentTool(
+            subagent_names=["researcher", "coder"],
+            subagent_descriptions={
+                "researcher": "Handles research tasks",
+                "coder": "Writes and debugs code",
+            },
+            execute_callback=callback,
+            run_registry=SubAgentRunRegistry(),
+            conversation_id="conv-1",
+        )
+
+        await tool.execute(subagent_name="researcher", task="Find info about X")
+        events = tool.consume_pending_events()
+
+        assert [event["type"] for event in events] == [
+            "subagent_run_started",
+            "subagent_run_failed",
+        ]
+        assert events[1]["data"]["status"] == "failed"
+        assert events[1]["data"]["error"] == "boom"
+
+    async def test_execute_respects_max_active_runs_limit(self):
+        registry = SubAgentRunRegistry()
+        existing = registry.create_run(
+            conversation_id="conv-1",
+            subagent_name="coder",
+            task="Already running",
+        )
+        registry.mark_running("conv-1", existing.run_id)
+
+        tool = DelegateSubAgentTool(
+            subagent_names=["researcher", "coder"],
+            subagent_descriptions={
+                "researcher": "Handles research tasks",
+                "coder": "Writes and debugs code",
+            },
+            execute_callback=self._make_callback("done"),
+            run_registry=registry,
+            conversation_id="conv-1",
+            max_active_runs=1,
+        )
+
+        result = await tool.execute(subagent_name="researcher", task="Find info about X")
+        assert "active SubAgent run limit reached" in result
 
 
 @pytest.mark.unit
@@ -265,8 +336,10 @@ class TestParallelDelegateSubAgentTool:
     def _make_callback(self, side_effect=None):
         if side_effect:
             return AsyncMock(side_effect=side_effect)
+
         async def _cb(name, task):
             return f"Result from {name}: {task[:30]}"
+
         return AsyncMock(side_effect=_cb)
 
     def _make_tool(self, callback=None):
@@ -297,17 +370,17 @@ class TestParallelDelegateSubAgentTool:
         assert tasks_prop["minItems"] == 2
         items = tasks_prop["items"]
         assert "subagent_name" in items["properties"]
-        assert items["properties"]["subagent_name"]["enum"] == [
-            "researcher", "coder", "writer"
-        ]
+        assert items["properties"]["subagent_name"]["enum"] == ["researcher", "coder", "writer"]
 
     async def test_execute_parallel_success(self):
         callback = self._make_callback()
         tool = self._make_tool(callback)
-        result = await tool.execute(tasks=[
-            {"subagent_name": "researcher", "task": "Find info"},
-            {"subagent_name": "coder", "task": "Write code"},
-        ])
+        result = await tool.execute(
+            tasks=[
+                {"subagent_name": "researcher", "task": "Find info"},
+                {"subagent_name": "coder", "task": "Write code"},
+            ]
+        )
         assert "researcher" in result
         assert "coder" in result
         assert "success" in result.lower()
@@ -316,11 +389,13 @@ class TestParallelDelegateSubAgentTool:
     async def test_execute_parallel_three_tasks(self):
         callback = self._make_callback()
         tool = self._make_tool(callback)
-        result = await tool.execute(tasks=[
-            {"subagent_name": "researcher", "task": "Research"},
-            {"subagent_name": "coder", "task": "Code"},
-            {"subagent_name": "writer", "task": "Write"},
-        ])
+        result = await tool.execute(
+            tasks=[
+                {"subagent_name": "researcher", "task": "Research"},
+                {"subagent_name": "coder", "task": "Code"},
+                {"subagent_name": "writer", "task": "Write"},
+            ]
+        )
         assert callback.call_count == 3
         assert "3/3 succeeded" in result
 
@@ -331,39 +406,48 @@ class TestParallelDelegateSubAgentTool:
 
     async def test_execute_single_task_rejected(self):
         tool = self._make_tool()
-        result = await tool.execute(tasks=[
-            {"subagent_name": "researcher", "task": "Solo task"},
-        ])
+        result = await tool.execute(
+            tasks=[
+                {"subagent_name": "researcher", "task": "Solo task"},
+            ]
+        )
         assert "Error" in result
         assert "at least 2" in result
 
     async def test_execute_invalid_subagent(self):
         tool = self._make_tool()
-        result = await tool.execute(tasks=[
-            {"subagent_name": "researcher", "task": "ok"},
-            {"subagent_name": "nonexistent", "task": "bad"},
-        ])
+        result = await tool.execute(
+            tasks=[
+                {"subagent_name": "researcher", "task": "ok"},
+                {"subagent_name": "nonexistent", "task": "bad"},
+            ]
+        )
         assert "Error" in result
         assert "nonexistent" in result
 
     async def test_execute_missing_task_field(self):
         tool = self._make_tool()
-        result = await tool.execute(tasks=[
-            {"subagent_name": "researcher", "task": "ok"},
-            {"subagent_name": "coder"},
-        ])
+        result = await tool.execute(
+            tasks=[
+                {"subagent_name": "researcher", "task": "ok"},
+                {"subagent_name": "coder"},
+            ]
+        )
         assert "Error" in result
         assert "missing" in result.lower()
 
     async def test_execute_json_string_input(self):
         """Test that JSON string input is parsed correctly."""
         import json
+
         callback = self._make_callback()
         tool = self._make_tool(callback)
-        tasks_json = json.dumps([
-            {"subagent_name": "researcher", "task": "Find info"},
-            {"subagent_name": "coder", "task": "Write code"},
-        ])
+        tasks_json = json.dumps(
+            [
+                {"subagent_name": "researcher", "task": "Find info"},
+                {"subagent_name": "coder", "task": "Write code"},
+            ]
+        )
         result = await tool.execute(tasks=tasks_json)
         assert callback.call_count == 2
         assert "2/2 succeeded" in result
@@ -381,10 +465,12 @@ class TestParallelDelegateSubAgentTool:
 
         callback = AsyncMock(side_effect=_mixed)
         tool = self._make_tool(callback)
-        result = await tool.execute(tasks=[
-            {"subagent_name": "researcher", "task": "Research"},
-            {"subagent_name": "coder", "task": "Code"},
-        ])
+        result = await tool.execute(
+            tasks=[
+                {"subagent_name": "researcher", "task": "Research"},
+                {"subagent_name": "coder", "task": "Code"},
+            ]
+        )
         assert "1/2 succeeded" in result
         assert "researcher" in result
         assert "failed" in result.lower()
@@ -397,6 +483,7 @@ class TestParallelDelegateSubAgentTool:
     async def test_execute_concurrency_limit(self):
         """Verify semaphore limits concurrent executions."""
         import asyncio
+
         max_concurrent = 0
         current_concurrent = 0
         lock = asyncio.Lock()
@@ -418,11 +505,69 @@ class TestParallelDelegateSubAgentTool:
             execute_callback=_tracking,
             max_concurrency=2,
         )
-        result = await tool.execute(tasks=[
-            {"subagent_name": "a", "task": "t1"},
-            {"subagent_name": "b", "task": "t2"},
-            {"subagent_name": "c", "task": "t3"},
-            {"subagent_name": "d", "task": "t4"},
-        ])
+        result = await tool.execute(
+            tasks=[
+                {"subagent_name": "a", "task": "t1"},
+                {"subagent_name": "b", "task": "t2"},
+                {"subagent_name": "c", "task": "t3"},
+                {"subagent_name": "d", "task": "t4"},
+            ]
+        )
         assert "4/4 succeeded" in result
         assert max_concurrent <= 2
+
+    async def test_parallel_execute_emits_run_lifecycle_events(self):
+        callback = self._make_callback()
+        tool = ParallelDelegateSubAgentTool(
+            subagent_names=["researcher", "coder", "writer"],
+            subagent_descriptions={
+                "researcher": "Research tasks",
+                "coder": "Coding tasks",
+                "writer": "Writing tasks",
+            },
+            execute_callback=callback,
+            run_registry=SubAgentRunRegistry(),
+            conversation_id="conv-2",
+        )
+
+        await tool.execute(
+            tasks=[
+                {"subagent_name": "researcher", "task": "Research"},
+                {"subagent_name": "coder", "task": "Code"},
+            ]
+        )
+
+        events = tool.consume_pending_events()
+        event_types = [event["type"] for event in events]
+        assert event_types.count("subagent_run_started") == 2
+        assert event_types.count("subagent_run_completed") == 2
+
+    async def test_parallel_execute_respects_max_active_runs_limit(self):
+        registry = SubAgentRunRegistry()
+        existing = registry.create_run(
+            conversation_id="conv-1",
+            subagent_name="writer",
+            task="Already running",
+        )
+        registry.mark_running("conv-1", existing.run_id)
+
+        tool = ParallelDelegateSubAgentTool(
+            subagent_names=["researcher", "coder", "writer"],
+            subagent_descriptions={
+                "researcher": "Research tasks",
+                "coder": "Coding tasks",
+                "writer": "Writing tasks",
+            },
+            execute_callback=self._make_callback(),
+            run_registry=registry,
+            conversation_id="conv-1",
+            max_active_runs=2,
+        )
+
+        result = await tool.execute(
+            tasks=[
+                {"subagent_name": "researcher", "task": "Research"},
+                {"subagent_name": "coder", "task": "Code"},
+            ]
+        )
+        assert "active SubAgent run limit reached" in result
