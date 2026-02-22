@@ -382,6 +382,17 @@ function timelineToMessages(timeline: TimelineEvent[]): Message[] {
         });
         break;
 
+      case 'text_end':
+        messages.push({
+          id: event.id,
+          conversation_id: '',
+          role: 'assistant',
+          content: (event as any).fullText || '',
+          message_type: 'text' as const,
+          created_at: new Date(event.timestamp).toISOString(),
+        });
+        break;
+
       // Other event types are rendered directly from timeline, not as messages
       default:
         break;

@@ -204,6 +204,53 @@ describe('streamEventHandlers', () => {
     );
   });
 
+  it('should keep text_end events stable on onComplete', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+    mockState.timeline = [
+      {
+        id: 'text-start-1',
+        type: 'text_start',
+        timestamp: Date.now(),
+      } as any,
+      {
+        id: 'text-delta-1',
+        type: 'text_delta',
+        content: 'partial',
+        timestamp: Date.now(),
+      } as any,
+      {
+        id: 'text-end-1',
+        type: 'text_end',
+        fullText: 'final content',
+        timestamp: Date.now(),
+      } as any,
+    ];
+    (mockDeps.timelineToMessages as any).mockReturnValue([
+      { id: 'text-end-1', role: 'assistant', content: 'final content' },
+    ]);
+
+    handlers.onComplete!({
+      type: 'complete',
+      data: {
+        content: 'final content',
+      } as any,
+    });
+
+    const completionCall = mockUpdateConversationState.mock.calls.find(
+      ([, updates]) => (updates as any).isStreaming === false
+    );
+    const completionUpdates = completionCall?.[1] as any;
+
+    expect(completionUpdates).toBeDefined();
+    expect(
+      completionUpdates.timeline.some((e: any) => e.type === 'text_start' || e.type === 'text_delta')
+    ).toBe(false);
+    expect(
+      completionUpdates.timeline.some((e: any) => e.type === 'text_end' && e.id === 'text-end-1')
+    ).toBe(true);
+    expect(completionUpdates.timeline.some((e: any) => e.type === 'assistant_message')).toBe(false);
+  });
+
   it('should handle onAct (tool call)', () => {
     const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
     const event: AgentEvent<ActEventData> = {

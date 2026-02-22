@@ -30,7 +30,6 @@ import type {
   ArtifactReadyEventData,
   ArtifactErrorEventData,
   ArtifactCreatedEvent,
-  TimelineEvent,
   MemoryRecalledEventData,
   MemoryCapturedEventData,
 } from '../../types/agent';
@@ -1097,32 +1096,24 @@ export function createStreamEventHandlers(
 
       const convState = getConversationState(handlerConversationId);
 
-      // Convert text_end events to assistant_message so intermediate text between
-      // tool execution groups is preserved in the timeline (matches backend persistence).
-      // Remove text_start and text_delta as they are transient streaming events.
+      // Remove transient streaming control events.
+      // Keep text_end events intact so their IDs stay stable and avoid
+      // text_end -> assistant_message remount flicker at stream completion.
       const hasTextEndMessages = convState.timeline.some(
         (e) => e.type === 'text_end' && !!(e as any).fullText?.trim()
       );
-      const cleanedTimeline = convState.timeline
-        .filter((e) => e.type !== 'text_start' && e.type !== 'text_delta')
-        .map((e) => {
-          if (e.type === 'text_end') {
-            const content = (e as any).fullText || '';
-            if (!content.trim()) return null;
-            return {
-              ...e,
-              id: (e.id || '').replace('text_end', 'assistant') || `assistant-${Date.now()}`,
-              type: 'assistant_message' as const,
-              content,
-              role: 'assistant',
-            } as TimelineEvent;
-          }
-          return e;
-        })
-        .filter(Boolean) as TimelineEvent[];
+      const cleanedTimeline = convState.timeline.filter((e) => {
+        if (e.type === 'text_start' || e.type === 'text_delta') {
+          return false;
+        }
+        if (e.type === 'text_end') {
+          return !!(e as any).fullText?.trim();
+        }
+        return true;
+      });
 
-      // Only add assistant_message from complete event if no text_end events were converted,
-      // to avoid duplicating the last message.
+      // Only add assistant_message from complete event when no text_end segment exists,
+      // to avoid duplicating final output.
       const completeEvent: AgentEvent<CompleteEventData> =
         event as AgentEvent<CompleteEventData>;
       const hasContent = !!(completeEvent.data as any)?.content?.trim();
