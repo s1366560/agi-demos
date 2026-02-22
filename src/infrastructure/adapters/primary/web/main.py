@@ -93,6 +93,12 @@ for _logger_name in _litellm_loggers:
     _litellm_logger = logging.getLogger(_logger_name)
     _litellm_logger.propagate = False
 
+# Suppress Neo4j driver notifications about non-existent property keys.
+# These are benign warnings emitted when querying properties (e.g. embedding_dim,
+# entity_type) that don't exist on any nodes yet. The queries use coalesce() and
+# IS NOT NULL checks that handle missing properties correctly.
+logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
