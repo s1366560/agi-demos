@@ -17,9 +17,8 @@ from pydantic import BaseModel
 # These warnings are harmless -- the field is simply not in the declared schema.
 warnings.filterwarnings(
     "ignore",
-    message=r".*Expected `ServerToolUse`.*",
+    message=r"Pydantic serializer warnings",
     category=UserWarning,
-    module=r"pydantic\.main",
 )
 
 from src.configuration.config import get_settings
