@@ -57,24 +57,23 @@ class EmbeddingService:
         """
         self._embedder = embedder
         self._validate_dimensions = validate_dimensions
-        self._dimension_cache: Optional[int] = None
 
     @property
     def embedding_dim(self) -> int:
-        """Get the embedding dimension for this service."""
-        if self._dimension_cache is not None:
-            return self._dimension_cache
+        """Get the embedding dimension for this service.
 
+        Always delegates to the underlying embedder so that auto-detected
+        dimension updates (e.g. after the first real embedding call) are
+        reflected immediately.
+        """
         if hasattr(self._embedder, "embedding_dim"):
-            self._dimension_cache = self._embedder.embedding_dim
-            return self._dimension_cache
+            return self._embedder.embedding_dim
 
         # Fallback to config-based dimension
         if hasattr(self._embedder, "config"):
             config = self._embedder.config
             if hasattr(config, "embedding_dim"):
-                self._dimension_cache = config.embedding_dim
-                return self._dimension_cache
+                return config.embedding_dim
 
         # Default dimension (common for many models)
         logger.warning("Could not determine embedding dimension from embedder, using default 1024")

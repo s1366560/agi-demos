@@ -18,7 +18,7 @@ class MockEmbedder:
 
     async def create(self, input_data: str) -> list:
         """Create mock embedding."""
-        return await self._create_mock(input_data)
+        return await self._create_mock(input_data=input_data)
 
 
 @pytest.fixture
@@ -163,7 +163,7 @@ class TestEmbeddingService:
     @pytest.mark.unit
     def test_embedding_dim_from_config(self):
         """Test embedding dimension from embedder config."""
-        embedder = MagicMock()
+        embedder = MagicMock(spec=["config"])
         embedder.config = MagicMock()
         embedder.config.embedding_dim = 512
 
@@ -172,10 +172,9 @@ class TestEmbeddingService:
         assert service.embedding_dim == 512
 
     @pytest.mark.unit
-    def test_embedding_dim_cached(self, embedding_service, mock_embedder):
-        """Test embedding dimension is cached."""
+    def test_embedding_dim_consistent(self, embedding_service, mock_embedder):
+        """Test embedding dimension is consistent across calls."""
         dim1 = embedding_service.embedding_dim
         dim2 = embedding_service.embedding_dim
 
         assert dim1 == dim2 == 768
-        # Should only access once due to caching
