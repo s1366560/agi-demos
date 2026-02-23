@@ -407,8 +407,7 @@ export const Support: React.FC = () => {
 
                 {ticket.resolved_at && (
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {t('project.support.tickets.resolved_at')}{' '}
-                    {formatDateTime(ticket.resolved_at)}
+                    {t('project.support.tickets.resolved_at')} {formatDateTime(ticket.resolved_at)}
                   </p>
                 )}
               </div>

@@ -45,14 +45,18 @@ import { VoiceWaveform } from './chat/VoiceWaveform';
 import { useFileUpload, type PendingAttachment } from './FileUploader';
 import { SlashCommandDropdown } from './SlashCommandDropdown';
 
-
 import type { SkillResponse } from '@/types/agent';
 
 import type { MentionPopoverHandle } from './chat/MentionPopover';
 import type { SlashCommandDropdownHandle } from './SlashCommandDropdown';
 
 interface InputBarProps {
-  onSend: (content: string, fileMetadata?: FileMetadata[], forcedSkillName?: string, forcedSubAgentName?: string) => void;
+  onSend: (
+    content: string,
+    fileMetadata?: FileMetadata[],
+    forcedSkillName?: string,
+    forcedSubAgentName?: string
+  ) => void;
   onAbort: () => void;
   isStreaming: boolean;
   disabled?: boolean;
@@ -134,9 +138,8 @@ export const InputBar = memo<InputBarProps>(
       const fileMetadataList = uploadedAttachments
         .filter((a) => a.fileMetadata !== undefined)
         .map((a) => a.fileMetadata!);
-      const messageContent = inputMode === 'command'
-        ? `[command] ${content.trim()}`
-        : content.trim();
+      const messageContent =
+        inputMode === 'command' ? `[command] ${content.trim()}` : content.trim();
       onSend(
         messageContent,
         fileMetadataList.length > 0 ? fileMetadataList : undefined,
@@ -166,14 +169,11 @@ export const InputBar = memo<InputBarProps>(
       inputMode,
     ]);
 
-    const handleTemplateSelect = useCallback(
-      (prompt: string) => {
-        setContent(prompt);
-        setTemplateLibraryVisible(false);
-        setTimeout(() => textareaRef.current?.focus(), 50);
-      },
-      []
-    );
+    const handleTemplateSelect = useCallback((prompt: string) => {
+      setContent(prompt);
+      setTemplateLibraryVisible(false);
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    }, []);
 
     const handleMentionSelect = useCallback(
       (item: MentionItem) => {
@@ -526,11 +526,12 @@ export const InputBar = memo<InputBarProps>(
         {isPlanMode && (
           <div className="mb-2 flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-300 text-sm">
             <ListChecks size={14} />
-            <span className="font-medium">
-              {t('agent.inputBar.planModeLabel', 'Plan Mode')}
-            </span>
+            <span className="font-medium">{t('agent.inputBar.planModeLabel', 'Plan Mode')}</span>
             <span className="text-blue-500 dark:text-blue-400 text-xs">
-              {t('agent.inputBar.planModeHint', 'Read-only analysis. Agent will plan without making changes.')}
+              {t(
+                'agent.inputBar.planModeHint',
+                'Read-only analysis. Agent will plan without making changes.'
+              )}
             </span>
           </div>
         )}
@@ -571,7 +572,9 @@ export const InputBar = memo<InputBarProps>(
             <div className="absolute inset-0 z-20 rounded-xl bg-primary/5 dark:bg-primary/10 flex items-center justify-center pointer-events-none">
               <div className="flex flex-col items-center gap-2 text-primary">
                 <Upload size={28} strokeWidth={1.5} />
-                <span className="text-sm font-medium">{t('agent.inputBar.dropToUpload', 'Drop files to upload')}</span>
+                <span className="text-sm font-medium">
+                  {t('agent.inputBar.dropToUpload', 'Drop files to upload')}
+                </span>
               </div>
             </div>
           )}
@@ -662,13 +665,13 @@ export const InputBar = memo<InputBarProps>(
               onBlur={() => setIsFocused(false)}
               aria-label={
                 inputMode === 'command'
-                    ? t('agent.inputBar.commandPlaceholder', 'Enter a command...')
-                    : t('agent.inputBar.placeholder', "Ask me anything, or type '/' for commands...")
+                  ? t('agent.inputBar.commandPlaceholder', 'Enter a command...')
+                  : t('agent.inputBar.placeholder', "Ask me anything, or type '/' for commands...")
               }
               placeholder={
                 inputMode === 'command'
-                    ? t('agent.inputBar.commandPlaceholder', 'Enter a command...')
-                    : t('agent.inputBar.placeholder', "Ask me anything, or type '/' for commands...")
+                  ? t('agent.inputBar.commandPlaceholder', 'Enter a command...')
+                  : t('agent.inputBar.placeholder', "Ask me anything, or type '/' for commands...")
               }
               rows={1}
               data-testid="chat-input"
@@ -805,9 +808,7 @@ export const InputBar = memo<InputBarProps>(
                   `}
                   title={t('agent.inputBar.modeToggle', 'Toggle input mode')}
                 >
-                  {inputMode === 'chat'
-                    ? <MessageSquare size={16} />
-                    : <Terminal size={16} />}
+                  {inputMode === 'chat' ? <MessageSquare size={16} /> : <Terminal size={16} />}
                 </button>
               </LazyTooltip>
             </div>

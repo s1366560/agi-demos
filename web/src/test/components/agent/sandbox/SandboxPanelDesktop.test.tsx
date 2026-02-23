@@ -278,9 +278,7 @@ describe('RemoteDesktopViewer', () => {
         resolution: '',
         port: 0,
       };
-      render(
-        <RemoteDesktopViewer sandboxId="test-sandbox" desktopStatus={stoppedStatus} />
-      );
+      render(<RemoteDesktopViewer sandboxId="test-sandbox" desktopStatus={stoppedStatus} />);
 
       expect(screen.getByText('Desktop is not running')).toBeInTheDocument();
     });

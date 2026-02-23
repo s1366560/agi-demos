@@ -18,7 +18,6 @@ import { useLayoutModeStore } from '@/stores/layoutMode';
 
 import { MermaidBlock } from './MermaidBlock';
 
-
 function extractCodeContent(children: ReactNode): { text: string; language?: string } {
   if (!children) return { text: '' };
 
@@ -142,7 +141,11 @@ export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props })
               type="button"
               onClick={handleCopy}
               className="p-1 rounded hover:bg-slate-300/60 dark:hover:bg-slate-600/60 transition-colors text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
-              title={copied ? t('agent.actions.copied', 'Copied!') : t('agent.actions.copyCode', 'Copy code')}
+              title={
+                copied
+                  ? t('agent.actions.copied', 'Copied!')
+                  : t('agent.actions.copyCode', 'Copy code')
+              }
             >
               {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
             </button>
@@ -183,7 +186,11 @@ export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props })
             type="button"
             onClick={handleCopy}
             className="p-1 rounded bg-slate-700/80 hover:bg-slate-600 transition-colors text-slate-400 hover:text-slate-200"
-            title={copied ? t('agent.actions.copied', 'Copied!') : t('agent.actions.copyCode', 'Copy code')}
+            title={
+              copied
+                ? t('agent.actions.copied', 'Copied!')
+                : t('agent.actions.copyCode', 'Copy code')
+            }
           >
             {copied ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
           </button>

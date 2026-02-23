@@ -45,7 +45,7 @@ interface MCPAppState {
   proxyToolCall: (
     appId: string,
     toolName: string,
-    args: Record<string, unknown>,
+    args: Record<string, unknown>
   ) => Promise<MCPAppToolCallResponse>;
   reset: () => void;
 }
@@ -181,21 +181,25 @@ export const useMCPAppStore = create<MCPAppState>()(
         return null;
       },
 
-      proxyToolCall: async (
-        appId: string,
-        toolName: string,
-        args: Record<string, unknown>,
-      ) => {
+      proxyToolCall: async (appId: string, toolName: string, args: Record<string, unknown>) => {
         return await mcpAppAPI.proxyToolCall(appId, {
           tool_name: toolName,
           arguments: args,
         });
       },
 
-      reset: () => set({ apps: {}, resources: {}, resourceCachedAt: {}, htmlByUri: {}, loading: false, error: null }),
+      reset: () =>
+        set({
+          apps: {},
+          resources: {},
+          resourceCachedAt: {},
+          htmlByUri: {},
+          loading: false,
+          error: null,
+        }),
     }),
-    { name: 'mcp-app-store' },
-  ),
+    { name: 'mcp-app-store' }
+  )
 );
 
 // Selectors
@@ -212,5 +216,5 @@ export const useMCPAppActions = () =>
       getHtmlByUri: s.getHtmlByUri,
       proxyToolCall: s.proxyToolCall,
       reset: s.reset,
-    })),
+    }))
   );

@@ -88,7 +88,6 @@ export const RightPanel = memo<RightPanelProps>(
           <div className="flex-1 overflow-y-auto">
             <TaskList tasks={tasks} />
           </div>
-
         </div>
       </div>
     );

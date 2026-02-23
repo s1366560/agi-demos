@@ -31,10 +31,7 @@ import {
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
-import {
-  useConversationLabelsStore,
-  LABEL_COLORS,
-} from '@/stores/conversationLabelsStore';
+import { useConversationLabelsStore, LABEL_COLORS } from '@/stores/conversationLabelsStore';
 import type { LabelColor } from '@/stores/conversationLabelsStore';
 
 import {
@@ -48,7 +45,6 @@ import {
 } from '@/components/ui/lazyAntd';
 
 import { formatDistanceToNow } from '../../utils/date';
-
 
 import type { Conversation } from '../../types/agent';
 import type { HITLSummary } from '../../types/conversationState';
@@ -180,7 +176,12 @@ const LabelManager: FC<{ conversationId: string }> = memo(({ conversationId }) =
             ))}
           </div>
           <div className="flex gap-1.5">
-            <LazyButton size="small" type="primary" onClick={handleAddNew} disabled={!newLabelName.trim()}>
+            <LazyButton
+              size="small"
+              type="primary"
+              onClick={handleAddNew}
+              disabled={!newLabelName.trim()}
+            >
               {t('agent.sidebar.addLabel', 'Add label')}
             </LazyButton>
             <LazyButton size="small" onClick={() => setShowNewForm(false)}>
@@ -211,9 +212,7 @@ const ConversationItem = memo<ConversationItemProps>(
     const getLabelsForConversation = useConversationLabelsStore(
       (state) => state.getLabelsForConversation
     );
-    const conversationLabelsMap = useConversationLabelsStore(
-      (state) => state.conversationLabels
-    );
+    const conversationLabelsMap = useConversationLabelsStore((state) => state.conversationLabels);
     // Subscribe to the specific conversation's label IDs to trigger re-render
     const _labelIds = conversationLabelsMap[conversation.id];
     const allLabels = useConversationLabelsStore((state) => state.labels);
@@ -266,7 +265,9 @@ const ConversationItem = memo<ConversationItemProps>(
         <LazyTooltip
           title={
             <div>
-              <div className="font-medium">{conversation.title || t('agent.sidebar.untitled', 'Untitled')}</div>
+              <div className="font-medium">
+                {conversation.title || t('agent.sidebar.untitled', 'Untitled')}
+              </div>
               {hasHITL && (
                 <div className="text-amber-400 text-xs mt-1 flex items-center gap-1">
                   <AlertCircle size={10} /> {t('agent.sidebar.needsInput', 'Needs input')}
@@ -274,7 +275,8 @@ const ConversationItem = memo<ConversationItemProps>(
               )}
               {isStreaming && (
                 <div className="text-blue-400 text-xs mt-1 flex items-center gap-1">
-                  <Loader2 size={10} className="animate-spin" /> {t('agent.sidebar.processing', 'Processing')}
+                  <Loader2 size={10} className="animate-spin" />{' '}
+                  {t('agent.sidebar.processing', 'Processing')}
                 </div>
               )}
             </div>
@@ -381,7 +383,8 @@ const ConversationItem = memo<ConversationItemProps>(
             {convLabels.length > 0 && (
               <div className="flex items-center gap-1 mt-0.5 flex-wrap">
                 {convLabels.map((label) => {
-                  const colorDef = LABEL_COLORS.find((c) => c.name === label.color) ?? LABEL_COLORS[1];
+                  const colorDef =
+                    LABEL_COLORS.find((c) => c.name === label.color) ?? LABEL_COLORS[1];
                   return (
                     <span
                       key={label.id}
@@ -510,7 +513,10 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
   };
 
   return (
-    <nav aria-label="Conversations" className="h-full flex flex-col bg-slate-50/80 dark:bg-slate-900/50 backdrop-blur-sm">
+    <nav
+      aria-label="Conversations"
+      className="h-full flex flex-col bg-slate-50/80 dark:bg-slate-900/50 backdrop-blur-sm"
+    >
       {/* Header */}
       <div
         className={`
@@ -585,7 +591,9 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
             transition-all duration-200 hover:-translate-y-0.5
           `}
         >
-          {!collapsed && <span className="font-medium">{t('agent.sidebar.newChat', 'New Chat')}</span>}
+          {!collapsed && (
+            <span className="font-medium">{t('agent.sidebar.newChat', 'New Chat')}</span>
+          )}
         </LazyButton>
       </div>
 
@@ -634,8 +642,12 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
               <MessageSquare size={24} className="text-slate-400" />
             </div>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">{t('agent.sidebar.noConversations', 'No conversations yet')}</p>
-            <p className="text-xs text-slate-400 dark:text-slate-500">{t('agent.sidebar.startNewChat', 'Start a new chat to begin')}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-1">
+              {t('agent.sidebar.noConversations', 'No conversations yet')}
+            </p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">
+              {t('agent.sidebar.startNewChat', 'Start a new chat to begin')}
+            </p>
           </div>
         )}
       </div>
@@ -653,7 +665,9 @@ export const ConversationSidebar: FC<ConversationSidebarProps> = ({
               </p>
               <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">{t('agent.sidebar.online', 'Online')}</p>
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                  {t('agent.sidebar.online', 'Online')}
+                </p>
               </div>
             </div>
           </div>

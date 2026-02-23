@@ -59,30 +59,26 @@ const DefaultErrorFallback: React.FC<{
       <span className="material-symbols-outlined text-red-500 dark:text-red-400 text-xl">
         error
       </span>
-      
+
       <div className="flex-1 min-w-0">
         <h3 className="text-sm font-semibold text-red-800 dark:text-red-300">
           Failed to render message
         </h3>
-        
+
         {error && (
           <p className="mt-1 text-xs text-red-600 dark:text-red-400 font-mono break-words">
             {error.message}
           </p>
         )}
-        
+
         {retryCount > 0 && (
           <p className="mt-1 text-xs text-red-500 dark:text-red-400">
             Retry attempts: {retryCount}
           </p>
         )}
-        
+
         {showRetry && (
-          <Button
-            onClick={onRetry}
-            size="small"
-            className="mt-2 text-xs"
-          >
+          <Button onClick={onRetry} size="small" className="mt-2 text-xs">
             <span className="material-symbols-outlined text-sm mr-1">refresh</span>
             Try Again
           </Button>
@@ -115,15 +111,15 @@ export class MessageErrorBoundary extends Component<
 
   override componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
     this.setState({ errorInfo });
-    
+
     // Log error to console in development
     if (process.env.NODE_ENV === 'development') {
       console.error('MessageErrorBoundary caught an error:', error, errorInfo);
     }
-    
+
     // Call error callback
     this.props.onError?.(error, errorInfo);
-    
+
     // Report to error tracking service (e.g., Sentry)
     if (typeof window !== 'undefined' && (window as any).Sentry) {
       (window as any).Sentry.captureException(error, { contexts: { react: errorInfo } });
@@ -166,14 +162,12 @@ export class MessageErrorBoundary extends Component<
 
 /**
  * Hook-based error boundary for functional components.
- * 
+ *
  * Note: This is a simplified version that only catches errors
  * in event handlers, not render errors. For full error boundary
  * functionality, use the class-based MessageErrorBoundary.
  */
-export function useErrorHandler(
-  onError?: (error: Error) => void
-): {
+export function useErrorHandler(onError?: (error: Error) => void): {
   handleError: (error: Error) => void;
   hasError: boolean;
   error: Error | null;

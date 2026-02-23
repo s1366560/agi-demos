@@ -79,8 +79,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
 
     // Truncate content for collapsed preview
     const previewText = content
-      ? content.slice(0, 100).replace(/\n/g, ' ').trim() +
-        (content.length > 100 ? '...' : '')
+      ? content.slice(0, 100).replace(/\n/g, ' ').trim() + (content.length > 100 ? '...' : '')
       : t('agent.thinking.analyzing', 'Analyzing your request...');
 
     // Calculate progress percentage
@@ -179,10 +178,7 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
                 ${expanded ? 'max-h-[400px]' : 'max-h-0'}
               `}
             >
-              <div
-                ref={contentRef}
-                className="px-4 pb-3 max-h-[360px] overflow-y-auto"
-              >
+              <div ref={contentRef} className="px-4 pb-3 max-h-[360px] overflow-y-auto">
                 {/* Steps list (if provided) */}
                 {steps && steps.length > 0 && (
                   <div className="mb-3 space-y-1.5">
@@ -193,8 +189,8 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
                           idx === currentStep
                             ? 'text-primary font-medium'
                             : idx < currentStep
-                            ? 'text-slate-500 dark:text-slate-400 line-through'
-                            : 'text-slate-400 dark:text-slate-500'
+                              ? 'text-slate-500 dark:text-slate-400 line-through'
+                              : 'text-slate-400 dark:text-slate-500'
                         }`}
                       >
                         <span
@@ -202,8 +198,8 @@ export const ThinkingBlock = memo<ThinkingBlockProps>(
                             idx === currentStep
                               ? 'bg-primary/20 text-primary'
                               : idx < currentStep
-                              ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
+                                ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400'
+                                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
                           }`}
                         >
                           {idx < currentStep ? '✓' : idx + 1}

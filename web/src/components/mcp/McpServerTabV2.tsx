@@ -6,14 +6,7 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 
 import { message, Select, Spin, Input, Tooltip } from 'antd';
-import { 
-  Plus, 
-  RefreshCw, 
-  Search, 
-  Filter, 
-  Server, 
-  AlertCircle,
-} from 'lucide-react';
+import { Plus, RefreshCw, Search, Filter, Server, AlertCircle } from 'lucide-react';
 
 import { useMCPStore } from '@/stores/mcp';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
@@ -30,7 +23,6 @@ import { getRuntimeStatus } from './types';
 import type { MCPServerResponse } from '@/types/agent';
 
 import type { ServerFilters } from './types';
-
 
 const { Search: AntSearch } = Input;
 
@@ -101,10 +93,10 @@ export const McpServerTabV2: React.FC = () => {
     const byName: Record<string, { total: number; ready: number; error: number }> = {};
 
     for (const app of Object.values(apps)) {
-      const base = { 
-        total: 1, 
-        ready: app.status === 'ready' ? 1 : 0, 
-        error: app.status === 'error' ? 1 : 0 
+      const base = {
+        total: 1,
+        ready: app.status === 'ready' ? 1 : 0,
+        error: app.status === 'error' ? 1 : 0,
       };
       if (app.server_id) {
         byId[app.server_id] = {
@@ -233,12 +225,16 @@ export const McpServerTabV2: React.FC = () => {
   }, [currentProject?.id, listServers, fetchApps]);
 
   // Error count
-  const errorCount = useMemo(() =>
-    servers.filter((s) => s.sync_error || getRuntimeStatus(s) === 'error').length,
+  const errorCount = useMemo(
+    () => servers.filter((s) => s.sync_error || getRuntimeStatus(s) === 'error').length,
     [servers]
   );
 
-  const hasActiveFilters = filters.search || filters.enabled !== 'all' || filters.type !== 'all' || filters.runtime !== 'all';
+  const hasActiveFilters =
+    filters.search ||
+    filters.enabled !== 'all' ||
+    filters.type !== 'all' ||
+    filters.runtime !== 'all';
 
   const clearFilters = () => {
     setFilters({
@@ -334,10 +330,7 @@ export const McpServerTabV2: React.FC = () => {
                 <span className="text-xs font-medium">协调</span>
               </button>
             </Tooltip>
-            <button
-              onClick={handleCreate}
-              className={BUTTON_STYLES.primary}
-            >
+            <button onClick={handleCreate} className={BUTTON_STYLES.primary}>
               <Plus size={18} />
               <span>创建服务器</span>
             </button>
@@ -377,7 +370,9 @@ export const McpServerTabV2: React.FC = () => {
           <p className="text-sm text-slate-400 mt-4">加载服务器中...</p>
         </div>
       ) : servers.length === 0 ? (
-        <div className={`flex flex-col items-center justify-center py-16 text-center ${CARD_STYLES.base} border-dashed`}>
+        <div
+          className={`flex flex-col items-center justify-center py-16 text-center ${CARD_STYLES.base} border-dashed`}
+        >
           <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center mb-4">
             <Server size={28} className="text-slate-300 dark:text-slate-500" />
           </div>
@@ -387,10 +382,7 @@ export const McpServerTabV2: React.FC = () => {
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-4 max-w-sm">
             创建第一个 MCP 服务器，启用强大的工具和功能
           </p>
-          <button
-            onClick={handleCreate}
-            className={BUTTON_STYLES.primary}
-          >
+          <button onClick={handleCreate} className={BUTTON_STYLES.primary}>
             <Plus size={18} />
             创建服务器
           </button>
@@ -400,9 +392,7 @@ export const McpServerTabV2: React.FC = () => {
           <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center mb-3">
             <Search size={20} className="text-slate-300 dark:text-slate-500" />
           </div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">
-            没有符合筛选条件的服务器
-          </p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">没有符合筛选条件的服务器</p>
           <button
             onClick={clearFilters}
             className="mt-2 text-sm text-primary-600 hover:text-primary-700 dark:text-primary-400 font-medium"

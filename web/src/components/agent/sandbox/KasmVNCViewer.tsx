@@ -215,7 +215,16 @@ export function KasmVNCViewer({
       setConnectionState('error');
       onError?.(`Failed to connect: ${err instanceof Error ? err.message : String(err)}`);
     }
-  }, [wsUrl, currentResolution, dynamicResize, onConnect, onDisconnect, onError, clearReconnectTimer, safeDisconnect]);
+  }, [
+    wsUrl,
+    currentResolution,
+    dynamicResize,
+    onConnect,
+    onDisconnect,
+    onError,
+    clearReconnectTimer,
+    safeDisconnect,
+  ]);
 
   // Connect on mount and when wsUrl changes
   useEffect(() => {
@@ -271,7 +280,7 @@ export function KasmVNCViewer({
       setCurrentResolution(value);
       onResolutionChange?.(value);
     },
-    [onResolutionChange],
+    [onResolutionChange]
   );
 
   // Reconnect (manual)

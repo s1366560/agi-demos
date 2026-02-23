@@ -23,7 +23,6 @@ import { CodeBlock } from './CodeBlock';
 import { FinalResponseDisplay } from './FinalResponseDisplay';
 import { useMarkdownPlugins } from './markdownPlugins';
 
-
 const MARKDOWN_COMPONENTS: Components = {
   pre: ({ children, ...props }) => <CodeBlock {...props}>{children}</CodeBlock>,
 };
@@ -79,7 +78,11 @@ export function AssistantMessage({
 
       {/* Message content bubble */}
       <div className={`${ASSISTANT_BUBBLE_CLASSES} p-5 ${MARKDOWN_PROSE_CLASSES}`}>
-        <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={MARKDOWN_COMPONENTS}>
+        <ReactMarkdown
+          remarkPlugins={remarkPlugins}
+          rehypePlugins={rehypePlugins}
+          components={MARKDOWN_COMPONENTS}
+        >
           {content}
         </ReactMarkdown>
       </div>

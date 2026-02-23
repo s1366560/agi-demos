@@ -20,10 +20,7 @@ export interface ConversationModeResponse {
 }
 
 export const planService = {
-  async switchMode(
-    conversationId: string,
-    mode: 'plan' | 'build',
-  ): Promise<ModeResponse> {
+  async switchMode(conversationId: string, mode: 'plan' | 'build'): Promise<ModeResponse> {
     return httpClient.post<ModeResponse>(`${BASE_URL}/mode`, {
       conversation_id: conversationId,
       mode,

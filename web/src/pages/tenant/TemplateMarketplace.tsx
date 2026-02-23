@@ -8,14 +8,7 @@ import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Input, Tag, Empty, Spin, App } from 'antd';
-import {
-  Search,
-  Download,
-  Star,
-  Package,
-  Shield,
-  Bot,
-} from 'lucide-react';
+import { Search, Download, Star, Package, Shield, Bot } from 'lucide-react';
 
 import { subagentTemplateService } from '../../services/subagentTemplateService';
 
@@ -71,7 +64,7 @@ export const TemplateMarketplace: React.FC = () => {
         message.success(
           t('agent.templates.installed', 'Installed SubAgent: {{name}}', {
             name: result.name,
-          }),
+          })
         );
       } catch {
         message.error(t('agent.templates.installError', 'Failed to install template'));
@@ -83,7 +76,7 @@ export const TemplateMarketplace: React.FC = () => {
         });
       }
     },
-    [message, t],
+    [message, t]
   );
 
   const handleSeed = useCallback(async () => {
@@ -92,7 +85,7 @@ export const TemplateMarketplace: React.FC = () => {
       message.success(
         t('agent.templates.seeded', 'Seeded {{count}} templates', {
           count: result.seeded,
-        }),
+        })
       );
       // Reload
       const listRes = await subagentTemplateService.list();
@@ -110,7 +103,7 @@ export const TemplateMarketplace: React.FC = () => {
         tpl.name.toLowerCase().includes(q) ||
         tpl.display_name.toLowerCase().includes(q) ||
         tpl.description.toLowerCase().includes(q) ||
-        tpl.tags.some((tag) => tag.toLowerCase().includes(q)),
+        tpl.tags.some((tag) => tag.toLowerCase().includes(q))
     );
   }, [templates, search]);
 
@@ -126,7 +119,7 @@ export const TemplateMarketplace: React.FC = () => {
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             {t(
               'agent.templates.marketplaceDesc',
-              'Browse and install SubAgent templates to extend your agent capabilities.',
+              'Browse and install SubAgent templates to extend your agent capabilities.'
             )}
           </p>
         </div>
@@ -160,7 +153,7 @@ export const TemplateMarketplace: React.FC = () => {
           {categories.map((cat) => (
             <Tag
               key={cat}
-              color={selectedCategory === cat ? (CATEGORY_COLORS[cat] || 'blue') : undefined}
+              color={selectedCategory === cat ? CATEGORY_COLORS[cat] || 'blue' : undefined}
               className="cursor-pointer"
               onClick={() => setSelectedCategory(cat)}
             >

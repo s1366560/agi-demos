@@ -58,9 +58,7 @@ export const ConversationPickerModal = memo(
       if (!search.trim()) return available;
       const lower = search.toLowerCase();
       return available.filter(
-        (c) =>
-          c.title.toLowerCase().includes(lower) ||
-          c.id.toLowerCase().includes(lower)
+        (c) => c.title.toLowerCase().includes(lower) || c.id.toLowerCase().includes(lower)
       );
     }, [conversations, currentConversationId, search]);
 
@@ -134,10 +132,7 @@ export const ConversationPickerModal = memo(
                   className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors border-b border-slate-100 dark:border-slate-700/30 last:border-b-0"
                 >
                   <div className="flex items-start gap-2.5">
-                    <MessageSquare
-                      size={14}
-                      className="mt-0.5 flex-shrink-0 text-slate-400"
-                    />
+                    <MessageSquare size={14} className="mt-0.5 flex-shrink-0 text-slate-400" />
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">
                         {conv.title}

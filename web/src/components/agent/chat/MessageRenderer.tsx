@@ -19,7 +19,13 @@
 
 import React from 'react';
 
-import { ChatMessage, UserMessage, AssistantMessage, SystemMessage, ToolMessage } from '../types/message';
+import {
+  ChatMessage,
+  UserMessage,
+  AssistantMessage,
+  SystemMessage,
+  ToolMessage,
+} from '../types/message';
 
 import { AssistantMessage as AssistantMessageComponent } from './AssistantMessage';
 import { MessageErrorBoundary } from './MessageErrorBoundary';
@@ -147,9 +153,7 @@ const ToolMessageRenderer: React.FC<{
         <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
           {message.metadata?.toolName || 'Tool'}
         </span>
-        <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColor}`}>
-          {status}
-        </span>
+        <span className={`text-[10px] px-2 py-0.5 rounded-full ${statusColor}`}>{status}</span>
       </div>
       <div className="text-xs text-slate-600 dark:text-slate-400 font-mono whitespace-pre-wrap">
         {message.content}
@@ -180,18 +184,16 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({
       case 'user':
         return <UserMessageRenderer message={message} />;
       case 'assistant':
-        return (
-          <AssistantMessageRenderer
-            message={message}
-          />
-        );
+        return <AssistantMessageRenderer message={message} />;
       case 'system':
         return <SystemMessageRenderer message={message} />;
       case 'tool':
         return <ToolMessageRenderer message={message} />;
       default:
         return (
-          <div className="text-sm text-slate-500">Unknown message role: {(message as any).role}</div>
+          <div className="text-sm text-slate-500">
+            Unknown message role: {(message as any).role}
+          </div>
         );
     }
   };

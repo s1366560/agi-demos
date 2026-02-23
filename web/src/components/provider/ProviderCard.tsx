@@ -183,6 +183,16 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
               )}
             </div>
           )}
+          {provider.reranker_model && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-500 dark:text-slate-400 w-14 shrink-0">
+                Rerank
+              </span>
+              <code className="flex-1 px-2 py-1 bg-slate-50 dark:bg-slate-800 rounded text-xs text-slate-700 dark:text-slate-300 font-mono truncate">
+                {provider.reranker_model}
+              </code>
+            </div>
+          )}
         </div>
 
         {/* Status Bar */}
@@ -191,11 +201,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         >
           {/* Health Status */}
           <div className="flex items-center gap-2">
-            <MaterialIcon
-              name={statusConfig.icon}
-              size={16}
-              className={statusConfig.color}
-            />
+            <MaterialIcon name={statusConfig.icon} size={16} className={statusConfig.color} />
             <div className="flex flex-col">
               <span className={`text-xs font-medium ${statusConfig.color}`}>
                 {statusConfig.label}
@@ -211,15 +217,9 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
           {/* Circuit Breaker */}
           <div className="flex items-center gap-2">
-            <MaterialIcon
-              name={cbConfig.icon}
-              size={16}
-              className={cbConfig.color}
-            />
+            <MaterialIcon name={cbConfig.icon} size={16} className={cbConfig.color} />
             <div className="flex flex-col">
-              <span className={`text-xs font-medium ${cbConfig.color}`}>
-                {cbConfig.label}
-              </span>
+              <span className={`text-xs font-medium ${cbConfig.color}`}>{cbConfig.label}</span>
               {provider.resilience?.failure_count ? (
                 <span className="text-[10px] text-red-500">
                   {provider.resilience.failure_count} fails

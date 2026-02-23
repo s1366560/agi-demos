@@ -40,7 +40,14 @@ import type {
   EnvVarRequestedEventData,
   PermissionAskedEventData,
 } from '../../types/agent';
-import type { HITLType, HITLResponseData, ClarificationResponseData, DecisionResponseData, EnvVarResponseData, PermissionResponseData } from '../../types/hitl.unified';
+import type {
+  HITLType,
+  HITLResponseData,
+  ClarificationResponseData,
+  DecisionResponseData,
+  EnvVarResponseData,
+  PermissionResponseData,
+} from '../../types/hitl.unified';
 
 // =============================================================================
 // Types
@@ -269,7 +276,9 @@ const ClarificationContent: React.FC<{
   isAnswered?: boolean;
   answeredValue?: string;
 }> = memo(({ data, onSubmit, isSubmitting, isAnswered, answeredValue }) => {
-  const [selected, setSelected] = useState<string | null>(isAnswered ? answeredValue || null : null);
+  const [selected, setSelected] = useState<string | null>(
+    isAnswered ? answeredValue || null : null
+  );
   const [customInput, setCustomInput] = useState('');
 
   const handleSubmit = useCallback(() => {
@@ -315,9 +324,13 @@ const ClarificationContent: React.FC<{
                     <></>
                   </Radio>
                 )}
-                <span className={`font-medium text-sm ${
-                  isSelected ? 'text-slate-800 dark:text-slate-200' : 'text-slate-600 dark:text-slate-400'
-                }`}>
+                <span
+                  className={`font-medium text-sm ${
+                    isSelected
+                      ? 'text-slate-800 dark:text-slate-200'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
                   {option.label}
                 </span>
                 {option.recommended && !isAnswered && (
@@ -332,9 +345,13 @@ const ClarificationContent: React.FC<{
                 )}
               </div>
               {option.description && (
-                <p className={`text-xs ml-6 mt-1 leading-relaxed ${
-                  isSelected ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 dark:text-slate-500'
-                }`}>
+                <p
+                  className={`text-xs ml-6 mt-1 leading-relaxed ${
+                    isSelected
+                      ? 'text-slate-500 dark:text-slate-400'
+                      : 'text-slate-400 dark:text-slate-500'
+                  }`}
+                >
                   {option.description}
                 </p>
               )}
@@ -415,7 +432,8 @@ const DecisionContent: React.FC<{
         {data.options.map((option) => {
           const isSelected = isAnswered ? answeredValue === option.id : selected === option.id;
           const isExpanded = expanded === option.id;
-          const hasDetails = !isAnswered && (option.estimated_time || option.estimated_cost || option.risks?.length);
+          const hasDetails =
+            !isAnswered && (option.estimated_time || option.estimated_cost || option.risks?.length);
 
           return (
             <div
@@ -451,9 +469,13 @@ const DecisionContent: React.FC<{
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`font-medium text-sm ${
-                      isSelected ? 'text-slate-800 dark:text-slate-200' : 'text-slate-600 dark:text-slate-400'
-                    }`}>
+                    <span
+                      className={`font-medium text-sm ${
+                        isSelected
+                          ? 'text-slate-800 dark:text-slate-200'
+                          : 'text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
                       {option.label}
                     </span>
                     {option.recommended && !isAnswered && (
@@ -474,9 +496,13 @@ const DecisionContent: React.FC<{
                     )}
                   </div>
                   {option.description && (
-                    <p className={`text-xs mt-1.5 leading-relaxed ${
-                      isSelected ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 dark:text-slate-500'
-                    }`}>
+                    <p
+                      className={`text-xs mt-1.5 leading-relaxed ${
+                        isSelected
+                          ? 'text-slate-500 dark:text-slate-400'
+                          : 'text-slate-400 dark:text-slate-500'
+                      }`}
+                    >
                       {option.description}
                     </p>
                   )}
@@ -631,15 +657,13 @@ const EnvVarContent: React.FC<{
         <div className="p-3 rounded-xl border-2 border-green-400 bg-green-50/50 dark:bg-green-900/20">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-green-500" />
-            <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
-              已配置
-            </span>
+            <span className="font-medium text-sm text-slate-800 dark:text-slate-200">已配置</span>
             <LazyTag color="green" className="text-xs">
               已完成
             </LazyTag>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 ml-6">
-            {data.fields?.map(f => f.label).join(', ') || '环境变量'}
+            {data.fields?.map((f) => f.label).join(', ') || '环境变量'}
           </p>
         </div>
       )}
@@ -682,9 +706,24 @@ const PermissionContent: React.FC<{
   const [remember, setRemember] = useState(false);
 
   const riskConfig = {
-    low: { color: 'green', bgClass: 'bg-emerald-50 dark:bg-emerald-900/20', borderClass: 'border-emerald-200 dark:border-emerald-800/50', textClass: 'text-emerald-700 dark:text-emerald-400' },
-    medium: { color: 'orange', bgClass: 'bg-amber-50 dark:bg-amber-900/20', borderClass: 'border-amber-200 dark:border-amber-800/50', textClass: 'text-amber-700 dark:text-amber-400' },
-    high: { color: 'red', bgClass: 'bg-rose-50 dark:bg-rose-900/20', borderClass: 'border-rose-200 dark:border-rose-800/50', textClass: 'text-rose-700 dark:text-rose-400' },
+    low: {
+      color: 'green',
+      bgClass: 'bg-emerald-50 dark:bg-emerald-900/20',
+      borderClass: 'border-emerald-200 dark:border-emerald-800/50',
+      textClass: 'text-emerald-700 dark:text-emerald-400',
+    },
+    medium: {
+      color: 'orange',
+      bgClass: 'bg-amber-50 dark:bg-amber-900/20',
+      borderClass: 'border-amber-200 dark:border-amber-800/50',
+      textClass: 'text-amber-700 dark:text-amber-400',
+    },
+    high: {
+      color: 'red',
+      bgClass: 'bg-rose-50 dark:bg-rose-900/20',
+      borderClass: 'border-rose-200 dark:border-rose-800/50',
+      textClass: 'text-rose-700 dark:text-rose-400',
+    },
   } as const;
 
   const risk = data.risk_level ? riskConfig[data.risk_level] : null;
@@ -731,11 +770,13 @@ const PermissionContent: React.FC<{
       <p className="text-[15px] leading-7 text-slate-700 dark:text-slate-300">{data.description}</p>
 
       {isAnswered ? (
-        <div className={`p-3 rounded-xl border-2 ${
-          wasGranted
-            ? 'border-green-400 bg-green-50/50 dark:bg-green-900/20'
-            : 'border-red-400 bg-red-50/50 dark:bg-red-900/20'
-        }`}>
+        <div
+          className={`p-3 rounded-xl border-2 ${
+            wasGranted
+              ? 'border-green-400 bg-green-50/50 dark:bg-green-900/20'
+              : 'border-red-400 bg-red-50/50 dark:bg-red-900/20'
+          }`}
+        >
           <div className="flex items-center gap-2">
             <CheckCircle2 className={`w-4 h-4 ${wasGranted ? 'text-green-500' : 'text-red-500'}`} />
             <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
@@ -803,29 +844,24 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
     timeoutSeconds = 300,
   }) => {
     // Unified HITL store for status tracking UI
-    const { isSubmitting, submittingRequestId, requestStatuses } =
-      useUnifiedHITLStore(
-        useShallow((state) => ({
-          isSubmitting: state.isSubmitting,
-          submittingRequestId: state.submittingRequestId,
-          requestStatuses: state.requestStatuses,
-        }))
-      );
-
-    // AgentV3 store respond methods set up WebSocket handler + streaming state
-    const {
-      respondToClarification,
-      respondToDecision,
-      respondToEnvVar,
-      respondToPermission,
-    } = useAgentV3Store(
+    const { isSubmitting, submittingRequestId, requestStatuses } = useUnifiedHITLStore(
       useShallow((state) => ({
-        respondToClarification: state.respondToClarification,
-        respondToDecision: state.respondToDecision,
-        respondToEnvVar: state.respondToEnvVar,
-        respondToPermission: state.respondToPermission,
+        isSubmitting: state.isSubmitting,
+        submittingRequestId: state.submittingRequestId,
+        requestStatuses: state.requestStatuses,
       }))
     );
+
+    // AgentV3 store respond methods set up WebSocket handler + streaming state
+    const { respondToClarification, respondToDecision, respondToEnvVar, respondToPermission } =
+      useAgentV3Store(
+        useShallow((state) => ({
+          respondToClarification: state.respondToClarification,
+          respondToDecision: state.respondToDecision,
+          respondToEnvVar: state.respondToEnvVar,
+          respondToPermission: state.respondToPermission,
+        }))
+      );
 
     const [localSubmitting, setLocalSubmitting] = useState(false);
     const [localAnsweredValue, setLocalAnsweredValue] = useState<string | undefined>(undefined);
@@ -836,7 +872,8 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
     const isAnswered = isAnsweredProp || isAnsweredFromStore;
 
     // Priority: prop from timeline event > local state from submission > fallback
-    const answeredValue = answeredValueProp || localAnsweredValue || (isAnsweredFromStore ? '已提交' : undefined);
+    const answeredValue =
+      answeredValueProp || localAnsweredValue || (isAnsweredFromStore ? '已提交' : undefined);
 
     const isCurrentlySubmitting =
       localSubmitting || (isSubmitting && submittingRequestId === requestId);
@@ -924,7 +961,9 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
             }`}
           >
             {/* Header - Unified style */}
-            <div className={`flex items-center justify-between px-4 py-3 border-b ${headerBgClass}`}>
+            <div
+              className={`flex items-center justify-between px-4 py-3 border-b ${headerBgClass}`}
+            >
               <div className="flex items-center gap-2">
                 <Bot className={`w-4 h-4 ${iconColorClass}`} />
                 <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
@@ -942,10 +981,16 @@ export const InlineHITLCard: React.FC<InlineHITLCardProps> = memo(
               </div>
               {isAnswered ? (
                 createdAt && (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">{formatTimeAgo(createdAt)}</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    {formatTimeAgo(createdAt)}
+                  </span>
                 )
               ) : (
-                <CountdownTimer expiresAt={expiresAt} timeoutSeconds={timeoutSeconds} color={color} />
+                <CountdownTimer
+                  expiresAt={expiresAt}
+                  timeoutSeconds={timeoutSeconds}
+                  color={color}
+                />
               )}
             </div>
 

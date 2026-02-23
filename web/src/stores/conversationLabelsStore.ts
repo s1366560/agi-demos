@@ -65,11 +65,7 @@ export const useConversationLabelsStore = create<ConversationLabelsState>()(
         labels: [],
 
         addLabel: (label) =>
-          set(
-            (state) => ({ labels: [...state.labels, label] }),
-            false,
-            'addLabel'
-          ),
+          set((state) => ({ labels: [...state.labels, label] }), false, 'addLabel'),
 
         removeLabel: (labelId) =>
           set(

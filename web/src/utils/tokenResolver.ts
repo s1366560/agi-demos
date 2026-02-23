@@ -47,15 +47,17 @@ export function getAuthToken(): string | null {
  */
 export function clearAuthState(): void {
   // Clear Zustand in-memory state (triggers React re-render -> redirect to /login)
-  import('@/stores/auth').then(({ useAuthStore }) => {
-    useAuthStore.setState({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-      isLoading: false,
+  import('@/stores/auth')
+    .then(({ useAuthStore }) => {
+      useAuthStore.setState({
+        user: null,
+        token: null,
+        isAuthenticated: false,
+        isLoading: false,
+      });
+    })
+    .catch(() => {
+      // If dynamic import fails, clear localStorage directly as fallback
+      localStorage.removeItem(ZUSTAND_AUTH_STORAGE_KEY);
     });
-  }).catch(() => {
-    // If dynamic import fails, clear localStorage directly as fallback
-    localStorage.removeItem(ZUSTAND_AUTH_STORAGE_KEY);
-  });
 }

@@ -178,10 +178,7 @@ const ChainDetail = memo<{ info: SubAgentGroup['chainInfo'] }>(({ info }) => {
         {/* Vertical connector line */}
         <div className="absolute left-[7px] top-2 bottom-2 w-px bg-slate-300 dark:bg-slate-600" />
         {info.steps.map((step) => (
-          <div
-            key={`chain-step-${step.index}`}
-            className="relative flex items-start gap-2 py-1"
-          >
+          <div key={`chain-step-${step.index}`} className="relative flex items-start gap-2 py-1">
             {/* Step dot */}
             <div className="relative z-10 mt-0.5">
               <StatusIcon status={step.status} size={12} />
@@ -191,9 +188,7 @@ const ChainDetail = memo<{ info: SubAgentGroup['chainInfo'] }>(({ info }) => {
                 <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
                   {step.name || step.subagentName}
                 </span>
-                <span className="text-[10px] text-slate-400">
-                  ({step.subagentName})
-                </span>
+                <span className="text-[10px] text-slate-400">({step.subagentName})</span>
               </div>
               {step.summary && (
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
@@ -278,14 +273,18 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
         {/* Status badges */}
         <div className="flex items-center gap-2 shrink-0">
           {group.confidence != null && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full
-              bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded-full
+              bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400"
+            >
               {Math.round(group.confidence * 100)}%
             </span>
           )}
           {group.tokensUsed != null && group.tokensUsed > 0 && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded-full
-              bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center gap-0.5">
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded-full
+              bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center gap-0.5"
+            >
               <Zap size={8} />
               {formatTokens(group.tokensUsed)}
             </span>
@@ -312,9 +311,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
 
           {/* Routing reason */}
           {group.reason && (
-            <p className="text-[11px] text-slate-400 dark:text-slate-500 italic">
-              {group.reason}
-            </p>
+            <p className="text-[11px] text-slate-400 dark:text-slate-500 italic">{group.reason}</p>
           )}
 
           {/* Parallel detail */}
@@ -323,14 +320,14 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
           )}
 
           {/* Chain detail */}
-          {group.mode === 'chain' && group.chainInfo && (
-            <ChainDetail info={group.chainInfo} />
-          )}
+          {group.mode === 'chain' && group.chainInfo && <ChainDetail info={group.chainInfo} />}
 
           {/* Summary (on completion) */}
           {group.summary && (
-            <div className="mt-1 p-2 rounded-md bg-white/60 dark:bg-slate-900/40
-              border border-slate-200/40 dark:border-slate-700/30">
+            <div
+              className="mt-1 p-2 rounded-md bg-white/60 dark:bg-slate-900/40
+              border border-slate-200/40 dark:border-slate-700/30"
+            >
               <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
                 {group.summary}
               </p>
@@ -339,8 +336,10 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
 
           {/* Error message */}
           {group.error && (
-            <div className="mt-1 p-2 rounded-md bg-red-50/60 dark:bg-red-950/30
-              border border-red-200/40 dark:border-red-800/30">
+            <div
+              className="mt-1 p-2 rounded-md bg-red-50/60 dark:bg-red-950/30
+              border border-red-200/40 dark:border-red-800/30"
+            >
               <p className="text-xs text-red-600 dark:text-red-400">{group.error}</p>
             </div>
           )}

@@ -14,7 +14,6 @@ import { LazyTooltip } from '@/components/ui/lazyAntd';
 
 import { useContextStatus, useContextActions } from '../../../stores/contextStore';
 
-
 const levelLabels: Record<string, string> = {
   none: '',
   l1_prune: 'L1',

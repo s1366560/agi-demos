@@ -1,14 +1,10 @@
 import { useMemo } from 'react';
 import type { FC } from 'react';
 
-import {
-  CompressOutlined,
-  DatabaseOutlined,
-} from '@ant-design/icons';
+import { CompressOutlined, DatabaseOutlined } from '@ant-design/icons';
 import { Tooltip, Progress } from 'antd';
 
 import { useContextStatus, useContextActions } from '../../../stores/contextStore';
-
 
 interface ContextMonitorProps {
   compact?: boolean;
@@ -59,7 +55,9 @@ export const ContextMonitor: FC<ContextMonitorProps> = ({ compact = true }) => {
 
   const tooltipContent = (
     <div style={{ fontSize: 12, lineHeight: 1.6 }}>
-      <div>Tokens: {formatTokens(currentTokens)} / {formatTokens(tokenBudget)}</div>
+      <div>
+        Tokens: {formatTokens(currentTokens)} / {formatTokens(tokenBudget)}
+      </div>
       <div>Occupancy: {occupancy.toFixed(1)}%</div>
       <div>Compression: {levelLabel}</div>
       {totalSaved > 0 && <div>Total saved: {formatTokens(totalSaved)} tokens</div>}

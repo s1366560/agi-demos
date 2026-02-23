@@ -237,9 +237,20 @@ export const TenantLayout: React.FC = memo(() => {
   // Determine if the current page is an agent workspace (needs full-height, no scroll)
   // Non-agent pages: overview, projects, users, providers, analytics, etc.
   const NON_AGENT_SUBPATHS = [
-    'overview', 'tasks', 'agents', 'projects', 'users', 'providers',
-    'analytics', 'billing', 'settings', 'patterns', 'subagents', 'skills',
-    'profile', 'mcp-servers',
+    'overview',
+    'tasks',
+    'agents',
+    'projects',
+    'users',
+    'providers',
+    'analytics',
+    'billing',
+    'settings',
+    'patterns',
+    'subagents',
+    'skills',
+    'profile',
+    'mcp-servers',
   ];
   const pathSegments = location.pathname.replace(basePath, '').split('/').filter(Boolean);
   const isAgentWorkspacePath =
@@ -258,10 +269,7 @@ export const TenantLayout: React.FC = memo(() => {
         />
 
         {/* Mobile sidebar drawer */}
-        <MobileSidebarDrawer
-          open={mobileSidebarOpen}
-          onClose={() => setMobileSidebarOpen(false)}
-        >
+        <MobileSidebarDrawer open={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)}>
           <TenantChatSidebar tenantId={tenantId} mobile />
         </MobileSidebarDrawer>
 
@@ -278,14 +286,10 @@ export const TenantLayout: React.FC = memo(() => {
           {/* Page Content */}
           <div
             className={`flex-1 relative ${
-              isAgentWorkspacePath
-                ? 'overflow-hidden h-full'
-                : 'overflow-y-auto p-4'
+              isAgentWorkspacePath ? 'overflow-hidden h-full' : 'overflow-y-auto p-4'
             }`}
           >
-            <div
-              className={`${isAgentWorkspacePath ? 'h-full' : 'max-w-full'}`}
-            >
+            <div className={`${isAgentWorkspacePath ? 'h-full' : 'max-w-full'}`}>
               <RouteErrorBoundary context="Tenant" fallbackPath="/tenant">
                 <Outlet />
               </RouteErrorBoundary>

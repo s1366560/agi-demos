@@ -30,17 +30,29 @@ const STATUS_OPTIONS: { value: StatusFilter; labelKey: string; fallback: string 
 const SORT_OPTIONS: { value: SortField; labelKey: string; fallback: string }[] = [
   { value: 'name', labelKey: 'tenant.subagents.sort.name', fallback: 'Name' },
   { value: 'invocations', labelKey: 'tenant.subagents.sort.invocations', fallback: 'Most Runs' },
-  { value: 'success_rate', labelKey: 'tenant.subagents.sort.successRate', fallback: 'Success Rate' },
+  {
+    value: 'success_rate',
+    labelKey: 'tenant.subagents.sort.successRate',
+    fallback: 'Success Rate',
+  },
   { value: 'recent', labelKey: 'tenant.subagents.sort.recent', fallback: 'Recently Used' },
 ];
 
 export const SubAgentFilters = memo<SubAgentFiltersProps>(
-  ({ search, onSearchChange, statusFilter, onStatusFilterChange, sortField, onSortChange, onRefresh }) => {
+  ({
+    search,
+    onSearchChange,
+    statusFilter,
+    onStatusFilterChange,
+    sortField,
+    onSortChange,
+    onRefresh,
+  }) => {
     const { t } = useTranslation();
 
     const handleSearchInput = useCallback(
       (e: React.ChangeEvent<HTMLInputElement>) => onSearchChange(e.target.value),
-      [onSearchChange],
+      [onSearchChange]
     );
 
     return (
@@ -103,7 +115,7 @@ export const SubAgentFilters = memo<SubAgentFiltersProps>(
         </div>
       </div>
     );
-  },
+  }
 );
 
 SubAgentFilters.displayName = 'SubAgentFilters';

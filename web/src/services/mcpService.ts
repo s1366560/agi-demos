@@ -108,10 +108,9 @@ export const mcpAPI = {
   listAllTools: async (projectId?: string): Promise<MCPToolInfo[]> => {
     const params: Record<string, string | number> = { per_page: 200 };
     if (projectId) params.project_id = projectId;
-    const resp = await api.get<{ items: MCPToolInfo[]; total: number }>(
-      '/mcp/tools/all',
-      { params },
-    );
+    const resp = await api.get<{ items: MCPToolInfo[]; total: number }>('/mcp/tools/all', {
+      params,
+    });
     return resp.items;
   },
 

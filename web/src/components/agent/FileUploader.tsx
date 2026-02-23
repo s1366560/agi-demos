@@ -34,11 +34,7 @@ interface UseFileUploadOptions {
   maxSizeMB?: number;
 }
 
-export function useFileUpload({
-  projectId,
-  maxFiles = 10,
-  maxSizeMB = 100,
-}: UseFileUploadOptions) {
+export function useFileUpload({ projectId, maxFiles = 10, maxSizeMB = 100 }: UseFileUploadOptions) {
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
   const idCounter = useRef(0);
 
@@ -147,7 +143,9 @@ export function useFileUpload({
         uploadSingleFile(target.file, newId);
 
         return prev.map((a) =>
-          a.id === id ? { ...a, id: newId, status: 'uploading' as const, progress: 0, error: undefined } : a
+          a.id === id
+            ? { ...a, id: newId, status: 'uploading' as const, progress: 0, error: undefined }
+            : a
         );
       });
     },

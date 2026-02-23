@@ -28,7 +28,6 @@ import type { SearchMode } from '@/hooks/useSearchState';
 
 import { formatTimeOnly } from '@/utils/date';
 
-
 export interface SearchHeaderProps {
   // Search mode
   searchMode: SearchMode;
@@ -350,9 +349,7 @@ function SearchHistoryDropdown({
             </span>
             <span className="text-xs text-slate-500 capitalize">{getModeLabel(item.mode)}</span>
           </div>
-          <span className="text-xs text-slate-400">
-            {formatTimeOnly(item.timestamp)}
-          </span>
+          <span className="text-xs text-slate-400">{formatTimeOnly(item.timestamp)}</span>
         </button>
       ))}
     </div>

@@ -5,7 +5,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 
 import { formatDateOnly } from '@/utils/date';
 
-import { LazyDropdown , Modal, message } from '@/components/ui/lazyAntd';
+import { LazyDropdown, Modal, message } from '@/components/ui/lazyAntd';
 
 import { projectAPI, memoryAPI } from '../../services/api';
 import { Project, Memory } from '../../types/memory';
@@ -18,7 +18,7 @@ export const ProjectOverview: React.FC = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [memories, setMemories] = useState<Memory[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  
+
   // Action states
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [memoryToDelete, setMemoryToDelete] = useState<Memory | null>(null);
@@ -66,20 +66,20 @@ export const ProjectOverview: React.FC = () => {
 
   const handleDelete = async () => {
     if (!memoryToDelete || !projectId) return;
-    
+
     setIsDeleting(true);
     try {
       await memoryAPI.delete(projectId, memoryToDelete.id);
       message.success(t('common.status.deleted') || 'Memory deleted');
-      
+
       // Refresh list
       const memoriesData = await memoryAPI.list(projectId, { page: 1, page_size: 5 });
       setMemories(memoriesData.memories);
-      
+
       // Refresh stats
       const statsData = await projectAPI.getStats(projectId);
       setStats(statsData);
-      
+
       setDeleteModalOpen(false);
       setMemoryToDelete(null);
     } catch (error) {
@@ -357,13 +357,21 @@ export const ProjectOverview: React.FC = () => {
                                   {
                                     key: 'reprocess',
                                     label: t('common.actions.reprocess') || 'Reprocess',
-                                    icon: <span className="material-symbols-outlined text-sm">refresh</span>,
+                                    icon: (
+                                      <span className="material-symbols-outlined text-sm">
+                                        refresh
+                                      </span>
+                                    ),
                                   },
                                   {
                                     key: 'delete',
                                     label: t('common.actions.delete') || 'Delete',
                                     danger: true,
-                                    icon: <span className="material-symbols-outlined text-sm">delete</span>,
+                                    icon: (
+                                      <span className="material-symbols-outlined text-sm">
+                                        delete
+                                      </span>
+                                    ),
                                   },
                                 ],
                                 onClick: ({ key, domEvent }: { key: string; domEvent: any }) => {
@@ -481,7 +489,8 @@ export const ProjectOverview: React.FC = () => {
         okButtonProps={{ danger: true, loading: isDeleting }}
       >
         <p>
-          {t('project.memories.deleteConfirmation') || 'Are you sure you want to delete this memory? This action cannot be undone.'}
+          {t('project.memories.deleteConfirmation') ||
+            'Are you sure you want to delete this memory? This action cannot be undone.'}
         </p>
         {memoryToDelete && (
           <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">

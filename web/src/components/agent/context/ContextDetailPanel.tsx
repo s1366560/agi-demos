@@ -9,8 +9,11 @@ import {
 } from '@ant-design/icons';
 import { Drawer, Progress, Space, Tag, Typography, Divider, Empty, Timeline } from 'antd';
 
-import { useContextStatus, useContextDetailExpanded, useContextActions } from '../../../stores/contextStore';
-
+import {
+  useContextStatus,
+  useContextDetailExpanded,
+  useContextActions,
+} from '../../../stores/contextStore';
 
 import type { CompressionRecord, TokenDistribution } from '../../../stores/contextStore';
 
@@ -37,8 +40,14 @@ const levelDescriptions: Record<string, string> = {
 };
 
 const TokenDistributionBar: FC<{ distribution: TokenDistribution }> = ({ distribution }) => {
-  const total = distribution.system + distribution.user + distribution.assistant + distribution.tool + distribution.summary;
-  if (total === 0) return <Empty description="No token data" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
+  const total =
+    distribution.system +
+    distribution.user +
+    distribution.assistant +
+    distribution.tool +
+    distribution.summary;
+  if (total === 0)
+    return <Empty description="No token data" image={Empty.PRESENTED_IMAGE_SIMPLE} />;
 
   const segments = [
     { key: 'system', label: 'System', color: '#1890ff', value: distribution.system },
@@ -110,11 +119,14 @@ const CompressionTimeline: FC<{ records: CompressionRecord[] }> = ({ records }) 
         <div style={{ fontSize: 12, lineHeight: 1.6 }}>
           <div>
             <Text strong>{record.level.toUpperCase()}</Text>
-            <Text type="secondary" style={{ marginLeft: 8 }}>{time}</Text>
+            <Text type="secondary" style={{ marginLeft: 8 }}>
+              {time}
+            </Text>
           </div>
           <Space size={12} wrap>
             <span>
-              <ThunderboltOutlined /> Saved {formatTokens(record.tokens_saved)} tokens ({record.savings_pct.toFixed(0)}%)
+              <ThunderboltOutlined /> Saved {formatTokens(record.tokens_saved)} tokens (
+              {record.savings_pct.toFixed(0)}%)
             </span>
             <span>
               <ClockCircleOutlined /> {record.duration_ms.toFixed(0)}ms

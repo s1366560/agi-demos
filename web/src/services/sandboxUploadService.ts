@@ -46,7 +46,7 @@ class SandboxUploadServiceClass {
   async upload(
     projectId: string,
     file: File,
-    onProgress?: UploadProgressCallback,
+    onProgress?: UploadProgressCallback
   ): Promise<SandboxUploadResult> {
     // Report initial progress
     onProgress?.({ loaded: 0, total: file.size, percentage: 0 });

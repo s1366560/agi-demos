@@ -159,8 +159,7 @@ export function TerminalImpl({
 
     const ws = new WebSocket(getWsUrl());
 
-    ws.onopen = () => {
-    };
+    ws.onopen = () => {};
 
     ws.onmessage = (event) => {
       try {

@@ -82,8 +82,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     {
       icon: <BarChart3 size={20} />,
       title: t('agent.emptyState.cards.analyzeTrends', 'Analyze project trends'),
-      description: t('agent.emptyState.cards.analyzeTrendsDesc', 'Identify key patterns and insights across your data streams'),
-      prompt: t('agent.emptyState.cards.analyzeTrendsPrompt', 'Analyze the trends and patterns in my project data. Identify key insights and anomalies.'),
+      description: t(
+        'agent.emptyState.cards.analyzeTrendsDesc',
+        'Identify key patterns and insights across your data streams'
+      ),
+      prompt: t(
+        'agent.emptyState.cards.analyzeTrendsPrompt',
+        'Analyze the trends and patterns in my project data. Identify key insights and anomalies.'
+      ),
       color: 'from-blue-500/10 to-blue-600/5',
       iconColor: 'text-blue-500',
       borderColor: 'border-blue-200/50 dark:border-blue-800/30',
@@ -92,8 +98,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     {
       icon: <FileText size={20} />,
       title: t('agent.emptyState.cards.synthesizeReports', 'Synthesize reports'),
-      description: t('agent.emptyState.cards.synthesizeReportsDesc', 'Transform complex findings into executive summaries'),
-      prompt: t('agent.emptyState.cards.synthesizeReportsPrompt', 'Help me synthesize a report from my recent findings. Create a clear executive summary.'),
+      description: t(
+        'agent.emptyState.cards.synthesizeReportsDesc',
+        'Transform complex findings into executive summaries'
+      ),
+      prompt: t(
+        'agent.emptyState.cards.synthesizeReportsPrompt',
+        'Help me synthesize a report from my recent findings. Create a clear executive summary.'
+      ),
       color: 'from-purple-500/10 to-purple-600/5',
       iconColor: 'text-purple-500',
       borderColor: 'border-purple-200/50 dark:border-purple-800/30',
@@ -102,8 +114,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     {
       icon: <Code size={20} />,
       title: t('agent.emptyState.cards.generateCode', 'Generate code'),
-      description: t('agent.emptyState.cards.generateCodeDesc', 'Write, review, and optimize code with AI assistance'),
-      prompt: t('agent.emptyState.cards.generateCodePrompt', 'Help me write code. What programming language and task do you need help with?'),
+      description: t(
+        'agent.emptyState.cards.generateCodeDesc',
+        'Write, review, and optimize code with AI assistance'
+      ),
+      prompt: t(
+        'agent.emptyState.cards.generateCodePrompt',
+        'Help me write code. What programming language and task do you need help with?'
+      ),
       color: 'from-emerald-500/10 to-emerald-600/5',
       iconColor: 'text-emerald-500',
       borderColor: 'border-emerald-200/50 dark:border-emerald-800/30',
@@ -112,8 +130,14 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
     {
       icon: <Zap size={20} />,
       title: t('agent.emptyState.cards.quickAutomation', 'Quick automation'),
-      description: t('agent.emptyState.cards.quickAutomationDesc', 'Build workflows and automate repetitive tasks'),
-      prompt: t('agent.emptyState.cards.quickAutomationPrompt', 'Help me automate a repetitive task. Describe the workflow you want to streamline.'),
+      description: t(
+        'agent.emptyState.cards.quickAutomationDesc',
+        'Build workflows and automate repetitive tasks'
+      ),
+      prompt: t(
+        'agent.emptyState.cards.quickAutomationPrompt',
+        'Help me automate a repetitive task. Describe the workflow you want to streamline.'
+      ),
       color: 'from-amber-500/10 to-amber-600/5',
       iconColor: 'text-amber-500',
       borderColor: 'border-amber-200/50 dark:border-amber-800/30',
@@ -149,7 +173,10 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
 
         {/* Subtitle */}
         <p className="text-slate-500 dark:text-slate-400 max-w-md mx-auto mb-8 text-base leading-relaxed">
-          {t('agent.emptyState.subtitle', 'Your intelligent AI assistant is ready to help with analysis, coding, writing, and more.')}
+          {t(
+            'agent.emptyState.subtitle',
+            'Your intelligent AI assistant is ready to help with analysis, coding, writing, and more.'
+          )}
         </p>
 
         {/* New Chat Button */}
@@ -187,13 +214,15 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
               hover:-translate-y-0.5
             "
           >
-            <div className="
+            <div
+              className="
               flex-shrink-0 w-10 h-10 rounded-lg
               bg-primary/10 dark:bg-primary/20
               flex items-center justify-center
               text-primary
               group-hover:scale-110 transition-transform duration-300
-            ">
+            "
+            >
               <History size={20} />
             </div>
             <div className="flex-1 min-w-0">
@@ -209,13 +238,15 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
                 </p>
               )}
             </div>
-            <div className="
+            <div
+              className="
               flex-shrink-0 px-4 py-1.5 rounded-lg
               bg-primary/10 dark:bg-primary/20
               text-primary text-sm font-medium
               group-hover:bg-primary group-hover:text-white
               transition-colors duration-300
-            ">
+            "
+            >
               {t('agent.emptyState.continueAction', 'Resume')}
             </div>
           </button>

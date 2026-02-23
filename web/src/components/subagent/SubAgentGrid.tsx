@@ -32,7 +32,7 @@ export const SubAgentGrid = memo<SubAgentGridProps>(
         />
       ))}
     </div>
-  ),
+  )
 );
 
 SubAgentGrid.displayName = 'SubAgentGrid';

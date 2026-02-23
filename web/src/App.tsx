@@ -669,12 +669,7 @@ function App() {
                   }
                 />
               </Route>
-              <Route
-                path="channels"
-                element={
-                  <ProjectChannelsRedirect />
-                }
-              />
+              <Route path="channels" element={<ProjectChannelsRedirect />} />
               <Route
                 path="team"
                 element={

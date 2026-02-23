@@ -147,10 +147,7 @@ export const AgentWorkspace: React.FC = () => {
     <div className="w-full h-full">
       {effectiveProjectId ? (
         <>
-          <AgentChatContent
-            externalProjectId={effectiveProjectId}
-            basePath={basePath}
-          />
+          <AgentChatContent externalProjectId={effectiveProjectId} basePath={basePath} />
           <ContextDetailPanel />
         </>
       ) : (

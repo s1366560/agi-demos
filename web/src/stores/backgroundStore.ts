@@ -30,7 +30,7 @@ interface BackgroundState {
     executionId: string,
     summary: string,
     tokensUsed?: number,
-    executionTimeMs?: number,
+    executionTimeMs?: number
   ) => void;
   fail: (executionId: string, error: string) => void;
   cancel: (executionId: string) => void;
@@ -118,8 +118,8 @@ export const useBackgroundStore = create<BackgroundState>()(
 
       setPanel: (open) => set({ panelOpen: open }),
     }),
-    { name: 'background-store' },
-  ),
+    { name: 'background-store' }
+  )
 );
 
 // Selectors
@@ -128,11 +128,10 @@ export const useBackgroundExecutions = () =>
 
 export const useRunningCount = () =>
   useBackgroundStore(
-    (state) => Array.from(state.executions.values()).filter((e) => e.status === 'running').length,
+    (state) => Array.from(state.executions.values()).filter((e) => e.status === 'running').length
   );
 
-export const useBackgroundPanel = () =>
-  useBackgroundStore((state) => state.panelOpen);
+export const useBackgroundPanel = () => useBackgroundStore((state) => state.panelOpen);
 
 export const useBackgroundActions = () =>
   useBackgroundStore(
@@ -145,5 +144,5 @@ export const useBackgroundActions = () =>
       clearAll: state.clearAll,
       togglePanel: state.togglePanel,
       setPanel: state.setPanel,
-    })),
+    }))
   );

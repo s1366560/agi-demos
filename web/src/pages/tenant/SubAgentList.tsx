@@ -128,14 +128,14 @@ export const SubAgentList: React.FC = () => {
             enabled
               ? 'tenant.subagents.messages.enableSuccess'
               : 'tenant.subagents.messages.disableSuccess',
-            enabled ? 'SubAgent enabled' : 'SubAgent disabled',
-          ),
+            enabled ? 'SubAgent enabled' : 'SubAgent disabled'
+          )
         );
       } catch {
         // Error handled by store
       }
     },
-    [toggleSubAgent, t],
+    [toggleSubAgent, t]
   );
 
   const handleDelete = useCallback(
@@ -147,7 +147,7 @@ export const SubAgentList: React.FC = () => {
         // Error handled by store
       }
     },
-    [deleteSubAgent, t],
+    [deleteSubAgent, t]
   );
 
   const handleCreateFromTemplate = useCallback(
@@ -155,7 +155,7 @@ export const SubAgentList: React.FC = () => {
       try {
         const created = await createFromTemplate(templateId);
         message.success(
-          t('tenant.subagents.messages.createFromTemplateSuccess', 'SubAgent created from template'),
+          t('tenant.subagents.messages.createFromTemplateSuccess', 'SubAgent created from template')
         );
         setEditingSubAgent(created);
         setIsModalOpen(true);
@@ -163,7 +163,7 @@ export const SubAgentList: React.FC = () => {
         // Error handled by store
       }
     },
-    [createFromTemplate, t],
+    [createFromTemplate, t]
   );
 
   const handleRefresh = useCallback(() => listSubAgents(), [listSubAgents]);
@@ -173,13 +173,13 @@ export const SubAgentList: React.FC = () => {
       try {
         await importFilesystem(name);
         message.success(
-          t('tenant.subagents.messages.importSuccess', 'SubAgent imported to database'),
+          t('tenant.subagents.messages.importSuccess', 'SubAgent imported to database')
         );
       } catch {
         // Error handled by store
       }
     },
-    [importFilesystem, t],
+    [importFilesystem, t]
   );
 
   const handleModalClose = useCallback(() => {
@@ -196,7 +196,13 @@ export const SubAgentList: React.FC = () => {
   // Template dropdown menu
   const templateMenuItems: MenuProps['items'] = useMemo(() => {
     if (templates.length === 0) {
-      return [{ key: 'empty', label: t('tenant.subagents.noTemplates', 'No templates available'), disabled: true }];
+      return [
+        {
+          key: 'empty',
+          label: t('tenant.subagents.noTemplates', 'No templates available'),
+          disabled: true,
+        },
+      ];
     }
     return templates.map((tpl: SubAgentTemplate) => ({
       key: tpl.name,

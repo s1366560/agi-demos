@@ -142,7 +142,7 @@ describe('agentV3 Store - Timeline Field', () => {
       // Set initial timeline (from a previous conversation)
       act(() => {
         useAgentV3Store.setState({
-          activeConversationId: 'old-conv',  // Different from what we'll load
+          activeConversationId: 'old-conv', // Different from what we'll load
           timeline: [
             {
               id: 'old-1',
@@ -394,7 +394,7 @@ describe('agentV3 Store - Timeline Field', () => {
         {
           id: 'assistant-2',
           type: 'assistant_message',
-          eventTimeUs: baseTime + 2000000,  // 3rd
+          eventTimeUs: baseTime + 2000000, // 3rd
           eventCounter: 3,
           timestamp: Date.now() + 2000,
           content: 'Second response',
@@ -403,7 +403,7 @@ describe('agentV3 Store - Timeline Field', () => {
         {
           id: 'user-1',
           type: 'user_message',
-          eventTimeUs: baseTime,  // 1st
+          eventTimeUs: baseTime, // 1st
           eventCounter: 1,
           timestamp: Date.now(),
           content: 'First message',
@@ -412,7 +412,7 @@ describe('agentV3 Store - Timeline Field', () => {
         {
           id: 'assistant-1',
           type: 'assistant_message',
-          eventTimeUs: baseTime + 1000000,  // 2nd
+          eventTimeUs: baseTime + 1000000, // 2nd
           eventCounter: 2,
           timestamp: Date.now() + 1000,
           content: 'First response',

@@ -40,10 +40,10 @@ export interface ToolStats {
 
 export function getRuntimeStatus(server: MCPServerResponse): RuntimeStatus {
   if (server.enabled === false) return 'stopped';
-  
+
   const runtimeState = server.runtime_metadata?.runtime_state as string;
   const isReady = server.runtime_metadata?.is_ready as boolean;
-  
+
   if (runtimeState === 'running' && isReady) return 'running';
   if (runtimeState === 'starting' || runtimeState === 'pending') return 'starting';
   if (runtimeState === 'stopping') return 'stopping';

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 
+import { PROVIDERS } from '../../constants/providers';
 import { providerAPI } from '../../services/api';
 import {
   EmbeddingConfig,
@@ -19,8 +20,6 @@ interface ProviderConfigModalProps {
   provider?: ProviderConfig | null;
   initialProviderType?: ProviderType;
 }
-
-import { PROVIDERS } from '../../constants/providers';
 
 const OPTIONAL_API_KEY_PROVIDERS: ProviderType[] = ['ollama', 'lmstudio'];
 
@@ -62,6 +61,8 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     rerank: string[];
   }>({ chat: [], embedding: [], rerank: [] });
   const [isLoadingModels, setIsLoadingModels] = useState(false);
+  const [showAdvancedEmbedding, setShowAdvancedEmbedding] = useState(false);
+  const [showAdvancedLLM, setShowAdvancedLLM] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -82,6 +83,8 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     is_default: false,
     use_custom_base_url: false,
   });
+
+  const [configJsonStr, setConfigJsonStr] = useState('{}');
 
   // Track which model fields are in custom input mode
   const [useCustomModel, setUseCustomModel] = useState({
@@ -108,7 +111,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
     try {
       const response = await providerAPI.listModels(type);
       setAvailableModels(response.models);
-      
+
       // If editing, don't auto-select defaults yet, we handle that in useEffect
       return response.models;
     } catch (err) {
@@ -125,22 +128,19 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
   useEffect(() => {
     if (provider) {
       const embeddingConfig = resolveEmbeddingConfig(provider);
-      
+
       // Fetch models for the provider
       fetchModels(provider.provider_type).then((models) => {
         if (!models) return;
-        
+
         // Check if models are custom (not in fetched list)
         const llmIsCustom = !models.chat.includes(provider.llm_model);
         const smallIsCustom =
-          !!provider.llm_small_model &&
-          !models.chat.includes(provider.llm_small_model);
+          !!provider.llm_small_model && !models.chat.includes(provider.llm_small_model);
         const embeddingModel = embeddingConfig?.model || provider.embedding_model || '';
-        const embeddingIsCustom =
-          !!embeddingModel && !models.embedding.includes(embeddingModel);
+        const embeddingIsCustom = !!embeddingModel && !models.embedding.includes(embeddingModel);
         const rerankerIsCustom =
-          !!provider.reranker_model &&
-          !models.rerank.includes(provider.reranker_model);
+          !!provider.reranker_model && !models.rerank.includes(provider.reranker_model);
 
         setUseCustomModel({
           llm: llmIsCustom,
@@ -177,13 +177,14 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         is_default: provider.is_default,
         use_custom_base_url: !!provider.base_url,
       });
+      setConfigJsonStr(JSON.stringify(provider.config || {}, null, 2));
 
       setCurrentStep('credentials');
     } else {
       // Default state for new provider
       const defaultProvider = initialProviderType || 'openai';
-      const providerMeta = PROVIDERS.find(p => p.value === defaultProvider);
-      
+      const providerMeta = PROVIDERS.find((p) => p.value === defaultProvider);
+
       setFormData({
         name: providerMeta?.label || '',
         provider_type: defaultProvider,
@@ -203,20 +204,29 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         is_default: false,
         use_custom_base_url: false,
       });
-      
+      setConfigJsonStr('{}');
+
       // Fetch models for default provider
       fetchModels(defaultProvider).then((models) => {
         if (models && models.chat.length > 0) {
-           setFormData(prev => ({
-             ...prev,
-             llm_model: models.chat[0],
-             llm_small_model: models.chat.find(m => m.includes('mini') || m.includes('small') || m.includes('flash') || m.includes('haiku')) || models.chat[1] || '',
-             embedding_model: models.embedding[0] || '',
-             reranker_model: models.rerank[0] || '',
-           }));
+          setFormData((prev) => ({
+            ...prev,
+            llm_model: models.chat[0],
+            llm_small_model:
+              models.chat.find(
+                (m) =>
+                  m.includes('mini') ||
+                  m.includes('small') ||
+                  m.includes('flash') ||
+                  m.includes('haiku')
+              ) ||
+              models.chat[1] ||
+              '',
+            embedding_model: models.embedding[0] || '',
+            reranker_model: models.rerank[0] || '',
+          }));
         }
       });
-
 
       setUseCustomModel({
         llm: false,
@@ -233,21 +243,27 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
 
   const handleProviderSelect = async (type: ProviderType) => {
     const providerMeta = PROVIDERS.find((p) => p.value === type);
-    
+
     // Fetch models first
     const models = await fetchModels(type);
-    
+
     setFormData((prev) => ({
       ...prev,
       provider_type: type,
       name: prev.name || providerMeta?.label || '',
       llm_model: models?.chat[0] || '',
-      llm_small_model: models?.chat.find(m => m.includes('mini') || m.includes('small') || m.includes('flash') || m.includes('haiku')) || models?.chat[1] || '',
+      llm_small_model:
+        models?.chat.find(
+          (m) =>
+            m.includes('mini') || m.includes('small') || m.includes('flash') || m.includes('haiku')
+        ) ||
+        models?.chat[1] ||
+        '',
       embedding_model: models?.embedding[0] || '',
       embedding_dimensions: '1536', // Default, user can change
       reranker_model: models?.rerank[0] || '',
     }));
-    
+
     // Reset custom model mode when switching provider
     setUseCustomModel({
       llm: false,
@@ -567,6 +583,52 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       placeholder="https://api.example.com"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                      Provider Configuration (JSON)
+                    </label>
+                    <textarea
+                      value={configJsonStr}
+                      onChange={(e) => {
+                        setConfigJsonStr(e.target.value);
+                        try {
+                          const parsed = JSON.parse(e.target.value);
+                          setFormData({ ...formData, config: parsed });
+                        } catch (_err) {
+                          // Ignore invalid JSON while typing
+                        }
+                      }}
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent font-mono text-sm"
+                      rows={4}
+                      placeholder="{}"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-6 pt-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.is_active}
+                        onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                        className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
+                      />
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Active
+                      </span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.is_default}
+                        onChange={(e) => setFormData({ ...formData, is_default: e.target.checked })}
+                        className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
+                      />
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Set as Default
+                      </span>
+                    </label>
+                  </div>
                 </div>
               </div>
             )}
@@ -580,7 +642,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     Fetching available models...
                   </div>
                 )}
-                
+
                 {/* Primary LLM Model */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -626,7 +688,9 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       disabled={isLoadingModels}
                     >
                       {availableModels.chat.length === 0 && !isLoadingModels && (
-                         <option value="" disabled>No models available</option>
+                        <option value="" disabled>
+                          No models available
+                        </option>
                       )}
                       {availableModels.chat.map((m) => (
                         <option key={m} value={m}>
@@ -695,6 +759,165 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                   )}
                 </div>
 
+                {/* Advanced LLM Settings */}
+                <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowAdvancedLLM(!showAdvancedLLM)}
+                    className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Advanced LLM Settings
+                    </span>
+                    <MaterialIcon
+                      name={showAdvancedLLM ? 'expand_less' : 'expand_more'}
+                      size={20}
+                      className="text-slate-500"
+                    />
+                  </button>
+
+                  {showAdvancedLLM && (
+                    <div className="p-4 space-y-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Temperature
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="2"
+                            step="0.1"
+                            value={formData.config.temperature ?? ''}
+                            onChange={(e) => {
+                              const newConfig = {
+                                ...formData.config,
+                                temperature: e.target.value ? Number(e.target.value) : undefined,
+                              };
+                              setFormData({ ...formData, config: newConfig });
+                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                            }}
+                            placeholder="e.g. 0.7"
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Max Tokens
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={formData.config.max_tokens ?? ''}
+                            onChange={(e) => {
+                              const newConfig = {
+                                ...formData.config,
+                                max_tokens: e.target.value ? Number(e.target.value) : undefined,
+                              };
+                              setFormData({ ...formData, config: newConfig });
+                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                            }}
+                            placeholder="e.g. 4096"
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Top P
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="1"
+                            step="0.1"
+                            value={formData.config.top_p ?? ''}
+                            onChange={(e) => {
+                              const newConfig = {
+                                ...formData.config,
+                                top_p: e.target.value ? Number(e.target.value) : undefined,
+                              };
+                              setFormData({ ...formData, config: newConfig });
+                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                            }}
+                            placeholder="e.g. 1.0"
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Timeout (seconds)
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={formData.config.timeout_seconds ?? ''}
+                            onChange={(e) => {
+                              const newConfig = {
+                                ...formData.config,
+                                timeout_seconds: e.target.value ? Number(e.target.value) : undefined,
+                              };
+                              setFormData({ ...formData, config: newConfig });
+                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                            }}
+                            placeholder="e.g. 120"
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Frequency Penalty
+                          </label>
+                          <input
+                            type="number"
+                            min="-2"
+                            max="2"
+                            step="0.1"
+                            value={formData.config.frequency_penalty ?? ''}
+                            onChange={(e) => {
+                              const newConfig = {
+                                ...formData.config,
+                                frequency_penalty: e.target.value ? Number(e.target.value) : undefined,
+                              };
+                              setFormData({ ...formData, config: newConfig });
+                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                            }}
+                            placeholder="e.g. 0.0"
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Presence Penalty
+                          </label>
+                          <input
+                            type="number"
+                            min="-2"
+                            max="2"
+                            step="0.1"
+                            value={formData.config.presence_penalty ?? ''}
+                            onChange={(e) => {
+                              const newConfig = {
+                                ...formData.config,
+                                presence_penalty: e.target.value ? Number(e.target.value) : undefined,
+                              };
+                              setFormData({ ...formData, config: newConfig });
+                              setConfigJsonStr(JSON.stringify(newConfig, null, 2));
+                            }}
+                            placeholder="e.g. 0.0"
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* Embedding Model */}
                 <div>
                   <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
@@ -743,6 +966,172 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     >
                       <option value="">None</option>
                       {availableModels.embedding.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                      <option value="__custom__">Custom model name...</option>
+                    </select>
+                  )}
+                </div>
+
+                {/* Advanced Embedding Settings */}
+                {formData.embedding_model && (
+                  <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdvancedEmbedding(!showAdvancedEmbedding)}
+                      className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                    >
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Advanced Embedding Settings
+                      </span>
+                      <MaterialIcon
+                        name={showAdvancedEmbedding ? 'expand_less' : 'expand_more'}
+                        size={20}
+                        className="text-slate-500"
+                      />
+                    </button>
+
+                    {showAdvancedEmbedding && (
+                      <div className="p-4 space-y-4 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                              Dimensions
+                            </label>
+                            <input
+                              type="number"
+                              value={formData.embedding_dimensions}
+                              onChange={(e) =>
+                                setFormData({ ...formData, embedding_dimensions: e.target.value })
+                              }
+                              placeholder="e.g. 1536"
+                              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                              Encoding Format
+                            </label>
+                            <select
+                              value={formData.embedding_encoding_format}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  embedding_encoding_format: e.target.value as any,
+                                })
+                              }
+                              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                            >
+                              <option value="">Default</option>
+                              <option value="float">Float</option>
+                              <option value="base64">Base64</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                              User ID (Optional)
+                            </label>
+                            <input
+                              type="text"
+                              value={formData.embedding_user}
+                              onChange={(e) =>
+                                setFormData({ ...formData, embedding_user: e.target.value })
+                              }
+                              placeholder="End-user ID"
+                              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                              Timeout (ms)
+                            </label>
+                            <input
+                              type="number"
+                              value={formData.embedding_timeout}
+                              onChange={(e) =>
+                                setFormData({ ...formData, embedding_timeout: e.target.value })
+                              }
+                              placeholder="e.g. 30000"
+                              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Provider Options (JSON)
+                          </label>
+                          <textarea
+                            value={formData.embedding_provider_options_json}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+                                embedding_provider_options_json: e.target.value,
+                              })
+                            }
+                            placeholder="{}"
+                            rows={2}
+                            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent font-mono text-xs"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Reranker Model */}
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                    Reranker Model (Optional)
+                  </label>
+                  {useCustomModel.reranker ? (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={formData.reranker_model}
+                        onChange={(e) =>
+                          setFormData({ ...formData, reranker_model: e.target.value })
+                        }
+                        placeholder="Enter custom model name"
+                        className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUseCustomModel({ ...useCustomModel, reranker: false });
+                          setFormData({
+                            ...formData,
+                            reranker_model: availableModels.rerank[0] || '',
+                          });
+                        }}
+                        className="px-3 py-2.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                        title="Use preset model"
+                      >
+                        <MaterialIcon name="list" size={18} />
+                      </button>
+                    </div>
+                  ) : (
+                    <select
+                      value={formData.reranker_model}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        if (value === '__custom__') {
+                          setUseCustomModel({ ...useCustomModel, reranker: true });
+                          setFormData({ ...formData, reranker_model: '' });
+                        } else {
+                          setFormData({ ...formData, reranker_model: value });
+                        }
+                      }}
+                      className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
+                      disabled={isLoadingModels}
+                    >
+                      <option value="">None</option>
+                      {availableModels.rerank.map((m) => (
                         <option key={m} value={m}>
                           {m}
                         </option>
@@ -817,6 +1206,25 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         >
                           {formData.embedding_model}
                           {useCustomModel.embedding && (
+                            <span className="ml-1.5 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
+                              Custom
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {formData.reranker_model && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Reranker:</span>
+                        <span
+                          className={`font-medium ${
+                            useCustomModel.reranker
+                              ? 'text-amber-600 dark:text-amber-400'
+                              : 'text-slate-900 dark:text-white'
+                          }`}
+                        >
+                          {formData.reranker_model}
+                          {useCustomModel.reranker && (
                             <span className="ml-1.5 text-xs bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded">
                               Custom
                             </span>

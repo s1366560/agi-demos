@@ -61,7 +61,7 @@ export const SubAgentStats = memo<SubAgentStatsProps>(
         />
       </div>
     );
-  },
+  }
 );
 
 SubAgentStats.displayName = 'SubAgentStats';

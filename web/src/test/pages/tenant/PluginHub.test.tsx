@@ -132,7 +132,10 @@ describe('PluginHub', () => {
     fireEvent.click(addButton as HTMLButtonElement);
 
     await waitFor(() => {
-      expect(channelService.getTenantChannelPluginSchema).toHaveBeenCalledWith('tenant-1', 'feishu');
+      expect(channelService.getTenantChannelPluginSchema).toHaveBeenCalledWith(
+        'tenant-1',
+        'feishu'
+      );
       expect(screen.getByText('App ID')).toBeInTheDocument();
     });
   });

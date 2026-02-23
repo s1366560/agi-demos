@@ -244,9 +244,7 @@ export function SandboxOutputViewer({
           <Tag icon={TOOL_ICONS[exec.toolName]} color={TOOL_COLORS[exec.toolName]} className="m-0">
             {exec.toolName}
           </Tag>
-          <Text className="text-sm text-slate-600">
-            {formatTimeOnly(exec.timestamp)}
-          </Text>
+          <Text className="text-sm text-slate-600">{formatTimeOnly(exec.timestamp)}</Text>
           {exec.error && <Tag color="error">Error</Tag>}
           {exec.artifacts && exec.artifacts.length > 0 && (
             <Tag icon={<PictureOutlined />} color="blue">

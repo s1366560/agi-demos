@@ -90,24 +90,30 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
   }, [app.status]);
 
   return (
-    <div className={`group relative ${CARD_STYLES.base} ${CARD_STYLES.hover} transition-all duration-300 overflow-hidden`}>
+    <div
+      className={`group relative ${CARD_STYLES.base} ${CARD_STYLES.hover} transition-all duration-300 overflow-hidden`}
+    >
       {/* Source Indicator */}
-      <div className={`absolute top-0 left-0 right-0 h-0.5 ${
-        isAgentDeveloped 
-          ? 'bg-gradient-to-r from-violet-500 to-purple-500' 
-          : 'bg-gradient-to-r from-cyan-500 to-blue-500'
-      }`} />
+      <div
+        className={`absolute top-0 left-0 right-0 h-0.5 ${
+          isAgentDeveloped
+            ? 'bg-gradient-to-r from-violet-500 to-purple-500'
+            : 'bg-gradient-to-r from-cyan-500 to-blue-500'
+        }`}
+      />
 
       <div className="p-4">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-2.5 min-w-0 flex-1">
             {/* App Icon */}
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-              isAgentDeveloped
-                ? 'bg-gradient-to-br from-violet-50 to-purple-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400'
-                : 'bg-gradient-to-br from-cyan-50 to-blue-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400'
-            }`}>
+            <div
+              className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                isAgentDeveloped
+                  ? 'bg-gradient-to-br from-violet-50 to-purple-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400'
+                  : 'bg-gradient-to-br from-cyan-50 to-blue-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400'
+              }`}
+            >
               {isAgentDeveloped ? <Sparkles size={18} /> : <LayoutGrid size={18} />}
             </div>
 
@@ -136,10 +142,13 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
             {serverRuntime && (
               <Tag
                 color={
-                  serverRuntime === 'running' ? 'green' :
-                  serverRuntime === 'starting' ? 'blue' :
-                  serverRuntime === 'error' ? 'red' :
-                  'default'
+                  serverRuntime === 'running'
+                    ? 'green'
+                    : serverRuntime === 'starting'
+                      ? 'blue'
+                      : serverRuntime === 'error'
+                        ? 'red'
+                        : 'default'
                 }
                 className="text-[10px] flex-shrink-0 m-0 px-1.5 py-0.5 rounded-full"
               >
@@ -153,7 +162,9 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
         <div className="mb-3 p-2.5 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-1.5 mb-1">
             <Globe size={10} className="text-slate-400" />
-            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">资源地址</span>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+              资源地址
+            </span>
           </div>
           <code className="text-xs text-slate-600 dark:text-slate-400 break-all font-mono block">
             {app.ui_metadata?.resourceUri || '无资源地址'}
@@ -161,7 +172,10 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
           {refreshStatus && (
             <div className="flex items-center gap-1 mt-1.5 text-[10px] text-slate-500 dark:text-slate-400">
               <Clock size={10} />
-              <span>刷新 {refreshStatus}{refreshAt ? ` · ${formatRelativeTime(refreshAt)}` : ''}</span>
+              <span>
+                刷新 {refreshStatus}
+                {refreshAt ? ` · ${formatRelativeTime(refreshAt)}` : ''}
+              </span>
             </div>
           )}
         </div>
@@ -196,9 +210,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
           <div className="mb-3 p-2.5 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-100 dark:border-amber-800/30">
             <div className="flex items-center gap-2">
               <AlertCircle size={12} className="text-amber-500" />
-              <p className="text-xs text-amber-700 dark:text-amber-300">
-                加载时间较长，请尝试刷新
-              </p>
+              <p className="text-xs text-amber-700 dark:text-amber-300">加载时间较长，请尝试刷新</p>
             </div>
           </div>
         )}
@@ -209,7 +221,9 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
           <div className="flex items-center gap-2 flex-wrap">
             {/* Source Badge */}
             <Tooltip title={sourceCfg.label}>
-              <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs ${sourceCfg.bg} ${sourceCfg.text}`}>
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs ${sourceCfg.bg} ${sourceCfg.text}`}
+              >
                 {isAgentDeveloped ? <Bot size={10} /> : <User size={10} />}
                 {isAgentDeveloped ? 'AI' : '用户'}
               </span>

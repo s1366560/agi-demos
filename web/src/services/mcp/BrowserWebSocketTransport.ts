@@ -6,7 +6,10 @@
  * MCP servers via backend WebSocket proxy.
  */
 
-import type { Transport, TransportSendOptions } from '@modelcontextprotocol/sdk/shared/transport.js';
+import type {
+  Transport,
+  TransportSendOptions,
+} from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 
 export interface BrowserWebSocketTransportOptions {

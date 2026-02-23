@@ -19,7 +19,6 @@ import { Resizer } from './Resizer';
 
 import type { INPUT_MIN_HEIGHT, INPUT_MAX_HEIGHT } from './AgentChatHooks';
 
-
 export interface AgentChatInputAreaProps {
   /** Current height of the input area */
   inputHeight: number;

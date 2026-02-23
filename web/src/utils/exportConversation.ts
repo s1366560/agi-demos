@@ -63,9 +63,10 @@ export function timelineToMarkdown(timeline: TimelineEvent[], title?: string): s
       case 'observe':
         lines.push(`> 📋 **Result** (${event.toolName})${event.isError ? ' ❌ Error' : ''}`);
         if (event.toolOutput) {
-          const output = event.toolOutput.length > 500
-            ? event.toolOutput.slice(0, 500) + '...(truncated)'
-            : event.toolOutput;
+          const output =
+            event.toolOutput.length > 500
+              ? event.toolOutput.slice(0, 500) + '...(truncated)'
+              : event.toolOutput;
           lines.push('> ```');
           lines.push(`> ${output.split('\n').join('\n> ')}`);
           lines.push('> ```');
@@ -88,7 +89,7 @@ export function timelineToMarkdown(timeline: TimelineEvent[], title?: string): s
 export function downloadConversationMarkdown(
   timeline: TimelineEvent[],
   title?: string,
-  filename?: string,
+  filename?: string
 ): void {
   const md = timelineToMarkdown(timeline, title);
   const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
@@ -116,57 +117,55 @@ function escapeHtml(text: string): string {
 function timelineToHtml(timeline: TimelineEvent[], title?: string): string {
   const lines: string[] = [];
   lines.push(
-    `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 700px; margin: 0 auto; color: #1e293b;">`,
+    `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 700px; margin: 0 auto; color: #1e293b;">`
   );
   lines.push(
-    `<h1 style="font-size: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">${escapeHtml(title || 'Conversation Export')}</h1>`,
+    `<h1 style="font-size: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 16px;">${escapeHtml(title || 'Conversation Export')}</h1>`
   );
   lines.push(
-    `<p style="font-size: 11px; color: #94a3b8; margin-bottom: 24px;">Exported at ${new Date().toISOString()}</p>`,
+    `<p style="font-size: 11px; color: #94a3b8; margin-bottom: 24px;">Exported at ${new Date().toISOString()}</p>`
   );
 
   for (const event of timeline) {
     switch (event.type) {
       case 'user_message':
         lines.push(
-          `<div style="margin-bottom: 16px; padding: 12px 16px; background: #f1f5f9; border-radius: 8px;">`,
+          `<div style="margin-bottom: 16px; padding: 12px 16px; background: #f1f5f9; border-radius: 8px;">`
         );
         lines.push(
-          `<div style="font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 600;">User &mdash; ${formatTimestamp(event.timestamp)}</div>`,
+          `<div style="font-size: 11px; color: #64748b; margin-bottom: 4px; font-weight: 600;">User &mdash; ${formatTimestamp(event.timestamp)}</div>`
         );
         lines.push(
-          `<div style="font-size: 14px; white-space: pre-wrap;">${escapeHtml(event.content)}</div>`,
+          `<div style="font-size: 14px; white-space: pre-wrap;">${escapeHtml(event.content)}</div>`
         );
         lines.push(`</div>`);
         break;
       case 'assistant_message':
         lines.push(
-          `<div style="margin-bottom: 16px; padding: 12px 16px; background: #eff6ff; border-left: 3px solid #3b82f6; border-radius: 4px;">`,
+          `<div style="margin-bottom: 16px; padding: 12px 16px; background: #eff6ff; border-left: 3px solid #3b82f6; border-radius: 4px;">`
         );
         lines.push(
-          `<div style="font-size: 11px; color: #3b82f6; margin-bottom: 4px; font-weight: 600;">Assistant &mdash; ${formatTimestamp(event.timestamp)}</div>`,
+          `<div style="font-size: 11px; color: #3b82f6; margin-bottom: 4px; font-weight: 600;">Assistant &mdash; ${formatTimestamp(event.timestamp)}</div>`
         );
         lines.push(
-          `<div style="font-size: 14px; white-space: pre-wrap;">${escapeHtml(event.content)}</div>`,
+          `<div style="font-size: 14px; white-space: pre-wrap;">${escapeHtml(event.content)}</div>`
         );
         lines.push(`</div>`);
         break;
       case 'thought':
         lines.push(
-          `<div style="margin-bottom: 8px; padding: 8px 12px; background: #fefce8; border-radius: 4px; font-size: 12px; color: #854d0e;">`,
+          `<div style="margin-bottom: 8px; padding: 8px 12px; background: #fefce8; border-radius: 4px; font-size: 12px; color: #854d0e;">`
         );
         lines.push(
-          `<strong>Thinking:</strong> ${escapeHtml(event.content).slice(0, 300)}${event.content.length > 300 ? '...' : ''}`,
+          `<strong>Thinking:</strong> ${escapeHtml(event.content).slice(0, 300)}${event.content.length > 300 ? '...' : ''}`
         );
         lines.push(`</div>`);
         break;
       case 'act':
         lines.push(
-          `<div style="margin-bottom: 4px; padding: 6px 12px; background: #f0fdf4; border-radius: 4px; font-size: 12px; color: #166534;">`,
+          `<div style="margin-bottom: 4px; padding: 6px 12px; background: #f0fdf4; border-radius: 4px; font-size: 12px; color: #166534;">`
         );
-        lines.push(
-          `<strong>Tool:</strong> <code>${escapeHtml(event.toolName || '')}</code>`,
-        );
+        lines.push(`<strong>Tool:</strong> <code>${escapeHtml(event.toolName || '')}</code>`);
         lines.push(`</div>`);
         break;
       case 'observe':
@@ -176,7 +175,7 @@ function timelineToHtml(timeline: TimelineEvent[], title?: string): string {
               ? event.toolOutput.slice(0, 300) + '...'
               : event.toolOutput;
           lines.push(
-            `<div style="margin-bottom: 12px; padding: 6px 12px; background: #f8fafc; border-radius: 4px; font-size: 11px; font-family: monospace; color: #475569; overflow: hidden;">`,
+            `<div style="margin-bottom: 12px; padding: 6px 12px; background: #f8fafc; border-radius: 4px; font-size: 11px; font-family: monospace; color: #475569; overflow: hidden;">`
           );
           lines.push(`${escapeHtml(output)}`);
           lines.push(`</div>`);
@@ -195,7 +194,7 @@ function timelineToHtml(timeline: TimelineEvent[], title?: string): string {
 export async function downloadConversationPdf(
   timeline: TimelineEvent[],
   title?: string,
-  filename?: string,
+  filename?: string
 ): Promise<void> {
   const { default: html2pdf } = await import('html2pdf.js');
 

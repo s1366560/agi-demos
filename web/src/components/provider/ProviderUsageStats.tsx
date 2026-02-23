@@ -61,7 +61,10 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
           <div className="p-6 space-y-6">
             {loading ? (
               <div className="flex justify-center items-center py-12">
-                <MaterialIcon name="progress_activity" className="animate-spin text-primary text-4xl" />
+                <MaterialIcon
+                  name="progress_activity"
+                  className="animate-spin text-primary text-4xl"
+                />
               </div>
             ) : error ? (
               <div className="bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-4 rounded-lg flex items-center gap-2">
@@ -75,7 +78,9 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
                   <div className="bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-900/10 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <MaterialIcon name="analytics" className="text-blue-500" />
-                      <span className="text-sm text-blue-700 dark:text-blue-400">Total Requests</span>
+                      <span className="text-sm text-blue-700 dark:text-blue-400">
+                        Total Requests
+                      </span>
                     </div>
                     <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">
                       {stats.total_requests.toLocaleString()}
@@ -85,13 +90,16 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
                   <div className="bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-900/10 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <MaterialIcon name="data_usage" className="text-purple-500" />
-                      <span className="text-sm text-purple-700 dark:text-purple-400">Total Tokens</span>
+                      <span className="text-sm text-purple-700 dark:text-purple-400">
+                        Total Tokens
+                      </span>
                     </div>
                     <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">
                       {(stats.total_tokens / 1000).toFixed(1)}k
                     </p>
                     <div className="text-xs text-purple-600/80 dark:text-purple-400/80 mt-1">
-                      {stats.total_prompt_tokens.toLocaleString()} in / {stats.total_completion_tokens.toLocaleString()} out
+                      {stats.total_prompt_tokens.toLocaleString()} in /{' '}
+                      {stats.total_completion_tokens.toLocaleString()} out
                     </div>
                   </div>
 
@@ -108,7 +116,9 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
                   <div className="bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-900/10 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
                       <MaterialIcon name="speed" className="text-orange-500" />
-                      <span className="text-sm text-orange-700 dark:text-orange-400">Avg Response</span>
+                      <span className="text-sm text-orange-700 dark:text-orange-400">
+                        Avg Response
+                      </span>
                     </div>
                     <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">
                       {(stats.avg_response_time_ms || 0).toFixed(0)}ms
@@ -118,25 +128,30 @@ export const ProviderUsageStats: React.FC<ProviderUsageStatsProps> = ({ provider
 
                 {/* Additional Info */}
                 <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-6">
-                   <h3 className="font-semibold text-slate-900 dark:text-white mb-4">
-                    Details
-                  </h3>
+                  <h3 className="font-semibold text-slate-900 dark:text-white mb-4">Details</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
                     <div className="flex justify-between py-2 border-b border-slate-200 dark:border-slate-600">
                       <span className="text-slate-500">First Request</span>
                       <span className="font-mono text-slate-900 dark:text-white">
-                        {stats.first_request_at ? new Date(stats.first_request_at).toLocaleString() : 'N/A'}
+                        {stats.first_request_at
+                          ? new Date(stats.first_request_at).toLocaleString()
+                          : 'N/A'}
                       </span>
                     </div>
                     <div className="flex justify-between py-2 border-b border-slate-200 dark:border-slate-600">
                       <span className="text-slate-500">Last Request</span>
                       <span className="font-mono text-slate-900 dark:text-white">
-                        {stats.last_request_at ? new Date(stats.last_request_at).toLocaleString() : 'N/A'}
+                        {stats.last_request_at
+                          ? new Date(stats.last_request_at).toLocaleString()
+                          : 'N/A'}
                       </span>
                     </div>
                     <div className="flex justify-between py-2 border-b border-slate-200 dark:border-slate-600">
                       <span className="text-slate-500">Provider ID</span>
-                      <span className="font-mono text-slate-900 dark:text-white truncate max-w-[200px]" title={stats.provider_id}>
+                      <span
+                        className="font-mono text-slate-900 dark:text-white truncate max-w-[200px]"
+                        title={stats.provider_id}
+                      >
                         {stats.provider_id}
                       </span>
                     </div>

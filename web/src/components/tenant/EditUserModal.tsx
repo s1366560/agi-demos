@@ -137,9 +137,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
                   {t('tenant.users.last_login_label')}
                 </p>
                 <p className="text-gray-900 dark:text-white font-medium">
-                  {user.last_login
-                    ? formatDateOnly(user.last_login)
-                    : t('common.time.never')}
+                  {user.last_login ? formatDateOnly(user.last_login) : t('common.time.never')}
                 </p>
               </div>
             </div>

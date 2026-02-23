@@ -33,7 +33,6 @@ import type { PromptTemplateData } from '@/services/templateService';
 
 import { VariableInputModal } from './VariableInputModal';
 
-
 export interface PromptTemplate {
   id: string;
   titleKey: string;
@@ -72,7 +71,8 @@ const defaultTemplates: PromptTemplate[] = [
     titleKey: 'agent.templates.analyzeCodebase',
     titleFallback: 'Analyze Codebase',
     promptKey: 'agent.templates.analyzeCodebasePrompt',
-    promptFallback: 'Analyze the codebase structure and provide a high-level overview including architecture patterns, key dependencies, and areas for improvement.',
+    promptFallback:
+      'Analyze the codebase structure and provide a high-level overview including architecture patterns, key dependencies, and areas for improvement.',
     category: 'analysis',
   },
   {
@@ -80,7 +80,8 @@ const defaultTemplates: PromptTemplate[] = [
     titleKey: 'agent.templates.findBugs',
     titleFallback: 'Find Bugs',
     promptKey: 'agent.templates.findBugsPrompt',
-    promptFallback: 'Search for potential bugs, security vulnerabilities, and code quality issues in the project. Focus on critical issues first.',
+    promptFallback:
+      'Search for potential bugs, security vulnerabilities, and code quality issues in the project. Focus on critical issues first.',
     category: 'analysis',
   },
   {
@@ -88,7 +89,8 @@ const defaultTemplates: PromptTemplate[] = [
     titleKey: 'agent.templates.performanceAudit',
     titleFallback: 'Performance Audit',
     promptKey: 'agent.templates.performanceAuditPrompt',
-    promptFallback: 'Analyze the application for performance bottlenecks including database queries, API response times, memory usage, and frontend rendering.',
+    promptFallback:
+      'Analyze the application for performance bottlenecks including database queries, API response times, memory usage, and frontend rendering.',
     category: 'analysis',
   },
   // Code
@@ -97,7 +99,8 @@ const defaultTemplates: PromptTemplate[] = [
     titleKey: 'agent.templates.writeTests',
     titleFallback: 'Write Tests',
     promptKey: 'agent.templates.writeTestsPrompt',
-    promptFallback: 'Write comprehensive unit tests for the most critical modules. Aim for 80%+ coverage with meaningful test cases.',
+    promptFallback:
+      'Write comprehensive unit tests for the most critical modules. Aim for 80%+ coverage with meaningful test cases.',
     category: 'code',
   },
   {
@@ -105,7 +108,8 @@ const defaultTemplates: PromptTemplate[] = [
     titleKey: 'agent.templates.refactorCode',
     titleFallback: 'Refactor Code',
     promptKey: 'agent.templates.refactorCodePrompt',
-    promptFallback: 'Identify and refactor code that violates DRY, SOLID principles, or has high complexity. Propose cleaner alternatives.',
+    promptFallback:
+      'Identify and refactor code that violates DRY, SOLID principles, or has high complexity. Propose cleaner alternatives.',
     category: 'code',
   },
   {
@@ -113,7 +117,8 @@ const defaultTemplates: PromptTemplate[] = [
     titleKey: 'agent.templates.addFeature',
     titleFallback: 'Add Feature',
     promptKey: 'agent.templates.addFeaturePrompt',
-    promptFallback: 'I want to add a new feature: [describe feature]. Plan the implementation, identify files to modify, and implement it step by step.',
+    promptFallback:
+      'I want to add a new feature: [describe feature]. Plan the implementation, identify files to modify, and implement it step by step.',
     category: 'code',
   },
   {
@@ -121,7 +126,7 @@ const defaultTemplates: PromptTemplate[] = [
     titleKey: 'agent.templates.fixError',
     titleFallback: 'Fix Error',
     promptKey: 'agent.templates.fixErrorPrompt',
-    promptFallback: 'I\'m getting this error: [paste error]. Diagnose the root cause and fix it.',
+    promptFallback: "I'm getting this error: [paste error]. Diagnose the root cause and fix it.",
     category: 'code',
   },
   // Writing
@@ -130,7 +135,8 @@ const defaultTemplates: PromptTemplate[] = [
     titleKey: 'agent.templates.writeDocs',
     titleFallback: 'Write Documentation',
     promptKey: 'agent.templates.writeDocsPrompt',
-    promptFallback: 'Generate comprehensive documentation for the project including API reference, setup guide, and architecture overview.',
+    promptFallback:
+      'Generate comprehensive documentation for the project including API reference, setup guide, and architecture overview.',
     category: 'writing',
   },
   {
@@ -138,7 +144,8 @@ const defaultTemplates: PromptTemplate[] = [
     titleKey: 'agent.templates.writeReadme',
     titleFallback: 'Write README',
     promptKey: 'agent.templates.writeReadmePrompt',
-    promptFallback: 'Create or improve the project README with sections for: overview, quick start, installation, configuration, usage examples, and contributing.',
+    promptFallback:
+      'Create or improve the project README with sections for: overview, quick start, installation, configuration, usage examples, and contributing.',
     category: 'writing',
   },
   // General
@@ -147,7 +154,8 @@ const defaultTemplates: PromptTemplate[] = [
     titleKey: 'agent.templates.explainCode',
     titleFallback: 'Explain Code',
     promptKey: 'agent.templates.explainCodePrompt',
-    promptFallback: 'Explain how the core system works, walking through the main execution flow from entry point to key outputs.',
+    promptFallback:
+      'Explain how the core system works, walking through the main execution flow from entry point to key outputs.',
     category: 'general',
   },
   {
@@ -155,7 +163,8 @@ const defaultTemplates: PromptTemplate[] = [
     titleKey: 'agent.templates.brainstorm',
     titleFallback: 'Brainstorm Ideas',
     promptKey: 'agent.templates.brainstormPrompt',
-    promptFallback: 'Help me brainstorm ideas for improving this project. Consider UX improvements, new features, technical debt reduction, and scalability.',
+    promptFallback:
+      'Help me brainstorm ideas for improving this project. Consider UX improvements, new features, technical debt reduction, and scalability.',
     category: 'general',
   },
 ];
@@ -433,61 +442,59 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
                 })}
               </div>
             )
+          ) : // Custom templates
+          customLoading ? (
+            <div className="px-4 py-8 text-center text-sm text-slate-400">
+              <Loader2 size={16} className="inline animate-spin mr-2" />
+              Loading...
+            </div>
+          ) : filteredCustom.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-slate-400">
+              {t('agent.templates.noCustom', 'No custom templates yet')}
+            </div>
           ) : (
-            // Custom templates
-            customLoading ? (
-              <div className="px-4 py-8 text-center text-sm text-slate-400">
-                <Loader2 size={16} className="inline animate-spin mr-2" />
-                Loading...
-              </div>
-            ) : filteredCustom.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-slate-400">
-                {t('agent.templates.noCustom', 'No custom templates yet')}
-              </div>
-            ) : (
-              <div className="py-1">
-                {filteredCustom.map((tmpl) => {
-                  const cat = (tmpl.category as TemplateCategory) || 'general';
-                  const cfg = categoryConfig[cat] || categoryConfig.general;
-                  return (
-                    <button
-                      key={tmpl.id}
-                      type="button"
-                      onClick={() => handleSelectCustom(tmpl)}
-                      className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group flex items-start gap-3"
+            <div className="py-1">
+              {filteredCustom.map((tmpl) => {
+                const cat = (tmpl.category as TemplateCategory) || 'general';
+                const cfg = categoryConfig[cat] || categoryConfig.general;
+                return (
+                  <button
+                    key={tmpl.id}
+                    type="button"
+                    onClick={() => handleSelectCustom(tmpl)}
+                    className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group flex items-start gap-3"
+                  >
+                    <div
+                      className={`mt-0.5 w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${cfg.colorClass}`}
                     >
-                      <div
-                        className={`mt-0.5 w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${cfg.colorClass}`}
+                      {cfg.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1">
+                        {tmpl.title}
+                        <ArrowRight
+                          size={12}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-primary"
+                        />
+                      </div>
+                      <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 line-clamp-1">
+                        {tmpl.content}
+                      </div>
+                    </div>
+                    {!tmpl.is_system && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteCustom(e, tmpl.id)}
+                        className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-all"
+                        aria-label="Delete"
                       >
-                        {cfg.icon}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-slate-700 dark:text-slate-200 flex items-center gap-1">
-                          {tmpl.title}
-                          <ArrowRight
-                            size={12}
-                            className="opacity-0 group-hover:opacity-100 transition-opacity text-primary"
-                          />
-                        </div>
-                        <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5 line-clamp-1">
-                          {tmpl.content}
-                        </div>
-                      </div>
-                      {!tmpl.is_system && (
-                        <button
-                          type="button"
-                          onClick={(e) => handleDeleteCustom(e, tmpl.id)}
-                          className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-all"
-                          aria-label="Delete"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )
+                        <Trash2 size={12} />
+                      </button>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
         {variableTemplate && (
@@ -507,4 +514,3 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
   }
 );
 PromptTemplateLibrary.displayName = 'PromptTemplateLibrary';
-

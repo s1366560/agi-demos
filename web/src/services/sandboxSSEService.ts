@@ -115,12 +115,10 @@ class SandboxSSEService {
     const projectId = this.projectId;
 
     // Ensure agentService WebSocket is connected with timeout
-    const connectPromise = agentService.isConnected()
-      ? Promise.resolve()
-      : agentService.connect();
+    const connectPromise = agentService.isConnected() ? Promise.resolve() : agentService.connect();
 
     const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('WebSocket connection timeout')), 15000),
+      setTimeout(() => reject(new Error('WebSocket connection timeout')), 15000)
     );
 
     Promise.race([connectPromise, timeoutPromise])

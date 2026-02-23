@@ -72,7 +72,7 @@ export const McpToolsTabV2: React.FC = () => {
     [servers]
   );
 
-  const serversWithTools = servers.filter(s => s.discovered_tools?.length).length;
+  const serversWithTools = servers.filter((s) => s.discovered_tools?.length).length;
 
   if (isLoading) {
     return (
@@ -94,7 +94,9 @@ export const McpToolsTabV2: React.FC = () => {
                 <Wrench size={20} className="text-violet-600 dark:text-violet-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white">{allTools.length}</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                  {allTools.length}
+                </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">工具总数</p>
               </div>
             </div>
@@ -104,7 +106,9 @@ export const McpToolsTabV2: React.FC = () => {
                 <Server size={20} className="text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white">{serversWithTools}</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                  {serversWithTools}
+                </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">有工具的服务器</p>
               </div>
             </div>
@@ -143,7 +147,9 @@ export const McpToolsTabV2: React.FC = () => {
 
       {/* Tool List */}
       {filteredTools.length === 0 ? (
-        <div className={`flex flex-col items-center justify-center py-16 text-center ${CARD_STYLES.base} border-dashed`}>
+        <div
+          className={`flex flex-col items-center justify-center py-16 text-center ${CARD_STYLES.base} border-dashed`}
+        >
           <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center mb-4">
             <Wrench size={28} className="text-slate-300 dark:text-slate-500" />
           </div>
@@ -151,9 +157,7 @@ export const McpToolsTabV2: React.FC = () => {
             {allTools.length === 0 ? '暂无工具' : '无匹配工具'}
           </h3>
           <p className="text-sm text-slate-500 dark:text-slate-400 max-w-sm">
-            {allTools.length === 0
-              ? '同步 MCP 服务器以发现可用工具'
-              : '尝试调整搜索或筛选条件'}
+            {allTools.length === 0 ? '同步 MCP 服务器以发现可用工具' : '尝试调整搜索或筛选条件'}
           </p>
         </div>
       ) : (

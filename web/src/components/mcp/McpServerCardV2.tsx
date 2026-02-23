@@ -15,7 +15,7 @@ import {
   SERVER_TYPE_STYLES,
   CARD_STYLES,
   BUTTON_STYLES,
-  ANIMATION_CLASSES
+  ANIMATION_CLASSES,
 } from './styles';
 import { getRuntimeStatus } from './types';
 
@@ -82,18 +82,24 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
       : undefined;
 
     return (
-      <div className={`group relative ${CARD_STYLES.base} ${CARD_STYLES.hover} ${
-        hasError ? CARD_STYLES.error : ''
-      } transition-all duration-200 overflow-hidden`}>
+      <div
+        className={`group relative ${CARD_STYLES.base} ${CARD_STYLES.hover} ${
+          hasError ? CARD_STYLES.error : ''
+        } transition-all duration-200 overflow-hidden`}
+      >
         {/* Status Bar */}
-        <div className={`h-1 w-full ${status === 'error' ? 'bg-red-500' : status === 'running' ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'}`} />
+        <div
+          className={`h-1 w-full ${status === 'error' ? 'bg-red-500' : status === 'running' ? 'bg-emerald-500' : 'bg-slate-200 dark:bg-slate-700'}`}
+        />
 
         {/* Card Content */}
         <div className="p-4">
           {/* Header */}
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-3 flex-1">
-              <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${typeStyle.bgColor}`}>
+              <div
+                className={`w-10 h-10 rounded-lg flex items-center justify-center ${typeStyle.bgColor}`}
+              >
                 <MaterialIcon name={typeStyle.icon} size={20} className={typeStyle.textColor} />
               </div>
               <div className="flex-1 min-w-0">
@@ -127,7 +133,9 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
           </div>
 
           {/* Status Badge */}
-          <div className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border mb-3 ${runtimeStyle.bgColor} ${runtimeStyle.borderColor}`}>
+          <div
+            className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border mb-3 ${runtimeStyle.bgColor} ${runtimeStyle.borderColor}`}
+          >
             <MaterialIcon
               name={runtimeStyle.icon}
               size={16}
@@ -154,7 +162,9 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
               <p className="text-[10px] text-slate-500 dark:text-slate-400">Apps</p>
             </div>
             <div className="text-center p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-              <p className="text-lg font-bold text-slate-900 dark:text-white">{readyAppCount || 0}</p>
+              <p className="text-lg font-bold text-slate-900 dark:text-white">
+                {readyAppCount || 0}
+              </p>
               <p className="text-[10px] text-slate-500 dark:text-slate-400">Ready</p>
             </div>
           </div>

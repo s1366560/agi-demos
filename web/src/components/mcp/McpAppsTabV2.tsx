@@ -6,11 +6,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { message, Spin, Input, Badge } from 'antd';
-import {
-  LayoutGrid,
-  RefreshCw,
-  Search,
-} from 'lucide-react';
+import { LayoutGrid, RefreshCw, Search } from 'lucide-react';
 
 import { useCanvasStore } from '@/stores/canvasStore';
 import { useLayoutModeStore } from '@/stores/layoutMode';
@@ -110,9 +106,13 @@ export const McpAppsTabV2: React.FC = () => {
   // Status counts
   const statusCounts = useMemo(() => {
     const counts: Record<MCPAppStatus, number> = {
-      discovered: 0, loading: 0, ready: 0, error: 0, disabled: 0
+      discovered: 0,
+      loading: 0,
+      ready: 0,
+      error: 0,
+      disabled: 0,
     };
-    Object.values(apps).forEach(app => {
+    Object.values(apps).forEach((app) => {
       counts[app.status]++;
     });
     return counts;
@@ -137,11 +137,13 @@ export const McpAppsTabV2: React.FC = () => {
                 <LayoutGrid size={20} className="text-emerald-600 dark:text-emerald-400" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-slate-900 dark:text-white">{appList.length}</p>
+                <p className="text-2xl font-bold text-slate-900 dark:text-white">
+                  {appList.length}
+                </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">应用总数</p>
               </div>
             </div>
-            
+
             {/* Status Badges */}
             <div className="flex items-center gap-2 flex-wrap">
               {statusCounts.ready > 0 && (
@@ -179,11 +181,7 @@ export const McpAppsTabV2: React.FC = () => {
                 allowClear
               />
             )}
-            <button
-              type="button"
-              onClick={handleRefresh}
-              className={BUTTON_STYLES.secondary}
-            >
+            <button type="button" onClick={handleRefresh} className={BUTTON_STYLES.secondary}>
               <RefreshCw size={14} />
               刷新
             </button>
@@ -193,7 +191,9 @@ export const McpAppsTabV2: React.FC = () => {
 
       {/* App Grid */}
       {appList.length === 0 ? (
-        <div className={`flex flex-col items-center justify-center py-12 text-center ${CARD_STYLES.base} border-dashed`}>
+        <div
+          className={`flex flex-col items-center justify-center py-12 text-center ${CARD_STYLES.base} border-dashed`}
+        >
           <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-700/50 flex items-center justify-center mb-4">
             <LayoutGrid size={32} className="text-slate-300 dark:text-slate-500" />
           </div>

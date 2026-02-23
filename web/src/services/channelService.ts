@@ -61,9 +61,7 @@ export const channelService = {
   },
 
   async reloadTenantPlugins(tenantId: string): Promise<PluginActionResponse> {
-    return httpClient.post<PluginActionResponse>(
-      `${BASE_URL}/tenants/${tenantId}/plugins/reload`
-    );
+    return httpClient.post<PluginActionResponse>(`${BASE_URL}/tenants/${tenantId}/plugins/reload`);
   },
 
   async listPlugins(projectId: string): Promise<RuntimePluginList> {
@@ -140,27 +138,15 @@ export const channelService = {
   /**
    * Create a new channel configuration
    */
-  async createConfig(
-    projectId: string,
-    data: CreateChannelConfig
-  ): Promise<ChannelConfig> {
-    return httpClient.post<ChannelConfig>(
-      `${BASE_URL}/projects/${projectId}/configs`,
-      data
-    );
+  async createConfig(projectId: string, data: CreateChannelConfig): Promise<ChannelConfig> {
+    return httpClient.post<ChannelConfig>(`${BASE_URL}/projects/${projectId}/configs`, data);
   },
 
   /**
    * Update a channel configuration
    */
-  async updateConfig(
-    configId: string,
-    data: UpdateChannelConfig
-  ): Promise<ChannelConfig> {
-    return httpClient.put<ChannelConfig>(
-      `${BASE_URL}/configs/${configId}`,
-      data
-    );
+  async updateConfig(configId: string, data: UpdateChannelConfig): Promise<ChannelConfig> {
+    return httpClient.put<ChannelConfig>(`${BASE_URL}/configs/${configId}`, data);
   },
 
   /**
@@ -173,9 +159,7 @@ export const channelService = {
   /**
    * Test a channel configuration
    */
-  async testConfig(
-    configId: string
-  ): Promise<{ success: boolean; message: string }> {
+  async testConfig(configId: string): Promise<{ success: boolean; message: string }> {
     return httpClient.post<{ success: boolean; message: string }>(
       `${BASE_URL}/configs/${configId}/test`
     );
@@ -185,17 +169,13 @@ export const channelService = {
    * Get connection status for a specific channel config
    */
   async getConnectionStatus(configId: string): Promise<ChannelConnectionStatus> {
-    return httpClient.get<ChannelConnectionStatus>(
-      `${BASE_URL}/configs/${configId}/status`
-    );
+    return httpClient.get<ChannelConnectionStatus>(`${BASE_URL}/configs/${configId}/status`);
   },
 
   /**
    * Get observability summary for a project
    */
-  async getObservabilitySummary(
-    projectId: string
-  ): Promise<ChannelObservabilitySummary> {
+  async getObservabilitySummary(projectId: string): Promise<ChannelObservabilitySummary> {
     return httpClient.get<ChannelObservabilitySummary>(
       `${BASE_URL}/projects/${projectId}/observability/summary`
     );

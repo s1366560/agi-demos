@@ -68,10 +68,7 @@ const MarkdownRenderer = lazy(async () => {
   await import('katex/dist/katex.min.css');
 
   const MarkdownWrapper = ({ children }: { children: string }) => (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeKatex]}
-    >
+    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
       {children}
     </ReactMarkdown>
   );
@@ -282,9 +279,7 @@ function TaskStartItem({ event }: { event: TimelineEvent }) {
           <div className="text-sm font-medium text-blue-700 dark:text-blue-300">
             Task {e.orderIndex + 1}/{e.totalTasks}
           </div>
-          <div className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
-            {e.content}
-          </div>
+          <div className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">{e.content}</div>
         </div>
       </div>
       <div className="pl-10">
@@ -305,16 +300,12 @@ function TaskCompleteItem({ event }: { event: TimelineEvent }) {
     <div className="flex items-start gap-3 my-2 opacity-70">
       <div
         className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-          isSuccess
-            ? 'bg-green-100 dark:bg-green-900/30'
-            : 'bg-red-100 dark:bg-red-900/30'
+          isSuccess ? 'bg-green-100 dark:bg-green-900/30' : 'bg-red-100 dark:bg-red-900/30'
         }`}
       >
         <span
           className={`material-symbols-outlined text-xs ${
-            isSuccess
-              ? 'text-green-600 dark:text-green-400'
-              : 'text-red-600 dark:text-red-400'
+            isSuccess ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
           }`}
         >
           {isSuccess ? 'check_circle' : 'cancel'}
@@ -758,13 +749,21 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
   const artifactUrl = storeArtifact?.url || event.url;
   const artifactPreviewUrl = storeArtifact?.previewUrl || event.previewUrl;
   const artifactError = storeArtifact?.errorMessage || event.error;
-  const artifactStatus = storeArtifact?.status || (event.url ? 'ready' : artifactError ? 'error' : 'uploading');
+  const artifactStatus =
+    storeArtifact?.status || (event.url ? 'ready' : artifactError ? 'error' : 'uploading');
 
   // Check if this artifact can be opened in canvas (text-decodable content)
-  const isCanvasCompatible = ['code', 'document', 'data'].includes(event.category)
-    || event.mimeType.startsWith('text/')
-    || ['application/json', 'application/xml', 'application/yaml', 'application/javascript',
-        'application/typescript', 'application/x-python'].includes(event.mimeType);
+  const isCanvasCompatible =
+    ['code', 'document', 'data'].includes(event.category) ||
+    event.mimeType.startsWith('text/') ||
+    [
+      'application/json',
+      'application/xml',
+      'application/yaml',
+      'application/javascript',
+      'application/typescript',
+      'application/x-python',
+    ].includes(event.mimeType);
 
   const handleOpenInCanvas = useCallback(async () => {
     const url = artifactUrl || artifactPreviewUrl;
@@ -775,9 +774,9 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
       const content = await response.text();
 
       // Check if this is HTML content - should use preview mode with iframe
-      const isHtmlFile = event.filename.toLowerCase().endsWith('.html') || 
-                         event.mimeType === 'text/html';
-      
+      const isHtmlFile =
+        event.filename.toLowerCase().endsWith('.html') || event.mimeType === 'text/html';
+
       if (isHtmlFile) {
         // HTML files should be rendered in preview mode using iframe
         useCanvasStore.getState().openTab({
@@ -800,11 +799,30 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
         // Extract language from filename extension
         const ext = event.filename.split('.').pop()?.toLowerCase();
         const langMap: Record<string, string> = {
-          py: 'python', js: 'javascript', ts: 'typescript', tsx: 'tsx', jsx: 'jsx',
-          rs: 'rust', go: 'go', java: 'java', cpp: 'cpp', c: 'c', rb: 'ruby',
-          php: 'php', sh: 'bash', sql: 'sql', html: 'html', css: 'css',
-          json: 'json', yaml: 'yaml', yml: 'yaml', xml: 'xml', md: 'markdown',
-          toml: 'toml', ini: 'ini', csv: 'csv',
+          py: 'python',
+          js: 'javascript',
+          ts: 'typescript',
+          tsx: 'tsx',
+          jsx: 'jsx',
+          rs: 'rust',
+          go: 'go',
+          java: 'java',
+          cpp: 'cpp',
+          c: 'c',
+          rb: 'ruby',
+          php: 'php',
+          sh: 'bash',
+          sql: 'sql',
+          html: 'html',
+          css: 'css',
+          json: 'json',
+          yaml: 'yaml',
+          yml: 'yaml',
+          xml: 'xml',
+          md: 'markdown',
+          toml: 'toml',
+          ini: 'ini',
+          csv: 'csv',
         };
 
         useCanvasStore.getState().openTab({
@@ -825,7 +843,14 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
     } catch {
       // Silently fail — user can still download
     }
-  }, [artifactUrl, artifactPreviewUrl, event.artifactId, event.filename, event.category, event.mimeType]);
+  }, [
+    artifactUrl,
+    artifactPreviewUrl,
+    event.artifactId,
+    event.filename,
+    event.category,
+    event.mimeType,
+  ]);
 
   // Determine icon based on category
   const getCategoryIcon = (category: string) => {
@@ -914,9 +939,7 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
                 <span className="material-symbols-outlined text-red-500 dark:text-red-400 text-base">
                   error
                 </span>
-                <span className="text-xs text-red-600 dark:text-red-400">
-                  {artifactError}
-                </span>
+                <span className="text-xs text-red-600 dark:text-red-400">{artifactError}</span>
               </div>
             )}
 

@@ -70,7 +70,12 @@ const DEFAULT_MODELS: Record<
   bedrock: { llm: 'anthropic.claude-3-sonnet-20240229-v1:0' },
   vertex: { llm: 'gemini-1.5-pro', small: 'gemini-1.5-flash' },
   deepseek: { llm: 'deepseek-chat', small: 'deepseek-coder' },
-  zai: { llm: 'glm-4-plus', small: 'glm-4-flash', embedding: 'embedding-3', reranker: 'glm-4-flash' },
+  zai: {
+    llm: 'glm-4-plus',
+    small: 'glm-4-flash',
+    embedding: 'embedding-3',
+    reranker: 'glm-4-flash',
+  },
   ollama: {
     llm: 'llama3.1:8b',
     small: 'llama3.1:8b',

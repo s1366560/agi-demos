@@ -376,13 +376,13 @@ class SandboxServiceImpl implements SandboxService {
       if (sessions && sessions.length > 0) {
         const results = await Promise.allSettled(
           sessions.map((session: any) =>
-            this.api.delete(`/terminal/${sandboxId}/sessions/${session.session_id}`),
-          ),
+            this.api.delete(`/terminal/${sandboxId}/sessions/${session.session_id}`)
+          )
         );
         const failed = results.filter((r) => r.status === 'rejected');
         if (failed.length > 0) {
           logger.warn(
-            `[SandboxService] Failed to close ${failed.length}/${sessions.length} sessions`,
+            `[SandboxService] Failed to close ${failed.length}/${sessions.length} sessions`
           );
         }
       }

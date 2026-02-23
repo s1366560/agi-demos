@@ -110,7 +110,10 @@ export function createStreamEventHandlers(
       const { updateConversationState, getConversationState, activeConversationId } = get();
       const convState = getConversationState(handlerConversationId);
 
-      if (messageData.id && convState.timeline.some((timelineEvent) => timelineEvent.id === messageData.id)) {
+      if (
+        messageData.id &&
+        convState.timeline.some((timelineEvent) => timelineEvent.id === messageData.id)
+      ) {
         return;
       }
 
@@ -238,7 +241,11 @@ export function createStreamEventHandlers(
       const state = getConversationState(handlerConversationId);
       const tasks = (state?.tasks ?? []).map((t: import('../../types/agent').AgentTask) =>
         t.id === data.task_id
-          ? { ...t, status: data.status as import('../../types/agent').TaskStatus, ...(data.content ? { content: data.content } : {}) }
+          ? {
+              ...t,
+              status: data.status as import('../../types/agent').TaskStatus,
+              ...(data.content ? { content: data.content } : {}),
+            }
           : t
       );
       updateConversationState(handlerConversationId, { tasks });
@@ -473,7 +480,11 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('clarification_asked', event.data as unknown as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent(
+          'clarification_asked',
+          event.data as unknown as Record<string, unknown>,
+          handlerConversationId
+        );
     },
 
     onDecisionAsked: (event) => {
@@ -494,7 +505,11 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('decision_asked', event.data as unknown as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent(
+          'decision_asked',
+          event.data as unknown as Record<string, unknown>,
+          handlerConversationId
+        );
     },
 
     onClarificationAnswered: (event) => {
@@ -517,7 +532,11 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('clarification_answered', event.data as unknown as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent(
+          'clarification_answered',
+          event.data as unknown as Record<string, unknown>,
+          handlerConversationId
+        );
     },
 
     onDecisionAnswered: (event) => {
@@ -539,7 +558,11 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('decision_answered', event.data as unknown as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent(
+          'decision_answered',
+          event.data as unknown as Record<string, unknown>,
+          handlerConversationId
+        );
     },
 
     onEnvVarProvided: (event) => {
@@ -561,7 +584,11 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('env_var_provided', event.data as unknown as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent(
+          'env_var_provided',
+          event.data as unknown as Record<string, unknown>,
+          handlerConversationId
+        );
     },
 
     onDoomLoopDetected: (event) => {
@@ -590,7 +617,11 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('env_var_requested', event.data as unknown as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent(
+          'env_var_requested',
+          event.data as unknown as Record<string, unknown>,
+          handlerConversationId
+        );
     },
 
     onPermissionAsked: (event) => {
@@ -611,7 +642,11 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('permission_asked', event.data as unknown as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent(
+          'permission_asked',
+          event.data as unknown as Record<string, unknown>,
+          handlerConversationId
+        );
     },
 
     onPermissionReplied: (event) => {
@@ -633,7 +668,11 @@ export function createStreamEventHandlers(
 
       useUnifiedHITLStore
         .getState()
-        .handleSSEEvent('permission_replied', event.data as unknown as Record<string, unknown>, handlerConversationId);
+        .handleSSEEvent(
+          'permission_replied',
+          event.data as unknown as Record<string, unknown>,
+          handlerConversationId
+        );
     },
 
     onDoomLoopIntervened: (event) => {
@@ -670,11 +709,15 @@ export function createStreamEventHandlers(
     },
 
     onContextCompressed: (event) => {
-      useContextStore.getState().handleContextCompressed(event.data as unknown as Record<string, unknown>);
+      useContextStore
+        .getState()
+        .handleContextCompressed(event.data as unknown as Record<string, unknown>);
     },
 
     onContextStatus: (event) => {
-      useContextStore.getState().handleContextStatus(event.data as unknown as Record<string, unknown>);
+      useContextStore
+        .getState()
+        .handleContextStatus(event.data as unknown as Record<string, unknown>);
     },
 
     onArtifactCreated: (event) => {
@@ -848,7 +891,7 @@ export function createStreamEventHandlers(
           execId,
           event.data.summary || '',
           event.data.tokens_used,
-          event.data.execution_time_ms,
+          event.data.execution_time_ms
         );
       }
     },
@@ -936,7 +979,7 @@ export function createStreamEventHandlers(
       bgStore.launch(
         event.data.execution_id || '',
         event.data.subagent_name || '',
-        event.data.task || '',
+        event.data.task || ''
       );
     },
 
@@ -948,10 +991,7 @@ export function createStreamEventHandlers(
       const uiMetadata =
         data.ui_metadata && typeof data.ui_metadata === 'object' ? data.ui_metadata : {};
       const resourceUri =
-        data.resource_uri ||
-        uiMetadata.resourceUri ||
-        uiMetadata.resource_uri ||
-        undefined;
+        data.resource_uri || uiMetadata.resourceUri || uiMetadata.resource_uri || undefined;
       const toolName = data.tool_name || '';
       const projectId = data.project_id || uiMetadata.project_id || '';
       const serverName = data.server_name || uiMetadata.server_name || '';
@@ -1114,8 +1154,7 @@ export function createStreamEventHandlers(
 
       // Only add assistant_message from complete event when no text_end segment exists,
       // to avoid duplicating final output.
-      const completeEvent: AgentEvent<CompleteEventData> =
-        event as AgentEvent<CompleteEventData>;
+      const completeEvent: AgentEvent<CompleteEventData> = event as AgentEvent<CompleteEventData>;
       const hasContent = !!(completeEvent.data as any)?.content?.trim();
       const updatedTimeline =
         hasContent && !hasTextEndMessages
@@ -1149,9 +1188,7 @@ export function createStreamEventHandlers(
       (async () => {
         try {
           const { httpClient } = await import('../../services/client/httpClient');
-          const res = (await httpClient.get(
-            `/agent/plan/tasks/${handlerConversationId}`,
-          )) as any;
+          const res = (await httpClient.get(`/agent/plan/tasks/${handlerConversationId}`)) as any;
           if (res && Array.isArray(res.tasks) && res.tasks.length > 0) {
             const { updateConversationState } = get();
             updateConversationState(handlerConversationId, {
@@ -1160,7 +1197,7 @@ export function createStreamEventHandlers(
             console.log(
               '[TaskSync] onComplete fallback: fetched',
               res.tasks.length,
-              'tasks from API',
+              'tasks from API'
             );
           }
         } catch {

@@ -58,13 +58,7 @@ export type MessageRole = 'user' | 'assistant' | 'system';
 /**
  * Message type (extended for multi-level thinking)
  */
-export type MessageType =
-  | 'text'
-  | 'thought'
-  | 'tool_call'
-  | 'tool_result'
-  | 'error'
-  | 'work_plan';
+export type MessageType = 'text' | 'thought' | 'tool_call' | 'tool_result' | 'error' | 'work_plan';
 
 /**
  * Agent execution status (extended for multi-level thinking)

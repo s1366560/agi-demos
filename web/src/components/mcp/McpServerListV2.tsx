@@ -5,12 +5,9 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 
-
 import { message } from 'antd';
 import { RefreshCw, Server, AlertCircle, Activity, Layers } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
-
-
 
 import { useMCPStore } from '@/stores/mcp';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
@@ -56,13 +53,11 @@ const StatsCard: React.FC<StatsCardProps> = ({
       <div>
         <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mb-1">{title}</p>
         <p className={`text-2xl font-bold ${textColor}`}>{value}</p>
-        {subtitle && (
-          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">
-            {subtitle}
-          </p>
-        )}
+        {subtitle && <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{subtitle}</p>}
       </div>
-      <div className={`w-12 h-12 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform duration-200`}>
+      <div
+        className={`w-12 h-12 rounded-lg ${iconBg} flex items-center justify-center flex-shrink-0 group-hover:scale-105 transition-transform duration-200`}
+      >
         {icon}
       </div>
     </div>
@@ -90,7 +85,7 @@ export const McpServerListV2: React.FC = () => {
   const stats = useMemo(() => {
     // Convert apps record to array for filtering
     const appsArray = Object.values(apps);
-    
+
     const serverStats: ServerStats = {
       total: servers.length,
       running: 0,
@@ -117,11 +112,13 @@ export const McpServerListV2: React.FC = () => {
     const toolStats: ToolStats = {
       total: servers.reduce((acc, s) => acc + (s.discovered_tools?.length || 0), 0),
       available: servers.reduce(
-        (acc, s) => acc + (s.discovered_tools?.filter((t) => !(t as MCPToolInfo).is_error)?.length || 0),
+        (acc, s) =>
+          acc + (s.discovered_tools?.filter((t) => !(t as MCPToolInfo).is_error)?.length || 0),
         0
       ),
       error: servers.reduce(
-        (acc, s) => acc + (s.discovered_tools?.filter((t) => (t as MCPToolInfo).is_error)?.length || 0),
+        (acc, s) =>
+          acc + (s.discovered_tools?.filter((t) => (t as MCPToolInfo).is_error)?.length || 0),
         0
       ),
     };
@@ -182,7 +179,9 @@ export const McpServerListV2: React.FC = () => {
         <StatsCard
           title="Tools"
           value={stats.toolStats.total}
-          icon={<MaterialIcon name="build" size={24} className="text-purple-600 dark:text-purple-400" />}
+          icon={
+            <MaterialIcon name="build" size={24} className="text-purple-600 dark:text-purple-400" />
+          }
           bgColor="bg-purple-500"
           textColor="text-slate-900 dark:text-white"
           iconBg="bg-purple-100 dark:bg-purple-900/30"
@@ -191,7 +190,13 @@ export const McpServerListV2: React.FC = () => {
         <StatsCard
           title="Applications"
           value={stats.appStats.total}
-          icon={<MaterialIcon name="apps" size={24} className="text-emerald-600 dark:text-emerald-400" />}
+          icon={
+            <MaterialIcon
+              name="apps"
+              size={24}
+              className="text-emerald-600 dark:text-emerald-400"
+            />
+          }
           bgColor="bg-emerald-500"
           textColor="text-slate-900 dark:text-white"
           iconBg="bg-emerald-100 dark:bg-emerald-900/30"
@@ -202,14 +207,30 @@ export const McpServerListV2: React.FC = () => {
           value={stats.serverStats.error > 0 ? stats.serverStats.error : stats.serverStats.running}
           icon={
             stats.serverStats.error > 0 ? (
-              <MaterialIcon name="warning" size={24} className="text-amber-600 dark:text-amber-400" />
+              <MaterialIcon
+                name="warning"
+                size={24}
+                className="text-amber-600 dark:text-amber-400"
+              />
             ) : (
-              <MaterialIcon name="check_circle" size={24} className="text-emerald-600 dark:text-emerald-400" />
+              <MaterialIcon
+                name="check_circle"
+                size={24}
+                className="text-emerald-600 dark:text-emerald-400"
+              />
             )
           }
           bgColor="bg-emerald-500"
-          textColor={stats.serverStats.error > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}
-          iconBg={stats.serverStats.error > 0 ? 'bg-amber-100 dark:bg-amber-900/30' : 'bg-emerald-100 dark:bg-emerald-900/30'}
+          textColor={
+            stats.serverStats.error > 0
+              ? 'text-amber-600 dark:text-amber-400'
+              : 'text-emerald-600 dark:text-emerald-400'
+          }
+          iconBg={
+            stats.serverStats.error > 0
+              ? 'bg-amber-100 dark:bg-amber-900/30'
+              : 'bg-emerald-100 dark:bg-emerald-900/30'
+          }
           subtitle={stats.serverStats.error > 0 ? 'errors' : 'healthy'}
         />
       </div>

@@ -271,9 +271,23 @@ describe('timelineUtils', () => {
   describe('isTimelineSorted', () => {
     it('should return true for sorted timeline', () => {
       const timeline: TimelineEvent[] = [
-        { id: 'a', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'A', role: 'user' },
+        {
+          id: 'a',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'A',
+          role: 'user',
+        },
         { id: 'b', type: 'thought', sequenceNumber: 2, timestamp: 2000, content: 'B' },
-        { id: 'c', type: 'assistant_message', sequenceNumber: 3, timestamp: 3000, content: 'C', role: 'assistant' },
+        {
+          id: 'c',
+          type: 'assistant_message',
+          sequenceNumber: 3,
+          timestamp: 3000,
+          content: 'C',
+          role: 'assistant',
+        },
       ];
 
       expect(isTimelineSorted(timeline)).toBe(true);
@@ -282,8 +296,22 @@ describe('timelineUtils', () => {
     it('should return false for unsorted timeline', () => {
       const timeline: TimelineEvent[] = [
         { id: 'b', type: 'thought', sequenceNumber: 2, timestamp: 2000, content: 'B' },
-        { id: 'a', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'A', role: 'user' },
-        { id: 'c', type: 'assistant_message', sequenceNumber: 3, timestamp: 3000, content: 'C', role: 'assistant' },
+        {
+          id: 'a',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'A',
+          role: 'user',
+        },
+        {
+          id: 'c',
+          type: 'assistant_message',
+          sequenceNumber: 3,
+          timestamp: 3000,
+          content: 'C',
+          role: 'assistant',
+        },
       ];
 
       expect(isTimelineSorted(timeline)).toBe(false);
@@ -291,9 +319,23 @@ describe('timelineUtils', () => {
 
     it('should skip invalid sequence numbers during check', () => {
       const timeline: TimelineEvent[] = [
-        { id: 'a', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'A', role: 'user' },
+        {
+          id: 'a',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'A',
+          role: 'user',
+        },
         { id: 'b', type: 'thought', sequenceNumber: null as any, timestamp: 2000, content: 'B' },
-        { id: 'c', type: 'assistant_message', sequenceNumber: 3, timestamp: 3000, content: 'C', role: 'assistant' },
+        {
+          id: 'c',
+          type: 'assistant_message',
+          sequenceNumber: 3,
+          timestamp: 3000,
+          content: 'C',
+          role: 'assistant',
+        },
       ];
 
       expect(isTimelineSorted(timeline)).toBe(true);
@@ -305,7 +347,14 @@ describe('timelineUtils', () => {
 
     it('should return true for single element', () => {
       const timeline: TimelineEvent[] = [
-        { id: 'a', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'A', role: 'user' },
+        {
+          id: 'a',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'A',
+          role: 'user',
+        },
       ];
       expect(isTimelineSorted(timeline)).toBe(true);
     });
@@ -318,7 +367,14 @@ describe('timelineUtils', () => {
 
     it('should return next number for sorted timeline', () => {
       const timeline: TimelineEvent[] = [
-        { id: 'a', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'A', role: 'user' },
+        {
+          id: 'a',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'A',
+          role: 'user',
+        },
         { id: 'b', type: 'thought', sequenceNumber: 2, timestamp: 2000, content: 'B' },
       ];
 
@@ -327,7 +383,14 @@ describe('timelineUtils', () => {
 
     it('should handle timeline with gaps', () => {
       const timeline: TimelineEvent[] = [
-        { id: 'a', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'A', role: 'user' },
+        {
+          id: 'a',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'A',
+          role: 'user',
+        },
         { id: 'b', type: 'thought', sequenceNumber: 5, timestamp: 2000, content: 'B' },
       ];
 
@@ -336,7 +399,14 @@ describe('timelineUtils', () => {
 
     it('should handle timeline with invalid sequence numbers', () => {
       const timeline: TimelineEvent[] = [
-        { id: 'a', type: 'user_message', sequenceNumber: null as any, timestamp: 1000, content: 'A', role: 'user' },
+        {
+          id: 'a',
+          type: 'user_message',
+          sequenceNumber: null as any,
+          timestamp: 1000,
+          content: 'A',
+          role: 'user',
+        },
         { id: 'b', type: 'thought', sequenceNumber: 2, timestamp: 2000, content: 'B' },
       ];
 
@@ -350,7 +420,14 @@ describe('timelineUtils', () => {
         { id: 'b', type: 'thought', sequenceNumber: 2, timestamp: 2000, content: 'B' },
       ];
       const secondary: TimelineEvent[] = [
-        { id: 'a', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'A', role: 'user' },
+        {
+          id: 'a',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'A',
+          role: 'user',
+        },
       ];
 
       const merged = mergeTimelines(primary, secondary);
@@ -362,10 +439,24 @@ describe('timelineUtils', () => {
 
     it('should deduplicate events by id', () => {
       const primary: TimelineEvent[] = [
-        { id: 'a', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'A', role: 'user' },
+        {
+          id: 'a',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'A',
+          role: 'user',
+        },
       ];
       const secondary: TimelineEvent[] = [
-        { id: 'a', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'A', role: 'user' },
+        {
+          id: 'a',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'A',
+          role: 'user',
+        },
         { id: 'b', type: 'thought', sequenceNumber: 2, timestamp: 2000, content: 'B' },
       ];
 
@@ -378,10 +469,24 @@ describe('timelineUtils', () => {
 
     it('should prefer primary timeline for duplicates', () => {
       const primary: TimelineEvent[] = [
-        { id: 'a', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'From Primary', role: 'user' },
+        {
+          id: 'a',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'From Primary',
+          role: 'user',
+        },
       ];
       const secondary: TimelineEvent[] = [
-        { id: 'a', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'From Secondary', role: 'user' },
+        {
+          id: 'a',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'From Secondary',
+          role: 'user',
+        },
       ];
 
       const merged = mergeTimelines(primary, secondary);
@@ -392,7 +497,14 @@ describe('timelineUtils', () => {
 
     it('should handle empty primary', () => {
       const secondary: TimelineEvent[] = [
-        { id: 'a', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'A', role: 'user' },
+        {
+          id: 'a',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'A',
+          role: 'user',
+        },
       ];
 
       const merged = mergeTimelines([], secondary);
@@ -403,7 +515,14 @@ describe('timelineUtils', () => {
 
     it('should handle empty secondary', () => {
       const primary: TimelineEvent[] = [
-        { id: 'a', type: 'user_message', sequenceNumber: 1, timestamp: 1000, content: 'A', role: 'user' },
+        {
+          id: 'a',
+          type: 'user_message',
+          sequenceNumber: 1,
+          timestamp: 1000,
+          content: 'A',
+          role: 'user',
+        },
       ];
 
       const merged = mergeTimelines(primary, []);

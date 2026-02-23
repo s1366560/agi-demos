@@ -8,16 +8,7 @@ import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Drawer } from 'antd';
-import {
-  Rocket,
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  Clock,
-  Zap,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { Rocket, CheckCircle2, XCircle, Loader2, Clock, Zap, Trash2, X } from 'lucide-react';
 
 import {
   useBackgroundExecutions,
@@ -144,22 +135,17 @@ const BackgroundSubAgentDrawer = memo(() => {
 
   const sorted = useMemo(
     () => [...executions].sort((a, b) => b.startedAt - a.startedAt),
-    [executions],
+    [executions]
   );
 
-  const runningCount = useMemo(
-    () => sorted.filter((e) => e.status === 'running').length,
-    [sorted],
-  );
+  const runningCount = useMemo(() => sorted.filter((e) => e.status === 'running').length, [sorted]);
 
   return (
     <Drawer
       title={
         <div className="flex items-center gap-2">
           <Rocket size={16} className="text-purple-500" />
-          <span>
-            {t('agent.background.title', 'Background Tasks')}
-          </span>
+          <span>{t('agent.background.title', 'Background Tasks')}</span>
           {runningCount > 0 && (
             <span className="text-xs px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400">
               {runningCount}
@@ -186,9 +172,7 @@ const BackgroundSubAgentDrawer = memo(() => {
       {sorted.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-slate-400">
           <Rocket size={32} className="mb-3 opacity-30" />
-          <p className="text-sm">
-            {t('agent.background.empty', 'No background tasks')}
-          </p>
+          <p className="text-sm">{t('agent.background.empty', 'No background tasks')}</p>
         </div>
       ) : (
         <div className="space-y-3">

@@ -23,7 +23,9 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
   initialOperationType = 'llm',
   initialPriority = 0,
 }) => {
-  const [operationType, setOperationType] = useState<'llm' | 'embedding' | 'rerank'>(initialOperationType);
+  const [operationType, setOperationType] = useState<'llm' | 'embedding' | 'rerank'>(
+    initialOperationType
+  );
   const [priority, setPriority] = useState(initialPriority);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,7 +130,9 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
                 disabled={isSubmitting}
                 className="px-4 py-2 bg-primary hover:bg-primary-dark text-white font-medium rounded-lg transition-colors shadow-sm disabled:opacity-50 flex items-center gap-2"
               >
-                {isSubmitting && <MaterialIcon name="progress_activity" className="animate-spin" size={16} />}
+                {isSubmitting && (
+                  <MaterialIcon name="progress_activity" className="animate-spin" size={16} />
+                )}
                 Assign
               </button>
             </div>

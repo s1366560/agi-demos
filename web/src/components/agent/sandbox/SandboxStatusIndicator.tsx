@@ -177,10 +177,7 @@ SmoothProgressBar.displayName = 'SmoothProgressBar';
  */
 const AnimatedValue: FC<{ children: React.ReactNode; className?: string }> = memo(
   ({ children, className }) => (
-    <span
-      className={className}
-      style={{ transition: 'opacity 200ms ease' }}
-    >
+    <span className={className} style={{ transition: 'opacity 200ms ease' }}>
       {children}
     </span>
   )
@@ -247,11 +244,7 @@ const MetricsPopover: FC<{
                   {stats.cpu_percent.toFixed(1)}%
                 </AnimatedValue>
               </div>
-              <SmoothProgressBar
-                percent={stats.cpu_percent}
-                color="#3b82f6"
-                highColor="#ef4444"
-              />
+              <SmoothProgressBar percent={stats.cpu_percent} color="#3b82f6" highColor="#ef4444" />
             </div>
           </div>
 

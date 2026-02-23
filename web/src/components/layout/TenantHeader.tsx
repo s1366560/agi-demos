@@ -66,14 +66,44 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
 
   const allNav: NavItem[] = useMemo(
     () => [
-      { id: 'projects', label: t('nav.projects', 'Projects'), path: `${basePath}/projects`, icon: <Folder size={16} /> },
-      { id: 'skills', label: t('nav.skills', 'Skills'), path: `${basePath}/skills`, icon: <Brain size={16} /> },
-      { id: 'subagents', label: t('nav.subagents', 'Agents'), path: `${basePath}/subagents`, icon: <Bot size={16} /> },
-      { id: 'mcp-servers', label: t('nav.mcpServers', 'MCP'), path: `${basePath}/mcp-servers`, icon: <Cable size={16} /> },
-      { id: 'plugins', label: t('nav.plugins', 'Plugins'), path: `${basePath}/plugins`, icon: <ToyBrick size={16} /> },
-      { id: 'providers', label: t('nav.providers', 'Model Services'), path: `${basePath}/providers`, icon: <Cpu size={16} /> },
+      {
+        id: 'projects',
+        label: t('nav.projects', 'Projects'),
+        path: `${basePath}/projects`,
+        icon: <Folder size={16} />,
+      },
+      {
+        id: 'skills',
+        label: t('nav.skills', 'Skills'),
+        path: `${basePath}/skills`,
+        icon: <Brain size={16} />,
+      },
+      {
+        id: 'subagents',
+        label: t('nav.subagents', 'Agents'),
+        path: `${basePath}/subagents`,
+        icon: <Bot size={16} />,
+      },
+      {
+        id: 'mcp-servers',
+        label: t('nav.mcpServers', 'MCP'),
+        path: `${basePath}/mcp-servers`,
+        icon: <Cable size={16} />,
+      },
+      {
+        id: 'plugins',
+        label: t('nav.plugins', 'Plugins'),
+        path: `${basePath}/plugins`,
+        icon: <ToyBrick size={16} />,
+      },
+      {
+        id: 'providers',
+        label: t('nav.providers', 'Model Services'),
+        path: `${basePath}/providers`,
+        icon: <Cpu size={16} />,
+      },
     ],
-    [basePath, t],
+    [basePath, t]
   );
 
   // With 6 items, all fit on md+ screens; overflow only if needed
@@ -308,7 +338,13 @@ function HeaderUserMenu({ tenantId }: { tenantId: string }) {
   };
 
   const themeIcon =
-    theme === 'dark' ? <Moon size={16} /> : theme === 'light' ? <Sun size={16} /> : <Monitor size={16} />;
+    theme === 'dark' ? (
+      <Moon size={16} />
+    ) : theme === 'light' ? (
+      <Sun size={16} />
+    ) : (
+      <Monitor size={16} />
+    );
 
   const themeLabel =
     theme === 'dark'
@@ -383,17 +419,26 @@ function HeaderUserMenu({ tenantId }: { tenantId: string }) {
             <MenuLink
               icon={<User size={16} />}
               label={t('user.profile', 'Profile')}
-              onClick={() => { navigate('/profile'); setOpen(false); }}
+              onClick={() => {
+                navigate('/profile');
+                setOpen(false);
+              }}
             />
             <MenuLink
               icon={<Settings size={16} />}
               label={t('user.settings', 'Settings')}
-              onClick={() => { navigate(`${basePath}/settings`); setOpen(false); }}
+              onClick={() => {
+                navigate(`${basePath}/settings`);
+                setOpen(false);
+              }}
             />
             <MenuLink
               icon={<CreditCard size={16} />}
               label={t('user.billing', 'Billing')}
-              onClick={() => { navigate(`${basePath}/billing`); setOpen(false); }}
+              onClick={() => {
+                navigate(`${basePath}/billing`);
+                setOpen(false);
+              }}
             />
           </div>
 

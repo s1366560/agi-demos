@@ -56,20 +56,16 @@ async function ensureConnectedAndSubscribe(
     await agentService.connect();
   }
 
-  const handler: AgentStreamHandler = createStreamEventHandlers(
-    conversationId,
-    undefined,
-    {
-      get: deps.get as any,
-      set: deps.set as any,
-      getDeltaBuffer: deps.getDeltaBuffer,
-      clearDeltaBuffers: deps.clearDeltaBuffers,
-      clearAllDeltaBuffers: deps.clearAllDeltaBuffers,
-      timelineToMessages: deps.timelineToMessages,
-      tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
-      thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
-    }
-  );
+  const handler: AgentStreamHandler = createStreamEventHandlers(conversationId, undefined, {
+    get: deps.get as any,
+    set: deps.set as any,
+    getDeltaBuffer: deps.getDeltaBuffer,
+    clearDeltaBuffers: deps.clearDeltaBuffers,
+    clearAllDeltaBuffers: deps.clearAllDeltaBuffers,
+    timelineToMessages: deps.timelineToMessages,
+    tokenBatchIntervalMs: TOKEN_BATCH_INTERVAL_MS,
+    thoughtBatchIntervalMs: THOUGHT_BATCH_INTERVAL_MS,
+  });
 
   agentService.subscribe(conversationId, handler);
 }
@@ -92,12 +88,10 @@ export function createHITLActions(deps: HITLActionDeps) {
         await agentService.respondToClarification(requestId, answer);
         clearAllDeltaBuffers();
         setState((state: any) => ({
-          timeline: updateHITLEventInTimeline(
-            state.timeline,
-            requestId,
-            'clarification_asked',
-            { answered: true, answer }
-          ),
+          timeline: updateHITLEventInTimeline(state.timeline, requestId, 'clarification_asked', {
+            answered: true,
+            answer,
+          }),
           pendingClarification: null,
           agentState: 'thinking',
           isStreaming: true,
@@ -154,12 +148,10 @@ export function createHITLActions(deps: HITLActionDeps) {
         await agentService.respondToEnvVar(requestId, values);
         clearAllDeltaBuffers();
         setState((state: any) => ({
-          timeline: updateHITLEventInTimeline(
-            state.timeline,
-            requestId,
-            'env_var_requested',
-            { answered: true, values }
-          ),
+          timeline: updateHITLEventInTimeline(state.timeline, requestId, 'env_var_requested', {
+            answered: true,
+            values,
+          }),
           pendingEnvVarRequest: null,
           agentState: 'thinking',
           isStreaming: true,
@@ -186,12 +178,10 @@ export function createHITLActions(deps: HITLActionDeps) {
         await agentService.respondToPermission(requestId, granted);
         clearAllDeltaBuffers();
         setState((state: any) => ({
-          timeline: updateHITLEventInTimeline(
-            state.timeline,
-            requestId,
-            'permission_asked',
-            { answered: true, granted }
-          ),
+          timeline: updateHITLEventInTimeline(state.timeline, requestId, 'permission_asked', {
+            answered: true,
+            granted,
+          }),
           pendingPermission: null,
           agentState: granted ? 'thinking' : 'idle',
           isStreaming: granted,

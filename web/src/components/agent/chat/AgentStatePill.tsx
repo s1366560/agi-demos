@@ -9,17 +9,8 @@ import { memo, useMemo } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import {
-  Brain,
-  CheckCircle2,
-  Eye,
-  Loader2,
-  MessageCircle,
-  RotateCcw,
-  Zap,
-} from 'lucide-react';
+import { Brain, CheckCircle2, Eye, Loader2, MessageCircle, RotateCcw, Zap } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
-
 
 import { useAgentV3Store } from '@/stores/agentV3';
 
@@ -42,7 +33,7 @@ interface StateConfig {
 
 function getStateConfig(
   state: AgentState,
-  t: (key: string, fallback: string) => string,
+  t: (key: string, fallback: string) => string
 ): StateConfig {
   switch (state) {
     case 'thinking':
@@ -115,7 +106,7 @@ export const AgentStatePill: React.FC<AgentStatePillProps> = memo(({ className =
       isStreaming: s.isStreaming,
       agentState: s.agentState,
       pendingToolsStack: s.pendingToolsStack,
-    })),
+    }))
   );
 
   const state = agentState as AgentState;
@@ -179,7 +170,7 @@ const PhaseDot: React.FC<{ active: boolean; completed: boolean }> = memo(
       ${active ? 'bg-current scale-125' : completed ? 'bg-current opacity-40' : 'bg-slate-300 dark:bg-slate-600'}
     `}
     />
-  ),
+  )
 );
 
 PhaseDot.displayName = 'PhaseDot';

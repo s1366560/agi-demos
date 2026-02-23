@@ -80,9 +80,7 @@ function getTargetRect(selector: string | null): TargetRect | null {
   return { top: r.top, left: r.left, width: r.width, height: r.height };
 }
 
-function computeCardPosition(
-  rect: TargetRect | null,
-): { top: number; left: number } {
+function computeCardPosition(rect: TargetRect | null): { top: number; left: number } {
   if (!rect) {
     return {
       top: Math.max(0, (window.innerHeight - CARD_HEIGHT_EST) / 2),
@@ -108,8 +106,7 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({ onComplete }) =>
   const [cardPos, setCardPos] = useState({ top: 0, left: 0 });
   const rafRef = useRef<number>(0);
   const reducedMotion =
-    typeof window !== 'undefined' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const currentStep = TOUR_STEPS[step];
 
@@ -185,12 +182,7 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({ onComplete }) =>
       aria-label="Onboarding tour"
     >
       {/* Backdrop - only when no spotlight target */}
-      {!targetRect && (
-        <div
-          className="absolute inset-0 bg-black/55"
-          style={{ transition }}
-        />
-      )}
+      {!targetRect && <div className="absolute inset-0 bg-black/55" style={{ transition }} />}
 
       {/* Spotlight ring */}
       {targetRect && <div style={spotlightStyle} />}

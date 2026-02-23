@@ -144,9 +144,7 @@ describe('RightPanel (Refactored)', () => {
   });
 
   it('should not render when collapsed', () => {
-    const { container } = render(
-      <RightPanel collapsed={true} />
-    );
+    const { container } = render(<RightPanel collapsed={true} />);
 
     expect(container.firstChild).toBe(null);
   });

@@ -124,9 +124,7 @@ export function buildHostStyles(theme: 'light' | 'dark'): { variables: Record<st
     '--shadow-hairline': isLight
       ? '0 0 0 1px rgba(0,0,0,0.05)'
       : '0 0 0 1px rgba(255,255,255,0.05)',
-    '--shadow-sm': isLight
-      ? '0 1px 2px rgba(0,0,0,0.05)'
-      : '0 1px 2px rgba(0,0,0,0.3)',
+    '--shadow-sm': isLight ? '0 1px 2px rgba(0,0,0,0.05)' : '0 1px 2px rgba(0,0,0,0.3)',
     '--shadow-md': isLight
       ? '0 4px 6px -1px rgba(0,0,0,0.07), 0 2px 4px -2px rgba(0,0,0,0.05)'
       : '0 4px 6px -1px rgba(0,0,0,0.4), 0 2px 4px -2px rgba(0,0,0,0.3)',

@@ -119,8 +119,7 @@ function extractEventOrdering(data: unknown): {
   timestamp: number;
 } {
   const d = data as Record<string, unknown>;
-  const eventTimeUs =
-    typeof d?.event_time_us === 'number' ? d.event_time_us : Date.now() * 1000;
+  const eventTimeUs = typeof d?.event_time_us === 'number' ? d.event_time_us : Date.now() * 1000;
   const eventCounter = typeof d?.event_counter === 'number' ? d.event_counter : 0;
   const timestamp = eventTimeUs ? Math.floor(eventTimeUs / 1000) : Date.now();
   return { eventTimeUs, eventCounter, timestamp };
@@ -135,9 +134,7 @@ function extractEventOrdering(data: unknown): {
  * @param event - The SSE event to convert
  * @returns A TimelineEvent or null if event type is not supported
  */
-export function sseEventToTimeline(
-  event: AgentEvent<unknown>
-): TimelineEvent | null {
+export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | null {
   const { eventTimeUs, eventCounter, timestamp } = extractEventOrdering(event.data);
 
   switch (event.type) {
@@ -234,15 +231,16 @@ export function sseEventToTimeline(
       // Extract MCP App UI metadata if present (for timeline "Open App")
       // Support both snake_case (Python) and camelCase (TypeScript) field names
       const rawUiMeta = (data as any).ui_metadata;
-      const mcpUiMetadata = rawUiMeta && typeof rawUiMeta === 'object'
-        ? {
-            resource_uri: rawUiMeta.resource_uri || rawUiMeta.resourceUri || undefined,
-            server_name: rawUiMeta.server_name || rawUiMeta.serverName || undefined,
-            app_id: rawUiMeta.app_id || rawUiMeta.appId || undefined,
-            title: rawUiMeta.title || undefined,
-            project_id: rawUiMeta.project_id || rawUiMeta.projectId || undefined,
-          }
-        : undefined;
+      const mcpUiMetadata =
+        rawUiMeta && typeof rawUiMeta === 'object'
+          ? {
+              resource_uri: rawUiMeta.resource_uri || rawUiMeta.resourceUri || undefined,
+              server_name: rawUiMeta.server_name || rawUiMeta.serverName || undefined,
+              app_id: rawUiMeta.app_id || rawUiMeta.appId || undefined,
+              title: rawUiMeta.title || undefined,
+              project_id: rawUiMeta.project_id || rawUiMeta.projectId || undefined,
+            }
+          : undefined;
 
       return {
         id: generateTimelineEventId('observe'),
@@ -997,9 +995,7 @@ export function envelopeToTimeline(
  * @param rawData - Raw JSON data (string or parsed object)
  * @returns TimelineEvent with optional correlation info, or null if unsupported
  */
-export function parseAndConvertEvent(
-  rawData: unknown
-): TimelineEventWithCorrelation | null {
+export function parseAndConvertEvent(rawData: unknown): TimelineEventWithCorrelation | null {
   // Handle string input
   let data: unknown;
   if (typeof rawData === 'string') {

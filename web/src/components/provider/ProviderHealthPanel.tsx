@@ -74,9 +74,7 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
             <MaterialIcon name="monitoring" size={20} className="text-primary" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">
-              System Health
-            </h2>
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-white">System Health</h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Real-time provider status overview
             </p>
@@ -159,7 +157,9 @@ export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({
               Issues
             </span>
             <MaterialIcon
-              name={unhealthyProviders > 0 ? 'error' : degradedProviders > 0 ? 'warning' : 'verified'}
+              name={
+                unhealthyProviders > 0 ? 'error' : degradedProviders > 0 ? 'warning' : 'verified'
+              }
               size={18}
               className={
                 unhealthyProviders > 0

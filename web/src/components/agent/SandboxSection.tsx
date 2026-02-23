@@ -6,15 +6,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 
-import {
-  Terminal,
-  Monitor,
-  Play,
-  Square,
-  RefreshCw,
-  Maximize2,
-  Minimize2,
-} from 'lucide-react';
+import { Terminal, Monitor, Play, Square, RefreshCw, Maximize2, Minimize2 } from 'lucide-react';
 
 import {
   LazyTabs,
@@ -234,10 +226,7 @@ const DesktopTab: React.FC<{
   );
 };
 
-export const SandboxSection: React.FC<SandboxSectionProps> = ({
-  sandboxId,
-  className,
-}) => {
+export const SandboxSection: React.FC<SandboxSectionProps> = ({ sandboxId, className }) => {
   const [activeTab, setActiveTab] = useState<SandboxTab>('terminal');
   const {
     activeProjectId,

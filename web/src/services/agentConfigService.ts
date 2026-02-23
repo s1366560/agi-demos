@@ -101,12 +101,9 @@ class TenantAgentConfigService implements ITenantAgentConfigService {
    */
   async canModifyConfig(tenantId: string): Promise<boolean> {
     try {
-      const response = await api.get<{ can_modify: boolean }>(
-        '/agent/config/can-modify',
-        {
-          params: { tenant_id: tenantId },
-        }
-      );
+      const response = await api.get<{ can_modify: boolean }>('/agent/config/can-modify', {
+        params: { tenant_id: tenantId },
+      });
       return response.can_modify;
     } catch (error) {
       // If API fails, assume no permission

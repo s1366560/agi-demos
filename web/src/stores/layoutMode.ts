@@ -34,7 +34,10 @@ interface LayoutModeState {
   setRightPanelTab: (tab: 'plan' | 'terminal' | 'desktop') => void;
 }
 
-const MODE_DEFAULTS: Record<LayoutMode, { splitRatio: number; rightPanelTab: 'plan' | 'terminal' | 'desktop' }> = {
+const MODE_DEFAULTS: Record<
+  LayoutMode,
+  { splitRatio: number; rightPanelTab: 'plan' | 'terminal' | 'desktop' }
+> = {
   chat: { splitRatio: 1, rightPanelTab: 'plan' },
   task: { splitRatio: 0.5, rightPanelTab: 'plan' },
   code: { splitRatio: 0.5, rightPanelTab: 'terminal' },
@@ -57,11 +60,9 @@ export const useLayoutModeStore = create<LayoutModeState>()(
             rightPanelTab: MODE_DEFAULTS[mode].rightPanelTab,
           }),
 
-        setSplitRatio: (ratio) =>
-          set({ splitRatio: Math.max(0.15, Math.min(0.85, ratio)) }),
+        setSplitRatio: (ratio) => set({ splitRatio: Math.max(0.15, Math.min(0.85, ratio)) }),
 
-        toggleChatPanel: () =>
-          set((state) => ({ chatPanelVisible: !state.chatPanelVisible })),
+        toggleChatPanel: () => set((state) => ({ chatPanelVisible: !state.chatPanelVisible })),
 
         setRightPanelTab: (tab) => set({ rightPanelTab: tab }),
       }),

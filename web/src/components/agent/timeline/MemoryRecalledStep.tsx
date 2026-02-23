@@ -10,7 +10,10 @@ import React, { useState } from 'react';
 
 import { ChevronDown, ChevronRight, Database } from 'lucide-react';
 
-import type { MemoryRecalledTimelineEvent, MemoryCapturedTimelineEvent } from '../../../types/agent';
+import type {
+  MemoryRecalledTimelineEvent,
+  MemoryCapturedTimelineEvent,
+} from '../../../types/agent';
 
 interface MemoryRecalledStepProps {
   event: MemoryRecalledTimelineEvent;
@@ -75,9 +78,7 @@ export const MemoryCapturedStep: React.FC<MemoryCapturedStepProps> = ({ event })
         Captured {event.capturedCount} {event.capturedCount === 1 ? 'memory' : 'memories'}
       </span>
       {event.categories.length > 0 && (
-        <span className="text-green-500 dark:text-green-400">
-          ({event.categories.join(', ')})
-        </span>
+        <span className="text-green-500 dark:text-green-400">({event.categories.join(', ')})</span>
       )}
     </div>
   );

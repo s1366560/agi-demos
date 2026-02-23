@@ -9,7 +9,19 @@ import React, { memo, useState, useCallback, useRef, useEffect } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
-import { Copy, Check, RotateCcw, Pencil, Trash2, Bookmark, Pin, PinOff, Save, Reply, GitBranch } from 'lucide-react';
+import {
+  Copy,
+  Check,
+  RotateCcw,
+  Pencil,
+  Trash2,
+  Bookmark,
+  Pin,
+  PinOff,
+  Save,
+  Reply,
+  GitBranch,
+} from 'lucide-react';
 
 import { LazyTooltip } from '@/components/ui/lazyAntd';
 
@@ -39,13 +51,28 @@ interface MessageActionBarProps {
 }
 
 export const MessageActionBar: React.FC<MessageActionBarProps> = memo(
-  ({ role, content, onRetry, onEdit, onDelete, onBookmark, onPin, onSaveAsTemplate, onReply, onFork, isPinned, className = '' }) => {
+  ({
+    role,
+    content,
+    onRetry,
+    onEdit,
+    onDelete,
+    onBookmark,
+    onPin,
+    onSaveAsTemplate,
+    onReply,
+    onFork,
+    isPinned,
+    className = '',
+  }) => {
     const { t } = useTranslation();
     const [copied, setCopied] = useState(false);
     const copyTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
     useEffect(() => {
-      return () => { clearTimeout(copyTimerRef.current); };
+      return () => {
+        clearTimeout(copyTimerRef.current);
+      };
     }, []);
 
     const handleCopy = useCallback(async () => {
@@ -75,14 +102,8 @@ export const MessageActionBar: React.FC<MessageActionBarProps> = memo(
     // Copy - available for all messages
     actions.push({
       key: 'copy',
-      icon: copied ? (
-        <Check size={14} className="text-emerald-500" />
-      ) : (
-        <Copy size={14} />
-      ),
-      label: copied
-        ? t('agent.actions.copied', 'Copied!')
-        : t('agent.actions.copy', 'Copy'),
+      icon: copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />,
+      label: copied ? t('agent.actions.copied', 'Copied!') : t('agent.actions.copy', 'Copy'),
       onClick: handleCopy,
     });
 
@@ -126,14 +147,8 @@ export const MessageActionBar: React.FC<MessageActionBarProps> = memo(
       if (onPin) {
         actions.push({
           key: 'pin',
-          icon: isPinned ? (
-            <PinOff size={14} className="text-primary" />
-          ) : (
-            <Pin size={14} />
-          ),
-          label: isPinned
-            ? t('agent.actions.unpin', 'Unpin')
-            : t('agent.actions.pin', 'Pin'),
+          icon: isPinned ? <PinOff size={14} className="text-primary" /> : <Pin size={14} />,
+          label: isPinned ? t('agent.actions.unpin', 'Unpin') : t('agent.actions.pin', 'Pin'),
           onClick: onPin,
         });
       }
@@ -219,7 +234,9 @@ export const CodeBlockCopyButton: React.FC<{ code: string }> = memo(({ code }) =
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
-    return () => { clearTimeout(timerRef.current); };
+    return () => {
+      clearTimeout(timerRef.current);
+    };
   }, []);
 
   const handleCopy = useCallback(async () => {
@@ -235,7 +252,9 @@ export const CodeBlockCopyButton: React.FC<{ code: string }> = memo(({ code }) =
 
   return (
     <LazyTooltip
-      title={copied ? t('agent.actions.copied', 'Copied!') : t('agent.actions.copyCode', 'Copy code')}
+      title={
+        copied ? t('agent.actions.copied', 'Copied!') : t('agent.actions.copyCode', 'Copy code')
+      }
       placement="top"
     >
       <button

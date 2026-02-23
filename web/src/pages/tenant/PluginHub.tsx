@@ -96,7 +96,9 @@ export const PluginHub: React.FC = () => {
   const [pluginDiagnostics, setPluginDiagnostics] = useState<PluginDiagnostic[]>([]);
   const [channelPluginCatalog, setChannelPluginCatalog] = useState<ChannelPluginCatalogItem[]>([]);
   const [channelConfigs, setChannelConfigs] = useState<ChannelConfig[]>([]);
-  const [channelSchemas, setChannelSchemas] = useState<Record<string, ChannelPluginConfigSchema>>({});
+  const [channelSchemas, setChannelSchemas] = useState<Record<string, ChannelPluginConfigSchema>>(
+    {}
+  );
 
   const [pluginsLoading, setPluginsLoading] = useState(false);
   const [configsLoading, setConfigsLoading] = useState(false);
@@ -105,9 +107,8 @@ export const PluginHub: React.FC = () => {
   const [pluginActionKey, setPluginActionKey] = useState<string | null>(null);
   const [configActionKey, setConfigActionKey] = useState<string | null>(null);
   const [installRequirement, setInstallRequirement] = useState('');
-  const [lastPluginActionDetails, setLastPluginActionDetails] = useState<PluginActionDetails | null>(
-    null
-  );
+  const [lastPluginActionDetails, setLastPluginActionDetails] =
+    useState<PluginActionDetails | null>(null);
   const [configModalVisible, setConfigModalVisible] = useState(false);
   const [editingConfig, setEditingConfig] = useState<ChannelConfig | null>(null);
 
@@ -166,28 +167,33 @@ export const PluginHub: React.FC = () => {
       const items = await channelService.listConfigs(selectedProjectId);
       setChannelConfigs(items);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to load channel configurations');
+      message.error(
+        error instanceof Error ? error.message : 'Failed to load channel configurations'
+      );
     } finally {
       setConfigsLoading(false);
     }
   }, [selectedProjectId]);
 
-  const loadChannelSchema = useCallback(async (channelType: string) => {
-    if (!tenantId || !channelType) return;
-    if (channelSchemas[channelType]) return;
-    const catalogEntry = channelPluginCatalog.find((item) => item.channel_type === channelType);
-    if (!catalogEntry?.schema_supported) return;
+  const loadChannelSchema = useCallback(
+    async (channelType: string) => {
+      if (!tenantId || !channelType) return;
+      if (channelSchemas[channelType]) return;
+      const catalogEntry = channelPluginCatalog.find((item) => item.channel_type === channelType);
+      if (!catalogEntry?.schema_supported) return;
 
-    setSchemaLoading(true);
-    try {
-      const schema = await channelService.getTenantChannelPluginSchema(tenantId, channelType);
-      setChannelSchemas((prev) => ({ ...prev, [channelType]: schema }));
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to load plugin schema');
-    } finally {
-      setSchemaLoading(false);
-    }
-  }, [channelPluginCatalog, channelSchemas, tenantId]);
+      setSchemaLoading(true);
+      try {
+        const schema = await channelService.getTenantChannelPluginSchema(tenantId, channelType);
+        setChannelSchemas((prev) => ({ ...prev, [channelType]: schema }));
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : 'Failed to load plugin schema');
+      } finally {
+        setSchemaLoading(false);
+      }
+    },
+    [channelPluginCatalog, channelSchemas, tenantId]
+  );
 
   useEffect(() => {
     if (!tenantId) {
@@ -291,7 +297,10 @@ export const PluginHub: React.FC = () => {
     }
     setPluginActionKey('install');
     try {
-      const response = await channelService.installTenantPlugin(tenantId, installRequirement.trim());
+      const response = await channelService.installTenantPlugin(
+        tenantId,
+        installRequirement.trim()
+      );
       setLastPluginActionDetails(response.details || null);
       message.success(response.message);
       setInstallRequirement('');
@@ -381,59 +390,68 @@ export const PluginHub: React.FC = () => {
     void loadChannelSchema(defaultChannelType);
   }, [channelTypeOptions, form, loadChannelSchema, selectedProjectId]);
 
-  const handleEditConfig = useCallback((config: ChannelConfig) => {
-    setEditingConfig(config);
-    const normalizedExtraSettings =
-      config.extra_settings && typeof config.extra_settings === 'object'
-        ? Object.fromEntries(
-            Object.entries(config.extra_settings).map(([key, value]) => [
-              key,
-              value === SECRET_UNCHANGED_SENTINEL ? undefined : value,
-            ])
-          )
-        : {};
+  const handleEditConfig = useCallback(
+    (config: ChannelConfig) => {
+      setEditingConfig(config);
+      const normalizedExtraSettings =
+        config.extra_settings && typeof config.extra_settings === 'object'
+          ? Object.fromEntries(
+              Object.entries(config.extra_settings).map(([key, value]) => [
+                key,
+                value === SECRET_UNCHANGED_SENTINEL ? undefined : value,
+              ])
+            )
+          : {};
 
-    form.resetFields();
-    form.setFieldsValue({
-      ...config,
-      app_secret: undefined,
-      encrypt_key: undefined,
-      verification_token: undefined,
-      extra_settings: normalizedExtraSettings,
-    });
-    setConfigModalVisible(true);
-    void loadChannelSchema(config.channel_type);
-  }, [form, loadChannelSchema]);
+      form.resetFields();
+      form.setFieldsValue({
+        ...config,
+        app_secret: undefined,
+        encrypt_key: undefined,
+        verification_token: undefined,
+        extra_settings: normalizedExtraSettings,
+      });
+      setConfigModalVisible(true);
+      void loadChannelSchema(config.channel_type);
+    },
+    [form, loadChannelSchema]
+  );
 
-  const handleDeleteConfig = useCallback(async (configId: string) => {
-    setConfigActionKey(`delete:${configId}`);
-    try {
-      await channelService.deleteConfig(configId);
-      message.success('Configuration deleted');
-      await loadChannelConfigs();
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to delete configuration');
-    } finally {
-      setConfigActionKey(null);
-    }
-  }, [loadChannelConfigs]);
-
-  const handleTestConfig = useCallback(async (configId: string) => {
-    setConfigActionKey(`test:${configId}`);
-    try {
-      const result = await channelService.testConfig(configId);
-      if (result.success) {
-        message.success(result.message);
-      } else {
-        message.error(result.message);
+  const handleDeleteConfig = useCallback(
+    async (configId: string) => {
+      setConfigActionKey(`delete:${configId}`);
+      try {
+        await channelService.deleteConfig(configId);
+        message.success('Configuration deleted');
+        await loadChannelConfigs();
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : 'Failed to delete configuration');
+      } finally {
+        setConfigActionKey(null);
       }
-      await loadChannelConfigs();
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : 'Failed to test configuration');
-    } finally {
-      setConfigActionKey(null);
-    }
-  }, [loadChannelConfigs]);
+    },
+    [loadChannelConfigs]
+  );
+
+  const handleTestConfig = useCallback(
+    async (configId: string) => {
+      setConfigActionKey(`test:${configId}`);
+      try {
+        const result = await channelService.testConfig(configId);
+        if (result.success) {
+          message.success(result.message);
+        } else {
+          message.error(result.message);
+        }
+        await loadChannelConfigs();
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : 'Failed to test configuration');
+      } finally {
+        setConfigActionKey(null);
+      }
+    },
+    [loadChannelConfigs]
+  );
 
   const handleSaveConfig = useCallback(async () => {
     if (!selectedProjectId) {
@@ -480,9 +498,8 @@ export const PluginHub: React.FC = () => {
           }
         });
       }
-      payload.extra_settings = extraSettings && Object.keys(extraSettings).length > 0
-        ? extraSettings
-        : undefined;
+      payload.extra_settings =
+        extraSettings && Object.keys(extraSettings).length > 0 ? extraSettings : undefined;
 
       Object.keys(payload).forEach((key) => {
         if (payload[key] === undefined) {
@@ -529,7 +546,9 @@ export const PluginHub: React.FC = () => {
         const hint = hints[fieldName] || {};
         const sensitive = Boolean(hint.sensitive) || secretPaths.has(fieldName);
         const requiredField = required.has(fieldName) && !(editingConfig && sensitive);
-        const formName = CHANNEL_SETTING_FIELDS.has(fieldName) ? fieldName : ['extra_settings', fieldName];
+        const formName = CHANNEL_SETTING_FIELDS.has(fieldName)
+          ? fieldName
+          : ['extra_settings', fieldName];
         const label = hint.label || schema.title || humanizeFieldName(fieldName);
         const placeholder = hint.placeholder || schema.description;
         const rules = requiredField
@@ -701,7 +720,11 @@ export const PluginHub: React.FC = () => {
       key: 'channel_type',
       render: (channelType: string) => {
         const option = channelTypeOptionMap[channelType];
-        return <Tag color={option?.color || 'default'}>{option?.label || humanizeChannelType(channelType)}</Tag>;
+        return (
+          <Tag color={option?.color || 'default'}>
+            {option?.label || humanizeChannelType(channelType)}
+          </Tag>
+        );
       },
     },
     {
@@ -896,7 +919,15 @@ export const PluginHub: React.FC = () => {
                 className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2"
               >
                 <Space wrap>
-                  <Tag color={item.level === 'error' ? 'error' : item.level === 'warning' ? 'warning' : 'default'}>
+                  <Tag
+                    color={
+                      item.level === 'error'
+                        ? 'error'
+                        : item.level === 'warning'
+                          ? 'warning'
+                          : 'default'
+                    }
+                  >
                     {item.level}
                   </Tag>
                   <Text strong>{item.plugin_name}</Text>
@@ -926,10 +957,19 @@ export const PluginHub: React.FC = () => {
       >
         <Form form={form} layout="vertical">
           <Form.Item name="channel_type" label="Channel Type" rules={[{ required: true }]}>
-            <Select options={channelTypeOptions.map((option) => ({ value: option.value, label: option.label }))} />
+            <Select
+              options={channelTypeOptions.map((option) => ({
+                value: option.value,
+                label: option.label,
+              }))}
+            />
           </Form.Item>
 
-          <Form.Item name="name" label="Name" rules={[{ required: true, message: 'Please enter a name' }]}>
+          <Form.Item
+            name="name"
+            label="Name"
+            rules={[{ required: true, message: 'Please enter a name' }]}
+          >
             <Input placeholder="e.g., Feishu Bot for Support" />
           </Form.Item>
 

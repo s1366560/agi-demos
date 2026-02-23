@@ -34,7 +34,6 @@ import { useSandboxStore } from '@/stores/sandbox';
 
 import { artifactService } from '@/services/artifactService';
 
-
 import { CodeBlock as SharedCodeBlock } from '../chat/CodeBlock';
 import { useMarkdownPlugins, safeMarkdownComponents } from '../chat/markdownPlugins';
 import { MessageActionBar } from '../chat/MessageActionBar';
@@ -260,107 +259,123 @@ function getFileIconForMime(mimeType: string): string {
 }
 
 // User Message Component - Modern floating style with action bar
-const UserMessage: React.FC<UserMessageProps> = memo(({ content, onReply, forcedSkillName, forcedSubAgentName, fileMetadata }) => {
-  if (!content) return null;
-  const hasFiles = fileMetadata && fileMetadata.length > 0;
-  
-  // Determine bubble style based on forced type
-  const isSkill = !!forcedSkillName;
-  const isSubAgent = !!forcedSubAgentName;
-  const isForced = isSkill || isSubAgent;
+const UserMessage: React.FC<UserMessageProps> = memo(
+  ({ content, onReply, forcedSkillName, forcedSubAgentName, fileMetadata }) => {
+    if (!content) return null;
+    const hasFiles = fileMetadata && fileMetadata.length > 0;
 
-  let gradientClass = '';
-  if (isSubAgent) {
-    gradientClass = 'bg-gradient-to-r from-purple-400 via-purple-500/80 to-purple-400';
-  } else if (isSkill) {
-    gradientClass = 'bg-gradient-to-r from-indigo-400 via-primary/80 to-indigo-400';
-  }
+    // Determine bubble style based on forced type
+    const isSkill = !!forcedSkillName;
+    const isSubAgent = !!forcedSubAgentName;
+    const isForced = isSkill || isSubAgent;
 
-  return (
-    <div className="group flex flex-col items-end gap-1 mb-2 animate-fade-in-up">
-      {/* Main row: bubble + avatar */}
-      <div className="flex items-end justify-end gap-3 w-full">
-        <div className="max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-          <div
-            className={
-              isForced
-                ? `relative ${gradientClass} rounded-xl rounded-br-sm p-px`
-                : 'relative'
-            }
-          >
-            {!isForced && (
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-xl rounded-br-sm blur-sm -z-10" />
-            )}
-            
-            {/* Badge Icon for Forced Execution */}
-            {isForced && (
-              <div className={`absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-800 z-10 ${isSubAgent ? 'bg-gradient-to-br from-purple-400 to-purple-600' : 'bg-gradient-to-br from-indigo-400 to-primary/90'}`}>
-                {isSubAgent ? (
-                  <svg className="w-[9px] h-[9px] text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                    <line x1="8" y1="21" x2="16" y2="21" />
-                    <line x1="12" y1="17" x2="12" y2="21" />
-                  </svg>
-                ) : (
-                  <svg className="w-[9px] h-[9px] text-white" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M9.5 0L4 9h4l-1.5 7L13 7H9l.5-7z" />
-                  </svg>
-                )}
-              </div>
-            )}
+    let gradientClass = '';
+    if (isSubAgent) {
+      gradientClass = 'bg-gradient-to-r from-purple-400 via-purple-500/80 to-purple-400';
+    } else if (isSkill) {
+      gradientClass = 'bg-gradient-to-r from-indigo-400 via-primary/80 to-indigo-400';
+    }
 
+    return (
+      <div className="group flex flex-col items-end gap-1 mb-2 animate-fade-in-up">
+        {/* Main row: bubble + avatar */}
+        <div className="flex items-end justify-end gap-3 w-full">
+          <div className="max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
             <div
               className={
-                isForced
-                  ? 'bg-white dark:bg-slate-800 rounded-xl rounded-br-sm px-4 py-2.5'
-                  : 'bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl rounded-br-sm px-4 py-2.5 shadow-sm hover:shadow-md transition-shadow duration-200'
+                isForced ? `relative ${gradientClass} rounded-xl rounded-br-sm p-px` : 'relative'
               }
             >
-              <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-normal">
-                {content}
-              </p>
-            </div>
-            {/* Action bar - appears on hover at top-right */}
-            <div className="absolute -top-3 right-2 z-10">
-              <MessageActionBar role="user" content={content} onReply={onReply} />
-            </div>
-            
-            {/* Badge Label */}
-            {isForced && (
-              <div className={`absolute bottom-0 right-4 translate-y-1/2 px-1.5 bg-white dark:bg-slate-800 text-[10px] font-medium leading-none tracking-wide ${isSubAgent ? 'text-purple-600 dark:text-purple-400' : 'text-primary/70'}`}>
-                {isSubAgent ? `@${forcedSubAgentName}` : forcedSkillName}
+              {!isForced && (
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-primary/5 rounded-xl rounded-br-sm blur-sm -z-10" />
+              )}
+
+              {/* Badge Icon for Forced Execution */}
+              {isForced && (
+                <div
+                  className={`absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-800 z-10 ${isSubAgent ? 'bg-gradient-to-br from-purple-400 to-purple-600' : 'bg-gradient-to-br from-indigo-400 to-primary/90'}`}
+                >
+                  {isSubAgent ? (
+                    <svg
+                      className="w-[9px] h-[9px] text-white"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                      <line x1="8" y1="21" x2="16" y2="21" />
+                      <line x1="12" y1="17" x2="12" y2="21" />
+                    </svg>
+                  ) : (
+                    <svg
+                      className="w-[9px] h-[9px] text-white"
+                      viewBox="0 0 16 16"
+                      fill="currentColor"
+                    >
+                      <path d="M9.5 0L4 9h4l-1.5 7L13 7H9l.5-7z" />
+                    </svg>
+                  )}
+                </div>
+              )}
+
+              <div
+                className={
+                  isForced
+                    ? 'bg-white dark:bg-slate-800 rounded-xl rounded-br-sm px-4 py-2.5'
+                    : 'bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-xl rounded-br-sm px-4 py-2.5 shadow-sm hover:shadow-md transition-shadow duration-200'
+                }
+              >
+                <p className="text-[15px] leading-relaxed whitespace-pre-wrap break-words text-slate-800 dark:text-slate-100 font-normal">
+                  {content}
+                </p>
               </div>
-            )}
+              {/* Action bar - appears on hover at top-right */}
+              <div className="absolute -top-3 right-2 z-10">
+                <MessageActionBar role="user" content={content} onReply={onReply} />
+              </div>
+
+              {/* Badge Label */}
+              {isForced && (
+                <div
+                  className={`absolute bottom-0 right-4 translate-y-1/2 px-1.5 bg-white dark:bg-slate-800 text-[10px] font-medium leading-none tracking-wide ${isSubAgent ? 'text-purple-600 dark:text-purple-400' : 'text-primary/70'}`}
+                >
+                  {isSubAgent ? `@${forcedSubAgentName}` : forcedSkillName}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center flex-shrink-0 shadow-sm">
+            <User size={16} className="text-slate-500 dark:text-slate-400" />
           </div>
         </div>
-        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-700 dark:to-slate-800 flex items-center justify-center flex-shrink-0 shadow-sm">
-          <User size={16} className="text-slate-500 dark:text-slate-400" />
-        </div>
+        {/* Attachment row: below bubble, aligned under bubble (offset by avatar width) */}
+        {hasFiles && (
+          <div className={`flex flex-col items-end gap-1 mr-11 ${isForced ? 'mt-2' : 'mt-0.5'}`}>
+            {fileMetadata.map((file, idx) => (
+              <div
+                key={idx}
+                className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-lg"
+              >
+                <span className="material-symbols-outlined text-[16px] text-slate-500 dark:text-slate-400">
+                  {getFileIconForMime(file.mime_type)}
+                </span>
+                <span className="text-xs text-slate-700 dark:text-slate-300 truncate max-w-[200px]">
+                  {file.filename}
+                </span>
+                <span className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
+                  {formatBytesSize(file.size_bytes)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-      {/* Attachment row: below bubble, aligned under bubble (offset by avatar width) */}
-      {hasFiles && (
-        <div className={`flex flex-col items-end gap-1 mr-11 ${isForced ? 'mt-2' : 'mt-0.5'}`}>
-          {fileMetadata.map((file, idx) => (
-            <div
-              key={idx}
-              className="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 rounded-lg"
-            >
-              <span className="material-symbols-outlined text-[16px] text-slate-500 dark:text-slate-400">
-                {getFileIconForMime(file.mime_type)}
-              </span>
-              <span className="text-xs text-slate-700 dark:text-slate-300 truncate max-w-[200px]">
-                {file.filename}
-              </span>
-              <span className="text-[10px] text-slate-400 dark:text-slate-500 whitespace-nowrap">
-                {formatBytesSize(file.size_bytes)}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-});
+    );
+  }
+);
 UserMessage.displayName = 'MessageBubble.User';
 
 // Stable component references hoisted to module scope to prevent ReactMarkdown re-parsing
@@ -370,56 +385,58 @@ const ASSISTANT_COMPONENTS: Components = {
 };
 
 // Assistant Message Component - Modern card style with action bar
-const AssistantMessage: React.FC<AssistantMessageProps> = memo(({ content, isStreaming, isPinned, onPin, onReply }) => {
-  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
-  const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
-  if (!content && !isStreaming) return null;
-  return (
-    <div className="group flex items-start gap-3 mb-2 animate-fade-in-up">
-      <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-primary/20">
-        <Bot size={18} className="text-white" />
-      </div>
-      <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
-        <div className="relative">
-          <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-4 py-2.5 shadow-sm hover:shadow-md transition-all duration-200">
-            <div className={MARKDOWN_PROSE_CLASSES}>
-            {content ? (
-              <ReactMarkdown
-                remarkPlugins={remarkPlugins}
-                rehypePlugins={rehypePlugins}
-                components={ASSISTANT_COMPONENTS}
-              >
-                {content}
-              </ReactMarkdown>
-            ) : null}
+const AssistantMessage: React.FC<AssistantMessageProps> = memo(
+  ({ content, isStreaming, isPinned, onPin, onReply }) => {
+    const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+    const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(content);
+    if (!content && !isStreaming) return null;
+    return (
+      <div className="group flex items-start gap-3 mb-2 animate-fade-in-up">
+        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-primary/20">
+          <Bot size={18} className="text-white" />
+        </div>
+        <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
+          <div className="relative">
+            <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-4 py-2.5 shadow-sm hover:shadow-md transition-all duration-200">
+              <div className={MARKDOWN_PROSE_CLASSES}>
+                {content ? (
+                  <ReactMarkdown
+                    remarkPlugins={remarkPlugins}
+                    rehypePlugins={rehypePlugins}
+                    components={ASSISTANT_COMPONENTS}
+                  >
+                    {content}
+                  </ReactMarkdown>
+                ) : null}
+              </div>
+            </div>
+            {/* Action bar - appears on hover at top-right */}
+            {!isStreaming && content && (
+              <div className="absolute -top-3 right-2 z-10">
+                <MessageActionBar
+                  role="assistant"
+                  content={content}
+                  isPinned={isPinned}
+                  onPin={onPin}
+                  onReply={onReply}
+                  onSaveAsTemplate={() => setShowSaveTemplate(true)}
+                />
+              </div>
+            )}
           </div>
         </div>
-          {/* Action bar - appears on hover at top-right */}
-          {!isStreaming && content && (
-            <div className="absolute -top-3 right-2 z-10">
-              <MessageActionBar
-                role="assistant"
-                content={content}
-                isPinned={isPinned}
-                onPin={onPin}
-                onReply={onReply}
-                onSaveAsTemplate={() => setShowSaveTemplate(true)}
-              />
-            </div>
-          )}
-        </div>
+        {showSaveTemplate && (
+          <SaveTemplateModal
+            content={content || ''}
+            visible={showSaveTemplate}
+            onClose={() => setShowSaveTemplate(false)}
+            onSave={() => setShowSaveTemplate(false)}
+          />
+        )}
       </div>
-      {showSaveTemplate && (
-        <SaveTemplateModal
-          content={content || ''}
-          visible={showSaveTemplate}
-          onClose={() => setShowSaveTemplate(false)}
-          onSave={() => setShowSaveTemplate(false)}
-        />
-      )}
-    </div>
-  );
-});
+    );
+  }
+);
 AssistantMessage.displayName = 'MessageBubble.Assistant';
 
 // Text Delta Component (for streaming content)
@@ -434,7 +451,13 @@ const TextDelta: React.FC<TextDeltaProps> = memo(({ content }) => {
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-4 py-2.5 shadow-sm">
           <div className={MARKDOWN_PROSE_CLASSES}>
-            <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={safeMarkdownComponents}>{content}</ReactMarkdown>
+            <ReactMarkdown
+              remarkPlugins={remarkPlugins}
+              rehypePlugins={rehypePlugins}
+              components={safeMarkdownComponents}
+            >
+              {content}
+            </ReactMarkdown>
           </div>
         </div>
       </div>
@@ -519,10 +542,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
   return (
     <div className="flex items-start gap-3 mb-2 animate-fade-in-up">
       <div className="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0">
-        <Wrench
-          size={16}
-          className="text-slate-500 dark:text-slate-400"
-        />
+        <Wrench size={16} className="text-slate-500 dark:text-slate-400" />
       </div>
       <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200">
@@ -705,7 +725,13 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
         <div className="relative">
           <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-xl rounded-tl-sm px-5 py-4 shadow-sm">
             <div className={MARKDOWN_PROSE_CLASSES}>
-              <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={safeMarkdownComponents}>{fullText}</ReactMarkdown>
+              <ReactMarkdown
+                remarkPlugins={remarkPlugins}
+                rehypePlugins={rehypePlugins}
+                components={safeMarkdownComponents}
+              >
+                {fullText}
+              </ReactMarkdown>
             </div>
           </div>
           {/* Action bar - appears on hover at top-right */}
@@ -749,7 +775,8 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
   const artifactUrl = currentUrl || storeArtifact?.url || event.url;
   const artifactPreviewUrl = currentUrl || storeArtifact?.previewUrl || event.previewUrl;
   const artifactError = storeArtifact?.errorMessage || event.error;
-  const artifactStatus = storeArtifact?.status || (event.url ? 'ready' : artifactError ? 'error' : 'uploading');
+  const artifactStatus =
+    storeArtifact?.status || (event.url ? 'ready' : artifactError ? 'error' : 'uploading');
 
   const canvasOpenTab = useCanvasStore((s) => s.openTab);
   const setLayoutMode = useLayoutModeStore((s) => s.setMode);
@@ -782,9 +809,9 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
       const content = await response.text();
 
       // Check if this is HTML content - should use preview mode with iframe
-      const isHtmlFile = event.filename.toLowerCase().endsWith('.html') || 
-                         event.mimeType === 'text/html';
-      
+      const isHtmlFile =
+        event.filename.toLowerCase().endsWith('.html') || event.mimeType === 'text/html';
+
       if (isHtmlFile) {
         // HTML files should be rendered in preview mode using iframe
         canvasOpenTab({
@@ -914,8 +941,7 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                 <RefreshCw size={12} className={refreshingUrl ? 'animate-spin' : ''} />
                 {refreshingUrl
                   ? t('agent.messageBubble.refreshing', 'Refreshing...')
-                  : t('agent.messageBubble.refreshLink', 'Refresh Link')
-                }
+                  : t('agent.messageBubble.refreshLink', 'Refresh Link')}
               </button>
             </div>
           )}
@@ -978,14 +1004,11 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                 <RefreshCw size={14} className={refreshingUrl ? 'animate-spin' : ''} />
                 {refreshingUrl
                   ? t('agent.messageBubble.refreshing', 'Refreshing...')
-                  : t('agent.messageBubble.refreshLink', 'Refresh')
-                }
+                  : t('agent.messageBubble.refreshLink', 'Refresh')}
               </button>
             )}
             {refreshError && !imageError && (
-              <span className="text-xs text-red-500 dark:text-red-400">
-                {refreshError}
-              </span>
+              <span className="text-xs text-red-500 dark:text-red-400">{refreshError}</span>
             )}
           </div>
 
@@ -1024,8 +1047,10 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         const rawContent = getContent(event);
         // Check for System Instruction prefix for SubAgent delegation
         // Format: [System Instruction: Delegate this task strictly to SubAgent "NAME"]\nCONTENT
-        const systemInstructionMatch = rawContent.match(/^\[System Instruction: Delegate this task strictly to SubAgent "([^"]+)"\]\n/);
-        
+        const systemInstructionMatch = rawContent.match(
+          /^\[System Instruction: Delegate this task strictly to SubAgent "([^"]+)"\]\n/
+        );
+
         let content = rawContent;
         let forcedSubAgentName: string | undefined = undefined;
 
@@ -1055,7 +1080,15 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
       }
 
       case 'assistant_message':
-        return <AssistantMessage content={getContent(event)} isStreaming={isStreaming} isPinned={isPinned} onPin={onPin} onReply={onReply} />;
+        return (
+          <AssistantMessage
+            content={getContent(event)}
+            isStreaming={isStreaming}
+            isPinned={isPinned}
+            onPin={onPin}
+            onReply={onReply}
+          />
+        );
 
       case 'text_delta':
         // Skip text_delta when a text_end exists (it contains the full text)
@@ -1089,7 +1122,9 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
         return null;
 
       case 'artifact_created':
-        return <ArtifactCreated event={event as unknown as ArtifactCreatedEvent & { error?: string }} />;
+        return (
+          <ArtifactCreated event={event as unknown as ArtifactCreatedEvent & { error?: string }} />
+        );
 
       // HITL Events - Render inline cards
       case 'clarification_asked': {

@@ -22,19 +22,18 @@ import {
 } from 'antd';
 import { X } from 'lucide-react';
 
-
 import { agentService } from '../../services/agentService';
 import { mcpAPI } from '../../services/mcpService';
 import { skillAPI } from '../../services/skillService';
 import { useSubAgentStore, useSubAgentSubmitting } from '../../stores/subagent';
 
-import type { 
-  SubAgentResponse, 
-  SubAgentCreate, 
+import type {
+  SubAgentResponse,
+  SubAgentCreate,
   SubAgentUpdate,
   SkillResponse,
   MCPServerResponse,
-  ToolInfo
+  ToolInfo,
 } from '../../types/agent';
 import type { Color } from 'antd/es/color-picker';
 
@@ -89,7 +88,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
   const [keywordInput, setKeywordInput] = useState('');
   const [exampleInput, setExampleInput] = useState('');
   const [selectedColor, setSelectedColor] = useState('#3B82F6');
-  
+
   // Available resources state
   const [availableTools, setAvailableTools] = useState<ToolInfo[]>([]);
   const [availableSkills, setAvailableSkills] = useState<SkillResponse[]>([]);
@@ -114,20 +113,22 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
           const [toolsRes, skillsRes, mcpRes] = await Promise.all([
             agentService.listTools(),
             skillAPI.list({ limit: 100 }),
-            mcpAPI.list({ limit: 100 })
+            mcpAPI.list({ limit: 100 }),
           ]);
-          
+
           setAvailableTools(toolsRes.tools || []);
           setAvailableSkills(skillsRes.skills || []); // skillAPI returns { skills: [], total: number }
           setAvailableMcpServers(mcpRes || []); // mcpAPI returns MCPServerResponse[]
         } catch (error) {
           console.error('Failed to fetch resources:', error);
-          message.error(t('tenant.subagents.modal.resourceFetchError', 'Failed to load available tools/skills'));
+          message.error(
+            t('tenant.subagents.modal.resourceFetchError', 'Failed to load available tools/skills')
+          );
         } finally {
           setLoadingResources(false);
         }
       };
-      
+
       fetchResources();
     }
   }, [isOpen, t]);
@@ -289,14 +290,14 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
     }
     const queryLower = testQuery.toLowerCase();
     const queryWords = queryLower.split(/\s+/);
-    
+
     // Backend logic: strict word matching
     // Check if any keyword matches exactly one of the words in the query
-    const matchedKeyword = keywords.find(k => {
-       const kLower = k.toLowerCase();
-       return queryWords.includes(kLower);
+    const matchedKeyword = keywords.find((k) => {
+      const kLower = k.toLowerCase();
+      return queryWords.includes(kLower);
     });
-    
+
     if (matchedKeyword) {
       setTestResult({ matched: true, keyword: matchedKeyword });
     } else {

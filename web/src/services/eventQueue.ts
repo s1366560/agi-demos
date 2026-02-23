@@ -22,7 +22,11 @@ interface QueuedEvent {
 /**
  * Event handler function type
  */
-type EventHandler = (event: { type: string; data: unknown; conversationId?: string }) => void | Promise<void>;
+type EventHandler = (event: {
+  type: string;
+  data: unknown;
+  conversationId?: string;
+}) => void | Promise<void>;
 
 /**
  * Configuration for the event queue

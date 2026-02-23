@@ -67,7 +67,12 @@ const getToolIcon = (toolName: string, size = 13, className = '') => {
   if (name.includes('search') || name.includes('grep') || name.includes('find')) {
     return <Search size={size} className={className} />;
   }
-  if (name.includes('read') || name.includes('write') || name.includes('file') || name.includes('edit')) {
+  if (
+    name.includes('read') ||
+    name.includes('write') ||
+    name.includes('file') ||
+    name.includes('edit')
+  ) {
     return <FileText size={size} className={className} />;
   }
   if (name.includes('web') || name.includes('browse') || name.includes('scrape')) {
@@ -172,11 +177,13 @@ const TimelineStepItem = memo<{
         : 'bg-red-50 dark:bg-red-950 border-red-200/60 dark:border-red-800/30';
 
   const statusIcon =
-    step.status === 'running'
-      ? <Loader2 size={14} className={`${statusColor} animate-spin`} />
-      : step.status === 'success'
-        ? <CheckCircle2 size={14} className={statusColor} />
-        : <XCircle size={14} className={statusColor} />;
+    step.status === 'running' ? (
+      <Loader2 size={14} className={`${statusColor} animate-spin`} />
+    ) : step.status === 'success' ? (
+      <CheckCircle2 size={14} className={statusColor} />
+    ) : (
+      <XCircle size={14} className={statusColor} />
+    );
 
   return (
     <div className="relative flex gap-2 mb-0" style={{ minHeight: '24px' }}>
@@ -185,11 +192,12 @@ const TimelineStepItem = memo<{
         <div
           className={`
             w-6 h-6 rounded-full flex items-center justify-center border-2 flex-shrink-0
-            ${step.status === 'running'
-              ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/50'
-              : step.status === 'success'
-                ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/50'
-                : 'border-red-400 bg-red-50 dark:bg-red-950/50'
+            ${
+              step.status === 'running'
+                ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/50'
+                : step.status === 'success'
+                  ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/50'
+                  : 'border-red-400 bg-red-50 dark:bg-red-950/50'
             }
           `}
           style={{ minWidth: '24px', minHeight: '24px' }}
@@ -240,11 +248,12 @@ const TimelineStepItem = memo<{
                 <Undo2 size={12} />
               </button>
             )}
-            {(step.input || step.output) && (
-              expanded
-                ? <ChevronDown size={12} className="text-slate-400" />
-                : <ChevronRight size={12} className="text-slate-400" />
-            )}
+            {(step.input || step.output) &&
+              (expanded ? (
+                <ChevronDown size={12} className="text-slate-400" />
+              ) : (
+                <ChevronRight size={12} className="text-slate-400" />
+              ))}
           </div>
           {!expanded && preview && (
             <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">
@@ -254,8 +263,7 @@ const TimelineStepItem = memo<{
         </button>
 
         {/* MCP App "Open App" button - visible without expanding */}
-        {step.toolName.startsWith('mcp__') &&
-          step.status === 'success' && !step.isError && (
+        {step.toolName.startsWith('mcp__') && step.status === 'success' && !step.isError && (
           <button
             type="button"
             onClick={async (e) => {
@@ -266,7 +274,7 @@ const TimelineStepItem = memo<{
 
               // Priority 1: Find existing tab for this tool
               const existingMcpTab = canvasState.tabs.find(
-                (t) => t.type === 'mcp-app' && t.mcpToolName === step.toolName,
+                (t) => t.type === 'mcp-app' && t.mcpToolName === step.toolName
               );
               if (existingMcpTab) {
                 canvasState.setActiveTab(existingMcpTab.id);
@@ -278,8 +286,10 @@ const TimelineStepItem = memo<{
               if (ui?.resource_uri) {
                 // Priority: ui.project_id > project store > conversation store
                 const projectStoreId = useProjectStore.getState().currentProject?.id;
-                const conversationProjectId = useConversationsStore.getState().currentConversation?.project_id;
-                const currentProjectId = ui.project_id || projectStoreId || conversationProjectId || '';
+                const conversationProjectId =
+                  useConversationsStore.getState().currentConversation?.project_id;
+                const currentProjectId =
+                  ui.project_id || projectStoreId || conversationProjectId || '';
                 const tabId = `mcp-app-${ui.resource_uri}`;
 
                 // Look up cached HTML from mcp_app_result event
@@ -307,7 +317,8 @@ const TimelineStepItem = memo<{
               // Priority: ui.project_id > project store > conversation store
               const uiProjectId = ui?.project_id;
               const projectStoreId = useProjectStore.getState().currentProject?.id;
-              const conversationProjectId = useConversationsStore.getState().currentConversation?.project_id;
+              const conversationProjectId =
+                useConversationsStore.getState().currentConversation?.project_id;
               const currentProjectId = uiProjectId || projectStoreId || conversationProjectId || '';
 
               let match = Object.values(apps).find(
@@ -315,7 +326,7 @@ const TimelineStepItem = memo<{
                   step.toolName === `mcp__${a.server_name}__${a.tool_name}` ||
                   step.toolName.replace(/-/g, '_') ===
                     `mcp__${(a.server_name || '').replace(/-/g, '_')}__${a.tool_name}` ||
-                  a.tool_name === step.toolName,
+                  a.tool_name === step.toolName
               );
 
               // Priority 4: If no match in store, fetch from API
@@ -328,7 +339,7 @@ const TimelineStepItem = memo<{
                       step.toolName === `mcp__${a.server_name}__${a.tool_name}` ||
                       step.toolName.replace(/-/g, '_') ===
                         `mcp__${(a.server_name || '').replace(/-/g, '_')}__${a.tool_name}` ||
-                      a.tool_name === step.toolName,
+                      a.tool_name === step.toolName
                   );
                 } catch {
                   // Ignore fetch errors - fall through to open without match
@@ -344,7 +355,7 @@ const TimelineStepItem = memo<{
 
               canvasState.openTab({
                 id: tabId,
-                title: match?.ui_metadata?.title as string || getToolLabel(step.toolName),
+                title: (match?.ui_metadata?.title as string) || getToolLabel(step.toolName),
                 type: 'mcp-app' as const,
                 content: '',
                 mcpResourceUri: resourceUri,
@@ -412,67 +423,68 @@ TimelineStepItem.displayName = 'TimelineStepItem';
 // Main timeline component
 export const ExecutionTimeline = memo<ExecutionTimelineProps>(
   ({ steps, isStreaming, onUndoRequest }) => {
-  const { t } = useTranslation();
-  const [collapsed, setCollapsed] = useState(false);
+    const { t } = useTranslation();
+    const [collapsed, setCollapsed] = useState(false);
 
-  const summary = useMemo(() => {
-    const total = steps.length;
-    const completed = steps.filter((s) => s.status === 'success').length;
-    const failed = steps.filter((s) => s.status === 'error').length;
-    const running = steps.filter((s) => s.status === 'running').length;
-    return { total, completed, failed, running };
-  }, [steps]);
+    const summary = useMemo(() => {
+      const total = steps.length;
+      const completed = steps.filter((s) => s.status === 'success').length;
+      const failed = steps.filter((s) => s.status === 'error').length;
+      const running = steps.filter((s) => s.status === 'running').length;
+      return { total, completed, failed, running };
+    }, [steps]);
 
-  if (steps.length === 0) return null;
+    if (steps.length === 0) return null;
 
-  return (
-    <div className="mb-2 rounded-md">
-      {/* Summary header */}
-      <button
-        type="button"
-        onClick={() => setCollapsed((v) => !v)}
-        className="flex items-center gap-2 w-full text-left mb-1.5 group cursor-pointer"
-      >
-        {collapsed ? (
-          <ChevronRight size={14} className="text-slate-400" />
-        ) : (
-          <ChevronDown size={14} className="text-slate-400" />
-        )}
-        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
-          {summary.running > 0
-            ? t('agent.timeline.running', 'Running {{count}} tools...', {
-                count: summary.running,
-              })
-            : t('agent.timeline.completed', '{{completed}}/{{total}} steps completed', {
-                completed: summary.completed,
-                total: summary.total,
-              })}
-        </span>
-        {summary.failed > 0 && (
-          <span className="text-[10px] px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full">
-            {summary.failed} {t('agent.timeline.failed', 'failed')}
+    return (
+      <div className="mb-2 rounded-md">
+        {/* Summary header */}
+        <button
+          type="button"
+          onClick={() => setCollapsed((v) => !v)}
+          className="flex items-center gap-2 w-full text-left mb-1.5 group cursor-pointer"
+        >
+          {collapsed ? (
+            <ChevronRight size={14} className="text-slate-400" />
+          ) : (
+            <ChevronDown size={14} className="text-slate-400" />
+          )}
+          <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+            {summary.running > 0
+              ? t('agent.timeline.running', 'Running {{count}} tools...', {
+                  count: summary.running,
+                })
+              : t('agent.timeline.completed', '{{completed}}/{{total}} steps completed', {
+                  completed: summary.completed,
+                  total: summary.total,
+                })}
           </span>
-        )}
-        {isStreaming && summary.running > 0 && (
-          <Loader2 size={12} className="text-blue-500 animate-spin" />
-        )}
-      </button>
+          {summary.failed > 0 && (
+            <span className="text-[10px] px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full">
+              {summary.failed} {t('agent.timeline.failed', 'failed')}
+            </span>
+          )}
+          {isStreaming && summary.running > 0 && (
+            <Loader2 size={12} className="text-blue-500 animate-spin" />
+          )}
+        </button>
 
-      {/* Timeline steps */}
-      {!collapsed && (
-        <div className="pl-1 pt-0.5" style={{ display: 'flow-root' }}>
-          {steps.map((step, i) => (
-            <TimelineStepItem
-              key={step.id}
-              step={step}
-              isLast={i === steps.length - 1}
-              defaultExpanded={step.status === 'error'}
-              onUndoRequest={onUndoRequest}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-});
+        {/* Timeline steps */}
+        {!collapsed && (
+          <div className="pl-1 pt-0.5" style={{ display: 'flow-root' }}>
+            {steps.map((step, i) => (
+              <TimelineStepItem
+                key={step.id}
+                step={step}
+                isLast={i === steps.length - 1}
+                defaultExpanded={step.status === 'error'}
+                onUndoRequest={onUndoRequest}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+);
 ExecutionTimeline.displayName = 'ExecutionTimeline';

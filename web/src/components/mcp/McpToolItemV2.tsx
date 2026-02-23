@@ -26,34 +26,29 @@ export interface McpToolItemV2Props {
   onToggle: () => void;
 }
 
-export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({
-  tool,
-  isExpanded,
-  onToggle,
-}) => {
-  const typeStyle = SERVER_TYPE_STYLES[tool.serverType as keyof typeof SERVER_TYPE_STYLES] || SERVER_TYPE_STYLES.stdio;
+export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({ tool, isExpanded, onToggle }) => {
+  const typeStyle =
+    SERVER_TYPE_STYLES[tool.serverType as keyof typeof SERVER_TYPE_STYLES] ||
+    SERVER_TYPE_STYLES.stdio;
 
   return (
     <div
       className={`group ${CARD_STYLES.base} ${CARD_STYLES.hover} ${
-        isExpanded
-          ? 'border-primary bg-primary/5 dark:border-primary'
-          : ''
+        isExpanded ? 'border-primary bg-primary/5 dark:border-primary' : ''
       } transition-all duration-200 overflow-hidden`}
     >
       {/* Header - Clickable */}
-      <div
-        className="p-4 cursor-pointer"
-        onClick={onToggle}
-      >
+      <div className="p-4 cursor-pointer" onClick={onToggle}>
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0 flex-1">
             {/* Tool Icon */}
-            <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
-              isExpanded
-                ? 'bg-primary/10 text-primary'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
-            }`}>
+            <div
+              className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
+                isExpanded
+                  ? 'bg-primary/10 text-primary'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+              }`}
+            >
               <MaterialIcon name="build" size={20} />
             </div>
 
@@ -93,11 +88,13 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({
             </Tag>
 
             {/* Expand Indicator */}
-            <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 ${
-              isExpanded
-                ? 'bg-primary/10 text-primary rotate-180'
-                : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
-            }`}>
+            <div
+              className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                isExpanded
+                  ? 'bg-primary/10 text-primary rotate-180'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+              }`}
+            >
               <ChevronDown size={14} />
             </div>
           </div>
@@ -110,13 +107,19 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({
           {/* Server Info */}
           <div className="flex items-center gap-4 py-3 text-xs text-slate-500 dark:text-slate-400">
             <div className="flex items-center gap-2">
-              <div className={`w-6 h-6 rounded flex items-center justify-center ${typeStyle.bgColor}`}>
+              <div
+                className={`w-6 h-6 rounded flex items-center justify-center ${typeStyle.bgColor}`}
+              >
                 <MaterialIcon name={typeStyle.icon} size={14} className={typeStyle.textColor} />
               </div>
-              <span className="font-medium text-slate-700 dark:text-slate-300">{tool.serverName}</span>
+              <span className="font-medium text-slate-700 dark:text-slate-300">
+                {tool.serverName}
+              </span>
             </div>
             <span className="text-slate-300 dark:text-slate-600">•</span>
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${typeStyle.bgColor} ${typeStyle.textColor}`}>
+            <span
+              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${typeStyle.bgColor} ${typeStyle.textColor}`}
+            >
               {tool.serverType.toUpperCase()}
             </span>
           </div>
@@ -126,7 +129,9 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({
             <div className="mb-4">
               <div className="flex items-center gap-1.5 mb-2">
                 <FileJson size={12} className="text-slate-400" />
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Description</span>
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Description
+                </span>
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
                 {tool.description}
@@ -139,7 +144,9 @@ export const McpToolItemV2: React.FC<McpToolItemV2Props> = ({
             <div>
               <div className="flex items-center gap-1.5 mb-2">
                 <FileJson size={12} className="text-slate-400" />
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Input Schema</span>
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Input Schema
+                </span>
               </div>
               <pre className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg text-xs text-slate-700 dark:text-slate-300 overflow-auto max-h-80 border border-slate-200 dark:border-slate-700 font-mono">
                 {JSON.stringify(tool.input_schema, null, 2)}

@@ -439,7 +439,10 @@ export function ToolExecutionCardDisplay({
       </div>
 
       {hasDetails && (
-        <details className="group" open={defaultExpanded || status === 'running' || status === 'preparing'}>
+        <details
+          className="group"
+          open={defaultExpanded || status === 'running' || status === 'preparing'}
+        >
           <summary className="px-4 py-2 text-xs text-slate-500 cursor-pointer hover:bg-slate-50 dark:hover:bg-white/5 flex items-center gap-1 select-none">
             <span className="material-symbols-outlined text-sm group-open:rotate-90 transition-transform">
               chevron_right
@@ -454,7 +457,10 @@ export function ToolExecutionCardDisplay({
                   <span className="material-symbols-outlined text-[12px]">edit_note</span>
                   Building Arguments
                 </label>
-                <div ref={streamingArgsRef} className="px-3 py-2 bg-blue-50 dark:bg-blue-500/5 border border-blue-200 dark:border-blue-500/20 rounded-lg text-xs font-mono text-slate-600 dark:text-text-muted overflow-x-auto max-h-32 overflow-y-auto">
+                <div
+                  ref={streamingArgsRef}
+                  className="px-3 py-2 bg-blue-50 dark:bg-blue-500/5 border border-blue-200 dark:border-blue-500/20 rounded-lg text-xs font-mono text-slate-600 dark:text-text-muted overflow-x-auto max-h-32 overflow-y-auto"
+                >
                   <pre className="whitespace-pre-wrap break-words">
                     {partialArguments}
                     <span className="inline-block w-1.5 h-3.5 bg-blue-500 animate-pulse ml-0.5 align-middle" />
@@ -468,7 +474,9 @@ export function ToolExecutionCardDisplay({
               <div className="space-y-2">
                 <div className="border border-dashed border-blue-200 dark:border-blue-500/20 rounded-lg p-4 flex items-center justify-center gap-2 text-center bg-blue-50/50 dark:bg-blue-500/5">
                   <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                  <p className="text-xs text-blue-600 dark:text-blue-400 italic">Preparing tool call...</p>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 italic">
+                    Preparing tool call...
+                  </p>
                 </div>
               </div>
             )}

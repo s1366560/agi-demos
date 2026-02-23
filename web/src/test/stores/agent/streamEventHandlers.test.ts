@@ -2,13 +2,16 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { createStreamEventHandlers } from '../../../stores/agent/streamEventHandlers';
 
-import type { DeltaBufferState, StreamHandlerDeps } from '../../../stores/agent/streamEventHandlers';
-import type { 
-  AgentEvent, 
-  ThoughtEventData, 
-  ActEventData, 
-  ObserveEventData, 
-  TextDeltaEventData 
+import type {
+  DeltaBufferState,
+  StreamHandlerDeps,
+} from '../../../stores/agent/streamEventHandlers';
+import type {
+  AgentEvent,
+  ThoughtEventData,
+  ActEventData,
+  ObserveEventData,
+  TextDeltaEventData,
 } from '../../../types/agent';
 import type { ConversationState } from '../../../types/conversationState';
 
@@ -16,7 +19,7 @@ describe('streamEventHandlers', () => {
   const conversationId = 'conv-1';
   // Mock state object
   let mockState: ConversationState;
-  
+
   // Mock dependencies
   let mockUpdateConversationState: ReturnType<typeof vi.fn>;
   let mockGetConversationState: ReturnType<typeof vi.fn>;
@@ -52,9 +55,9 @@ describe('streamEventHandlers', () => {
       // Apply updates to mockState for subsequent calls
       Object.assign(mockState, updates);
     });
-    
+
     mockGetConversationState = vi.fn().mockReturnValue(mockState);
-    
+
     mockSet = vi.fn();
 
     deltaBuffers = new Map();
@@ -158,7 +161,7 @@ describe('streamEventHandlers', () => {
 
     // First chunk
     handlers.onTextDelta!(event);
-    
+
     // Should not update state yet (buffered)
     expect(mockUpdateConversationState).not.toHaveBeenCalled();
 
@@ -173,7 +176,7 @@ describe('streamEventHandlers', () => {
 
   it('should handle onTextEnd and flush remaining buffer', () => {
     const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
-    
+
     // Add some data to buffer
     handlers.onTextDelta!({ type: 'text_delta', data: { delta: 'World' } });
 
@@ -197,9 +200,9 @@ describe('streamEventHandlers', () => {
         timeline: expect.arrayContaining([
           expect.objectContaining({
             type: 'text_end',
-            fullText: 'Hello World'
-          })
-        ])
+            fullText: 'Hello World',
+          }),
+        ]),
       })
     );
   });
@@ -243,7 +246,9 @@ describe('streamEventHandlers', () => {
 
     expect(completionUpdates).toBeDefined();
     expect(
-      completionUpdates.timeline.some((e: any) => e.type === 'text_start' || e.type === 'text_delta')
+      completionUpdates.timeline.some(
+        (e: any) => e.type === 'text_start' || e.type === 'text_delta'
+      )
     ).toBe(false);
     expect(
       completionUpdates.timeline.some((e: any) => e.type === 'text_end' && e.id === 'text-end-1')
@@ -277,15 +282,17 @@ describe('streamEventHandlers', () => {
     const lastCall = mockUpdateConversationState.mock.calls[0];
     const updates = lastCall[1];
     const calls = updates.activeToolCalls;
-    expect(calls.get('search')).toEqual(expect.objectContaining({
-      name: 'search',
-      status: 'running',
-    }));
+    expect(calls.get('search')).toEqual(
+      expect.objectContaining({
+        name: 'search',
+        status: 'running',
+      })
+    );
   });
 
   it('should handle onObserve (tool result)', () => {
     const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
-    
+
     // Setup initial state with active tool call
     const activeCalls = new Map();
     activeCalls.set('search', { name: 'search', status: 'running' });
@@ -326,7 +333,7 @@ describe('streamEventHandlers', () => {
     };
 
     handlers.onThoughtDelta!(event);
-    
+
     expect(mockUpdateConversationState).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(50);
@@ -359,11 +366,11 @@ describe('streamEventHandlers', () => {
         streamingThought: '',
         currentThought: '\nI should search.',
         timeline: expect.arrayContaining([
-            expect.objectContaining({
-                type: 'thought',
-                content: 'I should search.'
-            })
-        ])
+          expect.objectContaining({
+            type: 'thought',
+            content: 'I should search.',
+          }),
+        ]),
       })
     );
   });

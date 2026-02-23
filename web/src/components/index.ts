@@ -25,11 +25,7 @@
 // Re-exports for IDE support - prefer sub-barrel imports in production code
 
 // Common components (ErrorBoundary, SkeletonLoader)
-export {
-  ErrorBoundary,
-  SkeletonLoader,
-  type SkeletonLoaderProps,
-} from './common';
+export { ErrorBoundary, SkeletonLoader, type SkeletonLoaderProps } from './common';
 
 // Agent components (modern agent chat UI)
 export {

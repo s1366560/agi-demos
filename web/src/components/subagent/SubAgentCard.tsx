@@ -74,7 +74,7 @@ export const SubAgentCard = memo<SubAgentCardProps>(
 
     const handleToggle = useCallback(
       (checked: boolean) => onToggle(subagent.id, checked),
-      [subagent.id, onToggle],
+      [subagent.id, onToggle]
     );
 
     const handleEdit = useCallback(() => {
@@ -113,7 +113,9 @@ export const SubAgentCard = memo<SubAgentCardProps>(
                   <span className="text-xs text-slate-400 dark:text-slate-500 truncate">
                     @{subagent.name}
                   </span>
-                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${getModelBadgeStyle(subagent.model)}`}>
+                  <span
+                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${getModelBadgeStyle(subagent.model)}`}
+                  >
                     {subagent.model === 'inherit'
                       ? t('tenant.subagents.card.inherit', 'Inherit')
                       : subagent.model}
@@ -175,43 +177,46 @@ export const SubAgentCard = memo<SubAgentCardProps>(
                         </>
                       ) : (
                         <>
-                      <button
-                        type="button"
-                        onClick={handleEdit}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                      >
-                        <Pencil size={14} className="text-slate-400" />
-                        {t('common.edit', 'Edit')}
-                      </button>
-                      {onExport && (
-                        <button
-                          type="button"
-                          onClick={handleExport}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
-                        >
-                          <Upload size={14} className="text-slate-400" />
-                          {t('tenant.subagents.card.exportTemplate', 'Export as Template')}
-                        </button>
-                      )}
-                      <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
-                      <Popconfirm
-                        title={t('tenant.subagents.card.deleteConfirm', 'Delete this SubAgent?')}
-                        onConfirm={() => {
-                          onDelete(subagent.id);
-                          setMenuOpen(false);
-                        }}
-                        okText={t('common.delete', 'Delete')}
-                        cancelText={t('common.cancel', 'Cancel')}
-                        okButtonProps={{ danger: true }}
-                      >
-                        <button
-                          type="button"
-                          className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                        >
-                          <Trash2 size={14} />
-                          {t('common.delete', 'Delete')}
-                        </button>
-                      </Popconfirm>
+                          <button
+                            type="button"
+                            onClick={handleEdit}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                          >
+                            <Pencil size={14} className="text-slate-400" />
+                            {t('common.edit', 'Edit')}
+                          </button>
+                          {onExport && (
+                            <button
+                              type="button"
+                              onClick={handleExport}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                            >
+                              <Upload size={14} className="text-slate-400" />
+                              {t('tenant.subagents.card.exportTemplate', 'Export as Template')}
+                            </button>
+                          )}
+                          <div className="border-t border-slate-100 dark:border-slate-700 my-1" />
+                          <Popconfirm
+                            title={t(
+                              'tenant.subagents.card.deleteConfirm',
+                              'Delete this SubAgent?'
+                            )}
+                            onConfirm={() => {
+                              onDelete(subagent.id);
+                              setMenuOpen(false);
+                            }}
+                            okText={t('common.delete', 'Delete')}
+                            cancelText={t('common.cancel', 'Cancel')}
+                            okButtonProps={{ danger: true }}
+                          >
+                            <button
+                              type="button"
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                            >
+                              <Trash2 size={14} />
+                              {t('common.delete', 'Delete')}
+                            </button>
+                          </Popconfirm>
                         </>
                       )}
                     </div>
@@ -225,7 +230,8 @@ export const SubAgentCard = memo<SubAgentCardProps>(
         {/* Trigger description */}
         <div className="px-4 pb-3">
           <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 leading-relaxed">
-            {subagent.trigger.description || t('tenant.subagents.card.noDescription', 'No trigger description')}
+            {subagent.trigger.description ||
+              t('tenant.subagents.card.noDescription', 'No trigger description')}
           </p>
         </div>
 
@@ -277,8 +283,8 @@ export const SubAgentCard = memo<SubAgentCardProps>(
           <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
             <span className="flex items-center gap-1">
               <Zap size={11} />
-              {subagent.total_invocations.toLocaleString()}
-              {' '}{t('tenant.subagents.card.runs', 'runs')}
+              {subagent.total_invocations.toLocaleString()}{' '}
+              {t('tenant.subagents.card.runs', 'runs')}
             </span>
             <span className="flex items-center gap-1">
               <TrendingUp size={11} />
@@ -301,7 +307,7 @@ export const SubAgentCard = memo<SubAgentCardProps>(
         </div>
       </div>
     );
-  },
+  }
 );
 
 SubAgentCard.displayName = 'SubAgentCard';

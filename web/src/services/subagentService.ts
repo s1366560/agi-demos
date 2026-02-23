@@ -64,14 +64,11 @@ export const subagentAPI = {
   /**
    * Import a filesystem SubAgent into the database for customization
    */
-  importFilesystem: async (
-    name: string,
-    projectId?: string,
-  ): Promise<SubAgentResponse> => {
+  importFilesystem: async (name: string, projectId?: string): Promise<SubAgentResponse> => {
     return await api.post<SubAgentResponse>(
       `/subagents/filesystem/${encodeURIComponent(name)}/import`,
       null,
-      { params: projectId ? { project_id: projectId } : undefined },
+      { params: projectId ? { project_id: projectId } : undefined }
     );
   },
 

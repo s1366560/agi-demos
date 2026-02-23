@@ -36,8 +36,7 @@ export const NewMemory: React.FC = () => {
 
       const eventSource = new EventSource(streamUrl);
 
-      eventSource.onopen = () => {
-      };
+      eventSource.onopen = () => {};
 
       // Listen for progress events
       eventSource.addEventListener('progress', (e: MessageEvent) => {

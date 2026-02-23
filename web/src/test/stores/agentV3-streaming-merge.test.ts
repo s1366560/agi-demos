@@ -116,7 +116,7 @@ describe('agentV3 Store - Timeline Merging During Streaming', () => {
       // Set streaming state with local event - CRITICAL: activeConversationId must match
       act(() => {
         useAgentV3Store.setState({
-          activeConversationId: 'conv-123',  // Same as conversation being loaded
+          activeConversationId: 'conv-123', // Same as conversation being loaded
           isStreaming: true,
           streamStatus: 'streaming',
           timeline: [localEvent],
@@ -189,7 +189,7 @@ describe('agentV3 Store - Timeline Merging During Streaming', () => {
       // CRITICAL: activeConversationId must match the conversation being loaded
       act(() => {
         useAgentV3Store.setState({
-          activeConversationId: 'conv-456',  // Same as conversation being loaded
+          activeConversationId: 'conv-456', // Same as conversation being loaded
           isStreaming: true,
           timeline: [localEvent],
           lastEventTimestamp: localTimestamp,
@@ -285,7 +285,7 @@ describe('agentV3 Store - Timeline Merging During Streaming', () => {
       // CRITICAL: activeConversationId must match the conversation being loaded
       act(() => {
         useAgentV3Store.setState({
-          activeConversationId: 'conv-stream',  // Same as conversation being loaded
+          activeConversationId: 'conv-stream', // Same as conversation being loaded
           isStreaming: true,
           timeline: [],
         });

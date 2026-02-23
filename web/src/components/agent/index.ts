@@ -44,12 +44,7 @@ export { SkillExecutionCard } from './SkillExecutionCard';
 export { WorkspaceSidebar, TopNavigation, ChatHistorySidebar } from './layout';
 export { IdleState } from './chat';
 export { TimelineEventItem } from './TimelineEventItem';
-export {
-  ToolExecutionLive,
-  ReasoningLog,
-  FinalReport,
-  FollowUpPills,
-} from './execution';
+export { ToolExecutionLive, ReasoningLog, FinalReport, FollowUpPills } from './execution';
 export { PatternStats, PatternList, PatternInspector } from './patterns';
 export { MaterialIcon } from './shared';
 

@@ -118,7 +118,7 @@ export const subagentTemplateService = {
 
   update: async (
     templateId: string,
-    data: SubAgentTemplateUpdateRequest,
+    data: SubAgentTemplateUpdateRequest
   ): Promise<SubAgentTemplateDetail> => {
     const response = await apiFetch.put(`/subagents/templates/${templateId}`, data);
     return response.json();
@@ -130,7 +130,7 @@ export const subagentTemplateService = {
 
   install: async (
     templateId: string,
-    projectId: string,
+    projectId: string
   ): Promise<{ subagent_id: string; name: string }> => {
     const response = await apiFetch.post(`/subagents/templates/${templateId}/install`, {
       project_id: projectId,

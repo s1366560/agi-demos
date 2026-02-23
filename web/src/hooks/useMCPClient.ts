@@ -129,12 +129,15 @@ export function useMCPClient({
   /**
    * Calculate backoff delay with exponential increase
    */
-  const calculateBackoffDelay = useCallback((attempt: number): number => {
-    const { initialDelayMs, maxDelayMs } = reconnectionConfig;
-    // Exponential backoff: 1s, 2s, 4s, 8s, 16s...
-    const delay = initialDelayMs * Math.pow(2, attempt);
-    return Math.min(delay, maxDelayMs);
-  }, [reconnectionConfig]);
+  const calculateBackoffDelay = useCallback(
+    (attempt: number): number => {
+      const { initialDelayMs, maxDelayMs } = reconnectionConfig;
+      // Exponential backoff: 1s, 2s, 4s, 8s, 16s...
+      const delay = initialDelayMs * Math.pow(2, attempt);
+      return Math.min(delay, maxDelayMs);
+    },
+    [reconnectionConfig]
+  );
 
   /**
    * Start the grace period before reporting disconnection
@@ -230,7 +233,7 @@ export function useMCPClient({
 
       const mcpClient = new Client(
         { name: 'memstack-web', version: '1.0.0' },
-        { capabilities: {} },
+        { capabilities: {} }
       );
 
       // Set onclose BEFORE connect to avoid missing early disconnects
@@ -252,7 +255,7 @@ export function useMCPClient({
       await Promise.race([
         mcpClient.connect(transport),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('MCP connect timeout')), CONNECT_TIMEOUT_MS),
+          setTimeout(() => reject(new Error('MCP connect timeout')), CONNECT_TIMEOUT_MS)
         ),
       ]);
 

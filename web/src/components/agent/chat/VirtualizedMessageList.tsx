@@ -92,13 +92,13 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
 }) => {
   // Parent ref for virtualizer
   const parentRef = useRef<HTMLDivElement>(null);
-  
+
   // Track if user is near bottom
   const [isNearBottom, setIsNearBottom] = useState(true);
-  
+
   // Track last message count for auto-scroll decision
   const lastMessageCount = useRef(messages.length);
-  
+
   // Virtualizer instance
   const virtualizer = useVirtualizer({
     count: messages.length,
@@ -115,7 +115,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
    */
   const handleScroll = useCallback(() => {
     if (!parentRef.current) return;
-    
+
     const { scrollTop, scrollHeight, clientHeight } = parentRef.current;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
     setIsNearBottom(distanceFromBottom <= scrollThreshold);
@@ -127,12 +127,12 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
    */
   useEffect(() => {
     if (!autoScroll || !parentRef.current) return;
-    
+
     // Only auto-scroll if:
     // 1. New messages were added
     // 2. User was near bottom
     const hasNewMessages = messages.length > lastMessageCount.current;
-    
+
     if (hasNewMessages && isNearBottom) {
       // Smooth scroll to bottom
       parentRef.current.scrollTo({
@@ -140,7 +140,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
         behavior: 'smooth',
       });
     }
-    
+
     lastMessageCount.current = messages.length;
   }, [messages.length, autoScroll, isNearBottom]);
 
@@ -150,17 +150,17 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
    */
   useEffect(() => {
     if (!autoScroll || !parentRef.current) return;
-    
+
     // Check if we were near bottom BEFORE this size change
     // Note: isNearBottom state might be slightly stale if a scroll event hasn't fired yet
     // but usually it's close enough.
-    
+
     if (isNearBottom) {
-       // Use 'auto' behavior for streaming updates to prevent smooth scroll lag
-       parentRef.current.scrollTo({
-         top: parentRef.current.scrollHeight,
-         behavior: 'auto',
-       });
+      // Use 'auto' behavior for streaming updates to prevent smooth scroll lag
+      parentRef.current.scrollTo({
+        top: parentRef.current.scrollHeight,
+        behavior: 'auto',
+      });
     }
   }, [virtualizer.getTotalSize(), autoScroll, isNearBottom]);
 
@@ -170,7 +170,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
   useEffect(() => {
     const element = parentRef.current;
     if (!element) return;
-    
+
     element.addEventListener('scroll', handleScroll, { passive: true });
     return () => element.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
@@ -226,7 +226,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const message = messages[virtualRow.index];
           const isLatest = virtualRow.index === messages.length - 1;
-          
+
           return (
             <div
               key={virtualRow.key}

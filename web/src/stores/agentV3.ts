@@ -32,7 +32,6 @@ import {
 import { logger } from '../utils/logger';
 import { tabSync, type TabSyncMessage } from '../utils/tabSync';
 
-
 import { createHITLActions } from './agent/hitlActions';
 import { createStreamEventHandlers } from './agent/streamEventHandlers';
 
@@ -766,9 +765,11 @@ export const useAgentV3Store = create<AgentV3State>()(
           clearAllDeltaBuffers();
 
           // Reset context status for the new conversation (async import for browser compatibility)
-          import('../stores/contextStore').then(({ useContextStore }) => {
-            useContextStore.getState().reset();
-          }).catch(console.error);
+          import('../stores/contextStore')
+            .then(({ useContextStore }) => {
+              useContextStore.getState().reset();
+            })
+            .catch(console.error);
 
           // Save current conversation state before switching
           if (activeConversationId && activeConversationId !== id) {
@@ -921,12 +922,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
           try {
             const offset = state.conversations.length;
-            const response = await agentService.listConversations(
-              projectId,
-              undefined,
-              10,
-              offset
-            );
+            const response = await agentService.listConversations(projectId, undefined, 10, offset);
             logger.debug(`[agentV3] Loaded ${response.items.length} more conversations`);
             set({
               conversations: [...state.conversations, ...response.items],
@@ -1104,42 +1100,45 @@ export const useAgentV3Store = create<AgentV3State>()(
           try {
             // Parallelize independent API calls (async-parallel)
             // Include recovery info in execution status check
-            const [response, execStatus, _contextStatusResult, planModeResult, taskListResult] = await Promise.all([
-              agentService.getConversationMessages(
-                conversationId,
-                projectId,
-                200 // Load latest 200 messages
-              ) as Promise<any>,
-              agentService.getExecutionStatus(conversationId, true, lastKnownTimeUs).catch((e) => {
-                logger.warn(`[AgentV3] getExecutionStatus failed:`, e);
-                return null;
-              }),
-              // Restore context status indicator on conversation switch / page refresh
-              (async () => {
-                const { useContextStore } = await import('../stores/contextStore');
-                await useContextStore.getState().fetchContextStatus(conversationId, projectId);
-              })().catch((e) => {
-                logger.warn(`[AgentV3] fetchContextStatus failed:`, e);
-                return null;
-              }),
-              // Fetch plan mode status from API
-              (async () => {
-                const { planService } = await import('../services/planService');
-                return planService.getMode(conversationId);
-              })().catch((e) => {
-                logger.debug(`[AgentV3] getMode failed:`, e);
-                return null;
-              }),
-              // Fetch tasks for conversation
-              (async () => {
-                const { httpClient } = await import('../services/client/httpClient');
-                const res = await httpClient.get(`/agent/plan/tasks/${conversationId}`);
-                return res as any;
-              })().catch((e) => {
-                logger.debug(`[AgentV3] fetchTasks failed:`, e);
-                return null;
-              }),
-            ]);
+            const [response, execStatus, _contextStatusResult, planModeResult, taskListResult] =
+              await Promise.all([
+                agentService.getConversationMessages(
+                  conversationId,
+                  projectId,
+                  200 // Load latest 200 messages
+                ) as Promise<any>,
+                agentService
+                  .getExecutionStatus(conversationId, true, lastKnownTimeUs)
+                  .catch((e) => {
+                    logger.warn(`[AgentV3] getExecutionStatus failed:`, e);
+                    return null;
+                  }),
+                // Restore context status indicator on conversation switch / page refresh
+                (async () => {
+                  const { useContextStore } = await import('../stores/contextStore');
+                  await useContextStore.getState().fetchContextStatus(conversationId, projectId);
+                })().catch((e) => {
+                  logger.warn(`[AgentV3] fetchContextStatus failed:`, e);
+                  return null;
+                }),
+                // Fetch plan mode status from API
+                (async () => {
+                  const { planService } = await import('../services/planService');
+                  return planService.getMode(conversationId);
+                })().catch((e) => {
+                  logger.debug(`[AgentV3] getMode failed:`, e);
+                  return null;
+                }),
+                // Fetch tasks for conversation
+                (async () => {
+                  const { httpClient } = await import('../services/client/httpClient');
+                  const res = await httpClient.get(`/agent/plan/tasks/${conversationId}`);
+                  return res as any;
+                })().catch((e) => {
+                  logger.debug(`[AgentV3] fetchTasks failed:`, e);
+                  return null;
+                }),
+              ]);
 
             // Update plan mode from API response
             if (planModeResult && planModeResult.mode) {
@@ -1297,9 +1296,7 @@ export const useAgentV3Store = create<AgentV3State>()(
 
               return {
                 conversationStates: newStates,
-                ...(timelineChanged
-                  ? { timeline: finalTimeline, messages: finalMessages }
-                  : {}),
+                ...(timelineChanged ? { timeline: finalTimeline, messages: finalMessages } : {}),
                 isLoadingHistory: false,
                 hasEarlier: response.has_more ?? false,
                 earliestTimeUs: firstTimeUs,
@@ -1366,8 +1363,13 @@ export const useAgentV3Store = create<AgentV3State>()(
         },
 
         loadEarlierMessages: async (conversationId, projectId) => {
-          const { earliestTimeUs, earliestCounter, timeline, isLoadingEarlier, activeConversationId } =
-            get();
+          const {
+            earliestTimeUs,
+            earliestCounter,
+            timeline,
+            isLoadingEarlier,
+            activeConversationId,
+          } = get();
 
           // Guard: Don't load if already loading or no pagination point exists
           if (activeConversationId !== conversationId) return false;

@@ -76,7 +76,10 @@ export const LayoutModeSelector: FC = () => {
   }, [handleKeyDown]);
 
   return (
-    <div data-tour="layout-selector" className="flex items-center gap-0.5 bg-slate-200/60 dark:bg-slate-700/40 rounded-md p-0.5">
+    <div
+      data-tour="layout-selector"
+      className="flex items-center gap-0.5 bg-slate-200/60 dark:bg-slate-700/40 rounded-md p-0.5"
+    >
       {modes.map((m) => {
         const Icon = m.icon;
         const isActive = mode === m.key;

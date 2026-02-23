@@ -6,14 +6,7 @@
  * insert as a mention reference.
  */
 
-import {
-  memo,
-  useState,
-  useEffect,
-  useRef,
-  forwardRef,
-  useImperativeHandle,
-} from 'react';
+import { memo, useState, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 
 import { useTranslation } from 'react-i18next';
 
@@ -39,10 +32,7 @@ interface MentionPopoverProps {
 
 export const MentionPopover = memo(
   forwardRef<MentionPopoverHandle, MentionPopoverProps>(
-    (
-      { query, projectId, visible, onSelect, selectedIndex, onSelectedIndexChange },
-      ref
-    ) => {
+    ({ query, projectId, visible, onSelect, selectedIndex, onSelectedIndexChange }, ref) => {
       const { t } = useTranslation();
       const [items, setItems] = useState<MentionItem[]>([]);
       const [loading, setLoading] = useState(false);
@@ -79,11 +69,12 @@ export const MentionPopover = memo(
 
             // Filter subagents locally
             const subagentResults: MentionItem[] = subagents
-              .filter(sa =>
-                sa.name.toLowerCase().includes(query.toLowerCase()) ||
-                sa.display_name.toLowerCase().includes(query.toLowerCase())
+              .filter(
+                (sa) =>
+                  sa.name.toLowerCase().includes(query.toLowerCase()) ||
+                  sa.display_name.toLowerCase().includes(query.toLowerCase())
               )
-              .map(sa => ({
+              .map((sa) => ({
                 id: sa.id,
                 name: sa.name, // Use system name for mention ID
                 type: 'subagent',
@@ -108,19 +99,15 @@ export const MentionPopover = memo(
       // Scroll selected item into view
       useEffect(() => {
         if (!listRef.current) return;
-        const el = listRef.current.children[selectedIndex] as
-          | HTMLElement
-          | undefined;
+        const el = listRef.current.children[selectedIndex] as HTMLElement | undefined;
         el?.scrollIntoView({ block: 'nearest' });
       }, [selectedIndex]);
 
       if (!visible) return null;
 
       const typeIcon = (item: MentionItem) => {
-        if (item.type === 'subagent')
-          return <Workflow size={14} className="text-purple-500" />;
-        if (item.type === 'entity')
-          return <Hash size={14} className="text-primary" />;
+        if (item.type === 'subagent') return <Workflow size={14} className="text-purple-500" />;
+        if (item.type === 'entity') return <Hash size={14} className="text-primary" />;
         return <FileText size={14} className="text-slate-500" />;
       };
 
@@ -160,9 +147,7 @@ export const MentionPopover = memo(
                       {item.name}
                     </div>
                     {item.summary && (
-                      <div className="text-xs text-slate-400 truncate mt-0.5">
-                        {item.summary}
-                      </div>
+                      <div className="text-xs text-slate-400 truncate mt-0.5">{item.summary}</div>
                     )}
                     {item.entityType && (
                       <span className="text-[10px] bg-slate-100 dark:bg-slate-600 text-slate-500 dark:text-slate-300 px-1.5 rounded-full mt-0.5 inline-block">

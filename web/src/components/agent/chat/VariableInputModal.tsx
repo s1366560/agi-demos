@@ -90,9 +90,7 @@ export const VariableInputModal = memo<VariableInputModalProps>(
                 {v.description && <p className="text-xs text-slate-400 mb-1">{v.description}</p>}
                 <input
                   value={values[v.name] || ''}
-                  onChange={(e) =>
-                    setValues((prev) => ({ ...prev, [v.name]: e.target.value }))
-                  }
+                  onChange={(e) => setValues((prev) => ({ ...prev, [v.name]: e.target.value }))}
                   placeholder={v.default_value || v.name}
                   className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-transparent text-sm text-slate-800 dark:text-slate-200"
                 />

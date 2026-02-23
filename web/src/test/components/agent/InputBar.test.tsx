@@ -92,7 +92,9 @@ describe('InputBar autocomplete overlays', () => {
   });
 
   it('shows mention popover when typing @ query', async () => {
-    render(<InputBar onSend={vi.fn()} onAbort={vi.fn()} isStreaming={false} projectId="project-1" />);
+    render(
+      <InputBar onSend={vi.fn()} onAbort={vi.fn()} isStreaming={false} projectId="project-1" />
+    );
 
     const input = await screen.findByTestId('chat-input');
     fireEvent.change(input, { target: { value: '@doc', selectionStart: 4 } });

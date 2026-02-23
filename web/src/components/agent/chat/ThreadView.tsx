@@ -3,7 +3,6 @@
  */
 import { memo, useState, useEffect } from 'react';
 
-
 import { useTranslation } from 'react-i18next';
 
 import { MessageSquare, ChevronDown, ChevronRight, Send, Loader2 } from 'lucide-react';
@@ -36,15 +35,12 @@ export const ThreadView = memo<ThreadViewProps>(
       if (!expanded || !conversationId || !messageId) return;
       const abortController = new AbortController();
       setLoading(true);
-      fetch(
-        `/api/v1/agent/conversations/${conversationId}/messages/${messageId}/replies`,
-        {
-          headers: {
-            Authorization: `Bearer ${getAuthToken()}`,
-          },
-          signal: abortController.signal,
-        }
-      )
+      fetch(`/api/v1/agent/conversations/${conversationId}/messages/${messageId}/replies`, {
+        headers: {
+          Authorization: `Bearer ${getAuthToken()}`,
+        },
+        signal: abortController.signal,
+      })
         .then((res) => res.json())
         .then((data) => {
           if (!abortController.signal.aborted) {
@@ -84,10 +80,7 @@ export const ThreadView = memo<ThreadViewProps>(
           <div className="mt-2 pl-3 border-l-2 border-primary/20">
             {loading ? (
               <div className="py-2">
-                <Loader2
-                  size={14}
-                  className="animate-spin text-slate-400"
-                />
+                <Loader2 size={14} className="animate-spin text-slate-400" />
               </div>
             ) : (
               <>
@@ -111,10 +104,7 @@ export const ThreadView = memo<ThreadViewProps>(
                   <input
                     value={replyText}
                     onChange={(e) => setReplyText(e.target.value)}
-                    placeholder={t(
-                      'agent.thread.replyPlaceholder',
-                      'Write a reply...'
-                    )}
+                    placeholder={t('agent.thread.replyPlaceholder', 'Write a reply...')}
                     className="flex-1 px-2.5 py-1.5 text-xs bg-transparent border border-slate-200 dark:border-slate-600 rounded-lg"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && replyText.trim()) {

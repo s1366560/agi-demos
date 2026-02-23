@@ -28,7 +28,16 @@
  * - Scroll to bottom button when user scrolls up
  */
 
-import { useRef, useEffect, useCallback, useState, memo, Children, createContext, useMemo } from 'react';
+import {
+  useRef,
+  useEffect,
+  useCallback,
+  useState,
+  memo,
+  Children,
+  createContext,
+  useMemo,
+} from 'react';
 
 import { useTranslation } from 'react-i18next';
 import ReactMarkdown from 'react-markdown';
@@ -83,9 +92,16 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
 
   // SubAgent event types that should be grouped
   const SUBAGENT_EVENT_TYPES = new Set([
-    'subagent_routed', 'subagent_started', 'subagent_completed', 'subagent_failed',
-    'parallel_started', 'parallel_completed',
-    'chain_started', 'chain_step_started', 'chain_step_completed', 'chain_completed',
+    'subagent_routed',
+    'subagent_started',
+    'subagent_completed',
+    'subagent_failed',
+    'parallel_started',
+    'parallel_completed',
+    'chain_started',
+    'chain_step_started',
+    'chain_step_completed',
+    'chain_completed',
     'background_launched',
   ]);
 
@@ -153,10 +169,7 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
         input: act.toolInput,
         output: o?.toolOutput,
         isError: o?.isError,
-        duration:
-          o && act.timestamp && o.timestamp
-            ? (o.timestamp - act.timestamp)
-            : undefined,
+        duration: o && act.timestamp && o.timestamp ? o.timestamp - act.timestamp : undefined,
         mcpUiMetadata: o?.mcpUiMetadata,
       };
       currentSteps.push(step);
@@ -179,12 +192,19 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
  */
 function buildSubAgentGroup(
   timeline: TimelineEvent[],
-  startIdx: number,
+  startIdx: number
 ): { group: SubAgentGroup; endIndex: number } {
   const SUBAGENT_EVENT_TYPES = new Set([
-    'subagent_routed', 'subagent_started', 'subagent_completed', 'subagent_failed',
-    'parallel_started', 'parallel_completed',
-    'chain_started', 'chain_step_started', 'chain_step_completed', 'chain_completed',
+    'subagent_routed',
+    'subagent_started',
+    'subagent_completed',
+    'subagent_failed',
+    'parallel_started',
+    'parallel_completed',
+    'chain_started',
+    'chain_step_started',
+    'chain_step_completed',
+    'chain_completed',
     'background_launched',
   ]);
 
@@ -198,9 +218,13 @@ function buildSubAgentGroup(
       endIndex = i;
       // Stop after terminal events
       const t = timeline[i].type;
-      if (t === 'subagent_completed' || t === 'subagent_failed'
-        || t === 'parallel_completed' || t === 'chain_completed'
-        || t === 'background_launched') {
+      if (
+        t === 'subagent_completed' ||
+        t === 'subagent_failed' ||
+        t === 'parallel_completed' ||
+        t === 'chain_completed' ||
+        t === 'background_launched'
+      ) {
         break;
       }
     } else {
@@ -662,9 +686,7 @@ const ConversationSummaryCardWrapper: React.FC<{
   conversationId?: string | null;
 }> = memo(({ conversationId }) => {
   const currentConversation = useConversationsStore((s) => s.currentConversation);
-  const generateConversationSummary = useConversationsStore(
-    (s) => s.generateConversationSummary
-  );
+  const generateConversationSummary = useConversationsStore((s) => s.generateConversationSummary);
 
   if (!conversationId || !currentConversation || currentConversation.id !== conversationId) {
     return null;
@@ -776,7 +798,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
     // Track if user has manually scrolled up during streaming
     const userScrolledUpRef = useRef(false);
-    
+
     // Track conversation switch to prevent scroll jitter
     const isSwitchingConversationRef = useRef(false);
     const lastConversationIdRef = useRef(conversationId);
@@ -854,10 +876,10 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       ) {
         const { scrollTop, scrollHeight, clientHeight } = container;
 
-        // If content doesn't fill the container (no scrollbar needed), 
+        // If content doesn't fill the container (no scrollbar needed),
         // trigger loading immediately to fill the screen
         const contentFillsContainer = scrollHeight > clientHeight + 10; // 10px tolerance
-        
+
         const avgMessageHeight = 100;
         const visibleItemsFromTop = Math.ceil(scrollTop / avgMessageHeight);
 
@@ -897,7 +919,8 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
     // Handle scroll events
     const handleScroll = useCallback(() => {
       const container = containerRef.current;
-      if (!container || isLoading || isSwitchingConversationRef.current || isPositioningRef.current) return;
+      if (!container || isLoading || isSwitchingConversationRef.current || isPositioningRef.current)
+        return;
 
       checkAndPreload();
 
@@ -964,7 +987,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       if (hasNewMessages) {
         // Clear switching flag when new messages arrive
         isSwitchingConversationRef.current = false;
-        
+
         if (isStreaming || isNearBottom(container, 200)) {
           requestAnimationFrame(() => {
             if (containerRef.current) {
@@ -988,7 +1011,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       if (isStreaming && !userScrolledUpRef.current) {
         // Clear switching flag during streaming (user is actively viewing this conversation)
         isSwitchingConversationRef.current = false;
-        
+
         requestAnimationFrame(() => {
           if (containerRef.current) {
             containerRef.current.scrollTop = containerRef.current.scrollHeight;
@@ -1090,7 +1113,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
         cancelAnimationFrame(rafId);
         if (cleanupRef.current) cancelAnimationFrame(cleanupRef.current);
       };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+      // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [conversationId]);
 
     // j/k keyboard navigation for messages
@@ -1119,9 +1142,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       const handleNav = (e: KeyboardEvent) => {
         const target = e.target as HTMLElement;
         const isInput =
-          target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable;
+          target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
         if (isInput) return;
 
         if (e.key === 'j' || e.key === 'k') {
@@ -1142,9 +1163,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
           setFocusedMsgIndex(nextIndex);
 
           // Scroll to the focused message
-          const el = containerRef.current?.querySelector(
-            `[data-msg-index="${nextIndex}"]`
-          );
+          const el = containerRef.current?.querySelector(`[data-msg-index="${nextIndex}"]`);
           if (el) {
             el.scrollIntoView({ block: 'center', behavior: 'smooth' });
           }
@@ -1296,7 +1315,10 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
                             <ExecutionTimeline
                               steps={item.steps}
-                              isStreaming={isStreaming && item.startIndex + item.steps.length >= timeline.length}
+                              isStreaming={
+                                isStreaming &&
+                                item.startIndex + item.steps.length >= timeline.length
+                              }
                             />
                           </div>
                         </div>
@@ -1323,7 +1345,10 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           <div className="flex-1 min-w-0 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
                             <SubAgentTimeline
                               group={item.group}
-                              isStreaming={isStreaming && item.startIndex + item.group.events.length >= timeline.length}
+                              isStreaming={
+                                isStreaming &&
+                                item.startIndex + item.group.events.length >= timeline.length
+                              }
                             />
                           </div>
                         </div>
@@ -1376,7 +1401,11 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                         width: '100%',
                         transform: `translateY(${virtualRow.start}px)`,
                       }}
-                      className={isFocused ? 'ring-2 ring-blue-400/60 dark:ring-blue-500/50 rounded-xl transition-shadow duration-200' : ''}
+                      className={
+                        isFocused
+                          ? 'ring-2 ring-blue-400/60 dark:ring-blue-500/50 rounded-xl transition-shadow duration-200'
+                          : ''
+                      }
                     >
                       <div className="pb-1.5">
                         <MessageBubble
@@ -1396,10 +1425,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
               <div className="space-y-1.5">
                 {/* Suggestion chips - shown when not streaming and suggestions available */}
                 {!isStreaming && suggestions && suggestions.length > 0 && onSuggestionSelect && (
-                  <SuggestionChips
-                    suggestions={suggestions}
-                    onSelect={onSuggestionSelect}
-                  />
+                  <SuggestionChips suggestions={suggestions} onSelect={onSuggestionSelect} />
                 )}
 
                 {/* Streaming thought indicator - ThinkingBlock (new design) */}
@@ -1418,7 +1444,10 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                   isStreaming &&
                   streamingContent &&
                   !isThinkingStreaming && (
-                    <div className="flex items-start gap-3 mb-2 animate-fade-in-up" aria-live="assertive">
+                    <div
+                      className="flex items-start gap-3 mb-2 animate-fade-in-up"
+                      aria-live="assertive"
+                    >
                       <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary-600 flex items-center justify-center flex-shrink-0 shadow-sm shadow-primary/20">
                         <svg
                           className="w-[18px] h-[18px] text-white"
@@ -1437,7 +1466,10 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
                         <div className="bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/50 rounded-2xl rounded-tl-sm px-4 py-2.5 shadow-sm">
                           <div className={MARKDOWN_PROSE_CLASSES}>
-                            <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>
+                            <ReactMarkdown
+                              remarkPlugins={remarkPlugins}
+                              rehypePlugins={rehypePlugins}
+                            >
                               {streamingContent}
                             </ReactMarkdown>
                           </div>

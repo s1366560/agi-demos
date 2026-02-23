@@ -316,10 +316,10 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
   const isLoadingMoreRef = useRef(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  
+
   const loadMore = useCallback(async () => {
     if (!hasMoreConversations || isLoadingMoreRef.current || !selectedProjectId) return;
-    
+
     isLoadingMoreRef.current = true;
     setIsLoadingMore(true);
     try {
@@ -329,7 +329,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
       setIsLoadingMore(false);
     }
   }, [hasMoreConversations, selectedProjectId, loadMoreConversations]);
-  
+
   const handleConversationScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       if (!hasMoreConversations || isLoadingMoreRef.current || !selectedProjectId) return;
@@ -384,7 +384,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
 
     // Check if content fills the container
     const contentFillsContainer = container.scrollHeight > container.clientHeight + 10;
-    
+
     // If content doesn't fill container and there are more conversations, load more
     if (!contentFillsContainer && conversations.length > 0) {
       loadMore();
@@ -714,13 +714,41 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
             {t('nav.navigation', 'Navigation')}
           </p>
           {[
-            { path: `/tenant/${tenantId}/overview`, icon: <LayoutDashboard size={16} />, label: t('nav.overview', 'Overview') },
-            { path: `/tenant/${tenantId}/projects`, icon: <Folder size={16} />, label: t('nav.projects', 'Projects') },
-            { path: `/tenant/${tenantId}/agents`, icon: <Headphones size={16} />, label: t('nav.agents', 'Agents') },
-            { path: `/tenant/${tenantId}/skills`, icon: <Brain size={16} />, label: t('nav.skills', 'Skills') },
-            { path: `/tenant/${tenantId}/plugins`, icon: <ToyBrick size={16} />, label: t('nav.plugins', 'Plugins') },
-            { path: `/tenant/${tenantId}/analytics`, icon: <BarChart3 size={16} />, label: t('nav.analytics', 'Analytics') },
-            { path: `/tenant/${tenantId}/settings`, icon: <Settings size={16} />, label: t('nav.settings', 'Settings') },
+            {
+              path: `/tenant/${tenantId}/overview`,
+              icon: <LayoutDashboard size={16} />,
+              label: t('nav.overview', 'Overview'),
+            },
+            {
+              path: `/tenant/${tenantId}/projects`,
+              icon: <Folder size={16} />,
+              label: t('nav.projects', 'Projects'),
+            },
+            {
+              path: `/tenant/${tenantId}/agents`,
+              icon: <Headphones size={16} />,
+              label: t('nav.agents', 'Agents'),
+            },
+            {
+              path: `/tenant/${tenantId}/skills`,
+              icon: <Brain size={16} />,
+              label: t('nav.skills', 'Skills'),
+            },
+            {
+              path: `/tenant/${tenantId}/plugins`,
+              icon: <ToyBrick size={16} />,
+              label: t('nav.plugins', 'Plugins'),
+            },
+            {
+              path: `/tenant/${tenantId}/analytics`,
+              icon: <BarChart3 size={16} />,
+              label: t('nav.analytics', 'Analytics'),
+            },
+            {
+              path: `/tenant/${tenantId}/settings`,
+              icon: <Settings size={16} />,
+              label: t('nav.settings', 'Settings'),
+            },
           ].map((item) => (
             <NavLink
               key={item.path}

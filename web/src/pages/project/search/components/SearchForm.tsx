@@ -302,9 +302,7 @@ const SearchHistoryDropdown = memo<SearchHistoryDropdownProps>(({ history, onIte
           </span>
           <span className="text-xs text-slate-500 capitalize">{item.mode}</span>
         </div>
-        <span className="text-xs text-slate-400">
-          {formatTimeOnly(item.timestamp)}
-        </span>
+        <span className="text-xs text-slate-400">{formatTimeOnly(item.timestamp)}</span>
       </button>
     ))}
   </div>

@@ -63,11 +63,7 @@ export const UndoConfirmation = memo<UndoConfirmationProps>(
               disabled={loading}
               className="px-4 py-2 text-sm bg-amber-500 hover:bg-amber-600 text-white rounded-lg disabled:opacity-50 flex items-center gap-1.5"
             >
-              {loading ? (
-                <Loader2 size={14} className="animate-spin" />
-              ) : (
-                <Undo2 size={14} />
-              )}
+              {loading ? <Loader2 size={14} className="animate-spin" /> : <Undo2 size={14} />}
               {t('agent.undo.confirm', 'Undo')}
             </button>
           </div>

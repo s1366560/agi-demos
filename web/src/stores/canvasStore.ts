@@ -75,9 +75,7 @@ export const useCanvasStore = create<CanvasState>()(
           if (existing) {
             // Merge new data into existing tab (preserves history/dirty state)
             return {
-              tabs: state.tabs.map((t) =>
-                t.id === tab.id ? { ...t, ...tab, dirty: t.dirty } : t,
-              ),
+              tabs: state.tabs.map((t) => (t.id === tab.id ? { ...t, ...tab, dirty: t.dirty } : t)),
               activeTabId: tab.id,
             };
           }
@@ -118,10 +116,9 @@ export const useCanvasStore = create<CanvasState>()(
           tabs: state.tabs.map((t) => {
             if (t.id !== id) return t;
             // Push previous content to history, truncate any forward history
-            const newHistory = [
-              ...t.history.slice(0, t.historyIndex + 1),
-              t.content,
-            ].slice(-MAX_HISTORY);
+            const newHistory = [...t.history.slice(0, t.historyIndex + 1), t.content].slice(
+              -MAX_HISTORY
+            );
             return {
               ...t,
               content,
@@ -138,9 +135,8 @@ export const useCanvasStore = create<CanvasState>()(
             if (t.id !== tabId || t.historyIndex < 0) return t;
             const restoredContent = t.history[t.historyIndex];
             // Save current content at the end if we're at the latest position
-            const newHistory = t.historyIndex === t.history.length - 1
-              ? [...t.history, t.content]
-              : t.history;
+            const newHistory =
+              t.historyIndex === t.history.length - 1 ? [...t.history, t.content] : t.history;
             return {
               ...t,
               content: restoredContent,

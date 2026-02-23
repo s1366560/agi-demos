@@ -32,7 +32,6 @@ import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 import { useMarkdownPlugins } from './markdownPlugins';
 
-
 export interface MarkdownContentProps {
   /** Markdown content to render */
   content: string;
@@ -65,7 +64,9 @@ const CodeBlockLoadingFallback: React.FC = () => (
  * Code blocks are heavy due to syntax highlighting, so we lazy load them.
  */
 // Define the lazy component outside to prevent recreation
-const LazyCodeBlock = lazy(() => import('./CodeBlock').then((module) => ({ default: module.CodeBlock })));
+const LazyCodeBlock = lazy(() =>
+  import('./CodeBlock').then((module) => ({ default: module.CodeBlock }))
+);
 
 const CodeBlockWithSuspense: React.FC<{
   children?: React.ReactNode;
@@ -82,7 +83,7 @@ const CodeBlockWithSuspense: React.FC<{
 
 /**
  * MarkdownContent component
- * 
+ *
  * Optimizations:
  * - React.memo prevents re-renders when props haven't changed
  * - Lazy loading for heavy components (CodeBlock)
@@ -91,11 +92,11 @@ const CodeBlockWithSuspense: React.FC<{
 export const MarkdownContent = memo<MarkdownContentProps>(
   ({ content, className = '', prose = true, codeActions = false, loadingFallback }) => {
     const combinedClassName = prose ? `${MARKDOWN_PROSE_CLASSES} ${className}`.trim() : className;
-    
+
     // Stable components reference
     const components: Components = useMemo(() => {
       if (!codeActions) return {};
-      
+
       return {
         pre: ({ children }) => (
           <CodeBlockWithSuspense codeActions={codeActions} loadingFallback={loadingFallback}>

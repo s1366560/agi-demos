@@ -26,9 +26,7 @@ export const StreamingThoughtBubble = memo<StreamingThoughtBubbleProps>(
               <span className="text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wider">
                 Reasoning
               </span>
-              <span className="text-xs text-amber-600/70 dark:text-amber-500/70">
-                Thinking...
-              </span>
+              <span className="text-xs text-amber-600/70 dark:text-amber-500/70">Thinking...</span>
               {isStreaming && (
                 <span className="flex gap-0.5 ml-1">
                   <span

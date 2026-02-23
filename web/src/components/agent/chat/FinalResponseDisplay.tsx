@@ -20,7 +20,6 @@ import { MARKDOWN_PROSE_CLASSES } from '../styles';
 import { CodeBlock } from './CodeBlock';
 import { useMarkdownPlugins } from './markdownPlugins';
 
-
 const MARKDOWN_COMPONENTS: Components = {
   pre: ({ children, ...props }) => <CodeBlock {...props}>{children}</CodeBlock>,
 };
@@ -80,7 +79,7 @@ export function FinalResponseDisplay({
 
   const handleExportPDF = async () => {
     if (!contentRef.current) return;
-    
+
     setIsExporting(true);
     try {
       const element = contentRef.current;
@@ -89,7 +88,7 @@ export function FinalResponseDisplay({
         filename: `memstack-report-${new Date().toISOString().slice(0, 10)}.pdf`,
         image: { type: 'jpeg' as const, quality: 0.98 },
         html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const }
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
       };
 
       // @ts-ignore - html2pdf types might be missing
@@ -130,7 +129,7 @@ export function FinalResponseDisplay({
   return (
     <div className="flex-1 flex flex-col lg:flex-row gap-6 pb-12">
       {/* Main Content */}
-      <div 
+      <div
         ref={contentRef}
         className={`flex-1 min-w-0 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-2xl rounded-tl-none shadow-xl p-8 ${MARKDOWN_PROSE_CLASSES} text-slate-800 dark:text-slate-200`}
       >
@@ -145,7 +144,11 @@ export function FinalResponseDisplay({
         </div>
 
         {/* Content with ReactMarkdown */}
-        <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={MARKDOWN_COMPONENTS}>
+        <ReactMarkdown
+          remarkPlugins={remarkPlugins}
+          rehypePlugins={rehypePlugins}
+          components={MARKDOWN_COMPONENTS}
+        >
           {content}
         </ReactMarkdown>
       </div>

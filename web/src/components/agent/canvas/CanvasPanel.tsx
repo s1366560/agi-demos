@@ -57,7 +57,6 @@ import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 import { SelectionToolbar } from './SelectionToolbar';
 
-
 const typeIcon = (type: CanvasContentType, size = 14) => {
   switch (type) {
     case 'code':
@@ -74,36 +73,42 @@ const typeIcon = (type: CanvasContentType, size = 14) => {
 };
 
 // Tab bar
-const CanvasTabBar = memo<{ onBeforeCloseTab?: (tabId: string) => void }>(({ onBeforeCloseTab }) => {
-  const tabs = useCanvasStore((s) => s.tabs);
-  const activeTabId = useCanvasStore((s) => s.activeTabId);
-  const { setActiveTab, closeTab, openTab } = useCanvasActions();
-  const { t } = useTranslation();
-  const setMode = useLayoutModeStore((s) => s.setMode);
+const CanvasTabBar = memo<{ onBeforeCloseTab?: (tabId: string) => void }>(
+  ({ onBeforeCloseTab }) => {
+    const tabs = useCanvasStore((s) => s.tabs);
+    const activeTabId = useCanvasStore((s) => s.activeTabId);
+    const { setActiveTab, closeTab, openTab } = useCanvasActions();
+    const { t } = useTranslation();
+    const setMode = useLayoutModeStore((s) => s.setMode);
 
-  const handleNewTab = useCallback(() => {
-    const id = `new-${Date.now()}`;
-    openTab({ id, title: 'untitled.py', type: 'code', content: '', language: undefined });
-  }, [openTab]);
+    const handleNewTab = useCallback(() => {
+      const id = `new-${Date.now()}`;
+      openTab({ id, title: 'untitled.py', type: 'code', content: '', language: undefined });
+    }, [openTab]);
 
-  const handleClose = useCallback((tabId: string) => {
-    onBeforeCloseTab?.(tabId);
-    closeTab(tabId);
-  }, [onBeforeCloseTab, closeTab]);
+    const handleClose = useCallback(
+      (tabId: string) => {
+        onBeforeCloseTab?.(tabId);
+        closeTab(tabId);
+      },
+      [onBeforeCloseTab, closeTab]
+    );
 
-  if (tabs.length === 0) return null;
+    if (tabs.length === 0) return null;
 
-  return (
-    <div className="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/50">
-      <div className="flex-1 flex items-center overflow-x-auto scrollbar-none">
-        {tabs.map((tab) => (
-          <div
-            key={tab.id}
-            role="tab"
-            tabIndex={0}
-            onClick={() => setActiveTab(tab.id)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setActiveTab(tab.id); }}
-            className={`
+    return (
+      <div className="flex items-center border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-900/50">
+        <div className="flex-1 flex items-center overflow-x-auto scrollbar-none">
+          {tabs.map((tab) => (
+            <div
+              key={tab.id}
+              role="tab"
+              tabIndex={0}
+              onClick={() => setActiveTab(tab.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') setActiveTab(tab.id);
+              }}
+              className={`
               group flex items-center gap-1.5 px-3 py-2 text-xs font-medium
               border-r border-slate-200/60 dark:border-slate-700/60
               transition-colors whitespace-nowrap max-w-[180px] cursor-pointer
@@ -113,46 +118,47 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: (tabId: string) => void }>(({ onB
                   : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50'
               }
             `}
-          >
-            <span className={tab.id === activeTabId ? 'text-primary' : 'text-slate-400'}>
-              {typeIcon(tab.type)}
-            </span>
-            <span className="truncate">{tab.title}</span>
-            {tab.dirty && (
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
-            )}
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleClose(tab.id);
-              }}
-              className="ml-1 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
             >
-              <X size={12} />
-            </button>
-          </div>
-        ))}
+              <span className={tab.id === activeTabId ? 'text-primary' : 'text-slate-400'}>
+                {typeIcon(tab.type)}
+              </span>
+              <span className="truncate">{tab.title}</span>
+              {tab.dirty && (
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+              )}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleClose(tab.id);
+                }}
+                className="ml-1 p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={handleNewTab}
+            className="flex-shrink-0 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            title={t('agent.canvas.newTab', 'New tab')}
+          >
+            <Plus size={14} />
+          </button>
+        </div>
         <button
           type="button"
-          onClick={handleNewTab}
+          onClick={() => setMode('chat')}
           className="flex-shrink-0 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          title={t('agent.canvas.newTab', 'New tab')}
+          title={t('agent.canvas.backToChat', 'Back to chat')}
         >
-          <Plus size={14} />
+          <PanelLeftClose size={16} />
         </button>
       </div>
-      <button
-        type="button"
-        onClick={() => setMode('chat')}
-        className="flex-shrink-0 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-        title={t('agent.canvas.backToChat', 'Back to chat')}
-      >
-        <PanelLeftClose size={16} />
-      </button>
-    </div>
-  );
-});
+    );
+  }
+);
 CanvasTabBar.displayName = 'CanvasTabBar';
 
 /**
@@ -169,9 +175,10 @@ const IsolatedPreviewFrame = memo<{ content: string; title: string }>(({ content
     const htmlContent = content.trim();
 
     // Wrap in full HTML document with isolation
-    const wrappedContent = htmlContent.startsWith('<!DOCTYPE') || htmlContent.startsWith('<html')
-      ? htmlContent
-      : `<!DOCTYPE html>
+    const wrappedContent =
+      htmlContent.startsWith('<!DOCTYPE') || htmlContent.startsWith('<html')
+        ? htmlContent
+        : `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -224,7 +231,9 @@ const CanvasContent = memo<{
   onUpdateModelContext?: (context: Record<string, unknown>) => void;
   mcpAppRef?: React.Ref<StandardMCPAppRendererHandle>;
 }>(({ tab, editMode, onContentChange, onSendPrompt, onUpdateModelContext, mcpAppRef }) => {
-  const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(tab.type === 'markdown' ? tab.content : undefined);
+  const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(
+    tab.type === 'markdown' ? tab.content : undefined
+  );
   if (editMode && (tab.type === 'code' || tab.type === 'markdown' || tab.type === 'data')) {
     const bgClass =
       tab.type === 'code'
@@ -253,14 +262,16 @@ const CanvasContent = memo<{
       );
     case 'markdown':
       return (
-          <div className={`h-full overflow-auto p-6 bg-white dark:bg-slate-900 rounded-b-lg ${MARKDOWN_PROSE_CLASSES}`}>
-            <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>{tab.content}</ReactMarkdown>
-          </div>
+        <div
+          className={`h-full overflow-auto p-6 bg-white dark:bg-slate-900 rounded-b-lg ${MARKDOWN_PROSE_CLASSES}`}
+        >
+          <ReactMarkdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins}>
+            {tab.content}
+          </ReactMarkdown>
+        </div>
       );
     case 'preview':
-      return (
-        <IsolatedPreviewFrame content={tab.content} title={tab.title} />
-      );
+      return <IsolatedPreviewFrame content={tab.content} title={tab.title} />;
     case 'data':
       return (
         <div className="h-full overflow-auto p-4 bg-white dark:bg-slate-900 rounded-b-lg">
@@ -330,7 +341,8 @@ const CanvasToolbar = memo<{
       a.click();
       return;
     }
-    const ext = tab.type === 'code' ? (tab.language || 'txt') : tab.type === 'markdown' ? 'md' : 'txt';
+    const ext =
+      tab.type === 'code' ? tab.language || 'txt' : tab.type === 'markdown' ? 'md' : 'txt';
     const blob = new Blob([tab.content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -409,7 +421,11 @@ const CanvasToolbar = memo<{
               ? 'bg-primary/10 text-primary'
               : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400'
           }`}
-          title={editMode ? t('agent.canvas.viewMode', 'View mode') : t('agent.canvas.editMode', 'Edit mode')}
+          title={
+            editMode
+              ? t('agent.canvas.viewMode', 'View mode')
+              : t('agent.canvas.editMode', 'Edit mode')
+          }
         >
           {editMode ? <Eye size={14} /> : <Pencil size={14} />}
         </button>
@@ -572,97 +588,97 @@ CanvasEmptyState.displayName = 'CanvasEmptyState';
 export const CanvasPanel = memo<{
   onSendPrompt?: (prompt: string) => void;
   onUpdateModelContext?: (context: Record<string, unknown>) => void;
-}>(
-  ({ onSendPrompt, onUpdateModelContext }) => {
-    const activeTab = useActiveCanvasTab();
-    const { updateContent } = useCanvasActions();
-    const contentRef = useRef<HTMLDivElement>(null);
-    const mcpAppRef = useRef<StandardMCPAppRendererHandle>(null);
-    const [editMode, setEditMode] = useState(false);
-    const { t } = useTranslation();
+}>(({ onSendPrompt, onUpdateModelContext }) => {
+  const activeTab = useActiveCanvasTab();
+  const { updateContent } = useCanvasActions();
+  const contentRef = useRef<HTMLDivElement>(null);
+  const mcpAppRef = useRef<StandardMCPAppRendererHandle>(null);
+  const [editMode, setEditMode] = useState(false);
+  const { t } = useTranslation();
 
-    // SEP-1865: Send ui/resource-teardown before closing MCP App tabs
-    const handleBeforeCloseTab = useCallback((tabId: string) => {
+  // SEP-1865: Send ui/resource-teardown before closing MCP App tabs
+  const handleBeforeCloseTab = useCallback(
+    (tabId: string) => {
       const tabs = useCanvasStore.getState().tabs;
       const tab = tabs.find((t) => t.id === tabId);
       if (tab?.type === 'mcp-app' && tab.id === activeTab?.id) {
         mcpAppRef.current?.teardown();
       }
-    }, [activeTab?.id]);
+    },
+    [activeTab?.id]
+  );
 
-    const handleSelectionAction = useCallback(
-      (prompt: string) => {
-        onSendPrompt?.(prompt);
-      },
-      [onSendPrompt]
-    );
+  const handleSelectionAction = useCallback(
+    (prompt: string) => {
+      onSendPrompt?.(prompt);
+    },
+    [onSendPrompt]
+  );
 
-    const handleContentChange = useCallback(
-      (content: string) => {
-        if (activeTab) {
-          updateContent(activeTab.id, content);
-        }
-      },
-      [activeTab, updateContent]
-    );
-
-    const handleToggleEdit = useCallback(() => {
-      setEditMode((prev) => !prev);
-    }, []);
-
-    const handleAskRefine = useCallback(() => {
-      if (onSendPrompt && activeTab) {
-        onSendPrompt(
-          `I've edited the content below. Please review and improve it:\n\n${activeTab.content}`
-        );
-        setEditMode(false);
+  const handleContentChange = useCallback(
+    (content: string) => {
+      if (activeTab) {
+        updateContent(activeTab.id, content);
       }
-    }, [onSendPrompt, activeTab]);
+    },
+    [activeTab, updateContent]
+  );
 
-    return (
-      <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-950/50 overflow-hidden">
-        <CanvasTabBar onBeforeCloseTab={handleBeforeCloseTab} />
-        {activeTab ? (
-          <>
-            <CanvasToolbar
+  const handleToggleEdit = useCallback(() => {
+    setEditMode((prev) => !prev);
+  }, []);
+
+  const handleAskRefine = useCallback(() => {
+    if (onSendPrompt && activeTab) {
+      onSendPrompt(
+        `I've edited the content below. Please review and improve it:\n\n${activeTab.content}`
+      );
+      setEditMode(false);
+    }
+  }, [onSendPrompt, activeTab]);
+
+  return (
+    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 to-slate-100/50 dark:from-slate-900 dark:to-slate-950/50 overflow-hidden">
+      <CanvasTabBar onBeforeCloseTab={handleBeforeCloseTab} />
+      {activeTab ? (
+        <>
+          <CanvasToolbar tab={activeTab} editMode={editMode} onToggleEdit={handleToggleEdit} />
+          <QuickActions
+            type={activeTab.type}
+            content={activeTab.content}
+            onSendPrompt={onSendPrompt}
+          />
+          <div
+            ref={contentRef}
+            className="flex-1 min-h-0 overflow-hidden relative bg-white dark:bg-slate-900"
+          >
+            <CanvasContent
               tab={activeTab}
               editMode={editMode}
-              onToggleEdit={handleToggleEdit}
-            />
-            <QuickActions
-              type={activeTab.type}
-              content={activeTab.content}
+              onContentChange={handleContentChange}
               onSendPrompt={onSendPrompt}
+              onUpdateModelContext={onUpdateModelContext}
+              mcpAppRef={mcpAppRef}
             />
-            <div ref={contentRef} className="flex-1 min-h-0 overflow-hidden relative bg-white dark:bg-slate-900">
-              <CanvasContent
-                tab={activeTab}
-                editMode={editMode}
-                onContentChange={handleContentChange}
-                onSendPrompt={onSendPrompt}
-                onUpdateModelContext={onUpdateModelContext}
-                mcpAppRef={mcpAppRef}
-              />
-              {!editMode && (
-                <SelectionToolbar containerRef={contentRef} onAction={handleSelectionAction} />
-              )}
-              {editMode && onSendPrompt && (
-                <button
-                  type="button"
-                  onClick={handleAskRefine}
-                  className="absolute bottom-4 right-4 px-3 py-1.5 bg-primary text-white text-xs rounded-lg shadow-lg hover:bg-primary-600 flex items-center gap-1.5"
-                >
-                  <Sparkles size={12} />
-                  {t('agent.canvas.askRefine', 'Ask Agent to Refine')}
-                </button>
-              )}
-            </div>
-          </>
-        ) : (
-          <CanvasEmptyState />
-        )}
-      </div>
-    );
-  }
-);
+            {!editMode && (
+              <SelectionToolbar containerRef={contentRef} onAction={handleSelectionAction} />
+            )}
+            {editMode && onSendPrompt && (
+              <button
+                type="button"
+                onClick={handleAskRefine}
+                className="absolute bottom-4 right-4 px-3 py-1.5 bg-primary text-white text-xs rounded-lg shadow-lg hover:bg-primary-600 flex items-center gap-1.5"
+              >
+                <Sparkles size={12} />
+                {t('agent.canvas.askRefine', 'Ask Agent to Refine')}
+              </button>
+            )}
+          </div>
+        </>
+      ) : (
+        <CanvasEmptyState />
+      )}
+    </div>
+  );
+});
 CanvasPanel.displayName = 'CanvasPanel';

@@ -130,11 +130,7 @@ export const ConversationCompareView = memo(
 
     const loadConversationMessages = useCallback(
       async (conversationId: string) => {
-        const response = await agentService.getConversationMessages(
-          conversationId,
-          projectId,
-          200
-        );
+        const response = await agentService.getConversationMessages(conversationId, projectId, 200);
         return extractMessages(response.timeline);
       },
       [projectId]
@@ -208,7 +204,10 @@ export const ConversationCompareView = memo(
             loading={leftLoading}
           />
           <ComparePanel
-            title={rightConv?.title || t('comparison.selectConversation', 'Select conversation to compare')}
+            title={
+              rightConv?.title ||
+              t('comparison.selectConversation', 'Select conversation to compare')
+            }
             messages={rightMessages}
             loading={rightLoading}
             placeholder={

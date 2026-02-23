@@ -357,7 +357,10 @@ export const Timeline: React.FC<TimelineProps> = ({ children, timelineRef }) => 
       {children || (
         <div className="relative pl-2" ref={timelineRef}>
           {/* Vertical Timeline Line */}
-          <div className="absolute left-6 top-2 bottom-2 w-0.5 bg-slate-200 dark:bg-slate-700" style={{ zIndex: 0 }} />
+          <div
+            className="absolute left-6 top-2 bottom-2 w-0.5 bg-slate-200 dark:bg-slate-700"
+            style={{ zIndex: 0 }}
+          />
 
           {/* Step Nodes */}
           <div className="relative" style={{ zIndex: 1 }}>

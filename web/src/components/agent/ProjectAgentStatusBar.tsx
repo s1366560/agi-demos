@@ -334,7 +334,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         pendingToolsStack: s.pendingToolsStack,
         tasks: convTasks ?? EMPTY_TASKS,
       };
-    }),
+    })
   );
 
   // Use the unified status hook for consolidated state
@@ -353,7 +353,10 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
 
   // Determine if we should show agent execution state (pill) vs lifecycle state
   const showExecState = (isStreaming || storeIsStreaming) && agentState !== 'idle';
-  const execConfig = useMemo(() => execStateConfig[agentState] || execStateConfig.idle, [agentState]);
+  const execConfig = useMemo(
+    () => execStateConfig[agentState] || execStateConfig.idle,
+    [agentState]
+  );
   const currentTool =
     pendingToolsStack.length > 0 ? pendingToolsStack[pendingToolsStack.length - 1] : null;
   const isActingPhase = agentState === 'acting' || agentState === 'preparing';
@@ -593,7 +596,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 ) : (
                   <TierIcon size={12} />
                 )}
-                <span className="hidden sm:inline">{poolInstance ? (poolTierConfig?.label ?? 'POOL') : '待分配'}</span>
+                <span className="hidden sm:inline">
+                  {poolInstance ? (poolTierConfig?.label ?? 'POOL') : '待分配'}
+                </span>
                 {poolInstance?.health_status === 'healthy' && (
                   <Heart size={10} className="text-emerald-500 fill-emerald-500" />
                 )}
@@ -620,9 +625,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             `}
           >
             <execConfig.icon size={12} className={execConfig.iconAnimate} />
-            <span className="hidden sm:inline">
-              {t(`agent.state.${agentState}`, agentState)}
-            </span>
+            <span className="hidden sm:inline">{t(`agent.state.${agentState}`, agentState)}</span>
             {currentTool && agentState === 'acting' && (
               <span className="text-xs opacity-60 truncate max-w-[80px] hidden sm:inline">
                 {currentTool}
@@ -734,7 +737,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               title={
                 <div className="space-y-1">
                   <div className="font-medium">任务进度</div>
-                  <div>已完成: {tasks.filter((t) => t.status === 'completed').length}/{tasks.length}</div>
+                  <div>
+                    已完成: {tasks.filter((t) => t.status === 'completed').length}/{tasks.length}
+                  </div>
                   <div>进行中: {tasks.filter((t) => t.status === 'in_progress').length}</div>
                   <div>待处理: {tasks.filter((t) => t.status === 'pending').length}</div>
                 </div>
@@ -937,7 +942,9 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
             ) : status.resources.activeCalls > 0 ? (
               <>
                 <Activity size={12} className="text-blue-500 animate-pulse" />
-                <span className="hidden sm:inline text-blue-500">{status.resources.activeCalls} active</span>
+                <span className="hidden sm:inline text-blue-500">
+                  {status.resources.activeCalls} active
+                </span>
               </>
             ) : status.connection.websocket ? (
               <>

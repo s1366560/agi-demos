@@ -457,13 +457,13 @@ describe('agentV3 Store - SSE Timeline Integration', () => {
       // The new user message should have eventTimeUs defined and greater than old events
       const newUserMessage = userMessages[userMessages.length - 1];
       expect(newUserMessage.eventTimeUs).toBeDefined();
-      expect((newUserMessage.eventTimeUs ?? 0)).toBeGreaterThan(oldTime);
+      expect(newUserMessage.eventTimeUs ?? 0).toBeGreaterThan(oldTime);
 
       // The thought event should also have eventTimeUs defined and greater than old events
       const thoughtEvents = timeline.filter((e) => e.type === 'thought');
       const newThought = thoughtEvents[thoughtEvents.length - 1];
       expect(newThought.eventTimeUs).toBeDefined();
-      expect((newThought.eventTimeUs ?? 0)).toBeGreaterThan(oldTime);
+      expect(newThought.eventTimeUs ?? 0).toBeGreaterThan(oldTime);
     });
   });
 

@@ -31,7 +31,7 @@ describe('FinalResponseDisplay', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
-  
+
   it('renders content', () => {
     render(<FinalResponseDisplay content={content} />);
     expect(screen.getByText('Final Synthesis Report')).toBeInTheDocument();
@@ -43,10 +43,10 @@ describe('FinalResponseDisplay', () => {
     render(<FinalResponseDisplay content={content} />);
     const copyButton = screen.getByText('Copy to Clipboard');
     fireEvent.click(copyButton);
-    
+
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(content);
     await waitFor(() => {
-        expect(screen.getByText('Copied!')).toBeInTheDocument();
+      expect(screen.getByText('Copied!')).toBeInTheDocument();
     });
   });
 
@@ -61,7 +61,7 @@ describe('FinalResponseDisplay', () => {
     render(<FinalResponseDisplay content={content} />);
     const shareButton = screen.getByText('Share with Team');
     fireEvent.click(shareButton);
-    
+
     expect(navigator.share).toHaveBeenCalled();
   });
 });

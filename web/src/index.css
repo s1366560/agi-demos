@@ -1603,8 +1603,12 @@ img[loading='lazy'] {
   animation: slideInLeft 0.3s ease-out;
 }
 @keyframes slideInLeft {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 /* High Contrast Mode */
@@ -1634,7 +1638,7 @@ img[loading='lazy'] {
 
 .high-contrast .bg-white,
 .high-contrast .bg-slate-50,
-.high-contrast [class*="bg-slate-"] {
+.high-contrast [class*='bg-slate-'] {
   background-color: var(--hc-surface) !important;
 }
 

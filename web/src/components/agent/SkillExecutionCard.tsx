@@ -264,8 +264,7 @@ export const SkillExecutionCard: React.FC<SkillExecutionCardProps> = ({ skillExe
           )}
           {skillExecution.started_at && (
             <Text type="secondary" style={{ fontSize: 10 }}>
-              Started:{' '}
-              {formatTimeOnly(skillExecution.started_at)}
+              Started: {formatTimeOnly(skillExecution.started_at)}
             </Text>
           )}
         </Space>
