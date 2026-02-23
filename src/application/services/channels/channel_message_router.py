@@ -729,7 +729,8 @@ class ChannelMessageRouter:
                 logger.info(f"[MessageRouter] Invoking agent for conversation {conversation_id}")
 
                 # --- Shared state between main loop and card updater ---------
-                _delta_text = ""  # accumulated text_delta (preview)
+                _delta_text = ""  # accumulated text_delta for current step (reset on text_end)
+                _accumulated_text = ""  # accumulated text across all steps (never reset)
                 _card_status = ""  # tool-execution status line
                 _final_content = ""  # authoritative answer from complete
                 error_message: Optional[str] = None
@@ -789,17 +790,18 @@ class ChannelMessageRouter:
                             last_snapshot = ""
                             while not _stream_done:
                                 await asyncio.sleep(0.5)
-                                display = _delta_text
-                                if _card_status and not _delta_text:
+                                # Use accumulated text for display to preserve all content
+                                display = _accumulated_text
+                                if _card_status and not _accumulated_text:
                                     display = f"_{_card_status}_"
                                 elif _card_status:
-                                    display = f"_{_card_status}_\n\n{_delta_text}"
+                                    display = f"_{_card_status}_\n\n{_accumulated_text}"
                                 if display != last_snapshot and display.strip():
                                     ok = await cardkit_mgr.update_text(cardkit_state, display)
                                     if ok:
                                         last_snapshot = display
-                            # Finalize
-                            final_display = _final_content or _delta_text
+                            # Finalize - use final content or accumulated text
+                            final_display = _final_content or _accumulated_text
                             if final_display.strip():
                                 await cardkit_mgr.finish_streaming(cardkit_state, final_display)
                             else:
@@ -826,11 +828,12 @@ class ChannelMessageRouter:
                             last_snapshot = ""
                             while not _stream_done:
                                 await asyncio.sleep(1.5)
-                                display = _delta_text
-                                if _card_status and not _delta_text:
+                                # Use accumulated text for display to preserve all content
+                                display = _accumulated_text
+                                if _card_status and not _accumulated_text:
                                     display = f"_{_card_status}_"
                                 elif _card_status:
-                                    display = f"_{_card_status}_\n\n{_delta_text}"
+                                    display = f"_{_card_status}_\n\n{_accumulated_text}"
                                 if display != last_snapshot and display.strip():
                                     ok = await self._patch_streaming_card(
                                         streaming_adapter,
@@ -840,7 +843,7 @@ class ChannelMessageRouter:
                                     )
                                     if ok:
                                         last_snapshot = display
-                            final_display = _final_content or _delta_text
+                            final_display = _final_content or _accumulated_text
                             if final_display.strip():
                                 await self._patch_streaming_card(
                                     streaming_adapter,
@@ -880,13 +883,15 @@ class ChannelMessageRouter:
                                 delta = event_data.get("delta", "")
                                 if isinstance(delta, str):
                                     _delta_text += delta
+                                    _accumulated_text += delta
                             elif event_type == "text_end":
                                 # text_end carries the complete text for this turn;
-                                # reset delta accumulator so multi-turn planning
-                                # text doesn't leak into the final response.
+                                # update accumulated text with full content (in case of dropped deltas)
+                                # and reset delta accumulator for the next step.
                                 full = event_data.get("full_text", "")
                                 if isinstance(full, str) and full.strip():
-                                    _delta_text = full
+                                    _accumulated_text = full
+                                _delta_text = ""
                                 _card_status = ""
                             elif event_type == "thought":
                                 _card_status = "Thinking..."
@@ -910,7 +915,7 @@ class ChannelMessageRouter:
 
                 # --- Finalize ------------------------------------------------
                 _stream_done = True
-                response = _final_content or _delta_text
+                response = _final_content or _accumulated_text
 
                 if _card_updater_task:
                     try:

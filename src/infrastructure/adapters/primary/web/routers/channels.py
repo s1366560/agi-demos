@@ -32,6 +32,7 @@ from src.infrastructure.adapters.secondary.persistence.models import (
     UserRole,
     UserTenant,
 )
+from src.infrastructure.agent.plugins.control_plane import PluginControlPlaneService
 from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
 from src.infrastructure.agent.plugins.registry import get_plugin_registry
 from src.infrastructure.security.encryption_service import get_encryption_service
@@ -150,9 +151,7 @@ class ChannelConfigCreate(BaseModel):
     allow_from: Optional[List[str]] = Field(
         None, description="Allowlist of user IDs (wildcard * = all)"
     )
-    group_allow_from: Optional[List[str]] = Field(
-        None, description="Allowlist of group/chat IDs"
-    )
+    group_allow_from: Optional[List[str]] = Field(None, description="Allowlist of group/chat IDs")
     rate_limit_per_minute: int = Field(
         60, ge=0, description="Max messages per minute per chat (0 = unlimited)"
     )
@@ -168,9 +167,7 @@ class ChannelConfigCreate(BaseModel):
         if not token and isinstance(self.extra_settings, dict):
             token = self.extra_settings.get("verification_token")
         if self.connection_mode == "webhook" and not token:
-            raise ValueError(
-                "verification_token is required when connection_mode is 'webhook'"
-            )
+            raise ValueError("verification_token is required when connection_mode is 'webhook'")
         return self
 
 
@@ -190,12 +187,8 @@ class ChannelConfigUpdate(BaseModel):
     domain: Optional[str] = None
     extra_settings: Optional[dict] = None
     description: Optional[str] = None
-    dm_policy: Optional[str] = Field(
-        None, pattern=r"^(open|allowlist|disabled)$"
-    )
-    group_policy: Optional[str] = Field(
-        None, pattern=r"^(open|allowlist|disabled)$"
-    )
+    dm_policy: Optional[str] = Field(None, pattern=r"^(open|allowlist|disabled)$")
+    group_policy: Optional[str] = Field(None, pattern=r"^(open|allowlist|disabled)$")
     allow_from: Optional[List[str]] = None
     group_allow_from: Optional[List[str]] = None
     rate_limit_per_minute: Optional[int] = Field(None, ge=0)
@@ -255,6 +248,11 @@ class RuntimePluginResponse(BaseModel):
     source: str
     package: Optional[str] = None
     version: Optional[str] = None
+    kind: Optional[str] = None
+    manifest_id: Optional[str] = None
+    channels: List[str] = Field(default_factory=list)
+    providers: List[str] = Field(default_factory=list)
+    skills: List[str] = Field(default_factory=list)
     enabled: bool = True
     discovered: bool = True
     channel_types: List[str] = Field(default_factory=list)
@@ -289,6 +287,10 @@ class ChannelPluginCatalogItemResponse(BaseModel):
     source: str
     package: Optional[str] = None
     version: Optional[str] = None
+    kind: Optional[str] = None
+    manifest_id: Optional[str] = None
+    providers: List[str] = Field(default_factory=list)
+    skills: List[str] = Field(default_factory=list)
     enabled: bool = True
     discovered: bool = True
     schema_supported: bool = False
@@ -302,6 +304,10 @@ class ChannelPluginConfigSchemaResponse(BaseModel):
     source: str
     package: Optional[str] = None
     version: Optional[str] = None
+    kind: Optional[str] = None
+    manifest_id: Optional[str] = None
+    providers: List[str] = Field(default_factory=list)
+    skills: List[str] = Field(default_factory=list)
     schema_supported: bool = False
     config_schema: Optional[Dict[str, Any]] = None
     config_ui_hints: Optional[Dict[str, Any]] = None
@@ -344,6 +350,16 @@ def _resolve_secret_paths(metadata: Any | None) -> List[str]:
     for path in secret_paths:
         if isinstance(path, str) and path.strip():
             normalized.append(path.strip())
+    return normalized
+
+
+def _as_string_list(value: Any) -> List[str]:
+    if not isinstance(value, list):
+        return []
+    normalized: List[str] = []
+    for item in value[:100]:
+        if isinstance(item, str) and item.strip():
+            normalized.append(item.strip()[:500])
     return normalized
 
 
@@ -448,7 +464,9 @@ def _apply_secret_sentinel(
         if value != _SECRET_UNCHANGED_SENTINEL:
             continue
         existing_value = (
-            _get_path_value(existing_settings, path) if isinstance(existing_settings, dict) else _MISSING
+            _get_path_value(existing_settings, path)
+            if isinstance(existing_settings, dict)
+            else _MISSING
         )
         if existing_value is _MISSING:
             raise HTTPException(
@@ -542,7 +560,9 @@ def _validate_plugin_settings_schema(
     )
 
 
-def _split_settings_to_model_fields(settings: Dict[str, Any]) -> tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+def _split_settings_to_model_fields(
+    settings: Dict[str, Any],
+) -> tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
     model_fields = {key: settings.get(key) for key in _CHANNEL_SETTING_FIELDS if key in settings}
     extras = {key: value for key, value in settings.items() if key not in _CHANNEL_SETTING_FIELDS}
     return model_fields, extras or None
@@ -583,6 +603,16 @@ def _serialize_plugin_diagnostics(diagnostics: List[Any]) -> List[PluginDiagnost
     """Serialize plugin diagnostics into API response models."""
     serialized: List[PluginDiagnosticResponse] = []
     for diagnostic in diagnostics:
+        if isinstance(diagnostic, dict):
+            serialized.append(
+                PluginDiagnosticResponse(
+                    plugin_name=str(diagnostic.get("plugin_name", "unknown")),
+                    code=str(diagnostic.get("code", "unknown")),
+                    message=str(diagnostic.get("message", "")),
+                    level=str(diagnostic.get("level", "warning")),
+                )
+            )
+            continue
         serialized.append(
             PluginDiagnosticResponse(
                 plugin_name=str(getattr(diagnostic, "plugin_name", "unknown")),
@@ -594,6 +624,15 @@ def _serialize_plugin_diagnostics(diagnostics: List[Any]) -> List[PluginDiagnost
     return serialized
 
 
+def _build_plugin_control_plane() -> PluginControlPlaneService:
+    """Build plugin control-plane service with runtime reconciliation hook."""
+    return PluginControlPlaneService(
+        runtime_manager=get_plugin_runtime_manager(),
+        registry=get_plugin_registry(),
+        reconcile_channel_runtime=_reconcile_channel_runtime_after_plugin_change,
+    )
+
+
 async def _load_runtime_plugins(
     *,
     tenant_id: Optional[str] = None,
@@ -603,21 +642,10 @@ async def _load_runtime_plugins(
     Dict[str, List[str]],
 ]:
     """Load plugin runtime view enriched with channel adapter ownership."""
-    runtime_manager = get_plugin_runtime_manager()
-    await runtime_manager.ensure_loaded()
-    plugin_records, diagnostics = runtime_manager.list_plugins(tenant_id=tenant_id)
-    channel_factories = get_plugin_registry().list_channel_adapter_factories()
-
-    channel_types_by_plugin: Dict[str, List[str]] = {}
-    for channel_type, (plugin_name, _factory) in channel_factories.items():
-        channel_types_by_plugin.setdefault(plugin_name, []).append(channel_type)
-
-    for plugin_name, channel_types in channel_types_by_plugin.items():
-        channel_types_by_plugin[plugin_name] = sorted(set(channel_types))
-
-    for record in plugin_records:
-        record["channel_types"] = channel_types_by_plugin.get(record["name"], [])
-
+    control_plane = _build_plugin_control_plane()
+    plugin_records, diagnostics, channel_types_by_plugin = await control_plane.list_runtime_plugins(
+        tenant_id=tenant_id,
+    )
     return plugin_records, _serialize_plugin_diagnostics(diagnostics), channel_types_by_plugin
 
 
@@ -685,6 +713,10 @@ def _build_channel_catalog_items(
                 source=str(plugin_record.get("source", "entrypoint")),
                 package=plugin_record.get("package"),
                 version=plugin_record.get("version"),
+                kind=plugin_record.get("kind"),
+                manifest_id=plugin_record.get("manifest_id"),
+                providers=_as_string_list(plugin_record.get("providers")),
+                skills=_as_string_list(plugin_record.get("skills")),
                 enabled=bool(plugin_record.get("enabled", True)),
                 discovered=bool(plugin_record.get("discovered", True)),
                 schema_supported=bool(metadata and metadata.config_schema),
@@ -745,7 +777,9 @@ async def list_tenant_channel_plugin_catalog(
     """List channel plugin catalog for tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db)
     plugin_records, _, _ = await _load_runtime_plugins(tenant_id=tenant_id)
-    return ChannelPluginCatalogResponse(items=_build_channel_catalog_items(plugin_records=plugin_records))
+    return ChannelPluginCatalogResponse(
+        items=_build_channel_catalog_items(plugin_records=plugin_records)
+    )
 
 
 @router.get(
@@ -776,6 +810,10 @@ async def get_tenant_channel_plugin_schema(
         source=str(plugin_record.get("source", "entrypoint")),
         package=plugin_record.get("package"),
         version=plugin_record.get("version"),
+        kind=plugin_record.get("kind"),
+        manifest_id=plugin_record.get("manifest_id"),
+        providers=_as_string_list(plugin_record.get("providers")),
+        skills=_as_string_list(plugin_record.get("skills")),
         schema_supported=bool(metadata.config_schema),
         config_schema=metadata.config_schema,
         config_ui_hints=metadata.config_ui_hints,
@@ -796,21 +834,14 @@ async def install_tenant_plugin(
 ):
     """Install plugin package from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    manager = get_plugin_runtime_manager()
-    result = await manager.install_plugin(data.requirement)
-    if not result.get("success"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=result.get("error", "Plugin install failed"),
-        )
-    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
-    details = dict(result)
-    if channel_reload_plan is not None:
-        details["channel_reload_plan"] = channel_reload_plan
+    control_plane = _build_plugin_control_plane()
+    result = await control_plane.install_plugin(data.requirement)
+    if not result.success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.message)
     return PluginActionResponse(
         success=True,
-        message=f"Installed plugin requirement: {data.requirement}",
-        details=details,
+        message=result.message,
+        details=result.details,
     )
 
 
@@ -826,22 +857,16 @@ async def enable_tenant_plugin(
 ):
     """Enable plugin from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    manager = get_plugin_runtime_manager()
-    diagnostics = await manager.set_plugin_enabled(
+    control_plane = _build_plugin_control_plane()
+    result = await control_plane.set_plugin_enabled(
         plugin_name,
         enabled=True,
         tenant_id=tenant_id,
     )
-    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
-    details: Dict[str, Any] = {
-        "diagnostics": [item.model_dump() for item in _serialize_plugin_diagnostics(diagnostics)]
-    }
-    if channel_reload_plan is not None:
-        details["channel_reload_plan"] = channel_reload_plan
     return PluginActionResponse(
         success=True,
-        message=f"Enabled plugin: {plugin_name}",
-        details=details,
+        message=result.message,
+        details=result.details,
     )
 
 
@@ -857,22 +882,16 @@ async def disable_tenant_plugin(
 ):
     """Disable plugin from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    manager = get_plugin_runtime_manager()
-    diagnostics = await manager.set_plugin_enabled(
+    control_plane = _build_plugin_control_plane()
+    result = await control_plane.set_plugin_enabled(
         plugin_name,
         enabled=False,
         tenant_id=tenant_id,
     )
-    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
-    details: Dict[str, Any] = {
-        "diagnostics": [item.model_dump() for item in _serialize_plugin_diagnostics(diagnostics)]
-    }
-    if channel_reload_plan is not None:
-        details["channel_reload_plan"] = channel_reload_plan
     return PluginActionResponse(
         success=True,
-        message=f"Disabled plugin: {plugin_name}",
-        details=details,
+        message=result.message,
+        details=result.details,
     )
 
 
@@ -888,21 +907,14 @@ async def uninstall_tenant_plugin(
 ):
     """Uninstall plugin package from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    manager = get_plugin_runtime_manager()
-    result = await manager.uninstall_plugin(plugin_name)
-    if not result.get("success"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=result.get("error", "Plugin uninstall failed"),
-        )
-    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
-    details = dict(result)
-    if channel_reload_plan is not None:
-        details["channel_reload_plan"] = channel_reload_plan
+    control_plane = _build_plugin_control_plane()
+    result = await control_plane.uninstall_plugin(plugin_name)
+    if not result.success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.message)
     return PluginActionResponse(
         success=True,
-        message=f"Uninstalled plugin: {plugin_name}",
-        details=details,
+        message=result.message,
+        details=result.details,
     )
 
 
@@ -917,18 +929,12 @@ async def reload_tenant_plugins(
 ):
     """Reload plugins from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
-    manager = get_plugin_runtime_manager()
-    diagnostics = await manager.reload()
-    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
-    details: Dict[str, Any] = {
-        "diagnostics": [item.model_dump() for item in _serialize_plugin_diagnostics(diagnostics)]
-    }
-    if channel_reload_plan is not None:
-        details["channel_reload_plan"] = channel_reload_plan
+    control_plane = _build_plugin_control_plane()
+    result = await control_plane.reload_plugins()
     return PluginActionResponse(
         success=True,
-        message="Plugin runtime reloaded",
-        details=details,
+        message=result.message,
+        details=result.details,
     )
 
 
@@ -945,7 +951,9 @@ async def list_project_channel_plugin_catalog(
     await verify_project_access(project_id, current_user, db)
     project_tenant_id = await _resolve_project_tenant_id(project_id, db)
     plugin_records, _, _ = await _load_runtime_plugins(tenant_id=project_tenant_id)
-    return ChannelPluginCatalogResponse(items=_build_channel_catalog_items(plugin_records=plugin_records))
+    return ChannelPluginCatalogResponse(
+        items=_build_channel_catalog_items(plugin_records=plugin_records)
+    )
 
 
 @router.get(
@@ -978,6 +986,10 @@ async def get_project_channel_plugin_schema(
         source=str(plugin_record.get("source", "entrypoint")),
         package=plugin_record.get("package"),
         version=plugin_record.get("version"),
+        kind=plugin_record.get("kind"),
+        manifest_id=plugin_record.get("manifest_id"),
+        providers=_as_string_list(plugin_record.get("providers")),
+        skills=_as_string_list(plugin_record.get("skills")),
         schema_supported=bool(metadata.config_schema),
         config_schema=metadata.config_schema,
         config_ui_hints=metadata.config_ui_hints,
@@ -998,21 +1010,14 @@ async def install_project_plugin(
 ):
     """Install a plugin package and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    manager = get_plugin_runtime_manager()
-    result = await manager.install_plugin(data.requirement)
-    if not result.get("success"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=result.get("error", "Plugin install failed"),
-        )
-    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
-    details = dict(result)
-    if channel_reload_plan is not None:
-        details["channel_reload_plan"] = channel_reload_plan
+    control_plane = _build_plugin_control_plane()
+    result = await control_plane.install_plugin(data.requirement)
+    if not result.success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.message)
     return PluginActionResponse(
         success=True,
-        message=f"Installed plugin requirement: {data.requirement}",
-        details=details,
+        message=result.message,
+        details=result.details,
     )
 
 
@@ -1028,23 +1033,17 @@ async def enable_project_plugin(
 ):
     """Enable plugin and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    manager = get_plugin_runtime_manager()
     project_tenant_id = await _resolve_project_tenant_id(project_id, db)
-    diagnostics = await manager.set_plugin_enabled(
+    control_plane = _build_plugin_control_plane()
+    result = await control_plane.set_plugin_enabled(
         plugin_name,
         enabled=True,
         tenant_id=project_tenant_id,
     )
-    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
-    details: Dict[str, Any] = {
-        "diagnostics": [item.model_dump() for item in _serialize_plugin_diagnostics(diagnostics)]
-    }
-    if channel_reload_plan is not None:
-        details["channel_reload_plan"] = channel_reload_plan
     return PluginActionResponse(
         success=True,
-        message=f"Enabled plugin: {plugin_name}",
-        details=details,
+        message=result.message,
+        details=result.details,
     )
 
 
@@ -1060,23 +1059,17 @@ async def disable_project_plugin(
 ):
     """Disable plugin and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    manager = get_plugin_runtime_manager()
     project_tenant_id = await _resolve_project_tenant_id(project_id, db)
-    diagnostics = await manager.set_plugin_enabled(
+    control_plane = _build_plugin_control_plane()
+    result = await control_plane.set_plugin_enabled(
         plugin_name,
         enabled=False,
         tenant_id=project_tenant_id,
     )
-    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
-    details: Dict[str, Any] = {
-        "diagnostics": [item.model_dump() for item in _serialize_plugin_diagnostics(diagnostics)]
-    }
-    if channel_reload_plan is not None:
-        details["channel_reload_plan"] = channel_reload_plan
     return PluginActionResponse(
         success=True,
-        message=f"Disabled plugin: {plugin_name}",
-        details=details,
+        message=result.message,
+        details=result.details,
     )
 
 
@@ -1092,21 +1085,14 @@ async def uninstall_project_plugin(
 ):
     """Uninstall plugin package and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    manager = get_plugin_runtime_manager()
-    result = await manager.uninstall_plugin(plugin_name)
-    if not result.get("success"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=result.get("error", "Plugin uninstall failed"),
-        )
-    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
-    details = dict(result)
-    if channel_reload_plan is not None:
-        details["channel_reload_plan"] = channel_reload_plan
+    control_plane = _build_plugin_control_plane()
+    result = await control_plane.uninstall_plugin(plugin_name)
+    if not result.success:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=result.message)
     return PluginActionResponse(
         success=True,
-        message=f"Uninstalled plugin: {plugin_name}",
-        details=details,
+        message=result.message,
+        details=result.details,
     )
 
 
@@ -1121,18 +1107,12 @@ async def reload_project_plugins(
 ):
     """Reload runtime plugin discovery and registrations."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
-    manager = get_plugin_runtime_manager()
-    diagnostics = await manager.reload()
-    channel_reload_plan = await _reconcile_channel_runtime_after_plugin_change()
-    details: Dict[str, Any] = {
-        "diagnostics": [item.model_dump() for item in _serialize_plugin_diagnostics(diagnostics)]
-    }
-    if channel_reload_plan is not None:
-        details["channel_reload_plan"] = channel_reload_plan
+    control_plane = _build_plugin_control_plane()
+    result = await control_plane.reload_plugins()
     return PluginActionResponse(
         success=True,
-        message="Plugin runtime reloaded",
-        details=details,
+        message=result.message,
+        details=result.details,
     )
 
 
@@ -1180,7 +1160,9 @@ async def create_config(
             settings=settings_payload,
         )
         encrypted_settings = _encrypt_secret_values(settings_payload, secret_paths)
-        model_settings, normalized_extra_settings = _split_settings_to_model_fields(encrypted_settings)
+        model_settings, normalized_extra_settings = _split_settings_to_model_fields(
+            encrypted_settings
+        )
     else:
         # Backward-compatible encryption for legacy non-schema channels.
         encryption_service = get_encryption_service()
@@ -1313,7 +1295,9 @@ async def update_config(
             settings=settings_payload,
         )
         encrypted_settings = _encrypt_secret_values(settings_payload, secret_paths)
-        model_settings, normalized_extra_settings = _split_settings_to_model_fields(encrypted_settings)
+        model_settings, normalized_extra_settings = _split_settings_to_model_fields(
+            encrypted_settings
+        )
 
         for field, value in update_data.items():
             if field in _CHANNEL_SETTING_FIELDS or field == "extra_settings":
@@ -1323,7 +1307,9 @@ async def update_config(
         for field, new_value in model_settings.items():
             setattr(config, field, new_value)
 
-        existing_extra_settings = config.extra_settings if isinstance(config.extra_settings, dict) else None
+        existing_extra_settings = (
+            config.extra_settings if isinstance(config.extra_settings, dict) else None
+        )
         if normalized_extra_settings != existing_extra_settings:
             config.extra_settings = normalized_extra_settings
     else:
@@ -1855,9 +1841,7 @@ async def push_message_to_channel(
 
     # Verify user has access to the channel's project
     config = await db.execute(
-        select(ChannelConfigModel).where(
-            ChannelConfigModel.id == binding_row.channel_config_id
-        )
+        select(ChannelConfigModel).where(ChannelConfigModel.id == binding_row.channel_config_id)
     )
     config_row = config.scalar_one_or_none()
     if config_row:

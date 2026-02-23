@@ -10,12 +10,12 @@ Tests for:
 """
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
-from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
-from src.infrastructure.agent.core.subagent_router import SubAgentMatch
+from src.domain.model.agent.subagent import SubAgent
+from src.infrastructure.agent.config import ExecutionConfig
 from src.infrastructure.agent.routing.hybrid_router import HybridRouter, HybridRouterConfig
 from src.infrastructure.agent.routing.intent_router import IntentRouter
 from src.infrastructure.agent.routing.schemas import (
@@ -29,7 +29,6 @@ from src.infrastructure.agent.routing.subagent_orchestrator import (
     SubAgentOrchestrator,
     SubAgentOrchestratorConfig,
 )
-
 
 # ============================================================================
 # Fixtures
@@ -128,11 +127,13 @@ class TestRoutingSchemas:
                 {
                     "function": {
                         "name": "route_to_subagent",
-                        "arguments": json.dumps({
-                            "subagent_name": "coder",
-                            "confidence": 0.9,
-                            "reasoning": "User wants to write code",
-                        }),
+                        "arguments": json.dumps(
+                            {
+                                "subagent_name": "coder",
+                                "confidence": 0.9,
+                                "reasoning": "User wants to write code",
+                            }
+                        ),
                     }
                 }
             ],
@@ -150,11 +151,13 @@ class TestRoutingSchemas:
                 {
                     "function": {
                         "name": "route_to_subagent",
-                        "arguments": json.dumps({
-                            "subagent_name": "none",
-                            "confidence": 0.3,
-                            "reasoning": "General question",
-                        }),
+                        "arguments": json.dumps(
+                            {
+                                "subagent_name": "none",
+                                "confidence": 0.3,
+                                "reasoning": "General question",
+                            }
+                        ),
                     }
                 }
             ],
@@ -171,9 +174,7 @@ class TestRoutingSchemas:
 
     def test_parse_routing_response_invalid_json(self):
         response = {
-            "tool_calls": [
-                {"function": {"name": "route_to_subagent", "arguments": "not-json"}}
-            ],
+            "tool_calls": [{"function": {"name": "route_to_subagent", "arguments": "not-json"}}],
         }
         decision = parse_routing_response(response)
         assert decision.matched is False
@@ -185,11 +186,13 @@ class TestRoutingSchemas:
                 {
                     "function": {
                         "name": "route_to_subagent",
-                        "arguments": json.dumps({
-                            "subagent_name": "coder",
-                            "confidence": 0.05,
-                            "reasoning": "Very uncertain",
-                        }),
+                        "arguments": json.dumps(
+                            {
+                                "subagent_name": "coder",
+                                "confidence": 0.05,
+                                "reasoning": "Very uncertain",
+                            }
+                        ),
                     }
                 }
             ],
@@ -219,11 +222,13 @@ class TestIntentRouter:
                 {
                     "function": {
                         "name": "route_to_subagent",
-                        "arguments": json.dumps({
-                            "subagent_name": "coder",
-                            "confidence": 0.85,
-                            "reasoning": "User wants to implement a function",
-                        }),
+                        "arguments": json.dumps(
+                            {
+                                "subagent_name": "coder",
+                                "confidence": 0.85,
+                                "reasoning": "User wants to implement a function",
+                            }
+                        ),
                     }
                 }
             ],
@@ -244,11 +249,13 @@ class TestIntentRouter:
                 {
                     "function": {
                         "name": "route_to_subagent",
-                        "arguments": json.dumps({
-                            "subagent_name": "none",
-                            "confidence": 0.2,
-                            "reasoning": "General greeting",
-                        }),
+                        "arguments": json.dumps(
+                            {
+                                "subagent_name": "none",
+                                "confidence": 0.2,
+                                "reasoning": "General greeting",
+                            }
+                        ),
                     }
                 }
             ],
@@ -285,11 +292,13 @@ class TestIntentRouter:
                 {
                     "function": {
                         "name": "route_to_subagent",
-                        "arguments": json.dumps({
-                            "subagent_name": "coder",
-                            "confidence": 0.9,
-                            "reasoning": "Continuation of coding task",
-                        }),
+                        "arguments": json.dumps(
+                            {
+                                "subagent_name": "coder",
+                                "confidence": 0.9,
+                                "reasoning": "Continuation of coding task",
+                            }
+                        ),
                     }
                 }
             ],
@@ -327,6 +336,21 @@ class TestIntentRouter:
 
 @pytest.mark.unit
 class TestHybridRouter:
+    def test_config_from_execution_config(self):
+        """HybridRouterConfig should read thresholds from ExecutionConfig."""
+        execution_config = ExecutionConfig(
+            subagent_keyword_skip_threshold=0.92,
+            subagent_keyword_floor_threshold=0.41,
+            subagent_llm_min_confidence=0.73,
+            enable_subagent_routing=False,
+        )
+        config = HybridRouterConfig.from_execution_config(execution_config)
+
+        assert config.keyword_skip_threshold == 0.92
+        assert config.keyword_floor_threshold == 0.41
+        assert config.llm_min_confidence == 0.73
+        assert config.enable_llm_routing is False
+
     def test_sync_match_keyword_only(self, sample_subagents):
         """Sync match() should use keyword-only routing."""
         router = HybridRouter(subagents=sample_subagents)
@@ -362,11 +386,13 @@ class TestHybridRouter:
                 {
                     "function": {
                         "name": "route_to_subagent",
-                        "arguments": json.dumps({
-                            "subagent_name": "coder",
-                            "confidence": 0.85,
-                            "reasoning": "User wants to build a REST API",
-                        }),
+                        "arguments": json.dumps(
+                            {
+                                "subagent_name": "coder",
+                                "confidence": 0.85,
+                                "reasoning": "User wants to build a REST API",
+                            }
+                        ),
                     }
                 }
             ],
@@ -392,11 +418,13 @@ class TestHybridRouter:
                 {
                     "function": {
                         "name": "route_to_subagent",
-                        "arguments": json.dumps({
-                            "subagent_name": "none",
-                            "confidence": 0.2,
-                            "reasoning": "General greeting",
-                        }),
+                        "arguments": json.dumps(
+                            {
+                                "subagent_name": "none",
+                                "confidence": 0.2,
+                                "reasoning": "General greeting",
+                            }
+                        ),
                     }
                 }
             ],
@@ -409,9 +437,7 @@ class TestHybridRouter:
         result = await router.match_async("Hello, how are you today?")
         assert result.subagent is None
 
-    async def test_async_llm_failure_falls_back_to_keyword(
-        self, sample_subagents, mock_llm_client
-    ):
+    async def test_async_llm_failure_falls_back_to_keyword(self, sample_subagents, mock_llm_client):
         """If LLM call fails, should gracefully fall back to keyword result."""
         mock_llm_client.generate.side_effect = Exception("API timeout")
 
@@ -438,7 +464,7 @@ class TestHybridRouter:
             llm_client=mock_llm_client,
             config=config,
         )
-        result = await router.match_async("Build a REST API")
+        await router.match_async("Build a REST API")
         mock_llm_client.generate.assert_not_called()
 
     def test_delegated_methods(self, sample_subagents):
@@ -470,11 +496,13 @@ class TestHybridRouter:
                 {
                     "function": {
                         "name": "route_to_subagent",
-                        "arguments": json.dumps({
-                            "subagent_name": "researcher",
-                            "confidence": 0.8,
-                            "reasoning": "Continuing research task",
-                        }),
+                        "arguments": json.dumps(
+                            {
+                                "subagent_name": "researcher",
+                                "confidence": 0.8,
+                                "reasoning": "Continuing research task",
+                            }
+                        ),
                     }
                 }
             ],
@@ -509,11 +537,13 @@ class TestSubAgentOrchestratorAsync:
                 {
                     "function": {
                         "name": "route_to_subagent",
-                        "arguments": json.dumps({
-                            "subagent_name": "coder",
-                            "confidence": 0.9,
-                            "reasoning": "Coding task",
-                        }),
+                        "arguments": json.dumps(
+                            {
+                                "subagent_name": "coder",
+                                "confidence": 0.9,
+                                "reasoning": "Coding task",
+                            }
+                        ),
                     }
                 }
             ],

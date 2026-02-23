@@ -337,14 +337,17 @@ class HITLCardBuilder:
         template: str,
         elements: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
-        """Wrap elements in a standard Feishu card envelope."""
+        """Wrap elements in a Feishu Card JSON 2.0 envelope."""
         return {
+            "schema": "2.0",
             "config": {"wide_screen_mode": True},
             "header": {
                 "title": {"tag": "plain_text", "content": title},
                 "template": template,
             },
-            "elements": elements,
+            "body": {
+                "elements": elements,
+            },
         }
 
     def build_responded_card(

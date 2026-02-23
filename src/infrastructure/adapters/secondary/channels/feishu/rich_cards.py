@@ -5,6 +5,7 @@ Provides structured Feishu Card 2.0 JSON for:
 - Artifact ready notification (download link / preview)
 - Error notification with optional retry
 """
+
 from typing import Any, Dict, List, Optional
 
 
@@ -49,15 +50,9 @@ class RichCardBuilder:
 
         # Count by status
         total = len(tasks)
-        done = sum(
-            1 for t in tasks if t.get("status") in ("completed", "done")
-        )
-        in_progress = sum(
-            1 for t in tasks if t.get("status") in ("in_progress", "running")
-        )
-        failed = sum(
-            1 for t in tasks if t.get("status") in ("failed", "error")
-        )
+        done = sum(1 for t in tasks if t.get("status") in ("completed", "done"))
+        in_progress = sum(1 for t in tasks if t.get("status") in ("in_progress", "running"))
+        failed = sum(1 for t in tasks if t.get("status") in ("failed", "error"))
 
         # Build summary line
         summary = f"**{done}/{total}** completed"
@@ -71,7 +66,7 @@ class RichCardBuilder:
         for task in display_tasks:
             status = task.get("status", "pending")
             icon = self._STATUS_ICONS.get(status, "⬜")
-            task_title = task.get("title", "Untitled")
+            task_title = task.get("content") or task.get("title", "Untitled")
             lines.append(f"{icon} {task_title}")
 
         if len(tasks) > 15:
@@ -90,16 +85,19 @@ class RichCardBuilder:
             template = "grey"
 
         return {
+            "schema": "2.0",
             "config": {"wide_screen_mode": True},
             "header": {
                 "template": template,
                 "title": {"tag": "plain_text", "content": title},
             },
-            "elements": [
-                {"tag": "markdown", "content": summary},
-                {"tag": "hr"},
-                {"tag": "markdown", "content": task_list_text},
-            ],
+            "body": {
+                "elements": [
+                    {"tag": "markdown", "content": summary},
+                    {"tag": "hr"},
+                    {"tag": "markdown", "content": task_list_text},
+                ],
+            },
         }
 
     def build_artifact_card(
@@ -155,12 +153,15 @@ class RichCardBuilder:
             )
 
         return {
+            "schema": "2.0",
             "config": {"wide_screen_mode": True},
             "header": {
                 "template": "green",
                 "title": {"tag": "plain_text", "content": "Artifact Ready"},
             },
-            "elements": elements,
+            "body": {
+                "elements": elements,
+            },
         }
 
     def build_error_card(
@@ -209,10 +210,13 @@ class RichCardBuilder:
             )
 
         return {
+            "schema": "2.0",
             "config": {"wide_screen_mode": True},
             "header": {
                 "template": "red",
                 "title": {"tag": "plain_text", "content": "Error"},
             },
-            "elements": elements,
+            "body": {
+                "elements": elements,
+            },
         }

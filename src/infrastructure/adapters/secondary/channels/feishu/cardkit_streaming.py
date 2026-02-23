@@ -169,22 +169,17 @@ class CardKitStreamingManager:
 
         # Enable streaming mode
         settings = build_streaming_settings(enabled=True)
-        ok = await self._adapter.update_card_settings(
-            card_id, settings, state.next_seq()
-        )
+        ok = await self._adapter.update_card_settings(card_id, settings, state.next_seq())
         if not ok:
             logger.warning(f"[CardKitStreaming] Failed to enable streaming for {card_id}")
 
         # Send the card as a message
         try:
-            message_id = await self._adapter.send_card_entity_message(
-                chat_id, card_id, reply_to
-            )
+            message_id = await self._adapter.send_card_entity_message(chat_id, card_id, reply_to)
             state.message_id = message_id
             state.streaming_active = True
             logger.info(
-                f"[CardKitStreaming] Started streaming: "
-                f"card_id={card_id}, message_id={message_id}"
+                f"[CardKitStreaming] Started streaming: card_id={card_id}, message_id={message_id}"
             )
             return state
         except Exception as e:
@@ -245,21 +240,22 @@ class CardKitStreamingManager:
         if not state.card_id:
             return False
 
-        # Final text update (force, skip throttle)
-        if final_content.strip() and final_content != state.last_content:
-            await self.update_text(state, final_content, force=True)
+        # Always send final content if non-empty (force, skip throttle)
+        # This ensures the final text is displayed correctly after streaming mode is disabled
+        if final_content.strip():
+            ok = await self.update_text(state, final_content, force=True)
+            if not ok:
+                # Retry once if update failed (e.g., due to throttle or same content)
+                state.last_content = ""  # Reset to force update
+                await self.update_text(state, final_content, force=True)
 
         # Disable streaming mode
         settings = build_streaming_settings(enabled=False)
-        ok = await self._adapter.update_card_settings(
-            state.card_id, settings, state.next_seq()
-        )
+        ok = await self._adapter.update_card_settings(state.card_id, settings, state.next_seq())
         state.streaming_active = False
 
         if ok:
-            logger.info(
-                f"[CardKitStreaming] Finished streaming: card_id={state.card_id}"
-            )
+            logger.info(f"[CardKitStreaming] Finished streaming: card_id={state.card_id}")
         return ok
 
     async def add_hitl_buttons(

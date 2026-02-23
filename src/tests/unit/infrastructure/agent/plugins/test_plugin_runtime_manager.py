@@ -60,6 +60,50 @@ async def test_ensure_loaded_registers_discovered_plugins(
 
 @pytest.mark.unit
 @pytest.mark.asyncio
+async def test_ensure_loaded_passes_manifest_strict_flag(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """ensure_loaded should pass strict_local_manifest option to discovery."""
+    captured: dict[str, object] = {}
+
+    def _discover_plugins(**kwargs):
+        captured.update(kwargs)
+        return [], []
+
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.manager.discover_plugins",
+        _discover_plugins,
+    )
+    manager = PluginRuntimeManager(
+        registry=AgentPluginRegistry(),
+        state_store=PluginStateStore(base_path=tmp_path),
+        strict_local_manifest=True,
+    )
+
+    diagnostics = await manager.ensure_loaded()
+
+    assert diagnostics == []
+    assert captured.get("strict_local_manifest") is True
+
+
+@pytest.mark.unit
+def test_runtime_manager_reads_manifest_strict_flag_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """Manager should read strict manifest toggle from environment when unset."""
+    monkeypatch.setenv("MEMSTACK_PLUGIN_MANIFEST_STRICT", "true")
+    manager = PluginRuntimeManager(
+        registry=AgentPluginRegistry(),
+        state_store=PluginStateStore(base_path=tmp_path),
+    )
+
+    assert manager._strict_local_manifest is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
 async def test_set_plugin_enabled_persists_state_and_reloads(tmp_path) -> None:
     """set_plugin_enabled should persist state and trigger reload."""
     state_store = PluginStateStore(base_path=tmp_path)
@@ -116,6 +160,12 @@ def test_list_plugins_includes_state_only_entries(
         "source": "entrypoint",
         "package": "archived-package",
         "version": None,
+        "kind": None,
+        "manifest_id": None,
+        "manifest_path": None,
+        "channels": [],
+        "providers": [],
+        "skills": [],
         "enabled": False,
         "discovered": False,
     }
@@ -152,6 +202,98 @@ def test_list_plugins_prefers_tenant_override(
 
     assert default_plugins[0]["enabled"] is True
     assert tenant_plugins[0]["enabled"] is False
+
+
+@pytest.mark.unit
+def test_list_plugins_includes_manifest_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """list_plugins should expose manifest fields for discovered plugins."""
+    manager = PluginRuntimeManager(
+        registry=AgentPluginRegistry(),
+        state_store=PluginStateStore(base_path=tmp_path),
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.manager.discover_plugins",
+        lambda **_kwargs: (
+            [
+                DiscoveredPlugin(
+                    name="demo-plugin",
+                    plugin=object(),
+                    source="local",
+                    version="0.2.0",
+                    kind="channel",
+                    manifest_id="demo-plugin",
+                    manifest_path="/tmp/.memstack/plugins/demo/memstack.plugin.json",
+                    channels=("feishu",),
+                    providers=("demo-provider",),
+                    skills=("demo-skill",),
+                )
+            ],
+            [],
+        ),
+    )
+
+    plugins, _ = manager.list_plugins()
+
+    assert plugins[0]["kind"] == "channel"
+    assert plugins[0]["manifest_id"] == "demo-plugin"
+    assert plugins[0]["channels"] == ["feishu"]
+    assert plugins[0]["providers"] == ["demo-provider"]
+    assert plugins[0]["skills"] == ["demo-skill"]
+
+
+@pytest.mark.unit
+def test_list_plugins_applies_tenant_metadata_override(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """Tenant-scoped metadata should override discovered manifest metadata."""
+    state_store = PluginStateStore(base_path=tmp_path)
+    state_store.update_plugin(
+        "demo-plugin",
+        tenant_id="tenant-1",
+        kind="tenant-channel",
+        manifest_id="tenant-demo-plugin",
+        channels=["tenant-feishu"],
+        providers=["tenant-provider"],
+        skills=["tenant-skill"],
+    )
+    manager = PluginRuntimeManager(
+        registry=AgentPluginRegistry(),
+        state_store=state_store,
+    )
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.manager.discover_plugins",
+        lambda **_kwargs: (
+            [
+                DiscoveredPlugin(
+                    name="demo-plugin",
+                    plugin=object(),
+                    source="local",
+                    version="0.2.0",
+                    kind="channel",
+                    manifest_id="demo-plugin",
+                    channels=("feishu",),
+                    providers=("demo-provider",),
+                    skills=("demo-skill",),
+                )
+            ],
+            [],
+        ),
+    )
+
+    default_plugins, _ = manager.list_plugins()
+    tenant_plugins, _ = manager.list_plugins(tenant_id="tenant-1")
+
+    assert default_plugins[0]["kind"] == "channel"
+    assert default_plugins[0]["manifest_id"] == "demo-plugin"
+    assert tenant_plugins[0]["kind"] == "tenant-channel"
+    assert tenant_plugins[0]["manifest_id"] == "tenant-demo-plugin"
+    assert tenant_plugins[0]["channels"] == ["tenant-feishu"]
+    assert tenant_plugins[0]["providers"] == ["tenant-provider"]
+    assert tenant_plugins[0]["skills"] == ["tenant-skill"]
 
 
 @pytest.mark.unit

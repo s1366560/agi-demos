@@ -416,6 +416,7 @@ async def test_disconnect_raises_when_thread_does_not_stop(adapter: FeishuAdapte
     assert adapter._ws_thread is stuck_thread
     assert stuck_thread.joined is True
 
+
 # -- Helpers for mocking lark_oapi v2 SDK response objects -----------------
 
 
@@ -527,9 +528,7 @@ async def test_send_message_accepts_object_response_payload(adapter: FeishuAdapt
 @pytest.mark.asyncio
 async def test_send_message_raises_on_non_zero_response_code(adapter: FeishuAdapter) -> None:
     """send_message should raise if Feishu API returns an error code."""
-    msg_api = _FakeMessageAPI(
-        create_response=_FakeResponse(code=99991663, msg="forbidden")
-    )
+    msg_api = _FakeMessageAPI(create_response=_FakeResponse(code=99991663, msg="forbidden"))
     adapter._connected = True
     adapter._build_rest_client = lambda: _build_fake_client(msg_api)
 
@@ -615,9 +614,7 @@ async def test_patch_card_success(adapter: FeishuAdapter) -> None:
 @pytest.mark.asyncio
 async def test_patch_card_returns_false_on_failure(adapter: FeishuAdapter) -> None:
     """patch_card should return False when Feishu API returns error."""
-    msg_api = _FakeMessageAPI(
-        patch_response=_FakeResponse(code=999, msg="patch failed")
-    )
+    msg_api = _FakeMessageAPI(patch_response=_FakeResponse(code=999, msg="patch failed"))
     adapter._connected = True
     adapter._build_rest_client = lambda: _build_fake_client(msg_api)
 
@@ -669,9 +666,7 @@ async def test_delete_message_success(adapter: FeishuAdapter) -> None:
 @pytest.mark.asyncio
 async def test_delete_message_returns_false_on_failure(adapter: FeishuAdapter) -> None:
     """delete_message should return False when API returns error."""
-    msg_api = _FakeMessageAPI(
-        delete_response=_FakeResponse(code=999, msg="not found")
-    )
+    msg_api = _FakeMessageAPI(delete_response=_FakeResponse(code=999, msg="not found"))
     adapter._connected = True
     adapter._build_rest_client = lambda: _build_fake_client(msg_api)
 
@@ -701,9 +696,7 @@ async def test_send_streaming_card_returns_message_id(adapter: FeishuAdapter) ->
 @pytest.mark.asyncio
 async def test_send_streaming_card_returns_none_on_error(adapter: FeishuAdapter) -> None:
     """send_streaming_card should return None when send fails."""
-    msg_api = _FakeMessageAPI(
-        create_response=_FakeResponse(code=999, msg="fail")
-    )
+    msg_api = _FakeMessageAPI(create_response=_FakeResponse(code=999, msg="fail"))
     adapter._connected = True
     adapter._build_rest_client = lambda: _build_fake_client(msg_api)
 
@@ -723,7 +716,8 @@ def test_build_streaming_card_without_loading(adapter: FeishuAdapter) -> None:
     card_json = adapter._build_streaming_card("Hello world")
     card = json.loads(card_json)
 
-    assert card["elements"][0]["content"] == "Hello world"
+    assert card["schema"] == "2.0"
+    assert card["body"]["elements"][0]["content"] == "Hello world"
 
 
 @pytest.mark.unit
@@ -734,8 +728,9 @@ def test_build_streaming_card_with_loading(adapter: FeishuAdapter) -> None:
     card_json = adapter._build_streaming_card("Partial text", loading=True)
     card = json.loads(card_json)
 
-    assert "Generating..." in card["elements"][0]["content"]
-    assert "Partial text" in card["elements"][0]["content"]
+    assert card["schema"] == "2.0"
+    assert "Generating..." in card["body"]["elements"][0]["content"]
+    assert "Partial text" in card["body"]["elements"][0]["content"]
 
 
 # ------------------------------------------------------------------
@@ -766,9 +761,10 @@ def test_build_responded_card(adapter: FeishuAdapter) -> None:
     """_build_responded_card should return green card with selected label."""
     card = adapter._build_responded_card("decision", "Option A")
     assert card is not None
+    assert card["schema"] == "2.0"
     assert card["header"]["template"] == "green"
     assert card["header"]["title"]["content"] == "Decision Made"
-    assert "**Selected**: Option A" in card["elements"][0]["content"]
+    assert "**Selected**: Option A" in card["body"]["elements"][0]["content"]
     assert card["config"] == {"wide_screen_mode": True}
 
 
@@ -835,8 +831,13 @@ def test_on_card_action_without_hitl_request_id(adapter: FeishuAdapter) -> None:
     action = SimpleNamespace(
         value={"key": "some_other_value"},
         tag="button",
-        option=None, timezone=None, name=None, form_value=None,
-        input_value=None, options=None, checked=None,
+        option=None,
+        timezone=None,
+        name=None,
+        form_value=None,
+        input_value=None,
+        options=None,
+        checked=None,
     )
     event_data = SimpleNamespace(
         operator=SimpleNamespace(open_id="ou_x", user_id=None, union_id=None, tenant_key=None),
@@ -880,16 +881,16 @@ async def test_create_card_entity_success(adapter: FeishuAdapter) -> None:
     with patch.object(adapter, "_build_rest_client") as mock_client:
         cardkit_mock = AsyncMock()
         cardkit_mock.card.acreate.return_value = mock_response
-        mock_client.return_value = SimpleNamespace(
-            cardkit=SimpleNamespace(v1=cardkit_mock)
-        )
+        mock_client.return_value = SimpleNamespace(cardkit=SimpleNamespace(v1=cardkit_mock))
         adapter._connected = True
 
-        card_id = await adapter.create_card_entity({
-            "schema": "2.0",
-            "header": {"title": {"tag": "plain_text", "content": "Test"}},
-            "body": {"elements": []},
-        })
+        card_id = await adapter.create_card_entity(
+            {
+                "schema": "2.0",
+                "header": {"title": {"tag": "plain_text", "content": "Test"}},
+                "body": {"elements": []},
+            }
+        )
         assert card_id == "card_123456"
         cardkit_mock.card.acreate.assert_called_once()
 
@@ -897,15 +898,11 @@ async def test_create_card_entity_success(adapter: FeishuAdapter) -> None:
 @pytest.mark.unit
 async def test_create_card_entity_failure(adapter: FeishuAdapter) -> None:
     """create_card_entity should return None on API failure."""
-    mock_response = SimpleNamespace(
-        success=lambda: False, code=400, msg="bad request", data=None
-    )
+    mock_response = SimpleNamespace(success=lambda: False, code=400, msg="bad request", data=None)
     with patch.object(adapter, "_build_rest_client") as mock_client:
         cardkit_mock = AsyncMock()
         cardkit_mock.card.acreate.return_value = mock_response
-        mock_client.return_value = SimpleNamespace(
-            cardkit=SimpleNamespace(v1=cardkit_mock)
-        )
+        mock_client.return_value = SimpleNamespace(cardkit=SimpleNamespace(v1=cardkit_mock))
         result = await adapter.create_card_entity({"schema": "2.0"})
         assert result is None
 
@@ -913,18 +910,20 @@ async def test_create_card_entity_failure(adapter: FeishuAdapter) -> None:
 @pytest.mark.unit
 async def test_add_card_elements_success(adapter: FeishuAdapter) -> None:
     """add_card_elements should return True on success."""
-    mock_response = SimpleNamespace(
-        success=lambda: True, code=0, msg="success"
-    )
+    mock_response = SimpleNamespace(success=lambda: True, code=0, msg="success")
     with patch.object(adapter, "_build_rest_client") as mock_client:
         cardkit_mock = AsyncMock()
         cardkit_mock.card_element.acreate.return_value = mock_response
-        mock_client.return_value = SimpleNamespace(
-            cardkit=SimpleNamespace(v1=cardkit_mock)
-        )
+        mock_client.return_value = SimpleNamespace(cardkit=SimpleNamespace(v1=cardkit_mock))
         result = await adapter.add_card_elements(
             "card_123",
-            [{"tag": "button", "element_id": "btn1", "text": {"tag": "plain_text", "content": "Click"}}],
+            [
+                {
+                    "tag": "button",
+                    "element_id": "btn1",
+                    "text": {"tag": "plain_text", "content": "Click"},
+                }
+            ],
             position="append",
             sequence=1,
         )
@@ -934,15 +933,11 @@ async def test_add_card_elements_success(adapter: FeishuAdapter) -> None:
 @pytest.mark.unit
 async def test_add_card_elements_with_target(adapter: FeishuAdapter) -> None:
     """add_card_elements should pass target_element_id when specified."""
-    mock_response = SimpleNamespace(
-        success=lambda: True, code=0, msg="success"
-    )
+    mock_response = SimpleNamespace(success=lambda: True, code=0, msg="success")
     with patch.object(adapter, "_build_rest_client") as mock_client:
         cardkit_mock = AsyncMock()
         cardkit_mock.card_element.acreate.return_value = mock_response
-        mock_client.return_value = SimpleNamespace(
-            cardkit=SimpleNamespace(v1=cardkit_mock)
-        )
+        mock_client.return_value = SimpleNamespace(cardkit=SimpleNamespace(v1=cardkit_mock))
         result = await adapter.add_card_elements(
             "card_123",
             [{"tag": "button", "element_id": "btn2"}],
@@ -961,7 +956,9 @@ async def test_send_hitl_card_via_cardkit_success(adapter: FeishuAdapter) -> Non
     with (
         patch.object(adapter, "create_card_entity", new_callable=AsyncMock, return_value="ck_001"),
         patch.object(adapter, "add_card_elements", new_callable=AsyncMock, return_value=True),
-        patch.object(adapter, "send_card_entity_message", new_callable=AsyncMock, return_value="msg_001"),
+        patch.object(
+            adapter, "send_card_entity_message", new_callable=AsyncMock, return_value="msg_001"
+        ),
     ):
         msg_id = await adapter.send_hitl_card_via_cardkit(
             "oc_chat1",
@@ -972,9 +969,7 @@ async def test_send_hitl_card_via_cardkit_success(adapter: FeishuAdapter) -> Non
         assert msg_id == "msg_001"
         adapter.create_card_entity.assert_called_once()
         adapter.add_card_elements.assert_called_once()
-        adapter.send_card_entity_message.assert_called_once_with(
-            "oc_chat1", "ck_001", None
-        )
+        adapter.send_card_entity_message.assert_called_once_with("oc_chat1", "ck_001", None)
 
 
 @pytest.mark.unit
@@ -985,10 +980,14 @@ async def test_send_hitl_card_via_cardkit_env_var_with_form(adapter: FeishuAdapt
     with (
         patch.object(adapter, "create_card_entity", new_callable=AsyncMock, return_value="ck_002"),
         patch.object(adapter, "add_card_elements", new_callable=AsyncMock) as mock_add,
-        patch.object(adapter, "send_card_entity_message", new_callable=AsyncMock, return_value="msg_002"),
+        patch.object(
+            adapter, "send_card_entity_message", new_callable=AsyncMock, return_value="msg_002"
+        ),
     ):
         msg_id = await adapter.send_hitl_card_via_cardkit(
-            "oc_chat1", "env_var", "req-002",
+            "oc_chat1",
+            "env_var",
+            "req-002",
             {"tool_name": "gh", "fields": [{"name": "TOKEN"}]},
         )
         assert msg_id == "msg_002"
@@ -1008,7 +1007,9 @@ async def test_send_hitl_card_via_cardkit_entity_fails(adapter: FeishuAdapter) -
 
     with patch.object(adapter, "create_card_entity", new_callable=AsyncMock, return_value=None):
         result = await adapter.send_hitl_card_via_cardkit(
-            "oc_chat1", "clarification", "req-003",
+            "oc_chat1",
+            "clarification",
+            "req-003",
             {"question": "What?", "options": ["A"]},
         )
         assert result is None
@@ -1079,9 +1080,7 @@ async def test_stream_text_content_success(adapter: FeishuAdapter) -> None:
     mock_client.cardkit.v1.card_element.acontent = AsyncMock(return_value=mock_response)
 
     with patch.object(adapter, "_build_rest_client", return_value=mock_client):
-        result = await adapter.stream_text_content(
-            "card_001", "content", "Hello world", sequence=2
-        )
+        result = await adapter.stream_text_content("card_001", "content", "Hello world", sequence=2)
         assert result is True
         mock_client.cardkit.v1.card_element.acontent.assert_awaited_once()
 

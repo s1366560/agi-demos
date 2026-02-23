@@ -88,6 +88,32 @@ def _record_announce_event(
     run_registry.attach_metadata(conversation_id, run_id, metadata)
 
 
+def _build_lifecycle_metadata(
+    *,
+    session_mode: str,
+    requester_session_key: str,
+    lineage_root_run_id: Optional[str],
+    parent_run_id: Optional[str] = None,
+    delegation_depth: Optional[int] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build normalized run metadata for control-plane lifecycle tracking."""
+    metadata: Dict[str, Any] = {
+        "session_mode": session_mode,
+        "requester_session_key": requester_session_key,
+        "control_plane_version": "v2",
+    }
+    if lineage_root_run_id:
+        metadata["lineage_root_run_id"] = lineage_root_run_id
+    if parent_run_id:
+        metadata["parent_run_id"] = parent_run_id
+    if delegation_depth is not None:
+        metadata["delegation_depth"] = delegation_depth
+    if extra:
+        metadata.update(extra)
+    return metadata
+
+
 class SessionsSpawnTool(AgentTool):
     """Spawn a SubAgent run as a non-blocking session."""
 
@@ -99,6 +125,7 @@ class SessionsSpawnTool(AgentTool):
         run_registry: SubAgentRunRegistry,
         conversation_id: str,
         max_active_runs: int = 16,
+        max_active_runs_per_lineage: Optional[int] = None,
         max_children_per_requester: Optional[int] = None,
         requester_session_key: Optional[str] = None,
         delegation_depth: int = 0,
@@ -119,6 +146,7 @@ class SessionsSpawnTool(AgentTool):
         self._run_registry = run_registry
         self._conversation_id = conversation_id
         self._max_active_runs = max(1, max_active_runs)
+        self._max_active_runs_per_lineage = max(1, max_active_runs_per_lineage or max_active_runs)
         self._max_children_per_requester = max(1, max_children_per_requester or max_active_runs)
         self._requester_session_key = (requester_session_key or conversation_id).strip()
         self._delegation_depth = delegation_depth
@@ -266,13 +294,17 @@ class SessionsSpawnTool(AgentTool):
             conversation_id=self._conversation_id,
             subagent_name=target_subagent_name,
             task=task,
-            metadata={
-                "session_mode": "spawn",
-                **spawn_options,
-                "requested_subagent_name": subagent_name,
-                "delegation_depth": self._delegation_depth,
-                "requester_session_key": self._requester_session_key,
-            },
+            metadata=_build_lifecycle_metadata(
+                session_mode="spawn",
+                requester_session_key=self._requester_session_key,
+                lineage_root_run_id=None,
+                delegation_depth=self._delegation_depth,
+                extra={
+                    **spawn_options,
+                    "requested_subagent_name": subagent_name,
+                    "max_active_runs_per_lineage": self._max_active_runs_per_lineage,
+                },
+            ),
             requester_session_key=self._requester_session_key,
         )
         running = self._run_registry.mark_running(self._conversation_id, run.run_id)
@@ -884,7 +916,9 @@ class SessionsOverviewTool(AgentTool):
         archive_lag_summary = {
             "retention_seconds": retention_seconds,
             "stale_count": len(archive_lag_values),
-            "avg": int(sum(archive_lag_values) / len(archive_lag_values)) if archive_lag_values else 0,
+            "avg": int(sum(archive_lag_values) / len(archive_lag_values))
+            if archive_lag_values
+            else 0,
             "max": max(archive_lag_values) if archive_lag_values else 0,
         }
         hook_failures = 0
@@ -997,7 +1031,8 @@ class SessionsWaitTool(AgentTool):
                         "timed_out": not is_terminal and elapsed >= timeout,
                         "waited_ms": int(elapsed * 1000),
                         "announce": {
-                            "status": str(run.metadata.get("announce_status") or "").strip() or None,
+                            "status": str(run.metadata.get("announce_status") or "").strip()
+                            or None,
                             "attempt_count": int(run.metadata.get("announce_attempt_count") or 0),
                             "last_error": str(run.metadata.get("announce_last_error") or "").strip()
                             or None,
@@ -1109,6 +1144,7 @@ class SessionsSendTool(AgentTool):
         conversation_id: str,
         spawn_callback: Callable[..., Awaitable[str]],
         max_active_runs: int = 16,
+        max_active_runs_per_lineage: Optional[int] = None,
         max_children_per_requester: Optional[int] = None,
         requester_session_key: Optional[str] = None,
         delegation_depth: int = 0,
@@ -1127,6 +1163,7 @@ class SessionsSendTool(AgentTool):
         self._conversation_id = conversation_id
         self._spawn_callback = spawn_callback
         self._max_active_runs = max(1, max_active_runs)
+        self._max_active_runs_per_lineage = max(1, max_active_runs_per_lineage or max_active_runs)
         self._max_children_per_requester = max(1, max_children_per_requester or max_active_runs)
         self._requester_session_key = (requester_session_key or conversation_id).strip()
         self._delegation_depth = delegation_depth
@@ -1201,6 +1238,15 @@ class SessionsSendTool(AgentTool):
             )
 
         lineage_root_run_id = str(parent_run.metadata.get("lineage_root_run_id") or run_id).strip()
+        lineage_active_runs = self._run_registry.count_active_runs_for_lineage(
+            self._conversation_id,
+            lineage_root_run_id,
+        )
+        if lineage_active_runs >= self._max_active_runs_per_lineage:
+            return (
+                "Error: lineage SubAgent sessions limit reached "
+                f"({lineage_active_runs}/{self._max_active_runs_per_lineage})"
+            )
         try:
             parent_timeout = int(parent_run.metadata.get("run_timeout_seconds") or 0)
         except (TypeError, ValueError):
@@ -1228,13 +1274,17 @@ class SessionsSendTool(AgentTool):
             conversation_id=self._conversation_id,
             subagent_name=parent_run.subagent_name,
             task=task,
-            metadata={
-                "session_mode": "send",
-                **follow_up_options,
-                "parent_run_id": run_id,
-                "lineage_root_run_id": lineage_root_run_id,
-                "requester_session_key": self._requester_session_key,
-            },
+            metadata=_build_lifecycle_metadata(
+                session_mode="send",
+                requester_session_key=self._requester_session_key,
+                parent_run_id=run_id,
+                lineage_root_run_id=lineage_root_run_id,
+                delegation_depth=self._delegation_depth,
+                extra={
+                    **follow_up_options,
+                    "max_active_runs_per_lineage": self._max_active_runs_per_lineage,
+                },
+            ),
             requester_session_key=self._requester_session_key,
             parent_run_id=run_id,
             lineage_root_run_id=lineage_root_run_id,
@@ -1388,6 +1438,7 @@ class SubAgentsControlTool(AgentTool):
         restart_callback: Optional[Callable[[str, str, str], Awaitable[str]]] = None,
         steer_rate_limit_ms: int = 2000,
         max_active_runs: int = 16,
+        max_active_runs_per_lineage: Optional[int] = None,
         max_children_per_requester: Optional[int] = None,
         requester_session_key: Optional[str] = None,
         delegation_depth: int = 0,
@@ -1412,6 +1463,7 @@ class SubAgentsControlTool(AgentTool):
         self._restart_callback = restart_callback
         self._steer_rate_limit_ms = max(1, steer_rate_limit_ms)
         self._max_active_runs = max(1, max_active_runs)
+        self._max_active_runs_per_lineage = max(1, max_active_runs_per_lineage or max_active_runs)
         self._max_children_per_requester = max(1, max_children_per_requester or max_active_runs)
         self._requester_session_key = (requester_session_key or conversation_id).strip()
         self._delegation_depth = delegation_depth
@@ -1487,7 +1539,9 @@ class SubAgentsControlTool(AgentTool):
         if normalized_action == "list":
             return self._list_subagents()
         if normalized_action == "info":
-            return self._info_runs(run_id=run_id, target=target, include_descendants=include_descendants)
+            return self._info_runs(
+                run_id=run_id, target=target, include_descendants=include_descendants
+            )
         if normalized_action == "log":
             return await self._log_runs(
                 run_id=run_id,
@@ -1713,6 +1767,7 @@ class SubAgentsControlTool(AgentTool):
             conversation_id=self._conversation_id,
             spawn_callback=self._restart_callback,
             max_active_runs=self._max_active_runs,
+            max_active_runs_per_lineage=self._max_active_runs_per_lineage,
             max_children_per_requester=self._max_children_per_requester,
             requester_session_key=self._requester_session_key,
             delegation_depth=self._delegation_depth,
@@ -1755,8 +1810,7 @@ class SubAgentsControlTool(AgentTool):
         if not candidate_roots:
             if target_token == run_id and run_id and not target:
                 return (
-                    f"Marked run lineage {run_id} as cancelled "
-                    "(tasks already finished or detached)"
+                    f"Marked run lineage {run_id} as cancelled (tasks already finished or detached)"
                 )
             return f"No active runs matched target '{target_token}'"
 
@@ -1802,7 +1856,9 @@ class SubAgentsControlTool(AgentTool):
         matched_runs, error = self._resolve_target_runs(target_token, include_terminal=True)
         if error:
             return error
-        active_runs = [candidate for candidate in matched_runs if candidate.status in self._ACTIVE_STATUSES]
+        active_runs = [
+            candidate for candidate in matched_runs if candidate.status in self._ACTIVE_STATUSES
+        ]
         if len(active_runs) != 1:
             if (
                 len(matched_runs) == 1

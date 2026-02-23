@@ -29,6 +29,9 @@ class TestExecutionConfig:
         assert config.max_steps == 20
         assert config.skill_match_threshold == 0.9
         assert config.subagent_match_threshold == 0.5
+        assert config.subagent_keyword_skip_threshold == 0.85
+        assert config.subagent_keyword_floor_threshold == 0.3
+        assert config.subagent_llm_min_confidence == 0.6
         assert config.default_timeout_seconds == 30.0
 
     def test_custom_values(self) -> None:
@@ -37,11 +40,17 @@ class TestExecutionConfig:
             max_steps=50,
             skill_match_threshold=0.8,
             subagent_match_threshold=0.3,
+            subagent_keyword_skip_threshold=0.9,
+            subagent_keyword_floor_threshold=0.4,
+            subagent_llm_min_confidence=0.7,
         )
 
         assert config.max_steps == 50
         assert config.skill_match_threshold == 0.8
         assert config.subagent_match_threshold == 0.3
+        assert config.subagent_keyword_skip_threshold == 0.9
+        assert config.subagent_keyword_floor_threshold == 0.4
+        assert config.subagent_llm_min_confidence == 0.7
 
     def test_validate_max_steps(self) -> None:
         """Should validate max_steps range."""
@@ -70,6 +79,21 @@ class TestExecutionConfig:
         config.skill_match_threshold = 0.9  # Reset to valid
         config.subagent_match_threshold = -0.1
         with pytest.raises(ValueError, match="subagent_match_threshold"):
+            config.validate()
+
+        config.subagent_match_threshold = 0.5  # Reset to valid
+        config.subagent_keyword_skip_threshold = 1.1
+        with pytest.raises(ValueError, match="subagent_keyword_skip_threshold"):
+            config.validate()
+
+        config.subagent_keyword_skip_threshold = 0.8
+        config.subagent_keyword_floor_threshold = 0.9
+        with pytest.raises(ValueError, match="subagent_keyword_floor_threshold"):
+            config.validate()
+
+        config.subagent_keyword_floor_threshold = 0.3
+        config.subagent_llm_min_confidence = -0.01
+        with pytest.raises(ValueError, match="subagent_llm_min_confidence"):
             config.validate()
 
 
@@ -250,9 +274,11 @@ class TestAgentConfig:
         """Should apply tenant-specific overrides."""
         config = AgentConfig()
 
-        overridden = config.with_tenant_override({
-            "execution": {"max_steps": 50},
-        })
+        overridden = config.with_tenant_override(
+            {
+                "execution": {"max_steps": 50},
+            }
+        )
 
         assert overridden.execution.max_steps == 50
         assert overridden.execution.skill_match_threshold == 0.9  # Unchanged
@@ -364,7 +390,6 @@ class TestGlobalConfig:
 
     def test_get_config_with_tenant(self) -> None:
         """Should get config for specific tenant."""
-        manager = get_config.__self__._global_config if hasattr(get_config, '__self__') else None
         # This test verifies the function exists and works
         config = get_config("tenant-123")
 

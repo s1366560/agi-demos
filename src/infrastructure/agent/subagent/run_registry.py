@@ -136,6 +136,7 @@ class SubAgentRunRegistry:
         expected_statuses: Optional[Sequence[SubAgentRunStatus]] = None,
     ) -> Optional[SubAgentRun]:
         """Transition run to COMPLETED."""
+
         def _mutator(run: SubAgentRun) -> SubAgentRun:
             completed = run.complete(
                 summary=summary,
@@ -163,6 +164,7 @@ class SubAgentRunRegistry:
         expected_statuses: Optional[Sequence[SubAgentRunStatus]] = None,
     ) -> Optional[SubAgentRun]:
         """Transition run to FAILED."""
+
         def _mutator(run: SubAgentRun) -> SubAgentRun:
             failed = run.fail(error=error, execution_time_ms=execution_time_ms)
             if metadata:
@@ -185,6 +187,7 @@ class SubAgentRunRegistry:
         expected_statuses: Optional[Sequence[SubAgentRunStatus]] = None,
     ) -> Optional[SubAgentRun]:
         """Transition run to CANCELLED."""
+
         def _mutator(run: SubAgentRun) -> SubAgentRun:
             cancelled = run.cancel(reason=reason)
             if metadata:
@@ -207,6 +210,7 @@ class SubAgentRunRegistry:
         expected_statuses: Optional[Sequence[SubAgentRunStatus]] = None,
     ) -> Optional[SubAgentRun]:
         """Transition run to TIMED_OUT."""
+
         def _mutator(run: SubAgentRun) -> SubAgentRun:
             timed_out = run.time_out(reason=reason)
             if metadata:
@@ -228,6 +232,7 @@ class SubAgentRunRegistry:
         expected_statuses: Optional[Sequence[SubAgentRunStatus]] = None,
     ) -> Optional[SubAgentRun]:
         """Merge metadata into a run."""
+
         def _mutator(run: SubAgentRun) -> SubAgentRun:
             merged = dict(run.metadata)
             merged.update(metadata)
@@ -345,6 +350,25 @@ class SubAgentRunRegistry:
                 if run.status in self._ACTIVE_STATUSES
             ]
         )
+
+    def count_active_runs_for_lineage(
+        self,
+        conversation_id: str,
+        lineage_root_run_id: str,
+    ) -> int:
+        """Count active runs for one lineage root."""
+        self._sync_from_disk()
+        root_id = lineage_root_run_id.strip()
+        if not root_id:
+            return 0
+        count = 0
+        for run in self._runs_by_conversation.get(conversation_id, {}).values():
+            if run.status not in self._ACTIVE_STATUSES:
+                continue
+            lineage_id = str(run.metadata.get("lineage_root_run_id") or run.run_id).strip()
+            if lineage_id == root_id:
+                count += 1
+        return count
 
     @property
     def terminal_retention_seconds(self) -> int:
@@ -548,9 +572,7 @@ class SubAgentRunRegistry:
         payload = {
             "version": self._PERSIST_VERSION,
             "conversations": {
-                conversation_id: {
-                    run_id: run.to_event_data() for run_id, run in bucket.items()
-                }
+                conversation_id: {run_id: run.to_event_data() for run_id, run in bucket.items()}
                 for conversation_id, bucket in self._runs_by_conversation.items()
             },
         }
@@ -588,7 +610,9 @@ class SubAgentRunRegistry:
                 ended_at=SubAgentRunRegistry._parse_datetime(payload.get("ended_at")),
                 summary=SubAgentRunRegistry._optional_str(payload.get("summary")),
                 error=SubAgentRunRegistry._optional_str(payload.get("error")),
-                execution_time_ms=SubAgentRunRegistry._optional_int(payload.get("execution_time_ms")),
+                execution_time_ms=SubAgentRunRegistry._optional_int(
+                    payload.get("execution_time_ms")
+                ),
                 tokens_used=SubAgentRunRegistry._optional_int(payload.get("tokens_used")),
                 metadata=metadata,
             )

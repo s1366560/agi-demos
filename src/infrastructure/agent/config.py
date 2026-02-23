@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 class ExecutionMode(Enum):
     """Execution mode for the agent."""
+
     NORMAL = "normal"
     PLAN = "plan"
     EXPLORE = "explore"
@@ -31,6 +32,9 @@ class ExecutionConfig:
     # Matching thresholds
     skill_match_threshold: float = 0.9
     subagent_match_threshold: float = 0.5
+    subagent_keyword_skip_threshold: float = 0.85
+    subagent_keyword_floor_threshold: float = 0.3
+    subagent_llm_min_confidence: float = 0.6
 
     # Execution modes
     allow_direct_execution: bool = True
@@ -49,7 +53,27 @@ class ExecutionConfig:
         if not 0.0 <= self.skill_match_threshold <= 1.0:
             raise ValueError(f"skill_match_threshold must be 0-1, got {self.skill_match_threshold}")
         if not 0.0 <= self.subagent_match_threshold <= 1.0:
-            raise ValueError(f"subagent_match_threshold must be 0-1, got {self.subagent_match_threshold}")
+            raise ValueError(
+                f"subagent_match_threshold must be 0-1, got {self.subagent_match_threshold}"
+            )
+        if not 0.0 <= self.subagent_keyword_skip_threshold <= 1.0:
+            raise ValueError(
+                "subagent_keyword_skip_threshold must be 0-1, got "
+                f"{self.subagent_keyword_skip_threshold}"
+            )
+        if not 0.0 <= self.subagent_keyword_floor_threshold <= 1.0:
+            raise ValueError(
+                "subagent_keyword_floor_threshold must be 0-1, got "
+                f"{self.subagent_keyword_floor_threshold}"
+            )
+        if self.subagent_keyword_floor_threshold > self.subagent_keyword_skip_threshold:
+            raise ValueError(
+                "subagent_keyword_floor_threshold must be <= subagent_keyword_skip_threshold"
+            )
+        if not 0.0 <= self.subagent_llm_min_confidence <= 1.0:
+            raise ValueError(
+                f"subagent_llm_min_confidence must be 0-1, got {self.subagent_llm_min_confidence}"
+            )
 
 
 @dataclass
@@ -78,7 +102,9 @@ class PerformanceConfig:
         if self.context_limit < 1000:
             raise ValueError(f"context_limit must be >= 1000, got {self.context_limit}")
         if not 0.0 <= self.context_compression_threshold <= 1.0:
-            raise ValueError(f"context_compression_threshold must be 0-1, got {self.context_compression_threshold}")
+            raise ValueError(
+                f"context_compression_threshold must be 0-1, got {self.context_compression_threshold}"
+            )
 
 
 @dataclass
@@ -103,7 +129,9 @@ class CostConfig:
         if self.max_cost_per_request < 0:
             raise ValueError(f"max_cost_per_request must be >= 0, got {self.max_cost_per_request}")
         if not 0.0 <= self.cost_warning_threshold <= 1.0:
-            raise ValueError(f"cost_warning_threshold must be 0-1, got {self.cost_warning_threshold}")
+            raise ValueError(
+                f"cost_warning_threshold must be 0-1, got {self.cost_warning_threshold}"
+            )
 
 
 @dataclass
@@ -115,11 +143,13 @@ class PermissionConfig:
     auto_approve_safe_tools: bool = True
 
     # Safe tools list
-    safe_tools: Set[str] = field(default_factory=lambda: {
-        "read_file",
-        "list_directory",
-        "search",
-    })
+    safe_tools: Set[str] = field(
+        default_factory=lambda: {
+            "read_file",
+            "list_directory",
+            "search",
+        }
+    )
 
     # Session persistence
     remember_approvals: bool = True
@@ -194,6 +224,9 @@ class AgentConfig:
                 "max_steps": self.execution.max_steps,
                 "skill_match_threshold": self.execution.skill_match_threshold,
                 "subagent_match_threshold": self.execution.subagent_match_threshold,
+                "subagent_keyword_skip_threshold": self.execution.subagent_keyword_skip_threshold,
+                "subagent_keyword_floor_threshold": self.execution.subagent_keyword_floor_threshold,
+                "subagent_llm_min_confidence": self.execution.subagent_llm_min_confidence,
                 "default_timeout_seconds": self.execution.default_timeout_seconds,
             },
             "performance": {

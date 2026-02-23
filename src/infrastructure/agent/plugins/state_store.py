@@ -39,12 +39,20 @@ class PluginStateStore:
 
     def get_plugin(self, plugin_name: str, *, tenant_id: Optional[str] = None) -> Dict[str, Any]:
         """Get persisted state for one plugin."""
-        plugin_state = self.list_plugins(tenant_id=tenant_id).get(plugin_name)
-        if isinstance(plugin_state, dict):
-            return dict(plugin_state)
-        if tenant_id:
-            return dict(self.list_plugins().get(plugin_name, {}))
-        return {}
+        global_state = self.list_plugins().get(plugin_name, {})
+        if not isinstance(global_state, dict):
+            global_state = {}
+
+        if not tenant_id:
+            return dict(global_state)
+
+        tenant_state = self.list_plugins(tenant_id=tenant_id).get(plugin_name)
+        if not isinstance(tenant_state, dict):
+            return dict(global_state)
+
+        merged = dict(global_state)
+        merged.update(tenant_state)
+        return merged
 
     def is_enabled(self, plugin_name: str, *, tenant_id: Optional[str] = None) -> bool:
         """Check if a plugin is enabled (defaults to True when unset)."""
@@ -73,6 +81,11 @@ class PluginStateStore:
         package: Optional[str] = None,
         version: Optional[str] = None,
         requirement: Optional[str] = None,
+        kind: Optional[str] = None,
+        manifest_id: Optional[str] = None,
+        channels: Optional[list[str]] = None,
+        providers: Optional[list[str]] = None,
+        skills: Optional[list[str]] = None,
         tenant_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create or update plugin metadata entry."""
@@ -94,6 +107,16 @@ class PluginStateStore:
                 current["version"] = version
             if requirement is not None:
                 current["requirement"] = requirement
+            if kind is not None:
+                current["kind"] = kind
+            if manifest_id is not None:
+                current["manifest_id"] = manifest_id
+            if channels is not None:
+                current["channels"] = _normalize_string_list(channels)
+            if providers is not None:
+                current["providers"] = _normalize_string_list(providers)
+            if skills is not None:
+                current["skills"] = _normalize_string_list(skills)
             current["updated_at"] = datetime.now(timezone.utc).isoformat()
             plugins[plugin_name] = current
             self._write_state(state)
@@ -186,3 +209,15 @@ class PluginStateStore:
             plugins = {}
             state["plugins"] = plugins
         return plugins
+
+
+def _normalize_string_list(value: Any) -> list[str]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    normalized: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            clean = item.strip()
+            if clean:
+                normalized.append(clean)
+    return normalized

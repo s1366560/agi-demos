@@ -40,6 +40,7 @@ import type {
   CreateChannelConfig,
   UpdateChannelConfig,
   ChannelPluginConfigSchema,
+  PluginActionDetails,
   RuntimePlugin,
   PluginDiagnostic,
   ChannelPluginCatalogItem,
@@ -109,6 +110,9 @@ const ChannelConfigPage: React.FC = () => {
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [pluginActionKey, setPluginActionKey] = useState<string | null>(null);
   const [installRequirement, setInstallRequirement] = useState('');
+  const [lastPluginActionDetails, setLastPluginActionDetails] = useState<PluginActionDetails | null>(
+    null
+  );
 
   const {
     configs,
@@ -288,6 +292,7 @@ const ChannelConfigPage: React.FC = () => {
     setPluginActionKey('install');
     try {
       const response = await channelService.installPlugin(projectId, installRequirement.trim());
+      setLastPluginActionDetails(response.details || null);
       message.success(response.message);
       setInstallRequirement('');
       await loadPluginRuntime();
@@ -302,12 +307,15 @@ const ChannelConfigPage: React.FC = () => {
     if (!projectId) return;
     setPluginActionKey(`${plugin.name}:${enabled ? 'enable' : 'disable'}`);
     try {
+      const response = enabled
+        ? await channelService.enablePlugin(projectId, plugin.name)
+        : await channelService.disablePlugin(projectId, plugin.name);
+      setLastPluginActionDetails(response.details || null);
       if (enabled) {
-        await channelService.enablePlugin(projectId, plugin.name);
+        message.success(`Plugin enabled: ${plugin.name}`);
       } else {
-        await channelService.disablePlugin(projectId, plugin.name);
+        message.success(`Plugin disabled: ${plugin.name}`);
       }
-      message.success(`Plugin ${enabled ? 'enabled' : 'disabled'}: ${plugin.name}`);
       await loadPluginRuntime();
     } catch (error) {
       message.error(error instanceof Error ? error.message : 'Plugin action failed');
@@ -321,6 +329,7 @@ const ChannelConfigPage: React.FC = () => {
     setPluginActionKey('reload');
     try {
       const response = await channelService.reloadPlugins(projectId);
+      setLastPluginActionDetails(response.details || null);
       message.success(response.message);
       await loadPluginRuntime();
     } catch (error) {
@@ -669,6 +678,34 @@ const ChannelConfigPage: React.FC = () => {
           <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
             Diagnostics: {pluginDiagnostics.map((item) => item.code).join(', ')}
           </Text>
+        )}
+        {lastPluginActionDetails?.control_plane_trace && (
+          <div
+            style={{
+              marginBottom: 12,
+              border: '1px solid #d9d9d9',
+              borderRadius: 8,
+              padding: 10,
+            }}
+          >
+            <Space wrap size={[8, 8]}>
+              <Tag color="processing">{lastPluginActionDetails.control_plane_trace.action}</Tag>
+              <Text code>{lastPluginActionDetails.control_plane_trace.trace_id}</Text>
+              {Object.entries(lastPluginActionDetails.control_plane_trace.capability_counts).map(
+                ([key, value]) => (
+                  <Tag key={key}>{`${key}:${value}`}</Tag>
+                )
+              )}
+              {lastPluginActionDetails.channel_reload_plan && (
+                <Text type="secondary">
+                  reload:{' '}
+                  {Object.entries(lastPluginActionDetails.channel_reload_plan)
+                    .map(([key, value]) => `${key}=${value}`)
+                    .join(', ')}
+                </Text>
+              )}
+            </Space>
+          </div>
         )}
 
         <Table

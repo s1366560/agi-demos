@@ -561,6 +561,10 @@ class TestPluginChannelCatalog:
                                 "source": "local",
                                 "package": None,
                                 "version": None,
+                                "kind": "channel",
+                                "manifest_id": "feishu-channel-plugin",
+                                "providers": ["feishu"],
+                                "skills": ["channel-send"],
                                 "enabled": True,
                                 "discovered": True,
                             }
@@ -592,6 +596,10 @@ class TestPluginChannelCatalog:
         assert len(response.items) == 1
         assert response.items[0].channel_type == "feishu"
         assert response.items[0].schema_supported is True
+        assert response.items[0].kind == "channel"
+        assert response.items[0].manifest_id == "feishu-channel-plugin"
+        assert response.items[0].providers == ["feishu"]
+        assert response.items[0].skills == ["channel-send"]
 
     @pytest.mark.asyncio
     async def test_schema_endpoint_returns_metadata(self, mock_db_session):
@@ -613,6 +621,10 @@ class TestPluginChannelCatalog:
                                 "source": "local",
                                 "package": None,
                                 "version": "0.1.0",
+                                "kind": "channel",
+                                "manifest_id": "feishu-channel-plugin",
+                                "providers": ["feishu"],
+                                "skills": ["channel-send"],
                                 "enabled": True,
                                 "discovered": True,
                             }
@@ -649,6 +661,10 @@ class TestPluginChannelCatalog:
         assert response.schema_supported is True
         assert response.config_schema == {"type": "object"}
         assert response.secret_paths == ["app_secret"]
+        assert response.kind == "channel"
+        assert response.manifest_id == "feishu-channel-plugin"
+        assert response.providers == ["feishu"]
+        assert response.skills == ["channel-send"]
 
 
 class TestPluginSchemaExecution:
@@ -1014,6 +1030,12 @@ class TestTenantPluginEndpoints:
             "source": "local",
             "package": None,
             "version": None,
+            "kind": "channel",
+            "manifest_id": "feishu-channel-plugin",
+            "manifest_path": "/tmp/.memstack/plugins/feishu/memstack.plugin.json",
+            "channels": ["feishu"],
+            "providers": ["feishu"],
+            "skills": ["channel-send"],
             "enabled": True,
             "discovered": True,
             "channel_types": ["feishu"],
@@ -1037,6 +1059,11 @@ class TestTenantPluginEndpoints:
 
         assert len(response.items) == 1
         assert response.items[0].name == "feishu-channel-plugin"
+        assert response.items[0].kind == "channel"
+        assert response.items[0].manifest_id == "feishu-channel-plugin"
+        assert response.items[0].channels == ["feishu"]
+        assert response.items[0].providers == ["feishu"]
+        assert response.items[0].skills == ["channel-send"]
 
     @pytest.mark.asyncio
     async def test_reload_tenant_plugins_includes_channel_reload_plan(self, mock_db_session):
@@ -1104,6 +1131,10 @@ class TestTenantPluginEndpoints:
                                 "source": "local",
                                 "package": None,
                                 "version": "0.1.0",
+                                "kind": "channel",
+                                "manifest_id": "feishu-channel-plugin",
+                                "providers": ["feishu"],
+                                "skills": ["channel-send"],
                                 "enabled": True,
                                 "discovered": True,
                             }
@@ -1130,6 +1161,10 @@ class TestTenantPluginEndpoints:
 
         assert response.channel_type == "feishu"
         assert response.schema_supported is True
+        assert response.kind == "channel"
+        assert response.manifest_id == "feishu-channel-plugin"
+        assert response.providers == ["feishu"]
+        assert response.skills == ["channel-send"]
 
     @pytest.mark.asyncio
     async def test_list_tenant_channel_catalog(self, mock_db_session):

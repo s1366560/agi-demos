@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -11,6 +12,7 @@ from typing import Any, Dict, List, Optional
 
 from .discovery import DiscoveredPlugin, discover_plugins
 from .loader import AgentPluginLoader
+from .manifest import normalize_string_list
 from .registry import AgentPluginRegistry, PluginDiagnostic, get_plugin_registry
 from .state_store import PluginStateStore
 
@@ -20,6 +22,7 @@ _SAFE_REQUIREMENT_RE = re.compile(
 )
 _INSTALL_TIMEOUT_SECONDS = 300.0
 _UNINSTALL_TIMEOUT_SECONDS = 300.0
+_MANIFEST_STRICT_ENV = "MEMSTACK_PLUGIN_MANIFEST_STRICT"
 logger = logging.getLogger(__name__)
 
 
@@ -31,6 +34,7 @@ class PluginRuntimeManager:
         *,
         registry: Optional[AgentPluginRegistry] = None,
         state_store: Optional[PluginStateStore] = None,
+        strict_local_manifest: Optional[bool] = None,
     ) -> None:
         self._registry = registry or get_plugin_registry()
         self._state_store = state_store or PluginStateStore()
@@ -38,6 +42,11 @@ class PluginRuntimeManager:
         self._lock = asyncio.Lock()
         self._loaded = False
         self._last_discovered: List[DiscoveredPlugin] = []
+        self._strict_local_manifest = (
+            _read_env_bool(_MANIFEST_STRICT_ENV)
+            if strict_local_manifest is None
+            else bool(strict_local_manifest)
+        )
 
     async def ensure_loaded(self, *, force_reload: bool = False) -> List[PluginDiagnostic]:
         """Ensure enabled plugins are discovered and loaded into registry."""
@@ -48,7 +57,10 @@ class PluginRuntimeManager:
             if force_reload:
                 self._registry.clear()
 
-            discovered, discovery_diagnostics = discover_plugins(state_store=self._state_store)
+            discovered, discovery_diagnostics = discover_plugins(
+                state_store=self._state_store,
+                strict_local_manifest=self._strict_local_manifest,
+            )
             self._last_discovered = discovered
 
             setup_diagnostics = await self._loader.load_plugins(
@@ -79,6 +91,7 @@ class PluginRuntimeManager:
         discovered, diagnostics = discover_plugins(
             state_store=self._state_store,
             include_disabled=True,
+            strict_local_manifest=self._strict_local_manifest,
         )
         state_map = self._state_store.list_plugins()
         tenant_state_map = self._state_store.list_plugins(tenant_id=tenant_id) if tenant_id else {}
@@ -95,6 +108,21 @@ class PluginRuntimeManager:
                     "source": plugin.source,
                     "package": plugin.package,
                     "version": plugin.version,
+                    "kind": _coalesce_str(state_entry.get("kind"), plugin.kind),
+                    "manifest_id": _coalesce_str(state_entry.get("manifest_id"), plugin.manifest_id),
+                    "manifest_path": plugin.manifest_path,
+                    "channels": _coalesce_string_list(
+                        state_entry.get("channels"),
+                        plugin.channels,
+                    ),
+                    "providers": _coalesce_string_list(
+                        state_entry.get("providers"),
+                        plugin.providers,
+                    ),
+                    "skills": _coalesce_string_list(
+                        state_entry.get("skills"),
+                        plugin.skills,
+                    ),
                     "enabled": bool(state_entry.get("enabled", True)),
                     "discovered": True,
                 }
@@ -114,6 +142,12 @@ class PluginRuntimeManager:
                     "source": state_entry.get("source", "state"),
                     "package": state_entry.get("package"),
                     "version": state_entry.get("version"),
+                    "kind": state_entry.get("kind"),
+                    "manifest_id": state_entry.get("manifest_id"),
+                    "manifest_path": state_entry.get("manifest_path"),
+                    "channels": list(normalize_string_list(state_entry.get("channels"))),
+                    "providers": list(normalize_string_list(state_entry.get("providers"))),
+                    "skills": list(normalize_string_list(state_entry.get("skills"))),
                     "enabled": bool(state_entry.get("enabled", True)),
                     "discovered": False,
                 }
@@ -198,16 +232,24 @@ class PluginRuntimeManager:
             }
 
         diagnostics = await self.reload()
-        after_plugins = {item["name"] for item in self.list_plugins()[0]}
+        after_plugin_records = self.list_plugins()[0]
+        after_plugins = {item["name"] for item in after_plugin_records}
         new_plugins = sorted(after_plugins - before_plugins)
         requirement_name = _extract_requirement_name(normalized_requirement)
+        after_by_name = {item["name"]: item for item in after_plugin_records}
         for plugin_name in new_plugins:
+            record = after_by_name.get(plugin_name, {})
             self._state_store.update_plugin(
                 plugin_name,
                 enabled=True,
                 source="entrypoint",
                 package=requirement_name,
                 requirement=normalized_requirement,
+                kind=record.get("kind"),
+                manifest_id=record.get("manifest_id"),
+                channels=record.get("channels"),
+                providers=record.get("providers"),
+                skills=record.get("skills"),
             )
 
         return {
@@ -312,6 +354,11 @@ class PluginRuntimeManager:
             package=previous_state.get("package"),
             version=previous_state.get("version"),
             requirement=previous_state.get("requirement"),
+            kind=previous_state.get("kind"),
+            manifest_id=previous_state.get("manifest_id"),
+            channels=previous_state.get("channels"),
+            providers=previous_state.get("providers"),
+            skills=previous_state.get("skills"),
         )
 
 
@@ -344,6 +391,24 @@ def _validate_requirement(requirement: str) -> Optional[str]:
         )
         return "Invalid requirement format"
     return None
+
+
+def _read_env_bool(name: str) -> bool:
+    value = os.getenv(name, "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
+
+
+def _coalesce_str(preferred: Any, fallback: Optional[str]) -> Optional[str]:
+    if isinstance(preferred, str) and preferred.strip():
+        return preferred.strip()
+    return fallback
+
+
+def _coalesce_string_list(preferred: Any, fallback: Any) -> List[str]:
+    preferred_list = list(normalize_string_list(preferred))
+    if preferred_list:
+        return preferred_list
+    return list(normalize_string_list(fallback))
 
 
 def _serialize_diagnostic(diagnostic: PluginDiagnostic) -> Dict[str, Any]:

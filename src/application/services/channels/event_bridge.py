@@ -45,6 +45,8 @@ class ChannelEventBridge:
             "env_var_requested",
             "permission_asked",
             "task_list_updated",
+            "task_start",
+            "task_complete",
             "artifact_ready",
             "error",
             "subagent_session_spawned",
@@ -71,6 +73,8 @@ class ChannelEventBridge:
             "env_var_requested": self._handle_hitl_event,
             "permission_asked": self._handle_hitl_event,
             "task_list_updated": self._handle_task_update,
+            "task_start": self._handle_task_timeline_event,
+            "task_complete": self._handle_task_timeline_event,
             "artifact_ready": self._handle_artifact_ready,
             "error": self._handle_error,
             "subagent_session_spawned": self._handle_subagent_focus_event,
@@ -82,6 +86,8 @@ class ChannelEventBridge:
         }
         # card_id → CardStreamState for unified HITL (set by streaming flow)
         self._card_states: Dict[str, Any] = {}  # conversation_id → CardStreamState
+        # conversation_id → task progress card message_id (for patch updates)
+        self._task_card_states: Dict[str, str] = {}
         # conversation_id -> detached subagent thread focus state
         self._subagent_focus: Dict[str, Dict[str, Any]] = {}
         self._subagent_focus_timeout_tasks: Dict[str, asyncio.Task] = {}
@@ -357,10 +363,16 @@ class ChannelEventBridge:
         chat_id: str,
         event_data: Dict[str, Any],
     ) -> None:
-        """Forward task list update to channel as a rich card."""
+        """Forward task list update to channel as a rich card.
+
+        Uses patch_card to update existing task card if available,
+        otherwise sends a new card and tracks it for future updates.
+        """
         tasks = event_data.get("tasks") or event_data.get("todos") or []
         if not tasks:
             return
+
+        conversation_id = event_data.get("_conversation_id", "")
 
         try:
             from src.infrastructure.adapters.secondary.channels.feishu.rich_cards import (
@@ -368,17 +380,63 @@ class ChannelEventBridge:
             )
 
             card = RichCardBuilder().build_task_progress_card(tasks)
-            if card:
-                await adapter.send_card(chat_id, card)
+            if not card:
+                # Fallback to plain text
+                self._send_task_text_fallback(adapter, chat_id, tasks)
                 return
-        except Exception:
-            pass
 
-        # Fallback to plain text
+            # Check if we have an existing task card to update
+            existing_msg_id = (
+                self._task_card_states.get(conversation_id) if conversation_id else None
+            )
+
+            if existing_msg_id and hasattr(adapter, "patch_card"):
+                # Try to update existing card via patch
+                card_json = json.dumps(card)
+                try:
+                    ok = await adapter.patch_card(existing_msg_id, card_json)
+                    if ok:
+                        logger.info(
+                            f"[EventBridge] Updated task card {existing_msg_id} "
+                            f"for conversation {conversation_id}"
+                        )
+                        return
+                    logger.warning(
+                        f"[EventBridge] Patch card failed for {existing_msg_id}, sending new card"
+                    )
+                except Exception as e:
+                    logger.warning(f"[EventBridge] Patch card error: {e}, sending new card")
+
+            # Send new card
+            try:
+                msg_id = await adapter.send_card(chat_id, card)
+                if msg_id and conversation_id:
+                    self._task_card_states[conversation_id] = msg_id
+                    logger.info(
+                        f"[EventBridge] Sent new task card {msg_id} "
+                        f"for conversation {conversation_id}"
+                    )
+            except Exception as e:
+                logger.warning(f"[EventBridge] Send card failed: {e}")
+                # Fallback to plain text
+                self._send_task_text_fallback(adapter, chat_id, tasks)
+
+        except Exception as e:
+            logger.warning(f"[EventBridge] Task update handling failed: {e}")
+            # Fallback to plain text
+            self._send_task_text_fallback(adapter, chat_id, tasks)
+
+    async def _send_task_text_fallback(
+        self,
+        adapter: ChannelAdapter,
+        chat_id: str,
+        tasks: List[Dict[str, Any]],
+    ) -> None:
+        """Send task update as plain text fallback."""
         lines: List[str] = []
         for task in tasks[:10]:
             status = task.get("status", "pending")
-            title = task.get("title", "Untitled")
+            title = task.get("content") or task.get("title", "Untitled")
             icon = {"completed": "[done]", "in_progress": "[...]", "failed": "[X]"}.get(
                 status, "[ ]"
             )
@@ -390,6 +448,55 @@ class ChannelEventBridge:
                 await adapter.send_markdown_card(chat_id, text)
             except Exception:
                 await adapter.send_text(chat_id, text)
+
+    def clear_task_card_state(self, conversation_id: str) -> None:
+        """Clear task card state for a conversation (call when conversation ends)."""
+        self._task_card_states.pop(conversation_id, None)
+
+    async def _handle_task_timeline_event(
+        self,
+        adapter: ChannelAdapter,
+        chat_id: str,
+        event_data: Dict[str, Any],
+    ) -> None:
+        """Forward task_start/task_complete timeline events as status messages."""
+        event_type = event_data.get("_event_type", "")
+        task_id = event_data.get("task_id", "")
+        content = event_data.get("content", "")
+        status = event_data.get("status", "")
+
+        if not content:
+            return
+
+        icon = {
+            "task_start": "🔄",
+            "task_complete": "✅" if status == "completed" else "❌",
+        }.get(event_type, "•")
+
+        order_index = event_data.get("order_index", 0)
+        total_tasks = event_data.get("total_tasks", 1)
+
+        progress = f"({order_index + 1}/{total_tasks})"
+
+        if event_type == "task_start":
+            text = f"{icon} {progress} **Starting:** {content}"
+        elif event_type == "task_complete":
+            if status == "completed":
+                text = f"{icon} {progress} **Completed:** {content}"
+            elif status == "failed":
+                text = f"{icon} {progress} **Failed:** {content}"
+            else:
+                text = f"{icon} {progress} **{status.capitalize()}:** {content}"
+        else:
+            text = f"{icon} {content}"
+
+        try:
+            await adapter.send_markdown_card(chat_id, text)
+        except Exception:
+            try:
+                await adapter.send_text(chat_id, text)
+            except Exception as e:
+                logger.warning(f"[EventBridge] Task timeline send failed: {e}")
 
     async def _handle_artifact_ready(
         self,

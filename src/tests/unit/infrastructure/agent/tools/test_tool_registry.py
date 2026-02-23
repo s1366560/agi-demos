@@ -265,6 +265,40 @@ class TestToolRegistry:
         stats = registry.get_stats("test_tool")
         assert stats is not None
         assert stats["calls"] == 0
+        assert stats["success_rate"] == 0.0
+        assert stats["avg_duration_ms"] == 0.0
+
+    def test_record_execution_updates_derived_metrics(self) -> None:
+        """Derived quality metrics should update on each record_execution call."""
+        registry = ToolRegistry()
+        registry.register(MockTool())
+
+        registry.record_execution("test_tool", success=True, duration_ms=100.0)
+        registry.record_execution("test_tool", success=False, duration_ms=400.0)
+
+        stats = registry.get_stats("test_tool")
+        assert stats is not None
+        assert stats["calls"] == 2
+        assert stats["successes"] == 1
+        assert stats["errors"] == 1
+        assert stats["total_duration_ms"] == 500.0
+        assert stats["avg_duration_ms"] == 250.0
+        assert stats["success_rate"] == 0.5
+
+    def test_get_quality_scores_combines_success_and_latency(self) -> None:
+        """Quality score should reward reliable and fast tools."""
+        registry = ToolRegistry()
+        registry.register(MockTool("fast_tool"))
+        registry.register(MockTool("slow_tool"))
+
+        for _ in range(3):
+            registry.record_execution("fast_tool", success=True, duration_ms=120.0)
+        for _ in range(3):
+            registry.record_execution("slow_tool", success=False, duration_ms=3500.0)
+
+        quality = registry.get_quality_scores()
+        assert quality["fast_tool"] > quality["slow_tool"]
+        assert 0.0 <= quality["fast_tool"] <= 1.0
 
     def test_enable_disable_tool(self) -> None:
         """Should enable and disable tools."""

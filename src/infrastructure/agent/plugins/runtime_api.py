@@ -8,6 +8,8 @@ from .registry import (
     AgentPluginRegistry,
     ChannelAdapterFactory,
     ChannelReloadHook,
+    PluginCommandHandler,
+    PluginHookHandler,
     PluginToolFactory,
     get_plugin_registry,
 )
@@ -85,5 +87,65 @@ class PluginRuntimeApi:
             config_ui_hints=config_ui_hints,
             defaults=defaults,
             secret_paths=secret_paths,
+            overwrite=overwrite,
+        )
+
+    def register_hook(
+        self,
+        hook_name: str,
+        handler: PluginHookHandler,
+        *,
+        overwrite: bool = False,
+    ) -> None:
+        """Register a named runtime hook handler."""
+        self._registry.register_hook(
+            self._plugin_name,
+            hook_name,
+            handler,
+            overwrite=overwrite,
+        )
+
+    def register_command(
+        self,
+        command_name: str,
+        handler: PluginCommandHandler,
+        *,
+        overwrite: bool = False,
+    ) -> None:
+        """Register a command handler for runtime invocation."""
+        self._registry.register_command(
+            self._plugin_name,
+            command_name,
+            handler,
+            overwrite=overwrite,
+        )
+
+    def register_service(
+        self,
+        service_name: str,
+        service: Any,
+        *,
+        overwrite: bool = False,
+    ) -> None:
+        """Register a plugin service object."""
+        self._registry.register_service(
+            self._plugin_name,
+            service_name,
+            service,
+            overwrite=overwrite,
+        )
+
+    def register_provider(
+        self,
+        provider_name: str,
+        provider: Any,
+        *,
+        overwrite: bool = False,
+    ) -> None:
+        """Register a provider object for runtime lookup."""
+        self._registry.register_provider(
+            self._plugin_name,
+            provider_name,
+            provider,
             overwrite=overwrite,
         )

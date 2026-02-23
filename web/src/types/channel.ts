@@ -95,10 +95,36 @@ export interface RuntimePluginList {
   diagnostics: PluginDiagnostic[];
 }
 
+export interface PluginCapabilityCounts {
+  channel_types: number;
+  tool_factories: number;
+  hooks: number;
+  commands: number;
+  services: number;
+  providers: number;
+}
+
+export interface PluginControlPlaneTrace {
+  trace_id: string;
+  action: string;
+  plugin_name?: string | null;
+  requirement?: string | null;
+  tenant_id?: string | null;
+  timestamp: string;
+  capability_counts: PluginCapabilityCounts;
+}
+
+export interface PluginActionDetails {
+  diagnostics?: PluginDiagnostic[];
+  control_plane_trace?: PluginControlPlaneTrace;
+  channel_reload_plan?: Record<string, number>;
+  [key: string]: unknown;
+}
+
 export interface PluginActionResponse {
   success: boolean;
   message: string;
-  details?: Record<string, unknown>;
+  details?: PluginActionDetails;
 }
 
 export interface ChannelPluginCatalogItem {

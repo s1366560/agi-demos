@@ -122,3 +122,49 @@ async def test_build_channel_adapter_uses_registered_factory() -> None:
 
     assert adapter == {"adapter": expected_adapter, "app_id": "cli_xxx"}
     assert any(d.code == "channel_adapter_loaded" for d in diagnostics)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_register_hook_and_notify_hook_collects_diagnostics() -> None:
+    """Hook handlers should run and failures should be reported as diagnostics."""
+    registry = AgentPluginRegistry()
+    captured: list[dict[str, object]] = []
+
+    async def _ok_hook(payload):
+        captured.append(dict(payload))
+
+    async def _failing_hook(payload):
+        raise RuntimeError("boom")
+
+    registry.register_hook("plugin-a", "before_tool_selection", _ok_hook)
+    registry.register_hook("plugin-b", "before_tool_selection", _failing_hook)
+
+    diagnostics = await registry.notify_hook(
+        "before_tool_selection",
+        payload={"tenant_id": "tenant-1"},
+    )
+
+    assert captured == [{"tenant_id": "tenant-1"}]
+    assert any(item.code == "hook_handler_failed" for item in diagnostics)
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_register_command_service_provider_and_execute_command() -> None:
+    """Command/service/provider registries should expose runtime extension points."""
+    registry = AgentPluginRegistry()
+    registry.register_service("plugin-a", "skill-index", {"version": 1})
+    registry.register_provider("plugin-a", "embedding", {"provider": "demo"})
+
+    async def _command(payload):
+        return {"echo": payload.get("message")}
+
+    registry.register_command("plugin-a", "echo", _command)
+
+    result, diagnostics = await registry.execute_command("echo", payload={"message": "hello"})
+
+    assert diagnostics == []
+    assert result == {"echo": "hello"}
+    assert registry.get_service("skill-index") == {"version": 1}
+    assert registry.get_provider("embedding") == {"provider": "demo"}

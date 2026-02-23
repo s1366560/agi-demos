@@ -136,8 +136,11 @@ class ToolRegistry:
         self._status[name] = ToolStatus.REGISTERED
         self._execution_stats[name] = {
             "calls": 0,
+            "successes": 0,
             "errors": 0,
-            "total_duration_ms": 0,
+            "total_duration_ms": 0.0,
+            "avg_duration_ms": 0.0,
+            "success_rate": 0.0,
         }
 
         logger.info(f"Registered tool: {name}")
@@ -211,6 +214,43 @@ class ToolRegistry:
             Statistics dictionary or None
         """
         return self._execution_stats.get(name)
+
+    def record_execution(self, name: str, *, success: bool, duration_ms: float) -> None:
+        """Record one tool execution and refresh derived quality metrics."""
+        stats = self._execution_stats.get(name)
+        if stats is None:
+            return
+
+        stats["calls"] = int(stats.get("calls", 0)) + 1
+        if success:
+            stats["successes"] = int(stats.get("successes", 0)) + 1
+        else:
+            stats["errors"] = int(stats.get("errors", 0)) + 1
+        stats["total_duration_ms"] = float(stats.get("total_duration_ms", 0.0)) + max(
+            0.0, float(duration_ms)
+        )
+
+        calls = int(stats.get("calls", 0))
+        successes = int(stats.get("successes", 0))
+        total_duration = float(stats.get("total_duration_ms", 0.0))
+        stats["avg_duration_ms"] = total_duration / calls if calls else 0.0
+        stats["success_rate"] = successes / calls if calls else 0.0
+
+    def get_quality_scores(self) -> Dict[str, float]:
+        """Return normalized quality scores (0.0-1.0) for ranking feedback."""
+        quality_scores: Dict[str, float] = {}
+        for name, stats in self._execution_stats.items():
+            calls = int(stats.get("calls", 0))
+            if calls <= 0:
+                quality_scores[name] = 0.5
+                continue
+
+            success_rate = float(stats.get("success_rate", 0.0))
+            avg_duration_ms = float(stats.get("avg_duration_ms", 0.0))
+            latency_penalty = min(max(avg_duration_ms, 0.0) / 5000.0, 1.0) * 0.2
+            score = max(0.0, min(1.0, success_rate - latency_penalty))
+            quality_scores[name] = round(score, 4)
+        return quality_scores
 
     def enable_tool(self, name: str) -> None:
         """Enable a tool.
@@ -290,11 +330,6 @@ class ToolExecutor:
 
         timeout = timeout_seconds or self._default_timeout
 
-        # Update stats
-        stats = self._registry._execution_stats.get(tool_name)
-        if stats:
-            stats["calls"] += 1
-
         start_time = asyncio.get_event_loop().time()
 
         try:
@@ -306,9 +341,11 @@ class ToolExecutor:
 
             duration_ms = (asyncio.get_event_loop().time() - start_time) * 1000
 
-            # Update stats
-            if stats:
-                stats["total_duration_ms"] += duration_ms
+            self._registry.record_execution(
+                tool_name,
+                success=True,
+                duration_ms=duration_ms,
+            )
 
             return ToolExecutionResult(
                 tool_name=tool_name,
@@ -320,8 +357,11 @@ class ToolExecutor:
         except asyncio.TimeoutError:
             duration_ms = (asyncio.get_event_loop().time() - start_time) * 1000
 
-            if stats:
-                stats["errors"] += 1
+            self._registry.record_execution(
+                tool_name,
+                success=False,
+                duration_ms=duration_ms,
+            )
 
             return ToolExecutionResult(
                 tool_name=tool_name,
@@ -334,8 +374,11 @@ class ToolExecutor:
         except Exception as e:
             duration_ms = (asyncio.get_event_loop().time() - start_time) * 1000
 
-            if stats:
-                stats["errors"] += 1
+            self._registry.record_execution(
+                tool_name,
+                success=False,
+                duration_ms=duration_ms,
+            )
 
             return ToolExecutionResult(
                 tool_name=tool_name,
@@ -359,14 +402,27 @@ class ToolExecutor:
         Returns:
             List of execution results
         """
+        normalized_requests: List[Dict[str, Any]] = []
+        for req in requests:
+            raw_tool_name = req.get("tool_name")
+            tool_name = raw_tool_name.strip() if isinstance(raw_tool_name, str) else ""
+            parameters = req.get("parameters")
+            normalized_requests.append(
+                {
+                    "tool_name": tool_name or "unknown",
+                    "parameters": parameters if isinstance(parameters, dict) else {},
+                    "timeout_seconds": req.get("timeout_seconds"),
+                }
+            )
+
         tasks = [
             self.execute(
-                tool_name=req.get("tool_name"),
-                parameters=req.get("parameters", {}),
+                tool_name=req["tool_name"],
+                parameters=req["parameters"],
                 timeout_seconds=req.get("timeout_seconds"),
                 context=context,
             )
-            for req in requests
+            for req in normalized_requests
         ]
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -374,9 +430,8 @@ class ToolExecutor:
         # Handle any exceptions in gather
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                requests[i]  # type: ignore
                 results[i] = ToolExecutionResult(
-                    tool_name=requests[i].get("tool_name", "unknown"),
+                    tool_name=normalized_requests[i].get("tool_name", "unknown"),
                     success=False,
                     result=None,
                     error=str(result),

@@ -1,4 +1,5 @@
 """Tests for ChannelEventBridge."""
+
 import asyncio
 import json
 from types import SimpleNamespace
@@ -67,16 +68,20 @@ async def test_error_event_sends_card() -> None:
     bridge._lookup_binding = AsyncMock(return_value=binding)
     bridge._get_adapter = MagicMock(return_value=adapter)
 
-    await bridge.on_agent_event("conv-1", {
-        "type": "error",
-        "data": {"message": "Something broke", "code": "INTERNAL"},
-    })
+    await bridge.on_agent_event(
+        "conv-1",
+        {
+            "type": "error",
+            "data": {"message": "Something broke", "code": "INTERNAL"},
+        },
+    )
 
     adapter.send_card.assert_awaited_once()
     card = adapter.send_card.call_args[0][1]
+    assert card["schema"] == "2.0"
     assert card["header"]["template"] == "red"
-    assert "Something broke" in card["elements"][0]["content"]
-    assert "INTERNAL" in card["elements"][0]["content"]
+    assert "Something broke" in card["body"]["elements"][0]["content"]
+    assert "INTERNAL" in card["body"]["elements"][0]["content"]
 
 
 @pytest.mark.unit
@@ -88,21 +93,25 @@ async def test_hitl_event_sends_card_with_options() -> None:
     bridge._lookup_binding = AsyncMock(return_value=binding)
     bridge._get_adapter = MagicMock(return_value=adapter)
 
-    await bridge.on_agent_event("conv-1", {
-        "type": "clarification_asked",
-        "data": {
-            "question": "Which database?",
-            "options": ["PostgreSQL", "MySQL"],
-            "request_id": "hitl-123",
+    await bridge.on_agent_event(
+        "conv-1",
+        {
+            "type": "clarification_asked",
+            "data": {
+                "question": "Which database?",
+                "options": ["PostgreSQL", "MySQL"],
+                "request_id": "hitl-123",
+            },
         },
-    })
+    )
 
     adapter.send_card.assert_awaited_once()
     card = adapter.send_card.call_args[0][1]
+    assert card["schema"] == "2.0"
     assert card["header"]["title"]["content"] == "Agent needs clarification"
     # Should have markdown element + action element
-    assert len(card["elements"]) == 2
-    actions = card["elements"][1]["actions"]
+    assert len(card["body"]["elements"]) == 2
+    actions = card["body"]["elements"][1]["actions"]
     assert len(actions) == 2
     assert actions[0]["value"]["hitl_request_id"] == "hitl-123"
 
@@ -117,23 +126,27 @@ async def test_decision_event_sends_decision_card() -> None:
     bridge._lookup_binding = AsyncMock(return_value=binding)
     bridge._get_adapter = MagicMock(return_value=adapter)
 
-    await bridge.on_agent_event("conv-1", {
-        "type": "decision_asked",
-        "data": {
-            "question": "Which approach?",
-            "options": ["A", "B", "C"],
-            "risk_level": "high",
-            "request_id": "hitl-456",
+    await bridge.on_agent_event(
+        "conv-1",
+        {
+            "type": "decision_asked",
+            "data": {
+                "question": "Which approach?",
+                "options": ["A", "B", "C"],
+                "risk_level": "high",
+                "request_id": "hitl-456",
+            },
         },
-    })
+    )
 
     adapter.send_card.assert_awaited_once()
     card = adapter.send_card.call_args[0][1]
+    assert card["schema"] == "2.0"
     assert card["header"]["title"]["content"] == "Agent needs a decision"
     assert card["header"]["template"] == "orange"
     assert card["config"] == {"wide_screen_mode": True}
-    assert "[!]" in card["elements"][0]["content"]
-    actions = card["elements"][1]["actions"]
+    assert "[!]" in card["body"]["elements"][0]["content"]
+    actions = card["body"]["elements"][1]["actions"]
     assert len(actions) == 3
     assert actions[0]["value"]["hitl_request_id"] == "hitl-456"
 
@@ -147,10 +160,13 @@ async def test_hitl_event_falls_back_to_text_when_no_question() -> None:
     bridge._lookup_binding = AsyncMock(return_value=binding)
     bridge._get_adapter = MagicMock(return_value=adapter)
 
-    await bridge.on_agent_event("conv-1", {
-        "type": "clarification_asked",
-        "data": {"question": "", "options": [], "request_id": "hitl-x"},
-    })
+    await bridge.on_agent_event(
+        "conv-1",
+        {
+            "type": "clarification_asked",
+            "data": {"question": "", "options": [], "request_id": "hitl-x"},
+        },
+    )
 
     # No card or text sent for empty question
     adapter.send_card.assert_not_awaited()
@@ -166,19 +182,23 @@ async def test_task_update_sends_rich_card() -> None:
     bridge._lookup_binding = AsyncMock(return_value=binding)
     bridge._get_adapter = MagicMock(return_value=adapter)
 
-    await bridge.on_agent_event("conv-1", {
-        "type": "task_list_updated",
-        "data": {
-            "tasks": [
-                {"title": "Setup DB", "status": "completed"},
-                {"title": "Write tests", "status": "in_progress"},
-            ],
+    await bridge.on_agent_event(
+        "conv-1",
+        {
+            "type": "task_list_updated",
+            "data": {
+                "tasks": [
+                    {"title": "Setup DB", "status": "completed"},
+                    {"title": "Write tests", "status": "in_progress"},
+                ],
+            },
         },
-    })
+    )
 
     adapter.send_card.assert_awaited_once()
     card = adapter.send_card.call_args[0][1]
-    task_text = card["elements"][2]["content"]
+    assert card["schema"] == "2.0"
+    task_text = card["body"]["elements"][2]["content"]
     assert "Setup DB" in task_text
     assert "Write tests" in task_text
 
@@ -192,17 +212,21 @@ async def test_artifact_ready_sends_rich_card() -> None:
     bridge._lookup_binding = AsyncMock(return_value=binding)
     bridge._get_adapter = MagicMock(return_value=adapter)
 
-    await bridge.on_agent_event("conv-1", {
-        "type": "artifact_ready",
-        "data": {"name": "report.pdf", "url": "https://example.com/dl"},
-    })
+    await bridge.on_agent_event(
+        "conv-1",
+        {
+            "type": "artifact_ready",
+            "data": {"name": "report.pdf", "url": "https://example.com/dl"},
+        },
+    )
 
     adapter.send_card.assert_awaited_once()
     card = adapter.send_card.call_args[0][1]
+    assert card["schema"] == "2.0"
     assert card["header"]["template"] == "green"
-    assert "report.pdf" in card["elements"][0]["content"]
+    assert "report.pdf" in card["body"]["elements"][0]["content"]
     # Download button present
-    assert card["elements"][1]["actions"][0]["url"] == "https://example.com/dl"
+    assert card["body"]["elements"][1]["actions"][0]["url"] == "https://example.com/dl"
 
 
 @pytest.mark.unit
@@ -214,20 +238,25 @@ async def test_no_adapter_skips_silently() -> None:
     bridge._get_adapter = MagicMock(return_value=None)
 
     # Should not raise
-    await bridge.on_agent_event("conv-1", {
-        "type": "error",
-        "data": {"message": "fail"},
-    })
+    await bridge.on_agent_event(
+        "conv-1",
+        {
+            "type": "error",
+            "data": {"message": "fail"},
+        },
+    )
 
 
 @pytest.mark.unit
 def test_build_hitl_card_structure() -> None:
     bridge = ChannelEventBridge()
-    card = bridge._build_hitl_card({
-        "question": "Pick a color",
-        "options": ["Red", "Blue", "Green"],
-        "request_id": "req-42",
-    })
+    card = bridge._build_hitl_card(
+        {
+            "question": "Pick a color",
+            "options": ["Red", "Blue", "Green"],
+            "request_id": "req-42",
+        }
+    )
 
     assert card is not None
     assert card["config"]["wide_screen_mode"] is True

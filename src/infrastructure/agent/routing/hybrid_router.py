@@ -10,15 +10,31 @@ backward compatibility via the SubAgentRouterProtocol interface.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Protocol
 
-from src.domain.model.agent.subagent import AgentModel, SubAgent
+from src.domain.model.agent.subagent import SubAgent
 
 from ..core.subagent_router import SubAgentMatch, SubAgentRouter
 from .intent_router import IntentRouter
 from .schemas import RoutingCandidate
 
 logger = logging.getLogger(__name__)
+
+
+class ExecutionConfigLike(Protocol):
+    """Protocol describing ExecutionConfig fields used by HybridRouterConfig."""
+
+    subagent_keyword_skip_threshold: float
+    subagent_keyword_floor_threshold: float
+    subagent_llm_min_confidence: float
+    enable_subagent_routing: bool
+
+
+def _safe_float(value: Any, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
 
 @dataclass
@@ -36,6 +52,43 @@ class HybridRouterConfig:
 
     # Whether to enable LLM fallback routing
     enable_llm_routing: bool = True
+
+    @classmethod
+    def from_execution_config(
+        cls, execution_config: Optional[ExecutionConfigLike]
+    ) -> "HybridRouterConfig":
+        """Build HybridRouterConfig from ExecutionConfig-like object."""
+        if execution_config is None:
+            return cls()
+
+        defaults = cls()
+        return cls(
+            keyword_skip_threshold=_safe_float(
+                getattr(
+                    execution_config,
+                    "subagent_keyword_skip_threshold",
+                    defaults.keyword_skip_threshold,
+                ),
+                defaults.keyword_skip_threshold,
+            ),
+            keyword_floor_threshold=_safe_float(
+                getattr(
+                    execution_config,
+                    "subagent_keyword_floor_threshold",
+                    defaults.keyword_floor_threshold,
+                ),
+                defaults.keyword_floor_threshold,
+            ),
+            llm_min_confidence=_safe_float(
+                getattr(
+                    execution_config,
+                    "subagent_llm_min_confidence",
+                    defaults.llm_min_confidence,
+                ),
+                defaults.llm_min_confidence,
+            ),
+            enable_llm_routing=bool(getattr(execution_config, "enable_subagent_routing", True)),
+        )
 
 
 class HybridRouter:
@@ -146,7 +199,10 @@ class HybridRouter:
         # Step 1: Keyword fast path
         keyword_result = self._keyword_router.match(query, threshold)
 
-        if keyword_result.subagent and keyword_result.confidence >= self._config.keyword_skip_threshold:
+        if (
+            keyword_result.subagent
+            and keyword_result.confidence >= self._config.keyword_skip_threshold
+        ):
             logger.info(
                 f"[HybridRouter] Fast path: {keyword_result.subagent.name} "
                 f"(confidence={keyword_result.confidence:.2f})"

@@ -25,7 +25,7 @@ import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Mapping, Optional
 
 from src.domain.events.agent_events import (
     AgentDomainEvent,
@@ -40,6 +40,7 @@ from ..context import ContextFacade, ContextWindowConfig, ContextWindowManager
 from ..events import EventConverter
 from ..permission import PermissionManager
 from ..planning.plan_detector import PlanDetector
+from ..plugins.policy_context import PolicyContext, normalize_policy_layers
 from ..plugins.selection_pipeline import (
     ToolSelectionContext,
     ToolSelectionTraceStep,
@@ -53,7 +54,7 @@ from ..routing import (
     SubAgentOrchestrator,
     SubAgentOrchestratorConfig,
 )
-from ..routing.hybrid_router import HybridRouter
+from ..routing.hybrid_router import HybridRouter, HybridRouterConfig
 from ..skill import SkillExecutionConfig, SkillExecutionContext, SkillOrchestrator
 from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
 from .skill_executor import SkillExecutor
@@ -124,11 +125,15 @@ class ReActAgent:
         skill_fallback_on_error: bool = True,
         skill_execution_timeout: int = 300,  # Increased from 60 to 300 (5 minutes)
         subagent_match_threshold: float = 0.5,
+        subagent_keyword_skip_threshold: float = 0.85,
+        subagent_keyword_floor_threshold: float = 0.3,
+        subagent_llm_min_confidence: float = 0.6,
         # SubAgent-as-Tool: let LLM autonomously decide delegation
         enable_subagent_as_tool: bool = True,
         max_subagent_delegation_depth: int = 2,
         max_subagent_active_runs: int = 16,
         max_subagent_children_per_requester: int = 8,
+        max_subagent_active_runs_per_lineage: int = 8,
         max_subagent_lane_concurrency: int = 8,
         subagent_run_registry_path: Optional[str] = None,
         subagent_run_postgres_dsn: Optional[str] = None,
@@ -177,6 +182,9 @@ class ReActAgent:
         memory_flush: Optional[Any] = None,
         tool_selection_pipeline: Optional[Any] = None,
         tool_selection_max_tools: int = 40,
+        tool_selection_semantic_backend: str = "embedding_vector",
+        router_mode_tool_count_threshold: int = 100,
+        tool_policy_layers: Optional[Mapping[str, Any]] = None,
     ):
         """
         Initialize ReAct Agent.
@@ -199,6 +207,12 @@ class ReActAgent:
             skill_fallback_on_error: Whether to fallback to LLM on skill error (default: True)
             skill_execution_timeout: Timeout for skill execution in seconds (default: 300)
             subagent_match_threshold: Threshold for subagent routing (default: 0.5)
+            subagent_keyword_skip_threshold: Keyword match confidence threshold to skip
+                LLM routing fallback in HybridRouter (default: 0.85).
+            subagent_keyword_floor_threshold: Lower bound for keyword fallback confidence
+                when LLM routing does not produce a strong match (default: 0.3).
+            subagent_llm_min_confidence: Minimum confidence required for LLM-based
+                routing decisions in HybridRouter (default: 0.6).
             enable_subagent_as_tool: When True, SubAgents are exposed as a
                 delegate_to_subagent tool in the ReAct loop, letting the LLM
                 decide when to delegate. When False, uses pre-routing keyword
@@ -260,6 +274,14 @@ class ReActAgent:
             tool_selection_pipeline or build_default_tool_selection_pipeline()
         )
         self._tool_selection_max_tools = max(8, int(tool_selection_max_tools))
+        normalized_backend = str(tool_selection_semantic_backend).strip().lower()
+        if normalized_backend not in {"keyword", "token_vector", "embedding_vector"}:
+            normalized_backend = "token_vector"
+        self._tool_selection_semantic_backend = normalized_backend
+        self._router_mode_tool_count_threshold = max(1, int(router_mode_tool_count_threshold))
+        self._tool_policy_layers = normalize_policy_layers(
+            {"policy_layers": dict(tool_policy_layers or {})}
+        )
         self._last_tool_selection_trace: tuple[ToolSelectionTraceStep, ...] = ()
 
         # Memory auto-recall / auto-capture (optional, injected from DI)
@@ -288,6 +310,18 @@ class ReActAgent:
         # Context Facade - unified entry point for context building
         self.context_facade = ContextFacade(window_manager=self.context_manager)
 
+        execution_config = ExecutionConfig(
+            skill_match_threshold=skill_direct_execute_threshold,
+            subagent_match_threshold=subagent_match_threshold,
+            subagent_keyword_skip_threshold=subagent_keyword_skip_threshold,
+            subagent_keyword_floor_threshold=subagent_keyword_floor_threshold,
+            subagent_llm_min_confidence=subagent_llm_min_confidence,
+            allow_direct_execution=True,
+            enable_plan_mode=True,
+            enable_subagent_routing=not enable_subagent_as_tool,
+        )
+        execution_config.validate()
+
         # Skill System (L2)
         self.skills = skills or []
         self.skill_match_threshold = skill_match_threshold
@@ -299,11 +333,12 @@ class ReActAgent:
         # SubAgent System (L3) - use cached router if provided
         # When LLM client is available, use HybridRouter for keyword + LLM routing
         self.subagents = subagents or []
-        self.subagent_match_threshold = subagent_match_threshold
+        self.subagent_match_threshold = execution_config.subagent_match_threshold
         self._enable_subagent_as_tool = enable_subagent_as_tool
         self._max_subagent_delegation_depth = max(1, max_subagent_delegation_depth)
         self._max_subagent_active_runs = max(1, max_subagent_active_runs)
         self._max_subagent_children_per_requester = max(1, max_subagent_children_per_requester)
+        self._max_subagent_active_runs_per_lineage = max(1, max_subagent_active_runs_per_lineage)
         self._max_subagent_lane_concurrency = max(1, max_subagent_lane_concurrency)
         self._subagent_announce_max_events = max(1, int(subagent_announce_max_events))
         self._subagent_announce_max_retries = max(0, int(subagent_announce_max_retries))
@@ -319,13 +354,14 @@ class ReActAgent:
                 self.subagent_router = HybridRouter(
                     subagents=subagents,
                     llm_client=llm_client,
-                    default_confidence_threshold=subagent_match_threshold,
+                    config=HybridRouterConfig.from_execution_config(execution_config),
+                    default_confidence_threshold=execution_config.subagent_match_threshold,
                 )
                 logger.info("ReActAgent: Using HybridRouter (keyword + LLM)")
             else:
                 self.subagent_router = SubAgentRouter(
                     subagents=subagents,
-                    default_confidence_threshold=subagent_match_threshold,
+                    default_confidence_threshold=execution_config.subagent_match_threshold,
                 )
         else:
             self.subagent_router = None
@@ -383,7 +419,7 @@ class ReActAgent:
         self._subagent_orchestrator = SubAgentOrchestrator(
             router=self.subagent_router,
             config=SubAgentOrchestratorConfig(
-                default_confidence_threshold=subagent_match_threshold,
+                default_confidence_threshold=execution_config.subagent_match_threshold,
                 emit_routing_events=True,
             ),
             base_model=model,
@@ -393,13 +429,7 @@ class ReActAgent:
         )
 
         self._execution_router = ExecutionRouter(
-            config=ExecutionConfig(
-                skill_match_threshold=skill_direct_execute_threshold,
-                subagent_match_threshold=subagent_match_threshold,
-                allow_direct_execution=True,
-                enable_plan_mode=True,
-                enable_subagent_routing=not enable_subagent_as_tool,
-            ),
+            config=execution_config,
             skill_matcher=self._ExecutionRouterSkillMatcher(self),
             subagent_matcher=self._ExecutionRouterSubAgentMatcher(self),
             plan_evaluator=self._ExecutionRouterPlanEvaluator(self._plan_detector),
@@ -482,6 +512,8 @@ class ReActAgent:
             self._agent = agent
 
         def match(self, query: str, context: Dict[str, Any]) -> Optional[str]:
+            if not bool(context.get("router_mode_enabled", True)):
+                return None
             match = self._agent._match_subagent(query)
             return match.subagent.name if match.subagent else None
 
@@ -513,20 +545,29 @@ class ReActAgent:
         effective_mode: str,
     ) -> ToolSelectionContext:
         """Build selection context for context/intent/semantic/policy pipeline."""
+        policy_context = PolicyContext.from_metadata(
+            {"policy_layers": dict(self._tool_policy_layers)},
+        )
         deny_tools: List[str] = []
         if effective_mode == "plan":
             deny_tools = ["plugin_manager", "register_mcp_server", "skill_installer", "skill_sync"]
+        metadata: Dict[str, Any] = {
+            "user_message": user_message,
+            "conversation_history": conversation_context,
+            "effective_mode": effective_mode,
+            "agent_mode": self.agent_mode,
+            "max_tools": self._tool_selection_max_tools,
+            "semantic_backend": self._tool_selection_semantic_backend,
+            "deny_tools": deny_tools,
+            "policy_agent": {"deny_tools": deny_tools} if deny_tools else {},
+        }
+        if self._tool_policy_layers:
+            metadata["policy_layers"] = policy_context.to_mapping()
         return ToolSelectionContext(
             tenant_id=tenant_id,
             project_id=project_id,
-            metadata={
-                "user_message": user_message,
-                "conversation_history": conversation_context,
-                "effective_mode": effective_mode,
-                "agent_mode": self.agent_mode,
-                "max_tools": self._tool_selection_max_tools,
-                "deny_tools": deny_tools,
-            },
+            metadata=metadata,
+            policy_context=policy_context,
         )
 
     def _decide_execution_path(
@@ -569,10 +610,26 @@ class ReActAgent:
                 metadata={"legacy_preroute": True},
             )
 
+        available_tool_count = self._estimate_available_tool_count()
+        router_mode_enabled = available_tool_count > self._router_mode_tool_count_threshold
         routing_context = {
             "recent_messages": [m.get("content", "") for m in conversation_context[-3:]],
+            "available_tool_count": available_tool_count,
+            "router_mode_enabled": router_mode_enabled,
+            "router_mode_tool_count_threshold": self._router_mode_tool_count_threshold,
         }
         return self._execution_router.decide(message, routing_context)
+
+    def _estimate_available_tool_count(self) -> int:
+        """Estimate available tool count without mutating selection trace state."""
+        if self._use_dynamic_tools and self._tool_provider is not None:
+            try:
+                dynamic_tools = self._tool_provider()
+                if isinstance(dynamic_tools, dict):
+                    return len(dynamic_tools)
+            except Exception:
+                logger.warning("Failed to fetch dynamic tools for router threshold check", exc_info=True)
+        return len(self.raw_tools)
 
     def _get_current_tools(
         self,
@@ -984,9 +1041,8 @@ class ReActAgent:
         # decide via the delegate_to_subagent tool in the ReAct loop.
         # When False, use legacy pre-routing with keyword/LLM hybrid matching.
         # BUT if forced_subagent_name is present, we override everything.
-        should_preroute_subagent = (
-            routing_decision.path == ExecutionPath.SUBAGENT
-            and (forced_subagent_name is not None or not self._enable_subagent_as_tool)
+        should_preroute_subagent = routing_decision.path == ExecutionPath.SUBAGENT and (
+            forced_subagent_name is not None or not self._enable_subagent_as_tool
         )
         if should_preroute_subagent:
             active_subagent = None
@@ -1351,6 +1407,8 @@ class ReActAgent:
                     "before_count": step.before_count,
                     "after_count": step.after_count,
                     "removed_count": len(step.removed_tools),
+                    "duration_ms": step.duration_ms,
+                    "explain": dict(step.explain),
                 }
                 for step in self._last_tool_selection_trace
             ]
@@ -1511,6 +1569,7 @@ class ReActAgent:
                     run_registry=self._subagent_run_registry,
                     conversation_id=conversation_id,
                     max_active_runs=self._max_subagent_active_runs,
+                    max_active_runs_per_lineage=self._max_subagent_active_runs_per_lineage,
                     max_children_per_requester=self._max_subagent_children_per_requester,
                     requester_session_key=conversation_id,
                     delegation_depth=0,
@@ -1531,6 +1590,7 @@ class ReActAgent:
                     conversation_id=conversation_id,
                     spawn_callback=_spawn_callback,
                     max_active_runs=self._max_subagent_active_runs,
+                    max_active_runs_per_lineage=self._max_subagent_active_runs_per_lineage,
                     max_children_per_requester=self._max_subagent_children_per_requester,
                     requester_session_key=conversation_id,
                     delegation_depth=0,
@@ -1646,6 +1706,7 @@ class ReActAgent:
                     cancel_callback=_cancel_spawn_callback,
                     restart_callback=_spawn_callback,
                     max_active_runs=self._max_subagent_active_runs,
+                    max_active_runs_per_lineage=self._max_subagent_active_runs_per_lineage,
                     max_children_per_requester=self._max_subagent_children_per_requester,
                     requester_session_key=conversation_id,
                     delegation_depth=0,
@@ -2018,7 +2079,9 @@ class ReActAgent:
                         tenant_id=tenant_id,
                         abort_signal=abort_signal,
                         model_override=(str(spawn_options.get("model") or "").strip() or None),
-                        thinking_override=(str(spawn_options.get("thinking") or "").strip() or None),
+                        thinking_override=(
+                            str(spawn_options.get("thinking") or "").strip() or None
+                        ),
                         spawn_mode=str(spawn_options.get("spawn_mode") or "run"),
                         thread_requested=bool(spawn_options.get("thread_requested")),
                         cleanup=str(spawn_options.get("cleanup") or "keep"),
@@ -2075,6 +2138,7 @@ class ReActAgent:
                         cancel_callback=_nested_cancel_callback,
                         restart_callback=_nested_spawn_callback,
                         max_active_runs=self._max_subagent_active_runs,
+                        max_active_runs_per_lineage=self._max_subagent_active_runs_per_lineage,
                         max_children_per_requester=self._max_subagent_children_per_requester,
                         requester_session_key=conversation_id,
                         delegation_depth=nested_depth,
@@ -2824,9 +2888,7 @@ class ReActAgent:
                 last_error = "announce metadata update conflict"
 
             if attempt < max_retries:
-                delay_seconds = (
-                    self._subagent_announce_retry_delay_ms * (2**attempt)
-                ) / 1000.0
+                delay_seconds = (self._subagent_announce_retry_delay_ms * (2**attempt)) / 1000.0
                 await asyncio.sleep(delay_seconds)
 
         run = self._subagent_run_registry.get_run(conversation_id, run_id)

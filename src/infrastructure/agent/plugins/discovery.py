@@ -11,6 +11,11 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, List, Optional, Sequence
 
+from .manifest import (
+    PluginManifestMetadata,
+    load_local_plugin_manifest,
+    parse_plugin_manifest_payload,
+)
 from .registry import PluginDiagnostic
 from .state_store import PluginStateStore
 
@@ -28,6 +33,12 @@ class DiscoveredPlugin:
     source: str
     package: Optional[str] = None
     version: Optional[str] = None
+    kind: Optional[str] = None
+    manifest_id: Optional[str] = None
+    manifest_path: Optional[str] = None
+    channels: tuple[str, ...] = ()
+    providers: tuple[str, ...] = ()
+    skills: tuple[str, ...] = ()
 
 
 def discover_plugins(
@@ -37,6 +48,7 @@ def discover_plugins(
     include_entrypoints: bool = True,
     include_local_paths: bool = True,
     include_disabled: bool = False,
+    strict_local_manifest: bool = False,
 ) -> tuple[List[DiscoveredPlugin], List[PluginDiagnostic]]:
     """Discover plugin instances and return diagnostics for non-fatal failures."""
     discovered: List[DiscoveredPlugin] = []
@@ -71,8 +83,45 @@ def discover_plugins(
         for plugin_dir in _iter_local_plugin_dirs(state_store=state_store):
             plugin_name = plugin_dir.name
             try:
+                manifest_metadata, manifest_diagnostics = load_local_plugin_manifest(
+                    plugin_dir,
+                    plugin_name=plugin_name,
+                )
+                diagnostics.extend(manifest_diagnostics)
+                if strict_local_manifest and _has_manifest_errors(manifest_diagnostics):
+                    diagnostics.append(
+                        PluginDiagnostic(
+                            plugin_name=plugin_name,
+                            code="plugin_manifest_strict_skip",
+                            message="Skipped plugin due to invalid manifest in strict mode",
+                            level="warning",
+                        )
+                    )
+                    continue
                 plugin = _load_local_plugin(plugin_dir)
                 plugin_name = str(getattr(plugin, "name", plugin_dir.name))
+                if manifest_metadata is not None and manifest_metadata.id != plugin_name:
+                    diagnostics.append(
+                        PluginDiagnostic(
+                            plugin_name=plugin_name,
+                            code="plugin_manifest_id_mismatch",
+                            message=(
+                                "Manifest id does not match plugin runtime name "
+                                f"('{manifest_metadata.id}' != '{plugin_name}')"
+                            ),
+                            level="warning",
+                        )
+                    )
+                    if strict_local_manifest:
+                        diagnostics.append(
+                            PluginDiagnostic(
+                                plugin_name=plugin_name,
+                                code="plugin_manifest_strict_skip",
+                                message="Skipped plugin due to manifest id mismatch in strict mode",
+                                level="warning",
+                            )
+                        )
+                        continue
                 if plugin_name in seen_names:
                     diagnostics.append(
                         PluginDiagnostic(
@@ -100,6 +149,13 @@ def discover_plugins(
                         name=plugin_name,
                         plugin=plugin,
                         source="local",
+                        version=manifest_metadata.version if manifest_metadata else None,
+                        kind=manifest_metadata.kind if manifest_metadata else None,
+                        manifest_id=manifest_metadata.id if manifest_metadata else None,
+                        manifest_path=manifest_metadata.manifest_path if manifest_metadata else None,
+                        channels=manifest_metadata.channels if manifest_metadata else (),
+                        providers=manifest_metadata.providers if manifest_metadata else (),
+                        skills=manifest_metadata.skills if manifest_metadata else (),
                     )
                 )
                 seen_names.add(plugin_name)
@@ -143,6 +199,23 @@ def discover_plugins(
                 loaded = entry_point.load()
                 plugin = _coerce_plugin_instance(loaded)
                 plugin_name = str(getattr(plugin, "name", entry_point.name))
+                manifest_metadata, manifest_diagnostics = _load_entrypoint_manifest_metadata(
+                    plugin=plugin,
+                    plugin_name=plugin_name,
+                )
+                diagnostics.extend(manifest_diagnostics)
+                if manifest_metadata is not None and manifest_metadata.id != plugin_name:
+                    diagnostics.append(
+                        PluginDiagnostic(
+                            plugin_name=plugin_name,
+                            code="plugin_manifest_id_mismatch",
+                            message=(
+                                "Manifest id does not match plugin runtime name "
+                                f"('{manifest_metadata.id}' != '{plugin_name}')"
+                            ),
+                            level="warning",
+                        )
+                    )
                 if plugin_name in seen_names:
                     diagnostics.append(
                         PluginDiagnostic(
@@ -167,7 +240,11 @@ def discover_plugins(
 
                 dist = getattr(entry_point, "dist", None)
                 package_name = getattr(dist, "name", None)
-                version = getattr(dist, "version", None)
+                version = (
+                    manifest_metadata.version
+                    if manifest_metadata and manifest_metadata.version
+                    else getattr(dist, "version", None)
+                )
                 discovered.append(
                     DiscoveredPlugin(
                         name=plugin_name,
@@ -175,6 +252,12 @@ def discover_plugins(
                         source="entrypoint",
                         package=package_name,
                         version=version,
+                        kind=manifest_metadata.kind if manifest_metadata else None,
+                        manifest_id=manifest_metadata.id if manifest_metadata else None,
+                        manifest_path=manifest_metadata.manifest_path if manifest_metadata else None,
+                        channels=manifest_metadata.channels if manifest_metadata else (),
+                        providers=manifest_metadata.providers if manifest_metadata else (),
+                        skills=manifest_metadata.skills if manifest_metadata else (),
                     )
                 )
                 seen_names.add(plugin_name)
@@ -239,6 +322,36 @@ def _is_enabled(
     if include_disabled or state_store is None:
         return True
     return state_store.is_enabled(plugin_name)
+
+
+def _has_manifest_errors(diagnostics: Sequence[PluginDiagnostic]) -> bool:
+    return any(item.code == "plugin_manifest_invalid" for item in diagnostics)
+
+
+def _load_entrypoint_manifest_metadata(
+    *,
+    plugin: Any,
+    plugin_name: str,
+) -> tuple[Optional[PluginManifestMetadata], list[PluginDiagnostic]]:
+    payload = _resolve_entrypoint_manifest_payload(plugin)
+    if payload is None:
+        return None, []
+    return parse_plugin_manifest_payload(
+        payload,
+        plugin_name=plugin_name,
+        source="entrypoint manifest",
+    )
+
+
+def _resolve_entrypoint_manifest_payload(plugin: Any) -> Optional[Any]:
+    for attr in ("plugin_manifest", "manifest"):
+        payload = getattr(plugin, attr, None)
+        if payload is not None:
+            return payload
+    get_manifest = getattr(plugin, "get_manifest", None)
+    if callable(get_manifest):
+        return get_manifest()
+    return None
 
 
 def _builtin_plugins() -> List[Any]:

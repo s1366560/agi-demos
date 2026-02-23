@@ -144,3 +144,4 @@ local-sandbox-app/
 .volumes/
 .copilot/
 .mypy_cache/
+.ruff_cache/

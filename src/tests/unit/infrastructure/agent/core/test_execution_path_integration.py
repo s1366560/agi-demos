@@ -1,5 +1,6 @@
 """Tests for ReActAgent execution-path and selection integration."""
 
+from types import SimpleNamespace
 from typing import Any, Dict
 
 import pytest
@@ -54,3 +55,76 @@ def test_get_current_tools_applies_selection_pipeline_budget() -> None:
     assert len(selected_tools) <= agent._tool_selection_max_tools
     assert len(selected_defs) <= agent._tool_selection_max_tools
     assert any(step.stage == "semantic_ranker_stage" for step in agent._last_tool_selection_trace)
+
+
+@pytest.mark.unit
+def test_selection_context_includes_policy_layers_and_agent_policy() -> None:
+    """Selection context should carry layered policy and plan-mode deny list."""
+    agent = ReActAgent(
+        model="test-model",
+        tools={"read": _MockTool("read"), "plugin_manager": _MockTool("plugin_manager")},
+        tool_policy_layers={"tenant": {"allow_tools": ["read"]}},
+    )
+
+    selection_context = agent._build_tool_selection_context(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        user_message="plan this work",
+        conversation_context=[{"role": "user", "content": "plan this work"}],
+        effective_mode="plan",
+    )
+    metadata = selection_context.metadata or {}
+
+    assert "policy_layers" in metadata
+    assert metadata["policy_layers"]["tenant"]["allow_tools"] == ["read"]
+    assert "plugin_manager" in metadata["deny_tools"]
+    assert "plugin_manager" in metadata["policy_agent"]["deny_tools"]
+
+
+@pytest.mark.unit
+def test_router_mode_threshold_skips_subagent_routing_when_below_threshold() -> None:
+    """Subagent routing should be bypassed when tool count is below router threshold."""
+    tools = {"read": _MockTool("read"), "write": _MockTool("write")}
+    agent = ReActAgent(
+        model="test-model",
+        tools=tools,
+        enable_subagent_as_tool=False,
+        router_mode_tool_count_threshold=10,
+    )
+    agent._match_subagent = lambda _query: SimpleNamespace(  # type: ignore[assignment]
+        subagent=SimpleNamespace(name="coder"),
+        confidence=0.9,
+        match_reason="forced test match",
+    )
+
+    decision = agent._decide_execution_path(
+        message="coder function",
+        conversation_context=[],
+    )
+
+    assert decision.path == ExecutionPath.REACT_LOOP
+
+
+@pytest.mark.unit
+def test_router_mode_threshold_enables_subagent_routing_when_above_threshold() -> None:
+    """Subagent routing should run when tool count exceeds router threshold."""
+    tools = {f"tool_{idx}": _MockTool(f"tool_{idx}") for idx in range(4)}
+    agent = ReActAgent(
+        model="test-model",
+        tools=tools,
+        enable_subagent_as_tool=False,
+        router_mode_tool_count_threshold=2,
+    )
+    agent._match_subagent = lambda _query: SimpleNamespace(  # type: ignore[assignment]
+        subagent=SimpleNamespace(name="coder"),
+        confidence=0.9,
+        match_reason="forced test match",
+    )
+
+    decision = agent._decide_execution_path(
+        message="coder function",
+        conversation_context=[],
+    )
+
+    assert decision.path == ExecutionPath.SUBAGENT
+    assert decision.target == "coder"

@@ -1299,10 +1299,13 @@ class FeishuAdapter:
         markdown: str,
         reply_to: Optional[str] = None,
     ) -> str:
-        """Send markdown content as an interactive card."""
+        """Send markdown content as an interactive card (Card JSON 2.0 format)."""
         card = {
+            "schema": "2.0",
             "config": {"wide_screen_mode": True},
-            "elements": [{"tag": "markdown", "content": markdown}],
+            "body": {
+                "elements": [{"tag": "markdown", "content": markdown}],
+            },
         }
         return await self.send_card(to, card, reply_to)
 
@@ -1341,7 +1344,7 @@ class FeishuAdapter:
             return False
 
     def _build_streaming_card(self, markdown: str, *, loading: bool = False) -> str:
-        """Build a card JSON string for streaming updates.
+        """Build a card JSON string for streaming updates (Card JSON 2.0 format).
 
         Args:
             markdown: The markdown content to display.
@@ -1354,8 +1357,11 @@ class FeishuAdapter:
         if loading:
             content += "\n\n_Generating..._"
         card = {
+            "schema": "2.0",
             "config": {"wide_screen_mode": True},
-            "elements": [{"tag": "markdown", "content": content}],
+            "body": {
+                "elements": [{"tag": "markdown", "content": content}],
+            },
         }
         return json.dumps(card)
 
@@ -1365,14 +1371,17 @@ class FeishuAdapter:
         initial_text: str = "",
         reply_to: Optional[str] = None,
     ) -> Optional[str]:
-        """Send an initial loading card for streaming updates.
+        """Send an initial loading card for streaming updates (Card JSON 2.0 format).
 
         Returns the message_id for subsequent patch_card calls.
         """
         content = initial_text or "_Thinking..._"
         card = {
+            "schema": "2.0",
             "config": {"wide_screen_mode": True},
-            "elements": [{"tag": "markdown", "content": content}],
+            "body": {
+                "elements": [{"tag": "markdown", "content": content}],
+            },
         }
         try:
             return await self.send_card(to, card, reply_to)

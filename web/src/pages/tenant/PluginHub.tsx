@@ -33,6 +33,7 @@ import type {
   ChannelPluginCatalogItem,
   ChannelPluginConfigSchema,
   CreateChannelConfig,
+  PluginActionDetails,
   PluginDiagnostic,
   RuntimePlugin,
   UpdateChannelConfig,
@@ -104,6 +105,9 @@ export const PluginHub: React.FC = () => {
   const [pluginActionKey, setPluginActionKey] = useState<string | null>(null);
   const [configActionKey, setConfigActionKey] = useState<string | null>(null);
   const [installRequirement, setInstallRequirement] = useState('');
+  const [lastPluginActionDetails, setLastPluginActionDetails] = useState<PluginActionDetails | null>(
+    null
+  );
   const [configModalVisible, setConfigModalVisible] = useState(false);
   const [editingConfig, setEditingConfig] = useState<ChannelConfig | null>(null);
 
@@ -288,6 +292,7 @@ export const PluginHub: React.FC = () => {
     setPluginActionKey('install');
     try {
       const response = await channelService.installTenantPlugin(tenantId, installRequirement.trim());
+      setLastPluginActionDetails(response.details || null);
       message.success(response.message);
       setInstallRequirement('');
       await loadPluginRuntime();
@@ -304,12 +309,15 @@ export const PluginHub: React.FC = () => {
       if (!tenantId) return;
       setPluginActionKey(`${plugin.name}:${enabled ? 'enable' : 'disable'}`);
       try {
+        const response = enabled
+          ? await channelService.enableTenantPlugin(tenantId, plugin.name)
+          : await channelService.disableTenantPlugin(tenantId, plugin.name);
+        setLastPluginActionDetails(response.details || null);
         if (enabled) {
-          await channelService.enableTenantPlugin(tenantId, plugin.name);
+          message.success(`Plugin enabled: ${plugin.name}`);
         } else {
-          await channelService.disableTenantPlugin(tenantId, plugin.name);
+          message.success(`Plugin disabled: ${plugin.name}`);
         }
-        message.success(`Plugin ${enabled ? 'enabled' : 'disabled'}: ${plugin.name}`);
         await loadPluginRuntime();
         await loadChannelConfigs();
       } catch (error) {
@@ -326,6 +334,7 @@ export const PluginHub: React.FC = () => {
     setPluginActionKey('reload');
     try {
       const response = await channelService.reloadTenantPlugins(tenantId);
+      setLastPluginActionDetails(response.details || null);
       message.success(response.message);
       await loadPluginRuntime();
       await loadChannelConfigs();
@@ -342,6 +351,7 @@ export const PluginHub: React.FC = () => {
       setPluginActionKey(`${plugin.name}:uninstall`);
       try {
         const response = await channelService.uninstallTenantPlugin(tenantId, plugin.name);
+        setLastPluginActionDetails(response.details || null);
         message.success(response.message);
         await loadPluginRuntime();
         await loadChannelConfigs();
@@ -801,6 +811,27 @@ export const PluginHub: React.FC = () => {
           </Title>
         </div>
         <div className="px-5 pb-5">
+          {lastPluginActionDetails?.control_plane_trace && (
+            <div className="mb-4 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
+              <Space wrap size={[8, 8]}>
+                <Tag color="processing">{lastPluginActionDetails.control_plane_trace.action}</Tag>
+                <Text code>{lastPluginActionDetails.control_plane_trace.trace_id}</Text>
+                {Object.entries(lastPluginActionDetails.control_plane_trace.capability_counts).map(
+                  ([key, value]) => (
+                    <Tag key={key}>{`${key}:${value}`}</Tag>
+                  )
+                )}
+                {lastPluginActionDetails.channel_reload_plan && (
+                  <Text type="secondary">
+                    reload:{' '}
+                    {Object.entries(lastPluginActionDetails.channel_reload_plan)
+                      .map(([key, value]) => `${key}=${value}`)
+                      .join(', ')}
+                  </Text>
+                )}
+              </Space>
+            </div>
+          )}
           <Table
             dataSource={plugins}
             columns={pluginColumns}
