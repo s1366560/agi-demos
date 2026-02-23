@@ -166,21 +166,36 @@ describe('RightPanel (Refactored)', () => {
       <RightPanel
         tasks={[]}
         executionPathDecision={{
+          route_id: 'route_1',
+          trace_id: 'trace_1',
           path: 'react_loop',
           confidence: 0.8,
-          reason: 'default',
+          reason: 'default route',
           metadata: { domain_lane: 'general' },
         }}
         selectionTrace={{
+          route_id: 'route_1',
           initial_count: 12,
           final_count: 6,
           removed_total: 6,
+          tool_budget: 8,
           stages: [],
+        }}
+        policyFiltered={{
+          route_id: 'route_1',
+          trace_id: 'trace_1',
+          removed_total: 4,
+          stage_count: 2,
+          budget_exceeded_stages: ['semantic_ranker_stage'],
         }}
       />
     );
 
     expect(screen.getByTestId('execution-insights')).toBeInTheDocument();
     expect(screen.getByText('Execution Insights')).toBeInTheDocument();
+    expect(screen.getByText(/Path:/)).toBeInTheDocument();
+    expect(screen.getByText(/trace_id:/)).toBeInTheDocument();
+    expect(screen.getByText(/tool_budget:/)).toBeInTheDocument();
+    expect(screen.getByText(/budget_exceeded:/)).toBeInTheDocument();
   });
 });

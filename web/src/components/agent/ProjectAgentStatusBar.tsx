@@ -49,6 +49,8 @@ import {
   MessageCircle,
   RotateCcw,
   ListTodo,
+  Route,
+  Filter,
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
@@ -324,15 +326,27 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   const { t } = useTranslation();
 
   // Agent execution state from store (for real-time thinking/acting/observing)
-  const { agentState, storeIsStreaming, pendingToolsStack, tasks } = useAgentV3Store(
+  const {
+    agentState,
+    storeIsStreaming,
+    pendingToolsStack,
+    tasks,
+    executionPathDecision,
+    selectionTrace,
+    policyFiltered,
+  } = useAgentV3Store(
     useShallow((s) => {
       const convId = s.activeConversationId;
-      const convTasks = convId ? s.conversationStates.get(convId)?.tasks : undefined;
+      const convState = convId ? s.conversationStates.get(convId) : null;
+      const convTasks = convState?.tasks;
       return {
         agentState: s.agentState as AgentExecState,
         storeIsStreaming: s.isStreaming,
         pendingToolsStack: s.pendingToolsStack,
         tasks: convTasks ?? EMPTY_TASKS,
+        executionPathDecision: convState?.executionPathDecision ?? null,
+        selectionTrace: convState?.selectionTrace ?? null,
+        policyFiltered: convState?.policyFiltered ?? null,
       };
     })
   );
@@ -451,6 +465,13 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
   // Check if agent can be resumed (pool mode only)
   const canResume =
     enablePoolManagement && poolEnabled && poolInstance && lifecycleState === 'paused';
+
+  const domainLane =
+    (executionPathDecision?.metadata?.domain_lane as string | undefined) ??
+    selectionTrace?.domain_lane ??
+    policyFiltered?.domain_lane ??
+    null;
+  const hasInsights = Boolean(executionPathDecision || selectionTrace || policyFiltered);
 
   // Get instance key for pool operations
   const instanceKey = `${tenantId}:${projectId}:chat`;
@@ -586,7 +607,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
               <div
                 className={`
                   flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium
-                  ${poolTierConfig?.bgColor ?? 'bg-slate-100 dark:bg-slate-800'} 
+                  ${poolTierConfig?.bgColor ?? 'bg-slate-100 dark:bg-slate-800'}
                   ${poolTierConfig?.color ?? 'text-slate-500'}
                   transition-all duration-300 cursor-help
                 `}
@@ -772,6 +793,55 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
                 <Zap size={11} />
                 <span className="hidden sm:inline">
                   {status.planMode.currentMode === 'plan' ? '计划' : status.planMode.currentMode}
+                </span>
+              </div>
+            </LazyTooltip>
+          </>
+        )}
+
+        {/* Execution Insights */}
+        {hasInsights && (
+          <>
+            <div className="w-px h-3 bg-slate-300 dark:bg-slate-600 hidden sm:block" />
+            <LazyTooltip
+              title={
+                <div className="space-y-2 max-w-xs">
+                  <div className="font-medium border-b border-slate-200/20 pb-1">Execution Insights</div>
+                  {executionPathDecision && (
+                    <div className="flex items-start gap-2 text-xs">
+                      <Route size={12} className="mt-0.5 text-blue-400 flex-shrink-0" />
+                      <div>
+                        <span className="font-medium">Path:</span>{' '}
+                        {executionPathDecision.path.replace(/_/g, ' ')} (
+                        {executionPathDecision.confidence.toFixed(2)})
+                        {domainLane && <span className="ml-1 opacity-70">· lane {domainLane}</span>}
+                      </div>
+                    </div>
+                  )}
+                  {selectionTrace && (
+                    <div className="flex items-start gap-2 text-xs">
+                      <Filter size={12} className="mt-0.5 text-purple-400 flex-shrink-0" />
+                      <div>
+                        <span className="font-medium">Selection:</span> {selectionTrace.final_count}/
+                        {selectionTrace.initial_count} tools kept across {selectionTrace.stages.length} stages
+                      </div>
+                    </div>
+                  )}
+                  {policyFiltered && policyFiltered.removed_total > 0 && (
+                    <div className="flex items-start gap-2 text-xs">
+                      <Filter size={12} className="mt-0.5 text-amber-400 flex-shrink-0" />
+                      <div>
+                        <span className="font-medium">Policy:</span> filtered {policyFiltered.removed_total} tools
+                      </div>
+                    </div>
+                  )}
+                </div>
+              }
+            >
+              <div className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 cursor-help transition-colors">
+                <Route size={11} className="text-blue-500" />
+                <span className="hidden sm:inline">
+                  {executionPathDecision?.path.replace(/_/g, ' ') || 'Insights'}
                 </span>
               </div>
             </LazyTooltip>

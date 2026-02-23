@@ -156,6 +156,8 @@ export interface TaskCompleteEventData {
 }
 
 export interface ExecutionPathDecidedEventData {
+  route_id?: string;
+  trace_id?: string;
   path: string;
   confidence: number;
   reason: string;
@@ -173,17 +175,25 @@ export interface SelectionTraceStageData {
 }
 
 export interface SelectionTraceEventData {
+  route_id?: string;
+  trace_id?: string;
   initial_count: number;
   final_count: number;
   removed_total: number;
   domain_lane?: string | null;
+  tool_budget?: number;
+  budget_exceeded_stages?: string[];
   stages: SelectionTraceStageData[];
 }
 
 export interface PolicyFilteredEventData {
+  route_id?: string;
+  trace_id?: string;
   removed_total: number;
   stage_count: number;
   domain_lane?: string | null;
+  tool_budget?: number;
+  budget_exceeded_stages?: string[];
 }
 
 /**
@@ -3328,6 +3338,9 @@ export interface LifecycleStatus {
 // ============================================
 
 export interface SubAgentRoutedEventData {
+  route_id?: string;
+  trace_id?: string;
+  session_id?: string;
   subagent_id: string;
   subagent_name: string;
   confidence: number;
@@ -3399,33 +3412,51 @@ export interface SubAgentAnnounceGiveupEventData {
 }
 
 export interface ParallelStartedEventData {
+  route_id?: string;
+  trace_id?: string;
+  session_id?: string;
   task_count: number;
   subtasks: Array<{ subagent_name: string; task: string }>;
 }
 
 export interface ParallelCompletedEventData {
+  route_id?: string;
+  trace_id?: string;
+  session_id?: string;
   results: Array<{ subagent_name: string; summary: string; success: boolean }>;
   total_time_ms?: number;
 }
 
 export interface ChainStartedEventData {
+  route_id?: string;
+  trace_id?: string;
+  session_id?: string;
   step_count: number;
   chain_name?: string;
 }
 
 export interface ChainStepStartedEventData {
+  route_id?: string;
+  trace_id?: string;
+  session_id?: string;
   step_index: number;
   step_name?: string;
   subagent_name: string;
 }
 
 export interface ChainStepCompletedEventData {
+  route_id?: string;
+  trace_id?: string;
+  session_id?: string;
   step_index: number;
   summary: string;
   success: boolean;
 }
 
 export interface ChainCompletedEventData {
+  route_id?: string;
+  trace_id?: string;
+  session_id?: string;
   total_steps: number;
   total_time_ms?: number;
   success: boolean;

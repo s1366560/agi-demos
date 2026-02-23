@@ -34,6 +34,7 @@ import type {
   ChannelPluginConfigSchema,
   CreateChannelConfig,
   PluginActionDetails,
+  PluginActionResponse,
   PluginDiagnostic,
   RuntimePlugin,
   UpdateChannelConfig,
@@ -68,6 +69,15 @@ const humanizeFieldName = (fieldName: string): string =>
     .filter(Boolean)
     .map((part) => part[0]?.toUpperCase() + part.slice(1))
     .join(' ');
+
+interface PluginActionTimelineEntry {
+  id: string;
+  action: string;
+  message: string;
+  success: boolean;
+  timestamp: string;
+  details: PluginActionDetails | null;
+}
 
 export const PluginHub: React.FC = () => {
   const { tenantId: urlTenantId } = useParams<{ tenantId?: string }>();
@@ -109,8 +119,27 @@ export const PluginHub: React.FC = () => {
   const [installRequirement, setInstallRequirement] = useState('');
   const [lastPluginActionDetails, setLastPluginActionDetails] =
     useState<PluginActionDetails | null>(null);
+  const [pluginActionTimeline, setPluginActionTimeline] = useState<PluginActionTimelineEntry[]>([]);
   const [configModalVisible, setConfigModalVisible] = useState(false);
   const [editingConfig, setEditingConfig] = useState<ChannelConfig | null>(null);
+
+  const recordPluginAction = useCallback((response: PluginActionResponse, fallbackAction: string) => {
+    const details = response.details || null;
+    setLastPluginActionDetails(details);
+    const controlPlaneTrace = details?.control_plane_trace;
+    const timestamp = controlPlaneTrace?.timestamp || new Date().toISOString();
+    const traceId = controlPlaneTrace?.trace_id;
+    const action = controlPlaneTrace?.action || fallbackAction;
+    const entry: PluginActionTimelineEntry = {
+      id: traceId || `${timestamp}:${action}`,
+      action,
+      message: response.message,
+      success: response.success,
+      timestamp,
+      details,
+    };
+    setPluginActionTimeline((prev) => [entry, ...prev].slice(0, 10));
+  }, []);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -224,10 +253,10 @@ export const PluginHub: React.FC = () => {
     if (!defaults || typeof defaults !== 'object') return;
 
     const currentValues = form.getFieldsValue(true);
-    const nextValues: Record<string, unknown> = {};
+    const nextValues: Record<string, any> = {};
     const currentExtraSettings =
       currentValues.extra_settings && typeof currentValues.extra_settings === 'object'
-        ? { ...(currentValues.extra_settings as Record<string, unknown>) }
+        ? { ...(currentValues.extra_settings as Record<string, any>) }
         : {};
 
     Object.entries(defaults).forEach(([key, value]) => {
@@ -301,7 +330,7 @@ export const PluginHub: React.FC = () => {
         tenantId,
         installRequirement.trim()
       );
-      setLastPluginActionDetails(response.details || null);
+      recordPluginAction(response, 'install');
       message.success(response.message);
       setInstallRequirement('');
       await loadPluginRuntime();
@@ -311,7 +340,7 @@ export const PluginHub: React.FC = () => {
     } finally {
       setPluginActionKey(null);
     }
-  }, [installRequirement, loadChannelConfigs, loadPluginRuntime, tenantId]);
+  }, [installRequirement, loadChannelConfigs, loadPluginRuntime, recordPluginAction, tenantId]);
 
   const handleTogglePlugin = useCallback(
     async (plugin: RuntimePlugin, enabled: boolean) => {
@@ -321,7 +350,7 @@ export const PluginHub: React.FC = () => {
         const response = enabled
           ? await channelService.enableTenantPlugin(tenantId, plugin.name)
           : await channelService.disableTenantPlugin(tenantId, plugin.name);
-        setLastPluginActionDetails(response.details || null);
+        recordPluginAction(response, enabled ? 'enable' : 'disable');
         if (enabled) {
           message.success(`Plugin enabled: ${plugin.name}`);
         } else {
@@ -335,7 +364,7 @@ export const PluginHub: React.FC = () => {
         setPluginActionKey(null);
       }
     },
-    [loadChannelConfigs, loadPluginRuntime, tenantId]
+    [loadChannelConfigs, loadPluginRuntime, recordPluginAction, tenantId]
   );
 
   const handleReloadPlugins = useCallback(async () => {
@@ -343,7 +372,7 @@ export const PluginHub: React.FC = () => {
     setPluginActionKey('reload');
     try {
       const response = await channelService.reloadTenantPlugins(tenantId);
-      setLastPluginActionDetails(response.details || null);
+      recordPluginAction(response, 'reload');
       message.success(response.message);
       await loadPluginRuntime();
       await loadChannelConfigs();
@@ -352,7 +381,7 @@ export const PluginHub: React.FC = () => {
     } finally {
       setPluginActionKey(null);
     }
-  }, [loadChannelConfigs, loadPluginRuntime, tenantId]);
+  }, [loadChannelConfigs, loadPluginRuntime, recordPluginAction, tenantId]);
 
   const handleUninstallPlugin = useCallback(
     async (plugin: RuntimePlugin) => {
@@ -360,7 +389,7 @@ export const PluginHub: React.FC = () => {
       setPluginActionKey(`${plugin.name}:uninstall`);
       try {
         const response = await channelService.uninstallTenantPlugin(tenantId, plugin.name);
-        setLastPluginActionDetails(response.details || null);
+        recordPluginAction(response, 'uninstall');
         message.success(response.message);
         await loadPluginRuntime();
         await loadChannelConfigs();
@@ -370,7 +399,7 @@ export const PluginHub: React.FC = () => {
         setPluginActionKey(null);
       }
     },
-    [loadChannelConfigs, loadPluginRuntime, tenantId]
+    [loadChannelConfigs, loadPluginRuntime, recordPluginAction, tenantId]
   );
 
   const handleAddConfig = useCallback(() => {
@@ -460,18 +489,19 @@ export const PluginHub: React.FC = () => {
     }
     try {
       const values = await form.validateFields();
-      const payload: Record<string, unknown> = { ...values };
+      const payload: Partial<CreateChannelConfig & UpdateChannelConfig> = { ...values };
+      const mutablePayload = payload as Record<string, unknown>;
       const extraSettings =
-        payload.extra_settings && typeof payload.extra_settings === 'object'
-          ? { ...(payload.extra_settings as Record<string, unknown>) }
+        mutablePayload.extra_settings && typeof mutablePayload.extra_settings === 'object'
+          ? { ...(mutablePayload.extra_settings as Record<string, unknown>) }
           : undefined;
 
       if (activeChannelSchema?.schema_supported) {
         const secretPaths = activeChannelSchema.secret_paths || [];
         secretPaths.forEach((path) => {
           if (CHANNEL_SETTING_FIELDS.has(path)) {
-            if (editingConfig && (payload[path] === undefined || payload[path] === '')) {
-              delete payload[path];
+            if (editingConfig && (mutablePayload[path] === undefined || mutablePayload[path] === '')) {
+              delete mutablePayload[path];
             }
           } else if (extraSettings && editingConfig) {
             if (extraSettings[path] === undefined || extraSettings[path] === '') {
@@ -481,8 +511,8 @@ export const PluginHub: React.FC = () => {
         });
       } else if (editingConfig) {
         ['app_secret', 'encrypt_key', 'verification_token'].forEach((path) => {
-          if (payload[path] === undefined || payload[path] === '') {
-            delete payload[path];
+          if (mutablePayload[path] === undefined || mutablePayload[path] === '') {
+            delete mutablePayload[path];
           }
         });
       }
@@ -501,9 +531,9 @@ export const PluginHub: React.FC = () => {
       payload.extra_settings =
         extraSettings && Object.keys(extraSettings).length > 0 ? extraSettings : undefined;
 
-      Object.keys(payload).forEach((key) => {
-        if (payload[key] === undefined) {
-          delete payload[key];
+      Object.keys(mutablePayload).forEach((key) => {
+        if (mutablePayload[key] === undefined) {
+          delete mutablePayload[key];
         }
       });
 
@@ -514,7 +544,17 @@ export const PluginHub: React.FC = () => {
         await channelService.updateConfig(editingConfig.id, updatePayload);
         message.success('Configuration updated');
       } else {
-        await channelService.createConfig(selectedProjectId, payload as CreateChannelConfig);
+        const channelType = payload.channel_type;
+        const channelName = payload.name;
+        if (!channelType || !channelName) {
+          message.error('Channel type and name are required');
+          return;
+        }
+        await channelService.createConfig(selectedProjectId, {
+          ...payload,
+          channel_type: channelType,
+          name: channelName,
+        });
         message.success('Configuration created');
       }
 
@@ -853,6 +893,38 @@ export const PluginHub: React.FC = () => {
                   </Text>
                 )}
               </Space>
+            </div>
+          )}
+          {pluginActionTimeline.length > 0 && (
+            <div className="mb-4 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
+              <div className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                Operation Timeline
+              </div>
+              <div className="mt-2 space-y-2">
+                {pluginActionTimeline.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="rounded-md border border-slate-100 dark:border-slate-800 px-2 py-1.5"
+                  >
+                    <Space wrap size={[6, 6]}>
+                      <Tag color={entry.success ? 'success' : 'error'}>{entry.action}</Tag>
+                      {entry.details?.control_plane_trace?.trace_id ? (
+                        <Text code>{entry.details.control_plane_trace.trace_id}</Text>
+                      ) : null}
+                      <Text type="secondary">{new Date(entry.timestamp).toLocaleString()}</Text>
+                      <Text>{entry.message}</Text>
+                    </Space>
+                    {entry.details?.channel_reload_plan ? (
+                      <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                        reload:{' '}
+                        {Object.entries(entry.details.channel_reload_plan)
+                          .map(([key, value]) => `${key}=${value}`)
+                          .join(', ')}
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           <Table

@@ -53,7 +53,12 @@ import { SandboxSection } from './SandboxSection';
 
 import { MessageArea, InputBar, ProjectAgentStatusBar } from './index';
 
-import type { AgentTask } from '../../types/agent';
+import type {
+  AgentTask,
+  ExecutionPathDecidedEventData,
+  PolicyFilteredEventData,
+  SelectionTraceEventData,
+} from '../../types/agent';
 
 interface AgentChatContentProps {
   /** Optional className for styling */
@@ -221,7 +226,15 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       return state.conversationStates.get(convId)?.tasks;
     });
     const tasks = rawTasks ?? EMPTY_TASKS;
-    const { executionPathDecision, selectionTrace, policyFiltered } = useAgentV3Store(
+    const {
+      executionPathDecision,
+      selectionTrace,
+      policyFiltered,
+    }: {
+      executionPathDecision: ExecutionPathDecidedEventData | null;
+      selectionTrace: SelectionTraceEventData | null;
+      policyFiltered: PolicyFilteredEventData | null;
+    } = useAgentV3Store(
       useShallow((state) => {
         const convId = state.activeConversationId;
         const convState = convId ? state.conversationStates.get(convId) : null;
@@ -740,10 +753,10 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
             >
               <RightPanel
                 tasks={tasks}
+                sandboxId={activeSandboxId}
                 executionPathDecision={executionPathDecision}
                 selectionTrace={selectionTrace}
                 policyFiltered={policyFiltered}
-                sandboxId={activeSandboxId}
                 collapsed={false}
               />
             </div>

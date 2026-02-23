@@ -147,8 +147,15 @@ def test_build_tool_selection_context_carries_domain_lane_metadata() -> None:
         user_message="search memory graph",
         conversation_context=[{"role": "user", "content": "search memory graph"}],
         effective_mode="build",
-        routing_metadata={"domain_lane": "data", "router_mode_enabled": True},
+        routing_metadata={
+            "domain_lane": "data",
+            "router_mode_enabled": True,
+            "route_id": "route_123",
+            "trace_id": "trace_123",
+        },
     )
 
     assert selection_context.metadata.get("domain_lane") == "data"
+    assert selection_context.metadata.get("route_id") == "route_123"
+    assert selection_context.metadata.get("trace_id") == "trace_123"
     assert selection_context.metadata.get("routing_metadata", {}).get("router_mode_enabled") is True

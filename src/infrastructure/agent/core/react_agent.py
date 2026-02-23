@@ -26,6 +26,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Mapping, Optional
+from uuid import uuid4
 
 from src.domain.events.agent_events import (
     AgentDomainEvent,
@@ -573,6 +574,12 @@ class ReActAgent:
             domain_lane = routing_metadata.get("domain_lane")
             if isinstance(domain_lane, str) and domain_lane:
                 metadata["domain_lane"] = domain_lane
+            route_id = routing_metadata.get("route_id")
+            if isinstance(route_id, str) and route_id:
+                metadata["route_id"] = route_id
+            trace_id = routing_metadata.get("trace_id")
+            if isinstance(trace_id, str) and trace_id:
+                metadata["trace_id"] = trace_id
             metadata["routing_metadata"] = dict(routing_metadata)
         if self._tool_policy_layers:
             metadata["policy_layers"] = policy_context.to_mapping()
@@ -1083,14 +1090,21 @@ class ReActAgent:
             forced_skill_name=forced_skill_name,
             plan_mode_requested=plan_mode,
         )
+        route_id = uuid4().hex
+        trace_id = route_id
+        routing_metadata = dict(routing_decision.metadata or {})
+        routing_metadata["route_id"] = route_id
+        routing_metadata["trace_id"] = trace_id
         yield {
             "type": "execution_path_decided",
             "data": {
+                "route_id": route_id,
+                "trace_id": trace_id,
                 "path": routing_decision.path.value,
                 "confidence": routing_decision.confidence,
                 "reason": routing_decision.reason,
                 "target": routing_decision.target,
-                "metadata": routing_decision.metadata,
+                "metadata": routing_metadata,
             },
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
@@ -1126,6 +1140,9 @@ class ReActAgent:
                     yield {
                         "type": "subagent_routed",
                         "data": {
+                            "route_id": route_id,
+                            "trace_id": trace_id,
+                            "session_id": conversation_id,
                             "subagent_id": active_subagent.id,
                             "subagent_name": active_subagent.display_name,
                             "confidence": 1.0,
@@ -1148,6 +1165,9 @@ class ReActAgent:
                     yield {
                         "type": "subagent_routed",
                         "data": {
+                            "route_id": route_id,
+                            "trace_id": trace_id,
+                            "session_id": conversation_id,
                             "subagent_id": active_subagent.id,
                             "subagent_name": active_subagent.display_name,
                             "confidence": subagent_match.confidence,
@@ -1199,6 +1219,8 @@ class ReActAgent:
                                     conversation_context=conversation_context,
                                     project_id=project_id,
                                     tenant_id=tenant_id,
+                                    conversation_id=conversation_id,
+                                    route_id=route_id,
                                     abort_signal=abort_signal,
                                 ):
                                     yield event
@@ -1211,6 +1233,8 @@ class ReActAgent:
                                     conversation_context=conversation_context,
                                     project_id=project_id,
                                     tenant_id=tenant_id,
+                                    conversation_id=conversation_id,
+                                    route_id=route_id,
                                     abort_signal=abort_signal,
                                 ):
                                     yield event
@@ -1318,7 +1342,7 @@ class ReActAgent:
             user_message=processed_user_message,
             conversation_context=conversation_context,
             effective_mode=effective_mode,
-            routing_metadata=routing_decision.metadata,
+            routing_metadata=routing_metadata,
         )
 
         # Set permission manager mode to enforce tool restrictions
@@ -1467,6 +1491,8 @@ class ReActAgent:
         )
         if self._last_tool_selection_trace:
             removed_total = sum(len(step.removed_tools) for step in self._last_tool_selection_trace)
+            route_id = selection_context.metadata.get("route_id")
+            trace_id = selection_context.metadata.get("trace_id", route_id)
             trace_data = [
                 {
                     "stage": step.stage,
@@ -1478,13 +1504,34 @@ class ReActAgent:
                 }
                 for step in self._last_tool_selection_trace
             ]
+            semantic_stage = next(
+                (stage for stage in trace_data if stage["stage"] == "semantic_ranker_stage"),
+                None,
+            )
+            tool_budget_value = (
+                semantic_stage.get("explain", {}).get("max_tools") if semantic_stage else None
+            )
+            tool_budget = (
+                int(tool_budget_value)
+                if isinstance(tool_budget_value, (int, float))
+                else self._tool_selection_max_tools
+            )
+            budget_exceeded_stages = [
+                stage["stage"]
+                for stage in trace_data
+                if isinstance(stage.get("explain"), dict) and stage["explain"].get("budget_exceeded")
+            ]
             yield {
                 "type": "selection_trace",
                 "data": {
+                    "route_id": route_id,
+                    "trace_id": trace_id,
                     "initial_count": trace_data[0]["before_count"],
                     "final_count": trace_data[-1]["after_count"],
                     "removed_total": removed_total,
                     "domain_lane": selection_context.metadata.get("domain_lane"),
+                    "tool_budget": tool_budget,
+                    "budget_exceeded_stages": budget_exceeded_stages,
                     "stages": trace_data,
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1493,9 +1540,13 @@ class ReActAgent:
                 yield {
                     "type": "policy_filtered",
                     "data": {
+                        "route_id": route_id,
+                        "trace_id": trace_id,
                         "removed_total": removed_total,
                         "stage_count": len(trace_data),
                         "domain_lane": selection_context.metadata.get("domain_lane"),
+                        "tool_budget": tool_budget,
+                        "budget_exceeded_stages": budget_exceeded_stages,
                     },
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
@@ -2276,6 +2327,8 @@ class ReActAgent:
         conversation_context: List[Dict[str, str]],
         project_id: str,
         tenant_id: str,
+        conversation_id: Optional[str] = None,
+        route_id: Optional[str] = None,
         abort_signal: Optional[asyncio.Event] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """Execute multiple SubAgents in parallel via ParallelScheduler.
@@ -2297,6 +2350,9 @@ class ReActAgent:
             "type": "parallel_started",
             "data": {
                 "task_count": len(subtasks),
+                "session_id": conversation_id or None,
+                "route_id": route_id,
+                "trace_id": route_id,
                 "subtasks": [
                     {"id": st.id, "description": st.description, "agent": st.target_subagent}
                     for st in subtasks
@@ -2328,6 +2384,16 @@ class ReActAgent:
             tenant_id=tenant_id,
             abort_signal=abort_signal,
         ):
+            if route_id or conversation_id:
+                event_data = event.get("data")
+                if isinstance(event_data, dict):
+                    tagged_data = dict(event_data)
+                    if route_id:
+                        tagged_data.setdefault("route_id", route_id)
+                        tagged_data.setdefault("trace_id", route_id)
+                    if conversation_id:
+                        tagged_data.setdefault("session_id", conversation_id)
+                    event = {**event, "data": tagged_data}
             yield event
             # Collect results from completed subtask events
             if event.get("type") == "subtask_completed" and event.get("data", {}).get("result"):
@@ -2341,6 +2407,9 @@ class ReActAgent:
         yield {
             "type": "parallel_completed",
             "data": {
+                "session_id": conversation_id or None,
+                "route_id": route_id,
+                "trace_id": route_id,
                 "total_tasks": len(subtasks),
                 "completed": len(results),
                 "all_succeeded": aggregated.all_succeeded,
@@ -2356,6 +2425,9 @@ class ReActAgent:
                 "content": aggregated.summary,
                 "orchestration_mode": "parallel",
                 "subtask_count": len(subtasks),
+                "session_id": conversation_id or None,
+                "route_id": route_id,
+                "trace_id": route_id,
             },
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
@@ -2367,6 +2439,8 @@ class ReActAgent:
         conversation_context: List[Dict[str, str]],
         project_id: str,
         tenant_id: str,
+        conversation_id: Optional[str] = None,
+        route_id: Optional[str] = None,
         abort_signal: Optional[asyncio.Event] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """Execute SubAgents as a sequential chain (pipeline).
@@ -2428,6 +2502,16 @@ class ReActAgent:
             tenant_id=tenant_id,
             abort_signal=abort_signal,
         ):
+            if route_id or conversation_id:
+                event_data = event.get("data")
+                if isinstance(event_data, dict):
+                    tagged_data = dict(event_data)
+                    if route_id:
+                        tagged_data.setdefault("route_id", route_id)
+                        tagged_data.setdefault("trace_id", route_id)
+                    if conversation_id:
+                        tagged_data.setdefault("session_id", conversation_id)
+                    event = {**event, "data": tagged_data}
             yield event
 
         chain_result = chain.result
@@ -2437,6 +2521,9 @@ class ReActAgent:
                 "content": chain_result.final_summary if chain_result else "",
                 "orchestration_mode": "chain",
                 "step_count": len(chain_steps),
+                "session_id": conversation_id or None,
+                "route_id": route_id,
+                "trace_id": route_id,
             },
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }

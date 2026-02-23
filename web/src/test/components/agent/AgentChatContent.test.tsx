@@ -47,7 +47,7 @@ describe('useAgentChatPanelState (Extracted Hook)', () => {
 
     expect(result.current.panelCollapsed).toBe(true); // showPlanPanel defaults to false
     expect(result.current.panelWidth).toBe(360);
-    expect(result.current.inputHeight).toBe(160);
+    expect(result.current.inputHeight).toBe(180);
   });
 
   it('should calculate max panel width based on viewport', () => {

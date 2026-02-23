@@ -99,6 +99,26 @@ export function createStreamEventHandlers(
 
   // Type-safe wrapper for set to handle both object and updater forms
   const setState = set as any;
+  const appendExecutionInsightMarker = (
+    timeline: ConversationState['timeline'],
+    sourceEvent: AgentEvent<unknown>,
+    thought: string
+  ): ConversationState['timeline'] => {
+    const payload = sourceEvent.data as Record<string, unknown>;
+    const eventTimeUs =
+      typeof payload?.event_time_us === 'number' ? payload.event_time_us : Date.now() * 1000;
+    const eventCounter = typeof payload?.event_counter === 'number' ? payload.event_counter : 0;
+
+    return appendSSEEventToTimeline(timeline, {
+      type: 'thought',
+      data: {
+        thought,
+        thought_level: 'task',
+        event_time_us: eventTimeUs,
+        event_counter: eventCounter,
+      },
+    } as AgentEvent<ThoughtEventData>);
+  };
 
   return {
     onMessage: (event) => {
@@ -270,23 +290,43 @@ export function createStreamEventHandlers(
     },
 
     onExecutionPathDecided: (event) => {
-      const { updateConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
+      const decision = event.data as ExecutionPathDecidedEventData;
+      const convState = getConversationState(handlerConversationId);
+      const insight = `[Routing] ${decision.path} (${decision.confidence.toFixed(2)}) - ${decision.reason}`;
+      const updatedTimeline = appendExecutionInsightMarker(convState.timeline, event, insight);
+
       updateConversationState(handlerConversationId, {
-        executionPathDecision: event.data as ExecutionPathDecidedEventData,
+        executionPathDecision: decision,
+        timeline: updatedTimeline,
       });
     },
 
     onSelectionTrace: (event) => {
-      const { updateConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
+      const selection = event.data as SelectionTraceEventData;
+      const convState = getConversationState(handlerConversationId);
+      const budgetText =
+        typeof selection.tool_budget === 'number' ? `, budget=${selection.tool_budget}` : '';
+      const insight = `[Selection] kept ${selection.final_count}/${selection.initial_count}, removed ${selection.removed_total}${budgetText}`;
+      const updatedTimeline = appendExecutionInsightMarker(convState.timeline, event, insight);
+
       updateConversationState(handlerConversationId, {
-        selectionTrace: event.data as SelectionTraceEventData,
+        selectionTrace: selection,
+        timeline: updatedTimeline,
       });
     },
 
     onPolicyFiltered: (event) => {
-      const { updateConversationState } = get();
+      const { updateConversationState, getConversationState } = get();
+      const filtered = event.data as PolicyFilteredEventData;
+      const convState = getConversationState(handlerConversationId);
+      const insight = `[Policy] filtered ${filtered.removed_total} tools across ${filtered.stage_count} stages`;
+      const updatedTimeline = appendExecutionInsightMarker(convState.timeline, event, insight);
+
       updateConversationState(handlerConversationId, {
-        policyFiltered: event.data as PolicyFilteredEventData,
+        policyFiltered: filtered,
+        timeline: updatedTimeline,
       });
     },
 
