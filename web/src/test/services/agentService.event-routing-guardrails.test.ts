@@ -37,6 +37,33 @@ describe('agentService event routing guardrails', () => {
     expect(onTaskComplete).toHaveBeenCalledTimes(1);
   });
 
+  it('routes execution diagnostics events to dedicated handlers', () => {
+    const onExecutionPathDecided = vi.fn();
+    const onSelectionTrace = vi.fn();
+    const onPolicyFiltered = vi.fn();
+    const handler: AgentStreamHandler = {
+      onExecutionPathDecided,
+      onSelectionTrace,
+      onPolicyFiltered,
+    };
+
+    route(
+      'execution_path_decided',
+      { path: 'react_loop', confidence: 0.6, reason: 'default path' },
+      handler
+    );
+    route(
+      'selection_trace',
+      { initial_count: 18, final_count: 9, removed_total: 9, stages: [] },
+      handler
+    );
+    route('policy_filtered', { removed_total: 9, stage_count: 4 }, handler);
+
+    expect(onExecutionPathDecided).toHaveBeenCalledTimes(1);
+    expect(onSelectionTrace).toHaveBeenCalledTimes(1);
+    expect(onPolicyFiltered).toHaveBeenCalledTimes(1);
+  });
+
   it('routes MCP and memory events to dedicated handlers', () => {
     const onMCPAppRegistered = vi.fn();
     const onMCPAppResult = vi.fn();

@@ -94,6 +94,8 @@ def test_policy_stage_merges_layered_allow_and_deny() -> None:
     policy = next(step for step in result.trace if step.stage == "policy_stage")
     assert "tenant" in policy.explain.get("policy_layers_applied", [])
     assert "agent" in policy.explain.get("policy_layers_applied", [])
+    assert policy.explain.get("conflicting_tools_count") == 1
+    assert "memory_search" in policy.explain.get("conflicting_tools_sample", [])
 
 
 @pytest.mark.unit

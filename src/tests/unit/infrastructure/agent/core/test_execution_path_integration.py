@@ -33,6 +33,8 @@ def test_decide_execution_path_respects_forced_subagent() -> None:
 
     assert decision.path == ExecutionPath.SUBAGENT
     assert decision.target == "coder"
+    assert decision.metadata.get("domain_lane") == "subagent"
+    assert decision.metadata.get("router_fabric_version") == "lane-v1"
 
 
 @pytest.mark.unit
@@ -103,6 +105,8 @@ def test_router_mode_threshold_skips_subagent_routing_when_below_threshold() -> 
     )
 
     assert decision.path == ExecutionPath.REACT_LOOP
+    assert decision.metadata.get("router_mode_enabled") is False
+    assert decision.metadata.get("router_fabric_version") == "lane-v1"
 
 
 @pytest.mark.unit
@@ -128,3 +132,23 @@ def test_router_mode_threshold_enables_subagent_routing_when_above_threshold() -
 
     assert decision.path == ExecutionPath.SUBAGENT
     assert decision.target == "coder"
+    assert decision.metadata.get("router_mode_enabled") is True
+    assert decision.metadata.get("router_fabric_version") == "lane-v1"
+
+
+@pytest.mark.unit
+def test_build_tool_selection_context_carries_domain_lane_metadata() -> None:
+    """Selection context should include routed domain lane when provided."""
+    agent = ReActAgent(model="test-model", tools={"read": _MockTool("read")})
+
+    selection_context = agent._build_tool_selection_context(
+        tenant_id="tenant-1",
+        project_id="project-1",
+        user_message="search memory graph",
+        conversation_context=[{"role": "user", "content": "search memory graph"}],
+        effective_mode="build",
+        routing_metadata={"domain_lane": "data", "router_mode_enabled": True},
+    )
+
+    assert selection_context.metadata.get("domain_lane") == "data"
+    assert selection_context.metadata.get("routing_metadata", {}).get("router_mode_enabled") is True

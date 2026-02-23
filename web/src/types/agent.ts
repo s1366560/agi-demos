@@ -155,6 +155,37 @@ export interface TaskCompleteEventData {
   total_tasks: number;
 }
 
+export interface ExecutionPathDecidedEventData {
+  path: string;
+  confidence: number;
+  reason: string;
+  target?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SelectionTraceStageData {
+  stage: string;
+  before_count: number;
+  after_count: number;
+  removed_count: number;
+  duration_ms: number;
+  explain?: Record<string, unknown>;
+}
+
+export interface SelectionTraceEventData {
+  initial_count: number;
+  final_count: number;
+  removed_total: number;
+  domain_lane?: string | null;
+  stages: SelectionTraceStageData[];
+}
+
+export interface PolicyFilteredEventData {
+  removed_total: number;
+  stage_count: number;
+  domain_lane?: string | null;
+}
+
 /**
  * Tool call information
  */
@@ -378,6 +409,10 @@ export type AgentEventType =
   | 'chain_step_completed' // Chain step completed
   | 'chain_completed' // Chain execution completed
   | 'background_launched' // Background SubAgent launched
+  // Router and tool selection diagnostics
+  | 'execution_path_decided' // Router path decision with metadata
+  | 'selection_trace' // Tool selection stage-by-stage trace
+  | 'policy_filtered' // Tool policy filtering summary
   // Task list events (DB-persistent task tracking)
   | 'task_list_updated' // Full task list replacement
   | 'task_updated' // Single task status change
@@ -1055,6 +1090,9 @@ export interface AgentStreamHandler {
   onChainStepCompleted?: (event: AgentEvent<ChainStepCompletedEventData>) => void;
   onChainCompleted?: (event: AgentEvent<ChainCompletedEventData>) => void;
   onBackgroundLaunched?: (event: AgentEvent<BackgroundLaunchedEventData>) => void;
+  onExecutionPathDecided?: (event: AgentEvent<ExecutionPathDecidedEventData>) => void;
+  onSelectionTrace?: (event: AgentEvent<SelectionTraceEventData>) => void;
+  onPolicyFiltered?: (event: AgentEvent<PolicyFilteredEventData>) => void;
   // Task list handlers
   onTaskListUpdated?: (event: AgentEvent<TaskListUpdatedEventData>) => void;
   onTaskUpdated?: (event: AgentEvent<TaskUpdatedEventData>) => void;

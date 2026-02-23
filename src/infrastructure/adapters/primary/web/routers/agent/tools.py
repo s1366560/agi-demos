@@ -4,6 +4,7 @@ Endpoints for listing tools and tool compositions.
 """
 
 import logging
+from collections import Counter
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -16,6 +17,9 @@ from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import User
 
 from .schemas import (
+    CapabilityDomainSummary,
+    CapabilitySummaryResponse,
+    PluginRuntimeCapabilitySummary,
     ToolCompositionResponse,
     ToolCompositionsListResponse,
     ToolInfo,
@@ -25,39 +29,102 @@ from .schemas import (
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+_CORE_TOOL_DEFINITIONS: tuple[tuple[str, str], ...] = (
+    (
+        "memory_search",
+        "Search through stored memories and knowledge in the graph.",
+    ),
+    (
+        "entity_lookup",
+        "Look up specific entities and their relationships.",
+    ),
+    (
+        "episode_retrieval",
+        "Retrieve historical episodes and conversations.",
+    ),
+    (
+        "memory_create",
+        "Create a new memory entry in the knowledge graph.",
+    ),
+    (
+        "graph_query",
+        "Execute a custom Cypher query on the knowledge graph.",
+    ),
+    (
+        "summary",
+        "Generate a concise summary of provided information.",
+    ),
+)
+
+
+def _build_core_tools() -> list[ToolInfo]:
+    return [
+        ToolInfo(name=name, description=description) for name, description in _CORE_TOOL_DEFINITIONS
+    ]
+
+
+def _classify_domain(tool_name: str) -> str:
+    normalized = tool_name.lower()
+    if normalized.startswith("memory_") or "entity" in normalized or "episode" in normalized:
+        return "memory"
+    if "graph" in normalized:
+        return "graph"
+    if "search" in normalized:
+        return "search"
+    if "summary" in normalized:
+        return "reasoning"
+    return "general"
+
 
 @router.get("/tools", response_model=ToolsListResponse)
 async def list_tools(
     current_user: User = Depends(get_current_user),
 ) -> ToolsListResponse:
     """List available agent tools."""
-    tools = [
-        ToolInfo(
-            name="memory_search",
-            description="Search through stored memories and knowledge in the graph.",
-        ),
-        ToolInfo(
-            name="entity_lookup",
-            description="Look up specific entities and their relationships.",
-        ),
-        ToolInfo(
-            name="episode_retrieval",
-            description="Retrieve historical episodes and conversations.",
-        ),
-        ToolInfo(
-            name="memory_create",
-            description="Create a new memory entry in the knowledge graph.",
-        ),
-        ToolInfo(
-            name="graph_query",
-            description="Execute a custom Cypher query on the knowledge graph.",
-        ),
-        ToolInfo(
-            name="summary",
-            description="Generate a concise summary of provided information.",
-        ),
-    ]
-    return ToolsListResponse(tools=tools)
+    return ToolsListResponse(tools=_build_core_tools())
+
+
+@router.get("/tools/capabilities", response_model=CapabilitySummaryResponse)
+async def get_tool_capabilities(
+    current_user: User = Depends(get_current_user),
+) -> CapabilitySummaryResponse:
+    """Get aggregated capability catalog summary for agent tools and plugin runtime."""
+    try:
+        from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
+        from src.infrastructure.agent.plugins.registry import get_plugin_registry
+
+        runtime_manager = get_plugin_runtime_manager()
+        await runtime_manager.ensure_loaded()
+        plugin_records, _ = runtime_manager.list_plugins(tenant_id=current_user.tenant_id)
+        registry = get_plugin_registry()
+
+        core_tools = _build_core_tools()
+        domain_counter = Counter(_classify_domain(tool.name) for tool in core_tools)
+
+        hook_handlers = registry.list_hooks()
+        plugin_runtime = PluginRuntimeCapabilitySummary(
+            plugins_total=len(plugin_records),
+            plugins_enabled=sum(1 for plugin in plugin_records if bool(plugin.get("enabled"))),
+            tool_factories=len(registry.list_tool_factories()),
+            channel_types=len(registry.list_channel_type_metadata()),
+            hook_handlers=sum(len(handlers) for handlers in hook_handlers.values()),
+            commands=len(registry.list_commands()),
+            services=len(registry.list_services()),
+            providers=len(registry.list_providers()),
+        )
+        domain_breakdown = [
+            CapabilityDomainSummary(domain=domain, tool_count=count)
+            for domain, count in sorted(domain_counter.items())
+        ]
+        return CapabilitySummaryResponse(
+            total_tools=len(core_tools),
+            core_tools=len(core_tools),
+            domain_breakdown=domain_breakdown,
+            plugin_runtime=plugin_runtime,
+        )
+    except Exception as e:
+        logger.error(f"Error getting tool capabilities: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get tool capabilities: {e!s}")
 
 
 @router.get("/tools/compositions", response_model=ToolCompositionsListResponse)
@@ -106,7 +173,7 @@ async def list_tool_compositions(
 
     except Exception as e:
         logger.error(f"Error listing tool compositions: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list tool compositions: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to list tool compositions: {e!s}")
 
 
 @router.get("/tools/compositions/{composition_id}", response_model=ToolCompositionResponse)
@@ -146,4 +213,4 @@ async def get_tool_composition(
         raise
     except Exception as e:
         logger.error(f"Error getting tool composition: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get tool composition: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get tool composition: {e!s}")

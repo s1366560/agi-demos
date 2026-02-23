@@ -136,6 +136,7 @@
   },
   "nav": {
     "dashboard": "仪表盘",
+    "agentWorkspace": "智能体工作台",
     "projects": "项目",
     "users": "用户管理",
     "settings": "设置",

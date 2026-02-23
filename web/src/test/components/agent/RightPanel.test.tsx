@@ -160,4 +160,27 @@ describe('RightPanel (Refactored)', () => {
   it('should have displayName for debugging', () => {
     expect(RightPanel.displayName).toBe('RightPanel');
   });
+
+  it('should render execution insights when provided', () => {
+    render(
+      <RightPanel
+        tasks={[]}
+        executionPathDecision={{
+          path: 'react_loop',
+          confidence: 0.8,
+          reason: 'default',
+          metadata: { domain_lane: 'general' },
+        }}
+        selectionTrace={{
+          initial_count: 12,
+          final_count: 6,
+          removed_total: 6,
+          stages: [],
+        }}
+      />
+    );
+
+    expect(screen.getByTestId('execution-insights')).toBeInTheDocument();
+    expect(screen.getByText('Execution Insights')).toBeInTheDocument();
+  });
 });

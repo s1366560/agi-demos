@@ -32,6 +32,9 @@ import type {
   ArtifactCreatedEvent,
   MemoryRecalledEventData,
   MemoryCapturedEventData,
+  ExecutionPathDecidedEventData,
+  SelectionTraceEventData,
+  PolicyFilteredEventData,
 } from '../../types/agent';
 import type { ConversationState, CostTrackingState } from '../../types/conversationState';
 import type { AdditionalAgentHandlers } from '../agentV3';
@@ -264,6 +267,27 @@ export function createStreamEventHandlers(
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, event);
       updateConversationState(handlerConversationId, { timeline: updatedTimeline });
+    },
+
+    onExecutionPathDecided: (event) => {
+      const { updateConversationState } = get();
+      updateConversationState(handlerConversationId, {
+        executionPathDecision: event.data as ExecutionPathDecidedEventData,
+      });
+    },
+
+    onSelectionTrace: (event) => {
+      const { updateConversationState } = get();
+      updateConversationState(handlerConversationId, {
+        selectionTrace: event.data as SelectionTraceEventData,
+      });
+    },
+
+    onPolicyFiltered: (event) => {
+      const { updateConversationState } = get();
+      updateConversationState(handlerConversationId, {
+        policyFiltered: event.data as PolicyFilteredEventData,
+      });
     },
 
     onReflectionComplete: (event) => {

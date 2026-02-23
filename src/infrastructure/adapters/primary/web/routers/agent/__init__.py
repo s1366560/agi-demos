@@ -8,6 +8,8 @@ from fastapi import APIRouter
 
 from . import config, conversations, events, hitl, messages, patterns, plans, templates, tools
 from .schemas import (
+    CapabilityDomainSummary,
+    CapabilitySummaryResponse,
     ChatRequest,
     ClarificationResponseRequest,
     ConversationResponse,
@@ -23,6 +25,7 @@ from .schemas import (
     PatternsListResponse,
     PatternStepResponse,
     PendingHITLResponse,
+    PluginRuntimeCapabilitySummary,
     RecoveryInfo,
     ResetPatternsResponse,
     TenantAgentConfigResponse,
@@ -56,6 +59,8 @@ __all__ = [
     "get_container_with_db",
     # Schemas
     "ChatRequest",
+    "CapabilityDomainSummary",
+    "CapabilitySummaryResponse",
     "ClarificationResponseRequest",
     "ConversationResponse",
     "CreateConversationRequest",
@@ -73,6 +78,7 @@ __all__ = [
     "RecoveryInfo",
     "ResetPatternsResponse",
     "TenantAgentConfigResponse",
+    "PluginRuntimeCapabilitySummary",
     "ToolCompositionResponse",
     "ToolCompositionsListResponse",
     "ToolInfo",

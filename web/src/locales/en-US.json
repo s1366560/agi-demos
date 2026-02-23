@@ -136,6 +136,7 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "agentWorkspace": "Agent Workspace",
     "projects": "Projects",
     "users": "Users",
     "settings": "Settings",

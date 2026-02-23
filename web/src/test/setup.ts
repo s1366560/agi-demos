@@ -502,6 +502,7 @@ const commonTranslations: Record<string, string> = {
 
   // Navigation
   'nav.dashboard': 'Dashboard',
+  'nav.agentWorkspace': 'Agent Workspace',
   'nav.projects': 'Projects',
   'nav.users': 'Users',
   'nav.settings': 'Settings',

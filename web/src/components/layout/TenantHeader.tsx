@@ -67,6 +67,12 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
   const allNav: NavItem[] = useMemo(
     () => [
       {
+        id: 'agent-workspace',
+        label: t('nav.agentWorkspace', 'Agent Workspace'),
+        path: `${basePath}/agent-workspace`,
+        icon: <Activity size={16} />,
+      },
+      {
         id: 'projects',
         label: t('nav.projects', 'Projects'),
         path: `${basePath}/projects`,
@@ -106,9 +112,9 @@ const TenantHeader: React.FC<TenantHeaderProps> = ({
     [basePath, t]
   );
 
-  // With 6 items, all fit on md+ screens; overflow only if needed
-  const visibleNav = allNav;
-  const overflowNav: NavItem[] = [];
+  const MAX_VISIBLE_NAV_ITEMS = 6;
+  const visibleNav = allNav.slice(0, MAX_VISIBLE_NAV_ITEMS);
+  const overflowNav = allNav.slice(MAX_VISIBLE_NAV_ITEMS);
 
   return (
     <header className="h-14 px-3 sm:px-4 bg-surface-light dark:bg-surface-dark border-b border-slate-200 dark:border-border-dark flex items-center flex-none shrink-0">

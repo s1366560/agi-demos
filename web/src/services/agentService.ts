@@ -126,6 +126,9 @@ import type {
   TaskCompleteEventData,
   MemoryRecalledEventData,
   MemoryCapturedEventData,
+  ExecutionPathDecidedEventData,
+  SelectionTraceEventData,
+  PolicyFilteredEventData,
 } from '../types/agent';
 
 // Use centralized HTTP client for REST API calls
@@ -1148,6 +1151,15 @@ class AgentServiceImpl implements AgentService {
         break;
       case 'background_launched':
         handler.onBackgroundLaunched?.(event as AgentEvent<BackgroundLaunchedEventData>);
+        break;
+      case 'execution_path_decided':
+        handler.onExecutionPathDecided?.(event as AgentEvent<ExecutionPathDecidedEventData>);
+        break;
+      case 'selection_trace':
+        handler.onSelectionTrace?.(event as AgentEvent<SelectionTraceEventData>);
+        break;
+      case 'policy_filtered':
+        handler.onPolicyFiltered?.(event as AgentEvent<PolicyFilteredEventData>);
         break;
       // Task list events
       case 'task_list_updated':

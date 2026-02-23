@@ -18,6 +18,9 @@ import type {
   PermissionAskedEventData,
   DoomLoopDetectedEventData,
   MemoryRecalledEventData,
+  ExecutionPathDecidedEventData,
+  SelectionTraceEventData,
+  PolicyFilteredEventData,
 } from './agent';
 // Re-export CostUpdateEventData for consumers that need to map to CostTrackingState
 export type { CostUpdateEventData } from './agent';
@@ -133,6 +136,12 @@ export interface ConversationState {
   // ===== Agent Tasks =====
   /** Agent-managed task checklist for this conversation */
   tasks: AgentTask[];
+  /** Latest execution path routing decision */
+  executionPathDecision: ExecutionPathDecidedEventData | null;
+  /** Latest stage-by-stage tool selection trace */
+  selectionTrace: SelectionTraceEventData | null;
+  /** Latest policy filtering summary */
+  policyFiltered: PolicyFilteredEventData | null;
 
   // ===== HITL (Human-In-The-Loop) State =====
   /** Pending clarification request */
@@ -196,6 +205,9 @@ export function createDefaultConversationState(): ConversationState {
 
     // Tasks
     tasks: [],
+    executionPathDecision: null,
+    selectionTrace: null,
+    policyFiltered: null,
 
     // HITL
     pendingClarification: null,

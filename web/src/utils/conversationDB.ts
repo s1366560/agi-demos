@@ -42,6 +42,9 @@ interface SerializedConversationState {
   doomLoopDetected: unknown;
   pendingHITLSummary: unknown;
   costTracking: unknown;
+  executionPathDecision?: unknown;
+  selectionTrace?: unknown;
+  policyFiltered?: unknown;
   // Metadata
   lastUpdated: number;
   conversationId: string;
@@ -110,6 +113,9 @@ function serializeState(
     doomLoopDetected: state.doomLoopDetected || null,
     pendingHITLSummary: state.pendingHITLSummary || null,
     costTracking: state.costTracking || null,
+    executionPathDecision: state.executionPathDecision || null,
+    selectionTrace: state.selectionTrace || null,
+    policyFiltered: state.policyFiltered || null,
     lastUpdated: Date.now(),
   };
 }
@@ -141,6 +147,10 @@ function deserializeState(stored: SerializedConversationState): ConversationStat
     doomLoopDetected: stored.doomLoopDetected as ConversationState['doomLoopDetected'],
     pendingHITLSummary: stored.pendingHITLSummary as ConversationState['pendingHITLSummary'],
     costTracking: stored.costTracking as ConversationState['costTracking'],
+    executionPathDecision:
+      (stored.executionPathDecision as ConversationState['executionPathDecision']) ?? null,
+    selectionTrace: (stored.selectionTrace as ConversationState['selectionTrace']) ?? null,
+    policyFiltered: (stored.policyFiltered as ConversationState['policyFiltered']) ?? null,
     suggestions: (stored as any).suggestions ?? [],
     tasks: (stored as any).tasks ?? [],
     appModelContext: (stored as any).appModelContext ?? null,

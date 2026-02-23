@@ -53,9 +53,7 @@ class ConversationResponse(BaseModel):
             status=conversation.status.value,
             message_count=conversation.message_count,
             created_at=conversation.created_at.isoformat(),
-            updated_at=conversation.updated_at.isoformat()
-            if conversation.updated_at
-            else None,
+            updated_at=conversation.updated_at.isoformat() if conversation.updated_at else None,
             summary=conversation.summary,
         )
 
@@ -96,6 +94,35 @@ class ToolsListResponse(BaseModel):
     """Response with list of available tools."""
 
     tools: list[ToolInfo]
+
+
+class CapabilityDomainSummary(BaseModel):
+    """Domain-level capability summary."""
+
+    domain: str
+    tool_count: int
+
+
+class PluginRuntimeCapabilitySummary(BaseModel):
+    """Plugin runtime capability counts."""
+
+    plugins_total: int
+    plugins_enabled: int
+    tool_factories: int
+    channel_types: int
+    hook_handlers: int
+    commands: int
+    services: int
+    providers: int
+
+
+class CapabilitySummaryResponse(BaseModel):
+    """Response with aggregated capability catalog summary."""
+
+    total_tools: int
+    core_tools: int
+    domain_breakdown: list[CapabilityDomainSummary]
+    plugin_runtime: PluginRuntimeCapabilitySummary
 
 
 class ToolCompositionResponse(BaseModel):

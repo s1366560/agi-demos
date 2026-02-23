@@ -205,9 +205,9 @@ def semantic_ranker_stage(
         history.append({"role": "user", "content": str(user_message)})
 
     selector = get_tool_selector()
-    semantic_backend = str(
-        context.metadata.get("semantic_backend", "embedding_vector")
-    ).strip().lower()
+    semantic_backend = (
+        str(context.metadata.get("semantic_backend", "embedding_vector")).strip().lower()
+    )
     selected_names = selector.select_tools(
         tools,
         CoreToolSelectionContext(
@@ -331,6 +331,9 @@ def _build_stage_explain(
         )
         explain["allow_tools_count"] = policy_info.get("allow_tools_count", 0)
         explain["deny_tools_count"] = policy_info.get("deny_tools_count", 0)
+        explain["conflicting_tools_count"] = policy_info.get("conflicting_tools_count", 0)
+        if policy_info.get("conflicting_tools_sample"):
+            explain["conflicting_tools_sample"] = policy_info.get("conflicting_tools_sample", [])
         explain["policy_layers_applied"] = policy_info.get("layers_applied", [])
         explain["policy_layer_order"] = list(policy_context.names)
         explain["unknown_allow_tools_count"] = policy_info.get("unknown_allow_tools_count", 0)
@@ -392,6 +395,7 @@ def _resolve_policy_lists(
         allow_tools.update(layer_allow)
         deny_tools.update(layer_deny)
 
+    conflicting_tools = allow_tools & deny_tools
     known_names = set(known_tool_names or set()) | set(CORE_TOOLS)
     unknown_allow_tools = set()
     unknown_deny_tools = set()
@@ -405,6 +409,8 @@ def _resolve_policy_lists(
         {
             "allow_tools_count": len(allow_tools),
             "deny_tools_count": len(deny_tools),
+            "conflicting_tools_count": len(conflicting_tools),
+            "conflicting_tools_sample": sorted(conflicting_tools)[:5],
             "layers_applied": layers_applied,
             "unknown_allow_tools_count": len(unknown_allow_tools),
             "unknown_deny_tools_count": len(unknown_deny_tools),

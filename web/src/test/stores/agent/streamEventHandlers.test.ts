@@ -392,4 +392,53 @@ describe('streamEventHandlers', () => {
       tasks,
     });
   });
+
+  it('should persist execution insights events in conversation state', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+
+    handlers.onExecutionPathDecided!({
+      type: 'execution_path_decided',
+      data: {
+        path: 'react_loop',
+        confidence: 0.75,
+        reason: 'Standard routing',
+        metadata: { domain_lane: 'general' },
+      },
+    } as any);
+    handlers.onSelectionTrace!({
+      type: 'selection_trace',
+      data: {
+        initial_count: 20,
+        final_count: 8,
+        removed_total: 12,
+        stages: [],
+      },
+    } as any);
+    handlers.onPolicyFiltered!({
+      type: 'policy_filtered',
+      data: {
+        removed_total: 12,
+        stage_count: 4,
+      },
+    } as any);
+
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({
+        executionPathDecision: expect.objectContaining({ path: 'react_loop' }),
+      })
+    );
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({
+        selectionTrace: expect.objectContaining({ final_count: 8 }),
+      })
+    );
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({
+        policyFiltered: expect.objectContaining({ removed_total: 12 }),
+      })
+    );
+  });
 });

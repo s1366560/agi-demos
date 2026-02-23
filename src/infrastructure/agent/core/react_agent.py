@@ -104,6 +104,13 @@ class ReActAgent:
     _SUBAGENT_ANNOUNCE_MAX_EVENTS = 20
     _SUBAGENT_ANNOUNCE_MAX_RETRIES = 2
     _SUBAGENT_ANNOUNCE_RETRY_DELAY_MS = 200
+    _DOMAIN_LANE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
+        ("plugin", ("plugin", "channel", "reload", "install", "uninstall", "enable", "disable")),
+        ("mcp", ("mcp", "sandbox", "tool server", "connector")),
+        ("governance", ("policy", "permission", "compliance", "audit", "risk", "guard")),
+        ("code", ("code", "refactor", "test", "build", "compile", "debug", "function", "class")),
+        ("data", ("memory", "entity", "graph", "sql", "database", "query", "episode")),
+    )
 
     def __init__(
         self,
@@ -543,6 +550,7 @@ class ReActAgent:
         user_message: str,
         conversation_context: List[Dict[str, str]],
         effective_mode: str,
+        routing_metadata: Optional[Mapping[str, Any]] = None,
     ) -> ToolSelectionContext:
         """Build selection context for context/intent/semantic/policy pipeline."""
         policy_context = PolicyContext.from_metadata(
@@ -561,6 +569,11 @@ class ReActAgent:
             "deny_tools": deny_tools,
             "policy_agent": {"deny_tools": deny_tools} if deny_tools else {},
         }
+        if routing_metadata:
+            domain_lane = routing_metadata.get("domain_lane")
+            if isinstance(domain_lane, str) and domain_lane:
+                metadata["domain_lane"] = domain_lane
+            metadata["routing_metadata"] = dict(routing_metadata)
         if self._tool_policy_layers:
             metadata["policy_layers"] = policy_context.to_mapping()
         return ToolSelectionContext(
@@ -569,6 +582,28 @@ class ReActAgent:
             metadata=metadata,
             policy_context=policy_context,
         )
+
+    def _infer_domain_lane(
+        self,
+        *,
+        message: str,
+        forced_subagent_name: Optional[str] = None,
+        forced_skill_name: Optional[str] = None,
+        plan_mode_requested: bool = False,
+    ) -> str:
+        """Infer routing lane for router-fabric diagnostics."""
+        if forced_subagent_name:
+            return "subagent"
+        if forced_skill_name:
+            return "skill"
+        if plan_mode_requested:
+            return "planning"
+
+        normalized = message.lower()
+        for lane, keywords in self._DOMAIN_LANE_RULES:
+            if any(keyword in normalized for keyword in keywords):
+                return lane
+        return "general"
 
     def _decide_execution_path(
         self,
@@ -580,12 +615,22 @@ class ReActAgent:
         plan_mode_requested: bool = False,
     ) -> RoutingDecision:
         """Decide execution path via centralized ExecutionRouter."""
+        domain_lane = self._infer_domain_lane(
+            message=message,
+            forced_subagent_name=forced_subagent_name,
+            forced_skill_name=forced_skill_name,
+            plan_mode_requested=plan_mode_requested,
+        )
         if forced_subagent_name:
             return RoutingDecision(
                 path=ExecutionPath.SUBAGENT,
                 confidence=1.0,
                 reason="Forced delegation via system instruction",
                 target=forced_subagent_name,
+                metadata={
+                    "domain_lane": domain_lane,
+                    "router_fabric_version": "lane-v1",
+                },
             )
         if forced_skill_name:
             return RoutingDecision(
@@ -593,12 +638,20 @@ class ReActAgent:
                 confidence=1.0,
                 reason="Forced skill execution requested",
                 target=forced_skill_name,
+                metadata={
+                    "domain_lane": domain_lane,
+                    "router_fabric_version": "lane-v1",
+                },
             )
         if plan_mode_requested:
             return RoutingDecision(
                 path=ExecutionPath.PLAN_MODE,
                 confidence=1.0,
                 reason="Plan mode explicitly requested",
+                metadata={
+                    "domain_lane": domain_lane,
+                    "router_fabric_version": "lane-v1",
+                },
             )
         if self.subagents and not self._enable_subagent_as_tool:
             # Preserve legacy pre-routing behavior: when subagent-as-tool is disabled,
@@ -607,7 +660,11 @@ class ReActAgent:
                 path=ExecutionPath.SUBAGENT,
                 confidence=0.6,
                 reason="Legacy subagent pre-routing enabled",
-                metadata={"legacy_preroute": True},
+                metadata={
+                    "legacy_preroute": True,
+                    "domain_lane": domain_lane,
+                    "router_fabric_version": "lane-v1",
+                },
             )
 
         available_tool_count = self._estimate_available_tool_count()
@@ -618,7 +675,13 @@ class ReActAgent:
             "router_mode_enabled": router_mode_enabled,
             "router_mode_tool_count_threshold": self._router_mode_tool_count_threshold,
         }
-        return self._execution_router.decide(message, routing_context)
+        decision = self._execution_router.decide(message, routing_context)
+        decision.metadata = dict(decision.metadata or {})
+        decision.metadata.setdefault("domain_lane", domain_lane)
+        decision.metadata.setdefault("router_fabric_version", "lane-v1")
+        decision.metadata["router_mode_enabled"] = router_mode_enabled
+        decision.metadata["available_tool_count"] = available_tool_count
+        return decision
 
     def _estimate_available_tool_count(self) -> int:
         """Estimate available tool count without mutating selection trace state."""
@@ -628,7 +691,9 @@ class ReActAgent:
                 if isinstance(dynamic_tools, dict):
                     return len(dynamic_tools)
             except Exception:
-                logger.warning("Failed to fetch dynamic tools for router threshold check", exc_info=True)
+                logger.warning(
+                    "Failed to fetch dynamic tools for router threshold check", exc_info=True
+                )
         return len(self.raw_tools)
 
     def _get_current_tools(
@@ -1253,6 +1318,7 @@ class ReActAgent:
             user_message=processed_user_message,
             conversation_context=conversation_context,
             effective_mode=effective_mode,
+            routing_metadata=routing_decision.metadata,
         )
 
         # Set permission manager mode to enforce tool restrictions
@@ -1418,6 +1484,7 @@ class ReActAgent:
                     "initial_count": trace_data[0]["before_count"],
                     "final_count": trace_data[-1]["after_count"],
                     "removed_total": removed_total,
+                    "domain_lane": selection_context.metadata.get("domain_lane"),
                     "stages": trace_data,
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -1428,6 +1495,7 @@ class ReActAgent:
                     "data": {
                         "removed_total": removed_total,
                         "stage_count": len(trace_data),
+                        "domain_lane": selection_context.metadata.get("domain_lane"),
                     },
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }

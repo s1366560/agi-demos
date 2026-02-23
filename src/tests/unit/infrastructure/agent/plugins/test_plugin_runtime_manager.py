@@ -28,7 +28,9 @@ async def test_ensure_loaded_registers_discovered_plugins(
             api.register_tool_factory(lambda _ctx: {"demo_tool": object()})
 
     registry = AgentPluginRegistry()
-    manager = PluginRuntimeManager(registry=registry, state_store=PluginStateStore(base_path=tmp_path))
+    manager = PluginRuntimeManager(
+        registry=registry, state_store=PluginStateStore(base_path=tmp_path)
+    )
     monkeypatch.setattr(
         "src.infrastructure.agent.plugins.manager.discover_plugins",
         lambda **_kwargs: (
@@ -337,10 +339,13 @@ async def test_install_plugin_reports_timeout(
         registry=AgentPluginRegistry(),
         state_store=PluginStateStore(base_path=tmp_path),
     )
+
     async def _slow_to_thread(*_args, **_kwargs):
         await asyncio.sleep(1)
 
-    monkeypatch.setattr("src.infrastructure.agent.plugins.manager.asyncio.to_thread", _slow_to_thread)
+    monkeypatch.setattr(
+        "src.infrastructure.agent.plugins.manager.asyncio.to_thread", _slow_to_thread
+    )
     monkeypatch.setattr("src.infrastructure.agent.plugins.manager._INSTALL_TIMEOUT_SECONDS", 0.01)
 
     result = await manager.install_plugin("demo-package")
@@ -385,7 +390,9 @@ async def test_uninstall_plugin_clears_global_and_tenant_state(
 ) -> None:
     """Successful uninstall should remove plugin state from global and tenant scopes."""
     state_store = PluginStateStore(base_path=tmp_path)
-    state_store.update_plugin("demo-plugin", enabled=True, source="entrypoint", package="demo-package")
+    state_store.update_plugin(
+        "demo-plugin", enabled=True, source="entrypoint", package="demo-package"
+    )
     state_store.update_plugin("demo-plugin", enabled=False, tenant_id="tenant-1")
 
     manager = PluginRuntimeManager(
@@ -422,3 +429,33 @@ async def test_uninstall_plugin_clears_global_and_tenant_state(
     assert result["success"] is True
     assert state_store.get_plugin("demo-plugin") == {}
     assert state_store.get_plugin("demo-plugin", tenant_id="tenant-1") == {}
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_set_plugin_enabled_serializes_global_mutations(tmp_path) -> None:
+    """Global enable/disable mutations should execute sequentially."""
+    state_store = PluginStateStore(base_path=tmp_path)
+    manager = PluginRuntimeManager(registry=AgentPluginRegistry(), state_store=state_store)
+
+    order: list[str] = []
+
+    async def _slow_reload() -> list:
+        order.append("reload-start")
+        await asyncio.sleep(0.01)
+        order.append("reload-end")
+        return []
+
+    manager.reload = AsyncMock(side_effect=_slow_reload)  # type: ignore[method-assign]
+
+    await asyncio.gather(
+        manager.set_plugin_enabled("plugin-a", enabled=False),
+        manager.set_plugin_enabled("plugin-b", enabled=False),
+    )
+
+    assert order == [
+        "reload-start",
+        "reload-end",
+        "reload-start",
+        "reload-end",
+    ]

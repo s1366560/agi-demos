@@ -40,6 +40,7 @@ class PluginRuntimeManager:
         self._state_store = state_store or PluginStateStore()
         self._loader = AgentPluginLoader(registry=self._registry)
         self._lock = asyncio.Lock()
+        self._mutation_lock = asyncio.Lock()
         self._loaded = False
         self._last_discovered: List[DiscoveredPlugin] = []
         self._strict_local_manifest = (
@@ -109,7 +110,9 @@ class PluginRuntimeManager:
                     "package": plugin.package,
                     "version": plugin.version,
                     "kind": _coalesce_str(state_entry.get("kind"), plugin.kind),
-                    "manifest_id": _coalesce_str(state_entry.get("manifest_id"), plugin.manifest_id),
+                    "manifest_id": _coalesce_str(
+                        state_entry.get("manifest_id"), plugin.manifest_id
+                    ),
                     "manifest_path": plugin.manifest_path,
                     "channels": _coalesce_string_list(
                         state_entry.get("channels"),
@@ -164,180 +167,187 @@ class PluginRuntimeManager:
         tenant_id: Optional[str] = None,
     ) -> List[PluginDiagnostic]:
         """Enable or disable a plugin and reload runtime registry."""
-        if tenant_id:
-            self._state_store.update_plugin(plugin_name, enabled=enabled, tenant_id=tenant_id)
-            return []
+        async with self._mutation_lock:
+            if tenant_id:
+                self._state_store.update_plugin(plugin_name, enabled=enabled, tenant_id=tenant_id)
+                return []
 
-        previous_state = self._state_store.get_plugin(plugin_name)
-        self._state_store.update_plugin(plugin_name, enabled=enabled)
-        try:
-            return await self.reload()
-        except Exception:
-            self._restore_plugin_state(plugin_name, previous_state)
-            raise
+            previous_state = self._state_store.get_plugin(plugin_name)
+            self._state_store.update_plugin(plugin_name, enabled=enabled)
+            try:
+                return await self.reload()
+            except Exception:
+                self._restore_plugin_state(plugin_name, previous_state)
+                raise
 
     async def install_plugin(self, requirement: str) -> Dict[str, Any]:
         """Install plugin package with pip and reload runtime registry."""
-        normalized_requirement = requirement.strip()
-        if not normalized_requirement:
-            return {
-                "success": False,
-                "error": "requirement is required",
-            }
+        async with self._mutation_lock:
+            normalized_requirement = requirement.strip()
+            if not normalized_requirement:
+                return {
+                    "success": False,
+                    "error": "requirement is required",
+                }
 
-        validation_error = _validate_requirement(normalized_requirement)
-        if validation_error:
-            return {
-                "success": False,
-                "requirement": normalized_requirement,
-                "error": validation_error,
-            }
+            validation_error = _validate_requirement(normalized_requirement)
+            if validation_error:
+                return {
+                    "success": False,
+                    "requirement": normalized_requirement,
+                    "error": validation_error,
+                }
 
-        before_plugins = {item["name"] for item in self.list_plugins()[0]}
-        command = [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "--disable-pip-version-check",
-            "--no-input",
-            normalized_requirement,
-        ]
-        try:
-            process = await asyncio.wait_for(
-                asyncio.to_thread(
-                    subprocess.run,
-                    command,
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                ),
-                timeout=_INSTALL_TIMEOUT_SECONDS,
-            )
-        except asyncio.TimeoutError:
-            return {
-                "success": False,
-                "requirement": normalized_requirement,
-                "error": f"pip install timed out after {_INSTALL_TIMEOUT_SECONDS:.0f} seconds",
-            }
+            before_plugins = {item["name"] for item in self.list_plugins()[0]}
+            command = [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--disable-pip-version-check",
+                "--no-input",
+                normalized_requirement,
+            ]
+            try:
+                process = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        subprocess.run,
+                        command,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    ),
+                    timeout=_INSTALL_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                return {
+                    "success": False,
+                    "requirement": normalized_requirement,
+                    "error": f"pip install timed out after {_INSTALL_TIMEOUT_SECONDS:.0f} seconds",
+                }
 
-        if process.returncode != 0:
+            if process.returncode != 0:
+                return {
+                    "success": False,
+                    "requirement": normalized_requirement,
+                    "command": command,
+                    "returncode": process.returncode,
+                    "stdout": _trim_output(process.stdout),
+                    "stderr": _trim_output(process.stderr),
+                }
+
+            diagnostics = await self.reload()
+            after_plugin_records = self.list_plugins()[0]
+            after_plugins = {item["name"] for item in after_plugin_records}
+            new_plugins = sorted(after_plugins - before_plugins)
+            requirement_name = _extract_requirement_name(normalized_requirement)
+            after_by_name = {item["name"]: item for item in after_plugin_records}
+            for plugin_name in new_plugins:
+                record = after_by_name.get(plugin_name, {})
+                self._state_store.update_plugin(
+                    plugin_name,
+                    enabled=True,
+                    source="entrypoint",
+                    package=requirement_name,
+                    requirement=normalized_requirement,
+                    kind=record.get("kind"),
+                    manifest_id=record.get("manifest_id"),
+                    channels=record.get("channels"),
+                    providers=record.get("providers"),
+                    skills=record.get("skills"),
+                )
+
             return {
-                "success": False,
+                "success": True,
                 "requirement": normalized_requirement,
                 "command": command,
-                "returncode": process.returncode,
                 "stdout": _trim_output(process.stdout),
                 "stderr": _trim_output(process.stderr),
+                "new_plugins": new_plugins,
+                "diagnostics": [_serialize_diagnostic(item) for item in diagnostics],
             }
-
-        diagnostics = await self.reload()
-        after_plugin_records = self.list_plugins()[0]
-        after_plugins = {item["name"] for item in after_plugin_records}
-        new_plugins = sorted(after_plugins - before_plugins)
-        requirement_name = _extract_requirement_name(normalized_requirement)
-        after_by_name = {item["name"]: item for item in after_plugin_records}
-        for plugin_name in new_plugins:
-            record = after_by_name.get(plugin_name, {})
-            self._state_store.update_plugin(
-                plugin_name,
-                enabled=True,
-                source="entrypoint",
-                package=requirement_name,
-                requirement=normalized_requirement,
-                kind=record.get("kind"),
-                manifest_id=record.get("manifest_id"),
-                channels=record.get("channels"),
-                providers=record.get("providers"),
-                skills=record.get("skills"),
-            )
-
-        return {
-            "success": True,
-            "requirement": normalized_requirement,
-            "command": command,
-            "stdout": _trim_output(process.stdout),
-            "stderr": _trim_output(process.stderr),
-            "new_plugins": new_plugins,
-            "diagnostics": [_serialize_diagnostic(item) for item in diagnostics],
-        }
 
     async def uninstall_plugin(self, plugin_name: str) -> Dict[str, Any]:
         """Uninstall plugin package by plugin name and reload runtime registry."""
-        normalized_name = plugin_name.strip()
-        if not normalized_name:
-            return {
-                "success": False,
-                "error": "plugin_name is required",
-            }
+        async with self._mutation_lock:
+            normalized_name = plugin_name.strip()
+            if not normalized_name:
+                return {
+                    "success": False,
+                    "error": "plugin_name is required",
+                }
 
-        plugins, _ = self.list_plugins()
-        plugin_record = next((item for item in plugins if item["name"] == normalized_name), None)
-        if not plugin_record:
-            return {
-                "success": False,
-                "plugin_name": normalized_name,
-                "error": "Plugin not found in runtime inventory",
-            }
-
-        package_name = plugin_record.get("package")
-        if not package_name:
-            return {
-                "success": False,
-                "plugin_name": normalized_name,
-                "error": "Only package-managed plugins can be uninstalled",
-            }
-
-        command = [
-            sys.executable,
-            "-m",
-            "pip",
-            "uninstall",
-            "--disable-pip-version-check",
-            "--yes",
-            str(package_name),
-        ]
-        try:
-            process = await asyncio.wait_for(
-                asyncio.to_thread(
-                    subprocess.run,
-                    command,
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                ),
-                timeout=_UNINSTALL_TIMEOUT_SECONDS,
+            plugins, _ = self.list_plugins()
+            plugin_record = next(
+                (item for item in plugins if item["name"] == normalized_name), None
             )
-        except asyncio.TimeoutError:
-            return {
-                "success": False,
-                "plugin_name": normalized_name,
-                "package": package_name,
-                "error": f"pip uninstall timed out after {_UNINSTALL_TIMEOUT_SECONDS:.0f} seconds",
-            }
+            if not plugin_record:
+                return {
+                    "success": False,
+                    "plugin_name": normalized_name,
+                    "error": "Plugin not found in runtime inventory",
+                }
 
-        if process.returncode != 0:
+            package_name = plugin_record.get("package")
+            if not package_name:
+                return {
+                    "success": False,
+                    "plugin_name": normalized_name,
+                    "error": "Only package-managed plugins can be uninstalled",
+                }
+
+            command = [
+                sys.executable,
+                "-m",
+                "pip",
+                "uninstall",
+                "--disable-pip-version-check",
+                "--yes",
+                str(package_name),
+            ]
+            try:
+                process = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        subprocess.run,
+                        command,
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    ),
+                    timeout=_UNINSTALL_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                return {
+                    "success": False,
+                    "plugin_name": normalized_name,
+                    "package": package_name,
+                    "error": (
+                        f"pip uninstall timed out after {_UNINSTALL_TIMEOUT_SECONDS:.0f} seconds"
+                    ),
+                }
+
+            if process.returncode != 0:
+                return {
+                    "success": False,
+                    "plugin_name": normalized_name,
+                    "package": package_name,
+                    "command": command,
+                    "returncode": process.returncode,
+                    "stdout": _trim_output(process.stdout),
+                    "stderr": _trim_output(process.stderr),
+                }
+
+            diagnostics = await self.reload()
+            self._state_store.remove_plugin_everywhere(normalized_name)
             return {
-                "success": False,
+                "success": True,
                 "plugin_name": normalized_name,
                 "package": package_name,
                 "command": command,
-                "returncode": process.returncode,
                 "stdout": _trim_output(process.stdout),
                 "stderr": _trim_output(process.stderr),
+                "diagnostics": [_serialize_diagnostic(item) for item in diagnostics],
             }
-
-        diagnostics = await self.reload()
-        self._state_store.remove_plugin_everywhere(normalized_name)
-        return {
-            "success": True,
-            "plugin_name": normalized_name,
-            "package": package_name,
-            "command": command,
-            "stdout": _trim_output(process.stdout),
-            "stderr": _trim_output(process.stderr),
-            "diagnostics": [_serialize_diagnostic(item) for item in diagnostics],
-        }
 
     def _restore_plugin_state(self, plugin_name: str, previous_state: Dict[str, Any]) -> None:
         if not previous_state:

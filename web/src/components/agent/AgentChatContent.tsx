@@ -221,6 +221,17 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       return state.conversationStates.get(convId)?.tasks;
     });
     const tasks = rawTasks ?? EMPTY_TASKS;
+    const { executionPathDecision, selectionTrace, policyFiltered } = useAgentV3Store(
+      useShallow((state) => {
+        const convId = state.activeConversationId;
+        const convState = convId ? state.conversationStates.get(convId) : null;
+        return {
+          executionPathDecision: convState?.executionPathDecision ?? null,
+          selectionTrace: convState?.selectionTrace ?? null,
+          policyFiltered: convState?.policyFiltered ?? null,
+        };
+      })
+    );
 
     // Local UI state
     const [inputHeight, setInputHeight] = useState(INPUT_DEFAULT_HEIGHT);
@@ -727,7 +738,14 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
               className="h-full overflow-hidden border-l border-slate-200/60 dark:border-slate-700/50 mobile-full"
               style={{ width: rightPercent }}
             >
-              <RightPanel tasks={tasks} sandboxId={activeSandboxId} collapsed={false} />
+              <RightPanel
+                tasks={tasks}
+                executionPathDecision={executionPathDecision}
+                selectionTrace={selectionTrace}
+                policyFiltered={policyFiltered}
+                sandboxId={activeSandboxId}
+                collapsed={false}
+              />
             </div>
           </div>
 
