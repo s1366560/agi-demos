@@ -129,6 +129,9 @@ async def lifespan(app: FastAPI):
 
     # Initialize Redis client for event bus
     redis_client = await initialize_redis_client()
+    # Wire Redis into graph service for cached embedding support
+    if redis_client and graph_service and hasattr(graph_service, "set_redis_client"):
+        graph_service.set_redis_client(redis_client)
 
     # Initialize DI Container
     container = initialize_container(

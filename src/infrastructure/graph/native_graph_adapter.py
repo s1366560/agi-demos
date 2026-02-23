@@ -31,7 +31,7 @@ from .schemas import (
     EpisodicEdge,
     EpisodicNode,
 )
-from .search.hybrid_search import HybridSearch
+from .search.hybrid_search import GraphSearchConfig, HybridSearch
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +89,8 @@ class NativeGraphAdapter(GraphServicePort):
         self._enable_reflexion = enable_reflexion
         self._reflexion_max_iterations = reflexion_max_iterations
         self._auto_clear_embeddings = auto_clear_embeddings
+        # Optional Redis client for CachedEmbeddingService
+        self._redis_client: Optional[Any] = None
 
         # Lazily initialized components
         self._entity_extractor: Optional[EntityExtractor] = None
@@ -133,6 +135,25 @@ class NativeGraphAdapter(GraphServicePort):
         """
         self._transaction_coordinator = coordinator
 
+    def set_redis_client(self, redis_client: Any) -> None:
+        """
+        Set the Redis client for cached embedding support.
+
+        When set, HybridSearch will wrap the embedding service with
+        CachedEmbeddingService for L1+Redis caching of embeddings.
+
+        Should be called after initialization when Redis becomes available.
+
+        Args:
+            redis_client: Redis client instance for L2 caching
+        """
+        self._redis_client = redis_client
+        # Reset hybrid search so it gets recreated with cached embeddings
+        self._hybrid_search = None
+        logger.info(
+            "Redis client set on NativeGraphAdapter; hybrid search will use cached embeddings"
+        )
+
     def get_transaction_coordinator(self) -> Optional[Any]:
         """Get the current transaction coordinator."""
         return self._transaction_coordinator
@@ -164,11 +185,23 @@ class NativeGraphAdapter(GraphServicePort):
         return self._reflexion_checker
 
     def _get_hybrid_search(self) -> HybridSearch:
-        """Get or create hybrid search."""
+        """Get or create hybrid search with optional cached embeddings."""
         if self._hybrid_search is None:
+            embedding_service = self._embedding_service
+
+            # Wrap with CachedEmbeddingService if Redis is available
+            if self._redis_client is not None:
+                from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
+
+                embedding_service = CachedEmbeddingService(
+                    embedding_service=self._embedding_service,
+                    redis_client=self._redis_client,
+                )
+                logger.debug("HybridSearch using CachedEmbeddingService")
             self._hybrid_search = HybridSearch(
                 neo4j_client=self._neo4j_client,
-                embedding_service=self._embedding_service,
+                embedding_service=embedding_service,
+                search_config=GraphSearchConfig(),
             )
         return self._hybrid_search
 

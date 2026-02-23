@@ -5,15 +5,23 @@ This module provides:
 - Vector similarity search using Neo4j vector indices
 - Fulltext keyword search using Neo4j fulltext indices
 - RRF (Reciprocal Rank Fusion) for combining results
+- MMR (Maximal Marginal Relevance) for diversity re-ranking
+- Temporal decay for recency-aware scoring
+- Query expansion with stop-word filtering for improved FTS
 """
 
 import asyncio
 import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
 from src.infrastructure.graph.neo4j_client import Neo4jClient
 from src.infrastructure.graph.schemas import HybridSearchResult, SearchResultItem
+from src.infrastructure.memory.mmr import mmr_rerank
+from src.infrastructure.memory.query_expansion import extract_keywords
+from src.infrastructure.memory.temporal_decay import apply_temporal_decay
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +33,47 @@ DEFAULT_VECTOR_WEIGHT = 0.6
 DEFAULT_KEYWORD_WEIGHT = 0.4
 
 
+@dataclass
+class GraphSearchConfig:
+    """Configuration for graph hybrid search enhancements.
+
+    Controls MMR diversity re-ranking, temporal decay, and query expansion.
+    All enhancements are opt-in via enable flags.
+    """
+
+    enable_mmr: bool = True
+    mmr_lambda: float = 0.7
+    enable_temporal_decay: bool = True
+    temporal_half_life_days: float = 30.0
+    enable_query_expansion: bool = True
+
+
+def _item_to_dict(item: SearchResultItem) -> dict:
+    """Convert a SearchResultItem to a dict for MMR/temporal decay processing."""
+    return {
+        "uuid": item.uuid,
+        "type": item.type,
+        "name": item.name or "",
+        "content": item.content or item.summary or item.name or "",
+        "summary": item.summary or "",
+        "score": item.score,
+        "metadata": dict(item.metadata),
+    }
+
+
+def _dict_to_item(d: dict) -> SearchResultItem:
+    """Convert a processed dict back to a SearchResultItem."""
+    return SearchResultItem(
+        type=d["type"],
+        uuid=d["uuid"],
+        name=d.get("name"),
+        content=d.get("content") if d["type"] == "episode" else None,
+        summary=d.get("summary") if d["type"] == "entity" else None,
+        score=d.get("score", 0.0),
+        metadata=d.get("metadata", {}),
+    )
+
+
 class HybridSearch:
     """
     Hybrid search engine combining vector and keyword search.
@@ -33,8 +82,15 @@ class HybridSearch:
     - Vector search: Semantic similarity using embeddings
     - Keyword search: Fulltext search using Neo4j indices
 
+    Post-processing pipeline (when enabled via GraphSearchConfig):
+    1. Query expansion: Extract keywords for improved FTS matching
+    2. RRF fusion: Combine vector + keyword results
+    3. Temporal decay: Down-weight older results
+    4. MMR re-ranking: Balance relevance with diversity
+
     Example:
-        search = HybridSearch(neo4j_client, embedding_service)
+        config = GraphSearchConfig(enable_mmr=True, enable_temporal_decay=True)
+        search = HybridSearch(neo4j_client, embedding_service, search_config=config)
         results = await search.search("machine learning applications", project_id="proj1")
     """
 
@@ -48,6 +104,7 @@ class HybridSearch:
         rrf_k: int = DEFAULT_RRF_K,
         vector_weight: float = DEFAULT_VECTOR_WEIGHT,
         keyword_weight: float = DEFAULT_KEYWORD_WEIGHT,
+        search_config: Optional[GraphSearchConfig] = None,
     ):
         """
         Initialize hybrid search.
@@ -61,6 +118,7 @@ class HybridSearch:
             rrf_k: RRF constant (default: 60)
             vector_weight: Weight for vector search results
             keyword_weight: Weight for keyword search results
+            search_config: Configuration for MMR, temporal decay, and query expansion
         """
         self._neo4j_client = neo4j_client
         self._embedding_service = embedding_service
@@ -70,6 +128,7 @@ class HybridSearch:
         self._rrf_k = rrf_k
         self._vector_weight = vector_weight
         self._keyword_weight = keyword_weight
+        self._search_config = search_config or GraphSearchConfig()
 
     async def search(
         self,
@@ -95,39 +154,50 @@ class HybridSearch:
         if not query or not query.strip():
             return HybridSearchResult(items=[], total_results=0)
 
+        # Over-fetch for post-processing (MMR/temporal decay may reorder)
+        fetch_limit = limit * 3 if self._search_config.enable_mmr else limit * 2
+
+        # Query expansion: extract keywords for improved FTS matching
+        expanded_query = query
+        if self._search_config.enable_query_expansion:
+            keywords = extract_keywords(query)
+            if keywords:
+                expanded_query = " ".join(keywords)
+                logger.debug(f"Query expanded: '{query}' -> keywords: {keywords}")
+
         # Run searches in parallel
         tasks = []
 
         if include_entities:
-            tasks.append(self._vector_search_entities(query, project_id, limit * 2))
-            tasks.append(self._keyword_search_entities(query, project_id, limit * 2))
+            tasks.append(self._vector_search_entities(query, project_id, fetch_limit))
+            tasks.append(self._keyword_search_entities(expanded_query, project_id, fetch_limit))
 
         if include_episodes:
-            tasks.append(self._keyword_search_episodes(query, project_id, limit * 2))
+            tasks.append(self._keyword_search_episodes(expanded_query, project_id, fetch_limit))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Collect results, handling any errors
-        vector_entity_results = []
-        keyword_entity_results = []
-        episode_results = []
+        vector_entity_results: List[SearchResultItem] = []
+        keyword_entity_results: List[SearchResultItem] = []
+        episode_results: List[SearchResultItem] = []
 
         idx = 0
         if include_entities:
-            if not isinstance(results[idx], Exception):
+            if not isinstance(results[idx], BaseException):
                 vector_entity_results = results[idx]
             else:
                 logger.warning(f"Vector search failed: {results[idx]}")
             idx += 1
 
-            if not isinstance(results[idx], Exception):
+            if not isinstance(results[idx], BaseException):
                 keyword_entity_results = results[idx]
             else:
                 logger.warning(f"Entity keyword search failed: {results[idx]}")
             idx += 1
 
         if include_episodes:
-            if not isinstance(results[idx], Exception):
+            if not isinstance(results[idx], BaseException):
                 episode_results = results[idx]
             else:
                 logger.warning(f"Episode keyword search failed: {results[idx]}")
@@ -143,8 +213,13 @@ class HybridSearch:
         # Combine all results
         all_results = combined_entities + episode_results
 
-        # Sort by score and limit
+        # Sort by score before post-processing
         all_results.sort(key=lambda x: x.score, reverse=True)
+
+        # Post-processing pipeline: temporal decay -> MMR
+        all_results = self._apply_post_processing(all_results)
+
+        # Final limit
         limited_results = all_results[:limit]
 
         return HybridSearchResult(
@@ -153,6 +228,58 @@ class HybridSearch:
             vector_results_count=len(vector_entity_results),
             keyword_results_count=len(keyword_entity_results) + len(episode_results),
         )
+
+    def _apply_post_processing(self, items: List[SearchResultItem]) -> List[SearchResultItem]:
+        """Apply temporal decay and MMR re-ranking to search results.
+
+        Pipeline order:
+        1. Temporal decay (adjust scores based on age)
+        2. Re-sort by decayed scores
+        3. MMR re-ranking (balance relevance with diversity)
+
+        Args:
+            items: Search results after RRF fusion.
+
+        Returns:
+            Post-processed and re-ranked items.
+        """
+        if not items:
+            return items
+
+        # Convert to dicts for processing
+        dicts = [_item_to_dict(item) for item in items]
+
+        # 1. Temporal decay
+        if self._search_config.enable_temporal_decay:
+            now = datetime.now(timezone.utc)
+            for d in dicts:
+                created_at_str = d["metadata"].get("created_at")
+                if created_at_str:
+                    try:
+                        created_at = datetime.fromisoformat(created_at_str)
+                        d["score"] = apply_temporal_decay(
+                            d["score"],
+                            created_at,
+                            self._search_config.temporal_half_life_days,
+                            now,
+                        )
+                    except (ValueError, TypeError):
+                        pass  # Skip decay for items without valid timestamps
+
+            # Re-sort after decay
+            dicts.sort(key=lambda x: x.get("score", 0), reverse=True)
+
+        # 2. MMR re-ranking for diversity
+        if self._search_config.enable_mmr and len(dicts) > 1:
+            dicts = mmr_rerank(
+                dicts,
+                lambda_=self._search_config.mmr_lambda,
+                content_key="content",
+                score_key="score",
+            )
+
+        # Convert back to SearchResultItem
+        return [_dict_to_item(d) for d in dicts]
 
     async def vector_search(
         self,
@@ -194,19 +321,26 @@ class HybridSearch:
         Returns:
             List of SearchResultItem
         """
+        # Apply query expansion for keyword search
+        search_query = query
+        if self._search_config.enable_query_expansion:
+            keywords = extract_keywords(query)
+            if keywords:
+                search_query = " ".join(keywords)
+
         tasks = []
 
         if include_entities:
-            tasks.append(self._keyword_search_entities(query, project_id, limit))
+            tasks.append(self._keyword_search_entities(search_query, project_id, limit))
 
         if include_episodes:
-            tasks.append(self._keyword_search_episodes(query, project_id, limit))
+            tasks.append(self._keyword_search_episodes(search_query, project_id, limit))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         all_results = []
         for result in results:
-            if not isinstance(result, Exception):
+            if not isinstance(result, BaseException):
                 all_results.extend(result)
 
         all_results.sort(key=lambda x: x.score, reverse=True)
@@ -244,10 +378,10 @@ class HybridSearch:
             )
             return []
 
-        # Build query - request more results when filtering by project_id to account for filtering
+        # Build query - request more results when filtering by project_id
         query_limit = limit * 2 if project_id else limit
         project_filter = ""
-        params = {
+        params: Dict[str, Any] = {
             "limit": query_limit,
             "query_embedding": query_embedding,
         }
@@ -268,6 +402,7 @@ class HybridSearch:
                    node.name AS name,
                    node.summary AS summary,
                    coalesce(node.entity_type, 'Entity') AS entity_type,
+                   node.created_at AS created_at,
                    score
             ORDER BY score DESC
             LIMIT $result_limit
@@ -294,6 +429,7 @@ class HybridSearch:
                     metadata={
                         "entity_type": record.get("entity_type"),
                         "search_type": "vector",
+                        "created_at": record.get("created_at"),
                     },
                 )
                 items.append(item)
@@ -317,6 +453,7 @@ class HybridSearch:
                             metadata={
                                 "entity_type": record.get("entity_type"),
                                 "search_type": "vector",
+                                "created_at": record.get("created_at"),
                             },
                         )
                         for record in result.records
@@ -343,7 +480,7 @@ class HybridSearch:
         Keyword search on entity nodes using fulltext index.
 
         Args:
-            query: Search query
+            query: Search query (may be pre-expanded via query expansion)
             project_id: Project filter
             limit: Maximum results
 
@@ -354,7 +491,7 @@ class HybridSearch:
         escaped_query = self._escape_fulltext_query(query)
 
         project_filter = ""
-        params = {
+        params: Dict[str, Any] = {
             "search_query": escaped_query,
             "limit": limit,
         }
@@ -371,6 +508,7 @@ class HybridSearch:
                    node.name AS name,
                    node.summary AS summary,
                    coalesce(node.entity_type, 'Entity') AS entity_type,
+                   node.created_at AS created_at,
                    score
             ORDER BY score DESC
             LIMIT $limit
@@ -391,6 +529,7 @@ class HybridSearch:
                     metadata={
                         "entity_type": record.get("entity_type"),
                         "search_type": "keyword",
+                        "created_at": record.get("created_at"),
                     },
                 )
                 items.append(item)
@@ -411,7 +550,7 @@ class HybridSearch:
         Keyword search on episode nodes using fulltext index.
 
         Args:
-            query: Search query
+            query: Search query (may be pre-expanded via query expansion)
             project_id: Project filter
             limit: Maximum results
 
@@ -421,7 +560,7 @@ class HybridSearch:
         escaped_query = self._escape_fulltext_query(query)
 
         project_filter = ""
-        params = {
+        params: Dict[str, Any] = {
             "search_query": escaped_query,
             "limit": limit,
         }
@@ -437,6 +576,7 @@ class HybridSearch:
             RETURN node.uuid AS uuid,
                    node.name AS name,
                    node.content AS content,
+                   node.created_at AS created_at,
                    score
             ORDER BY score DESC
             LIMIT $limit
@@ -454,7 +594,10 @@ class HybridSearch:
                     name=record.get("name"),
                     content=record.get("content"),
                     score=float(record.get("score", 0)),
-                    metadata={"search_type": "keyword"},
+                    metadata={
+                        "search_type": "keyword",
+                        "created_at": record.get("created_at"),
+                    },
                 )
                 items.append(item)
 
@@ -474,7 +617,7 @@ class HybridSearch:
         """
         Combine results using Reciprocal Rank Fusion (RRF).
 
-        RRF formula: score = sum(1 / (k + rank))
+        RRF formula: score = sum(weight / (k + rank))
 
         Args:
             vector_results: Results from vector search
@@ -509,7 +652,8 @@ class HybridSearch:
         combined = []
         for uuid, score in scores.items():
             item = items_map[uuid]
-            # Create new item with RRF score
+            # Merge metadata: prefer vector result's metadata, add rrf_score
+            merged_metadata = {**item.metadata, "rrf_score": score}
             combined_item = SearchResultItem(
                 type=item.type,
                 uuid=item.uuid,
@@ -517,7 +661,7 @@ class HybridSearch:
                 content=item.content,
                 summary=item.summary,
                 score=score,
-                metadata={**item.metadata, "rrf_score": score},
+                metadata=merged_metadata,
             )
             combined.append(combined_item)
 
