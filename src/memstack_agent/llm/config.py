@@ -3,7 +3,7 @@
 Provides immutable configuration classes for LLM clients.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 

@@ -7,7 +7,7 @@ import pytest
 
 from src.application.services.skill_service import SkillService
 from src.domain.model.agent.skill import Skill, SkillScope, SkillSource, SkillStatus, TriggerType
-from src.domain.model.agent.tenant_skill_config import TenantSkillAction, TenantSkillConfig
+from src.domain.model.agent.tenant_skill_config import TenantSkillConfig
 
 
 @pytest.fixture

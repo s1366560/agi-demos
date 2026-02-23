@@ -16,8 +16,8 @@ Usage:
 import json
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Type
+from datetime import datetime
+from typing import Any, Dict, Optional
 
 from src.domain.events.envelope import EventEnvelope
 from src.domain.events.registry import EventSchemaRegistry

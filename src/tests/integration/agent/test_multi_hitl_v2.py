@@ -12,7 +12,6 @@ import json
 import os
 import sys
 import time
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import websockets
@@ -70,7 +69,7 @@ class MultiHITLTester:
                         request_id = data.get("data", {}).get("request_id")
                         print(f"      >>> HITL #{self.hitl_count}: {event_type} / {request_id}")
                     elif event_type == "complete":
-                        print(f"      >>> COMPLETE event received!")
+                        print("      >>> COMPLETE event received!")
                     elif event_type == "error":
                         error_msg = data.get("data", {}).get("message", "Unknown error")
                         print(f"      >>> ERROR: {error_msg[:80]}")
@@ -195,7 +194,7 @@ class MultiHITLTester:
                     # Try one more cycle
                     continue
                 else:
-                    print(f"   No progress, stopping")
+                    print("   No progress, stopping")
                     return False
 
             request_id = hitl_event.get("data", {}).get("request_id")
@@ -214,7 +213,7 @@ class MultiHITLTester:
                 return False
 
             # Wait for the response to be processed
-            print(f"   Waiting for Agent to process response...")
+            print("   Waiting for Agent to process response...")
             await asyncio.sleep(1.0)
 
         print(f"\n   ⚠ Reached max cycles ({max_cycles})")
@@ -236,12 +235,12 @@ class MultiHITLTester:
             et = e.get("type", "unknown")
             event_type_counts[et] = event_type_counts.get(et, 0) + 1
         
-        print(f"\nEvent type breakdown:")
+        print("\nEvent type breakdown:")
         for et, count in sorted(event_type_counts.items(), key=lambda x: -x[1])[:10]:
             print(f"  {et}: {count}")
 
         if self.errors:
-            print(f"\nErrors:")
+            print("\nErrors:")
             for err in self.errors:
                 print(f"  - {err}")
 

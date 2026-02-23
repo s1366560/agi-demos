@@ -7,8 +7,7 @@ Tests:
 - AutoScalingService: Dynamic scaling
 """
 
-import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 
@@ -18,10 +17,6 @@ from src.infrastructure.agent.pool.ha import (
     FailureEvent,
     FailureRecoveryService,
     FailureType,
-    RecoveryResult,
-    RecoveryStatus,
-    RecoveryStrategy,
-    ScalingDecision,
     ScalingDirection,
     ScalingMetrics,
     ScalingPolicy,

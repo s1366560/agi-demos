@@ -9,23 +9,21 @@ These tests require:
 Tests are marked with 'integration' and skipped by default in unit test runs.
 """
 
-import asyncio
-import os
-import pytest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
+
 from src.domain.model.agent.skill import (
     Skill,
-    SkillScope,
     SkillStatus,
     TriggerPattern,
     TriggerType,
 )
+from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 from src.infrastructure.agent.core.skill_executor import SkillExecutor
 from src.infrastructure.agent.skill.skill_resource_injector import SkillResourceInjector
 from src.infrastructure.agent.skill.skill_resource_loader import SkillResourceLoader
-from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
 
 @pytest.fixture

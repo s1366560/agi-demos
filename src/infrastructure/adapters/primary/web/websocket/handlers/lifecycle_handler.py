@@ -240,7 +240,7 @@ class StartAgentHandler(WebSocketMessageHandler):
 
         except Exception as e:
             logger.error(f"[WS] Error starting agent: {e}", exc_info=True)
-            await context.send_error(f"Failed to start agent: {str(e)}")
+            await context.send_error(f"Failed to start agent: {e!s}")
 
 
 class StopAgentHandler(WebSocketMessageHandler):
@@ -312,7 +312,7 @@ class StopAgentHandler(WebSocketMessageHandler):
 
         except Exception as e:
             logger.error(f"[WS] Error stopping agent: {e}", exc_info=True)
-            await context.send_error(f"Failed to stop agent: {str(e)}")
+            await context.send_error(f"Failed to stop agent: {e!s}")
 
 
 class RestartAgentHandler(WebSocketMessageHandler):
@@ -429,7 +429,7 @@ class RestartAgentHandler(WebSocketMessageHandler):
 
         except Exception as e:
             logger.error(f"[WS] Error restarting agent: {e}", exc_info=True)
-            await context.send_error(f"Failed to restart agent: {str(e)}")
+            await context.send_error(f"Failed to restart agent: {e!s}")
 
 
 # =============================================================================

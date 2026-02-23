@@ -12,7 +12,7 @@ All types are immutable (frozen dataclass).
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Protocol, Union, runtime_checkable
+from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
 
 
 class SkillStatus(str, Enum):

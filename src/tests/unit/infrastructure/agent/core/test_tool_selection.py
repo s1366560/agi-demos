@@ -12,8 +12,6 @@ to reduce LLM context consumption.
 
 from unittest.mock import MagicMock
 
-import pytest
-
 
 class TestToolSelectionContext:
     """Test ToolSelectionContext dataclass."""

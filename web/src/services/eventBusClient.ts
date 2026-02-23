@@ -182,7 +182,7 @@ export class EventBusClient {
         };
       } catch (_err) {
         this.setState('disconnected');
-        reject(err);
+        reject(_err);
       }
     });
   }
@@ -326,7 +326,7 @@ export class EventBusClient {
           try {
             handler(envelope);
           } catch (_err) {
-            console.error('Event handler error:', err);
+            console.error('Event handler error:', _err);
           }
         });
       }
@@ -381,7 +381,7 @@ export class EventBusClient {
       try {
         handler(error);
       } catch (_err) {
-        console.error('Error handler threw:', err);
+        console.error('Error handler threw:', _err);
       }
     });
   }

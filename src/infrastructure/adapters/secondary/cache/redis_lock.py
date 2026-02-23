@@ -321,7 +321,7 @@ class RedisDistributedLock:
             logger.error(f"Error getting lock TTL {self._key}: {e}")
             return -2
 
-    async def __aenter__(self) -> "RedisDistributedLock":
+    async def __aenter__(self) -> RedisDistributedLock:
         """Async context manager entry - acquire lock."""
         await self.acquire()
         return self

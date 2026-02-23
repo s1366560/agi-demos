@@ -13,7 +13,6 @@ from src.infrastructure.adapters.secondary.channels.feishu.cardkit_streaming imp
     build_streaming_settings,
 )
 
-
 # ------------------------------------------------------------------
 # CardKitSequence
 # ------------------------------------------------------------------

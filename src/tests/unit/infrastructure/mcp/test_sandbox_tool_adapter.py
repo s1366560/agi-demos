@@ -1,7 +1,8 @@
 """Unit tests for SandboxMCPServerToolAdapter."""
 
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 
 from src.infrastructure.mcp.sandbox_tool_adapter import SandboxMCPServerToolAdapter
 

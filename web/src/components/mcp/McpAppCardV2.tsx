@@ -223,7 +223,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
             {/* Source Badge */}
             <Tooltip title={sourceCfg.label}>
               <span
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs ${sourceCfg.bg} ${sourceCfg.text}`}
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs ${sourceCfg.bgColor} ${sourceCfg.textColor}`}
               >
                 {isAgentDeveloped ? <Bot size={10} /> : <User size={10} />}
                 {isAgentDeveloped ? 'AI' : '用户'}

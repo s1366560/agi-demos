@@ -7,7 +7,7 @@ incremental discovery - only re-discover tools when they have changed.
 import hashlib
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)

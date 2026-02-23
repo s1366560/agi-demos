@@ -461,7 +461,7 @@ class ChannelEventBridge:
     ) -> None:
         """Forward task_start/task_complete timeline events as status messages."""
         event_type = event_data.get("_event_type", "")
-        task_id = event_data.get("task_id", "")
+        _task_id = event_data.get("task_id", "")
         content = event_data.get("content", "")
         status = event_data.get("status", "")
 

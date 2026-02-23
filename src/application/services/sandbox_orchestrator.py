@@ -225,7 +225,7 @@ class SandboxOrchestrator:
         """Stop the remote desktop service."""
         adapter = self._get_adapter_for_sandbox(sandbox_id)
         try:
-            result = await adapter.call_tool(
+            _ = await adapter.call_tool(
                 sandbox_id,
                 "stop_desktop",
                 {"_workspace_dir": "/workspace"},
@@ -292,7 +292,7 @@ class SandboxOrchestrator:
     async def stop_terminal(self, sandbox_id: str) -> bool:
         """Stop the web terminal service."""
         try:
-            result = await self._adapter.call_tool(
+            _ = await self._adapter.call_tool(
                 sandbox_id,
                 "stop_terminal",
                 {"_workspace_dir": "/workspace"},

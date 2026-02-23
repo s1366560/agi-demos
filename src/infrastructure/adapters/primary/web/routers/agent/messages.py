@@ -436,7 +436,7 @@ async def get_conversation_messages(
         import traceback
 
         logger.error(f"Error getting conversation messages: {e}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Failed to get messages: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get messages: {e!s}")
 
 
 @router.get("/conversations/{conversation_id}/execution")
@@ -479,7 +479,7 @@ async def get_conversation_execution(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Error getting conversation execution history: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get execution history: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get execution history: {e!s}")
 
 
 @router.get("/conversations/{conversation_id}/tool-executions")
@@ -524,7 +524,7 @@ async def get_conversation_tool_executions(
     except Exception as e:
         logger.error(f"Error getting tool execution history: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to get tool execution history: {str(e)}"
+            status_code=500, detail=f"Failed to get tool execution history: {e!s}"
         )
 
 
@@ -598,7 +598,7 @@ async def get_conversation_execution_status(
         raise
     except Exception as e:
         logger.error(f"Error getting conversation execution status: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get execution status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get execution status: {e!s}")
 
 
 async def _get_recovery_info(
@@ -745,7 +745,7 @@ async def get_execution_stats(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         logger.error(f"Error getting execution statistics: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get execution statistics: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get execution statistics: {e!s}")
 
 
 @router.get("/conversations/{conversation_id}/messages/{message_id}/replies")

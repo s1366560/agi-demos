@@ -2,7 +2,6 @@
 """Test HITL Redis Stream."""
 
 import asyncio
-import json
 import os
 import sys
 

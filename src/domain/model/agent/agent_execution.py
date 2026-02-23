@@ -1,4 +1,3 @@
 """Backward compatibility - re-exports from execution subpackage."""
 
-# ruff: noqa: F403
-from src.domain.model.agent.execution.agent_execution import *
+from src.domain.model.agent.execution.agent_execution import *  # noqa: F403

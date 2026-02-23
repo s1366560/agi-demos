@@ -144,7 +144,7 @@ class MCPAuthStorage:
         try:
             content = self._filepath.read_text()
             return json.loads(content)
-        except (json.JSONDecodeError, IOError):
+        except (OSError, json.JSONDecodeError):
             return {}
 
     def _entry_to_dict(self, entry: MCPAuthEntry) -> Dict[str, Any]:

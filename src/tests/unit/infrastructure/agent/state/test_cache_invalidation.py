@@ -9,10 +9,7 @@ The tests verify that cache invalidation cascades properly when
 MCP tools are registered or updated.
 """
 
-import asyncio
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -95,10 +92,10 @@ class TestUnifiedCacheInvalidation:
         Tool definitions cache is keyed by tools_hash, which changes when new
         tools are registered. All entries should be cleared when tools change.
         """
+        from src.infrastructure.agent.state import agent_worker_state
         from src.infrastructure.agent.state.agent_session_pool import (
             _tool_definitions_cache,
         )
-        from src.infrastructure.agent.state import agent_worker_state
 
         # Setup: Populate tool_definitions_cache with entries
         _tool_definitions_cache["hash1"] = (
@@ -128,11 +125,11 @@ class TestUnifiedCacheInvalidation:
         When MCP tools change, the mcp_tools_cache should be invalidated for
         the tenant associated with the project.
         """
+        from src.infrastructure.agent.state import agent_worker_state
         from src.infrastructure.agent.state.agent_session_pool import (
             MCPToolsCacheEntry,
             _mcp_tools_cache,
         )
-        from src.infrastructure.agent.state import agent_worker_state
 
         # Setup: Populate mcp_tools_cache with entry for tenant
         tenant_id = "test-tenant-789"
@@ -259,14 +256,9 @@ class TestCacheInvalidationIntegration:
         After registering a new MCP server, all relevant caches should be
         invalidated so the new tools are immediately available.
         """
+        from src.infrastructure.agent.state import agent_worker_state
         from src.infrastructure.agent.tools.register_mcp_server import (
             RegisterMCPServerTool,
-        )
-        from src.infrastructure.agent.state import agent_worker_state
-        from src.infrastructure.agent.state.agent_session_pool import (
-            _agent_session_pool,
-            _tool_definitions_cache,
-            _mcp_tools_cache,
         )
 
         # Setup: Mock sandbox adapter and tools
@@ -289,9 +281,7 @@ class TestCacheInvalidationIntegration:
         # Mock the sandbox adapter responses
         async def mock_call_tool(**kwargs):
             tool_name = kwargs.get("tool_name", "")
-            if tool_name == "mcp_server_install":
-                return {"content": [{"type": "text", "text": '{"success": true}'}]}
-            elif tool_name == "mcp_server_start":
+            if tool_name == "mcp_server_install" or tool_name == "mcp_server_start":
                 return {"content": [{"type": "text", "text": '{"success": true}'}]}
             elif tool_name == "mcp_server_discover_tools":
                 return {"content": [{"type": "text", "text": "[]"}]}

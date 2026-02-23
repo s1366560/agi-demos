@@ -4,14 +4,13 @@ Tests the unified event bus port, routing key, and event router.
 """
 
 import asyncio
-import pytest
 from typing import List
-from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from src.domain.events.envelope import EventEnvelope
 from src.domain.events.types import AgentEventType
 from src.domain.ports.services.unified_event_bus_port import (
-    EventPublishError,
     EventWithMetadata,
     PublishResult,
     RoutingKey,
@@ -20,7 +19,6 @@ from src.domain.ports.services.unified_event_bus_port import (
 from src.infrastructure.adapters.secondary.messaging.event_router import (
     EventRouter,
     HandlerRegistration,
-    RoutingResult,
 )
 
 

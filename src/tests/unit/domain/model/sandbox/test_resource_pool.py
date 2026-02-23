@@ -98,7 +98,7 @@ class TestResourcePool:
         """Should raise error when acquiring resource in use."""
         pool = ResourcePool(factory=lambda: {"data": "value"})
 
-        rid = await pool.acquire("specific-123")
+        _rid = await pool.acquire("specific-123")
 
         with pytest.raises(SandboxResourceError, match="already in use"):
             await pool.acquire("specific-123")
@@ -112,8 +112,8 @@ class TestResourcePool:
         )
 
         # Acquire all resources
-        rid1 = await pool.acquire()
-        rid2 = await pool.acquire()
+        _rid1 = await pool.acquire()
+        _rid2 = await pool.acquire()
 
         assert pool.size == 2
         assert pool.in_use_count == 2
@@ -125,7 +125,7 @@ class TestResourcePool:
         await asyncio.sleep(0.1)
 
         # Release one resource
-        await pool.release(rid1)
+        await pool.release(_rid1)
 
         # Now the acquire should complete
         rid3 = await acquire_task
@@ -140,7 +140,7 @@ class TestResourcePool:
         )
 
         # Acquire the only resource
-        rid = await pool.acquire()
+        _rid = await pool.acquire()
 
         # Try to acquire another - should timeout
         with pytest.raises(SandboxTimeoutError, match="timeout"):
@@ -155,7 +155,7 @@ class TestResourcePool:
         )
 
         # Fill the pool
-        rid = await pool.acquire()
+        _rid = await pool.acquire()
 
         # Try to create new specific resource - should fail
         with pytest.raises(SandboxResourceError, match="max capacity"):
@@ -217,8 +217,8 @@ class TestResourcePool:
             cleanup=cleanup,
         )
 
-        rid1 = await pool.acquire()
-        rid2 = await pool.acquire()
+        _rid1 = await pool.acquire()
+        _rid2 = await pool.acquire()
 
         await pool.close()
 
@@ -251,7 +251,7 @@ class TestResourcePool:
         """Should automatically release with context manager."""
         pool = ResourcePool(factory=lambda: {"data": "value"})
 
-        async with pool.resource() as rid:
+        async with pool.resource() as _rid:
             assert pool.in_use_count == 1
 
         assert pool.in_use_count == 0

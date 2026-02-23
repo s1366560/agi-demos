@@ -225,7 +225,7 @@ class TestBaseRepository:
         repo = TestRepository(mock_session)
 
         # Act
-        result = await repo.save(domain_entity)
+        _ = await repo.save(domain_entity)
 
         # Assert
         assert mock_db_entity.name == "Updated Name"

@@ -6,8 +6,8 @@ to avoid frequent Docker API calls and supports fast reconnect.
 
 import asyncio
 import time
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -107,11 +107,11 @@ class TestHealthCheckCache:
     @pytest.mark.asyncio
     async def test_fast_reconnect_after_disconnect(self):
         """Test that fast reconnect is possible after disconnect."""
+        from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxStatus
         from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
             MCPSandboxAdapter,
             MCPSandboxInstance,
         )
-        from src.domain.ports.services.sandbox_port import SandboxStatus, SandboxConfig
 
         with patch("docker.from_env"):
             adapter = MCPSandboxAdapter()
@@ -185,11 +185,11 @@ class TestHealthCheckCacheInvalidation:
     @pytest.mark.asyncio
     async def test_cache_invalidated_on_terminate(self):
         """Test that cache is invalidated when sandbox is terminated."""
+        from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxStatus
         from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
             MCPSandboxAdapter,
             MCPSandboxInstance,
         )
-        from src.domain.ports.services.sandbox_port import SandboxStatus, SandboxConfig
 
         with patch("docker.from_env") as mock_docker:
             mock_client = MagicMock()

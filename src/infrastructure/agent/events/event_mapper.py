@@ -10,7 +10,7 @@ for backward compatibility.
 import json
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional
 
 # Import unified types - SINGLE SOURCE OF TRUTH
 from src.domain.events.types import AgentEventType

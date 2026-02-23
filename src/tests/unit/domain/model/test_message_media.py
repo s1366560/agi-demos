@@ -97,7 +97,7 @@ class TestMessageContentMediaHandling:
             duration=30,
         )
         text = content.generate_display_text()
-        assert "[语音消息: 30秒]" == text
+        assert text == "[语音消息: 30秒]"
 
     def test_generate_display_text_for_audio_without_duration(self):
         """Test display text generation for audio without duration."""
@@ -106,7 +106,7 @@ class TestMessageContentMediaHandling:
             file_key="audio123",
         )
         text = content.generate_display_text()
-        assert "[语音消息: 未知时长]" == text
+        assert text == "[语音消息: 未知时长]"
 
     def test_generate_display_text_for_video_with_duration(self):
         """Test display text generation for video with duration."""
@@ -116,7 +116,7 @@ class TestMessageContentMediaHandling:
             duration=120,
         )
         text = content.generate_display_text()
-        assert "[视频消息: 120秒]" == text
+        assert text == "[视频消息: 120秒]"
 
     def test_generate_display_text_for_video_without_duration(self):
         """Test display text generation for video without duration."""
@@ -125,7 +125,7 @@ class TestMessageContentMediaHandling:
             file_key="video123",
         )
         text = content.generate_display_text()
-        assert "[视频消息: 未知时长]" == text
+        assert text == "[视频消息: 未知时长]"
 
     def test_generate_display_text_for_sticker(self):
         """Test display text generation for sticker."""

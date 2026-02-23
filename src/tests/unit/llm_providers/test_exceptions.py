@@ -4,7 +4,6 @@ Unit tests for unified LLM exceptions.
 Tests the exception hierarchy and error handling capabilities.
 """
 
-import pytest
 
 from src.domain.llm_providers.exceptions import (
     AuthenticationError,

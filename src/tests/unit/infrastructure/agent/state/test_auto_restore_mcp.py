@@ -6,7 +6,7 @@ Tests the P1 fix: Auto-restore race condition using Redis distributed lock.
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -68,7 +68,6 @@ class TestAutoRestoreMCPServersWithLock:
     @pytest.fixture
     def mock_lock_adapter(self, mock_redis_client):
         """Create a mock distributed lock adapter."""
-        from src.domain.ports.services.distributed_lock_port import LockHandle
         from src.infrastructure.adapters.secondary.cache.redis_lock_adapter import (
             RedisDistributedLockAdapter,
         )

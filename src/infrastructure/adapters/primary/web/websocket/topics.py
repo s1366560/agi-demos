@@ -15,8 +15,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional, Set
 
-from fastapi import WebSocket
-
 logger = logging.getLogger(__name__)
 
 

@@ -1,4 +1,3 @@
 """Backward compatibility - re-exports from conversation subpackage."""
 
-# ruff: noqa: F403
-from src.domain.model.agent.conversation.attachment import *
+from src.domain.model.agent.conversation.attachment import *  # noqa: F403

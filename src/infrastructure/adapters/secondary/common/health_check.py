@@ -147,7 +147,7 @@ class PostgresHealthChecker:
             return HealthStatus(
                 service="postgres",
                 healthy=False,
-                message=f"PostgreSQL health check failed: {str(e)}",
+                message=f"PostgreSQL health check failed: {e!s}",
                 latency_ms=latency_ms,
             )
 
@@ -233,7 +233,7 @@ class RedisHealthChecker:
             return HealthStatus(
                 service="redis",
                 healthy=False,
-                message=f"Redis health check failed: {str(e)}",
+                message=f"Redis health check failed: {e!s}",
                 latency_ms=latency_ms,
             )
 
@@ -327,7 +327,7 @@ class Neo4jHealthChecker:
             return HealthStatus(
                 service="neo4j",
                 healthy=False,
-                message=f"Neo4j health check failed: {str(e)}",
+                message=f"Neo4j health check failed: {e!s}",
                 latency_ms=latency_ms,
             )
 
@@ -387,7 +387,7 @@ class SystemHealthChecker:
                     checks[name] = HealthStatus(
                         service=name,
                         healthy=False,
-                        message=f"Health check error: {str(result)}",
+                        message=f"Health check error: {result!s}",
                         latency_ms=0,
                     )
                 else:

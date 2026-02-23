@@ -8,12 +8,20 @@ Provides REST API endpoints for managing persistent sandboxes per project:
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, WebSocket
-from fastapi import WebSocketDisconnect, status
-from fastapi.responses import RedirectResponse
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -403,7 +411,7 @@ async def ensure_project_sandbox(
 
     except Exception as e:
         logger.error(f"Failed to ensure sandbox for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create sandbox: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create sandbox: {e!s}")
 
 
 @router.get("/{project_id}/sandbox/health", response_model=HealthCheckResponse)
@@ -438,7 +446,7 @@ async def check_project_sandbox_health(
         raise
     except Exception as e:
         logger.error(f"Health check failed for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Health check failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Health check failed: {e!s}")
 
 
 @router.get("/{project_id}/sandbox/stats", response_model=SandboxStatsResponse)
@@ -470,9 +478,6 @@ async def get_project_sandbox_stats(
         # Calculate uptime if we have creation time
         uptime_seconds = None
         if info.created_at:
-            # Use timezone-aware datetime to avoid naive vs aware comparison
-            from datetime import timezone
-
             now = datetime.now(timezone.utc)
             created_at = info.created_at
             # Ensure created_at is timezone-aware
@@ -501,7 +506,7 @@ async def get_project_sandbox_stats(
         raise
     except Exception as e:
         logger.error(f"Failed to get sandbox stats for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Stats query failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Stats query failed: {e!s}")
 
 
 @router.post("/{project_id}/sandbox/execute", response_model=ExecuteToolResponse)
@@ -534,7 +539,7 @@ async def execute_tool_in_project_sandbox(
 
     except Exception as e:
         logger.error(f"Tool execution failed for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Execution failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Execution failed: {e!s}")
 
 
 @router.post("/{project_id}/sandbox/restart", response_model=SandboxActionResponse)
@@ -595,7 +600,7 @@ async def restart_project_sandbox(
 
     except Exception as e:
         logger.error(f"Failed to restart sandbox for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Restart failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Restart failed: {e!s}")
 
 
 @router.delete("/{project_id}/sandbox", response_model=SandboxActionResponse)
@@ -657,7 +662,7 @@ async def terminate_project_sandbox(
         raise
     except Exception as e:
         logger.error(f"Failed to terminate sandbox for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Termination failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Termination failed: {e!s}")
 
 
 @router.get("/{project_id}/sandbox/sync", response_model=ProjectSandboxResponse)
@@ -679,7 +684,7 @@ async def sync_project_sandbox_status(
 
     except Exception as e:
         logger.error(f"Failed to sync sandbox status for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Sync failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Sync failed: {e!s}")
 
 
 # ============================================================================
@@ -789,7 +794,7 @@ async def start_project_desktop(
 
     except Exception as e:
         logger.error(f"Failed to start desktop for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start desktop: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start desktop: {e!s}")
 
 
 @router.delete("/{project_id}/sandbox/desktop")
@@ -814,7 +819,7 @@ async def stop_project_desktop(
 
     except Exception as e:
         logger.error(f"Failed to stop desktop for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to stop desktop: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to stop desktop: {e!s}")
 
 
 @router.post("/{project_id}/sandbox/terminal")
@@ -846,7 +851,7 @@ async def start_project_terminal(
 
     except Exception as e:
         logger.error(f"Failed to start terminal for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start terminal: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start terminal: {e!s}")
 
 
 @router.delete("/{project_id}/sandbox/terminal")
@@ -871,7 +876,7 @@ async def stop_project_terminal(
 
     except Exception as e:
         logger.error(f"Failed to stop terminal for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to stop terminal: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to stop terminal: {e!s}")
 
 
 # ============================================================================
@@ -909,6 +914,7 @@ async def proxy_project_desktop(
     
     # Build target URL from the desktop service URL
     import re
+
     import httpx
     
     target_base = info.desktop_url.rstrip("/")
@@ -1081,10 +1087,10 @@ async def proxy_project_desktop_websocket(
                     if msg_type == "websocket.disconnect":
                         logger.info("Browser disconnected normally")
                         break
-                    if "bytes" in data and data["bytes"]:
+                    if data.get("bytes"):
                         frame_count += 1
                         await upstream_ws.send(data["bytes"])
-                    elif "text" in data and data["text"]:
+                    elif data.get("text"):
                         frame_count += 1
                         await upstream_ws.send(data["text"])
             except WebSocketDisconnect:
@@ -1129,7 +1135,7 @@ async def proxy_project_desktop_websocket(
     except Exception as e:
         logger.error(f"Desktop WebSocket proxy error for project {project_id}: {e}")
         try:
-            await websocket.send_text(f'{{"error": "{str(e)}"}}')
+            await websocket.send_text(f'{{"error": "{e!s}"}}')
         except Exception:
             pass
     finally:
@@ -1325,7 +1331,7 @@ async def proxy_project_mcp_websocket(
                     msg_type = data.get("type", "")
                     if msg_type == "websocket.disconnect":
                         break
-                    if "text" in data and data["text"]:
+                    if data.get("text"):
                         await upstream_ws.send(data["text"])
             except WebSocketDisconnect:
                 logger.debug("MCP proxy: browser disconnected")
@@ -1372,7 +1378,7 @@ async def proxy_project_mcp_websocket(
     except Exception as e:
         logger.error(f"MCP WebSocket proxy error for project {project_id}: {e}")
         try:
-            await websocket.send_text(f'{{"error": "{str(e)}"}}')
+            await websocket.send_text(f'{{"error": "{e!s}"}}')
         except Exception:
             pass
     finally:

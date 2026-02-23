@@ -208,7 +208,7 @@ class SkillExecutor:
                 )
 
                 success = False
-                error_msg = f"Tool {tool_name} failed: {str(e)}"
+                error_msg = f"Tool {tool_name} failed: {e!s}"
                 break
 
         end_time = time.time()

@@ -10,7 +10,6 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from src.domain.llm_providers.llm_types import LLMClient
-from src.domain.model.agent import ThoughtLevel
 
 if TYPE_CHECKING:
     from src.domain.ports.agent.agent_tool_port import AgentToolBase

@@ -319,7 +319,7 @@ class StateRecoveryService:
                 data = await self._redis_client.lindex(key, 0)
                 if data:
                     return StateCheckpoint.from_dict(json.loads(data))
-            elif key in self._memory_storage and self._memory_storage[key]:
+            elif self._memory_storage.get(key):
                 return StateCheckpoint.from_dict(json.loads(self._memory_storage[key][0]))
         else:
             # Get latest across all types
@@ -329,7 +329,7 @@ class StateRecoveryService:
                 data = None
                 if self._redis_client:
                     data = await self._redis_client.lindex(key, 0)
-                elif key in self._memory_storage and self._memory_storage[key]:
+                elif self._memory_storage.get(key):
                     data = self._memory_storage[key][0]
                 if data:
                     cp = StateCheckpoint.from_dict(json.loads(data))

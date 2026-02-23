@@ -16,7 +16,7 @@ Usage:
 import asyncio
 import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Callable, Dict, List, Optional
 
@@ -143,7 +143,6 @@ class SubAgentChain:
             tenant_id: Tenant scope.
             abort_signal: Cancellation signal.
         """
-        from .context_bridge import ContextBridge
 
         start_time = time.time()
         results: List[SubAgentResult] = []

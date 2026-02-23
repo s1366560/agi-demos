@@ -43,7 +43,7 @@ def _check_ray_reachable(address: str, timeout: int = 3) -> bool:
 
 # CRITICAL FIX: Patch Ray's auto_init_ray BEFORE importing ray
 # This prevents "allow_multiple" errors
-import ray._private.auto_init_hook as _auto_init_hook  # noqa: E402
+import ray._private.auto_init_hook as _auto_init_hook
 
 # Store original function
 _original_auto_init_ray = _auto_init_hook.auto_init_ray
@@ -78,7 +78,7 @@ def _patched_auto_init_ray():
 _auto_init_hook.auto_init_ray = _patched_auto_init_ray
 
 # Now safe to import ray
-import ray as _ray  # noqa: E402
+import ray as _ray
 
 # Try to initialize Ray; pre-check TCP connectivity to fail fast
 if not _ray.is_initialized():

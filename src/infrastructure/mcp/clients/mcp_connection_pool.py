@@ -8,7 +8,6 @@ connection overhead.
 import asyncio
 import logging
 from contextlib import asynccontextmanager
-from typing import Optional
 
 from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
 

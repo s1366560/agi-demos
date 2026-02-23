@@ -1,7 +1,8 @@
 """Tests for Phase 5.1: SubAgent Memory Sharing (MemoryAccessor)."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from src.infrastructure.agent.subagent.memory_accessor import (
     MemoryAccessor,

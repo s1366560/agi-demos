@@ -7,13 +7,12 @@ Tests for:
 - ParallelScheduler (concurrent SubAgent execution)
 """
 
-import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.domain.model.agent.subagent import SubAgent, AgentModel
+from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
 from src.infrastructure.agent.subagent.parallel_scheduler import (
     ParallelScheduler,
@@ -29,7 +28,6 @@ from src.infrastructure.agent.subagent.task_decomposer import (
     SubTask,
     TaskDecomposer,
 )
-
 
 # ============================================================================
 # Fixtures
@@ -333,7 +331,7 @@ class TestResultAggregator:
 
     async def test_aggregate_with_llm_single_result(self, sample_results, mock_llm_client):
         agg = ResultAggregator(llm_client=mock_llm_client)
-        result = await agg.aggregate_with_llm([sample_results[0]])
+        _ = await agg.aggregate_with_llm([sample_results[0]])
         # Single result should not call LLM
         mock_llm_client.generate.assert_not_called()
 

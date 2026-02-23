@@ -20,7 +20,6 @@ from typing import Any, Callable, Dict, List, Optional, Union, get_args, get_ori
 
 from memstack_agent.tools.protocol import ToolDefinition, ToolMetadata
 
-
 # Type mapping for JSON Schema
 _TYPE_MAPPING: Dict[type, Dict[str, Any]] = {
     str: {"type": "string"},
@@ -153,7 +152,7 @@ def _infer_dataclass_schema(dataclass_type: Any) -> Dict[str, Any]:
     Returns:
         JSON Schema dictionary for the dataclass
     """
-    from dataclasses import fields, MISSING
+    from dataclasses import MISSING, fields
 
     properties = {}
     required = []

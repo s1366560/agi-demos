@@ -21,11 +21,8 @@ Usage:
 """
 
 import logging
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
-
-from src.domain.events.types import AgentEventType
 
 logger = logging.getLogger(__name__)
 

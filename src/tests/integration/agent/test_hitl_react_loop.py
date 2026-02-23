@@ -14,7 +14,6 @@ import json
 import os
 import sys
 import time
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import websockets
@@ -208,8 +207,8 @@ class HITLReactLoopTester:
             print(f"   ✗ ERROR after HITL: {error_event.get('data', {})}")
             return False
         else:
-            print(f"   ⚠ Events received but no completion (timeout)")
-            print(f"   This may indicate the agent is still processing.")
+            print("   ⚠ Events received but no completion (timeout)")
+            print("   This may indicate the agent is still processing.")
             return True  # Partial success
 
     async def close(self):
@@ -228,7 +227,7 @@ class HITLReactLoopTester:
         print(f"HITL request ID:    {self.hitl_request_id or 'N/A'}")
 
         if self.errors:
-            print(f"\nErrors:")
+            print("\nErrors:")
             for err in self.errors:
                 print(f"  - {err}")
 

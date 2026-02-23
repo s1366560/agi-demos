@@ -136,7 +136,7 @@ async def search_by_graph_traversal(
         rel_filter = ""
         if relationship_types:
             rel_filter = "AND type(r) IN [{}]".format(
-                ", ".join(['"{}"'.format(t) for t in relationship_types])
+                ", ".join([f'"{t}"' for t in relationship_types])
             )
 
         query = f"""

@@ -6,7 +6,6 @@ import pytest
 
 from src.infrastructure.agent.hitl.session_registry import (
     AgentSessionRegistry,
-    HITLWaiter,
     get_session_registry,
     reset_session_registry,
 )

@@ -8,8 +8,8 @@ import logging
 import os
 from typing import Any, Dict, Optional, Set, Tuple
 
-import redis.asyncio as aioredis
 import ray
+import redis.asyncio as aioredis
 
 from src.configuration.config import get_settings
 from src.configuration.ray_config import get_ray_settings

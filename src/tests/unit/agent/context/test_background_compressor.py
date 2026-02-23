@@ -1,12 +1,10 @@
 """Tests for BackgroundCompressor."""
 
-import asyncio
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.infrastructure.agent.context.compaction import ModelLimits
 from src.infrastructure.agent.context.background_compressor import BackgroundCompressor
+from src.infrastructure.agent.context.compaction import ModelLimits
 from src.infrastructure.agent.context.compression_engine import ContextCompressionEngine
 from src.infrastructure.agent.context.compression_state import CompressionLevel
 

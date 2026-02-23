@@ -9,14 +9,13 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from src.domain.model.agent.subagent import SubAgent
-from src.domain.model.agent.subagent_result import SubAgentResult
 
 from .context_bridge import ContextBridge
 from .process import SubAgentProcess
-from .state_tracker import StateTracker, SubAgentStatus
+from .state_tracker import StateTracker
 
 logger = logging.getLogger(__name__)
 

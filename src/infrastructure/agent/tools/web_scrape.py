@@ -8,8 +8,7 @@ import logging
 import re
 from typing import Any
 
-from playwright.async_api import TimeoutError as PlaywrightTimeoutError
-from playwright.async_api import async_playwright
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
 
 from src.configuration.config import get_settings
 from src.infrastructure.agent.tools.base import AgentTool
@@ -240,7 +239,7 @@ class WebScrapeTool(AgentTool):
                             else:
                                 return f"Error: Selector '{selector}' found no elements on page"
                         except Exception as e:
-                            return f"Error extracting content with selector: {str(e)}"
+                            return f"Error extracting content with selector: {e!s}"
                     else:
                         # Try to find main content
                         content = None
@@ -277,7 +276,7 @@ class WebScrapeTool(AgentTool):
         except PlaywrightTimeoutError:
             return f"Error: Timeout after {self._settings.playwright_timeout}ms loading page"
         except Exception as e:
-            error_msg = f"Error scraping page: {str(e)}"
+            error_msg = f"Error scraping page: {e!s}"
             logger.error(error_msg)
             return f"Error: {error_msg}"
 

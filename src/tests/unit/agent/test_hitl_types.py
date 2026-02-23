@@ -9,37 +9,37 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from src.domain.model.agent.hitl_types import (
-    # Enums
-    HITLType,
-    HITLStatus,
-    ClarificationType,
-    DecisionType,
-    RiskLevel,
-    PermissionAction,
-    EnvVarInputType,
     # Data classes
     ClarificationOption,
-    DecisionOption,
-    EnvVarField,
     ClarificationRequestData,
-    DecisionRequestData,
-    EnvVarRequestData,
-    PermissionRequestData,
     ClarificationResponse,
+    ClarificationType,
+    DecisionOption,
+    DecisionRequestData,
     DecisionResponse,
+    DecisionType,
+    EnvVarField,
+    EnvVarInputType,
+    EnvVarRequestData,
     EnvVarResponse,
-    PermissionResponse,
     HITLRequest,
     HITLResponse,
     HITLSignalPayload,
+    HITLStatus,
+    # Enums
+    HITLType,
+    PermissionAction,
+    PermissionRequestData,
+    PermissionResponse,
+    RiskLevel,
     # Factory functions
     create_clarification_request,
     create_decision_request,
     create_env_var_request,
     create_permission_request,
+    get_remaining_time_seconds,
     # Helpers
     is_request_expired,
-    get_remaining_time_seconds,
 )
 
 

@@ -1,0 +1,9 @@
+{
+  "source": "sickn33/antigravity-awesome-skills",
+  "skill_name": "hubspot-automation",
+  "branch": "main",
+  "source_path": "skills/hubspot-automation/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

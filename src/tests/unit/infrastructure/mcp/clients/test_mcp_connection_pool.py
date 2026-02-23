@@ -5,7 +5,6 @@ WebSocket connections.
 """
 
 import asyncio
-import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -135,7 +134,7 @@ class TestConnectionPoolSizeLimits:
 
             # Exhaust the pool
             conn1 = await pool.get_connection()
-            conn2 = await pool.get_connection()
+            _conn2 = await pool.get_connection()
 
             # Third request should wait
             got_connection = False
@@ -375,7 +374,7 @@ class TestConnectionPoolContext:
             mock_client_class.return_value = mock_client
 
             try:
-                async with pool.connection() as conn:
+                async with pool.connection() as _conn:
                     raise ValueError("Test error")
             except ValueError:
                 pass
@@ -419,13 +418,13 @@ class TestConnectionPoolStats:
 
             # Create some connections
             conn1 = await pool.get_connection()
-            conn2 = await pool.get_connection()
+            _conn2 = await pool.get_connection()
 
             assert pool._created_count == 2
 
             # Return and reuse
             await pool.return_connection(conn1)
-            conn3 = await pool.get_connection()
+            _conn3 = await pool.get_connection()
 
             # Should still be 2 (reused conn1)
             assert pool._created_count == 2

@@ -33,7 +33,7 @@ async def test():
         hitl_request = await repo.get_by_id(request_id)
 
         if hitl_request:
-            print(f"✓ Found HITL request:")
+            print("✓ Found HITL request:")
             print(f"  ID: {hitl_request.id}")
             print(f"  Type: {hitl_request.request_type}")
             print(f"  Status: {hitl_request.status}")
@@ -53,7 +53,7 @@ async def test():
             if row:
                 print(f"  But raw SQL found: {row}")
             else:
-                print(f"  Raw SQL also didn't find it")
+                print("  Raw SQL also didn't find it")
 
 
 if __name__ == "__main__":

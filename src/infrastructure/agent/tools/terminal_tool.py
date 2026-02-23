@@ -158,7 +158,7 @@ class TerminalTool(AgentTool):
 
         except Exception as e:
             logger.error(f"Failed to start terminal: {e}")
-            return f"Error: Failed to start terminal - {str(e)}"
+            return f"Error: Failed to start terminal - {e!s}"
 
     async def _start_terminal_legacy(self, **kwargs: Any) -> str:
         """Legacy start_terminal using direct adapter call."""
@@ -199,7 +199,7 @@ class TerminalTool(AgentTool):
 
         except Exception as e:
             logger.error(f"Failed to stop terminal: {e}")
-            return f"Error: Failed to stop terminal - {str(e)}"
+            return f"Error: Failed to stop terminal - {e!s}"
 
     async def _stop_terminal_legacy(self) -> str:
         """Legacy stop_terminal using direct adapter call."""
@@ -230,7 +230,7 @@ class TerminalTool(AgentTool):
 
         except Exception as e:
             logger.error(f"Failed to get terminal status: {e}")
-            return f"Error: Failed to get terminal status - {str(e)}"
+            return f"Error: Failed to get terminal status - {e!s}"
 
     async def _get_terminal_status_legacy(self) -> str:
         """Legacy get_terminal_status using direct adapter call."""
@@ -309,11 +309,11 @@ class TerminalTool(AgentTool):
                 else:
                     parts.append("Terminal is not running")
 
-                if "url" in data and data["url"]:
+                if data.get("url"):
                     parts.append(f"URL: {data['url']}")
                 if "port" in data:
                     parts.append(f"Port: {data['port']}")
-                if "pid" in data and data["pid"]:
+                if data.get("pid"):
                     parts.append(f"PID: {data['pid']}")
 
                 return " | ".join(parts) if parts else "Terminal status retrieved"
@@ -321,11 +321,11 @@ class TerminalTool(AgentTool):
             # Handle success/error response
             if data.get("success"):
                 parts = [success_message]
-                if "url" in data and data["url"]:
+                if data.get("url"):
                     parts.append(f"URL: {data['url']}")
                 if "port" in data:
                     parts.append(f"Port: {data['port']}")
-                if "pid" in data and data["pid"]:
+                if data.get("pid"):
                     parts.append(f"PID: {data['pid']}")
 
                 return " | ".join(parts)

@@ -663,7 +663,7 @@ export const ProviderList: React.FC = () => {
       )}
 
       {activeTab === 'assignments' && (
-        <ModelAssignment tenantId={currentTenant.id} providers={providers} />
+        <ModelAssignment tenantId={currentTenant?.id ?? ''} providers={providers} />
       )}
 
       {/* Modals */}

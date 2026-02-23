@@ -14,17 +14,16 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
 
+from src.domain.model.auth.user import User
 from src.domain.ports.services.dead_letter_queue_port import (
     DeadLetterMessage,
     DeadLetterQueuePort,
     DLQMessageNotFoundError,
     DLQMessageStatus,
-    DLQStats,
 )
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
 )
-from src.domain.model.auth.user import User
 
 logger = logging.getLogger(__name__)
 

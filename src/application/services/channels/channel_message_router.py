@@ -145,11 +145,11 @@ class ChannelMessageRouter:
                         "[MessageRouter] Lazily initializing MediaImportService for media message"
                     )
                     try:
-                        from src.infrastructure.adapters.secondary.persistence.database import (
-                            async_session_factory,
-                        )
                         from src.application.services.channels.channel_service_factory import (
                             create_media_import_service_from_config,
+                        )
+                        from src.infrastructure.adapters.secondary.persistence.database import (
+                            async_session_factory,
                         )
 
                         async with async_session_factory() as init_session:
@@ -177,13 +177,13 @@ class ChannelMessageRouter:
                 if self._media_import_service:
                     # Each call gets fresh session and dependencies
                     try:
-                        from src.infrastructure.adapters.secondary.persistence.database import (
-                            async_session_factory,
-                        )
+                        from src.application.services.artifact_service import ArtifactService
                         from src.infrastructure.adapters.primary.web.startup.container import (
                             get_app_container,
                         )
-                        from src.application.services.artifact_service import ArtifactService
+                        from src.infrastructure.adapters.secondary.persistence.database import (
+                            async_session_factory,
+                        )
 
                         async with async_session_factory() as db_session:
                             # Get container and dependencies
@@ -270,7 +270,7 @@ class ChannelMessageRouter:
                             f"[MessageRouter] Media import failed: {e}",
                             exc_info=True,
                         )
-                        error_msg = f"抱歉，文件导入时发生错误: {str(e)}"
+                        error_msg = f"抱歉，文件导入时发生错误: {e!s}"
                         await self._send_error_reply(message, error_msg)
                 else:
                     logger.warning(
@@ -1743,7 +1743,7 @@ class ChannelMessageRouter:
             channel_config_id = await self._resolve_channel_config_id_from_message(message)
             if not channel_config_id:
                 logger.warning(
-                    f"[MessageRouter] Cannot send error reply: channel_config_id not found"
+                    "[MessageRouter] Cannot send error reply: channel_config_id not found"
                 )
                 return
 
@@ -1823,11 +1823,11 @@ def get_channel_message_router() -> ChannelMessageRouter:
         # Try to create MediaImportService
         media_import_service = None
         try:
-            from src.infrastructure.adapters.secondary.persistence.database import (
-                async_session_factory,
-            )
             from src.application.services.channels.channel_service_factory import (
                 create_media_import_service_from_config,
+            )
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
             )
 
             async def _init_media_service():
@@ -1856,7 +1856,7 @@ def get_channel_message_router() -> ChannelMessageRouter:
             try:
                 import asyncio
 
-                loop = asyncio.get_running_loop()
+                _ = asyncio.get_running_loop()
                 # Create task to initialize media service
                 # Note: This is a best-effort initialization; if it fails, media import will be disabled
                 logger.info("[MessageRouter] Attempting to initialize MediaImportService...")

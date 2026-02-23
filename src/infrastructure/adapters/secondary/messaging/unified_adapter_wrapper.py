@@ -11,9 +11,8 @@ Migration Strategy:
 4. Deprecate and remove legacy adapters
 """
 
-import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from src.domain.events.envelope import EventEnvelope
@@ -23,8 +22,6 @@ from src.domain.ports.services.agent_event_bus_port import (
     AgentEventBusPort,
 )
 from src.domain.ports.services.unified_event_bus_port import (
-    EventWithMetadata,
-    PublishResult,
     RoutingKey,
     SubscriptionOptions,
     UnifiedEventBusPort,
@@ -163,7 +160,7 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
     ) -> AsyncIterator[AgentEvent]:
         """Subscribe to events for a message (legacy interface)."""
         routing_key = self._create_routing_key(conversation_id, message_id)
-        routing_key_str = str(routing_key)
+        _routing_key_str = str(routing_key)
 
         options = SubscriptionOptions(
             from_time_us=from_time_us,

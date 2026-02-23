@@ -33,11 +33,11 @@ logger = logging.getLogger(__name__)
 
 async def _get_resume_service(db: AsyncSession):
     """Build ExecutionResumeService with per-request DB session."""
-    from src.infrastructure.adapters.secondary.persistence.sql_execution_checkpoint_repository import (
-        SqlExecutionCheckpointRepository,
-    )
     from src.application.services.agent.execution_resume_service import (
         ExecutionResumeService,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_execution_checkpoint_repository import (
+        SqlExecutionCheckpointRepository,
     )
 
     checkpoint_repo = SqlExecutionCheckpointRepository(db)
@@ -88,7 +88,7 @@ async def get_conversation_events(
 
     except Exception as e:
         logger.error(f"Error getting conversation events: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get events: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get events: {e!s}")
 
 
 @router.get(
@@ -215,7 +215,7 @@ async def get_execution_status(
 
     except Exception as e:
         logger.error(f"Error getting execution status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get execution status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get execution status: {e!s}")
 
 
 @router.post("/conversations/{conversation_id}/resume", status_code=202)
@@ -279,7 +279,7 @@ async def resume_execution(
         raise
     except Exception as e:
         logger.error(f"Error resuming execution: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to resume execution: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to resume execution: {e!s}")
 
 
 @router.get(
@@ -296,11 +296,11 @@ async def get_workflow_status(
     Get the Ray Actor status for an agent execution.
     """
     try:
-        from src.infrastructure.adapters.secondary.ray.client import await_ray
-        from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
         from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
             SqlConversationRepository,
         )
+        from src.infrastructure.adapters.secondary.ray.client import await_ray
+        from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
 
         conversation_repo = SqlConversationRepository(db)
         conversation = await conversation_repo.find_by_id(conversation_id)
@@ -346,4 +346,4 @@ async def get_workflow_status(
         raise
     except Exception as e:
         logger.error(f"Error getting workflow status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get workflow status: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get workflow status: {e!s}")

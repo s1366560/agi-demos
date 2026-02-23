@@ -210,7 +210,7 @@ class ComposeToolsUseCase:
         except Exception as e:
             logger.error(f"Error executing composition {composition.name}: {e}")
             success = False
-            final_result = f"Error: {str(e)}"
+            final_result = f"Error: {e!s}"
 
         return {
             "success": success,
@@ -276,7 +276,7 @@ class ComposeToolsUseCase:
         except Exception as e:
             logger.error(f"Error executing parallel composition {composition.name}: {e}")
             success = False
-            final_result = f"Error: {str(e)}"
+            final_result = f"Error: {e!s}"
 
         return {
             "success": success,
@@ -354,7 +354,7 @@ class ComposeToolsUseCase:
         except Exception as e:
             logger.error(f"Error executing conditional composition {composition.name}: {e}")
             success = False
-            final_result = f"Error: {str(e)}"
+            final_result = f"Error: {e!s}"
 
         return {
             "success": success,

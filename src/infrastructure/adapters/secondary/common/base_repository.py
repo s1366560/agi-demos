@@ -25,13 +25,11 @@ from typing import Any, Callable, Dict, Generic, List, Optional, TypeVar
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload  # noqa: F401 - available for subclasses
+from sqlalchemy.orm import selectinload  # noqa: F401 - used in docstring examples
 from sqlalchemy.sql import Select
 
 from src.domain.exceptions import (
     ConnectionError as DomainConnectionError,
-)
-from src.domain.exceptions import (
     DuplicateEntityError,
     RepositoryError,
     TransactionError,
@@ -135,7 +133,7 @@ def transactional(func: Callable) -> Callable:
                 raise
             raise TransactionError(
                 operation="execute",
-                message=f"Transaction failed: {str(e)}",
+                message=f"Transaction failed: {e!s}",
                 original_error=e,
             ) from e
 
@@ -288,7 +286,7 @@ class BaseRepository(ABC, Generic[T, M]):
         if not entity_id:
             raise ValueError("ID cannot be empty")
 
-        query = select(self._model_class).where(getattr(self._model_class, "id") == entity_id)
+        query = select(self._model_class).where(self._model_class.id == entity_id)
         # Apply eager loading options
         for option in self._eager_load_options():
             query = query.options(option)
@@ -312,7 +310,7 @@ class BaseRepository(ABC, Generic[T, M]):
         if not entity_ids:
             return []
 
-        query = select(self._model_class).where(getattr(self._model_class, "id").in_(entity_ids))
+        query = select(self._model_class).where(self._model_class.id.in_(entity_ids))
         # Apply eager loading options
         for option in self._eager_load_options():
             query = query.options(option)
@@ -359,7 +357,7 @@ class BaseRepository(ABC, Generic[T, M]):
         query = (
             select(func.count())
             .select_from(self._model_class)
-            .where(getattr(self._model_class, "id") == entity_id)
+            .where(self._model_class.id == entity_id)
         )
         result = await self._session.execute(query)
         count = result.scalar()
@@ -394,7 +392,7 @@ class BaseRepository(ABC, Generic[T, M]):
 
     async def _find_db_model_by_id(self, entity_id: str) -> Optional[M]:
         """Find database model by ID (internal helper)."""
-        query = select(self._model_class).where(getattr(self._model_class, "id") == entity_id)
+        query = select(self._model_class).where(self._model_class.id == entity_id)
         result = await self._session.execute(query)
         return result.scalar_one_or_none()
 
@@ -511,7 +509,7 @@ class BaseRepository(ABC, Generic[T, M]):
         if not entity_ids:
             return 0
 
-        query = delete(self._model_class).where(getattr(self._model_class, "id").in_(entity_ids))
+        query = delete(self._model_class).where(self._model_class.id.in_(entity_ids))
         result = await self._session.execute(query)
         await self._session.flush()
         return result.rowcount

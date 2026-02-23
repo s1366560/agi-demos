@@ -1849,6 +1849,7 @@ export interface MCPToolInfo {
   name: string;
   description?: string;
   input_schema?: Record<string, unknown>;
+  is_error?: boolean;
 }
 
 /**

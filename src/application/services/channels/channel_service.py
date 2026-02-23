@@ -1,17 +1,12 @@
 """Channel application service - orchestrates channel operations."""
 
 import logging
-from typing import Callable, Dict, List, Optional, Any
+from typing import Any, Callable, Dict, List, Optional
 
 from src.domain.model.channels.message import (
+    ChannelAdapter,
     Message,
     MessageContent,
-    ChannelAdapter,
-    ChannelConnectedEvent,
-    ChannelDisconnectedEvent,
-    ChannelErrorEvent,
-    MessageReceivedEvent,
-    MessageSentEvent,
 )
 
 logger = logging.getLogger(__name__)

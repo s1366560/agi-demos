@@ -16,20 +16,19 @@ Fix:
 """
 
 import asyncio
-from typing import Any, Dict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.domain.model.agent.hitl_types import HITLType
 from src.infrastructure.agent.core.message import ToolPart, ToolState
+from src.infrastructure.agent.permission.manager import PermissionManager
 from src.infrastructure.agent.permission.rules import PermissionAction, PermissionRule
 from src.infrastructure.agent.processor.processor import (
     ProcessorConfig,
     SessionProcessor,
     ToolDefinition,
 )
-from src.infrastructure.agent.permission.manager import PermissionManager
 
 
 async def async_execute(name: str, **kwargs) -> str:

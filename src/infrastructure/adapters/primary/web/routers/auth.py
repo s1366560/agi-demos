@@ -16,10 +16,8 @@ from src.application.schemas.auth import (
     APIKeyCreate,
     APIKeyResponse,
     Token,
-    UserUpdate,
-)
-from src.application.schemas.auth import (
     User as UserSchema,
+    UserUpdate,
 )
 from src.infrastructure.adapters.primary.web.dependencies import (
     create_api_key,
@@ -27,15 +25,15 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     verify_password,
 )
 from src.infrastructure.adapters.secondary.persistence.database import get_db
-from src.infrastructure.adapters.secondary.persistence.models import APIKey as DBAPIKey
-from src.infrastructure.adapters.secondary.persistence.models import Project as DBProject
 from src.infrastructure.adapters.secondary.persistence.models import (
+    APIKey as DBAPIKey,
+    Project as DBProject,
     Tenant,
+    User as DBUser,
     UserProject,
     UserRole,
     UserTenant,
 )
-from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 
 logger = logging.getLogger(__name__)
 

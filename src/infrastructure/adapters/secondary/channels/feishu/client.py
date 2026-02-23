@@ -49,7 +49,7 @@ class FeishuClient:
         """Get media manager for image/file operations."""
         if self._media is None:
             from src.infrastructure.adapters.secondary.channels.feishu.media import (
-                FeishuMediaManager
+                FeishuMediaManager,
             )
             self._media = FeishuMediaManager(self._get_client())
         return self._media
@@ -58,9 +58,7 @@ class FeishuClient:
     def docs(self):
         """Get document client for docx operations."""
         if self._docs is None:
-            from src.infrastructure.adapters.secondary.channels.feishu.docx import (
-                FeishuDocClient
-            )
+            from src.infrastructure.adapters.secondary.channels.feishu.docx import FeishuDocClient
             self._docs = FeishuDocClient(self._get_client())
         return self._docs
     
@@ -68,9 +66,7 @@ class FeishuClient:
     def wiki(self):
         """Get wiki client for knowledge base operations."""
         if self._wiki is None:
-            from src.infrastructure.adapters.secondary.channels.feishu.wiki import (
-                FeishuWikiClient
-            )
+            from src.infrastructure.adapters.secondary.channels.feishu.wiki import FeishuWikiClient
             self._wiki = FeishuWikiClient(self._get_client())
         return self._wiki
     
@@ -79,7 +75,7 @@ class FeishuClient:
         """Get drive client for cloud storage operations."""
         if self._drive is None:
             from src.infrastructure.adapters.secondary.channels.feishu.drive import (
-                FeishuDriveClient
+                FeishuDriveClient,
             )
             self._drive = FeishuDriveClient(self._get_client())
         return self._drive
@@ -89,7 +85,7 @@ class FeishuClient:
         """Get bitable client for multi-dimensional table operations."""
         if self._bitable is None:
             from src.infrastructure.adapters.secondary.channels.feishu.bitable import (
-                FeishuBitableClient
+                FeishuBitableClient,
             )
             self._bitable = FeishuBitableClient(self._get_client())
         return self._bitable
@@ -165,9 +161,7 @@ class FeishuClient:
         Returns:
             Message ID
         """
-        from src.infrastructure.adapters.secondary.channels.feishu.cards import (
-            CardBuilder
-        )
+        from src.infrastructure.adapters.secondary.channels.feishu.cards import CardBuilder
         
         card = CardBuilder.create_markdown_card(content, title)
         return await self.send_card_message(to, card)

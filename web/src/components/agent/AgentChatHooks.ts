@@ -99,7 +99,6 @@ export function useAgentChatHandlers(options: {
     projectId,
     conversationId,
     basePath,
-    _customBasePath,
     queryProjectId,
     navigate,
     togglePlanPanel,

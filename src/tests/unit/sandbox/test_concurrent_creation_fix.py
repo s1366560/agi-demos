@@ -372,7 +372,7 @@ class TestAgentWorkerSandboxConsistency:
                     _load_project_sandbox_tools,
                 )
 
-                result = await _load_project_sandbox_tools(
+                _ = await _load_project_sandbox_tools(
                     project_id="test-proj",
                     tenant_id="test-tenant",
                 )

@@ -13,8 +13,6 @@ import asyncio
 import json
 import os
 import sys
-import uuid
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import aiohttp
@@ -306,7 +304,7 @@ async def test_agent_chat_flow():
             print(f"   ✗ Agent error: {error_event.get('data', {})}")
             return False
         else:
-            print(f"   ⚠ No completion event received (timeout)")
+            print("   ⚠ No completion event received (timeout)")
             # Don't fail on timeout, might be normal for long operations
 
         print("\n   ✓ Test 2 PASSED")
@@ -354,7 +352,7 @@ async def test_hitl_clarification_flow():
             return False
 
         print("\n3.3 Waiting for HITL clarification request...")
-        events = await tester.receive_events(timeout=30.0)
+        _events = await tester.receive_events(timeout=30.0)
 
         # Check if we got clarification_asked
         if tester.hitl_type != "clarification":
@@ -386,7 +384,7 @@ async def test_hitl_clarification_flow():
                 print("   ✗ NO EVENTS after HITL response - ReAct event loop may be stuck!")
                 return False
             else:
-                print(f"   ⚠ Events received but no completion yet")
+                print("   ⚠ Events received but no completion yet")
 
         print("\n   ✓ Test 3 PASSED")
         return True
@@ -433,7 +431,7 @@ async def test_hitl_decision_flow():
             return False
 
         print("\n4.3 Waiting for HITL decision request...")
-        events = await tester.receive_events(timeout=30.0)
+        _ = await tester.receive_events(timeout=30.0)
 
         # Check if we got decision_asked
         if tester.hitl_type != "decision":
@@ -464,7 +462,7 @@ async def test_hitl_decision_flow():
                 print("   ✗ NO EVENTS after decision response - ReAct event loop may be stuck!")
                 return False
             else:
-                print(f"   ⚠ Events received but no completion yet")
+                print("   ⚠ Events received but no completion yet")
 
         print("\n   ✓ Test 4 PASSED")
         return True

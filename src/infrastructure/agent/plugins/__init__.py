@@ -1,7 +1,7 @@
 """Plugin runtime primitives for agent extensions."""
 
-from .discovery import DiscoveredPlugin, discover_plugins
 from .control_plane import PluginControlPlaneResult, PluginControlPlaneService
+from .discovery import DiscoveredPlugin, discover_plugins
 from .loader import AgentPluginLoader
 from .manager import PluginRuntimeManager, get_plugin_runtime_manager
 from .policy_context import (

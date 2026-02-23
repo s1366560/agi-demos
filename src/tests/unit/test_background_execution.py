@@ -8,11 +8,11 @@ Tests for:
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.domain.model.agent.subagent import SubAgent, AgentModel
+from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
 from src.infrastructure.agent.subagent.background_executor import BackgroundExecutor
 from src.infrastructure.agent.subagent.state_tracker import (
@@ -20,7 +20,6 @@ from src.infrastructure.agent.subagent.state_tracker import (
     SubAgentState,
     SubAgentStatus,
 )
-
 
 # ============================================================================
 # Fixtures

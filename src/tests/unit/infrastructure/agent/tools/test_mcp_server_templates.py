@@ -9,7 +9,7 @@ The tests verify that MCP Server templates provide standardized
 starting points for common server patterns.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -32,7 +32,6 @@ class TestMCPServerTemplates:
         Test that available templates can be listed.
         """
         from src.infrastructure.agent.tools.mcp_server_templates import (
-            CreateMCPServerFromTemplateTool,
             list_available_templates,
         )
 
@@ -170,7 +169,7 @@ class TestCreateMCPServerFromTemplateTool:
             workspace_path="/workspace",
         )
 
-        result = await tool.execute(
+        _ = await tool.execute(
             template="web-dashboard",
             server_name="my-dashboard",
         )

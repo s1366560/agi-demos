@@ -22,8 +22,6 @@ from fastapi.responses import JSONResponse
 # Domain exceptions
 from src.domain.exceptions.repository_exceptions import (
     ConnectionError as RepositoryConnectionError,
-)
-from src.domain.exceptions.repository_exceptions import (
     DuplicateEntityError,
     EntityNotFoundError,
     OptimisticLockError,

@@ -9,10 +9,8 @@ This script tests the fixes for:
 """
 
 import asyncio
-import json
 import os
 import sys
-from typing import Any, Dict, List
 
 sys.path.insert(0, os.getcwd())
 
@@ -191,8 +189,8 @@ class MultiHITLFixTest:
         print("\n=== Test: Multiple HITL State Simulation ===")
         
         # State tracking
-        conversation_id = "conv_multi_hitl"
-        message_id = "msg_001"
+        _conversation_id = "conv_multi_hitl"
+        _message_id = "msg_001"
         request_counter = 0
         sequence_number = 0
         
@@ -262,7 +260,7 @@ class MultiHITLFixTest:
         print(f"  Saved state: request_id={request_id_2}, messages={len(state_2['messages'])}")
         
         # Verify both states exist
-        print(f"\n  [Verification]")
+        print("\n  [Verification]")
         print(f"  First HITL request_id: {state_1['request_id']}")
         print(f"  Second HITL request_id: {state_2['request_id']}")
         print(f"  Total messages in context: {len(state_2['messages'])}")

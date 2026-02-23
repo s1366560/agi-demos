@@ -21,9 +21,9 @@ Usage:
 
 # Backends
 from .backends import Backend, BackendType
+from .backends.container_backend import ContainerBackend, ContainerConfig
 from .backends.ondemand_backend import OnDemandBackend, OnDemandConfig
 from .backends.shared_pool_backend import SharedPoolBackend, SharedPoolConfig
-from .backends.container_backend import ContainerBackend, ContainerConfig
 
 # Circuit Breaker
 from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitOpenError
@@ -31,6 +31,22 @@ from .circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitOpenEr
 # Classification
 from .classification import ClassificationResult, ProjectClassifier
 from .config import AgentInstanceConfig, PoolConfig, ResourceQuota
+
+# High Availability
+from .ha import (
+    AutoScalingService,
+    CheckpointType,
+    FailureEvent,
+    FailureRecoveryService,
+    FailureType,
+    RecoveryResult,
+    ScalingDecision,
+    ScalingDirection,
+    ScalingMetrics,
+    ScalingPolicy,
+    StateCheckpoint,
+    StateRecoveryService,
+)
 
 # Health
 from .health import HealthMonitor, HealthMonitorConfig
@@ -58,22 +74,6 @@ from .types import (
     RecoveryAction,
     ResourceUsage,
     TierMigration,
-)
-
-# High Availability
-from .ha import (
-    StateRecoveryService,
-    StateCheckpoint,
-    CheckpointType,
-    RecoveryResult,
-    FailureRecoveryService,
-    FailureEvent,
-    FailureType,
-    AutoScalingService,
-    ScalingPolicy,
-    ScalingMetrics,
-    ScalingDecision,
-    ScalingDirection,
 )
 
 __all__ = [
@@ -163,6 +163,14 @@ __all__ = [
 # Integration (lazy import to avoid circular dependencies)
 # API
 from .api import create_pool_router
+
+# Feature Flags
+from .feature_flags import (
+    FeatureFlagConfig,
+    FeatureFlags,
+    RolloutStrategy,
+    get_feature_flags,
+)
 from .integration import PooledAgentSessionAdapter
 from .integration.session_adapter import (
     AdapterConfig,
@@ -182,14 +190,6 @@ from .orchestrator import (
     create_orchestrator,
     get_global_orchestrator,
     shutdown_global_orchestrator,
-)
-
-# Feature Flags
-from .feature_flags import (
-    FeatureFlagConfig,
-    FeatureFlags,
-    RolloutStrategy,
-    get_feature_flags,
 )
 
 __all__ += [

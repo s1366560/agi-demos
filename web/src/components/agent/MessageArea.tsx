@@ -1002,7 +1002,10 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       }
 
       prevTimelineLengthRef.current = currentTimelineLength;
-    }, [timeline.length, isStreaming, isLoading, restoreScrollPosition, groupedItems.length, virtualizer]);
+    // virtualizer is intentionally excluded from deps: it creates a new reference every render
+    // and would cause this effect to fire continuously. It is always current via closure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [timeline.length, isStreaming, isLoading, restoreScrollPosition, groupedItems.length]);
 
     // Auto-scroll when streaming content updates
     useEffect(() => {
@@ -1060,7 +1063,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       [groupedItems]
     );
 
-// eslint-disable-next-line react-hooks/incompatible-library
+ 
     const virtualizer = useVirtualizer({
       count: groupedItems.length,
       getScrollElement: () => containerRef.current,

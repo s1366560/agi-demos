@@ -3,8 +3,9 @@
 
 import asyncio
 import json
-import websockets
 import sys
+
+import websockets
 
 # Configuration
 BASE_URL = "ws://localhost:8000"
@@ -43,7 +44,7 @@ async def test_websocket_chat():
                 "message": "Hello! What can you help me with?"
             }
             await ws.send(json.dumps(chat_msg))
-            print(f"✓ Sent chat message")
+            print("✓ Sent chat message")
             
             # Listen for events
             print("\n=== Listening for events (30 seconds) ===\n")
@@ -68,7 +69,7 @@ async def test_websocket_chat():
                     elif event_type == "error":
                         print(f"    ERROR: {event.get('data', {})}")
                     elif event_type == "complete":
-                        print(f"    ✓ Chat completed!")
+                        print("    ✓ Chat completed!")
                         break
                     elif event_type == "ack":
                         print(f"    Ack: {event}")

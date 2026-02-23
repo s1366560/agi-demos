@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from src.domain.llm_providers.llm_types import LLMClient
+from src.domain.llm_providers.llm_types import LLMClient, Message
 
 if TYPE_CHECKING:
     from src.domain.model.agent import WorkPlan
@@ -85,8 +85,8 @@ Be thorough but concise. Focus on actionable insights.
             # No timeout - allow long-running LLM calls
             response = await self._llm.ainvoke(
                 [
-                    SystemMessage(content=system_prompt),
-                    HumanMessage(content="Please provide the synthesized response."),
+                    Message.system(system_prompt),
+                    Message.user("Please provide the synthesized response."),
                 ]
             )
 

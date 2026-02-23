@@ -11,12 +11,11 @@ Priority 2 Features:
 3. Cancel Handling Integration - processor on_cancelled notification
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Optional
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from src.domain.events.agent_events import AgentDomainEvent
 from src.domain.events.types import AgentEventType
 
 
@@ -156,7 +155,7 @@ class TestResourceSubscription:
     async def test_subscribe_resource_with_callback(self, mock_client):
         """Test subscription with update callback."""
         # Mock callback for resource updates
-        callback = MagicMock()
+        callback = MagicMock()  # noqa: F841
 
         # Subscribe with callback
         result = await mock_client.subscribe_resource("file:///data.json")

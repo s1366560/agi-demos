@@ -7,6 +7,8 @@ since it depends on SQLAlchemy ORM models (infrastructure concern).
 Import from here is preserved for backward compatibility.
 """
 
-from src.infrastructure.security.authorization_service import (  # noqa: F401
+from src.infrastructure.security.authorization_service import (
     AuthorizationService,
 )
+
+__all__ = ["AuthorizationService"]

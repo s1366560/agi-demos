@@ -68,15 +68,14 @@ async def test_chat():
     # Test Agent Service
     print("\n3. Testing Agent Service...")
     try:
-        from src.configuration.factories import create_native_graph_adapter
+        from src.application.services.agent_service import AgentService
+        from src.configuration.factories import create_llm_client, create_native_graph_adapter
         from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_repository import (
             SqlAgentExecutionRepository,
         )
         from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
             SqlConversationRepository,
         )
-        from src.application.services.agent_service import AgentService
-        from src.configuration.factories import create_llm_client
 
         async with async_session_factory() as db:
             # Create minimal container dependencies
@@ -84,13 +83,14 @@ async def test_chat():
             conversation_repo = SqlConversationRepository(db)
             execution_repo = SqlAgentExecutionRepository(db)
 
-            settings = get_settings()
+            _settings = get_settings()
             llm = await create_llm_client("d06da862-1bb1-44fe-93a0-153f58578e07")  # tenant_id
+
+            import redis.asyncio as aioredis
 
             from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
                 SqlAgentExecutionEventRepository,
             )
-            import redis.asyncio as aioredis
             
             event_repo = SqlAgentExecutionEventRepository(db)
             

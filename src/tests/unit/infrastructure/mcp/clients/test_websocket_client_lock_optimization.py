@@ -6,7 +6,7 @@ for request ID generation, allowing concurrent send operations.
 
 import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -64,11 +64,11 @@ class TestWebSocketClientLockOptimization:
         client._ws = mock_ws
 
         # Track lock acquisition timing
-        lock_acquisition_times = []
+        lock_acquisition_times = []  # noqa: F841
         lock_release_times = []
         send_times = []
 
-        original_lock = client._request_id_lock
+        original_lock = client._request_id_lock  # noqa: F841
 
         # Track the actual send operation timing
         async def mock_send_json(data):

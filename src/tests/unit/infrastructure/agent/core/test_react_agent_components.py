@@ -36,7 +36,6 @@ from src.infrastructure.agent.events import (
     AgentDomainEvent,
     EventBus,
     EventMapper,
-    EventType,  # Alias for AgentEventType
     SSEEvent,
     get_event_bus,
     set_event_bus,
@@ -259,7 +258,7 @@ class TestFullIntegration:
     async def test_end_to_end_agent_flow(self) -> None:
         """Should simulate complete agent flow with all components."""
         # Setup
-        config_manager = ConfigManager()
+        _config_manager = ConfigManager()
         event_bus = EventBus()
         tool_registry = ToolRegistry()
         router = ExecutionRouter()
@@ -344,7 +343,7 @@ class TestFullIntegration:
     def test_sse_stream_from_all_components(self) -> None:
         """Should create SSE stream integrating all components."""
         mapper = EventMapper()
-        bus = EventBus(mapper=mapper)
+        _bus = EventBus(mapper=mapper)
 
         # Create events from different components
         events = [

@@ -1,11 +1,12 @@
 """Tests for ContextSummary value object, ContextLoader, and SqlContextSummaryAdapter."""
 
-import pytest
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
+from src.application.services.agent.context_loader import ContextLoader
 from src.domain.model.agent.conversation.context_summary import ContextSummary
-from src.application.services.agent.context_loader import ContextLoader, ContextLoadResult
 
 
 @pytest.mark.unit

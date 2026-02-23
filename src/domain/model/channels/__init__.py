@@ -1,18 +1,18 @@
 """Channels domain model."""
 
 from src.domain.model.channels.message import (
-    Message,
-    MessageContent,
-    MessageType,
-    SenderInfo,
-    ChatType,
-    ChannelConfig,
     ChannelAdapter,
-    MessageReceivedEvent,
-    MessageSentEvent,
+    ChannelConfig,
     ChannelConnectedEvent,
     ChannelDisconnectedEvent,
     ChannelErrorEvent,
+    ChatType,
+    Message,
+    MessageContent,
+    MessageReceivedEvent,
+    MessageSentEvent,
+    MessageType,
+    SenderInfo,
 )
 
 __all__ = [

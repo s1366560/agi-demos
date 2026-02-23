@@ -10,7 +10,7 @@ This improves concurrency and reduces lock contention.
 
 import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -82,7 +82,7 @@ class TestFineGrainedLocks:
             # (not blocked by the separate port lock)
             assert "port_start" in execution_order
             assert "instance_access" in execution_order
-            port_start_idx = execution_order.index("port_start")
+            _port_start_idx = execution_order.index("port_start")
             instance_idx = execution_order.index("instance_access")
             # Instance access should happen before port_end if locks are separate
             assert instance_idx < execution_order.index("port_end"), (
@@ -258,11 +258,11 @@ class TestInstanceAccessConcurrency:
     @pytest.mark.asyncio
     async def test_concurrent_instance_read_write(self):
         """Test that concurrent reads and writes to instances work correctly."""
+        from src.domain.ports.services.sandbox_port import SandboxConfig, SandboxStatus
         from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
             MCPSandboxAdapter,
             MCPSandboxInstance,
         )
-        from src.domain.ports.services.sandbox_port import SandboxStatus, SandboxConfig
 
         with patch("docker.from_env"):
             adapter = MCPSandboxAdapter()

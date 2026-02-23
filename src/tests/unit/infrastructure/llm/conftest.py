@@ -8,25 +8,30 @@ import pytest
 
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
-from src.tests.unit.infrastructure.llm.test_helper import _generate_response_noop  # noqa: F401
+from src.tests.unit.infrastructure.llm.test_helper import _generate_response_noop
 
 # Ensure the patch is applied
 LLMClient._generate_response = _generate_response_noop
 LLMClient.__abstractmethods__ = set()
 
 # Patch encryption service at module level (before tests run)
-import src.infrastructure.security.encryption_service as enc_service_module  # noqa: E402
+import src.infrastructure.security.encryption_service as enc_service_module
 
+_original_get_encryption_service = enc_service_module.get_encryption_service
 _mock_enc_service = MagicMock()
 _mock_enc_service.encrypt = MagicMock(side_effect=lambda x: f"encrypted_{x}" if x else x)
 _mock_enc_service.decrypt = MagicMock(side_effect=lambda x: x.replace("encrypted_", "") if x else x)
-enc_service_module.get_encryption_service = lambda: _mock_enc_service
+# NOTE: Do NOT patch at module level - it leaks to other test directories
 
 
 @pytest.fixture(autouse=True)
 def auto_mock_encryption_service():
     """Automatically mock encryption service for all tests in this directory."""
+    # Ensure the mock is active for this directory's tests
+    enc_service_module.get_encryption_service = lambda: _mock_enc_service
     yield _mock_enc_service
+    # Restore original so tests outside this directory get real encryption
+    enc_service_module.get_encryption_service = _original_get_encryption_service
 
 
 @pytest.fixture

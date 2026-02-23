@@ -226,7 +226,7 @@ const ChannelConfigPage: React.FC = () => {
   }, [activeChannelSchema, editingConfig, form, isModalVisible]);
 
   // Auto-refresh status every 10s
-  const intervalRef = useRef<ReturnType<typeof setInterval>>();
+  const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   useEffect(() => {
     if (projectId) {
       intervalRef.current = setInterval(() => {

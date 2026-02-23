@@ -10,7 +10,7 @@ Priority 1: Ping Health Check Integration
 - This is more efficient as ping is a lightweight operation
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 

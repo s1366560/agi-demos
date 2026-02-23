@@ -1,11 +1,10 @@
 """Unit tests for tool_converter module."""
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
-from typing import Any, Dict
 
 from src.infrastructure.agent.core.tool_converter import convert_tools
-from src.infrastructure.agent.core.processor import ToolDefinition
 
 
 class MockTool:

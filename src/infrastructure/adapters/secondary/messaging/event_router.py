@@ -27,7 +27,7 @@ import asyncio
 import fnmatch
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
+from typing import Awaitable, Callable, Dict, List, Optional, Set
 
 from src.domain.ports.services.unified_event_bus_port import EventWithMetadata
 

@@ -9,7 +9,7 @@ The tests verify that the DebugMCPServerTool provides useful debugging
 information for MCP servers running inside sandboxes.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -184,7 +184,7 @@ class TestDebugMCPServerToolIntegration:
             sandbox_id="sandbox-1",
         )
 
-        result = await tool.execute(server_name="test-server", include_logs=True)
+        _ = await tool.execute(server_name="test-server", include_logs=True)
 
         # Should have called multiple debug endpoints
         assert len(calls) >= 2, f"Expected multiple calls, got: {calls}"
@@ -208,7 +208,7 @@ class TestDebugMCPServerToolIntegration:
             sandbox_id="sandbox-1",
         )
 
-        result = await tool.execute(server_name="test-server", log_lines=10)
+        _ = await tool.execute(server_name="test-server", log_lines=10)
 
         # Should have called with log limit
         assert mock_adapter.call_tool.called

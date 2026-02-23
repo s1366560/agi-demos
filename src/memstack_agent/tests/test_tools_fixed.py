@@ -1,8 +1,8 @@
 """Tests for tool system - fixed imports."""
 
-import pytest
 from typing import Optional
-import inspect
+
+import pytest
 
 from memstack_agent.tools.converter import (
     function_to_tool,

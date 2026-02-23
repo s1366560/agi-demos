@@ -58,7 +58,7 @@ class BackgroundTask:
             self.status = TaskStatus.FAILED
             self.completed_at = datetime.now(timezone.utc)
             self.error = str(e)
-            self.message = f"Task failed: {str(e)}"
+            self.message = f"Task failed: {e!s}"
             logger.error(f"Task {self.task_id} failed: {e}")
             raise
 

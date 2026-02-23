@@ -15,11 +15,9 @@ Tests for missing MCP protocol features:
 Reference: https://modelcontextprotocol.io/specification/2025-11-25
 """
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 # ============================================================================
 # Edge Case Tests for Improved Coverage
@@ -184,7 +182,7 @@ class TestEdgeCases:
         ) as mock_send:
             mock_send.return_value = mock_response
 
-            prompt = await client.get_prompt("test", None)
+            _prompt = await client.get_prompt("test", None)
 
             # Verify empty dict was used
             call_args = mock_send.call_args

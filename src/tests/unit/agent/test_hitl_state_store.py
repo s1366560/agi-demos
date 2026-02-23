@@ -6,7 +6,7 @@ Tests the Redis-based state persistence for Agent pause/resume.
 
 import json
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 

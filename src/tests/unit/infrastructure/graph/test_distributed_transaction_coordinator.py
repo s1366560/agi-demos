@@ -395,7 +395,7 @@ class TestTimeoutHandling:
             await asyncio.sleep(0.2)  # Longer than timeout
 
         with pytest.raises(TimeoutError):
-            async with coordinator.begin() as tx:
+            async with coordinator.begin() as _tx:
                 await slow_operation()
 
         # Verify rollback was attempted
@@ -476,7 +476,7 @@ class TestConcurrencyScenarios:
         async def transaction_with_lock():
             # Note: Distributed locking is not fully implemented yet
             # This test verifies the coordinator accepts the key parameter
-            async with coordinator.begin(key="resource-123") as tx:
+            async with coordinator.begin(key="resource-123") as _tx:
                 lock_acquired.append(True)
                 await asyncio.sleep(0.01)
 
@@ -673,9 +673,9 @@ class TestEdgeCases:
 
         depth = []
 
-        async with coordinator.begin() as tx1:
+        async with coordinator.begin() as _tx1:
             depth.append(1)
-            async with coordinator.begin() as tx2:
+            async with coordinator.begin() as _tx2:
                 depth.append(2)
 
         # Both should complete

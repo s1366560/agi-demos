@@ -9,7 +9,7 @@ The tests verify that tool discovery uses exponential backoff retry
 when transient failures occur.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 

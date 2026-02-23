@@ -6,15 +6,15 @@ This module demonstrates the full capabilities of the Feishu channel integration
 import asyncio
 import os
 
-from src.domain.model.channels import ChannelConfig
 from src.application.services.channels import ChannelService
+from src.domain.model.channels import ChannelConfig
 from src.infrastructure.adapters.secondary.channels.feishu import (
+    CardBuilder,
     FeishuAdapter,
     FeishuClient,
-    CardBuilder,
     PostBuilder,
-    send_feishu_text,
     send_feishu_card,
+    send_feishu_text,
 )
 
 
@@ -47,9 +47,9 @@ async def media_example():
     """Media upload and send example."""
     app_id = os.getenv("FEISHU_APP_ID", "cli_xxx")
     app_secret = os.getenv("FEISHU_APP_SECRET", "xxx")
-    chat_id = "oc_xxx"
+    _chat_id = "oc_xxx"
     
-    client = FeishuClient(app_id, app_secret)
+    _client = FeishuClient(app_id, app_secret)
     
     # Upload and send image
     # image_key = await client.media.upload_image("/path/to/image.png")
@@ -162,17 +162,17 @@ async def bitable_example():
     
     # Create fields
     from src.infrastructure.adapters.secondary.channels.feishu.bitable import (
-        FIELD_TYPE_TEXT,
         FIELD_TYPE_SINGLE_SELECT,
+        FIELD_TYPE_TEXT,
     )
     
-    name_field = await client.bitable.create_field(
+    _name_field = await client.bitable.create_field(
         app_token, table_id,
         field_name="任务名称",
         field_type=FIELD_TYPE_TEXT
     )
     
-    status_field = await client.bitable.create_field(
+    _status_field = await client.bitable.create_field(
         app_token, table_id,
         field_name="状态",
         field_type=FIELD_TYPE_SINGLE_SELECT,

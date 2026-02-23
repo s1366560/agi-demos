@@ -9,15 +9,13 @@ TDD Approach: Tests written first to ensure:
 This is P0-2: Batch logging and token delta sampling in llm_stream.py
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
-import pytest
 import time
+
+import pytest
 
 from src.infrastructure.agent.core.llm_stream import (
     LLMStream,
     StreamConfig,
-    StreamEvent,
-    StreamEventType,
 )
 
 

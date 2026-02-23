@@ -554,7 +554,7 @@ async def get_tenant_analytics(
     # Determine time range
     days_map = {"7d": 7, "30d": 30, "90d": 90}
     days = days_map.get(period, 30)
-    start_date = datetime.now(timezone.utc) - timedelta(days=days)
+    _start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
     # Get projects for this tenant
     projects_result = await db.execute(
@@ -614,7 +614,7 @@ async def _get_memory_growth_by_day(
     if not project_ids:
         return []
 
-    start_date = datetime.now(timezone.utc) - timedelta(days=days)
+    _start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
     # Query memory counts grouped by date
     result = await db.execute(
@@ -623,7 +623,7 @@ async def _get_memory_growth_by_day(
             func.count().label("count"),
         )
         .where(Memory.project_id.in_(project_ids))
-        .where(Memory.created_at >= start_date)
+        .where(Memory.created_at >= _start_date)
         .group_by(func.date(Memory.created_at))
         .order_by(func.date(Memory.created_at))
     )

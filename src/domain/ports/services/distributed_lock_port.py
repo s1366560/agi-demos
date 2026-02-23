@@ -146,7 +146,7 @@ class DistributedLockPort(ABC):
         ttl: int = 60,
         blocking: bool = True,
         timeout: Optional[float] = None,
-    ) -> AsyncGenerator["AcquiredLock", None]:
+    ) -> AsyncGenerator[AcquiredLock, None]:
         """
         Context manager for acquiring a lock.
 

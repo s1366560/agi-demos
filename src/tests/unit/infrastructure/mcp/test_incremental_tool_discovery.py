@@ -9,8 +9,7 @@ The tests verify that tool discovery can be done incrementally by
 checking version hashes, avoiding full rediscovery when not needed.
 """
 
-import hashlib
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 

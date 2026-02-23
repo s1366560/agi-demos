@@ -4,6 +4,8 @@ REFACTORED: This package now uses AgentEventType from src.domain.events.types
 as the single source of truth. EventType is provided as a deprecated alias.
 """
 
+# Re-export unified type for explicit access
+from src.domain.events.types import AgentEventType
 from src.infrastructure.agent.events.converter import (
     EventConverter,
     SkillLike,
@@ -19,8 +21,6 @@ from src.infrastructure.agent.events.event_mapper import (
     get_event_bus,
     set_event_bus,
 )
-# Re-export unified type for explicit access
-from src.domain.events.types import AgentEventType
 
 __all__ = [
     # Event types (unified)

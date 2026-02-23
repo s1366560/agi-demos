@@ -79,7 +79,7 @@ class FeishuAdapter:
 
     def _build_rest_client(self) -> Any:
         """Build a lark_oapi REST Client with proper domain configuration."""
-        from lark_oapi import Client, FEISHU_DOMAIN, LARK_DOMAIN
+        from lark_oapi import FEISHU_DOMAIN, LARK_DOMAIN, Client
 
         domain = LARK_DOMAIN if self._config.domain == "lark" else FEISHU_DOMAIN
         return (
@@ -404,7 +404,7 @@ class FeishuAdapter:
             # Extract context info (message_id, chat_id)
             context = event_data.context
             message_id = context.open_message_id if context else ""
-            chat_id = context.open_chat_id if context else ""
+            _chat_id = context.open_chat_id if context else ""
 
             logger.info(
                 f"[Feishu] Card action: request_id={hitl_request_id}, "

@@ -5,12 +5,12 @@ TDD Approach: Tests written first, then implementation.
 """
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from src.domain.model.agent.skill import (
     Skill,
-    SkillScope,
     SkillStatus,
     TriggerPattern,
     TriggerType,
@@ -34,7 +34,6 @@ def mock_sandbox_adapter():
 @pytest.fixture
 def resource_loader(tmp_path: Path):
     """Create a SkillResourceLoader with temp path."""
-    from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
     return SkillResourceLoader(tmp_path)
 

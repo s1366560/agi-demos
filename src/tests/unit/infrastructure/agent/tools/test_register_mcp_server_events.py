@@ -9,7 +9,7 @@ The tests verify that when an MCP server is registered, the tools become
 immediately available without requiring an additional round-trip.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 

@@ -13,12 +13,15 @@ import { useMCPAppStore } from '@/stores/mcpAppStore';
 
 import { mcpAPI } from '@/services/mcpService';
 
+
 import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
 import { McpAppsTabV2 } from './McpAppsTabV2';
 import { McpServerTabV2 } from './McpServerTabV2';
 import { McpToolsTabV2 } from './McpToolsTabV2';
 import { getRuntimeStatus } from './types';
+
+import type { MCPToolInfo } from '@/types/agent';
 
 import type { McpTabKey, ServerStats, AppStats, ToolStats } from './types';
 
@@ -40,7 +43,6 @@ const StatsCard: React.FC<StatsCardProps> = ({
   title,
   value,
   icon,
-  _bgColor,
   textColor,
   iconBg,
   subtitle,
@@ -101,9 +103,9 @@ export const McpServerListV2: React.FC = () => {
 
     const appStats: AppStats = {
       total: appsArray.length,
-      ready: appsArray.filter((a) => a.status === 'Ready').length,
-      error: appsArray.filter((a) => a.status === 'Error').length,
-      disabled: appsArray.filter((a) => a.enabled === false).length,
+      ready: appsArray.filter((a) => a.status === 'ready').length,
+      error: appsArray.filter((a) => a.status === 'error').length,
+      disabled: appsArray.filter((a) => a.status === 'disabled').length,
     };
 
     const toolStats: ToolStats = {
@@ -127,7 +129,7 @@ export const McpServerListV2: React.FC = () => {
   const handleReconcile = async () => {
     setIsReconciling(true);
     try {
-      await mcpAPI.reconcile();
+      await mcpAPI.reconcileProject(servers[0]?.project_id || 'default');
       message.success('Servers reconciled');
     } catch (err: any) {
       message.error(err?.response?.data?.detail || 'Reconciliation failed');

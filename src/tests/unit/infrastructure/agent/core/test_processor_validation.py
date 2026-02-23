@@ -7,13 +7,13 @@ before calling LLM, preventing 3-minute waste on invalid events.
 This is P0-1: Fix Pydantic validation error in processor.py
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
+
 import pytest
 
 from src.domain.events.agent_events import AgentActEvent
 from src.infrastructure.agent.core.processor import (
     ProcessorConfig,
-    ProcessorState,
     SessionProcessor,
     ToolDefinition,
 )
@@ -396,8 +396,8 @@ class TestProcessorEarlyValidationInProcessStep:
     @pytest.mark.asyncio
     async def test_process_step_rejects_invalid_tool_name_type(self, processor):
         """Test _process_step rejects non-string tool_name during early validation."""
+        from src.infrastructure.agent.core.llm_stream import StreamEvent
         from src.infrastructure.agent.core.message import ToolPart, ToolState
-        from src.infrastructure.agent.core.llm_stream import StreamEvent, StreamEventType
 
         # Simulate LLM returning invalid tool_name (integer instead of string)
         call_id = "call_invalid"
@@ -414,7 +414,7 @@ class TestProcessorEarlyValidationInProcessStep:
         processor._pending_tool_calls[call_id] = tool_part
 
         # Create mock tool_call_end event with invalid data
-        invalid_event = StreamEvent.tool_call_end(
+        _invalid_event = StreamEvent.tool_call_end(
             call_id=call_id,
             name=tool_name,  # Invalid type
             arguments=arguments,

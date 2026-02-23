@@ -7,7 +7,7 @@ and produces a unified summary.
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 
 from src.domain.model.agent.subagent_result import SubAgentResult
 

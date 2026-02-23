@@ -8,9 +8,9 @@ These tests verify:
 4. API endpoint responses
 """
 
-import pytest
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 @pytest.mark.integration
@@ -20,27 +20,9 @@ class TestHITLTypeSystemIntegration:
     def test_all_hitl_types_can_be_imported(self):
         """Test all HITL types can be imported from hitl_types module."""
         from src.domain.model.agent.hitl_types import (
-            HITLType,
-            HITLStatus,
-            ClarificationType,
-            DecisionType,
-            PermissionAction,
-            RiskLevel,
-            ClarificationOption,
-            DecisionOption,
-            EnvVarField,
-            ClarificationRequestData,
-            DecisionRequestData,
-            EnvVarRequestData,
-            PermissionRequestData,
-            ClarificationResponse,
-            DecisionResponse,
-            EnvVarResponse,
-            PermissionResponse,
-            HITLRequest,
-            HITLResponse,
-            HITLSignalPayload,
             HITL_RESPONSE_SIGNAL,
+            HITLStatus,
+            HITLType,
         )
 
         # Verify enums have expected values
@@ -61,16 +43,16 @@ class TestHITLTypeSystemIntegration:
     def test_factory_functions_create_valid_requests(self):
         """Test factory functions create valid HITLRequest objects."""
         from src.domain.model.agent.hitl_types import (
+            ClarificationOption,
+            DecisionOption,
+            EnvVarField,
+            HITLStatus,
+            HITLType,
+            RiskLevel,
             create_clarification_request,
             create_decision_request,
             create_env_var_request,
             create_permission_request,
-            HITLType,
-            HITLStatus,
-            ClarificationOption,
-            DecisionOption,
-            EnvVarField,
-            RiskLevel,
         )
 
         # Clarification request
@@ -124,16 +106,16 @@ class TestHITLTypeSystemIntegration:
 
     def test_helper_functions_work_correctly(self):
         """Test helper functions for request expiry."""
+        from datetime import timedelta
+
         from src.domain.model.agent.hitl_types import (
+            ClarificationOption,
+            ClarificationRequestData,
             HITLRequest,
             HITLType,
-            HITLStatus,
-            ClarificationRequestData,
-            ClarificationOption,
-            is_request_expired,
             get_remaining_time_seconds,
+            is_request_expired,
         )
-        from datetime import datetime, timezone, timedelta
 
         # Create a request manually with timezone-aware datetime
         now = datetime.now(timezone.utc)
@@ -196,8 +178,9 @@ class TestHITLServicePortIntegration:
 
     def test_service_port_interface_is_abstract(self):
         """Test HITLServicePort is an abstract interface."""
-        from src.domain.ports.services.hitl_service_port import HITLServicePort
         import abc
+
+        from src.domain.ports.services.hitl_service_port import HITLServicePort
 
         assert abc.ABC in HITLServicePort.__bases__
 
@@ -247,10 +230,10 @@ class TestHITLEndToEndFlow:
     def test_request_creation_to_signal_payload(self):
         """Test creating a request and converting to signal payload."""
         from src.domain.model.agent.hitl_types import (
-            create_clarification_request,
+            ClarificationOption,
             HITLSignalPayload,
             HITLType,
-            ClarificationOption,
+            create_clarification_request,
         )
 
         # Create a request

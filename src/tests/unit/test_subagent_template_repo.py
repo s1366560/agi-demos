@@ -9,8 +9,7 @@ Tests cover:
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Dict, List, Optional
 
 import pytest
 
@@ -21,7 +20,6 @@ from src.infrastructure.adapters.secondary.persistence.seed_templates import (
     BUILTIN_TEMPLATES,
     seed_builtin_templates,
 )
-
 
 # === Fake In-Memory Repository for Testing ===
 
@@ -466,7 +464,6 @@ class TestTemplateRouterEndpoints:
     def test_template_list_response_schema(self):
         from src.infrastructure.adapters.primary.web.routers.subagents import (
             TemplateListResponse,
-            TemplateResponse,
         )
 
         resp = TemplateListResponse(templates=[], total=0)

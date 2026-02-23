@@ -1,9 +1,9 @@
 """Tests for Phase 5.3: SubAgent Template Registry (Marketplace)."""
 
-import pytest
-from unittest.mock import MagicMock
 
-from src.domain.model.agent.subagent import AgentModel, SubAgent
+import pytest
+
+from src.domain.model.agent.subagent import SubAgent
 from src.infrastructure.agent.subagent.template_registry import (
     SubAgentTemplate,
     TemplateRegistry,

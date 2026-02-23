@@ -372,7 +372,7 @@ class TestRestart:
     @pytest.mark.asyncio
     async def test_restart_preserves_sandbox_id(self, service, mock_adapter, mock_repository):
         """Restart should preserve sandbox_id for tool compatibility."""
-        result = await service.restart(project_id="proj-123")
+        _result = await service.restart(project_id="proj-123")
 
         # The sandbox_id should be preserved for ReActAgent tool cache compatibility
         # This is verified by checking that create_sandbox is called with the original ID

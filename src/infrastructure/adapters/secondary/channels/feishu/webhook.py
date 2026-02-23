@@ -3,7 +3,7 @@
 import hashlib
 import json
 import logging
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import HTTPException, Request
 
@@ -192,7 +192,7 @@ class FeishuEventDispatcher:
         # Apply global filters
         for filter_fn in self._filters:
             if not filter_fn(event_data):
-                logger.debug(f"Event filtered out by global filter")
+                logger.debug("Event filtered out by global filter")
                 return
         
         # Apply middleware

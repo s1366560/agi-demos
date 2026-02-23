@@ -8,11 +8,11 @@ SkillResourceInjector, and SkillExecutor without requiring Docker.
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import AsyncMock, MagicMock
+
 import pytest
 
 from src.domain.model.agent.skill import (
     Skill,
-    SkillScope,
     SkillStatus,
     TriggerPattern,
     TriggerType,

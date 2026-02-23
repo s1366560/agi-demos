@@ -305,7 +305,7 @@ def build_mentioned_message(
     mention_texts = []
     for m in mentions:
         name = m.get("name", "")
-        user_id = m.get("id", "")
+        _user_id = m.get("id", "")
         mention_texts.append(f"@{name}")
     
     return " ".join(mention_texts) + " " + message_text

@@ -17,16 +17,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.auth_service_v2 import AuthService
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory, get_db
-from src.infrastructure.adapters.secondary.persistence.models import APIKey as DBAPIKey
 from src.infrastructure.adapters.secondary.persistence.models import (
+    APIKey as DBAPIKey,
     Permission,
     Role,
     RolePermission,
     Tenant,
+    User as DBUser,
     UserRole,
     UserTenant,
 )
-from src.infrastructure.adapters.secondary.persistence.models import User as DBUser
 from src.infrastructure.adapters.secondary.persistence.sql_api_key_repository import (
     SqlAPIKeyRepository,
 )

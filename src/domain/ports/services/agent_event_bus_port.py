@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 # Import AgentEventType from the unified types module (Single Source of Truth)
-from src.domain.events.types import AgentEventType, is_terminal_event
+from src.domain.events.types import AgentEventType
 
 
 @dataclass

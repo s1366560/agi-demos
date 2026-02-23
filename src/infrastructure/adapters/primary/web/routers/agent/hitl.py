@@ -13,7 +13,6 @@ Architecture (Ray-based, Redis Streams only):
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession

@@ -168,7 +168,7 @@ def set_gauge(
         unit: Metric unit
     """
     # Store the value in a closure for the callback
-    gauge_state = {"value": value}
+    _gauge_state = {"value": value}
 
     def callback(options: metrics.CallbackOptions) -> metrics.Observation:
         return metrics.Observation(value, {})

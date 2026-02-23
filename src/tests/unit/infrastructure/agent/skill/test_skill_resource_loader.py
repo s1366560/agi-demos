@@ -5,7 +5,8 @@ TDD Approach: Tests written first, then implementation.
 """
 
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
+
 import pytest
 
 from src.infrastructure.agent.skill.skill_resource_loader import SkillResourceLoader
@@ -130,9 +131,6 @@ class TestSkillResourceLoader:
         """Test _scan_directory finds all files recursively."""
         from src.infrastructure.agent.skill.skill_resource_loader import (
             SkillResourceLoader,
-        )
-        from src.infrastructure.skill.filesystem_scanner import (
-            FileSystemSkillScanner,
         )
 
         loader = SkillResourceLoader(temp_project_path)

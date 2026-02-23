@@ -250,7 +250,7 @@ class TestQueryMonitor:
         mock_session.execute.return_value = MagicMock()
 
         # Execute
-        result = await monitor.execute(
+        _ = await monitor.execute(
             session=mock_session,
             query=text("SELECT * FROM users"),
             duration_ms=50,
@@ -268,8 +268,8 @@ class TestQueryMonitor:
         mock_session.execute.return_value = MagicMock()
 
         # Execute
-        with patch("src.infrastructure.adapters.secondary.common.query_monitor.logger") as mock_logger:
-            result = await monitor.execute(
+        with patch("src.infrastructure.adapters.secondary.common.query_monitor.logger") as _mock_logger:
+            _ = await monitor.execute(
                 session=mock_session,
                 query=text("SELECT * FROM users"),
                 duration_ms=150,  # Above threshold
@@ -458,7 +458,7 @@ class TestQueryMonitor:
     @pytest.mark.asyncio
     async def test_context_manager(self, monitor):
         """Test using monitor as context manager."""
-        with monitor.track("test_operation") as tracker:
+        with monitor.track("test_operation") as _tracker:
             # Simulate some work
             pass
 

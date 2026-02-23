@@ -53,7 +53,7 @@ class ProcessedAttachment:
             # Fallback for unknown types
             return {
                 "type": "text",
-                "text": f"\n\n--- Attached file: {self.filename} (type: {self.type}) ---\n{str(self.content)}\n--- End of file ---",
+                "text": f"\n\n--- Attached file: {self.filename} (type: {self.type}) ---\n{self.content!s}\n--- End of file ---",
             }
 
 

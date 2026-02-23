@@ -8,9 +8,9 @@ Provides a registry for managing and discovering skills:
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from threading import Lock
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from memstack_agent.skill.types import (
     Skill,
@@ -18,7 +18,6 @@ from memstack_agent.skill.types import (
     SkillExecutionMode,
     SkillMatch,
     SkillMetadata,
-    SkillStatus,
     SkillStep,
     SkillTrigger,
     TriggerType,

@@ -9,9 +9,9 @@ MCP Prompts are server-provided templates that:
 - Are discovered dynamically from registered servers
 """
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Dict, Any, List
 
 from src.infrastructure.agent.mcp.registry import MCPServerRegistry
 

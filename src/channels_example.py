@@ -7,8 +7,8 @@ in the AGI-Demos project.
 import asyncio
 import os
 
-from src.domain.model.channels import ChannelConfig, Message
 from src.application.services.channels import ChannelService
+from src.domain.model.channels import ChannelConfig, Message
 from src.infrastructure.adapters.secondary.channels.feishu import FeishuAdapter
 
 
@@ -92,9 +92,9 @@ async def multi_channel_example():
 async def direct_api_example():
     """Direct API usage example (without adapter)."""
     from src.infrastructure.adapters.secondary.channels.feishu import (
-        send_feishu_text,
-        send_feishu_card,
         FeishuClient,
+        send_feishu_card,
+        send_feishu_text,
     )
     
     app_id = os.getenv("FEISHU_APP_ID", "cli_xxx")

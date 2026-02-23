@@ -300,7 +300,7 @@ class ExecutionRouter:
         Returns:
             Summary statistics
         """
-        path_counts = {path: 0 for path in ExecutionPath}
+        path_counts = dict.fromkeys(ExecutionPath, 0)
         total_confidence = 0.0
 
         for decision in decisions:

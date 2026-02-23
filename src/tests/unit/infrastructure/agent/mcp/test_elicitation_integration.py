@@ -7,12 +7,12 @@ MCP Elicitation allows MCP servers to request information from users
 through the agent. We integrate this with the existing HITL infrastructure.
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from typing import Dict, Any
+from typing import Any, Dict
+from unittest.mock import AsyncMock, patch
 
-from src.domain.model.agent.hitl.hitl_types import HITLType
-from src.domain.events.agent_events import AgentElicitationAskedEvent, AgentElicitationAnsweredEvent
+import pytest
+
+from src.domain.events.agent_events import AgentElicitationAnsweredEvent, AgentElicitationAskedEvent
 from src.infrastructure.agent.mcp.registry import MCPServerRegistry
 
 
@@ -139,12 +139,8 @@ class TestMCPElicitationIntegration:
         This tests the conversion from MCP elicitation schema to HITL's
         ClarificationRequestData format.
         """
-        from src.domain.model.agent.hitl.hitl_types import (
-            ClarificationType,
-            ClarificationOption,
-        )
 
-        conversion_result = None
+        _conversion_result = None
 
         async def handler(server_id: str, message: str, schema: Dict[str, Any]) -> Dict[str, Any]:
             return {"result": "success"}

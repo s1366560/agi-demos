@@ -12,13 +12,12 @@ import asyncio
 import json
 import os
 import sys
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 # Add project to path
 sys.path.insert(0, os.getcwd())
 
-from src.domain.model.agent.hitl_types import HITLPendingException, HITLType
+from src.domain.model.agent.hitl_types import HITLType
 from src.infrastructure.agent.hitl.ray_hitl_handler import RayHITLHandler
 from src.infrastructure.agent.processor import ProcessorConfig, SessionProcessor, ToolDefinition
 
@@ -249,7 +248,7 @@ class MultiHITLTest:
             "content": "User clarification: Option A",
         })
         
-        print(f"  Added assistant tool call and tool response")
+        print("  Added assistant tool call and tool response")
         print(f"  Total messages: {len(messages)}")
         
         # Second HITL cycle
@@ -272,7 +271,7 @@ class MultiHITLTest:
             "content": "User decision: proceed",
         })
         
-        print(f"  Added assistant tool call and tool response")
+        print("  Added assistant tool call and tool response")
         print(f"  Total messages: {len(messages)}")
         
         # Verify context

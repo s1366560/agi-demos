@@ -66,7 +66,7 @@ export const RUNTIME_STATUS_STYLES: Record<
 // ============================================================================
 
 export const SERVER_TYPE_STYLES: Record<
-  'stdio' | 'sse' | 'remote',
+  'stdio' | 'sse' | 'remote' | 'http' | 'websocket',
   {
     bgColor: string;
     textColor: string;
@@ -91,6 +91,18 @@ export const SERVER_TYPE_STYLES: Record<
     textColor: 'text-purple-700 dark:text-purple-400',
     icon: 'cloud',
     label: 'Remote',
+  },
+  http: {
+    bgColor: 'bg-cyan-100 dark:bg-cyan-900/30',
+    textColor: 'text-cyan-700 dark:text-cyan-400',
+    icon: 'globe',
+    label: 'HTTP',
+  },
+  websocket: {
+    bgColor: 'bg-indigo-100 dark:bg-indigo-900/30',
+    textColor: 'text-indigo-700 dark:text-indigo-400',
+    icon: 'zap',
+    label: 'WebSocket',
   },
 };
 

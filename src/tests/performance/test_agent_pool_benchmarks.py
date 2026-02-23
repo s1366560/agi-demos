@@ -16,7 +16,7 @@ from typing import Callable
 
 import pytest
 
-from src.infrastructure.agent.pool.config import PoolConfig, ResourceQuota, TierConfig
+from src.infrastructure.agent.pool.config import PoolConfig, ResourceQuota
 from src.infrastructure.agent.pool.types import ProjectTier
 
 
@@ -193,7 +193,7 @@ class TestPoolMemoryBenchmarks:
         print(f"\n{'=' * 60}")
         print("Benchmark: Memory Per PoolConfig")
         print(f"{'=' * 60}")
-        print(f"  Configs created:    1000")
+        print("  Configs created:    1000")
         print(f"  Objects created:    {after_objects - baseline_objects}")
         print(f"  Objects/config:     {objects_per_config:.1f}")
         print(f"  Avg size/config:    {avg_size:.0f} bytes")
@@ -226,7 +226,7 @@ class TestPoolMemoryBenchmarks:
         print(f"\n{'=' * 60}")
         print("Benchmark: Memory Per ResourceQuota")
         print(f"{'=' * 60}")
-        print(f"  Quotas created:     1000")
+        print("  Quotas created:     1000")
         print(f"  Objects created:    {after_objects - baseline_objects}")
         print(f"  Objects/quota:      {objects_per_quota:.1f}")
         print(f"  Avg size/quota:     {avg_size:.0f} bytes")

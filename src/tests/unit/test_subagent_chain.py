@@ -1,11 +1,11 @@
 """Tests for Phase 5.2: SubAgent Chain execution."""
 
 import asyncio
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.domain.model.agent.subagent import AgentModel, SubAgent
+from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
 from src.infrastructure.agent.subagent.chain import (
     ChainResult,

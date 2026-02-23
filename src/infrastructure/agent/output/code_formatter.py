@@ -51,7 +51,7 @@ class CodeFormatter(OutputFormatter):
             return self._format_javascript(data)
         else:
             # Default: just wrap in code block
-            return f"```{language}\n{str(data)}\n```"
+            return f"```{language}\n{data!s}\n```"
 
     def _format_json(self, data: Any) -> str:
         """Format as JSON."""
@@ -100,17 +100,17 @@ class CodeFormatter(OutputFormatter):
             lines.append("# Data as Python dictionary")
             lines.append("data = {")
             for k, v in data.items():
-                lines.append(f'    "{k}": {repr(v)},')
+                lines.append(f'    "{k}": {v!r},')
             lines.append("}")
         elif isinstance(data, list):
             lines.append("# Data as Python list")
             lines.append("data = [")
             for item in data:
-                lines.append(f"    {repr(item)},")
+                lines.append(f"    {item!r},")
             lines.append("]")
         else:
             lines.append("# Data")
-            lines.append(f"data = {repr(data)}")
+            lines.append(f"data = {data!r}")
 
         lines.append("```")
         return "\n".join(lines)

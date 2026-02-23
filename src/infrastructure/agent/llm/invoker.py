@@ -354,7 +354,7 @@ class LLMInvoker:
         current_message.completed_at = time.time()
 
         # Build trace URL if Langfuse context is available
-        trace_url = self._build_trace_url(context)
+        _trace_url = self._build_trace_url(context)
 
         self._state = InvokerState.COMPLETE
 

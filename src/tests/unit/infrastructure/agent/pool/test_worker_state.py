@@ -4,8 +4,7 @@ Agent Worker State Pool Integration Tests.
 测试 agent_worker_state.py 中的池适配器相关功能。
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 
 class TestPoolAdapterState:

@@ -200,7 +200,7 @@ class ArtifactService:
                 object_key=object_key,
                 expiration_seconds=self._url_expiration,
             )
-            logger.warning(f"[ArtifactUpload] Presigned URL generated")
+            logger.warning("[ArtifactUpload] Presigned URL generated")
 
             logger.warning(
                 f"[ArtifactUpload] Uploaded {artifact_id}: "

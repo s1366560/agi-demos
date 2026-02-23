@@ -162,7 +162,7 @@ class TestParallelMCPToolDiscovery:
             "src.infrastructure.agent.state.agent_worker_state._discover_single_server_tools",
             side_effect=mock_discover_single,
         ):
-            results = await _discover_tools_for_servers_parallel(
+            results = await _discover_tools_for_servers_parallel(  # noqa: F841
                 sandbox_adapter=mock_adapter,
                 sandbox_id="test-sandbox",
                 servers=servers,
@@ -273,7 +273,6 @@ class TestLoadUserMCPServerToolsIntegration:
         import json
 
         from src.infrastructure.agent.state.agent_worker_state import (
-            _discover_tools_for_servers_parallel,
             _load_user_mcp_server_tools,
         )
 

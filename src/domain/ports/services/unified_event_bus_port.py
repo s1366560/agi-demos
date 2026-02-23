@@ -24,7 +24,7 @@ Usage:
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import AsyncIterator, List, Optional
 
 from src.domain.events.envelope import EventEnvelope
 

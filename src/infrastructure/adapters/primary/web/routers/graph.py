@@ -851,4 +851,4 @@ async def rebuild_communities(
             }
         except Exception as e:
             logger.error(f"Failed to rebuild communities: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to rebuild communities: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to rebuild communities: {e!s}")

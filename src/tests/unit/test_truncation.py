@@ -69,7 +69,7 @@ class TestTruncateByBytes:
         assert result.truncated
         assert len(result.output) <= 2000
         assert result.truncated_bytes == 1000
-        assert "x" * 2000 == result.output
+        assert result.output == "x" * 2000
 
     def test_unicode_handling(self):
         """Test Unicode content truncation."""

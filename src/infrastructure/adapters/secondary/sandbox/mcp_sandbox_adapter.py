@@ -2485,7 +2485,7 @@ class MCPSandboxAdapter(SandboxPort):
                         "content": [
                             {
                                 "type": "text",
-                                "text": f"Connection error after {max_retries} attempts: {str(e)}",
+                                "text": f"Connection error after {max_retries} attempts: {e!s}",
                             }
                         ],
                         "is_error": True,
@@ -2494,7 +2494,7 @@ class MCPSandboxAdapter(SandboxPort):
                 # Non-retryable error
                 logger.error(f"Tool call error: {e}")
                 return {
-                    "content": [{"type": "text", "text": f"Error: {str(e)}"}],
+                    "content": [{"type": "text", "text": f"Error: {e!s}"}],
                     "is_error": True,
                 }
 

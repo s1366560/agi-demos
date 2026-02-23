@@ -171,7 +171,7 @@ class DesktopTool(AgentTool):
 
         except Exception as e:
             logger.error(f"Failed to start desktop: {e}")
-            return f"Error: Failed to start desktop - {str(e)}"
+            return f"Error: Failed to start desktop - {e!s}"
 
     async def _start_desktop_legacy(self, **kwargs: Any) -> str:
         """Legacy start_desktop using direct adapter call."""
@@ -216,7 +216,7 @@ class DesktopTool(AgentTool):
 
         except Exception as e:
             logger.error(f"Failed to stop desktop: {e}")
-            return f"Error: Failed to stop desktop - {str(e)}"
+            return f"Error: Failed to stop desktop - {e!s}"
 
     async def _stop_desktop_legacy(self) -> str:
         """Legacy stop_desktop using direct adapter call."""
@@ -247,7 +247,7 @@ class DesktopTool(AgentTool):
 
         except Exception as e:
             logger.error(f"Failed to get desktop status: {e}")
-            return f"Error: Failed to get desktop status - {str(e)}"
+            return f"Error: Failed to get desktop status - {e!s}"
 
     async def _get_desktop_status_legacy(self) -> str:
         """Legacy get_desktop_status using direct adapter call."""
@@ -332,7 +332,7 @@ class DesktopTool(AgentTool):
                 else:
                     parts.append("Desktop is not running")
 
-                if "url" in data and data["url"]:
+                if data.get("url"):
                     parts.append(f"URL: {data['url']}")
                 if "port" in data:
                     parts.append(f"Port: {data['port']}")
@@ -346,7 +346,7 @@ class DesktopTool(AgentTool):
             # Handle success/error response
             if data.get("success"):
                 parts = [success_message]
-                if "url" in data and data["url"]:
+                if data.get("url"):
                     parts.append(f"URL: {data['url']}")
                 if "port" in data:
                     parts.append(f"Port: {data['port']}")

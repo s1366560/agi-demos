@@ -4,8 +4,6 @@ import logging
 
 from fastapi import Request
 
-from src.infrastructure.adapters.secondary.persistence.database import get_db
-
 from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies import (
     create_api_key,
     create_user,
@@ -24,6 +22,7 @@ from src.infrastructure.adapters.primary.web.dependencies.auth_dependencies impo
     verify_api_key_from_header_or_query,
     verify_password,
 )
+from src.infrastructure.adapters.secondary.persistence.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -89,8 +88,11 @@ __all__ = [
     "verify_password",
     "get_password_hash",
     "get_api_key_from_header",
+    "get_api_key_from_header_or_query",
     "verify_api_key_dependency",
+    "verify_api_key_from_header_or_query",
     "get_current_user",
+    "get_current_user_from_header_or_query",
     "get_current_user_tenant",
     "create_api_key",
     "create_user",

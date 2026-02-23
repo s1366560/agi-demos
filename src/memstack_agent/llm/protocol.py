@@ -4,7 +4,7 @@ Defines Protocol-based interfaces for LLM clients, following
 the same pattern as the Tool Protocol.
 """
 
-from typing import Any, AsyncGenerator, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, AsyncGenerator, List, Optional, Protocol, runtime_checkable
 
 from memstack_agent.llm.types import ChatResponse, Message, StreamChunk
 from memstack_agent.tools.protocol import ToolDefinition

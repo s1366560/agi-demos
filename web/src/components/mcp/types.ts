@@ -72,3 +72,10 @@ export function getStatusBg(status: RuntimeStatus): string {
   };
   return bgs[status];
 }
+
+export interface ServerFilters {
+  search: string;
+  enabled: 'all' | 'enabled' | 'disabled';
+  type: 'all' | 'stdio' | 'sse' | 'remote' | 'http';
+  runtime: 'all' | 'running' | 'starting' | 'stopping' | 'stopped' | 'error';
+}

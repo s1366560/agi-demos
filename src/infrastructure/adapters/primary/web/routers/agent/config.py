@@ -107,7 +107,7 @@ async def get_tenant_agent_config(
         raise
     except Exception as e:
         logger.error(f"Error getting tenant agent config: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get tenant agent config: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get tenant agent config: {e!s}")
 
 
 @router.put("/config", response_model=TenantAgentConfigResponse)
@@ -232,5 +232,5 @@ async def update_tenant_agent_config(
     except Exception as e:
         logger.error(f"Error updating tenant agent config: {e}")
         raise HTTPException(
-            status_code=500, detail=f"Failed to update tenant agent config: {str(e)}"
+            status_code=500, detail=f"Failed to update tenant agent config: {e!s}"
         )

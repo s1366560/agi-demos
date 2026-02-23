@@ -69,8 +69,6 @@ class TestRefactoredArchitectureIntegration:
         from src.infrastructure.agent.hitl.hitl_strategies import (
             ClarificationStrategy,
             DecisionStrategy,
-            EnvVarStrategy,
-            PermissionStrategy,
         )
 
         assert ClarificationStrategy is not None

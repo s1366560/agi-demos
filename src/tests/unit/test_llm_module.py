@@ -17,7 +17,7 @@ from memstack_agent.llm import (
     openai_config,
 )
 from memstack_agent.llm.litellm_adapter import LiteLLMAdapter
-from memstack_agent.llm.protocol import LLMClient, LLMClientSync
+from memstack_agent.llm.protocol import LLMClient
 
 
 class TestMessage:

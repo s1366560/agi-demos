@@ -1,9 +1,9 @@
 """Tests for HITLChannelResponder."""
 
 import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.application.services.channels.hitl_responder import HITLChannelResponder
 

@@ -1,0 +1,9 @@
+{
+  "source": "sickn33/antigravity-awesome-skills",
+  "skill_name": "email-sequence",
+  "branch": "main",
+  "source_path": "skills/email-sequence/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

@@ -81,7 +81,7 @@ class MCPToolAdapter(AgentTool):
                 return str(result)
 
         except Exception as e:
-            error_msg = f"MCP tool execution failed: {str(e)}"
+            error_msg = f"MCP tool execution failed: {e!s}"
             logger.error(f"{error_msg} (server={self.server_id}, tool={self.original_name})")
             return error_msg
 

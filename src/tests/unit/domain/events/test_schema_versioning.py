@@ -4,15 +4,15 @@ Tests the envelope, registry, and serialization modules.
 """
 
 import json
+from typing import Any, Dict
+
 import pytest
-from typing import Dict, Any
 
 from src.domain.events.envelope import EventEnvelope, create_child_envelope
 from src.domain.events.registry import EventSchemaRegistry
 from src.domain.events.serialization import (
-    EventSerializer,
-    SerializationError,
     DeserializationError,
+    EventSerializer,
 )
 from src.domain.events.types import AgentEventType
 

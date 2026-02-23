@@ -4,20 +4,11 @@ Unit tests for HITL strategies.
 Tests the HITL strategy classes in src/infrastructure/agent/hitl/hitl_strategies.py
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.domain.model.agent.hitl_types import (
-    ClarificationOption,
-    ClarificationType,
-    DecisionOption,
-    DecisionType,
-    EnvVarField,
-    EnvVarInputType,
-    HITLRequest,
     HITLType,
-    PermissionAction,
     RiskLevel,
 )
 from src.infrastructure.agent.hitl.hitl_strategies import (

@@ -315,7 +315,7 @@ class WebSearchTool(AgentTool):
 
         except ValueError as e:
             # Configuration error
-            error_msg = f"Configuration error: {str(e)}"
+            error_msg = f"Configuration error: {e!s}"
             logger.error(error_msg)
             return f"Error: {error_msg}"
         except httpx.HTTPStatusError as e:
@@ -325,7 +325,7 @@ class WebSearchTool(AgentTool):
             return f"Error: {error_msg}"
         except httpx.HTTPError as e:
             # Network or HTTP error
-            error_msg = f"Network error during search: {str(e)}"
+            error_msg = f"Network error during search: {e!s}"
             logger.error(error_msg)
             return f"Error: {error_msg}"
         except Exception as e:

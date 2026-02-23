@@ -1,4 +1,3 @@
 """Backward compatibility - re-exports from skill subpackage."""
 
-# ruff: noqa: F403
-from src.domain.model.agent.skill.tool_execution_record import *
+from src.domain.model.agent.skill.tool_execution_record import *  # noqa: F403

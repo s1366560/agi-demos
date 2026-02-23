@@ -13,19 +13,19 @@ logging.basicConfig(
     force=True,
 )
 
-from pathlib import Path  # noqa: E402
+from pathlib import Path
 
-from fastapi import FastAPI  # noqa: E402
-from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from fastapi.staticfiles import StaticFiles  # noqa: E402
-from slowapi import _rate_limit_exceeded_handler  # noqa: E402
-from slowapi.errors import RateLimitExceeded  # noqa: E402
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
-from src.configuration.config import get_settings  # noqa: E402
-from src.infrastructure.adapters.primary.web.middleware import (  # noqa: E402
+from src.configuration.config import get_settings
+from src.infrastructure.adapters.primary.web.middleware import (
     configure_exception_handlers,
 )
-from src.infrastructure.adapters.primary.web.routers import (  # noqa: E402
+from src.infrastructure.adapters.primary.web.routers import (
     ai_tools,
     artifacts,
     attachments_upload,
@@ -56,11 +56,10 @@ from src.infrastructure.adapters.primary.web.routers import (  # noqa: E402
     tenants,
     terminal,
 )
-from src.infrastructure.adapters.primary.web.routers.agent import (  # noqa: E402
+from src.infrastructure.adapters.primary.web.routers.agent import (
     router as agent_router,
 )
-from src.infrastructure.adapters.primary.web.startup import (  # noqa: E402
-    get_channel_manager,
+from src.infrastructure.adapters.primary.web.startup import (
     initialize_channel_manager,
     initialize_container,
     initialize_database_schema,
@@ -75,13 +74,13 @@ from src.infrastructure.adapters.primary.web.startup import (  # noqa: E402
     shutdown_docker_services,
     shutdown_telemetry_services,
 )
-from src.infrastructure.adapters.primary.web.startup.graph import (  # noqa: E402
+from src.infrastructure.adapters.primary.web.startup.graph import (
     shutdown_graph_service,
 )
-from src.infrastructure.adapters.primary.web.websocket import (  # noqa: E402
+from src.infrastructure.adapters.primary.web.websocket import (
     router as websocket_router,
 )
-from src.infrastructure.middleware.rate_limit import limiter  # noqa: E402
+from src.infrastructure.middleware.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
 settings = get_settings()

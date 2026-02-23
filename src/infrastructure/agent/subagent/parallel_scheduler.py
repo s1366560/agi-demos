@@ -7,15 +7,14 @@ respecting dependency ordering and concurrency limits.
 
 import asyncio
 import logging
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional, Set
 
 from src.domain.model.agent.subagent import SubAgent
 from src.domain.model.agent.subagent_result import SubAgentResult
 
-from .context_bridge import ContextBridge, SubAgentContext
+from .context_bridge import ContextBridge
 from .process import SubAgentProcess
 from .task_decomposer import SubTask
 

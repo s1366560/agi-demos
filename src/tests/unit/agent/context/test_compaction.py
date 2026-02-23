@@ -243,7 +243,7 @@ class TestPruneToolOutputs:
             _create_message_with_tool("m3", "user", "grep", 50_000),  # Turn 1 (recent)
             _create_message_with_tool("m4", "assistant", "grep", 50_000),
         ]
-        result = prune_tool_outputs(messages)
+        _result = prune_tool_outputs(messages)
         # The last 2 turns should be protected
         assert messages[3].get_tool_parts()[0].compacted is False  # Most recent
         assert messages[2].get_tool_parts()[0].compacted is False  # Turn 1

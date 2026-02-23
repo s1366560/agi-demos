@@ -1,0 +1,9 @@
+{
+  "source": "sickn33/antigravity-awesome-skills",
+  "skill_name": "notion-automation",
+  "branch": "main",
+  "source_path": "skills/notion-automation/SKILL.md",
+  "installed_files": [
+    "SKILL.md"
+  ]
+}

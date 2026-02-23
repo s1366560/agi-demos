@@ -21,11 +21,7 @@ Features:
 """
 
 import asyncio
-import fnmatch
-import json
 import logging
-import re
-from datetime import datetime, timezone
 from typing import AsyncIterator, Dict, List, Optional, Union
 
 import redis.asyncio as redis
@@ -243,7 +239,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
             return
 
         # Build stream dict with last_id tracking
-        last_ids: Dict[str, str] = {key: "$" for key in stream_keys}
+        last_ids: Dict[str, str] = dict.fromkeys(stream_keys, "$")
 
         while self._active_subscriptions.get(subscription_id, False):
             try:
@@ -298,7 +294,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
         for key in stream_keys:
             await self._ensure_consumer_group(key, consumer_group)
 
-        stream_dict = {key: ">" for key in stream_keys}  # ">" = undelivered messages
+        stream_dict = dict.fromkeys(stream_keys, ">")  # ">" = undelivered messages
 
         while self._active_subscriptions.get(subscription_id, False):
             try:

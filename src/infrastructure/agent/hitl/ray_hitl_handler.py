@@ -6,8 +6,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
-from src.domain.model.agent.hitl_request import HITLRequest as HITLRequestEntity
-from src.domain.model.agent.hitl_request import HITLRequestType
+from src.domain.model.agent.hitl_request import HITLRequest as HITLRequestEntity, HITLRequestType
 from src.domain.model.agent.hitl_types import (
     HITLPendingException,
     HITLRequest,
@@ -17,7 +16,6 @@ from src.infrastructure.adapters.secondary.persistence.database import async_ses
 from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
     SqlHITLRequestRepository,
 )
-from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 from src.infrastructure.agent.hitl.hitl_strategies import (
     ClarificationStrategy,
     DecisionStrategy,
@@ -25,6 +23,7 @@ from src.infrastructure.agent.hitl.hitl_strategies import (
     HITLTypeStrategy,
     PermissionStrategy,
 )
+from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 
 logger = logging.getLogger(__name__)
 

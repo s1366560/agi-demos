@@ -8,9 +8,9 @@ Provides tier-specific backends:
 """
 
 from .base import Backend, BackendType
-from .shared_pool_backend import SharedPoolBackend
-from .ondemand_backend import OnDemandBackend
 from .container_backend import ContainerBackend
+from .ondemand_backend import OnDemandBackend
+from .shared_pool_backend import SharedPoolBackend
 
 __all__ = [
     "Backend",

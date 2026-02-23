@@ -26,8 +26,8 @@ from src.domain.ports.repositories.agent_repository import MessageRepository
 from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 from src.infrastructure.adapters.secondary.persistence.models import (
     Conversation as DBConversation,
+    Message as DBMessage,
 )
-from src.infrastructure.adapters.secondary.persistence.models import Message as DBMessage
 
 logger = logging.getLogger(__name__)
 

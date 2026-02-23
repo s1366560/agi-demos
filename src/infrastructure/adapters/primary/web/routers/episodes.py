@@ -200,7 +200,7 @@ async def create_episode(
 
     except Exception as e:
         logger.error(f"Failed to create episode: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create episode: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to create episode: {e!s}")
 
 
 @router.get("/by-name/{episode_name}", response_model=EpisodeDetail)
@@ -375,4 +375,4 @@ async def health_check(
         await graphiti_client.driver.execute_query("RETURN 1 as test")
         return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Service unhealthy: {str(e)}")
+        raise HTTPException(status_code=503, detail=f"Service unhealthy: {e!s}")

@@ -17,7 +17,6 @@ import json
 import os
 import sys
 import time
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import websockets
@@ -218,7 +217,7 @@ class MultiHITLTester:
 
             success = await self.send_hitl_response(hitl_type, request_id, response)
             if not success:
-                print(f"   ✗ Failed to send HITL response")
+                print("   ✗ Failed to send HITL response")
                 return False
 
             # Wait a moment for the response to be processed
@@ -246,12 +245,12 @@ class MultiHITLTester:
             et = e.get("type", "unknown")
             event_type_counts[et] = event_type_counts.get(et, 0) + 1
         
-        print(f"\nEvent type breakdown:")
+        print("\nEvent type breakdown:")
         for et, count in sorted(event_type_counts.items(), key=lambda x: -x[1]):
             print(f"  {et}: {count}")
 
         if self.errors:
-            print(f"\nErrors:")
+            print("\nErrors:")
             for err in self.errors:
                 print(f"  - {err}")
 

@@ -9,8 +9,7 @@ The tests verify that resource HTML is cached to reduce UI latency
 when MCP App tools return UI content.
 """
 
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -133,14 +132,14 @@ class TestResourceHTMLCaching:
         )
 
         # First fetch
-        html1 = await tool.fetch_resource_html()
+        _html1 = await tool.fetch_resource_html()
         assert call_count[0] == 1
 
         # Invalidate cache
         tool.invalidate_resource_cache()
 
         # Second fetch (should refetch after invalidation)
-        html2 = await tool.fetch_resource_html()
+        _html2 = await tool.fetch_resource_html()
         assert call_count[0] == 2  # Should have made another call
 
     @pytest.mark.asyncio
