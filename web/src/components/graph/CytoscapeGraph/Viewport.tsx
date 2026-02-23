@@ -228,7 +228,7 @@ export function CytoscapeGraphViewport({
       window.removeEventListener('cytoscape-reload', handleReload);
       cy.destroy();
     };
-  }, [CytoscapeLib, onNodeSelect, setCyInstance]);
+  }, [CytoscapeLib, onNodeSelect, setCyInstance, cytoscapeStyles, loadGraphData]);
 
   // Update styles when theme changes
   useEffect(() => {

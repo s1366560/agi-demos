@@ -12,7 +12,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useAgentV3Store as useAgentStore } from '../../stores/agentV3';
 
 import type { TimelineEvent } from '../../types/agent';
-
 // Mock agent service
 vi.mock('../../services/agentService', () => ({
   agentService: {
@@ -23,7 +22,6 @@ vi.mock('../../services/agentService', () => ({
   },
 }));
 
-import { agentService } from '../../services/agentService';
 
 describe('Agent Store Pagination', () => {
   beforeEach(() => {

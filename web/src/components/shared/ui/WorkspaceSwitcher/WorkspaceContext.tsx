@@ -18,6 +18,7 @@ export interface WorkspaceProviderProps {
 /**
  * Provider for WorkspaceSwitcher state
  */
+ 
 export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
   mode,
   defaultOpen = false,
@@ -80,6 +81,8 @@ export const WorkspaceProvider: React.FC<WorkspaceProviderProps> = ({
 /**
  * Hook to access WorkspaceSwitcher context
  */
+ 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useWorkspaceContext = (): WorkspaceContextValue => {
   const context = useContext(WorkspaceContext);
   if (!context) {

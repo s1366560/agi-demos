@@ -229,7 +229,7 @@ describe('SearchHeader', () => {
 
       const buttons = screen.getAllByRole('button');
       const historyButton = buttons.find((btn) => btn.textContent?.includes('1'));
-      historyButton && fireEvent.click(historyButton);
+      if (historyButton) fireEvent.click(historyButton);
 
       expect(setShowHistory).toHaveBeenCalled();
     });

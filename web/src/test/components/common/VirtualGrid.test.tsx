@@ -358,7 +358,7 @@ describe('VirtualGrid - Scroll Handling', () => {
     <div data-testid={`item-${item.id}`}>{item.name}</div>
   );
 
-  const mockVirtualizer = {
+  const _mockVirtualizer = {
     getVirtualItems: vi.fn(() => [
       { index: 0, key: 'item-0', start: 0 },
       { index: 1, key: 'item-1', start: 100 },

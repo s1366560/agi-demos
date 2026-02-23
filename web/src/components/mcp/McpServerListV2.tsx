@@ -6,12 +6,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
 import { message } from 'antd';
-import { RefreshCw, Server, AlertCircle, Activity, Layers } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useMCPStore } from '@/stores/mcp';
 import { useMCPAppStore } from '@/stores/mcpAppStore';
-import { useProjectStore } from '@/stores/project';
 
 import { mcpAPI } from '@/services/mcpService';
 
@@ -20,10 +18,9 @@ import { MaterialIcon } from '../agent/shared/MaterialIcon';
 import { McpAppsTabV2 } from './McpAppsTabV2';
 import { McpServerTabV2 } from './McpServerTabV2';
 import { McpToolsTabV2 } from './McpToolsTabV2';
-import { ANIMATION_CLASSES } from './styles';
 import { getRuntimeStatus } from './types';
 
-import type { MCPServerType, McpTabKey, ServerStats, AppStats, ToolStats } from './types';
+import type { McpTabKey, ServerStats, AppStats, ToolStats } from './types';
 
 // ============================================================================
 // Stats Card Component
@@ -43,7 +40,7 @@ const StatsCard: React.FC<StatsCardProps> = ({
   title,
   value,
   icon,
-  bgColor,
+  _bgColor,
   textColor,
   iconBg,
   subtitle,

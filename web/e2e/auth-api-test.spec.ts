@@ -2,7 +2,7 @@
  * Test API authentication directly
  */
 
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 test('test API authentication', async ({ page }) => {
   // Login first

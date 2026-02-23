@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock antd components completely to avoid complex dependencies
 vi.mock('antd', () => ({
-  Tabs: ({ children, activeKey, onChange, items }: any) => (
+  Tabs: ({ _children, activeKey, onChange, items }: any) => (
     <div data-testid="tabs">
       {items?.map((item: any) => (
         <button key={item.key} data-testid={`tab-${item.key}`} onClick={() => onChange?.(item.key)}>
@@ -58,7 +58,9 @@ vi.mock('@/components/agent/SandboxSection', () => ({
 }));
 
 // Import components after mocking
+  // eslint-disable-next-line no-restricted-imports
 import { RightPanel } from '@/components/agent/RightPanel';
+  // eslint-disable-next-line no-restricted-imports
 import { ResizeHandle } from '@/components/agent/rightPanel/ResizeHandle';
 
 describe('ResizeHandle (Extracted Component)', () => {

@@ -117,7 +117,7 @@ export function useAgentLifecycleState({
         globalSubscriptionLock.delete(lockKey);
       }
     };
-  }, [enabled, projectId, tenantId]);
+  }, [enabled, projectId, tenantId, lockKey]);
 
   // Compute detailed status based on lifecycle state
   const status = useMemo<LifecycleStatus>(() => {

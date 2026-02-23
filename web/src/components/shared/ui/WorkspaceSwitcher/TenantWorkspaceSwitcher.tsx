@@ -44,7 +44,11 @@ export const TenantWorkspaceSwitcher: React.FC<TenantWorkspaceSwitcherProps> = (
   };
 
   const handleCreateTenant = () => {
-    onCreateTenant?.() ?? navigate('/tenants/new');
+    if (onCreateTenant) {
+      onCreateTenant();
+    } else {
+      navigate('/tenants/new');
+    }
   };
 
   return (

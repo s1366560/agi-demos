@@ -130,7 +130,7 @@ const DeadLetterQueue: React.FC = () => {
     try {
       const data = await dlqService.getStats();
       setStats(data);
-    } catch (error) {
+    } catch (_error) {
       message.error('Failed to load DLQ statistics');
     } finally {
       setStatsLoading(false);
@@ -149,7 +149,7 @@ const DeadLetterQueue: React.FC = () => {
         offset: (pagination.current - 1) * pagination.pageSize,
       });
       setMessages(data.messages);
-    } catch (error) {
+    } catch (_error) {
       message.error('Failed to load DLQ messages');
     } finally {
       setLoading(false);
@@ -175,7 +175,7 @@ const DeadLetterQueue: React.FC = () => {
       await dlqService.retryMessage(messageId);
       message.success('Retry initiated');
       handleRefresh();
-    } catch (error) {
+    } catch (_error) {
       message.error('Failed to retry message');
     }
   };
@@ -190,7 +190,7 @@ const DeadLetterQueue: React.FC = () => {
         `Retry initiated: ${result.success_count} succeeded, ${result.failure_count} failed`
       );
       handleRefresh();
-    } catch (error) {
+    } catch (_error) {
       message.error('Failed to retry messages');
     }
   };
@@ -221,7 +221,7 @@ const DeadLetterQueue: React.FC = () => {
       }
       setDiscardModalVisible(false);
       handleRefresh();
-    } catch (error) {
+    } catch (_error) {
       message.error('Failed to discard message(s)');
     }
   };
@@ -232,7 +232,7 @@ const DeadLetterQueue: React.FC = () => {
       const result = await dlqService.cleanupExpired();
       message.success(`Cleaned up ${result.cleaned_count} expired messages`);
       handleRefresh();
-    } catch (error) {
+    } catch (_error) {
       message.error('Failed to cleanup expired messages');
     }
   };
@@ -243,7 +243,7 @@ const DeadLetterQueue: React.FC = () => {
       const result = await dlqService.cleanupResolved();
       message.success(`Cleaned up ${result.cleaned_count} resolved messages`);
       handleRefresh();
-    } catch (error) {
+    } catch (_error) {
       message.error('Failed to cleanup resolved messages');
     }
   };

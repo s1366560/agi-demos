@@ -3,7 +3,6 @@
  * Aligned with agent workspace design system
  */
 
-import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
 // ============================================================================
 // Runtime Status Styles - Aligned with agent workspace

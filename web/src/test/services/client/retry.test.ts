@@ -26,7 +26,7 @@ describe('calculateDelay', () => {
     // With jitter disabled for predictable testing
     const config: RetryConfig = { jitter: false };
 
-    const delay0 = calculateDelay(0, config);
+    const _delay0 = calculateDelay(0, config);
     const delay1 = calculateDelay(1, config);
     const delay2 = calculateDelay(2, config);
 
@@ -43,7 +43,7 @@ describe('calculateDelay', () => {
     };
 
     // With multiplier of 10, delay would exceed maxDelay quickly
-    const delay0 = calculateDelay(0, config);
+    const _delay0 = calculateDelay(0, config);
     const delay1 = calculateDelay(1, config);
 
     expect(delay0).toBe(1000);
@@ -67,7 +67,7 @@ describe('calculateDelay', () => {
       jitter: false,
     };
 
-    const delay0 = calculateDelay(0, config);
+    const _delay0 = calculateDelay(0, config);
     const delay1 = calculateDelay(1, config);
 
     expect(delay1).toBe(1000 * 3);
@@ -87,7 +87,7 @@ describe('calculateDelay', () => {
   it('should not add jitter when disabled', () => {
     const config: RetryConfig = { jitter: false };
 
-    const delay0 = calculateDelay(0, config);
+    const _delay0 = calculateDelay(0, config);
     const delay1 = calculateDelay(0, config);
 
     expect(delay0).toBe(delay1);

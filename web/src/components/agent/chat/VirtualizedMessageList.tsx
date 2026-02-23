@@ -100,6 +100,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
   const lastMessageCount = useRef(messages.length);
 
   // Virtualizer instance
+// eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: messages.length,
     getScrollElement: () => parentRef.current,
@@ -148,6 +149,8 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
    * Auto-scroll when content size changes (e.g. streaming responses).
    * Keeps the view at the bottom if the user was already at the bottom.
    */
+  const totalVirtualizerSize = virtualizer.getTotalSize();
+
   useEffect(() => {
     if (!autoScroll || !parentRef.current) return;
 
@@ -162,7 +165,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
         behavior: 'auto',
       });
     }
-  }, [virtualizer.getTotalSize(), autoScroll, isNearBottom]);
+  }, [totalVirtualizerSize, autoScroll, isNearBottom]);
 
   /**
    * Set up scroll listener.

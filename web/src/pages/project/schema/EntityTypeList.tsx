@@ -475,8 +475,9 @@ interface HeaderProps {
 }
 
 const HeaderInternal: React.FC<HeaderProps> = (props) => {
+  const contextFromHook = useEntityTypeListContextOptional();
   const hasProps = props.onCreate !== undefined;
-  const context = hasProps ? null : useEntityTypeListContextOptional();
+  const context = hasProps ? null : contextFromHook;
   const actions = context?.actions;
   const handleCreate = props.onCreate ?? actions?.handleOpenModal;
 
@@ -519,8 +520,9 @@ interface ToolbarProps {
 }
 
 const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
+  const contextFromHook = useEntityTypeListContextOptional();
   const hasProps = props.onSearchChange !== undefined;
-  const context = hasProps ? null : useEntityTypeListContextOptional();
+  const context = hasProps ? null : contextFromHook;
   const state = context?.state;
   const actions = context?.actions;
 
@@ -697,7 +699,7 @@ const TableRowInternal: React.FC<TableRowProps> = React.memo(({ entity, onEdit, 
       </div>
       <div className="col-span-2 flex flex-col justify-start pt-1">
         <span className="text-sm text-slate-700 dark:text-white">
-          {formatDateOnly(entity.created_at || Date.now())}
+          {entity.created_at ? formatDateOnly(entity.created_at) : '-'}
         </span>
         <span className="text-xs text-slate-400 dark:text-[#95a0c6]">by Admin</span>
       </div>

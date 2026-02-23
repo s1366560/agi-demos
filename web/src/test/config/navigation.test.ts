@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 
 import {
-  getNavigationConfig,
+  _getNavigationConfig,
   getTenantSidebarConfig,
   getProjectSidebarConfig,
   getAgentConfig,

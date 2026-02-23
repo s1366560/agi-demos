@@ -2,7 +2,7 @@
  * Manual Sandbox UI Test
  */
 
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 test('manual sandbox UI test', async ({ page }) => {
   // Set English locale

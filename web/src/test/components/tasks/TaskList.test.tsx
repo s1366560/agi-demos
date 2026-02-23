@@ -10,7 +10,7 @@ import '@testing-library/jest-dom/vitest';
 
 // Mock date-fns
 vi.mock('date-fns', () => ({
-  format: vi.fn((date: Date) => 'Jan 1, 12:00:00'),
+  format: vi.fn((_date: Date) => 'Jan 1, 12:00:00'),
 }));
 
 import { taskAPI } from '../../../services/api';

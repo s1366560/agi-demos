@@ -89,6 +89,7 @@ function createMockEventSourceClass() {
   return class extends MockEventSource {
     constructor(url: string) {
       super(url);
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
       activeInstance = this;
       eventSourceInstances.add(this);
     }

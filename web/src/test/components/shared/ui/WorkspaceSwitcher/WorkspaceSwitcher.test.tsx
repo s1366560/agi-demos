@@ -38,14 +38,14 @@ import {
 import type { Tenant, Project } from '@/types/memory';
 
 // Mock stores with proper selector support
-const mockTenantState = {
+const _mockTenantState = {
   tenants: [],
   currentTenant: null as Tenant | null,
   listTenants: vi.fn(),
   setCurrentTenant: vi.fn(),
 };
 
-const mockProjectState = {
+const _mockProjectState = {
   projects: [],
   currentProject: null as Project | null,
   listProjects: vi.fn(),

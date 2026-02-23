@@ -475,7 +475,7 @@ function createRequestFromSSE(
         },
       };
 
-    case 'env_var':
+    case 'env_var': {
       // 尝试多个可能的字段名，以兼容不同的后端版本
       // 后端可能使用 'message' 或 'question' 字段
       const envMessage =
@@ -494,8 +494,9 @@ function createRequestFromSSE(
           context: (data.context as Record<string, unknown>) || {},
         },
       };
+    }
 
-    case 'permission':
+    case 'permission': {
       const toolName = (data.tool_name as string) || (data.toolName as string) || 'unknown';
       const action =
         (data.action as string) || (data.permission_type as string) || 'perform action';
@@ -519,6 +520,7 @@ function createRequestFromSSE(
           context: (data.context as Record<string, unknown>) || {},
         },
       };
+    }
 
     default:
       return null;

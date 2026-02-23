@@ -472,8 +472,9 @@ interface ToolbarProps {
 }
 
 const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
+  const contextFromHook = useEdgeTypeListContextOptional();
   const hasProps = props.onSearchChange !== undefined;
-  const context = hasProps ? null : useEdgeTypeListContextOptional();
+  const context = hasProps ? null : contextFromHook;
   const state = context?.state;
   const actions = context?.actions;
 

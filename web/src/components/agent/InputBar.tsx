@@ -416,7 +416,7 @@ export const InputBar = memo<InputBarProps>(
           setMentionQuery('');
         }
       },
-      [selectedSkill, selectedSubAgent, slashDropdownVisible, mentionVisible, resizeTextarea]
+      [selectedSkill, slashDropdownVisible, mentionVisible, resizeTextarea]
     );
 
     useEffect(() => {

@@ -61,6 +61,7 @@ export const ChatSearch = memo<ChatSearchProps>(({ timeline, onClose, visible })
     if (visible) {
       setTimeout(() => inputRef.current?.focus(), 50);
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setQuery('');
       setMatches([]);
       document.querySelectorAll('.chat-search-highlight').forEach((el) => {
@@ -72,6 +73,7 @@ export const ChatSearch = memo<ChatSearchProps>(({ timeline, onClose, visible })
   // Search logic
   useEffect(() => {
     if (!query.trim()) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setMatches([]);
       setCurrentIndex(0);
       return;

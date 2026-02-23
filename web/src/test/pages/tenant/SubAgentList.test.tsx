@@ -85,7 +85,7 @@ vi.mock('../../../stores/subagent', () => ({
   useEnabledSubAgentsCount: () => 1,
   useAverageSuccessRate: () => 90,
   useTotalInvocations: () => 150,
-  filterSubAgents: vi.fn((data, filters) => data),
+  filterSubAgents: vi.fn((data, _filters) => data),
   useListSubAgents: () => vi.fn(),
   useListTemplates: () => vi.fn(),
   useToggleSubAgent: () => vi.fn(),
@@ -165,24 +165,31 @@ describe('SubAgentList', () => {
   });
 
   describe('Component Structure', () => {
-    it('should have SubAgentCard component defined', () => {
-      const sourceCode = require('fs').readFileSync(
+    it('should have SubAgentCard component defined', async () => {
+       
+       
+
+      const sourceCode = (await import('fs')).readFileSync(
         require.resolve('../../../pages/tenant/SubAgentList'),
         'utf-8'
       );
       expect(sourceCode).toContain('SubAgentCard');
     });
 
-    it('should have StatusBadge component', () => {
-      const sourceCode = require('fs').readFileSync(
+    it('should have StatusBadge component', async () => {
+       
+
+      const sourceCode = (await import('fs')).readFileSync(
         require.resolve('../../../pages/tenant/SubAgentList'),
         'utf-8'
       );
       expect(sourceCode).toContain('StatusBadge');
     });
 
-    it('should export SubAgentList component', () => {
-      const sourceCode = require('fs').readFileSync(
+    it('should export SubAgentList component', async () => {
+       
+
+      const sourceCode = (await import('fs')).readFileSync(
         require.resolve('../../../pages/tenant/SubAgentList'),
         'utf-8'
       );
@@ -191,24 +198,30 @@ describe('SubAgentList', () => {
   });
 
   describe('Performance', () => {
-    it('should use useMemo for computed values', () => {
-      const sourceCode = require('fs').readFileSync(
+    it('should use useMemo for computed values', async () => {
+       
+
+      const sourceCode = (await import('fs')).readFileSync(
         require.resolve('../../../pages/tenant/SubAgentList'),
         'utf-8'
       );
       expect(sourceCode).toContain('useMemo');
     });
 
-    it('should use useCallback for event handlers', () => {
-      const sourceCode = require('fs').readFileSync(
+    it('should use useCallback for event handlers', async () => {
+       
+
+      const sourceCode = (await import('fs')).readFileSync(
         require.resolve('../../../pages/tenant/SubAgentList'),
         'utf-8'
       );
       expect(sourceCode).toContain('useCallback');
     });
 
-    it('should have efficient filtering', () => {
-      const sourceCode = require('fs').readFileSync(
+    it('should have efficient filtering', async () => {
+       
+
+      const sourceCode = (await import('fs')).readFileSync(
         require.resolve('../../../pages/tenant/SubAgentList'),
         'utf-8'
       );

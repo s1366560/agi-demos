@@ -167,6 +167,8 @@ export class MessageErrorBoundary extends Component<
  * in event handlers, not render errors. For full error boundary
  * functionality, use the class-based MessageErrorBoundary.
  */
+ 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useErrorHandler(onError?: (error: Error) => void): {
   handleError: (error: Error) => void;
   hasError: boolean;

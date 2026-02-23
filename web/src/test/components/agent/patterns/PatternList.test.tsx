@@ -8,11 +8,12 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
+  // eslint-disable-next-line no-restricted-imports
 import {
   PatternList,
-  type PatternStatus,
+  type _PatternStatus,
   type WorkflowPattern,
-  type PatternDefinition,
+  type _PatternDefinition,
 } from '@/components/agent/patterns/PatternList';
 
 describe('PatternList', () => {
@@ -46,7 +47,7 @@ describe('PatternList', () => {
     },
   ];
 
-  const mockPatternWithDefinition: WorkflowPattern = {
+  const _mockPatternWithDefinition: WorkflowPattern = {
     id: 'pattern-4',
     name: 'Complex Workflow',
     signature: 'complex_workflow(input: object)',
@@ -134,7 +135,7 @@ describe('PatternList', () => {
     });
 
     it('should show extra columns in detailed mode', () => {
-      const { container } = render(<PatternList patterns={mockPatterns} viewMode="detailed" />);
+      const { _container } = render(<PatternList patterns={mockPatterns} viewMode="detailed" />);
 
       // Detailed mode should show usage column
       expect(screen.getByText('Usage')).toBeInTheDocument();

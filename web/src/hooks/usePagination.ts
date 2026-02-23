@@ -61,7 +61,7 @@ export function usePagination({
         onPageChange?.(newTotalPages);
       }, 0);
     }
-  }, [totalItems, itemsPerPage]); // Remove currentPage, onPageChange from deps
+  }, [totalItems, itemsPerPage, currentPage, onPageChange]);
 
   // Calculate start and end indices (0-based)
   const startIndex = useMemo(() => {

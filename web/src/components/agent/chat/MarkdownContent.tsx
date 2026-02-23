@@ -75,7 +75,7 @@ const CodeBlockWithSuspense: React.FC<{
 }> = ({ children, codeActions = false, loadingFallback }) => {
   return (
     <Suspense fallback={loadingFallback || <CodeBlockLoadingFallback />}>
-      {/* @ts-ignore - Dynamic component props type check issue */}
+      {/* @ts-expect-error -- Dynamic component props type check issue */}
       <LazyCodeBlock codeActions={codeActions}>{children}</LazyCodeBlock>
     </Suspense>
   );

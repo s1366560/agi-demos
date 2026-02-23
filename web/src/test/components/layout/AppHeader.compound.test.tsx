@@ -127,13 +127,13 @@ describe('AppHeader (Compound Components)', () => {
 
     it('should show correct icon based on collapsed state', () => {
       const onToggle = vi.fn();
-      const { container: containerExpanded } = renderWithHeader(
+      const { container: _containerExpanded } = renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.SidebarToggle collapsed={false} onToggle={onToggle} />
         </AppHeader>
       );
 
-      const { container: containerCollapsed } = renderWithHeader(
+      const { container: _containerCollapsed } = renderWithHeader(
         <AppHeader basePath="/tenant">
           <AppHeader.SidebarToggle collapsed={true} onToggle={onToggle} />
         </AppHeader>

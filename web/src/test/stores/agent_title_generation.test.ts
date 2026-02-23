@@ -14,7 +14,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useAgentV3Store as useAgentStore } from '../../stores/agentV3';
 
 import type { TimelineEvent, Conversation } from '../../types/agent';
-
 // Mock agent service
 vi.mock('../../services/agentService', () => ({
   agentService: {
@@ -22,8 +21,6 @@ vi.mock('../../services/agentService', () => ({
     chat: vi.fn(),
   },
 }));
-
-import { agentService } from '../../services/agentService';
 
 // Skip this entire test suite as it references non-existent methods
 describe.skip('Agent Store - Title Generation', () => {
@@ -257,7 +254,7 @@ describe.skip('Agent Store - Title Generation', () => {
         await act(async () => {
           await sendMessage(conversationId, messageText, projectId);
         });
-      } catch (e) {
+      } catch (_e) {
         // sendMessage may fail due to incomplete mock setup
         // The important thing is that project_id is passed to agentService.chat
         // This is verified by the type system

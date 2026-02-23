@@ -91,8 +91,8 @@ export function FinalResponseDisplay({
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
       };
 
-      // @ts-ignore - html2pdf types might be missing
-      // @ts-ignore - Dynamic import
+      // @ts-expect-error -- html2pdf types might be missing
+      // @ts-expect-error -- Dynamic import
       const html2pdf = (await import('html2pdf.js')).default;
       await html2pdf().set(opt).from(element).save();
     } catch (error) {

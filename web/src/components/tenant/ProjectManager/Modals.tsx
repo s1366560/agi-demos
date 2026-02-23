@@ -11,6 +11,8 @@ import { ProjectSettingsModal } from '../ProjectSettingsModal';
 
 import { useProjectManagerContext } from './context';
 
+import type { Project } from '@/types/memory';
+
 import type { ProjectManagerCreateModalProps, ProjectManagerSettingsModalProps } from './types';
 
 // ============================================================================
@@ -112,4 +114,3 @@ export const SettingsModal: FC<ProjectManagerSettingsModalProps> = ({
   );
 };
 
-import type { Project } from '@/types/memory';

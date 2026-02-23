@@ -82,8 +82,8 @@ def test_schedule_route_message_logs_error_without_main_loop(
     ) as scheduler:
         manager._schedule_route_message(message)
 
-    scheduler.assert_not_called()
-    assert "Main event loop not initialized" in caplog.text
+    scheduler.assert_called_once()
+    assert "No event loop available" in caplog.text
 
 
 @pytest.mark.unit

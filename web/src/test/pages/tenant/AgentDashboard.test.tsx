@@ -60,7 +60,7 @@ describe('AgentDashboard', () => {
       render(<AgentDashboard />);
 
       // Find inactive agent
-      const creativeStrategist = screen.getByText('Creative Strategist').closest('div');
+      const _creativeStrategist = screen.getByText('Creative Strategist').closest('div');
       const activateButton = screen.getByText('Activate');
 
       fireEvent.click(activateButton);
@@ -93,18 +93,20 @@ describe('AgentDashboard', () => {
   });
 
   describe('Component Structure', () => {
-    it('should have static data hoisted to module scope', () => {
+    it('should have static data hoisted to module scope', async () => {
       // Verify that DEFAULT_SUB_AGENTS is defined outside component
-      const AgentDashboardModule = require('../../../pages/tenant/AgentDashboard');
+      const AgentDashboardModule = await import('../../../pages/tenant/AgentDashboard');
       expect(AgentDashboardModule.DEFAULT_SUB_AGENTS).toBeDefined();
       expect(AgentDashboardModule.SKILLS).toBeDefined();
     });
   });
 
   describe('Performance', () => {
-    it('should use React.memo for optimization', () => {
+    it('should use React.memo for optimization', async () => {
       // Check if component is wrapped with memo
-      const AgentDashboardModule = require('../../../pages/tenant/AgentDashboard');
+       
+
+      const AgentDashboardModule = await import('../../../pages/tenant/AgentDashboard');
       // Component should be exported and potentially memoized
       expect(AgentDashboardModule.AgentDashboard).toBeDefined();
     });

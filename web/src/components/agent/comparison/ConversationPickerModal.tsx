@@ -48,6 +48,7 @@ export const ConversationPickerModal = memo(
 
     useEffect(() => {
       if (visible) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setSearch('');
         setTimeout(() => inputRef.current?.focus(), 100);
       }

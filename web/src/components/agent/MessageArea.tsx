@@ -508,6 +508,7 @@ const STREAMING_CONTENT_SYMBOL = Symbol('MessageAreaStreamingContent');
 
 const MessageAreaContext = createContext<_MessageAreaContextValue | null>(null);
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useMessageArea = () => {
   const context = MessageAreaContext;
   if (!context) {
@@ -1001,7 +1002,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       }
 
       prevTimelineLengthRef.current = currentTimelineLength;
-    }, [timeline.length, isStreaming, isLoading, restoreScrollPosition]);
+    }, [timeline.length, isStreaming, isLoading, restoreScrollPosition, groupedItems.length, virtualizer]);
 
     // Auto-scroll when streaming content updates
     useEffect(() => {
@@ -1059,6 +1060,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       [groupedItems]
     );
 
+// eslint-disable-next-line react-hooks/incompatible-library
     const virtualizer = useVirtualizer({
       count: groupedItems.length,
       getScrollElement: () => containerRef.current,
@@ -1113,8 +1115,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
         cancelAnimationFrame(rafId);
         if (cleanupRef.current) cancelAnimationFrame(cleanupRef.current);
       };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [conversationId]);
+      }, [conversationId, virtualizer, groupedItems.length, timeline.length]);
 
     // j/k keyboard navigation for messages
     const focusedMsgRef = useRef<number>(-1);

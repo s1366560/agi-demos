@@ -10,7 +10,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Import the component and types
-import { ProjectManager, type ProjectManagerProps } from '@/components/tenant/ProjectManager';
+import { ProjectManager } from '@/components/tenant/ProjectManager';
 
 import type { Project } from '@/types/memory';
 
@@ -206,7 +206,7 @@ describe('ProjectManager - Compound Component Pattern', () => {
 
   describe('variant="full" - Automatic Rendering', () => {
     it('should render all sub-components automatically with full variant', () => {
-      const { container } = render(<ProjectManager variant="full" />);
+      const { _container } = render(<ProjectManager variant="full" />);
 
       // Should render Search component
       expect(screen.getByTestId('search-input')).toBeInTheDocument();
@@ -540,7 +540,7 @@ describe('ProjectManager.Error', () => {
   );
 
   it('should render null when no error', () => {
-    const { container } = render(<ProjectManager.Error error={null} />, { wrapper: Wrapper });
+    const { _container } = render(<ProjectManager.Error error={null} />, { wrapper: Wrapper });
 
     expect(screen.queryByTestId('error-state')).not.toBeInTheDocument();
   });

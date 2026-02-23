@@ -174,7 +174,7 @@ describe('TimelineEventItem', () => {
         role: 'user',
       };
 
-      const { container } = render(<TimelineEventItem event={event} />);
+      const { _container } = render(<TimelineEventItem event={event} />);
 
       // Verify the event renders (timestamp is internal, not displayed by default)
       expect(screen.getByText('Test timestamp')).toBeInTheDocument();

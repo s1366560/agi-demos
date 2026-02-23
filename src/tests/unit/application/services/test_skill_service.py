@@ -1,13 +1,12 @@
 """Unit tests for SkillService."""
 
-import pytest
 from datetime import datetime
-from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from src.application.services.skill_service import SkillService
-from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus
-from src.domain.model.agent.skill_source import SkillSource
+from src.domain.model.agent.skill import Skill, SkillScope, SkillSource, SkillStatus, TriggerType
 from src.domain.model.agent.tenant_skill_config import TenantSkillAction, TenantSkillConfig
 
 
@@ -15,11 +14,12 @@ from src.domain.model.agent.tenant_skill_config import TenantSkillAction, Tenant
 def mock_skill_repository():
     """Create mock skill repository."""
     repo = MagicMock()
-    repo.find_by_tenant = AsyncMock(return_value=[])
-    repo.find_by_project = AsyncMock(return_value=[])
-    repo.find_by_id = AsyncMock(return_value=None)
-    repo.find_by_name = AsyncMock(return_value=None)
-    repo.save = AsyncMock()
+    repo.list_by_tenant = AsyncMock(return_value=[])
+    repo.list_by_project = AsyncMock(return_value=[])
+    repo.get_by_id = AsyncMock(return_value=None)
+    repo.get_by_name = AsyncMock(return_value=None)
+    repo.create = AsyncMock()
+    repo.update = AsyncMock()
     repo.delete = AsyncMock()
     return repo
 
@@ -38,7 +38,7 @@ def mock_filesystem_loader():
     """Create mock filesystem skill loader."""
     loader = MagicMock()
     loader.load_skills = MagicMock(return_value=[])
-    return repo
+    return loader
 
 
 @pytest.fixture
@@ -46,14 +46,15 @@ def sample_skill():
     """Create sample skill for testing."""
     return Skill(
         id="skill-1",
-        name="test_skill",
+        name="test-skill",
         description="A test skill",
         scope=SkillScope.TENANT,
         status=SkillStatus.ACTIVE,
         tenant_id="tenant-1",
         project_id=None,
         source=SkillSource.DATABASE,
-        triggers=["test"],
+        trigger_type=TriggerType.KEYWORD,
+        trigger_patterns=[],
         tools=["read", "write"],
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
@@ -65,17 +66,19 @@ def sample_system_skill():
     """Create sample system skill for testing."""
     return Skill(
         id="system-skill-1",
-        name="system_skill",
+        name="system-skill",
         description="A system skill",
         scope=SkillScope.SYSTEM,
         status=SkillStatus.ACTIVE,
-        tenant_id=None,
+        tenant_id="system",
         project_id=None,
         source=SkillSource.FILESYSTEM,
-        triggers=["system"],
+        trigger_type=TriggerType.KEYWORD,
+        trigger_patterns=[],
         tools=["read"],
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
+        is_system_skill=True,
     )
 
 
@@ -101,10 +104,10 @@ class TestSkillService:
     async def test_get_skills_returns_empty_list_initially(
         self, skill_service, mock_skill_repository
     ):
-        """Test get_skills returns empty list when no skills exist."""
-        mock_skill_repository.find_by_tenant.return_value = []
+        """Test list_available_skills returns empty list when no skills exist."""
+        mock_skill_repository.list_by_tenant.return_value = []
 
-        skills = await skill_service.get_skills(tenant_id="tenant-1")
+        skills = await skill_service.list_available_skills(tenant_id="tenant-1")
 
         assert skills == []
 
@@ -112,117 +115,101 @@ class TestSkillService:
     async def test_get_skills_returns_tenant_skills(
         self, skill_service, mock_skill_repository, sample_skill
     ):
-        """Test get_skills returns tenant skills."""
-        mock_skill_repository.find_by_tenant.return_value = [sample_skill]
+        """Test list_available_skills returns tenant skills."""
+        mock_skill_repository.list_by_tenant.return_value = [sample_skill]
 
-        skills = await skill_service.get_skills(tenant_id="tenant-1")
+        skills = await skill_service.list_available_skills(tenant_id="tenant-1")
 
         assert len(skills) == 1
-        assert skills[0].name == "test_skill"
+        assert skills[0].name == "test-skill"
 
     @pytest.mark.unit
     async def test_get_skills_includes_project_skills(
         self, skill_service, mock_skill_repository, sample_skill
     ):
-        """Test get_skills includes project-level skills."""
+        """Test list_available_skills includes project-level skills."""
         project_skill = Skill(
             id="project-skill-1",
-            name="project_skill",
+            name="project-skill",
             description="A project skill",
             scope=SkillScope.PROJECT,
             status=SkillStatus.ACTIVE,
             tenant_id="tenant-1",
             project_id="project-1",
             source=SkillSource.DATABASE,
-            triggers=["project"],
+            trigger_type=TriggerType.KEYWORD,
+            trigger_patterns=[],
             tools=["read"],
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
         )
-        mock_skill_repository.find_by_tenant.return_value = [sample_skill]
-        mock_skill_repository.find_by_project.return_value = [project_skill]
+        mock_skill_repository.list_by_tenant.return_value = [sample_skill]
+        mock_skill_repository.list_by_project.return_value = [project_skill]
 
-        skills = await skill_service.get_skills(
+        skills = await skill_service.list_available_skills(
             tenant_id="tenant-1", project_id="project-1"
         )
 
         assert len(skills) == 2
 
     @pytest.mark.unit
-    async def test_get_skill_by_id_found(
-        self, skill_service, mock_skill_repository, sample_skill
-    ):
-        """Test get_skill_by_id returns skill when found."""
-        mock_skill_repository.find_by_id.return_value = sample_skill
-
-        skill = await skill_service.get_skill_by_id("skill-1")
-
-        assert skill is not None
-        assert skill.id == "skill-1"
-
-    @pytest.mark.unit
-    async def test_get_skill_by_id_not_found(
-        self, skill_service, mock_skill_repository
-    ):
-        """Test get_skill_by_id returns None when not found."""
-        mock_skill_repository.find_by_id.return_value = None
-
-        skill = await skill_service.get_skill_by_id("nonexistent")
-
-        assert skill is None
-
-    @pytest.mark.unit
     async def test_get_skill_by_name_found(
         self, skill_service, mock_skill_repository, sample_skill
     ):
         """Test get_skill_by_name returns skill when found."""
-        mock_skill_repository.find_by_name.return_value = sample_skill
+        mock_skill_repository.get_by_name.return_value = sample_skill
 
-        skill = await skill_service.get_skill_by_name("test_skill", "tenant-1")
+        skill = await skill_service.get_skill_by_name("tenant-1", "test-skill")
 
         assert skill is not None
-        assert skill.name == "test_skill"
+        assert skill.name == "test-skill"
 
     @pytest.mark.unit
-    async def test_create_skill_success(
-        self, skill_service, mock_skill_repository, sample_skill
-    ):
+    async def test_get_skill_by_name_not_found(self, skill_service, mock_skill_repository):
+        """Test get_skill_by_name returns None when not found."""
+        mock_skill_repository.get_by_name.return_value = None
+
+        skill = await skill_service.get_skill_by_name("tenant-1", "nonexistent")
+
+        assert skill is None
+
+    @pytest.mark.unit
+    async def test_create_skill_success(self, skill_service, mock_skill_repository, sample_skill):
         """Test successful skill creation."""
-        mock_skill_repository.save.return_value = sample_skill
+        mock_skill_repository.create.return_value = sample_skill
 
-        result = await skill_service.create_skill(sample_skill)
+        result = await skill_service.create_skill(
+            tenant_id="tenant-1",
+            name="test-skill",
+            description="A test skill",
+            tools=["read", "write"],
+        )
 
-        mock_skill_repository.save.assert_called_once()
+        mock_skill_repository.create.assert_called_once()
         assert result.id == "skill-1"
 
     @pytest.mark.unit
-    async def test_update_skill_success(
-        self, skill_service, mock_skill_repository, sample_skill
-    ):
+    async def test_update_skill_success(self, skill_service, mock_skill_repository, sample_skill):
         """Test successful skill update."""
-        mock_skill_repository.find_by_id.return_value = sample_skill
-        mock_skill_repository.save.return_value = sample_skill
+        mock_skill_repository.get_by_id.return_value = sample_skill
+        mock_skill_repository.update.return_value = sample_skill
 
-        result = await skill_service.update_skill("skill-1", {"description": "Updated"})
+        _result = await skill_service.update_skill_content("skill-1", "Updated content")
 
-        mock_skill_repository.save.assert_called_once()
+        mock_skill_repository.update.assert_called_once()
 
     @pytest.mark.unit
-    async def test_update_skill_not_found(
-        self, skill_service, mock_skill_repository
-    ):
-        """Test update_skill raises error when not found."""
-        mock_skill_repository.find_by_id.return_value = None
+    async def test_update_skill_not_found(self, skill_service, mock_skill_repository):
+        """Test update_skill_content raises error when not found."""
+        mock_skill_repository.get_by_id.return_value = None
 
         with pytest.raises(ValueError, match="not found"):
-            await skill_service.update_skill("nonexistent", {"description": "Updated"})
+            await skill_service.update_skill_content("nonexistent", "Updated content")
 
     @pytest.mark.unit
-    async def test_delete_skill_success(
-        self, skill_service, mock_skill_repository, sample_skill
-    ):
+    async def test_delete_skill_success(self, skill_service, mock_skill_repository, sample_skill):
         """Test successful skill deletion."""
-        mock_skill_repository.find_by_id.return_value = sample_skill
+        mock_skill_repository.get_by_id.return_value = sample_skill
 
         await skill_service.delete_skill("skill-1")
 
@@ -233,21 +220,16 @@ class TestSkillService:
         self, skill_service, mock_tenant_config_repository, sample_system_skill
     ):
         """Test tenant config can disable system skills."""
-        config = TenantSkillConfig(
+        config = TenantSkillConfig.create_disable(
             tenant_id="tenant-1",
-            skill_overrides={
-                "system_skill": TenantSkillAction.DISABLE
-            },
+            system_skill_name="system-skill",
         )
         mock_tenant_config_repository.get_config.return_value = config
-
-        # When getting skills, system_skill should be filtered out
-        # This depends on the actual implementation of get_skills
+        # This depends on the actual implementation of list_available_skills
         # Here we're testing the config retrieval
         retrieved_config = await skill_service._tenant_config_repo.get_config("tenant-1")
-
-        assert retrieved_config is not None
-        assert retrieved_config.skill_overrides.get("system_skill") == TenantSkillAction.DISABLE
+        assert retrieved_config.is_disabled()
+        assert retrieved_config.system_skill_name == "system-skill"
 
     @pytest.mark.unit
     def test_factory_method(self, mock_skill_repository, tmp_path):
@@ -262,42 +244,42 @@ class TestSkillService:
         assert service._fs_loader is not None
 
     @pytest.mark.unit
-    async def test_skill_priority_project_over_tenant(
-        self, skill_service, mock_skill_repository
-    ):
+    async def test_skill_priority_project_over_tenant(self, skill_service, mock_skill_repository):
         """Test project skills override tenant skills with same name."""
         tenant_skill = Skill(
             id="tenant-skill",
-            name="common_skill",
+            name="common-skill",
             description="Tenant version",
             scope=SkillScope.TENANT,
             status=SkillStatus.ACTIVE,
             tenant_id="tenant-1",
             source=SkillSource.DATABASE,
-            triggers=["test"],
+            trigger_type=TriggerType.KEYWORD,
+            trigger_patterns=[],
             tools=["read"],
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
         )
         project_skill = Skill(
             id="project-skill",
-            name="common_skill",
+            name="common-skill",
             description="Project version",
             scope=SkillScope.PROJECT,
             status=SkillStatus.ACTIVE,
             tenant_id="tenant-1",
             project_id="project-1",
             source=SkillSource.DATABASE,
-            triggers=["test"],
+            trigger_type=TriggerType.KEYWORD,
+            trigger_patterns=[],
             tools=["read", "write"],
             created_at=datetime.utcnow(),
             updated_at=datetime.utcnow(),
         )
 
-        mock_skill_repository.find_by_tenant.return_value = [tenant_skill]
-        mock_skill_repository.find_by_project.return_value = [project_skill]
+        mock_skill_repository.list_by_tenant.return_value = [tenant_skill]
+        mock_skill_repository.list_by_project.return_value = [project_skill]
 
-        skills = await skill_service.get_skills(
+        skills = await skill_service.list_available_skills(
             tenant_id="tenant-1", project_id="project-1"
         )
 

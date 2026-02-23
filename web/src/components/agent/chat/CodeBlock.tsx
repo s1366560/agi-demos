@@ -83,11 +83,6 @@ export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props })
 
   const { text, language } = extractCodeContent(children);
 
-  // Mermaid diagrams get special rendering
-  if (language === 'mermaid') {
-    return <MermaidBlock chart={text} />;
-  }
-
   const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(text);
@@ -116,6 +111,11 @@ export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props })
       useLayoutModeStore.getState().setMode('canvas');
     }
   }, [text, language]);
+
+  // Mermaid diagrams get special rendering
+  if (language === 'mermaid') {
+    return <MermaidBlock chart={text} />;
+  }
 
   // Short snippets (single line, < 80 chars) don't need action buttons
   const isShort = !text.includes('\n') && text.length < 80;

@@ -34,6 +34,7 @@ export const ThreadView = memo<ThreadViewProps>(
     useEffect(() => {
       if (!expanded || !conversationId || !messageId) return;
       const abortController = new AbortController();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(true);
       fetch(`/api/v1/agent/conversations/${conversationId}/messages/${messageId}/replies`, {
         headers: {

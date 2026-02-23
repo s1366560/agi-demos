@@ -222,7 +222,6 @@ export function KasmVNCViewer({
     onConnect,
     onDisconnect,
     onError,
-    clearReconnectTimer,
     safeDisconnect,
   ]);
 

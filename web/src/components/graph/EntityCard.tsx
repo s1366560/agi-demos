@@ -62,6 +62,8 @@ const customColorPalette = [
  * Generate consistent color for entity type (including custom schemas)
  * Exported for reuse in other components
  */
+ 
+// eslint-disable-next-line react-refresh/only-export-components
 export const getEntityTypeColor = (entityType: string): string => {
   if (predefinedColors[entityType]) {
     return predefinedColors[entityType];

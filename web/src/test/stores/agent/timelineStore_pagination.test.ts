@@ -13,8 +13,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-import { useTimelineStore, initialState } from '../../../stores/agent/timelineStore';
-
+import { agentService } from '../../../services/agentService';
+import { useTimelineStore } from '../../../stores/agent/timelineStore';
 // Mock agent service
 vi.mock('../../../services/agentService', () => ({
   agentService: {
@@ -22,7 +22,6 @@ vi.mock('../../../services/agentService', () => ({
   },
 }));
 
-import { agentService } from '../../../services/agentService';
 
 const getConversationMessages = vi.mocked(agentService.getConversationMessages);
 

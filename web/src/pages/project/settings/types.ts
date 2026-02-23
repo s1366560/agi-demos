@@ -153,7 +153,7 @@ export interface ProjectSettingsDangerProps {
 }
 
 // No Project State
-export interface ProjectSettingsNoProjectProps {}
+export type ProjectSettingsNoProjectProps = Record<string, never>;
 
 // ============================================================================
 // Main Component Props

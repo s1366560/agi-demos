@@ -5,7 +5,7 @@
  */
 
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
 
 // Mock child components to simplify testing
@@ -67,7 +67,7 @@ vi.mock('../../../../components/agent/shared', () => ({
 
 import { getDisplayMode } from '../../../../components/agent/execution/ExecutionTimeline';
 
-import type { TimelineStep, WorkPlan, ToolExecution, DisplayMode } from '../../../../types/agent';
+import type { TimelineStep, WorkPlan, ToolExecution } from '../../../../types/agent';
 
 // Mock data for testing
 const mockWorkPlan: WorkPlan = {
@@ -744,7 +744,7 @@ describe('ExecutionTimeline (Compound Components)', () => {
         />
       );
 
-      expect(screen.getByText('0\/3 步骤已完成')).toBeInTheDocument();
+      expect(screen.getByText('0/3 步骤已完成')).toBeInTheDocument();
     });
 
     it('should handle tool executions with step numbers', async () => {

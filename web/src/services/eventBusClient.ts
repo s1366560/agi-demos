@@ -180,7 +180,7 @@ export class EventBusClient {
         this.ws.onmessage = (event) => {
           this.handleMessage(event.data);
         };
-      } catch (err) {
+      } catch (_err) {
         this.setState('disconnected');
         reject(err);
       }
@@ -325,7 +325,7 @@ export class EventBusClient {
         handlers.forEach((handler) => {
           try {
             handler(envelope);
-          } catch (err) {
+          } catch (_err) {
             console.error('Event handler error:', err);
           }
         });
@@ -380,7 +380,7 @@ export class EventBusClient {
     this.errorHandlers.forEach((handler) => {
       try {
         handler(error);
-      } catch (err) {
+      } catch (_err) {
         console.error('Error handler threw:', err);
       }
     });
@@ -412,7 +412,7 @@ export class EventBusClient {
         for (const pattern of this.subscriptions.keys()) {
           this.sendMessage({ type: 'subscribe', pattern });
         }
-      } catch (err) {
+      } catch (_err) {
         // Will trigger another reconnect via onclose
       }
     }, delay);

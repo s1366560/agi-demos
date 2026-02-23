@@ -71,7 +71,7 @@ test.describe('Accessibility - ARIA Labels (A11Y)', () => {
         // Check Insights button has aria-label or accessible name
         const insightsButton = page.locator('button').filter({ hasText: 'Insights' });
         if (await insightsButton.isVisible()) {
-            const ariaLabel = await insightsButton.first().getAttribute('aria-label');
+            const _ariaLabel = await insightsButton.first().getAttribute('aria-label');
             // Has visible text "Insights", so aria-label is optional but good to have
             expect(await insightsButton.first().isVisible()).toBeTruthy();
         }
@@ -147,7 +147,7 @@ test.describe('Accessibility - ARIA Labels (A11Y)', () => {
         const newChatButton = page.getByRole('button', { name: /New Chat/i });
         await expect(newChatButton).toBeVisible();
 
-        const ariaLabel = await newChatButton.first().getAttribute('aria-label');
+        const _ariaLabel = await newChatButton.first().getAttribute('aria-label');
         // Has visible text "New Chat", so aria-label provides additional context
         expect(await newChatButton.first().isVisible()).toBeTruthy();
     });

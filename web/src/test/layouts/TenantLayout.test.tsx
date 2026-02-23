@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { screen, render, waitFor } from '../utils';
 import { TenantLayout } from '../../layouts/TenantLayout';
-
+import { _useTenantStore } from '../../stores/tenant';
+import { screen, render, waitFor } from '../utils';
 // Define mock state at module level (before vi.mock calls)
 let mockTenantState: any = {
   tenants: [{ id: 't1', name: 'Test Tenant' }],
@@ -105,7 +105,6 @@ vi.mock('../../components/shared/ui/LanguageSwitcher', () => ({
 }));
 
 // Import after mocking to get the mocked version
-import { useTenantStore } from '../../stores/tenant';
 
 describe('TenantLayout', () => {
   beforeEach(() => {

@@ -462,7 +462,7 @@ describe('useLocalStorage', () => {
 
     it('should handle multiple hooks with same key', () => {
       const { result: result1 } = renderHook(() => useLocalStorage('same-key', 'initial'));
-      const { result: result2 } = renderHook(() => useLocalStorage('same-key', 'initial'));
+      const { result: _result2 } = renderHook(() => useLocalStorage('same-key', 'initial'));
 
       act(() => {
         result1.current.setValue('updated');

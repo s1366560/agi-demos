@@ -6,7 +6,7 @@
 import React from 'react';
 
 import { Popconfirm, Switch, Tooltip } from 'antd';
-import { Trash2, Edit3, RefreshCw, Zap, Activity } from 'lucide-react';
+
 
 import { MaterialIcon } from '../agent/shared/MaterialIcon';
 
@@ -14,12 +14,10 @@ import {
   RUNTIME_STATUS_STYLES,
   SERVER_TYPE_STYLES,
   CARD_STYLES,
-  BUTTON_STYLES,
-  ANIMATION_CLASSES,
 } from './styles';
 import { getRuntimeStatus } from './types';
 
-import type { MCPServerResponse, MCPToolInfo } from '@/types/agent';
+import type { MCPServerResponse } from '@/types/agent';
 
 export interface McpServerCardV2Props {
   server: MCPServerResponse;
@@ -67,7 +65,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
     onShowTools,
     appCount = 0,
     readyAppCount = 0,
-    errorAppCount = 0,
+    _errorAppCount = 0,
   }) => {
     const status = getRuntimeStatus(server);
     const runtimeStyle = RUNTIME_STATUS_STYLES[status];

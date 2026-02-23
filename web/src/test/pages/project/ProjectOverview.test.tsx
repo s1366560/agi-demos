@@ -12,12 +12,11 @@
 
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 
-import { screen, render, waitFor } from '@testing-library/react';
+import { screen, render, waitFor, renderHook } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { ProjectOverview } from '../../../pages/project/ProjectOverview';
 import { projectAPI, memoryAPI } from '../../../services/api';
-
 // Mock API services
 vi.mock('../../../services/api', () => ({
   projectAPI: {
@@ -30,8 +29,8 @@ vi.mock('../../../services/api', () => ({
 }));
 
 // Create a test wrapper to count renders
-let renderCount = 0;
-const createRenderCounter = (componentId: string) => {
+const _renderCount = 0;
+const _createRenderCounter = (componentId: string) => {
   let count = 0;
   return {
     count: () => count,
@@ -376,14 +375,14 @@ describe('ProjectOverview - Performance Optimizations', () => {
 
   describe('Stable References (Re-render Prevention)', () => {
     it('should provide stable function references across re-renders', async () => {
-      let formatStorageFn: Function | undefined;
-      let formatDateFn: Function | undefined;
-      let getMemoryStatusFn: Function | undefined;
-      let getMemoryTitleFn: Function | undefined;
+      let _formatStorageFn: (...args: unknown[]) => unknown | undefined;
+      let _formatDateFn: (...args: unknown[]) => unknown | undefined;
+      let _getMemoryStatusFn: (...args: unknown[]) => unknown | undefined;
+      let _getMemoryTitleFn: (...args: unknown[]) => unknown | undefined;
 
       // Create a wrapper that captures function references
-      const TestWrapper = () => {
-        const { result } = renderHook(() => {
+      const _TestWrapper = () => {
+        const { _result } = renderHook(() => {
           // We'll access the component's functions via a test hook
           // This is a simplified version - in real scenario we'd use render prop
         });
@@ -406,7 +405,6 @@ describe('ProjectOverview - Performance Optimizations', () => {
 });
 
 // Import renderHook
-import { renderHook } from '@testing-library/react';
 
 describe('ProjectOverview - Pure Functions (moved outside component)', () => {
   describe('formatStorage function', () => {

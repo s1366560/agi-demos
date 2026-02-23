@@ -12,9 +12,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+import { httpClient } from '../../services/client/httpClient';
 import { requestCache } from '../../services/client/requestCache';
 import { requestDeduplicator } from '../../services/client/requestDeduplicator';
-
 // Define the mock instance using vi.hoisted to handle hoisting
 const { mockAxiosInstance } = vi.hoisted(() => {
   return {
@@ -44,8 +44,6 @@ vi.mock('axios', () => ({
 }));
 
 // Import after mock is defined
-import { httpClient } from '../../services/client/httpClient';
-
 // Mock window.location
 const mockLocation = {
   pathname: '/dashboard',

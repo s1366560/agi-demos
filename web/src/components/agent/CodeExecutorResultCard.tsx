@@ -43,6 +43,8 @@ interface CodeExecutorResultCardProps {
   result: CodeExecutorResult;
 }
 
+ 
+// eslint-disable-next-line react-refresh/only-export-components
 export function parseCodeExecutorResult(resultStr: string): CodeExecutorResult | null {
   try {
     // Try to parse as JSON first

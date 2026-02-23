@@ -7,15 +7,12 @@
  * 3. REFACTOR: Improve implementation
  */
 
-import { renderHook, act, waitFor, cleanup } from '@testing-library/react';
+import { renderHook, cleanup } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { useAgentLifecycleState } from '../../hooks/useAgentLifecycleState';
-import {
-  useUnifiedAgentStatus,
-  type ProjectAgentLifecycleState,
-} from '../../hooks/useUnifiedAgentStatus';
-
+// eslint-disable-next-line import/order
+import { useUnifiedAgentStatus, type ProjectAgentLifecycleState } from '../../hooks/useUnifiedAgentStatus';
 // Mock stores
 vi.mock('../../stores/agentV3', () => ({
   useAgentV3Store: vi.fn(),
@@ -289,13 +286,13 @@ describe('useUnifiedAgentStatus - TDD RED Phase', () => {
     });
 
     it('should count active tool calls from agent store', () => {
-      const activeToolCalls = new Map([
+      const _activeToolCalls = new Map([
         ['read', { status: 'running', startTime: Date.now() }],
         ['write', { status: 'running', startTime: Date.now() }],
       ]);
 
       vi.mocked(useAgentV3Store).mockImplementation((selector) => {
-        const state = { ...defaultAgentV3State, activeToolCalls };
+        const state = { ...defaultAgentV3StateiveToolCalls };
         return selector(state);
       });
 

@@ -29,6 +29,7 @@ export interface SandboxProviderProps {
 /**
  * Provider for SandboxPanel state
  */
+ 
 export const SandboxPanelProvider: React.FC<SandboxProviderProps> = ({
   sandboxId,
   defaultTab = 'terminal',
@@ -76,6 +77,7 @@ export const SandboxPanelProvider: React.FC<SandboxProviderProps> = ({
 /**
  * Hook to access SandboxPanel context
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export const useSandboxPanelContext = (): SandboxPanelContextValue => {
   const context = useContext(SandboxPanelContext);
   if (!context) {

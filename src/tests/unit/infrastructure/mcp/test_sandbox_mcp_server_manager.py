@@ -1,9 +1,9 @@
 """Unit tests for SandboxMCPServerManager."""
 
 import json
+from unittest.mock import AsyncMock
 
 import pytest
-from unittest.mock import AsyncMock
 
 from src.application.services.sandbox_mcp_server_manager import SandboxMCPServerManager
 from src.domain.ports.services.sandbox_mcp_server_port import (
@@ -190,4 +190,4 @@ class TestSandboxMCPServerManager:
         result = mgr._parse_tool_result({
             "content": [{"type": "text", "text": "just plain text"}]
         })
-        assert result == "just plain text"
+        assert result == {"success": False, "error": "just plain text", "raw_output": "just plain text"}

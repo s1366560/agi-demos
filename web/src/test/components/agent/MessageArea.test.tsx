@@ -4,7 +4,7 @@
  * TDD: Tests written first for the new compound component API.
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { MessageArea } from '../../../components/agent/MessageArea';
@@ -37,7 +37,7 @@ vi.mock('../../../components/agent/StreamingThoughtBubble', () => ({
 }));
 
 vi.mock('react-markdown', () => ({
-  default: ({ children, remarkPlugins }: any) => <div data-testid="markdown">{children}</div>,
+  default: ({ children, _remarkPlugins }: any) => <div data-testid="markdown">{children}</div>,
 }));
 
 vi.mock('remark-gfm', () => ({

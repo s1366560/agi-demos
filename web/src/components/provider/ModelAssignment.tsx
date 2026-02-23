@@ -1,6 +1,4 @@
-import React, { useEffect, useState } from 'react';
-
-import { useTranslation } from 'react-i18next';
+import React, { useCallback, useEffect, useState } from 'react';
 
 import { providerAPI } from '../../services/api';
 import { ProviderConfig, TenantProviderMapping } from '../../types/memory';
@@ -22,7 +20,6 @@ interface GroupedAssignments {
 }
 
 export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, providers }) => {
-  const { t } = useTranslation();
   const [assignments, setAssignments] = useState<TenantProviderMapping[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +30,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
   const [isSelectorOpen, setIsSelectorOpen] = useState(false);
   const [targetType, setTargetType] = useState<'llm' | 'embedding' | 'rerank'>('llm');
 
-  const loadAssignments = async () => {
+  const loadAssignments = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -45,11 +42,11 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [tenantId]);
 
   useEffect(() => {
     loadAssignments();
-  }, [tenantId]);
+  }, [tenantId, loadAssignments]);
 
   const handleUnassign = async (
     providerId: string,
@@ -59,9 +56,9 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
     try {
       await providerAPI.unassignFromTenant(providerId, tenantId, operationType);
       loadAssignments();
-    } catch (err: any) {
+    } catch (err) {
       console.error('Failed to unassign provider:', err);
-      alert(err.message || 'Failed to unassign provider');
+      alert(err instanceof Error ? err.message : 'Failed to unassign provider');
     }
   };
 
@@ -129,7 +126,7 @@ export const ModelAssignment: React.FC<ModelAssignmentProps> = ({ tenantId, prov
           </div>
         ) : (
           <div className="flex flex-col">
-            {items.map((assignment, index) => {
+            {items.map((assignment, _index) => {
               const provider = getProvider(assignment.provider_id);
               if (!provider) return null;
 

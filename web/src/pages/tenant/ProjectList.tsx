@@ -39,9 +39,7 @@ const createFormatTime = (t: TFunction) => {
   };
 };
 
-interface ProjectListProps {
-  // Props can be added later if needed
-}
+type ProjectListProps = Record<string, never>;
 
 // Use memo to prevent unnecessary re-renders (rerender-memo)
 const ProjectListInner: React.FC<ProjectListProps> = () => {

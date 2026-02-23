@@ -26,8 +26,8 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
+import { agentService } from '../../../services/agentService';
 import { useTimelineStore, initialState } from '../../../stores/agent/timelineStore';
-
 // Helper to create mock timeline response matching the full type
 const createMockResponse = (timeline: any[], total: number) => ({
   conversationId: 'mock-conv-id',
@@ -44,8 +44,6 @@ vi.mock('../../../services/agentService', () => ({
     getConversationMessages: vi.fn(),
   },
 }));
-
-import { agentService } from '../../../services/agentService';
 
 // Helper to access mocked method
 const getConversationMessages = vi.mocked(agentService.getConversationMessages);

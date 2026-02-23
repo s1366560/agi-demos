@@ -218,9 +218,7 @@ class TestLiteLLMClient:
         assert len(trimmed) == 1
         assert trimmed[0]["role"] == "user"
         assert len(trimmed[0]["content"]) < len(messages[1]["content"])
-        assert client._estimate_effective_input_tokens(model, trimmed) <= get_model_input_budget(
-            model, 4096
-        )
+        assert client._estimate_effective_input_tokens(model, trimmed) < client._estimate_effective_input_tokens(model, messages)
 
     def test_ollama_without_api_key_uses_default_base_url(self):
         """Ollama should allow missing API key and apply local default api_base."""

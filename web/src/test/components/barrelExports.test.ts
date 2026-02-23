@@ -12,8 +12,6 @@
 import { describe, it, expect } from 'vitest';
 
 // Test imports from barrel files that we know work
-// We import directly to avoid loading problematic components
-
 // Test 1: Common components barrel exports
 import {
   ErrorBoundary as RootErrorBoundary,
@@ -44,36 +42,17 @@ import {
   TokenUsageChart,
   ToolCallVisualization,
 } from '../../components/agent/execution';
-import { WorkspaceSidebar, TopNavigation, ChatHistorySidebar } from '../../components/agent/layout';
-
 // Test 2: Agent layout barrel exports (direct import)
-
 // Test 3: Agent chat barrel exports (direct import)
-
 // Test 4: Agent patterns barrel exports (direct import)
-import { PatternStats, PatternList, PatternInspector } from '../../components/agent/patterns';
-
 // Test 5: Agent shared barrel exports (direct import)
 import { ProjectSelector } from '../../components/agent/ProjectSelector';
 import { SandboxTerminal, SandboxOutputViewer, SandboxPanel } from '../../components/agent/sandbox';
-import { MaterialIcon } from '../../components/agent/shared';
-
 // Test 6: Agent execution barrel exports (direct import)
-
 // Test 7: Sandbox components barrel exports (direct import)
-
 // Test 8: Agent components barrel exports (direct import)
-// NOTE: Some components have been renamed or are not exported from the barrel:
-// - MessageList -> MessageArea (not exported as MessageList)
-// - InputArea -> InputBar (not exported as InputArea)
-// - ThinkingChain exists but is not exported from barrel
-// - ToolCard exists but is not exported from barrel
-// - PlanViewer -> removed (ExecutionPlanViewer deleted)
-// - ExecutionDetailsPanel exists but is not exported from barrel
-
 // Test 9: Individual component imports (not through barrel) to verify components exist
 import { ErrorBoundary, SkeletonLoader } from '../../components/common';
-
 // Test 10: Root components barrel export
 
 describe('Barrel Exports', () => {

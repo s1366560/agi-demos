@@ -35,6 +35,8 @@ interface GraphContextValue {
 
 const GraphContext = createContext<GraphContextValue | null>(null);
 
+ 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useGraphContext = () => {
   const context = useContext(GraphContext);
   if (!context) {
@@ -122,6 +124,7 @@ interface CytoscapeGraphProps {
 
 export function CytoscapeGraph(props: CytoscapeGraphProps) {
   const { computedTheme } = useThemeStore();
+  const { onNodeClick } = props;
 
   // Parse children FIRST to detect sub-components
   const childrenArray = React.Children.toArray(props.children);
@@ -164,11 +167,11 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
   const handleNodeClick = useCallback(
     (node: NodeData | null) => {
       setSelectedNode(node);
-      if (props.onNodeClick) {
-        props.onNodeClick(node);
+      if (onNodeClick) {
+        onNodeClick(node);
       }
     },
-    [props.onNodeClick]
+    [onNodeClick]
   );
 
   // Actions

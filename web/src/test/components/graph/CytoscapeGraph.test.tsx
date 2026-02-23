@@ -7,8 +7,6 @@
  * 3. Backward compatibility with legacy API
  */
 
-import { render, screen, fireEvent, waitFor } from '../../utils';
-
 import React from 'react';
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -21,6 +19,7 @@ import type { GraphConfig, NodeData } from '@/components/graph/CytoscapeGraph/ty
 
 import { graphService } from '../../mocks/graphService';
 import { useThemeStore } from '../../mocks/themeStore';
+import { render, screen, fireEvent, waitFor } from '../../utils';
 
 describe('CytoscapeGraph - TDD Refactoring', () => {
   beforeEach(() => {
@@ -195,7 +194,7 @@ describe('CytoscapeGraph - TDD Refactoring', () => {
 
     it('should handle node click through composite API', async () => {
       const onNodeClick = vi.fn();
-      const nodeClickHandler: ((node: NodeData | null) => void) | null = null;
+      const _nodeClickHandler: ((node: NodeData | null) => void) | null = null;
 
       // Capture the onNodeClick callback
       // graphService is imported from mocks

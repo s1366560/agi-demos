@@ -8,9 +8,9 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { CommunitiesList } from '../../../pages/project/communities';
+import { graphService } from '../../../services/graphService';
 
 import type { Community } from '../../../pages/project/communities/types';
-
 // Mock EventSource
 global.EventSource = vi.fn(() => ({
   addEventListener: vi.fn(),
@@ -58,8 +58,6 @@ vi.mock('../../../components/common', () => ({
     </div>
   ),
 }));
-
-import { graphService } from '../../../services/graphService';
 
 // Mock test data
 const mockCommunities: Community[] = [

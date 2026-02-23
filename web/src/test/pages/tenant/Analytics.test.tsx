@@ -46,7 +46,7 @@ vi.mock('../../../stores/tenant', () => ({
 // Mock ChartComponents lazy load
 vi.mock('../../../pages/tenant/ChartComponents', () => ({
   __esModule: true,
-  default: vi.fn(({ memoryGrowthData, projectStorageData, projectsLength }) => (
+  default: vi.fn(({ memoryGrowthData, _projectStorageData, projectsLength }) => (
     <div data-testid="chart-components">
       <div data-testid="memory-growth-chart">{memoryGrowthData.datasets[0].data.length} points</div>
       <div data-testid="project-storage-chart">{projectsLength} projects</div>
@@ -124,9 +124,9 @@ describe('Analytics', () => {
   });
 
   describe('Performance', () => {
-    it('should lazy load chart components', () => {
+    it('should lazy load chart components', async () => {
       // Verify ChartComponents is imported lazily
-      const AnalyticsModule = require('../../../pages/tenant/Analytics');
+      const AnalyticsModule = await import('../../../pages/tenant/Analytics');
       // ChartComponents should be imported with lazy()
       expect(AnalyticsModule).toBeDefined();
     });
@@ -156,7 +156,7 @@ describe('Analytics', () => {
 
   describe('Component Structure', () => {
     it('should use lazy import for ChartComponents', () => {
-      const sourceCode = require('fs').readFileSync(
+      const sourceCode = await import('fs').readFileSync(
         require.resolve('../../../pages/tenant/Analytics'),
         'utf-8'
       );

@@ -622,8 +622,8 @@ class TestLLMProvidersRouterTypes:
         data = response.json()
         assert data["provider_type"] == "openai"
         assert "models" in data
-        assert "gpt-4o" in data["models"]
-        assert "gpt-4o-mini" in data["models"]
+        assert "gpt-4o" in data["models"]["chat"]
+        assert "gpt-4o-mini" in data["models"]["chat"]
 
     @pytest.mark.asyncio
     async def test_list_models_for_dashscope(self, llm_client):
@@ -652,7 +652,7 @@ class TestLLMProvidersRouterTypes:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["provider_type"] == "kimi"
-        assert "kimi-embedding-1" in data["models"]
+        assert "kimi-embedding-1" in data["models"]["embedding"]
 
     @pytest.mark.asyncio
     async def test_list_models_for_zai(self, llm_client):
@@ -662,7 +662,7 @@ class TestLLMProvidersRouterTypes:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["provider_type"] == "zai"
-        assert "embedding-3" in data["models"]
+        assert "embedding-3" in data["models"]["embedding"]
 
     @pytest.mark.asyncio
     async def test_list_models_for_ollama(self, llm_client):
@@ -672,7 +672,7 @@ class TestLLMProvidersRouterTypes:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["provider_type"] == "ollama"
-        assert "nomic-embed-text" in data["models"]
+        assert "nomic-embed-text" in data["models"]["embedding"]
 
     @pytest.mark.asyncio
     async def test_list_models_for_lmstudio(self, llm_client):
@@ -682,15 +682,16 @@ class TestLLMProvidersRouterTypes:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["provider_type"] == "lmstudio"
-        assert "local-model" in data["models"]
+        assert "local-model" in data["models"]["chat"]
 
     @pytest.mark.asyncio
     async def test_list_models_unknown_provider(self, llm_client):
         """Test listing models for an unknown provider type."""
         response = llm_client.get("/api/v1/llm-providers/models/unknown_provider")
 
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "Unknown provider type" in response.json()["detail"]
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["models"] == {"chat": [], "embedding": [], "rerank": []}
 
 
 @pytest.mark.unit

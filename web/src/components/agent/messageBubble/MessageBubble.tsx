@@ -38,8 +38,6 @@ import { CodeBlock as SharedCodeBlock } from '../chat/CodeBlock';
 import { useMarkdownPlugins, safeMarkdownComponents } from '../chat/markdownPlugins';
 import { MessageActionBar } from '../chat/MessageActionBar';
 import { SaveTemplateModal } from '../chat/SaveTemplateModal';
-
-// Import types without type qualifier
 import { InlineHITLCard } from '../InlineHITLCard';
 import { MARKDOWN_PROSE_CLASSES } from '../styles';
 

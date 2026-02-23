@@ -75,7 +75,7 @@ export const AgentWorkspace: React.FC = () => {
     };
     loadProjects();
     // Only depend on tenantId - listProjects is stable from store
-  }, [tenantId]);
+  }, [tenantId, listProjects, projects.length]);
 
   // Initialize selected project after projects are loaded
   useEffect(() => {

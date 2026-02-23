@@ -104,7 +104,7 @@ export function WorkflowPatterns() {
     } finally {
       setLoading(false);
     }
-  }, [tenantId]);
+  }, [tenantId, message]);
 
   // Load patterns on mount
   useEffect(() => {

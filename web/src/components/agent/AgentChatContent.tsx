@@ -381,7 +381,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           onClose: clearError,
         });
       }
-    }, [error, clearError, t]);
+    }, [error, clearError, t, notification]);
 
     // Handle doom loop
     useEffect(() => {
@@ -394,8 +394,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           }),
         });
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [doomLoopDetected, t]);
+      }, [doomLoopDetected, notification, t]);
 
     const handleNewConversation = useCallback(async () => {
       if (!projectId) return;
@@ -492,7 +491,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         suggestions,
         loadEarlierMessages,
         projectId,
-        conversationId,
+        
       ]
     );
 

@@ -2,7 +2,7 @@
  * Debug Sandbox UI Test
  */
 
-import { test, expect } from '@playwright/test';
+import { test } from '@playwright/test';
 
 test('debug sandbox UI', async ({ page }) => {
   // Listen for console errors

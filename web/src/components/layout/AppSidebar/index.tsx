@@ -32,6 +32,8 @@ export { SidebarNavItem } from './SidebarNavItem';
 export type { SidebarNavItemProps } from './SidebarNavItem';
 
 // Context and hooks
+ 
+// eslint-disable-next-line react-refresh/only-export-components
 export { SidebarContext, SidebarProvider, useSidebarContext } from './SidebarContext';
 
 // Types

@@ -100,6 +100,7 @@ export const MessageActionBar: React.FC<MessageActionBarProps> = memo(
     const actions: MessageAction[] = [];
 
     // Copy - available for all messages
+    // eslint-disable-next-line react-hooks/refs
     actions.push({
       key: 'copy',
       icon: copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />,

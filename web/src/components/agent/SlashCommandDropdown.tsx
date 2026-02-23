@@ -64,6 +64,7 @@ export const SlashCommandDropdown = memo(
         if (!visible || loaded) return;
 
         let cancelled = false;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setLoading(true);
 
         skillAPI
@@ -91,6 +92,7 @@ export const SlashCommandDropdown = memo(
       // Reset loaded state when dropdown closes
       useEffect(() => {
         if (!visible) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setLoaded(false);
         }
       }, [visible]);

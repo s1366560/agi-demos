@@ -41,7 +41,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+ 
+ 
+ 
 // Re-export useThemeStore as useTheme for convenience
+// eslint-disable-next-line react-refresh/only-export-components
 export { useThemeStore as useTheme } from '../stores/theme';
 
 export default ThemeProvider;

@@ -6,14 +6,13 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
+
 import { useProjectStore } from '@/stores/project';
 import { useTenantStore } from '@/stores/tenant';
 
 import { projectService } from '@/services/projectService';
 
 import { ProjectManagerContext } from './context';
-
-// Import sub-components for full variant rendering
 import { Item } from './Item';
 import { List } from './List';
 import { CreateModal, SettingsModal } from './Modals';

@@ -82,6 +82,7 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
     if (app.status === 'loading') {
       timeoutRef.current = setTimeout(() => setLoadingTimeout(true), LOADING_TIMEOUT_MS);
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoadingTimeout(false);
     }
     return () => {

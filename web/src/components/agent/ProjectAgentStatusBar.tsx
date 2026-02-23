@@ -489,7 +489,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         agentService.stopAgent(projectId);
         message.info('正在停止 Agent...');
       }
-    } catch (err) {
+    } catch (_err) {
       message.error('停止 Agent 失败');
     } finally {
       setTimeout(() => setIsActionPending(false), 3000);
@@ -507,7 +507,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
         agentService.restartAgent(projectId);
         message.info('正在重启 Agent...');
       }
-    } catch (err) {
+    } catch (_err) {
       message.error('重启 Agent 失败');
     } finally {
       setTimeout(() => setIsActionPending(false), 5000);
@@ -520,7 +520,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     try {
       await poolService.pauseInstance(instanceKey);
       message.info('正在暂停 Agent 实例...');
-    } catch (err) {
+    } catch (_err) {
       message.error('暂停 Agent 失败');
     } finally {
       setTimeout(() => setIsActionPending(false), 2000);
@@ -533,7 +533,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     try {
       await poolService.resumeInstance(instanceKey);
       message.info('正在恢复 Agent 实例...');
-    } catch (err) {
+    } catch (_err) {
       message.error('恢复 Agent 失败');
     } finally {
       setTimeout(() => setIsActionPending(false), 2000);

@@ -4,7 +4,7 @@
  * TDD: Tests WebSocket message handling for lifecycle_state_change events.
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Mock agentService module (vitest hoisting requirement)
 vi.mock('../../services/agentService', () => ({

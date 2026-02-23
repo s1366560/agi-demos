@@ -99,7 +99,7 @@ export function useAgentChatHandlers(options: {
     projectId,
     conversationId,
     basePath,
-    customBasePath,
+    _customBasePath,
     queryProjectId,
     navigate,
     togglePlanPanel,
@@ -118,7 +118,7 @@ export function useAgentChatHandlers(options: {
       const queryString = queryProjectId ? `?projectId=${queryProjectId}` : '';
       navigate(`${basePath}/${newId}${queryString}`);
     }
-  }, [projectId, createNewConversation, navigate, basePath, customBasePath, queryProjectId]);
+  }, [projectId, createNewConversation, navigate, basePath, queryProjectId]);
 
   const handleSend = useCallback(
     async (content: string) => {
@@ -138,7 +138,6 @@ export function useAgentChatHandlers(options: {
       onObserve,
       navigate,
       basePath,
-      customBasePath,
       queryProjectId,
     ]
   );

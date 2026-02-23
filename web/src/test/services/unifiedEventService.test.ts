@@ -6,7 +6,7 @@
  * @packageDocumentation
  */
 
-import { describe, it, expect, beforeEach, afterEach, vi, type Mock } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Mock the logger
 vi.mock('@/utils/logger', () => ({
@@ -76,11 +76,11 @@ class MockWebSocket {
 }
 
 describe('unifiedEventService', () => {
-  let mockWebSocket: MockWebSocket;
+  let _mockWebSocket: MockWebSocket;
   let unifiedEventService: typeof import('@/services/unifiedEventService').unifiedEventService;
 
   beforeEach(async () => {
-    vi.stubGlobal('WebSocket', MockWebSocket);
+    vi.stubGlobal('WebSocket', WebSocket);
     vi.stubGlobal('crypto', {
       randomUUID: () => 'test-uuid-' + Date.now(),
     });
@@ -238,7 +238,7 @@ describe('unifiedEventService - Topic Management', () => {
   let unifiedEventService: typeof import('@/services/unifiedEventService').unifiedEventService;
 
   beforeEach(async () => {
-    vi.stubGlobal('WebSocket', MockWebSocket);
+    vi.stubGlobal('WebSocket', WebSocket);
     vi.stubGlobal('crypto', {
       randomUUID: () => 'test-uuid-' + Date.now(),
     });

@@ -146,7 +146,8 @@ function HeaderWrapper({
   context?: 'tenant' | 'project' | 'agent';
 }) {
   // Get breadcrumbs from hook if not provided
-  const breadcrumbs = customBreadcrumbs ?? useBreadcrumbs(context);
+  const hookBreadcrumbs = useBreadcrumbs(context);
+  const breadcrumbs = customBreadcrumbs ?? hookBreadcrumbs;
 
   // Group children by section using slot prop
   const leftChildren: React.ReactNode[] = [];
@@ -208,7 +209,8 @@ function HeaderContent({
   context?: 'tenant' | 'project' | 'agent';
 }) {
   // Get breadcrumbs from hook if not provided
-  const breadcrumbs = customBreadcrumbs ?? useBreadcrumbs(context);
+  const hookBreadcrumbs2 = useBreadcrumbs(context);
+  const breadcrumbs = customBreadcrumbs ?? hookBreadcrumbs2;
 
   const renderContent = () => {
     switch (variant) {

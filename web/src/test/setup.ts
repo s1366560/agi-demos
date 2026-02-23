@@ -883,7 +883,7 @@ afterEach(() => {
 HTMLCanvasElement.prototype.getContext = vi.fn(() => ({})) as any;
 
 // Mock Date.prototype.toLocaleDateString for consistent date formatting in tests
-const originalToLocaleDateString = Date.prototype.toLocaleDateString;
+const _originalToLocaleDateString = Date.prototype.toLocaleDateString;
 Date.prototype.toLocaleDateString = function (this: Date, ..._args: []) {
   // Return consistent format: M/D/YYYY (e.g., 1/1/2024, 12/20/2024)
   const month = this.getMonth() + 1;
@@ -963,7 +963,7 @@ const createMockZustandStore = <T extends Record<string, any>>(initialState: T) 
     },
 
     // subscribe method (optional, for Zustand compatibility)
-    subscribe: (listener: (newState: T) => void) => {
+    subscribe: (_listener: (newState: T) => void) => {
       return () => {}; // noop unsubscribe
     },
   };

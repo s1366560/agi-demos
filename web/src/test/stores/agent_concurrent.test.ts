@@ -21,7 +21,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { useAgentV3Store as useAgentStore } from '../../stores/agentV3';
 
 import type { TimelineEvent, WorkPlan, ToolExecution } from '../../types/agent';
-
 // Mock agent service
 vi.mock('../../services/agentService', () => ({
   agentService: {
@@ -32,8 +31,6 @@ vi.mock('../../services/agentService', () => ({
     stopChat: vi.fn(),
   },
 }));
-
-import { agentService } from '../../services/agentService';
 
 // Helper function to create mock response with all required properties
 function createMockResponse(conversationId: string, timeline: TimelineEvent[]) {

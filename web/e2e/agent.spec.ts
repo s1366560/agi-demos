@@ -298,7 +298,7 @@ test.describe('Agent Chat V3 (FR-016, FR-017)', () => {
 
         // Check initial switch state
         const switchElement = page.locator('.ant-switch').first();
-        const initialChecked = await switchElement.getAttribute('aria-checked');
+        const _initialChecked = await switchElement.getAttribute('aria-checked');
 
         // Click to toggle
         await planModeWrapper.click();
@@ -542,7 +542,7 @@ test.describe('Agent V3 Event Persistence', () => {
         }
 
         // Get the conversation URL
-        const conversationUrl = page.url();
+        const _conversationUrl = page.url();
 
         // Refresh the page
         await page.reload();
@@ -876,7 +876,7 @@ test.describe('Agent V3 Tools API', () => {
 
 // Test suite for Human Interaction Response (Clarification)
 test.describe('Agent V3 Human Interaction', () => {
-    let projectId: string;
+    let _projectId: string;
 
     test.beforeEach(async ({ page }) => {
         // Set English locale

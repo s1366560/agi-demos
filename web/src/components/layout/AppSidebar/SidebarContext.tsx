@@ -28,12 +28,16 @@ export interface SidebarContextValue {
   basePath: string;
 }
 
+ 
+// eslint-disable-next-line react-refresh/only-export-components
 export const SidebarContext = React.createContext<SidebarContextValue | null>(null);
 
 /**
  * Hook to access sidebar context
  * Throws error if used outside of SidebarProvider
+// eslint-disable-next-line react-refresh/only-export-components
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useSidebarContext(): SidebarContextValue {
   const context = React.useContext(SidebarContext);
   if (!context) {

@@ -154,7 +154,7 @@ describe('StepAdjustmentModal', () => {
     });
 
     it('should not render bulk action buttons when no adjustments', () => {
-      const { container } = render(<StepAdjustmentModal {...defaultProps} adjustments={[]} />);
+      const { _container } = render(<StepAdjustmentModal {...defaultProps} adjustments={[]} />);
 
       expect(screen.queryByRole('button', { name: /approve all/i })).not.toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /reject all/i })).not.toBeInTheDocument();

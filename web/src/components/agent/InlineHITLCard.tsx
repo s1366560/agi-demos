@@ -224,6 +224,7 @@ const CountdownTimer: React.FC<{
 
   useEffect(() => {
     if (!expiresAt) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate timer sync pattern
       setRemaining(null);
       return;
     }

@@ -106,7 +106,7 @@ const mockTerminalStatusRunning: TerminalStatus = {
   port: 7681,
 };
 
-const mockTerminalStatusStopped: TerminalStatus = {
+const _mockTerminalStatusStopped: TerminalStatus = {
   running: false,
   url: null,
   port: 0,

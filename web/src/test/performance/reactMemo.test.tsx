@@ -10,17 +10,17 @@
  * - Other pure components
  */
 
+import { createElement } from 'react';
+
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import '@testing-library/jest-dom/vitest';
-import { createElement } from 'react';
 
 // Import components to test
 import { ExecutionStatsCard } from '../../components/agent/ExecutionStatsCard';
 import { TopNavigation } from '../../components/agent/layout/TopNavigation';
 import * as containment from '../../styles/containment';
-
 // Render count tracking utility
 let renderCounts = new Map<string, number>();
 

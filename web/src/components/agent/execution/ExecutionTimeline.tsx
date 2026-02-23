@@ -137,6 +137,8 @@ const useExecutionTimelineContext = () => {
  * Determine display mode based on available data
  * Returns "direct" for simple conversations to avoid showing unnecessary execution plans
  */
+ 
+// eslint-disable-next-line react-refresh/only-export-components
 export function getDisplayMode(
   workPlan: WorkPlan | null | undefined,
   steps: TimelineStep[],

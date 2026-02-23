@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { mentionService } from '@/services/mentionService';
 import { skillAPI } from '@/services/skillService';
 
+  // eslint-disable-next-line no-restricted-imports
 import { InputBar } from '@/components/agent/InputBar';
 
 import type { SkillResponse } from '@/types/agent';

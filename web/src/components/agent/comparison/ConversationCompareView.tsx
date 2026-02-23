@@ -138,6 +138,7 @@ export const ConversationCompareView = memo(
 
     useEffect(() => {
       let cancelled = false;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLeftLoading(true);
       loadConversationMessages(leftConversationId)
         .then((msgs) => {
@@ -156,6 +157,7 @@ export const ConversationCompareView = memo(
 
     useEffect(() => {
       if (!rightConversationId) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setRightMessages([]);
         return;
       }

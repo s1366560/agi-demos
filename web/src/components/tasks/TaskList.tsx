@@ -310,6 +310,7 @@ const TaskListImpl: React.FC<TaskListProps> = ({ entityId, entityType, embedded 
   }, [limit, offset, searchQuery, statusFilter, entityType]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchTasks();
     const interval = setInterval(fetchTasks, 5000);
     return () => clearInterval(interval);

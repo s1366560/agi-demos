@@ -91,9 +91,7 @@ const SKILLS: Skill[] = [
   { id: 'email-syn', name: 'Email Synthesizer', version: 'Comm Engine v1.0', icon: Mail },
 ];
 
-interface AgentDashboardProps {
-  // Props for future extensibility
-}
+type AgentDashboardProps = Record<string, never>;
 
 // Sub-component: SubAgentCard with memo for performance optimization
 const SubAgentCard = memo<{

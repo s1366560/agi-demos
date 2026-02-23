@@ -4,7 +4,7 @@
  * Tests the extended sandbox store with desktop and terminal status management.
  */
 
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { useSandboxStore } from '../../stores/sandbox';
@@ -152,7 +152,7 @@ describe('Sandbox Store - Desktop and Terminal Status', () => {
 
   describe('Desktop Control Actions', () => {
     it('should call onDesktopStart callback when provided', async () => {
-      const mockOnDesktopStart = vi.fn().mockResolvedValue(undefined);
+      const _mockOnDesktopStart = vi.fn().mockResolvedValue(undefined);
 
       const { result } = renderHook(() => useSandboxStore());
 
@@ -166,7 +166,7 @@ describe('Sandbox Store - Desktop and Terminal Status', () => {
     });
 
     it('should call onDesktopStop callback when provided', async () => {
-      const mockOnDesktopStop = vi.fn().mockResolvedValue(undefined);
+      const _mockOnDesktopStop = vi.fn().mockResolvedValue(undefined);
 
       const { result } = renderHook(() => useSandboxStore());
 
@@ -194,7 +194,7 @@ describe('Sandbox Store - Desktop and Terminal Status', () => {
 
   describe('Terminal Control Actions', () => {
     it('should call onTerminalStart callback when provided', async () => {
-      const mockOnTerminalStart = vi.fn().mockResolvedValue(undefined);
+      const _mockOnTerminalStart = vi.fn().mockResolvedValue(undefined);
 
       const { result } = renderHook(() => useSandboxStore());
 
@@ -207,7 +207,7 @@ describe('Sandbox Store - Desktop and Terminal Status', () => {
     });
 
     it('should call onTerminalStop callback when provided', async () => {
-      const mockOnTerminalStop = vi.fn().mockResolvedValue(undefined);
+      const _mockOnTerminalStop = vi.fn().mockResolvedValue(undefined);
 
       const { result } = renderHook(() => useSandboxStore());
 

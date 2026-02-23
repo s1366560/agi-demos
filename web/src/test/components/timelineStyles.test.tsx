@@ -8,7 +8,7 @@
  * - Animation effects
  */
 
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, cleanup } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { TimelineEventItem } from '../../components/agent/TimelineEventItem';

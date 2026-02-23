@@ -93,17 +93,13 @@ export const useChannelStore = create<ChannelState>()(
       },
 
       testConfig: async (configId: string) => {
-        try {
-          const result = await channelService.testConfig(configId);
-          // Refresh configs to get updated status
-          const config = get().configs.find((c) => c.id === configId);
-          if (config) {
-            await get().fetchConfigs(config.project_id);
-          }
-          return result;
-        } catch (error) {
-          throw error;
+        const result = await channelService.testConfig(configId);
+        // Refresh configs to get updated status
+        const config = get().configs.find((c) => c.id === configId);
+        if (config) {
+          await get().fetchConfigs(config.project_id);
         }
+        return result;
       },
 
       reset: () => set({ configs: [], loading: false, error: null }),

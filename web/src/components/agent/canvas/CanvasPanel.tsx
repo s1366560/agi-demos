@@ -195,6 +195,7 @@ ${htmlContent}
     // Create blob URL for complete isolation (unique origin)
     const blob = new Blob([wrappedContent], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setBlobUrl(url);
 
     return () => {

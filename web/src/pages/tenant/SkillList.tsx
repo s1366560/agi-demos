@@ -99,7 +99,7 @@ export const SkillList: React.FC = () => {
     if (error) {
       message?.error(error);
     }
-  }, [error]);
+  }, [error, message]);
 
   // Handlers
   const handleCreate = useCallback(() => {
@@ -121,7 +121,7 @@ export const SkillList: React.FC = () => {
         // Error handled by store
       }
     },
-    [updateSkillStatus, t]
+    [updateSkillStatus, message, t]
   );
 
   const handleDelete = useCallback(
@@ -133,7 +133,7 @@ export const SkillList: React.FC = () => {
         // Error handled by store
       }
     },
-    [deleteSkill, t]
+    [deleteSkill, message, t]
   );
 
   const handleModalClose = useCallback(() => {

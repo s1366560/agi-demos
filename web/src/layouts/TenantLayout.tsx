@@ -28,7 +28,9 @@ import { useTenantStore } from '@/stores/tenant';
 
 import { TenantCreateModal } from '@/pages/tenant/TenantCreate';
 
+// eslint-disable-next-line no-restricted-imports
 import { BackgroundSubAgentPanel } from '@/components/agent/BackgroundSubAgentPanel';
+// eslint-disable-next-line no-restricted-imports
 import { MobileSidebarDrawer } from '@/components/agent/chat/MobileSidebarDrawer';
 import { RouteErrorBoundary } from '@/components/common/RouteErrorBoundary';
 import { TenantChatSidebar } from '@/components/layout/TenantChatSidebar';
@@ -170,6 +172,7 @@ export const TenantLayout: React.FC = memo(() => {
 
   // Sync tenant ID from URL with store - flattened for better performance
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     initializeTenantAndProject();
   }, [initializeTenantAndProject]);
 

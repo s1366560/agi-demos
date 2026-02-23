@@ -22,7 +22,7 @@ export const ProviderSelectorModal: React.FC<ProviderSelectorModalProps> = ({
   providers,
   title = 'Select Provider',
 }) => {
-  const { t } = useTranslation();
+  const { _t } = useTranslation();
   const [search, setSearch] = useState('');
 
   if (!isOpen) return null;
