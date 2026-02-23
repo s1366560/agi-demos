@@ -1983,6 +1983,20 @@ class SessionProcessor:
                     logger.error(f"Task event emission failed: {task_err}", exc_info=True)
 
             # Emit pending SSE events from tools that support event buffering
+            refresh_count: Optional[int] = None
+            refresh_status = "not_applicable"
+            if tool_name in {"plugin_manager", "register_mcp_server"}:
+                if isinstance(output_str, str) and not output_str.startswith("Error:"):
+                    logger.info("[Processor] %s succeeded, refreshing tools", tool_name)
+                    refresh_count = self._refresh_tools()
+                    refresh_status = "success" if refresh_count is not None else "failed"
+                else:
+                    logger.debug(
+                        "[Processor] %s failed or returned error, skipping tool refresh",
+                        tool_name,
+                    )
+                    refresh_status = "skipped"
+
             if (
                 tool_name
                 in {
@@ -2001,20 +2015,20 @@ class SessionProcessor:
             ):
                 try:
                     for event in tool_instance.consume_pending_events():
+                        if (
+                            tool_name in {"plugin_manager", "register_mcp_server"}
+                            and isinstance(event, dict)
+                            and event.get("type") == "toolset_changed"
+                        ):
+                            event_data = event.get("data")
+                            if isinstance(event_data, dict):
+                                event_data.setdefault("refresh_source", "processor")
+                                event_data["refresh_status"] = refresh_status
+                                if refresh_count is not None:
+                                    event_data["refreshed_tool_count"] = refresh_count
                         yield event
                 except Exception as pending_err:
                     logger.error(f"{tool_name} event emission failed: {pending_err}")
-
-            # Refresh tools after successful self-modifying tool execution.
-            if tool_name in {"plugin_manager", "register_mcp_server"}:
-                if isinstance(output_str, str) and not output_str.startswith("Error:"):
-                    logger.info("[Processor] %s succeeded, refreshing tools", tool_name)
-                    self._refresh_tools()
-                else:
-                    logger.debug(
-                        "[Processor] %s failed or returned error, skipping tool refresh",
-                        tool_name,
-                    )
 
         except Exception as e:
             logger.error(f"Tool execution error: {e}", exc_info=True)

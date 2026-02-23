@@ -129,6 +129,7 @@ import type {
   ExecutionPathDecidedEventData,
   SelectionTraceEventData,
   PolicyFilteredEventData,
+  ToolsetChangedEventData,
 } from '../types/agent';
 
 // Use centralized HTTP client for REST API calls
@@ -1160,6 +1161,9 @@ class AgentServiceImpl implements AgentService {
         break;
       case 'policy_filtered':
         handler.onPolicyFiltered?.(event as AgentEvent<PolicyFilteredEventData>);
+        break;
+      case 'toolset_changed':
+        handler.onToolsetChanged?.(event as AgentEvent<ToolsetChangedEventData>);
         break;
       // Task list events
       case 'task_list_updated':

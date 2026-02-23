@@ -196,6 +196,37 @@ export interface PolicyFilteredEventData {
   budget_exceeded_stages?: string[];
 }
 
+export type ToolsetRefreshStatus = 'success' | 'failed' | 'skipped' | 'not_applicable';
+
+export interface ToolsetChangedEventData {
+  source: string;
+  tenant_id?: string;
+  project_id?: string;
+  action?: string;
+  plugin_name?: string | null;
+  trace_id?: string;
+  mutation_fingerprint?: string | null;
+  reload_plan?: Record<string, unknown>;
+  details?: Record<string, unknown>;
+  lifecycle?: Record<string, unknown>;
+  refresh_source?: string;
+  refresh_status?: ToolsetRefreshStatus;
+  refreshed_tool_count?: number;
+}
+
+export type ExecutionNarrativeStage = 'routing' | 'selection' | 'policy' | 'toolset';
+
+export interface ExecutionNarrativeEntry {
+  id: string;
+  stage: ExecutionNarrativeStage;
+  summary: string;
+  timestamp: number;
+  trace_id?: string;
+  route_id?: string;
+  domain_lane?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
 /**
  * Tool call information
  */
@@ -423,6 +454,7 @@ export type AgentEventType =
   | 'execution_path_decided' // Router path decision with metadata
   | 'selection_trace' // Tool selection stage-by-stage trace
   | 'policy_filtered' // Tool policy filtering summary
+  | 'toolset_changed' // Tool inventory changed after self-modification
   // Task list events (DB-persistent task tracking)
   | 'task_list_updated' // Full task list replacement
   | 'task_updated' // Single task status change
@@ -1103,6 +1135,7 @@ export interface AgentStreamHandler {
   onExecutionPathDecided?: (event: AgentEvent<ExecutionPathDecidedEventData>) => void;
   onSelectionTrace?: (event: AgentEvent<SelectionTraceEventData>) => void;
   onPolicyFiltered?: (event: AgentEvent<PolicyFilteredEventData>) => void;
+  onToolsetChanged?: (event: AgentEvent<ToolsetChangedEventData>) => void;
   // Task list handlers
   onTaskListUpdated?: (event: AgentEvent<TaskListUpdatedEventData>) => void;
   onTaskUpdated?: (event: AgentEvent<TaskUpdatedEventData>) => void;

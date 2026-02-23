@@ -43,6 +43,8 @@ describe('streamEventHandlers', () => {
       activeToolCalls: new Map(),
       pendingToolsStack: [],
       tasks: [],
+      executionNarrative: [],
+      latestToolsetChange: null,
       artifacts: [],
       files: [],
       isPlanMode: false,
@@ -438,6 +440,42 @@ describe('streamEventHandlers', () => {
       conversationId,
       expect.objectContaining({
         policyFiltered: expect.objectContaining({ removed_total: 12 }),
+      })
+    );
+    expect(mockState.executionNarrative).toHaveLength(3);
+  });
+
+  it('should handle onToolsetChanged and append execution narrative', () => {
+    const handlers = createStreamEventHandlers(conversationId, undefined, mockDeps);
+
+    handlers.onToolsetChanged!({
+      type: 'toolset_changed',
+      data: {
+        source: 'plugin_manager',
+        action: 'reload',
+        plugin_name: 'demo-plugin',
+        trace_id: 'toolset-trace-1',
+        refresh_status: 'success',
+        refreshed_tool_count: 42,
+      },
+    } as any);
+
+    expect(mockUpdateConversationState).toHaveBeenCalledWith(
+      conversationId,
+      expect.objectContaining({
+        latestToolsetChange: expect.objectContaining({
+          action: 'reload',
+          plugin_name: 'demo-plugin',
+          refresh_status: 'success',
+        }),
+      })
+    );
+    const lastNarrativeEntry =
+      mockState.executionNarrative[mockState.executionNarrative.length - 1];
+    expect(lastNarrativeEntry).toEqual(
+      expect.objectContaining({
+        stage: 'toolset',
+        trace_id: 'toolset-trace-1',
       })
     );
   });

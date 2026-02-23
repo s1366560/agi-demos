@@ -35,6 +35,8 @@ import type {
   ExecutionPathDecidedEventData,
   SelectionTraceEventData,
   PolicyFilteredEventData,
+  ExecutionNarrativeEntry,
+  ToolsetChangedEventData,
 } from '../../types/agent';
 import type { ConversationState, CostTrackingState } from '../../types/conversationState';
 import type { AdditionalAgentHandlers } from '../agentV3';
@@ -99,6 +101,19 @@ export function createStreamEventHandlers(
 
   // Type-safe wrapper for set to handle both object and updater forms
   const setState = set as any;
+  // Keep the most recent execution diagnostics while bounding per-conversation memory usage.
+  const EXECUTION_NARRATIVE_LIMIT = 40;
+  const buildNarrativeId = (stage: ExecutionNarrativeEntry['stage'], traceId?: string): string =>
+    `${stage}-${traceId || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`}`;
+  const appendExecutionNarrativeEntry = (
+    entries: ConversationState['executionNarrative'],
+    entry: ExecutionNarrativeEntry
+  ): ConversationState['executionNarrative'] => {
+    const nextEntries = [...entries, entry];
+    return nextEntries.length <= EXECUTION_NARRATIVE_LIMIT
+      ? nextEntries
+      : nextEntries.slice(nextEntries.length - EXECUTION_NARRATIVE_LIMIT);
+  };
   const appendExecutionInsightMarker = (
     timeline: ConversationState['timeline'],
     sourceEvent: AgentEvent<unknown>,
@@ -295,10 +310,30 @@ export function createStreamEventHandlers(
       const convState = getConversationState(handlerConversationId);
       const insight = `[Routing] ${decision.path} (${decision.confidence.toFixed(2)}) - ${decision.reason}`;
       const updatedTimeline = appendExecutionInsightMarker(convState.timeline, event, insight);
+      const narrativeEntry: ExecutionNarrativeEntry = {
+        id: buildNarrativeId('routing', decision.trace_id),
+        stage: 'routing',
+        summary: insight,
+        timestamp: Date.now(),
+        trace_id: decision.trace_id,
+        route_id: decision.route_id,
+        domain_lane:
+          decision.metadata && typeof decision.metadata['domain_lane'] === 'string'
+            ? (decision.metadata['domain_lane'] as string)
+            : null,
+        metadata: {
+          target: decision.target,
+          confidence: decision.confidence,
+        },
+      };
 
       updateConversationState(handlerConversationId, {
         executionPathDecision: decision,
         timeline: updatedTimeline,
+        executionNarrative: appendExecutionNarrativeEntry(
+          convState.executionNarrative,
+          narrativeEntry
+        ),
       });
     },
 
@@ -310,10 +345,27 @@ export function createStreamEventHandlers(
         typeof selection.tool_budget === 'number' ? `, budget=${selection.tool_budget}` : '';
       const insight = `[Selection] kept ${selection.final_count}/${selection.initial_count}, removed ${selection.removed_total}${budgetText}`;
       const updatedTimeline = appendExecutionInsightMarker(convState.timeline, event, insight);
+      const narrativeEntry: ExecutionNarrativeEntry = {
+        id: buildNarrativeId('selection', selection.trace_id),
+        stage: 'selection',
+        summary: insight,
+        timestamp: Date.now(),
+        trace_id: selection.trace_id,
+        route_id: selection.route_id,
+        domain_lane: selection.domain_lane ?? null,
+        metadata: {
+          stage_count: selection.stages.length,
+          budget_exceeded_stages: selection.budget_exceeded_stages ?? [],
+        },
+      };
 
       updateConversationState(handlerConversationId, {
         selectionTrace: selection,
         timeline: updatedTimeline,
+        executionNarrative: appendExecutionNarrativeEntry(
+          convState.executionNarrative,
+          narrativeEntry
+        ),
       });
     },
 
@@ -323,10 +375,65 @@ export function createStreamEventHandlers(
       const convState = getConversationState(handlerConversationId);
       const insight = `[Policy] filtered ${filtered.removed_total} tools across ${filtered.stage_count} stages`;
       const updatedTimeline = appendExecutionInsightMarker(convState.timeline, event, insight);
+      const narrativeEntry: ExecutionNarrativeEntry = {
+        id: buildNarrativeId('policy', filtered.trace_id),
+        stage: 'policy',
+        summary: insight,
+        timestamp: Date.now(),
+        trace_id: filtered.trace_id,
+        route_id: filtered.route_id,
+        domain_lane: filtered.domain_lane ?? null,
+        metadata: {
+          budget_exceeded_stages: filtered.budget_exceeded_stages ?? [],
+          tool_budget: filtered.tool_budget,
+        },
+      };
 
       updateConversationState(handlerConversationId, {
         policyFiltered: filtered,
         timeline: updatedTimeline,
+        executionNarrative: appendExecutionNarrativeEntry(
+          convState.executionNarrative,
+          narrativeEntry
+        ),
+      });
+    },
+
+    onToolsetChanged: (event) => {
+      const { updateConversationState, getConversationState } = get();
+      const changed = event.data as ToolsetChangedEventData;
+      const convState = getConversationState(handlerConversationId);
+      const actionText = changed.action || 'update';
+      const pluginText = changed.plugin_name ? ` ${changed.plugin_name}` : '';
+      const refreshStateText = changed.refresh_status ? ` · refresh=${changed.refresh_status}` : '';
+      const refreshCountText =
+        typeof changed.refreshed_tool_count === 'number'
+          ? ` (${changed.refreshed_tool_count} tools)`
+          : '';
+      const insight = `[Toolset] ${actionText}${pluginText}${refreshStateText}${refreshCountText}`;
+      const updatedTimeline = appendExecutionInsightMarker(convState.timeline, event, insight);
+      const narrativeEntry: ExecutionNarrativeEntry = {
+        id: buildNarrativeId('toolset', changed.trace_id),
+        stage: 'toolset',
+        summary: insight,
+        timestamp: Date.now(),
+        trace_id: changed.trace_id,
+        metadata: {
+          source: changed.source,
+          action: changed.action,
+          plugin_name: changed.plugin_name,
+          refresh_status: changed.refresh_status,
+          refreshed_tool_count: changed.refreshed_tool_count,
+        },
+      };
+
+      updateConversationState(handlerConversationId, {
+        latestToolsetChange: changed,
+        timeline: updatedTimeline,
+        executionNarrative: appendExecutionNarrativeEntry(
+          convState.executionNarrative,
+          narrativeEntry
+        ),
       });
     },
 

@@ -198,4 +198,33 @@ describe('RightPanel (Refactored)', () => {
     expect(screen.getByText(/tool_budget:/)).toBeInTheDocument();
     expect(screen.getByText(/budget_exceeded:/)).toBeInTheDocument();
   });
+
+  it('should render execution narrative and toolset diagnostics', () => {
+    render(
+      <RightPanel
+        tasks={[]}
+        executionNarrative={[
+          {
+            id: 'narrative-1',
+            stage: 'routing',
+            summary: '[Routing] react_loop (0.82) - default route',
+            timestamp: Date.now(),
+          },
+        ]}
+        latestToolsetChange={{
+          source: 'plugin_manager',
+          action: 'reload',
+          plugin_name: 'demo-plugin',
+          trace_id: 'toolset-trace-1',
+          refresh_status: 'success',
+          refreshed_tool_count: 18,
+        }}
+      />
+    );
+
+    expect(screen.getByTestId('execution-narrative')).toBeInTheDocument();
+    expect(screen.getByText('Execution Narrative')).toBeInTheDocument();
+    expect(screen.getByText(/demo-plugin/)).toBeInTheDocument();
+    expect(screen.getByText(/refresh: success/)).toBeInTheDocument();
+  });
 });

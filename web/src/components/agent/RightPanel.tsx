@@ -18,9 +18,11 @@ import { TaskList } from './TaskList';
 
 import type {
   AgentTask,
+  ExecutionNarrativeEntry,
   ExecutionPathDecidedEventData,
   PolicyFilteredEventData,
   SelectionTraceEventData,
+  ToolsetChangedEventData,
 } from '../../types/agent';
 
 export interface RightPanelProps {
@@ -29,6 +31,8 @@ export interface RightPanelProps {
   executionPathDecision?: ExecutionPathDecidedEventData | null;
   selectionTrace?: SelectionTraceEventData | null;
   policyFiltered?: PolicyFilteredEventData | null;
+  executionNarrative?: ExecutionNarrativeEntry[];
+  latestToolsetChange?: ToolsetChangedEventData | null;
   onClose?: () => void;
   onFileClick?: (filePath: string) => void;
   collapsed?: boolean;
@@ -44,10 +48,18 @@ interface ExecutionInsightsProps {
   executionPathDecision?: ExecutionPathDecidedEventData | null;
   selectionTrace?: SelectionTraceEventData | null;
   policyFiltered?: PolicyFilteredEventData | null;
+  executionNarrative?: ExecutionNarrativeEntry[];
+  latestToolsetChange?: ToolsetChangedEventData | null;
 }
 
 const ExecutionInsights = memo<ExecutionInsightsProps>(
-  ({ executionPathDecision, selectionTrace, policyFiltered }) => {
+  ({
+    executionPathDecision,
+    selectionTrace,
+    policyFiltered,
+    executionNarrative,
+    latestToolsetChange,
+  }) => {
     const metadataLane =
       executionPathDecision?.metadata &&
       typeof executionPathDecision.metadata['domain_lane'] === 'string'
@@ -55,9 +67,19 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
         : null;
     const lane = metadataLane ?? selectionTrace?.domain_lane ?? policyFiltered?.domain_lane ?? null;
     const traceId =
-      executionPathDecision?.trace_id ?? selectionTrace?.trace_id ?? policyFiltered?.trace_id ?? null;
+      executionPathDecision?.trace_id ??
+      selectionTrace?.trace_id ??
+      policyFiltered?.trace_id ??
+      null;
+    const narrativeEntries = (executionNarrative ?? []).slice(-8).reverse();
 
-    if (!executionPathDecision && !selectionTrace && !policyFiltered) {
+    if (
+      !executionPathDecision &&
+      !selectionTrace &&
+      !policyFiltered &&
+      !latestToolsetChange &&
+      narrativeEntries.length === 0
+    ) {
       return (
         <div
           data-testid="execution-insights"
@@ -146,6 +168,53 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
             ) : null}
           </div>
         ) : null}
+
+        {latestToolsetChange ? (
+          <div className="rounded-md bg-slate-50 dark:bg-slate-800/50 p-3">
+            <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Toolset
+            </div>
+            <div className="mt-1 text-sm text-slate-800 dark:text-slate-100">
+              {latestToolsetChange.action || 'update'}
+              {latestToolsetChange.plugin_name ? ` ${latestToolsetChange.plugin_name}` : ''}
+            </div>
+            <div className="mt-1 text-xs text-slate-600 dark:text-slate-300">
+              refresh: {latestToolsetChange.refresh_status || 'not_applicable'}
+              {typeof latestToolsetChange.refreshed_tool_count === 'number'
+                ? ` (${latestToolsetChange.refreshed_tool_count} tools)`
+                : ''}
+            </div>
+            {latestToolsetChange.trace_id ? (
+              <div className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                trace_id: <span className="font-mono">{latestToolsetChange.trace_id}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {narrativeEntries.length ? (
+          <div
+            className="rounded-md bg-slate-50 dark:bg-slate-800/50 p-3"
+            data-testid="execution-narrative"
+          >
+            <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Execution Narrative
+            </div>
+            <div className="mt-2 space-y-2">
+              {narrativeEntries.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="rounded border border-slate-200/70 dark:border-slate-700/70 p-2"
+                >
+                  <div className="text-[11px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    {entry.stage}
+                  </div>
+                  <div className="text-xs text-slate-700 dark:text-slate-200">{entry.summary}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -159,6 +228,8 @@ export const RightPanel = memo<RightPanelProps>(
     executionPathDecision,
     selectionTrace,
     policyFiltered,
+    executionNarrative,
+    latestToolsetChange,
     onClose,
     collapsed,
     width = 360,
@@ -166,11 +237,18 @@ export const RightPanel = memo<RightPanelProps>(
     minWidth = 280,
     maxWidth = 600,
   }) => {
-    const hasInsights = Boolean(executionPathDecision || selectionTrace || policyFiltered);
+    const hasInsights = Boolean(
+      executionPathDecision ||
+      selectionTrace ||
+      policyFiltered ||
+      latestToolsetChange ||
+      (executionNarrative && executionNarrative.length > 0)
+    );
     const [preferredTab, setPreferredTab] = useState<PanelTab>(
       hasInsights && tasks.length === 0 ? 'insights' : 'tasks'
     );
-    const activeTab: PanelTab = preferredTab === 'insights' && !hasInsights ? 'tasks' : preferredTab;
+    const activeTab: PanelTab =
+      preferredTab === 'insights' && !hasInsights ? 'tasks' : preferredTab;
 
     const handleResize = useCallback(
       (delta: number) => {
@@ -259,6 +337,8 @@ export const RightPanel = memo<RightPanelProps>(
                 executionPathDecision={executionPathDecision}
                 selectionTrace={selectionTrace}
                 policyFiltered={policyFiltered}
+                executionNarrative={executionNarrative}
+                latestToolsetChange={latestToolsetChange}
               />
             </div>
           ) : (

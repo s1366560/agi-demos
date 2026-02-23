@@ -55,9 +55,11 @@ import { MessageArea, InputBar, ProjectAgentStatusBar } from './index';
 
 import type {
   AgentTask,
+  ExecutionNarrativeEntry,
   ExecutionPathDecidedEventData,
   PolicyFilteredEventData,
   SelectionTraceEventData,
+  ToolsetChangedEventData,
 } from '../../types/agent';
 
 interface AgentChatContentProps {
@@ -220,6 +222,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
 
     // Tasks from active conversation state (separate selector to avoid re-renders)
     const EMPTY_TASKS: AgentTask[] = useMemo(() => [], []);
+    const EMPTY_EXECUTION_NARRATIVE: ExecutionNarrativeEntry[] = useMemo(() => [], []);
     const rawTasks = useAgentV3Store((state) => {
       const convId = state.activeConversationId;
       if (!convId) return undefined;
@@ -230,10 +233,14 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
       executionPathDecision,
       selectionTrace,
       policyFiltered,
+      executionNarrative,
+      latestToolsetChange,
     }: {
       executionPathDecision: ExecutionPathDecidedEventData | null;
       selectionTrace: SelectionTraceEventData | null;
       policyFiltered: PolicyFilteredEventData | null;
+      executionNarrative: ExecutionNarrativeEntry[];
+      latestToolsetChange: ToolsetChangedEventData | null;
     } = useAgentV3Store(
       useShallow((state) => {
         const convId = state.activeConversationId;
@@ -242,6 +249,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           executionPathDecision: convState?.executionPathDecision ?? null,
           selectionTrace: convState?.selectionTrace ?? null,
           policyFiltered: convState?.policyFiltered ?? null,
+          executionNarrative: convState?.executionNarrative ?? EMPTY_EXECUTION_NARRATIVE,
+          latestToolsetChange: convState?.latestToolsetChange ?? null,
         };
       })
     );
@@ -757,6 +766,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
                 executionPathDecision={executionPathDecision}
                 selectionTrace={selectionTrace}
                 policyFiltered={policyFiltered}
+                executionNarrative={executionNarrative}
+                latestToolsetChange={latestToolsetChange}
                 collapsed={false}
               />
             </div>

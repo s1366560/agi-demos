@@ -479,3 +479,130 @@ class TestProcessorPendingToolEvents:
         assert any(
             isinstance(event, dict) and event.get("type") == "toolset_changed" for event in events
         )
+
+    @pytest.mark.asyncio
+    async def test_plugin_manager_toolset_event_includes_refresh_metadata(self):
+        """plugin_manager toolset_changed events should include refresh diagnostics."""
+
+        def provider() -> list:
+            return [create_tool_def("tool_a"), create_tool_def("tool_b")]
+
+        config = ProcessorConfig(model="test-model", tool_provider=provider)
+        processor = SessionProcessor(config=config, tools=[])
+
+        class _PluginManagerTool:
+            def __init__(self) -> None:
+                self._events = [
+                    {
+                        "type": "toolset_changed",
+                        "data": {
+                            "source": "plugin_manager",
+                            "action": "reload",
+                        },
+                    }
+                ]
+
+            async def execute(self, **kwargs):
+                return "Plugin runtime reloaded"
+
+            def consume_pending_events(self):
+                events = list(self._events)
+                self._events.clear()
+                return events
+
+        tool_instance = _PluginManagerTool()
+        processor.tools["plugin_manager"] = ToolDefinition(
+            name="plugin_manager",
+            description="Plugin manager tool",
+            parameters={},
+            execute=tool_instance.execute,
+            _tool_instance=tool_instance,
+        )
+
+        from src.infrastructure.agent.core.message import ToolPart, ToolState
+
+        processor._pending_tool_calls["call-plugin-manager"] = ToolPart(
+            call_id="call-plugin-manager",
+            tool="plugin_manager",
+            input={},
+            status=ToolState.RUNNING,
+        )
+
+        events = []
+        async for event in processor._execute_tool(
+            session_id="test-session",
+            call_id="call-plugin-manager",
+            tool_name="plugin_manager",
+            arguments={"action": "reload"},
+        ):
+            events.append(event)
+
+        toolset_changed_event = next(
+            event
+            for event in events
+            if isinstance(event, dict) and event.get("type") == "toolset_changed"
+        )
+        assert toolset_changed_event["data"]["refresh_source"] == "processor"
+        assert toolset_changed_event["data"]["refresh_status"] == "success"
+        assert toolset_changed_event["data"]["refreshed_tool_count"] == 2
+
+    @pytest.mark.asyncio
+    async def test_plugin_manager_toolset_event_marks_refresh_skipped_on_error(self):
+        """plugin_manager toolset_changed events should mark refresh as skipped on failures."""
+        config = ProcessorConfig(model="test-model")
+        processor = SessionProcessor(config=config, tools=[])
+
+        class _PluginManagerTool:
+            def __init__(self) -> None:
+                self._events = [
+                    {
+                        "type": "toolset_changed",
+                        "data": {
+                            "source": "plugin_manager",
+                            "action": "reload",
+                        },
+                    }
+                ]
+
+            async def execute(self, **kwargs):
+                return "Error: plugin reload failed"
+
+            def consume_pending_events(self):
+                events = list(self._events)
+                self._events.clear()
+                return events
+
+        tool_instance = _PluginManagerTool()
+        processor.tools["plugin_manager"] = ToolDefinition(
+            name="plugin_manager",
+            description="Plugin manager tool",
+            parameters={},
+            execute=tool_instance.execute,
+            _tool_instance=tool_instance,
+        )
+
+        from src.infrastructure.agent.core.message import ToolPart, ToolState
+
+        processor._pending_tool_calls["call-plugin-manager-error"] = ToolPart(
+            call_id="call-plugin-manager-error",
+            tool="plugin_manager",
+            input={},
+            status=ToolState.RUNNING,
+        )
+
+        events = []
+        async for event in processor._execute_tool(
+            session_id="test-session",
+            call_id="call-plugin-manager-error",
+            tool_name="plugin_manager",
+            arguments={"action": "reload"},
+        ):
+            events.append(event)
+
+        toolset_changed_event = next(
+            event
+            for event in events
+            if isinstance(event, dict) and event.get("type") == "toolset_changed"
+        )
+        assert toolset_changed_event["data"]["refresh_status"] == "skipped"
+        assert "refreshed_tool_count" not in toolset_changed_event["data"]

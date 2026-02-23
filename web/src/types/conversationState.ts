@@ -21,6 +21,8 @@ import type {
   ExecutionPathDecidedEventData,
   SelectionTraceEventData,
   PolicyFilteredEventData,
+  ExecutionNarrativeEntry,
+  ToolsetChangedEventData,
 } from './agent';
 // Re-export CostUpdateEventData for consumers that need to map to CostTrackingState
 export type { CostUpdateEventData } from './agent';
@@ -142,6 +144,10 @@ export interface ConversationState {
   selectionTrace: SelectionTraceEventData | null;
   /** Latest policy filtering summary */
   policyFiltered: PolicyFilteredEventData | null;
+  /** Unified execution narrative entries (routing/selection/policy/toolset) */
+  executionNarrative: ExecutionNarrativeEntry[];
+  /** Latest toolset mutation event */
+  latestToolsetChange: ToolsetChangedEventData | null;
 
   // ===== HITL (Human-In-The-Loop) State =====
   /** Pending clarification request */
@@ -208,6 +214,8 @@ export function createDefaultConversationState(): ConversationState {
     executionPathDecision: null,
     selectionTrace: null,
     policyFiltered: null,
+    executionNarrative: [],
+    latestToolsetChange: null,
 
     // HITL
     pendingClarification: null,

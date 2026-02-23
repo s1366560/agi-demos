@@ -45,6 +45,8 @@ interface SerializedConversationState {
   executionPathDecision?: unknown;
   selectionTrace?: unknown;
   policyFiltered?: unknown;
+  executionNarrative?: unknown;
+  latestToolsetChange?: unknown;
   // Metadata
   lastUpdated: number;
   conversationId: string;
@@ -116,6 +118,8 @@ function serializeState(
     executionPathDecision: state.executionPathDecision || null,
     selectionTrace: state.selectionTrace || null,
     policyFiltered: state.policyFiltered || null,
+    executionNarrative: state.executionNarrative || [],
+    latestToolsetChange: state.latestToolsetChange || null,
     lastUpdated: Date.now(),
   };
 }
@@ -151,6 +155,10 @@ function deserializeState(stored: SerializedConversationState): ConversationStat
       (stored.executionPathDecision as ConversationState['executionPathDecision']) ?? null,
     selectionTrace: (stored.selectionTrace as ConversationState['selectionTrace']) ?? null,
     policyFiltered: (stored.policyFiltered as ConversationState['policyFiltered']) ?? null,
+    executionNarrative:
+      (stored.executionNarrative as ConversationState['executionNarrative']) ?? [],
+    latestToolsetChange:
+      (stored.latestToolsetChange as ConversationState['latestToolsetChange']) ?? null,
     suggestions: (stored as any).suggestions ?? [],
     tasks: (stored as any).tasks ?? [],
     appModelContext: (stored as any).appModelContext ?? null,
