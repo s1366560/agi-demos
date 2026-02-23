@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 
-import { useTranslation } from 'react-i18next';
 
 import { ProviderConfig } from '../../types/memory';
 import { MaterialIcon } from '../agent/shared/MaterialIcon';
@@ -22,7 +21,6 @@ export const ProviderSelectorModal: React.FC<ProviderSelectorModalProps> = ({
   providers,
   title = 'Select Provider',
 }) => {
-  const { _t } = useTranslation();
   const [search, setSearch] = useState('');
 
   if (!isOpen) return null;

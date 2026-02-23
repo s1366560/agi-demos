@@ -65,7 +65,6 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
     onShowTools,
     appCount = 0,
     readyAppCount = 0,
-    _errorAppCount = 0,
   }) => {
     const status = getRuntimeStatus(server);
     const runtimeStyle = RUNTIME_STATUS_STYLES[status];
@@ -170,7 +169,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
           {/* Last Sync */}
           <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 mb-3">
             <MaterialIcon name="schedule" size={14} />
-            <span>Synced {formatLastSync(server.last_sync_time)}</span>
+            <span>Synced {formatLastSync(server.last_sync_at)}</span>
           </div>
 
           {/* Actions */}
