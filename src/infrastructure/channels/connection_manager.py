@@ -12,6 +12,7 @@ import logging
 from concurrent.futures import Future
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +43,18 @@ API_PING_CYCLE = 10  # Ping Feishu API every Nth health check cycle
 MAX_RECONNECT_ATTEMPTS = 20  # Max attempts before circuit breaker opens
 
 
+
+
+class ConnectionStatus(str, Enum):
+    """Status of a managed channel connection."""
+
+    DISCONNECTED = "disconnected"
+    CONNECTING = "connecting"
+    CONNECTED = "connected"
+    ERROR = "error"
+    CIRCUIT_OPEN = "circuit_open"
+
+
 @dataclass
 class ManagedConnection:
     """Represents a managed channel connection.
@@ -63,7 +76,7 @@ class ManagedConnection:
     channel_type: str
     adapter: Any  # ChannelAdapter instance
     task: Optional[asyncio.Task] = None
-    status: str = "disconnected"
+    status: ConnectionStatus = ConnectionStatus.DISCONNECTED
     last_heartbeat: Optional[datetime] = None
     last_error: Optional[str] = None
     reconnect_attempts: int = 0
@@ -76,7 +89,7 @@ class ManagedConnection:
             "project_id": self.project_id,
             "channel_type": self.channel_type,
             "status": self.status,
-            "connected": self.status == "connected",
+            "connected": self.status == ConnectionStatus.CONNECTED,
             "last_heartbeat": self.last_heartbeat.isoformat() if self.last_heartbeat else None,
             "last_error": self.last_error,
             "reconnect_attempts": self.reconnect_attempts,
@@ -232,7 +245,7 @@ class ChannelConnectionManager:
             project_id=config.project_id,
             channel_type=config.channel_type,
             adapter=adapter,
-            status="connecting",
+            status=ConnectionStatus.CONNECTING,
         )
 
         self._connections[config.id] = connection
@@ -355,7 +368,7 @@ class ChannelConnectionManager:
         while not connection._stop_event.is_set():
             try:
                 # Attempt to connect
-                connection.status = "connecting"
+                connection.status = ConnectionStatus.CONNECTING
                 await self._update_db_status(config.id, "connecting")
 
                 # Set up message handler
@@ -394,7 +407,7 @@ class ChannelConnectionManager:
                 # Connect
                 await connection.adapter.connect()
 
-                connection.status = "connected"
+                connection.status = ConnectionStatus.CONNECTED
                 connection.last_heartbeat = datetime.now(timezone.utc)
                 connection.reconnect_attempts = 0
                 connection.last_error = None
@@ -412,11 +425,11 @@ class ChannelConnectionManager:
 
                 # Disconnected unexpectedly
                 logger.warning(f"[ChannelManager] Connection lost: {config.id}")
-                connection.status = "disconnected"
+                connection.status = ConnectionStatus.DISCONNECTED
 
             except Exception as e:
                 logger.error(f"[ChannelManager] Connection error for {config.id}: {e}")
-                connection.status = "error"
+                connection.status = ConnectionStatus.ERROR
                 connection.last_error = str(e)
 
                 await self._update_db_status(config.id, "error", str(e))
@@ -425,7 +438,7 @@ class ChannelConnectionManager:
             if not connection._stop_event.is_set():
                 connection.reconnect_attempts += 1
                 if connection.reconnect_attempts >= MAX_RECONNECT_ATTEMPTS:
-                    connection.status = "circuit_open"
+                    connection.status = ConnectionStatus.CIRCUIT_OPEN
                     await self._update_db_status(
                         config.id,
                         "error",
@@ -454,7 +467,7 @@ class ChannelConnectionManager:
         except Exception as e:
             logger.warning(f"[ChannelManager] Error disconnecting {config.id}: {e}")
 
-        connection.status = "disconnected"
+        connection.status = ConnectionStatus.DISCONNECTED
         logger.info(f"[ChannelManager] Connection loop ended: {config.id}")
 
     async def _safe_route_message(self, message: Message) -> None:
@@ -643,7 +656,7 @@ class ChannelConnectionManager:
                 deep_ping = cycle % API_PING_CYCLE == 0
 
                 for connection in list(self._connections.values()):
-                    if connection.status == "connected":
+                    if connection.status == ConnectionStatus.CONNECTED:
                         if connection.adapter.connected:
                             if deep_ping and hasattr(connection.adapter, "health_check"):
                                 alive = await connection.adapter.health_check()
@@ -653,7 +666,7 @@ class ChannelConnectionManager:
                                         "marking disconnected",
                                         connection.config_id,
                                     )
-                                    connection.status = "disconnected"
+                                    connection.status = ConnectionStatus.DISCONNECTED
                                     continue
                             connection.last_heartbeat = datetime.now(timezone.utc)
                         else:

@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict
 
+from src.domain.ports.agent.tool_executor_port import ToolExecutionStatus
 from src.domain.shared_kernel import Entity
 
 
@@ -22,7 +23,7 @@ class ToolExecutionRecord(Entity):
     tool_name: str
     tool_input: Dict[str, Any] = field(default_factory=dict)
     tool_output: str | None = None
-    status: str = "running"  # running, success, failed
+    status: ToolExecutionStatus = ToolExecutionStatus.RUNNING
     error: str | None = None
     step_number: int | None = None
     sequence_number: int = 0  # Order within message
@@ -32,7 +33,7 @@ class ToolExecutionRecord(Entity):
 
     def mark_success(self, output: str) -> None:
         """Mark this execution as successful."""
-        self.status = "success"
+        self.status = ToolExecutionStatus.SUCCESS
         self.tool_output = output
         self.completed_at = datetime.now(timezone.utc)
         if self.started_at:
@@ -40,7 +41,7 @@ class ToolExecutionRecord(Entity):
 
     def mark_failed(self, error: str) -> None:
         """Mark this execution as failed."""
-        self.status = "failed"
+        self.status = ToolExecutionStatus.FAILED
         self.error = error
         self.completed_at = datetime.now(timezone.utc)
         if self.started_at:
@@ -56,7 +57,7 @@ class ToolExecutionRecord(Entity):
             "tool_name": self.tool_name,
             "tool_input": self.tool_input,
             "tool_output": self.tool_output,
-            "status": self.status,
+            "status": self.status.value,
             "error": self.error,
             "step_number": self.step_number,
             "sequence_number": self.sequence_number,

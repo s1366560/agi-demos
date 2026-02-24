@@ -23,6 +23,7 @@ import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Optional
 from uuid import uuid4
 
@@ -55,6 +56,15 @@ class TransactionStats:
     reconciled_count: int = 0
 
 
+
+
+class CompensatingTransactionStatus(str, Enum):
+    """Status of a compensating transaction."""
+
+    PENDING = "pending"
+    RECONCILED = "reconciled"
+    FAILED = "failed"
+
 @dataclass
 class CompensatingTransaction:
     """Record of a compensating transaction needed for reconciliation."""
@@ -66,7 +76,7 @@ class CompensatingTransaction:
     neo4j_committed: bool
     redis_committed: bool
     created_at: datetime
-    status: str = "pending"  # pending, reconciled, failed
+    status: CompensatingTransactionStatus = CompensatingTransactionStatus.PENDING
     # Store original operation data for replay
     neo4j_query: Optional[str] = None
     neo4j_params: Optional[Dict[str, Any]] = None
@@ -301,7 +311,7 @@ class DistributedTransactionCoordinator:
                         logger.error(
                             f"Failed to replay Neo4j for {transaction_id}: {neo4j_error}"
                         )
-                        compensating.status = "failed"
+                        compensating.status = CompensatingTransactionStatus.FAILED
                         return False
 
             # Redis reconciliation is optional - cache inconsistency is acceptable
@@ -312,7 +322,7 @@ class DistributedTransactionCoordinator:
                     "will be rebuilt on next read"
                 )
 
-            compensating.status = "reconciled"
+            compensating.status = CompensatingTransactionStatus.RECONCILED
             self._stats.reconciled_count += 1
             del self._pending_compensating[transaction_id]
             logger.info(f"Reconciled compensating transaction {transaction_id}")
@@ -320,7 +330,7 @@ class DistributedTransactionCoordinator:
 
         except Exception as e:
             logger.error(f"Failed to reconcile {transaction_id}: {e}")
-            compensating.status = "failed"
+            compensating.status = CompensatingTransactionStatus.FAILED
             return False
 
     @asynccontextmanager

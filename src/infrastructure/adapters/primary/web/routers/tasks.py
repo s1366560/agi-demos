@@ -17,6 +17,7 @@ from src.application.use_cases.task import (
     UpdateTaskCommand,
 )
 from src.configuration.di_container import DIContainer
+from src.domain.model.task.task_log import TaskLogStatus
 from src.infrastructure.adapters.secondary.persistence.database import get_db
 from src.infrastructure.adapters.secondary.persistence.models import TaskLog as DBTaskLog
 
@@ -81,7 +82,7 @@ def task_to_response(task) -> TaskLogResponse:
             duration_str = f"{ms}ms"
         else:
             duration_str = f"{ms / 1000:.1f}s"
-    elif task.status == "FAILED" and task.started_at and task.completed_at:
+    elif task.status == TaskLogStatus.FAILED and task.started_at and task.completed_at:
         ms = int((task.completed_at - task.started_at).total_seconds() * 1000)
         duration_str = f"{ms / 1000:.1f}s"
 
@@ -331,7 +332,7 @@ async def retry_task_endpoint(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    if task.status != "FAILED":
+    if task.status != TaskLogStatus.FAILED:
         raise HTTPException(status_code=400, detail="Task can only be retried if failed")
 
     # Update task to pending
@@ -429,8 +430,8 @@ async def stream_task_status(task_id: str, db: AsyncSession = Depends(get_db)):
                 logger.info(f"Task {task_id} found with status: {task.status}")
 
                 # If task is already in a final state, send final event directly
-                if task.status in ["COMPLETED", "FAILED"]:
-                    event_type = "completed" if task.status == "COMPLETED" else "failed"
+                if task.status in (TaskLogStatus.COMPLETED, TaskLogStatus.FAILED):
+                    event_type = "completed" if task.status == TaskLogStatus.COMPLETED else "failed"
                     logger.info(
                         f"Task {task_id} is already in final state: {task.status}, sending {event_type} event"
                     )

@@ -13,6 +13,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, runtime_c
 class ToolExecutionStatus(str, Enum):
     """Status of tool execution."""
 
+    RUNNING = "running"
     SUCCESS = "success"
     FAILED = "failed"
     PERMISSION_DENIED = "permission_denied"

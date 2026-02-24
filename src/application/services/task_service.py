@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from src.domain.model.task.task_log import TaskLog
+from src.domain.model.task.task_log import TaskLog, TaskLogStatus
 from src.domain.ports.repositories.task_repository import TaskRepository
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ class TaskService:
         if not task:
             raise ValueError(f"Task {task_id} not found")
 
-        if task.status != "FAILED":
+        if task.status != TaskLogStatus.FAILED:
             raise ValueError(f"Task {task_id} is not in FAILED status (current: {task.status})")
 
         # Check retry count to prevent infinite retries
@@ -103,7 +103,7 @@ class TaskService:
 
         # Update task for retry - the actual re-execution should be
         # triggered by starting a new Temporal workflow
-        task.status = "PENDING"
+        task.status = TaskLogStatus.PENDING
         task.retry_count += 1
         task.error_message = None
         await self._task_repo.save(task)
@@ -132,11 +132,11 @@ class TaskService:
         if not task:
             raise ValueError(f"Task {task_id} not found")
 
-        if task.status in ["COMPLETED", "FAILED"]:
+        if task.status in (TaskLogStatus.COMPLETED, TaskLogStatus.FAILED):
             raise ValueError(f"Cannot stop task in {task.status} status")
 
         # Update task status
-        task.status = "STOPPED"
+        task.status = TaskLogStatus.STOPPED
         task.stopped_at = datetime.now(timezone.utc)
         await self._task_repo.save(task)
 
@@ -157,7 +157,7 @@ class TaskService:
         if not task:
             raise ValueError(f"Task {task_id} not found")
 
-        if task.status == "PROCESSING":
+        if task.status == TaskLogStatus.PROCESSING:
             raise ValueError("Cannot delete task in PROCESSING status")
 
         await self._task_repo.delete(task_id)
@@ -188,9 +188,9 @@ class TaskService:
 
         # Use progress field if available, otherwise estimate from status
         progress_pct = getattr(task, "progress", 0)
-        if task.status == "COMPLETED":
+        if task.status == TaskLogStatus.COMPLETED:
             progress_pct = 100
-        elif task.status == "FAILED":
+        elif task.status == TaskLogStatus.FAILED:
             progress_pct = 0
 
         return {

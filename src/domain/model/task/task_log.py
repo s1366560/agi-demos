@@ -1,8 +1,19 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from enum import Enum
 from typing import Any, Dict, Optional
 
 from src.domain.shared_kernel import Entity
+
+
+class TaskLogStatus(str, Enum):
+    """Status of a background task."""
+
+    PENDING = "PENDING"
+    PROCESSING = "PROCESSING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    STOPPED = "STOPPED"
 
 
 @dataclass(kw_only=True)
@@ -11,7 +22,7 @@ class TaskLog(Entity):
 
     group_id: str
     task_type: str
-    status: str  # PENDING, PROCESSING, COMPLETED, FAILED
+    status: TaskLogStatus
     payload: Dict[str, Any] = field(default_factory=dict)
     entity_id: Optional[str] = None
     entity_type: Optional[str] = None

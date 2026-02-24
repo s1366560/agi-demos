@@ -31,6 +31,7 @@ from src.domain.events.agent_events import (
     AgentThoughtDeltaEvent,
     AgentThoughtEvent,
 )
+from src.infrastructure.agent.core.message import ToolState
 
 logger = logging.getLogger(__name__)
 
@@ -485,7 +486,7 @@ class LLMInvoker:
         if call_id in pending_tool_calls:
             tool_part = pending_tool_calls[call_id]
             tool_part.input = arguments
-            tool_part.status = "running"  # ToolState.RUNNING
+            tool_part.status = ToolState.RUNNING
             tool_part.start_time = time.time()
             tool_part.tool_execution_id = f"exec_{uuid.uuid4().hex[:12]}"
 
