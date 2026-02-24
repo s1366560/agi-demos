@@ -57,7 +57,7 @@ class TestToolComposition:
             ToolComposition(
                 id="comp-123",
                 tenant_id="test-tenant",
-            name="",
+                name="",
                 description="Description",
                 tools=["tool1"],
             )
@@ -68,7 +68,7 @@ class TestToolComposition:
             ToolComposition(
                 id="comp-123",
                 tenant_id="test-tenant",
-            name="Composition",
+                name="Composition",
                 description="Description",
                 tools=[],
             )
@@ -80,7 +80,7 @@ class TestToolComposition:
             ToolComposition(
                 id="comp-123",
                 tenant_id="test-tenant",
-            name="Composition",
+                name="Composition",
                 description="Description",
                 tools=["tool1"],
                 success_count=-1,
@@ -91,7 +91,7 @@ class TestToolComposition:
             ToolComposition(
                 id="comp-123",
                 tenant_id="test-tenant",
-            name="Composition",
+                name="Composition",
                 description="Description",
                 tools=["tool1"],
                 failure_count=-1,
@@ -102,7 +102,7 @@ class TestToolComposition:
             ToolComposition(
                 id="comp-123",
                 tenant_id="test-tenant",
-            name="Composition",
+                name="Composition",
                 description="Description",
                 tools=["tool1"],
                 usage_count=-1,
@@ -154,7 +154,7 @@ class TestToolComposition:
             ToolComposition(
                 id="comp-123",
                 tenant_id="test-tenant",
-            name="Empty",
+                name="Empty",
                 description="Test",
                 tools=[],
             )

@@ -57,16 +57,20 @@ class TestSandboxDesktopEndpoints:
             return create_mock_sandbox_instance(sandbox_id)
 
         # Mock the MCP tool call response - returns the expected format
-        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0):
+        async def mock_call_tool(
+            self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0
+        ):
             if tool_name == "start_desktop":
                 # Return in the format that MCP adapter returns
                 return {
-                    "content": [{
-                        "type": "text",
-                        "text": '{"success": true, "message": "Desktop started successfully", '
-                               '"url": "http://localhost:6080/vnc.html", "display": ":1", '
-                               '"resolution": "1280x720", "port": 6080}'
-                    }],
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": '{"success": true, "message": "Desktop started successfully", '
+                            '"url": "http://localhost:6080/vnc.html", "display": ":1", '
+                            '"resolution": "1280x720", "port": 6080}',
+                        }
+                    ],
                     "is_error": False,
                 }
             return {"content": [], "is_error": False}
@@ -106,16 +110,20 @@ class TestSandboxDesktopEndpoints:
         async def mock_get_sandbox(self, sandbox_id: str):
             return create_mock_sandbox_instance(sandbox_id)
 
-        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0):
+        async def mock_call_tool(
+            self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0
+        ):
             if tool_name == "start_desktop":
                 resolution = arguments.get("resolution", "1280x720")
                 return {
-                    "content": [{
-                        "type": "text",
-                        "text": f'{{"success": true, "message": "Desktop started successfully", '
-                               f'"url": "http://localhost:6080/vnc.html", "display": ":1", '
-                               f'"resolution": "{resolution}", "port": 6080}}'
-                    }],
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f'{{"success": true, "message": "Desktop started successfully", '
+                            f'"url": "http://localhost:6080/vnc.html", "display": ":1", '
+                            f'"resolution": "{resolution}", "port": 6080}}',
+                        }
+                    ],
                     "is_error": False,
                 }
             return {"content": [], "is_error": False}
@@ -177,13 +185,17 @@ class TestSandboxDesktopEndpoints:
         async def mock_get_sandbox(self, sandbox_id: str):
             return create_mock_sandbox_instance(sandbox_id)
 
-        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0):
+        async def mock_call_tool(
+            self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0
+        ):
             if tool_name == "stop_desktop":
                 return {
-                    "content": [{
-                        "type": "text",
-                        "text": '{"success": true, "message": "Desktop stopped successfully"}'
-                    }],
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": '{"success": true, "message": "Desktop stopped successfully"}',
+                        }
+                    ],
                     "is_error": False,
                 }
             return {"content": [], "is_error": False}
@@ -222,9 +234,7 @@ class TestSandboxDesktopEndpoints:
             mock_get_sandbox,
         )
 
-        response = await authenticated_async_client.delete(
-            "/api/v1/sandbox/nonexistent/desktop"
-        )
+        response = await authenticated_async_client.delete("/api/v1/sandbox/nonexistent/desktop")
 
         assert response.status_code == 404
 
@@ -242,14 +252,18 @@ class TestSandboxDesktopEndpoints:
         async def mock_get_sandbox(self, sandbox_id: str):
             return create_mock_sandbox_instance(sandbox_id)
 
-        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0):
+        async def mock_call_tool(
+            self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0
+        ):
             if tool_name == "get_desktop_status":
                 return {
-                    "content": [{
-                        "type": "text",
-                        "text": '{"running": true, "url": "http://localhost:6080/vnc.html", '
-                               '"display": ":1", "resolution": "1280x720", "port": 6080}'
-                    }],
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": '{"running": true, "url": "http://localhost:6080/vnc.html", '
+                            '"display": ":1", "resolution": "1280x720", "port": 6080}',
+                        }
+                    ],
                     "is_error": False,
                 }
             return {"content": [], "is_error": False}
@@ -285,14 +299,18 @@ class TestSandboxDesktopEndpoints:
         async def mock_get_sandbox(self, sandbox_id: str):
             return create_mock_sandbox_instance(sandbox_id)
 
-        async def mock_call_tool(self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0):
+        async def mock_call_tool(
+            self, sandbox_id: str, tool_name: str, arguments: dict, timeout: float = 600.0
+        ):
             if tool_name == "get_desktop_status":
                 return {
-                    "content": [{
-                        "type": "text",
-                        "text": '{"running": false, "url": null, "display": "", '
-                               '"resolution": "", "port": 0}'
-                    }],
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": '{"running": false, "url": null, "display": "", '
+                            '"resolution": "", "port": 0}',
+                        }
+                    ],
                     "is_error": False,
                 }
             return {"content": [], "is_error": False}
@@ -332,8 +350,6 @@ class TestSandboxDesktopEndpoints:
             mock_get_sandbox,
         )
 
-        response = await authenticated_async_client.get(
-            "/api/v1/sandbox/nonexistent/desktop"
-        )
+        response = await authenticated_async_client.get("/api/v1/sandbox/nonexistent/desktop")
 
         assert response.status_code == 404

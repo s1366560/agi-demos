@@ -78,9 +78,7 @@ class FakeTemplateRepository(SubAgentTemplateRepositoryPort):
         if template_id not in self._templates:
             return None
         self._templates[template_id].update(data)
-        self._templates[template_id]["updated_at"] = (
-            datetime.now(UTC).isoformat()
-        )
+        self._templates[template_id]["updated_at"] = datetime.now(UTC).isoformat()
         return self._templates[template_id]
 
     async def delete(self, template_id: str) -> bool:
@@ -217,9 +215,7 @@ class TestSubAgentTemplateRepository:
 
     async def test_update_template(self, repo):
         created = await repo.create(_make_template_data())
-        updated = await repo.update(
-            created["id"], {"description": "Updated description"}
-        )
+        updated = await repo.update(created["id"], {"description": "Updated description"})
 
         assert updated is not None
         assert updated["description"] == "Updated description"

@@ -49,7 +49,7 @@ class ShortTermRecallResponse(BaseModel):
 async def short_term_recall(
     payload: ShortTermRecallQuery,
     current_user: User = Depends(get_current_user),
-    graphiti_client: Any=Depends(get_graphiti_client),
+    graphiti_client: Any = Depends(get_graphiti_client),
 ) -> ShortTermRecallResponse:
     """
     Recall short-term episodic memories within the given time window.

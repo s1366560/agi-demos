@@ -46,6 +46,5 @@ class TestEventContractGuardrails:
 
         missing_event_types = expected_event_types - frontend_event_types
         assert not missing_event_types, (
-            "Critical frontend event types missing: "
-            f"{sorted(missing_event_types)}"
+            f"Critical frontend event types missing: {sorted(missing_event_types)}"
         )

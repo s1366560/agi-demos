@@ -95,9 +95,7 @@ class AttachmentInjector(AttachmentInjectorPort):
         self.config = config or AttachmentInjectorConfig()
         self._debug = self.config.debug_logging
 
-    def build_attachment_context(
-        self, metadata_list: list[AttachmentMetadata]
-    ) -> str:
+    def build_attachment_context(self, metadata_list: list[AttachmentMetadata]) -> str:
         """
         Build attachment context prompt from metadata.
 
@@ -124,9 +122,7 @@ class AttachmentInjector(AttachmentInjectorPort):
         context = self.config.context_template.format(file_list=file_list)
 
         if self._debug:
-            logger.debug(
-                f"[AttachmentInjector] Built context for {len(metadata_list)} files"
-            )
+            logger.debug(f"[AttachmentInjector] Built context for {len(metadata_list)} files")
 
         return context
 
@@ -213,9 +209,7 @@ class AttachmentInjector(AttachmentInjectorPort):
 
         return content
 
-    def _convert_attachment(
-        self, attachment: AttachmentContent
-    ) -> dict[str, Any] | None:
+    def _convert_attachment(self, attachment: AttachmentContent) -> dict[str, Any] | None:
         """
         Convert an attachment to content part.
 
@@ -258,9 +252,7 @@ class AttachmentInjector(AttachmentInjectorPort):
 
         return None
 
-    def parse_metadata_from_dict(
-        self, data: dict[str, Any]
-    ) -> AttachmentMetadata:
+    def parse_metadata_from_dict(self, data: dict[str, Any]) -> AttachmentMetadata:
         """
         Parse attachment metadata from raw dict.
 
@@ -271,9 +263,7 @@ class AttachmentInjector(AttachmentInjectorPort):
             AttachmentMetadata instance
         """
         filename = data.get("filename", "unknown")
-        sandbox_path = data.get(
-            "sandbox_path", f"{self.config.default_workspace}/{filename}"
-        )
+        sandbox_path = data.get("sandbox_path", f"{self.config.default_workspace}/{filename}")
         mime_type = data.get("mime_type", "application/octet-stream")
         size_bytes = data.get("size_bytes", 0)
 
@@ -318,9 +308,7 @@ class AttachmentInjector(AttachmentInjectorPort):
             image_url=data.get("image_url"),
         )
 
-    def parse_content_list(
-        self, data_list: list[dict[str, Any]] | None
-    ) -> list[AttachmentContent]:
+    def parse_content_list(self, data_list: list[dict[str, Any]] | None) -> list[AttachmentContent]:
         """
         Parse multiple attachment contents from raw dicts.
 

@@ -64,7 +64,7 @@ async def export_data(
     include_relationships: bool = Body(True, description="Include relationship data"),
     include_communities: bool = Body(True, description="Include community data"),
     current_user: User = Depends(get_current_user),
-    graphiti_client: Any=Depends(get_graphiti_client),
+    graphiti_client: Any = Depends(get_graphiti_client),
 ) -> dict[str, Any]:
     """
     Export graph data as JSON.
@@ -159,7 +159,7 @@ async def export_data(
 async def get_graph_stats(
     tenant_id: str | None = Query(None, description="Filter by tenant ID"),
     current_user: User = Depends(get_current_user),
-    graphiti_client: Any=Depends(get_graphiti_client),
+    graphiti_client: Any = Depends(get_graphiti_client),
 ) -> dict[str, Any]:
     """
     Get graph statistics.
@@ -245,7 +245,7 @@ async def cleanup_data(
     tenant_id: str | None = Query(None, description="Filter by tenant ID"),
     body: dict | None = Body(None),
     current_user: User = Depends(get_current_user),
-    graphiti_client: Any=Depends(get_graphiti_client),
+    graphiti_client: Any = Depends(get_graphiti_client),
 ) -> dict[str, Any]:
     """
     Clean up old graph data.

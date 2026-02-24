@@ -56,7 +56,9 @@ class TestSandboxHealthService:
         return sandbox
 
     @pytest.mark.asyncio
-    async def test_check_basic_health_running(self, service: SandboxHealthService, mock_adapter, running_sandbox):
+    async def test_check_basic_health_running(
+        self, service: SandboxHealthService, mock_adapter, running_sandbox
+    ):
         """运行中的 sandbox 基础健康检查应该返回健康."""
         mock_adapter.get_sandbox.return_value = running_sandbox
 
@@ -68,7 +70,9 @@ class TestSandboxHealthService:
         assert result.sandbox_id == "test-sandbox-123"
 
     @pytest.mark.asyncio
-    async def test_check_basic_health_stopped(self, service: SandboxHealthService, mock_adapter, stopped_sandbox):
+    async def test_check_basic_health_stopped(
+        self, service: SandboxHealthService, mock_adapter, stopped_sandbox
+    ):
         """已停止的 sandbox 基础健康检查应该返回不健康."""
         mock_adapter.get_sandbox.return_value = stopped_sandbox
 
@@ -89,7 +93,9 @@ class TestSandboxHealthService:
         assert len(result.errors) > 0
 
     @pytest.mark.asyncio
-    async def test_check_mcp_health(self, service: SandboxHealthService, mock_adapter, running_sandbox):
+    async def test_check_mcp_health(
+        self, service: SandboxHealthService, mock_adapter, running_sandbox
+    ):
         """MCP 健康检查应该验证连接状态."""
         mock_adapter.get_sandbox.return_value = running_sandbox
 
@@ -101,7 +107,9 @@ class TestSandboxHealthService:
             assert result.details.get("mcp_connected") is True
 
     @pytest.mark.asyncio
-    async def test_check_services_health(self, service: SandboxHealthService, mock_adapter, running_sandbox):
+    async def test_check_services_health(
+        self, service: SandboxHealthService, mock_adapter, running_sandbox
+    ):
         """Services 健康检查应该检查 desktop 和 terminal."""
         mock_adapter.get_sandbox.return_value = running_sandbox
         # Mock tool call 返回
@@ -117,7 +125,9 @@ class TestSandboxHealthService:
         assert "terminal_running" in result.details
 
     @pytest.mark.asyncio
-    async def test_check_full_health(self, service: SandboxHealthService, mock_adapter, running_sandbox):
+    async def test_check_full_health(
+        self, service: SandboxHealthService, mock_adapter, running_sandbox
+    ):
         """Full 健康检查应该执行所有检查."""
         mock_adapter.get_sandbox.return_value = running_sandbox
         mock_adapter.call_tool.return_value = {
@@ -156,8 +166,11 @@ class TestSandboxHealthService:
         assert all(r.healthy for r in results)
 
     @pytest.mark.asyncio
-    async def test_check_all_sandboxes_with_exception(self, service: SandboxHealthService, mock_adapter):
+    async def test_check_all_sandboxes_with_exception(
+        self, service: SandboxHealthService, mock_adapter
+    ):
         """批量检查时某个 sandbox 抛出异常应该继续检查其他."""
+
         # 创建 mock sandbox，中间会抛出异常
         def get_side_effect(sid):
             if sid == "sandbox-1":
@@ -194,7 +207,9 @@ class TestSandboxHealthService:
         assert result.container_status == "error"
 
     @pytest.mark.asyncio
-    async def test_check_mcp_health_no_client(self, service: SandboxHealthService, mock_adapter, running_sandbox):
+    async def test_check_mcp_health_no_client(
+        self, service: SandboxHealthService, mock_adapter, running_sandbox
+    ):
         """没有 MCP 客户端时应该返回 False."""
         running_sandbox.mcp_client = None
         mock_adapter.get_sandbox.return_value = running_sandbox

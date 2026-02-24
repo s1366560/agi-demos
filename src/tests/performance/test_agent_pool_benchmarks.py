@@ -315,4 +315,3 @@ class TestTierPerformance:
 
 if __name__ == "__main__":
     print("Run with: pytest src/tests/performance/test_agent_pool_benchmarks.py -v -m performance")
-

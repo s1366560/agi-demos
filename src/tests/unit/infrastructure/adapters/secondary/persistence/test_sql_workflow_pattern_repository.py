@@ -178,7 +178,9 @@ class TestSqlWorkflowPatternRepositoryUpdate:
         assert retrieved.steps[0].tool_name == "new_tool"
 
     @pytest.mark.asyncio
-    async def test_update_nonexistent_raises_error(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+    async def test_update_nonexistent_raises_error(
+        self, v2_pattern_repo: SqlWorkflowPatternRepository
+    ):
         """Test updating a non-existent pattern raises ValueError."""
         pattern = create_test_pattern("non-existent")
 
@@ -207,7 +209,9 @@ class TestSqlWorkflowPatternRepositoryList:
         assert all(p.tenant_id == "tenant-1" for p in patterns)
 
     @pytest.mark.asyncio
-    async def test_list_by_tenant_orders_by_usage(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+    async def test_list_by_tenant_orders_by_usage(
+        self, v2_pattern_repo: SqlWorkflowPatternRepository
+    ):
         """Test that patterns are ordered by usage_count desc, then created_at desc."""
         # Create patterns with different usage counts
         pattern1 = create_test_pattern("pattern-order-1", usage_count=5)
@@ -243,7 +247,9 @@ class TestSqlWorkflowPatternRepositoryDelete:
         assert retrieved is None
 
     @pytest.mark.asyncio
-    async def test_delete_nonexistent_raises_error(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+    async def test_delete_nonexistent_raises_error(
+        self, v2_pattern_repo: SqlWorkflowPatternRepository
+    ):
         """Test deleting a non-existent pattern raises ValueError."""
         with pytest.raises(ValueError, match="Pattern not found"):
             await v2_pattern_repo.delete("non-existent")
@@ -269,7 +275,9 @@ class TestSqlWorkflowPatternRepositoryIncrementUsage:
         assert retrieved.usage_count == 6
 
     @pytest.mark.asyncio
-    async def test_increment_nonexistent_raises_error(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+    async def test_increment_nonexistent_raises_error(
+        self, v2_pattern_repo: SqlWorkflowPatternRepository
+    ):
         """Test incrementing a non-existent pattern raises ValueError."""
         with pytest.raises(ValueError, match="Pattern not found"):
             await v2_pattern_repo.increment_usage_count("non-existent")
@@ -279,7 +287,9 @@ class TestSqlWorkflowPatternRepositoryToDomain:
     """Tests for _to_domain conversion."""
 
     @pytest.mark.asyncio
-    async def test_to_domain_converts_all_fields(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+    async def test_to_domain_converts_all_fields(
+        self, v2_pattern_repo: SqlWorkflowPatternRepository
+    ):
         """Test that _to_domain correctly converts all DB fields."""
         pattern = create_test_pattern("pattern-domain-1")
         await v2_pattern_repo.create(pattern)
@@ -296,7 +306,9 @@ class TestSqlWorkflowPatternRepositoryToDomain:
         assert retrieved.usage_count == 5
 
     @pytest.mark.asyncio
-    async def test_to_domain_with_none_db_model(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+    async def test_to_domain_with_none_db_model(
+        self, v2_pattern_repo: SqlWorkflowPatternRepository
+    ):
         """Test that _to_domain returns None for None input."""
         result = v2_pattern_repo._to_domain(None)
         assert result is None
@@ -381,7 +393,9 @@ class TestSqlWorkflowPatternRepositoryTransaction:
         assert p2 is not None
 
     @pytest.mark.asyncio
-    async def test_transaction_rollback_on_error(self, v2_pattern_repo: SqlWorkflowPatternRepository):
+    async def test_transaction_rollback_on_error(
+        self, v2_pattern_repo: SqlWorkflowPatternRepository
+    ):
         """Test that transaction rolls back on error."""
         try:
             async with v2_pattern_repo.transaction():

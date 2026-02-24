@@ -74,6 +74,7 @@ def _patched_auto_init_ray() -> None:
             log_to_driver=False,
         )
 
+
 # Apply the patch
 _auto_init_hook.auto_init_ray = _patched_auto_init_ray
 
@@ -103,14 +104,10 @@ if not _ray.is_initialized():
         except ValueError as e:
             if "already connected" not in str(e).lower():
                 _ray_init_failed = True
-                logger.warning(
-                    "[Ray] Init failed (ValueError): %s. Ray features disabled.", e
-                )
+                logger.warning("[Ray] Init failed (ValueError): %s. Ray features disabled.", e)
         except Exception as e:
             _ray_init_failed = True
-            logger.warning(
-                "[Ray] Cannot connect to cluster: %s. Ray features disabled.", e
-            )
+            logger.warning("[Ray] Cannot connect to cluster: %s. Ray features disabled.", e)
 
 # Re-export ray for convenience
 ray = _ray

@@ -38,7 +38,9 @@ def test_truncate_messages_for_overflow_recovery() -> None:
 @pytest.mark.asyncio
 async def test_recover_runs_staged_pipeline() -> None:
     coordinator = OverflowRecoveryCoordinator()
-    base_manager = ContextWindowManager(ContextWindowConfig(max_context_tokens=10000, max_output_tokens=512))
+    base_manager = ContextWindowManager(
+        ContextWindowConfig(max_context_tokens=10000, max_output_tokens=512)
+    )
     current_messages = [
         {"role": "system", "content": "system"},
         {"role": "tool", "content": "x" * 3000},
@@ -49,7 +51,10 @@ async def test_recover_runs_staged_pipeline() -> None:
     async def _build_context(request, manager):
         # Simulate force-compaction stage producing a compressed context.
         return SimpleNamespace(
-            messages=[{"role": "system", "content": "system"}, {"role": "assistant", "content": "short"}],
+            messages=[
+                {"role": "system", "content": "system"},
+                {"role": "assistant", "content": "short"},
+            ],
             was_compressed=True,
             metadata={"compression_level": "l2_summarize"},
         )
@@ -66,4 +71,3 @@ async def test_recover_runs_staged_pipeline() -> None:
     assert "stages" in result.metadata
     assert result.metadata["stages"][0]["stage"] == "force_compaction"
     assert result.metadata["tokens_after"] <= result.metadata["tokens_before"]
-

@@ -183,10 +183,12 @@ class TaskDecomposer:
 
         messages = [{"role": "system", "content": system_prompt}]
         if conversation_context:
-            messages.append({
-                "role": "user",
-                "content": f"Context:\n{conversation_context}\n\nTask: {query}",
-            })
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Context:\n{conversation_context}\n\nTask: {query}",
+                }
+            )
         else:
             messages.append({"role": "user", "content": query})
 
@@ -206,9 +208,7 @@ class TaskDecomposer:
                 reasoning=f"Decomposition failed: {e}",
             )
 
-    def _parse_response(
-        self, response: dict[str, Any], original_query: str
-    ) -> DecompositionResult:
+    def _parse_response(self, response: dict[str, Any], original_query: str) -> DecompositionResult:
         """Parse LLM response into DecompositionResult."""
         tool_calls = response.get("tool_calls", [])
         if not tool_calls:
@@ -247,7 +247,7 @@ class TaskDecomposer:
 
         subtasks = tuple(
             SubTask(
-                id=t.get("id", f"t{i+1}"),
+                id=t.get("id", f"t{i + 1}"),
                 description=t.get("description", original_query),
                 target_subagent=t.get("target_agent") if t.get("target_agent") != "auto" else None,
                 dependencies=tuple(t.get("depends_on", [])),

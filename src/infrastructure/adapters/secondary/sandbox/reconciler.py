@@ -93,7 +93,7 @@ class SandboxReconciler:
         self,
         docker_client: DockerClient,
         sandbox_adapter: MCPSandboxAdapter | None,
-        repository: Any=None,
+        repository: Any = None,
         default_action: OrphanAction = OrphanAction.ADOPT,
         max_orphan_age_hours: int = 24,  # Terminate orphans older than this
     ) -> None:

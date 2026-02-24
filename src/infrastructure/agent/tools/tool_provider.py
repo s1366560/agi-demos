@@ -40,14 +40,10 @@ def create_cached_tool_provider(
         if cached is not None:
             return cached
         elif fallback_tools is not None:
-            logger.warning(
-                f"Tools cache miss for project {project_id}, using fallback"
-            )
+            logger.warning(f"Tools cache miss for project {project_id}, using fallback")
             return fallback_tools
         else:
-            logger.warning(
-                f"Tools cache miss for project {project_id}, returning empty"
-            )
+            logger.warning(f"Tools cache miss for project {project_id}, returning empty")
             return {}
 
     return provider
@@ -66,6 +62,7 @@ def create_composite_tool_provider(
     Returns:
         A callable that returns merged tools dict from all providers
     """
+
     def provider() -> dict[str, Any]:
         tools = {}
         for p in providers:
@@ -156,6 +153,7 @@ def create_static_tool_provider(
     Returns:
         A callable that returns the static tools
     """
+
     def provider() -> dict[str, Any]:
         return tools.copy()
 

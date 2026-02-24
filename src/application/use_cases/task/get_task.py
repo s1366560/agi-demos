@@ -2,7 +2,6 @@
 Use case for getting a task log by ID.
 """
 
-
 from pydantic import BaseModel, field_validator
 
 from src.domain.model.task.task_log import TaskLog

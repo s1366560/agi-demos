@@ -167,9 +167,7 @@ class MemoryAccessor:
             saved = await self._graph.add_episode(episode)
             episode_id = getattr(saved, "uuid", getattr(saved, "id", ""))
 
-            logger.info(
-                f"[MemoryAccessor] Wrote episode {episode_id} from {source_description}"
-            )
+            logger.info(f"[MemoryAccessor] Wrote episode {episode_id} from {source_description}")
             return MemoryWriteResult(success=True, episode_id=str(episode_id))
 
         except Exception as e:
@@ -217,20 +215,24 @@ class MemoryAccessor:
 
         for r in raw_results:
             if isinstance(r, dict):
-                items.append(MemoryItem(
-                    content=r.get("content", r.get("summary", "")),
-                    item_type=r.get("type", "episode"),
-                    score=float(r.get("score", 0.0)),
-                    source_id=r.get("uuid", r.get("id", "")),
-                    metadata=r.get("metadata", {}),
-                ))
+                items.append(
+                    MemoryItem(
+                        content=r.get("content", r.get("summary", "")),
+                        item_type=r.get("type", "episode"),
+                        score=float(r.get("score", 0.0)),
+                        source_id=r.get("uuid", r.get("id", "")),
+                        metadata=r.get("metadata", {}),
+                    )
+                )
             elif hasattr(r, "content"):
-                items.append(MemoryItem(
-                    content=getattr(r, "content", "") or getattr(r, "summary", ""),
-                    item_type=getattr(r, "type", "episode"),
-                    score=float(getattr(r, "score", 0.0)),
-                    source_id=getattr(r, "uuid", getattr(r, "id", "")),
-                    metadata=getattr(r, "metadata", {}),
-                ))
+                items.append(
+                    MemoryItem(
+                        content=getattr(r, "content", "") or getattr(r, "summary", ""),
+                        item_type=getattr(r, "type", "episode"),
+                        score=float(getattr(r, "score", 0.0)),
+                        source_id=getattr(r, "uuid", getattr(r, "id", "")),
+                        metadata=getattr(r, "metadata", {}),
+                    )
+                )
 
         return items

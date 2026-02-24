@@ -180,9 +180,7 @@ class TestBuildContext:
         assert len(context.processed_attachments) == 1
         assert context.processed_attachments[0].type == "image_url"
 
-    def test_build_context_with_both(
-        self, processor, sample_metadata, sample_image_content
-    ):
+    def test_build_context_with_both(self, processor, sample_metadata, sample_image_content):
         """Test building context with both metadata and content."""
         context = processor.build_context(
             attachment_metadata=sample_metadata,

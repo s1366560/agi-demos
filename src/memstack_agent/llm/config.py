@@ -54,7 +54,9 @@ class LLMConfig:
 
 
 # Preset configurations
-def anthropic_config(model: str = "claude-3-sonnet-20240229", api_key: str | None = None) -> LLMConfig:
+def anthropic_config(
+    model: str = "claude-3-sonnet-20240229", api_key: str | None = None
+) -> LLMConfig:
     """Create Anthropic Claude configuration."""
     return LLMConfig(
         model=f"anthropic/{model}",

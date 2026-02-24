@@ -219,7 +219,9 @@ class TestCreateMCPServerFromTemplateTool:
         )
 
         # Should have run install command
-        install_commands = [c for c in bash_commands if "install" in c.lower() or "pip" in c or "npm" in c]
+        install_commands = [
+            c for c in bash_commands if "install" in c.lower() or "pip" in c or "npm" in c
+        ]
         assert len(install_commands) >= 1
 
     @pytest.mark.asyncio
@@ -244,7 +246,11 @@ class TestCreateMCPServerFromTemplateTool:
         )
 
         # Should return error message
-        assert "error" in result.lower() or "not found" in result.lower() or "invalid" in result.lower()
+        assert (
+            "error" in result.lower()
+            or "not found" in result.lower()
+            or "invalid" in result.lower()
+        )
 
     @pytest.mark.asyncio
     async def test_create_from_template_customizes_server_name(self):

@@ -91,15 +91,15 @@ class TestSubAgentChainValidation:
 class TestSubAgentChainExecution:
     async def test_single_step_chain(self):
         sa = _make_subagent("analyst")
-        chain = SubAgentChain(steps=[
-            ChainStep(subagent=sa, task_template="{input}"),
-        ])
+        chain = SubAgentChain(
+            steps=[
+                ChainStep(subagent=sa, task_template="{input}"),
+            ]
+        )
 
         mock_result = _make_result("analyst", summary="Analysis complete")
 
-        with patch(
-            "src.infrastructure.agent.subagent.chain.SubAgentProcess"
-        ) as MockProcess:
+        with patch("src.infrastructure.agent.subagent.chain.SubAgentProcess") as MockProcess:
             instance = MockProcess.return_value
             instance.result = mock_result
 
@@ -133,22 +133,22 @@ class TestSubAgentChainExecution:
         researcher = _make_subagent("researcher")
         writer = _make_subagent("writer")
 
-        chain = SubAgentChain(steps=[
-            ChainStep(subagent=researcher, task_template="{input}"),
-            ChainStep(
-                subagent=writer,
-                task_template="Write a report based on: {prev}\n\nOriginal question: {input}",
-            ),
-        ])
+        chain = SubAgentChain(
+            steps=[
+                ChainStep(subagent=researcher, task_template="{input}"),
+                ChainStep(
+                    subagent=writer,
+                    task_template="Write a report based on: {prev}\n\nOriginal question: {input}",
+                ),
+            ]
+        )
 
         research_result = _make_result("researcher", summary="Found 3 trends")
         writer_result = _make_result("writer", summary="Report written")
 
         call_count = 0
 
-        with patch(
-            "src.infrastructure.agent.subagent.chain.SubAgentProcess"
-        ) as MockProcess:
+        with patch("src.infrastructure.agent.subagent.chain.SubAgentProcess") as MockProcess:
 
             def create_mock(*args, **kwargs):
                 nonlocal call_count
@@ -192,20 +192,20 @@ class TestSubAgentChainExecution:
         sa1 = _make_subagent("step1")
         sa2 = _make_subagent("step2-conditional")
 
-        chain = SubAgentChain(steps=[
-            ChainStep(subagent=sa1, task_template="{input}"),
-            ChainStep(
-                subagent=sa2,
-                task_template="{input}",
-                condition=lambda prev: prev is not None and not prev.success,
-            ),
-        ])
+        chain = SubAgentChain(
+            steps=[
+                ChainStep(subagent=sa1, task_template="{input}"),
+                ChainStep(
+                    subagent=sa2,
+                    task_template="{input}",
+                    condition=lambda prev: prev is not None and not prev.success,
+                ),
+            ]
+        )
 
         result1 = _make_result("step1", summary="Success", success=True)
 
-        with patch(
-            "src.infrastructure.agent.subagent.chain.SubAgentProcess"
-        ) as MockProcess:
+        with patch("src.infrastructure.agent.subagent.chain.SubAgentProcess") as MockProcess:
             instance = MockProcess.return_value
             instance.result = result1
 
@@ -234,23 +234,23 @@ class TestSubAgentChainExecution:
         sa1 = _make_subagent("step1")
         sa2 = _make_subagent("step2-conditional")
 
-        chain = SubAgentChain(steps=[
-            ChainStep(subagent=sa1, task_template="{input}"),
-            ChainStep(
-                subagent=sa2,
-                task_template="{input}",
-                condition=lambda prev: prev is not None and prev.success,
-            ),
-        ])
+        chain = SubAgentChain(
+            steps=[
+                ChainStep(subagent=sa1, task_template="{input}"),
+                ChainStep(
+                    subagent=sa2,
+                    task_template="{input}",
+                    condition=lambda prev: prev is not None and prev.success,
+                ),
+            ]
+        )
 
         result1 = _make_result("step1", summary="Done", success=True)
         result2 = _make_result("step2-conditional", summary="Also done", success=True)
 
         call_count = 0
 
-        with patch(
-            "src.infrastructure.agent.subagent.chain.SubAgentProcess"
-        ) as MockProcess:
+        with patch("src.infrastructure.agent.subagent.chain.SubAgentProcess") as MockProcess:
 
             def create_mock(*args, **kwargs):
                 nonlocal call_count
@@ -280,16 +280,16 @@ class TestSubAgentChainExecution:
         sa1 = _make_subagent("step1")
         sa2 = _make_subagent("step2")
 
-        chain = SubAgentChain(steps=[
-            ChainStep(subagent=sa1),
-            ChainStep(subagent=sa2),
-        ])
+        chain = SubAgentChain(
+            steps=[
+                ChainStep(subagent=sa1),
+                ChainStep(subagent=sa2),
+            ]
+        )
 
         failed_result = _make_result("step1", success=False, error="Crashed")
 
-        with patch(
-            "src.infrastructure.agent.subagent.chain.SubAgentProcess"
-        ) as MockProcess:
+        with patch("src.infrastructure.agent.subagent.chain.SubAgentProcess") as MockProcess:
             instance = MockProcess.return_value
             instance.result = failed_result
 
@@ -317,17 +317,17 @@ class TestSubAgentChainExecution:
         sa1 = _make_subagent("step1")
         sa2 = _make_subagent("step2")
 
-        chain = SubAgentChain(steps=[
-            ChainStep(subagent=sa1),
-            ChainStep(subagent=sa2),
-        ])
+        chain = SubAgentChain(
+            steps=[
+                ChainStep(subagent=sa1),
+                ChainStep(subagent=sa2),
+            ]
+        )
 
         result1 = _make_result("step1", summary="Done")
         abort = asyncio.Event()
 
-        with patch(
-            "src.infrastructure.agent.subagent.chain.SubAgentProcess"
-        ) as MockProcess:
+        with patch("src.infrastructure.agent.subagent.chain.SubAgentProcess") as MockProcess:
             instance = MockProcess.return_value
             instance.result = result1
 
@@ -356,14 +356,16 @@ class TestSubAgentChainExecution:
         sa2 = _make_subagent("sa2")
         sa3 = _make_subagent("sa3")
 
-        chain = SubAgentChain(steps=[
-            ChainStep(subagent=sa1, task_template="{input}"),
-            ChainStep(subagent=sa2, task_template="{input}"),
-            ChainStep(
-                subagent=sa3,
-                task_template="Combine: {step_0} and {step_1}",
-            ),
-        ])
+        chain = SubAgentChain(
+            steps=[
+                ChainStep(subagent=sa1, task_template="{input}"),
+                ChainStep(subagent=sa2, task_template="{input}"),
+                ChainStep(
+                    subagent=sa3,
+                    task_template="Combine: {step_0} and {step_1}",
+                ),
+            ]
+        )
 
         results = [
             _make_result("sa1", summary="Result A"),
@@ -372,9 +374,7 @@ class TestSubAgentChainExecution:
         ]
         call_count = 0
 
-        with patch(
-            "src.infrastructure.agent.subagent.chain.SubAgentProcess"
-        ) as MockProcess:
+        with patch("src.infrastructure.agent.subagent.chain.SubAgentProcess") as MockProcess:
 
             def create_mock(*args, **kwargs):
                 nonlocal call_count
@@ -409,25 +409,33 @@ class TestSubAgentChainExecution:
         sa1 = _make_subagent("sa1")
         sa2 = _make_subagent("sa2")
 
-        chain = SubAgentChain(steps=[
-            ChainStep(subagent=sa1),
-            ChainStep(subagent=sa2),
-        ])
+        chain = SubAgentChain(
+            steps=[
+                ChainStep(subagent=sa1),
+                ChainStep(subagent=sa2),
+            ]
+        )
 
         r1 = SubAgentResult(
-            subagent_id="1", subagent_name="sa1", summary="R1",
-            success=True, tokens_used=100, tool_calls_count=3,
+            subagent_id="1",
+            subagent_name="sa1",
+            summary="R1",
+            success=True,
+            tokens_used=100,
+            tool_calls_count=3,
         )
         r2 = SubAgentResult(
-            subagent_id="2", subagent_name="sa2", summary="R2",
-            success=True, tokens_used=200, tool_calls_count=5,
+            subagent_id="2",
+            subagent_name="sa2",
+            summary="R2",
+            success=True,
+            tokens_used=200,
+            tool_calls_count=5,
         )
 
         call_count = 0
 
-        with patch(
-            "src.infrastructure.agent.subagent.chain.SubAgentProcess"
-        ) as MockProcess:
+        with patch("src.infrastructure.agent.subagent.chain.SubAgentProcess") as MockProcess:
 
             def create_mock(*args, **kwargs):
                 nonlocal call_count

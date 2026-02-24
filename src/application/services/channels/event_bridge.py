@@ -7,7 +7,6 @@ events to the appropriate channel adapter (Feishu, Slack, etc.).
 The agent core remains unchanged; the bridge is purely additive.
 """
 
-
 from __future__ import annotations
 
 import asyncio

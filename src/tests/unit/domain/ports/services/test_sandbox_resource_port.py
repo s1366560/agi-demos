@@ -100,6 +100,7 @@ class TestSandboxResourcePortImplementation:
     @pytest.mark.asyncio
     async def test_get_sandbox_id_returns_id_or_none(self):
         """Implementations should return sandbox ID or None."""
+
         # Create a mock implementation
         class MockSandboxResource(SandboxResourcePort):
             async def get_sandbox_id(self, project_id: str, tenant_id: str):
@@ -111,7 +112,9 @@ class TestSandboxResourcePortImplementation:
             async def execute_tool(self, project_id: str, tool_name: str, arguments, timeout=30.0):
                 return {"result": "ok"}
 
-            async def sync_file(self, project_id: str, filename: str, content, destination="/workspace"):
+            async def sync_file(
+                self, project_id: str, filename: str, content, destination="/workspace"
+            ):
                 return True
 
             async def get_sandbox_info(self, project_id: str):
@@ -124,6 +127,7 @@ class TestSandboxResourcePortImplementation:
     @pytest.mark.asyncio
     async def test_ensure_sandbox_ready_creates_if_needed(self):
         """ensure_sandbox_ready should create sandbox if not exists."""
+
         class MockSandboxResource(SandboxResourcePort):
             def __init__(self) -> None:
                 self.created = False
@@ -138,7 +142,9 @@ class TestSandboxResourcePortImplementation:
             async def execute_tool(self, project_id: str, tool_name: str, arguments, timeout=30.0):
                 return {"result": "ok"}
 
-            async def sync_file(self, project_id: str, filename: str, content, destination="/workspace"):
+            async def sync_file(
+                self, project_id: str, filename: str, content, destination="/workspace"
+            ):
                 return True
 
             async def get_sandbox_info(self, project_id: str):
@@ -152,6 +158,7 @@ class TestSandboxResourcePortImplementation:
     @pytest.mark.asyncio
     async def test_execute_tool_calls_sandbox(self):
         """execute_tool should delegate to sandbox adapter."""
+
         class MockSandboxResource(SandboxResourcePort):
             async def get_sandbox_id(self, project_id: str, tenant_id: str):
                 return None
@@ -162,7 +169,9 @@ class TestSandboxResourcePortImplementation:
             async def execute_tool(self, project_id: str, tool_name: str, arguments, timeout=30.0):
                 return {"tool": tool_name, "args": arguments}
 
-            async def sync_file(self, project_id: str, filename: str, content, destination="/workspace"):
+            async def sync_file(
+                self, project_id: str, filename: str, content, destination="/workspace"
+            ):
                 return True
 
             async def get_sandbox_info(self, project_id: str):
@@ -190,7 +199,9 @@ class TestSandboxResourcePortImplementation:
             async def execute_tool(self, project_id: str, tool_name: str, arguments, timeout=30.0):
                 return {"result": "ok"}
 
-            async def sync_file(self, project_id: str, filename: str, content, destination="/workspace"):
+            async def sync_file(
+                self, project_id: str, filename: str, content, destination="/workspace"
+            ):
                 # Decode base64 and store
                 decoded = base64.b64decode(content).decode()
                 self.synced_files.append((filename, decoded, destination))
@@ -208,6 +219,7 @@ class TestSandboxResourcePortImplementation:
     @pytest.mark.asyncio
     async def test_get_sandbox_info_returns_status(self):
         """get_sandbox_info should return sandbox status."""
+
         class MockSandboxResource(SandboxResourcePort):
             async def get_sandbox_id(self, project_id: str, tenant_id: str):
                 return None
@@ -218,7 +230,9 @@ class TestSandboxResourcePortImplementation:
             async def execute_tool(self, project_id: str, tool_name: str, arguments, timeout=30.0):
                 return {"result": "ok"}
 
-            async def sync_file(self, project_id: str, filename: str, content, destination="/workspace"):
+            async def sync_file(
+                self, project_id: str, filename: str, content, destination="/workspace"
+            ):
                 return True
 
             async def get_sandbox_info(self, project_id: str):

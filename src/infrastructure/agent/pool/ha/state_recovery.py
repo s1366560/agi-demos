@@ -200,9 +200,7 @@ class StateRecoveryService:
 
         try:
             # Get latest checkpoint
-            checkpoint = await self._get_latest_checkpoint(
-                instance_key, checkpoint_type
-            )
+            checkpoint = await self._get_latest_checkpoint(instance_key, checkpoint_type)
 
             if not checkpoint:
                 return RecoveryResult(
@@ -245,9 +243,7 @@ class StateRecoveryService:
             result = await self.recover_instance(instance_key)
             results.append(result)
 
-        logger.info(
-            f"Recovered {len([r for r in results if r.success])}/{len(results)} instances"
-        )
+        logger.info(f"Recovered {len([r for r in results if r.success])}/{len(results)} instances")
         return results
 
     async def delete_checkpoints(self, instance_key: str) -> int:
@@ -303,9 +299,7 @@ class StateRecoveryService:
             self._memory_storage[key].insert(0, data)
             # Trim to max checkpoints
             if len(self._memory_storage[key]) > self._max_checkpoints:
-                self._memory_storage[key] = self._memory_storage[key][
-                    : self._max_checkpoints
-                ]
+                self._memory_storage[key] = self._memory_storage[key][: self._max_checkpoints]
 
     async def _get_latest_checkpoint(
         self,
@@ -370,9 +364,7 @@ class StateRecoveryService:
             # Keep only max_checkpoints
             await self._redis_client.ltrim(key, 0, self._max_checkpoints - 1)
         elif key in self._memory_storage:
-            self._memory_storage[key] = self._memory_storage[key][
-                : self._max_checkpoints
-            ]
+            self._memory_storage[key] = self._memory_storage[key][: self._max_checkpoints]
 
     async def _delete_instance_checkpoints(self, instance_key: str) -> int:
         """Delete all checkpoints for an instance."""

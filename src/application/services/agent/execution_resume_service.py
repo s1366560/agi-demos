@@ -176,4 +176,6 @@ class ExecutionResumeService:
             step_number=None,
         )
         await self._checkpoint_repo.save(resume_checkpoint)
-        logger.info(f"Marked checkpoint {checkpoint_id} as resumed for conversation {conversation_id}")
+        logger.info(
+            f"Marked checkpoint {checkpoint_id} as resumed for conversation {conversation_id}"
+        )

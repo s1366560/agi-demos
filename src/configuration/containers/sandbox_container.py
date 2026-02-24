@@ -26,8 +26,8 @@ class SandboxContainer:
     def __init__(
         self,
         db: AsyncSession | None = None,
-        redis_client: Any=None,
-        settings: Settings | None=None,
+        redis_client: Any = None,
+        settings: Settings | None = None,
         sandbox_adapter_factory: Callable | None = None,
         sandbox_event_publisher_factory: Callable | None = None,
         distributed_lock_factory: Callable | None = None,

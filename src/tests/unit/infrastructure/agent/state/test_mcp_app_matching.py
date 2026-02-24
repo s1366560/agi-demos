@@ -16,6 +16,7 @@ from unittest.mock import MagicMock
 @dataclass
 class MockUIMetadata:
     """Mock UI metadata for testing."""
+
     resource_uri: str
     permissions: list = field(default_factory=list)
     csp: dict = field(default_factory=dict)
@@ -33,12 +34,14 @@ class MockUIMetadata:
 @dataclass
 class MockResource:
     """Mock resource for testing."""
+
     html_content: str | None = None
 
 
 @dataclass
 class MockMCPApp:
     """Mock MCPApp for testing."""
+
     id: str
     project_id: str
     tenant_id: str

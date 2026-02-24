@@ -1,6 +1,5 @@
 """Tests for core events."""
 
-
 import pytest
 
 from memstack_agent.core.events import (

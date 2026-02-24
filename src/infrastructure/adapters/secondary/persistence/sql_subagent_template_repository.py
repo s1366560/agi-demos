@@ -33,6 +33,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
         from src.infrastructure.adapters.secondary.persistence.models import (
             SubAgentTemplate as DBTemplate,
         )
+
         return DBTemplate
 
     def _row_to_dict(self, row: Any) -> dict[str, Any]:
@@ -158,11 +159,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
 
         values["updated_at"] = datetime.now(UTC)
 
-        stmt = (
-            update(DBTemplate)
-            .where(DBTemplate.id == template_id)
-            .values(**values)
-        )
+        stmt = update(DBTemplate).where(DBTemplate.id == template_id).values(**values)
         await self._session.execute(stmt)
         await self._session.flush()
         return await self.get_by_id(template_id)
@@ -192,8 +189,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
             stmt = stmt.where(DBTemplate.category == category)
         if query:
             stmt = stmt.where(
-                DBTemplate.name.ilike(f"%{query}%")
-                | DBTemplate.description.ilike(f"%{query}%")
+                DBTemplate.name.ilike(f"%{query}%") | DBTemplate.description.ilike(f"%{query}%")
             )
 
         stmt = stmt.order_by(DBTemplate.install_count.desc(), DBTemplate.created_at.desc())
@@ -209,9 +205,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
         published_only: bool = True,
     ) -> int:
         DBTemplate = self._get_model()
-        stmt = select(func.count(DBTemplate.id)).where(
-            DBTemplate.tenant_id == tenant_id
-        )
+        stmt = select(func.count(DBTemplate.id)).where(DBTemplate.tenant_id == tenant_id)
         if published_only:
             stmt = stmt.where(DBTemplate.is_published.is_(True))
         if category:

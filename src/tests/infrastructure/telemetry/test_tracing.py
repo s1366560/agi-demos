@@ -18,6 +18,7 @@ class TestGetCurrentSpan:
         assert span is not None
         # Should return NonRecordingSpan when no active span
         from opentelemetry.trace import NonRecordingSpan
+
         assert isinstance(span, NonRecordingSpan)
 
         # Cleanup

@@ -70,6 +70,7 @@ async def create_native_graph_adapter(
     # Looking at provider_factory.py, create_embedder returns LiteLLMEmbedder.
     # Looking at old code, it wrapped it: embedding_service = EmbeddingService(embedder=embedder)
     from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
+
     embedding_service = EmbeddingService(embedder=embedder)
 
     # Determine embedding dimension: use config override or auto-detect
@@ -129,7 +130,7 @@ async def create_llm_client(tenant_id: str | None = None) -> LLMClient:
     Resolves provider configuration from the database.
     """
     from src.infrastructure.llm.provider_factory import get_ai_service_factory
-    
+
     factory = get_ai_service_factory()
     provider_config = await factory.resolve_provider(tenant_id)
     return factory.create_unified_llm_client(provider_config)

@@ -132,10 +132,7 @@ class BackgroundExecutor:
         self._tasks[execution_id] = task
         task.add_done_callback(lambda _: self._tasks.pop(execution_id, None))
 
-        logger.info(
-            f"[BackgroundExecutor] Launched {subagent.display_name} "
-            f"as {execution_id}"
-        )
+        logger.info(f"[BackgroundExecutor] Launched {subagent.display_name} as {execution_id}")
 
         return execution_id
 
@@ -188,16 +185,18 @@ class BackgroundExecutor:
         self._tracker.start(execution_id, conversation_id)
 
         # Emit started event
-        await self._emit({
-            "type": "background_subagent_started",
-            "data": {
-                "execution_id": execution_id,
-                "subagent_name": subagent.display_name,
-                "task_description": user_message[:200],
-                "conversation_id": conversation_id,
-            },
-            "timestamp": datetime.now(UTC).isoformat(),
-        })
+        await self._emit(
+            {
+                "type": "background_subagent_started",
+                "data": {
+                    "execution_id": execution_id,
+                    "subagent_name": subagent.display_name,
+                    "task_description": user_message[:200],
+                    "conversation_id": conversation_id,
+                },
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
 
         try:
             # Build context
@@ -227,9 +226,11 @@ class BackgroundExecutor:
                 # Optionally relay progress events
                 if event.get("type") in ("subagent.act", "subagent.observe"):
                     self._tracker.update_progress(
-                        execution_id, conversation_id, min(95, self._tracker.get_state(
-                            execution_id, conversation_id
-                        ).progress + 10)
+                        execution_id,
+                        conversation_id,
+                        min(
+                            95, self._tracker.get_state(execution_id, conversation_id).progress + 10
+                        ),
                     )
 
             result = process.result
@@ -243,30 +244,34 @@ class BackgroundExecutor:
                     tool_calls_count=result.tool_calls_count,
                 )
 
-                await self._emit({
-                    "type": "background_subagent_completed",
-                    "data": {
-                        "execution_id": execution_id,
-                        "subagent_name": subagent.display_name,
-                        "conversation_id": conversation_id,
-                        "result": result.to_event_data() if result else None,
-                    },
-                    "timestamp": datetime.now(UTC).isoformat(),
-                })
+                await self._emit(
+                    {
+                        "type": "background_subagent_completed",
+                        "data": {
+                            "execution_id": execution_id,
+                            "subagent_name": subagent.display_name,
+                            "conversation_id": conversation_id,
+                            "result": result.to_event_data() if result else None,
+                        },
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
             else:
                 error = result.error if result else "No result produced"
                 self._tracker.fail(execution_id, conversation_id, error=error)
 
-                await self._emit({
-                    "type": "background_subagent_failed",
-                    "data": {
-                        "execution_id": execution_id,
-                        "subagent_name": subagent.display_name,
-                        "conversation_id": conversation_id,
-                        "error": error,
-                    },
-                    "timestamp": datetime.now(UTC).isoformat(),
-                })
+                await self._emit(
+                    {
+                        "type": "background_subagent_failed",
+                        "data": {
+                            "execution_id": execution_id,
+                            "subagent_name": subagent.display_name,
+                            "conversation_id": conversation_id,
+                            "error": error,
+                        },
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
 
         except asyncio.CancelledError:
             self._tracker.cancel(execution_id, conversation_id)
@@ -275,16 +280,18 @@ class BackgroundExecutor:
             self._tracker.fail(execution_id, conversation_id, error=str(e))
             logger.error(f"[BackgroundExecutor] {execution_id} failed: {e}")
 
-            await self._emit({
-                "type": "background_subagent_failed",
-                "data": {
-                    "execution_id": execution_id,
-                    "subagent_name": subagent.display_name,
-                    "conversation_id": conversation_id,
-                    "error": str(e),
-                },
-                "timestamp": datetime.now(UTC).isoformat(),
-            })
+            await self._emit(
+                {
+                    "type": "background_subagent_failed",
+                    "data": {
+                        "execution_id": execution_id,
+                        "subagent_name": subagent.display_name,
+                        "conversation_id": conversation_id,
+                        "error": str(e),
+                    },
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+            )
 
     async def _emit(self, event: dict[str, Any]) -> None:
         """Emit an event via the callback."""

@@ -139,6 +139,7 @@ class TestEventRouter:
 
     def test_register_handler(self, router):
         """Test registering a handler."""
+
         async def handler(event):
             pass
 
@@ -150,6 +151,7 @@ class TestEventRouter:
 
     def test_register_with_decorator(self, router):
         """Test registering handler with decorator."""
+
         @router.handler("agent.*")
         async def handle_agent(event):
             pass
@@ -158,6 +160,7 @@ class TestEventRouter:
 
     def test_unregister_handler(self, router):
         """Test unregistering a handler."""
+
         async def handler(event):
             pass
 
@@ -170,9 +173,15 @@ class TestEventRouter:
 
     def test_unregister_pattern(self, router):
         """Test unregistering all handlers for a pattern."""
-        async def h1(e): pass
-        async def h2(e): pass
-        async def h3(e): pass
+
+        async def h1(e):
+            pass
+
+        async def h2(e):
+            pass
+
+        async def h3(e):
+            pass
 
         router.register("agent.*", h1)
         router.register("agent.*", h2)
@@ -201,6 +210,7 @@ class TestEventRouter:
     @pytest.mark.asyncio
     async def test_route_no_matching_handler(self, router, sample_event):
         """Test routing with no matching handler."""
+
         @router.handler("hitl.*")
         async def handle_hitl(event):
             pass
@@ -232,6 +242,7 @@ class TestEventRouter:
     @pytest.mark.asyncio
     async def test_route_handler_error(self, router, sample_event):
         """Test routing with handler error."""
+
         @router.handler("agent.*")
         async def failing_handler(event):
             raise ValueError("Handler failed")
@@ -288,7 +299,9 @@ class TestEventRouter:
 
     def test_handler_registration_matches(self):
         """Test HandlerRegistration pattern matching."""
-        async def handler(e): pass
+
+        async def handler(e):
+            pass
 
         reg = HandlerRegistration(
             pattern="agent.*.msg-*",
@@ -301,7 +314,9 @@ class TestEventRouter:
 
     def test_get_matching_patterns(self, router):
         """Test getting patterns that match a routing key."""
-        async def h(e): pass
+
+        async def h(e):
+            pass
 
         router.register("agent.*", h)
         router.register("agent.conv-123.*", h)
@@ -323,6 +338,7 @@ class TestEventRouter:
     @pytest.mark.asyncio
     async def test_router_metrics_updated(self, router, sample_event):
         """Test router metrics are updated after routing."""
+
         @router.handler("agent.*")
         async def handler(event):
             pass

@@ -154,9 +154,11 @@ class TestMCPPromptsRegistry:
         mock_client = AsyncMock()
         mock_client.list_prompts = AsyncMock(side_effect=Exception("MCP server error"))
 
-        with patch.object(registry, "_clients", {"server_1": mock_client}):
-            with pytest.raises(Exception, match="MCP server error"):
-                await registry.get_server_prompts("server_1")
+        with (
+            patch.object(registry, "_clients", {"server_1": mock_client}),
+            pytest.raises(Exception, match="MCP server error"),
+        ):
+            await registry.get_server_prompts("server_1")
 
 
 @pytest.mark.unit
@@ -249,13 +251,15 @@ class TestPromptArgumentValidation:
             side_effect=ValueError("Missing required argument: code")
         )
 
-        with patch.object(registry, "_clients", {"server_1": mock_client}):
-            with pytest.raises(ValueError, match="Missing required argument"):
-                await registry.get_server_prompt(
-                    server_id="server_1",
-                    prompt_name="code_review",
-                    arguments={},  # Missing required 'code' argument
-                )
+        with (
+            patch.object(registry, "_clients", {"server_1": mock_client}),
+            pytest.raises(ValueError, match="Missing required argument"),
+        ):
+            await registry.get_server_prompt(
+                server_id="server_1",
+                prompt_name="code_review",
+                arguments={},  # Missing required 'code' argument
+            )
 
     @pytest.mark.asyncio
     async def test_optional_arguments_omitted(self, registry):

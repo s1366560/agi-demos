@@ -52,9 +52,7 @@ class EventEnvelope:
     payload: dict[str, Any]
     schema_version: str = "1.0"
     event_id: str = field(default_factory=lambda: f"evt_{uuid.uuid4().hex[:12]}")
-    timestamp: str = field(
-        default_factory=lambda: datetime.now(UTC).isoformat()
-    )
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     source: str = "memstack"
     correlation_id: str | None = None
     causation_id: str | None = None

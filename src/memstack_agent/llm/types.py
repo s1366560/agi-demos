@@ -60,7 +60,9 @@ class Message:
     @classmethod
     def tool_result(cls, content: str, tool_call_id: str, name: str | None = None) -> "Message":
         """Create a tool result message."""
-        return cls(role=MessageRole.TOOL.value, content=content, tool_call_id=tool_call_id, name=name)
+        return cls(
+            role=MessageRole.TOOL.value, content=content, tool_call_id=tool_call_id, name=name
+        )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API calls."""

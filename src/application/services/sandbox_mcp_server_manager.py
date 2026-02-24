@@ -333,7 +333,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                     error_msg = tools.get("error", tools.get("raw_output", str(tools)))
                 else:
                     error_msg = str(tools)
-                
+
                 status.status = "failed"
                 status.error = f"Tool discovery failed: {error_msg}"
                 status.tool_count = 0

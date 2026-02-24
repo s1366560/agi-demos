@@ -156,9 +156,13 @@ class SqlConversationRepository(
         if status:
             query = query.where(DBConversation.status == status.value)
 
-        query = query.order_by(
-            desc(func.coalesce(DBConversation.updated_at, DBConversation.created_at))
-        ).offset(offset).limit(limit)
+        query = (
+            query.order_by(
+                desc(func.coalesce(DBConversation.updated_at, DBConversation.created_at))
+            )
+            .offset(offset)
+            .limit(limit)
+        )
 
         result = await self._session.execute(query)
         db_conversations = result.scalars().all()
@@ -188,9 +192,13 @@ class SqlConversationRepository(
         if project_id:
             query = query.where(DBConversation.project_id == project_id)
 
-        query = query.order_by(
-            desc(func.coalesce(DBConversation.updated_at, DBConversation.created_at))
-        ).offset(offset).limit(limit)
+        query = (
+            query.order_by(
+                desc(func.coalesce(DBConversation.updated_at, DBConversation.created_at))
+            )
+            .offset(offset)
+            .limit(limit)
+        )
 
         result = await self._session.execute(query)
         db_conversations = result.scalars().all()

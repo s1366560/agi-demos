@@ -12,7 +12,6 @@ Tests Sandbox-related events:
 - terminal_status
 """
 
-
 from src.domain.events.agent_events import (
     AgentDesktopStartedEvent,
     AgentDesktopStatusEvent,
@@ -266,4 +265,6 @@ class TestSandboxEvents:
         ]
 
         for event_type in sandbox_types:
-            assert event_type in frontend_types, f"Sandbox event type {event_type} not in frontend list"
+            assert event_type in frontend_types, (
+                f"Sandbox event type {event_type} not in frontend list"
+            )

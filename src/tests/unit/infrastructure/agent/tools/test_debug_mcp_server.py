@@ -36,7 +36,9 @@ class TestDebugMCPServerTool:
         mock_adapter = AsyncMock()
         mock_adapter.call_tool = AsyncMock(
             return_value={
-                "content": [{"type": "text", "text": "[INFO] Server started\n[ERROR] Connection failed"}],
+                "content": [
+                    {"type": "text", "text": "[INFO] Server started\n[ERROR] Connection failed"}
+                ],
             }
         )
 
@@ -62,10 +64,12 @@ class TestDebugMCPServerTool:
         # Mock mcp_server_status response
         mock_adapter.call_tool = AsyncMock(
             return_value={
-                "content": [{
-                    "type": "text",
-                    "text": '{"status": "running", "pid": 12345, "memory_mb": 50, "cpu_percent": 2.5}'
-                }],
+                "content": [
+                    {
+                        "type": "text",
+                        "text": '{"status": "running", "pid": 12345, "memory_mb": 50, "cpu_percent": 2.5}',
+                    }
+                ],
             }
         )
 
@@ -91,10 +95,12 @@ class TestDebugMCPServerTool:
         # Mock response with error info
         mock_adapter.call_tool = AsyncMock(
             return_value={
-                "content": [{
-                    "type": "text",
-                    "text": '{"last_error": "Connection refused", "error_count": 3}'
-                }],
+                "content": [
+                    {
+                        "type": "text",
+                        "text": '{"last_error": "Connection refused", "error_count": 3}',
+                    }
+                ],
             }
         )
 
@@ -133,7 +139,11 @@ class TestDebugMCPServerTool:
         # Should return result without raising exception
         # Either has error info or registered: False
         assert isinstance(result, dict)
-        assert result.get("registered") is False or "error" in result or "not found" in str(result).lower()
+        assert (
+            result.get("registered") is False
+            or "error" in result
+            or "not found" in str(result).lower()
+        )
 
     @pytest.mark.asyncio
     async def test_tool_has_name_and_description(self):
@@ -170,7 +180,9 @@ class TestDebugMCPServerToolIntegration:
         async def track_call(tool_name, **kwargs):
             calls.append(tool_name)
             if tool_name == "mcp_server_list":
-                return {"content": [{"type": "text", "text": '[{"name": "test", "status": "running"}]'}]}
+                return {
+                    "content": [{"type": "text", "text": '[{"name": "test", "status": "running"}]'}]
+                }
             elif tool_name == "mcp_server_status":
                 return {"content": [{"type": "text", "text": '{"pid": 123, "status": "running"}'}]}
             elif tool_name == "mcp_server_logs":

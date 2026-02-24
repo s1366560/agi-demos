@@ -219,8 +219,8 @@ async def create_memory(
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client: Any=Depends(get_graphiti_client),
-    workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
+    graphiti_client: Any = Depends(get_graphiti_client),
+    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
 ) -> Any:
     """Create a new memory.
 
@@ -503,7 +503,7 @@ async def delete_memory(
     memory_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graph_service: GraphServicePort | None=Depends(get_graph_service),
+    graph_service: GraphServicePort | None = Depends(get_graph_service),
 ) -> JSONResponse | Response:
     """Delete a memory from all storage systems (DB, Graphiti)."""
     # 1. Get memory to check permissions and project_id
@@ -564,8 +564,8 @@ async def reprocess_memory(
     memory_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
-    graph_service: GraphServicePort | None=Depends(get_graph_service),
+    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
+    graph_service: GraphServicePort | None = Depends(get_graph_service),
 ) -> Any:
     """Manually trigger re-processing of a memory."""
     # 1. Get memory
@@ -695,7 +695,7 @@ async def update_memory(
     memory_data: MemoryUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
+    workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
 ) -> Any:
     """Update an existing memory with optimistic locking."""
     # 1. Get memory
@@ -792,18 +792,17 @@ async def update_memory(
                 }
 
                 # Create TaskLog record
-                async with async_session_factory() as task_session:
-                    async with task_session.begin():
-                        task_log = TaskLog(
-                            id=task_id,
-                            group_id=memory.project_id,
-                            task_type="add_episode",
-                            status="PENDING",
-                            payload=task_payload,
-                            entity_type="episode",
-                            created_at=datetime.now(UTC),
-                        )
-                        task_session.add(task_log)
+                async with async_session_factory() as task_session, task_session.begin():
+                    task_log = TaskLog(
+                        id=task_id,
+                        group_id=memory.project_id,
+                        task_type="add_episode",
+                        status="PENDING",
+                        payload=task_payload,
+                        entity_type="episode",
+                        created_at=datetime.now(UTC),
+                    )
+                    task_session.add(task_log)
 
                 task_payload["task_id"] = task_id
 

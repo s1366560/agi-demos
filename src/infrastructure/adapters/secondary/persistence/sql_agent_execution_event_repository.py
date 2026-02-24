@@ -275,9 +275,7 @@ class SqlAgentExecutionEventRepository(
 
     # === Conversion methods ===
 
-    def _to_domain(
-        self, db_event: DBAgentExecutionEvent | None
-    ) -> AgentExecutionEvent | None:
+    def _to_domain(self, db_event: DBAgentExecutionEvent | None) -> AgentExecutionEvent | None:
         """Convert database model to domain model."""
         if db_event is None:
             return None

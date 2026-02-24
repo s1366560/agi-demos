@@ -138,9 +138,7 @@ class ToolExecutorPort(Protocol):
         """
         ...
 
-    async def execute_stream(
-        self, request: ToolExecutionRequest
-    ) -> AsyncIterator[dict[str, Any]]:
+    async def execute_stream(self, request: ToolExecutionRequest) -> AsyncIterator[dict[str, Any]]:
         """
         Execute a tool with streaming output.
 

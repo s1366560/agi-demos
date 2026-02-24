@@ -218,7 +218,9 @@ class TestLiteLLMClient:
         assert len(trimmed) == 1
         assert trimmed[0]["role"] == "user"
         assert len(trimmed[0]["content"]) < len(messages[1]["content"])
-        assert client._estimate_effective_input_tokens(model, trimmed) < client._estimate_effective_input_tokens(model, messages)
+        assert client._estimate_effective_input_tokens(
+            model, trimmed
+        ) < client._estimate_effective_input_tokens(model, messages)
 
     def test_ollama_without_api_key_uses_default_base_url(self):
         """Ollama should allow missing API key and apply local default api_base."""
@@ -243,7 +245,9 @@ class TestLiteLLMClient:
             temperature=0,
         )
 
-        with patch("src.infrastructure.llm.litellm.litellm_client.get_encryption_service") as mock_get:
+        with patch(
+            "src.infrastructure.llm.litellm.litellm_client.get_encryption_service"
+        ) as mock_get:
             mock_encryption = MagicMock()
             mock_encryption.decrypt.return_value = NO_API_KEY_SENTINEL
             mock_get.return_value = mock_encryption

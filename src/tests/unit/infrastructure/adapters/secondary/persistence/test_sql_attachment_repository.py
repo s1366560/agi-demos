@@ -260,7 +260,9 @@ class TestSqlAttachmentRepositoryFind:
         assert all(a.conversation_id == "conv-1" for a in attachments)
 
     @pytest.mark.asyncio
-    async def test_get_by_conversation_with_status_filter(self, v2_attachment_repo: SqlAttachmentRepository):
+    async def test_get_by_conversation_with_status_filter(
+        self, v2_attachment_repo: SqlAttachmentRepository
+    ):
         """Test listing attachments for a conversation with status filter."""
         # Create attachments with different statuses
         for status in [AttachmentStatus.PENDING, AttachmentStatus.READY, AttachmentStatus.FAILED]:
@@ -287,7 +289,9 @@ class TestSqlAttachmentRepositoryFind:
             await v2_attachment_repo.save(attachment)
 
         # List only pending attachments
-        pending = await v2_attachment_repo.get_by_conversation("conv-status", status=AttachmentStatus.PENDING)
+        pending = await v2_attachment_repo.get_by_conversation(
+            "conv-status", status=AttachmentStatus.PENDING
+        )
         assert len(pending) == 1
         assert pending[0].status == AttachmentStatus.PENDING
 
@@ -572,7 +576,9 @@ class TestSqlAttachmentRepositoryUpdateMethods:
         await v2_attachment_repo.save(attachment)
 
         # Update sandbox path
-        result = await v2_attachment_repo.update_sandbox_path("att-sandbox-1", "/sandbox/files/sandbox.txt")
+        result = await v2_attachment_repo.update_sandbox_path(
+            "att-sandbox-1", "/sandbox/files/sandbox.txt"
+        )
         assert result is True
 
         # Verify update

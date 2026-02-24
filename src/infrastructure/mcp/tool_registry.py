@@ -56,11 +56,13 @@ class MCPToolRegistry:
         normalized = []
         for tool in sorted(tools, key=lambda t: t.get("name", "")):
             # Only include relevant fields for hash
-            normalized.append({
-                "name": tool.get("name", ""),
-                "description": tool.get("description", ""),
-                "input_schema": tool.get("input_schema", tool.get("inputSchema", {})),
-            })
+            normalized.append(
+                {
+                    "name": tool.get("name", ""),
+                    "description": tool.get("description", ""),
+                    "input_schema": tool.get("input_schema", tool.get("inputSchema", {})),
+                }
+            )
 
         # Compute hash
         json_str = json.dumps(normalized, sort_keys=True)
@@ -88,7 +90,9 @@ class MCPToolRegistry:
 
         logger.debug(
             "Stored hash for server %s in sandbox %s: %s...",
-            server_name, sandbox_id, hash_value[:8]
+            server_name,
+            sandbox_id,
+            hash_value[:8],
         )
 
     def get_server_hash(
@@ -132,7 +136,8 @@ class MCPToolRegistry:
             self._stats.cache_misses += 1
             logger.debug(
                 "No stored hash for server %s in sandbox %s - needs discovery",
-                server_name, sandbox_id
+                server_name,
+                sandbox_id,
             )
             return True
 
@@ -141,17 +146,20 @@ class MCPToolRegistry:
             self._stats.cache_hits += 1
             logger.debug(
                 "Tools unchanged for server %s in sandbox %s (hash: %s...)",
-                server_name, sandbox_id, current_hash[:8]
+                server_name,
+                sandbox_id,
+                current_hash[:8],
             )
             return False
 
         # Hash differs - tools updated
         self._stats.cache_misses += 1
         logger.info(
-            "Tools updated for server %s in sandbox %s "
-            "(old: %s..., new: %s...)",
-            server_name, sandbox_id,
-            stored_hash[:8], current_hash[:8]
+            "Tools updated for server %s in sandbox %s (old: %s..., new: %s...)",
+            server_name,
+            sandbox_id,
+            stored_hash[:8],
+            current_hash[:8],
         )
         return True
 
@@ -170,10 +178,7 @@ class MCPToolRegistry:
         if key in self._hashes:
             del self._hashes[key]
             self._stats.total_servers = max(0, self._stats.total_servers - 1)
-            logger.debug(
-                "Invalidated hash for server %s in sandbox %s",
-                server_name, sandbox_id
-            )
+            logger.debug("Invalidated hash for server %s in sandbox %s", server_name, sandbox_id)
 
     def invalidate_sandbox(self, sandbox_id: str) -> int:
         """Invalidate all stored hashes for a sandbox.
@@ -184,10 +189,7 @@ class MCPToolRegistry:
         Returns:
             Number of hashes invalidated
         """
-        keys_to_remove = [
-            key for key in self._hashes
-            if key[0] == sandbox_id
-        ]
+        keys_to_remove = [key for key in self._hashes if key[0] == sandbox_id]
 
         for key in keys_to_remove:
             del self._hashes[key]
@@ -196,10 +198,7 @@ class MCPToolRegistry:
         self._stats.total_servers = max(0, self._stats.total_servers)
 
         if keys_to_remove:
-            logger.debug(
-                "Invalidated %d hash(es) for sandbox %s",
-                len(keys_to_remove), sandbox_id
-            )
+            logger.debug("Invalidated %d hash(es) for sandbox %s", len(keys_to_remove), sandbox_id)
 
         return len(keys_to_remove)
 

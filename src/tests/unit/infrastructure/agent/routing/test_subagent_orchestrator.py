@@ -134,9 +134,7 @@ class MockSubAgentRouter:
         if "*" in subagent.allowed_tools:
             return available_tools
         return {
-            name: tool
-            for name, tool in available_tools.items()
-            if name in subagent.allowed_tools
+            name: tool for name, tool in available_tools.items() if name in subagent.allowed_tools
         }
 
     def get_subagent_config(self, subagent: MockSubAgent) -> dict[str, Any]:

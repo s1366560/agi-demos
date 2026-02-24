@@ -570,7 +570,9 @@ class TestSingletonFunctions:
 class TestStreamEventProcessing:
     """Test stream event processing."""
 
-    async def test_process_text_start(self, invoker, mock_message, invocation_config, invocation_context):
+    async def test_process_text_start(
+        self, invoker, mock_message, invocation_config, invocation_context
+    ):
         """Test processing TEXT_START event."""
         from src.infrastructure.agent.core.llm_stream import StreamEventType
 
@@ -598,7 +600,9 @@ class TestStreamEventProcessing:
         assert len(events) == 1
         assert events[0].__class__.__name__ == "AgentTextStartEvent"
 
-    async def test_process_text_delta(self, invoker, mock_message, invocation_config, invocation_context):
+    async def test_process_text_delta(
+        self, invoker, mock_message, invocation_config, invocation_context
+    ):
         """Test processing TEXT_DELTA event."""
         from src.infrastructure.agent.core.llm_stream import StreamEventType
 
@@ -628,7 +632,9 @@ class TestStreamEventProcessing:
         assert events[0].delta == "Hello "
         assert result.text == "Hello "
 
-    async def test_process_text_end(self, invoker, mock_message, invocation_config, invocation_context):
+    async def test_process_text_end(
+        self, invoker, mock_message, invocation_config, invocation_context
+    ):
         """Test processing TEXT_END event."""
         from src.infrastructure.agent.core.llm_stream import StreamEventType
 
@@ -658,7 +664,9 @@ class TestStreamEventProcessing:
         assert events[0].__class__.__name__ == "AgentTextEndEvent"
         mock_message.add_text.assert_called_once_with("Hello world")
 
-    async def test_process_reasoning_events(self, invoker, mock_message, invocation_config, invocation_context):
+    async def test_process_reasoning_events(
+        self, invoker, mock_message, invocation_config, invocation_context
+    ):
         """Test processing reasoning events."""
         from src.infrastructure.agent.core.llm_stream import StreamEventType
 
@@ -711,7 +719,9 @@ class TestStreamEventProcessing:
         assert events[0].__class__.__name__ == "AgentThoughtDeltaEvent"
         assert result.reasoning == "Thinking..."
 
-    async def test_process_finish_event(self, invoker, mock_message, invocation_config, invocation_context):
+    async def test_process_finish_event(
+        self, invoker, mock_message, invocation_config, invocation_context
+    ):
         """Test processing FINISH event."""
         from src.infrastructure.agent.core.llm_stream import StreamEventType
 
@@ -739,7 +749,9 @@ class TestStreamEventProcessing:
         assert len(events) == 0  # FINISH doesn't emit domain event
         assert result.finish_reason == "tool_calls"
 
-    async def test_process_error_event_raises(self, invoker, mock_message, invocation_config, invocation_context):
+    async def test_process_error_event_raises(
+        self, invoker, mock_message, invocation_config, invocation_context
+    ):
         """Test processing ERROR event raises exception."""
         from src.infrastructure.agent.core.llm_stream import StreamEventType
 
@@ -774,9 +786,7 @@ class TestStreamEventProcessing:
 class TestToolCallEndHandling:
     """Test tool call end handling."""
 
-    async def test_handle_tool_call_end_validation_error(
-        self, invoker, invocation_context
-    ):
+    async def test_handle_tool_call_end_validation_error(self, invoker, invocation_context):
         """Test tool call end with validation error."""
         event = MagicMock()
         event.data = {

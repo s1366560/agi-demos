@@ -164,7 +164,9 @@ class TestConversationTitleGeneration:
     @pytest.mark.asyncio
     async def test_generate_title_limits_to_50_chars(self, agent_service):
         """Test that generated titles are limited to 50 characters."""
-        agent_service._llm.set_response("This is a very long title that exceeds fifty characters limit")
+        agent_service._llm.set_response(
+            "This is a very long title that exceeds fifty characters limit"
+        )
 
         title = await agent_service.generate_conversation_title(
             first_message="Test message",
@@ -275,7 +277,9 @@ class TestTitleGenerationTriggerConditions:
         ]
 
         # Count only message events (correct behavior)
-        message_count = sum(1 for e in timeline if e["type"] in ("user_message", "assistant_message"))
+        message_count = sum(
+            1 for e in timeline if e["type"] in ("user_message", "assistant_message")
+        )
 
         # Should trigger because message_count is 2 (small), not timeline length 5
         assert message_count == 2
@@ -448,7 +452,8 @@ class TestTitleGenerationWithMessages:
                 message_id="msg-1",
                 event_type=USER_MESSAGE,
                 event_data={"role": "user", "content": "First user message"},
-                event_time_us=1000000, event_counter=0,
+                event_time_us=1000000,
+                event_counter=0,
                 created_at=datetime.now(),
             ),
             AgentExecutionEvent(
@@ -457,7 +462,8 @@ class TestTitleGenerationWithMessages:
                 message_id="msg-2",
                 event_type="thought",  # Not a message event
                 event_data={"thought": "Agent is thinking"},
-                event_time_us=2000000, event_counter=0,
+                event_time_us=2000000,
+                event_counter=0,
                 created_at=datetime.now(),
             ),
             AgentExecutionEvent(
@@ -466,7 +472,8 @@ class TestTitleGenerationWithMessages:
                 message_id="msg-3",
                 event_type=ASSISTANT_MESSAGE,
                 event_data={"role": "assistant", "content": "Assistant response"},
-                event_time_us=3000000, event_counter=0,
+                event_time_us=3000000,
+                event_counter=0,
                 created_at=datetime.now(),
             ),
         ]

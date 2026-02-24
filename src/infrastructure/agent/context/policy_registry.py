@@ -122,4 +122,3 @@ def enrich_summary_with_file_activity(summary_text: str, messages: MessageList) 
         return summary_text
     items = "\n".join(f"- {path}" for path in found_paths)
     return summary_text.rstrip() + "\n\n[File activity]\n" + items
-

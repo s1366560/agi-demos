@@ -22,14 +22,16 @@ logger = logging.getLogger(__name__)
 
 class HealthCheckLevel(Enum):
     """健康检查级别."""
-    BASIC = "basic"       # 容器运行
-    MCP = "mcp"           # MCP 连接
+
+    BASIC = "basic"  # 容器运行
+    MCP = "mcp"  # MCP 连接
     SERVICES = "services"  # Desktop + Terminal
-    FULL = "full"         # 以上全部
+    FULL = "full"  # 以上全部
 
 
 class HealthStatus(Enum):
     """健康状态."""
+
     HEALTHY = "healthy"
     DEGRADED = "degraded"
     UNHEALTHY = "unhealthy"
@@ -39,6 +41,7 @@ class HealthStatus(Enum):
 @dataclass
 class HealthCheckResult:
     """健康检查结果."""
+
     level: HealthCheckLevel
     status: HealthStatus
     healthy: bool
@@ -63,6 +66,7 @@ class HealthCheckResult:
 @dataclass
 class ComponentHealth:
     """组件健康状态."""
+
     container: bool = False
     mcp_connection: bool = False
     desktop_service: bool = False
@@ -79,7 +83,9 @@ class SandboxHealthService:
     执行不同级别的健康检查并返回结果。
     """
 
-    def __init__(self, sandbox_adapter: MCPSandboxAdapter | None=None, default_timeout: float = 5.0) -> None:
+    def __init__(
+        self, sandbox_adapter: MCPSandboxAdapter | None = None, default_timeout: float = 5.0
+    ) -> None:
         """初始化健康检查服务.
 
         Args:

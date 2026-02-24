@@ -74,9 +74,7 @@ class TestReActAgentMemoryIntegration:
         )
 
         # Mock SubAgentProcess to avoid real execution
-        with patch(
-            "src.infrastructure.agent.subagent.process.SubAgentProcess"
-        ) as MockProcess:
+        with patch("src.infrastructure.agent.subagent.process.SubAgentProcess") as MockProcess:
             mock_result = MagicMock()
             mock_result.final_content = "Research result"
             mock_result.to_event_data.return_value = {"summary": "done"}
@@ -111,16 +109,17 @@ class TestReActAgentMemoryIntegration:
         call_kwargs = MockProcess.call_args[1]
         context = call_kwargs.get("context")
         assert context is not None
-        assert "memory" in context.memory_context.lower() or "knowledge" in context.memory_context.lower()
+        assert (
+            "memory" in context.memory_context.lower()
+            or "knowledge" in context.memory_context.lower()
+        )
 
     async def test_execute_subagent_without_graph_service(self):
         """When no graph_service, memory_context should be empty."""
         sa = _make_subagent("researcher")
         agent = _make_react_agent(subagents=[sa])
 
-        with patch(
-            "src.infrastructure.agent.subagent.process.SubAgentProcess"
-        ) as MockProcess:
+        with patch("src.infrastructure.agent.subagent.process.SubAgentProcess") as MockProcess:
             mock_result = MagicMock()
             mock_result.final_content = "Output"
             mock_result.to_event_data.return_value = {}
@@ -159,9 +158,7 @@ class TestReActAgentMemoryIntegration:
             subagents=[sa],
         )
 
-        with patch(
-            "src.infrastructure.agent.subagent.process.SubAgentProcess"
-        ) as MockProcess:
+        with patch("src.infrastructure.agent.subagent.process.SubAgentProcess") as MockProcess:
             mock_result = MagicMock()
             mock_result.final_content = "Still works"
             mock_result.to_event_data.return_value = {}
@@ -200,9 +197,7 @@ class TestReActAgentMemoryIntegration:
             subagents=[sa],
         )
 
-        with patch(
-            "src.infrastructure.agent.subagent.process.SubAgentProcess"
-        ) as MockProcess:
+        with patch("src.infrastructure.agent.subagent.process.SubAgentProcess") as MockProcess:
             mock_result = MagicMock()
             mock_result.final_content = "Output"
             mock_result.to_event_data.return_value = {}
@@ -237,9 +232,7 @@ class TestReActAgentMemoryIntegration:
             enable_subagent_as_tool=True,
         )
 
-        with patch(
-            "src.infrastructure.agent.subagent.process.SubAgentProcess"
-        ) as MockProcess:
+        with patch("src.infrastructure.agent.subagent.process.SubAgentProcess") as MockProcess:
             mock_result = MagicMock()
             mock_result.final_content = "Output"
             mock_result.to_event_data.return_value = {}
@@ -274,9 +267,7 @@ class TestReActAgentMemoryIntegration:
             enable_subagent_as_tool=True,
         )
 
-        with patch(
-            "src.infrastructure.agent.subagent.process.SubAgentProcess"
-        ) as MockProcess:
+        with patch("src.infrastructure.agent.subagent.process.SubAgentProcess") as MockProcess:
             mock_result = MagicMock()
             mock_result.final_content = "Output"
             mock_result.to_event_data.return_value = {}

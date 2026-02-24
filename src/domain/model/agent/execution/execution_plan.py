@@ -67,9 +67,7 @@ class ExecutionStep:
 
     def mark_started(self) -> "ExecutionStep":
         """Mark step as started. Returns new instance."""
-        return replace(
-            self, status=ExecutionStepStatus.RUNNING, started_at=datetime.now(UTC)
-        )
+        return replace(self, status=ExecutionStepStatus.RUNNING, started_at=datetime.now(UTC))
 
     def mark_completed(self, result: str) -> "ExecutionStep":
         """Mark step as completed with result. Returns new instance."""
@@ -229,9 +227,7 @@ class ExecutionPlan(Entity):
 
     def mark_executing(self) -> "ExecutionPlan":
         """Mark plan as executing. Returns new plan instance."""
-        return replace(
-            self, status=ExecutionPlanStatus.EXECUTING, started_at=datetime.now(UTC)
-        )
+        return replace(self, status=ExecutionPlanStatus.EXECUTING, started_at=datetime.now(UTC))
 
     def mark_completed(self) -> "ExecutionPlan":
         """Mark plan as completed. Returns new plan instance."""
@@ -289,7 +285,7 @@ class ExecutionPlan(Entity):
 
     def create_snapshot(self, name: str, description: str | None = None) -> NoReturn:
         """Create a snapshot of current plan state for rollback.
-        
+
         Note: Plan snapshot system is being refactored.
         """
         raise NotImplementedError("Plan snapshot system is being refactored")

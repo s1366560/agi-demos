@@ -329,8 +329,12 @@ class TestMetricsCollector:
         """Recent errors are retrievable."""
         collector = MetricsCollector()
 
-        collector.record_request(ProviderType.OPENAI, "gpt-4", False, 100, error_type="RateLimitError")
-        collector.record_request(ProviderType.GEMINI, "gemini-pro", False, 50, error_type="TimeoutError")
+        collector.record_request(
+            ProviderType.OPENAI, "gpt-4", False, 100, error_type="RateLimitError"
+        )
+        collector.record_request(
+            ProviderType.GEMINI, "gemini-pro", False, 50, error_type="TimeoutError"
+        )
 
         errors = collector.get_recent_errors(limit=10)
 

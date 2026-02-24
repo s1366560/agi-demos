@@ -140,7 +140,9 @@ class TestSqlTenantAgentConfigRepositoryDelete:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_delete_nonexistent_raises_error(self, v2_config_repo: SqlTenantAgentConfigRepository):
+    async def test_delete_nonexistent_raises_error(
+        self, v2_config_repo: SqlTenantAgentConfigRepository
+    ):
         """Test deleting a non-existent config raises ValueError."""
         with pytest.raises(ValueError):
             await v2_config_repo.delete("non-existent")

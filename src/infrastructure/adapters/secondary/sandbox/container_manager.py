@@ -265,9 +265,7 @@ class ContainerManager:
             # Filter by tenant if specified
             if tenant_id:
                 containers = [
-                    c
-                    for c in containers
-                    if c.labels.get("memstack.tenant.id") == tenant_id
+                    c for c in containers if c.labels.get("memstack.tenant.id") == tenant_id
                 ]
 
             return containers
@@ -298,9 +296,7 @@ class ContainerManager:
         """Get resource usage stats for container."""
         loop = asyncio.get_event_loop()
         try:
-            stats = await loop.run_in_executor(
-                None, lambda: container.stats(stream=False)
-            )
+            stats = await loop.run_in_executor(None, lambda: container.stats(stream=False))
 
             # Parse CPU usage
             cpu_delta = (
@@ -308,8 +304,7 @@ class ContainerManager:
                 - stats["precpu_stats"]["cpu_usage"]["total_usage"]
             )
             system_delta = (
-                stats["cpu_stats"]["system_cpu_usage"]
-                - stats["precpu_stats"]["system_cpu_usage"]
+                stats["cpu_stats"]["system_cpu_usage"] - stats["precpu_stats"]["system_cpu_usage"]
             )
             cpu_percent = 0.0
             if system_delta > 0:
@@ -334,12 +329,8 @@ class ContainerManager:
         """Ensure Docker image exists, pull if needed."""
         loop = asyncio.get_event_loop()
         try:
-            await loop.run_in_executor(
-                None, lambda: self._docker.images.get(self._image)
-            )
+            await loop.run_in_executor(None, lambda: self._docker.images.get(self._image))
         except ImageNotFound:
             logger.info(f"Pulling image {self._image}...")
-            await loop.run_in_executor(
-                None, lambda: self._docker.images.pull(self._image)
-            )
+            await loop.run_in_executor(None, lambda: self._docker.images.pull(self._image))
             logger.info(f"Successfully pulled image {self._image}")

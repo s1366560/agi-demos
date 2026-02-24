@@ -39,4 +39,3 @@ class TestContextBudgetResolver:
         )
         assert profile.should_warn is True
         assert profile.should_block is True
-

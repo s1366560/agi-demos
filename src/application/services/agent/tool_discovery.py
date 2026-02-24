@@ -21,7 +21,7 @@ class ToolDiscoveryService:
 
     def __init__(
         self,
-        redis_client: Any=None,
+        redis_client: Any = None,
         skill_service: "SkillService | None" = None,
     ) -> None:
         self._redis_client = redis_client

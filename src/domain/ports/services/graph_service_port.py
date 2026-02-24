@@ -10,9 +10,7 @@ class GraphServicePort(ABC):
         pass
 
     @abstractmethod
-    async def search(
-        self, query: str, project_id: str | None = None, limit: int = 10
-    ) -> list[Any]:
+    async def search(self, query: str, project_id: str | None = None, limit: int = 10) -> list[Any]:
         # Returns list of MemoryItems (defined in DTOs usually, or domain items)
         pass
 

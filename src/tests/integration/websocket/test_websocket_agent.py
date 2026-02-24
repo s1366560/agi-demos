@@ -158,7 +158,9 @@ class AgentWebSocketTester:
             self.errors.append(f"Error subscribing: {e}")
             return False
 
-    async def receive_events(self, timeout: float = 30.0, expected_event_types: list[str] | None = None) -> list[dict[str, Any]]:
+    async def receive_events(
+        self, timeout: float = 30.0, expected_event_types: list[str] | None = None
+    ) -> list[dict[str, Any]]:
         """Receive events until timeout or completion."""
         events = []
         start_time = asyncio.get_event_loop().time()
@@ -313,6 +315,7 @@ async def test_agent_chat_flow():
     except Exception as e:
         print(f"   ✗ Test 2 FAILED: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     finally:
@@ -392,6 +395,7 @@ async def test_hitl_clarification_flow():
     except Exception as e:
         print(f"   ✗ Test 3 FAILED: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     finally:
@@ -470,6 +474,7 @@ async def test_hitl_decision_flow():
     except Exception as e:
         print(f"   ✗ Test 4 FAILED: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     finally:
@@ -479,14 +484,16 @@ async def test_hitl_decision_flow():
 async def check_api_health():
     """Check if API is running."""
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{API_BASE_URL}/health", timeout=5.0) as resp:
-                if resp.status == 200:
-                    print("   ✓ API is running")
-                    return True
-                else:
-                    print(f"   ⚠ API health check returned: {resp.status}")
-                    return False
+        async with (
+            aiohttp.ClientSession() as session,
+            session.get(f"{API_BASE_URL}/health", timeout=5.0) as resp,
+        ):
+            if resp.status == 200:
+                print("   ✓ API is running")
+                return True
+            else:
+                print(f"   ⚠ API health check returned: {resp.status}")
+                return False
     except Exception as e:
         print(f"   ⚠ API health check failed: {e}")
         return False

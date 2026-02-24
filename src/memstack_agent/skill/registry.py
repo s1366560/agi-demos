@@ -286,11 +286,7 @@ class SkillRegistry:
             Skills that use only the specified tools
         """
         tool_set = set(tools)
-        return [
-            skill
-            for skill in self._skills.values()
-            if set(skill.tools).issubset(tool_set)
-        ]
+        return [skill for skill in self._skills.values() if set(skill.tools).issubset(tool_set)]
 
     def clear(self) -> None:
         """Remove all registered skills."""

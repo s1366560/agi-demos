@@ -1,7 +1,7 @@
 """Unit tests for Environment Variable Tools.
 
 Tests the GetEnvVarTool and CheckEnvVarsTool for managing agent tool
-environment variables. 
+environment variables.
 
 NOTE: RequestEnvVarTool is now tested via HITL strategy tests.
 See src/tests/unit/agent/test_temporal_hitl_handler.py for HITL-related tests.

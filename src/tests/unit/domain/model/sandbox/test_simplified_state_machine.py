@@ -53,16 +53,12 @@ class TestStateMapping:
 
     def test_pending_maps_to_starting(self):
         """PENDING should map to STARTING."""
-        mapping = SimplifiedSandboxStateMachine.legacy_to_simplified(
-            ProjectSandboxStatus.PENDING
-        )
+        mapping = SimplifiedSandboxStateMachine.legacy_to_simplified(ProjectSandboxStatus.PENDING)
         assert mapping == SimplifiedSandboxState.STARTING
 
     def test_creating_maps_to_starting(self):
         """CREATING should map to STARTING."""
-        mapping = SimplifiedSandboxStateMachine.legacy_to_simplified(
-            ProjectSandboxStatus.CREATING
-        )
+        mapping = SimplifiedSandboxStateMachine.legacy_to_simplified(ProjectSandboxStatus.CREATING)
         assert mapping == SimplifiedSandboxState.STARTING
 
     def test_connecting_maps_to_starting(self):
@@ -74,23 +70,17 @@ class TestStateMapping:
 
     def test_running_maps_to_running(self):
         """RUNNING should map to RUNNING."""
-        mapping = SimplifiedSandboxStateMachine.legacy_to_simplified(
-            ProjectSandboxStatus.RUNNING
-        )
+        mapping = SimplifiedSandboxStateMachine.legacy_to_simplified(ProjectSandboxStatus.RUNNING)
         assert mapping == SimplifiedSandboxState.RUNNING
 
     def test_unhealthy_maps_to_error(self):
         """UNHEALTHY should map to ERROR."""
-        mapping = SimplifiedSandboxStateMachine.legacy_to_simplified(
-            ProjectSandboxStatus.UNHEALTHY
-        )
+        mapping = SimplifiedSandboxStateMachine.legacy_to_simplified(ProjectSandboxStatus.UNHEALTHY)
         assert mapping == SimplifiedSandboxState.ERROR
 
     def test_error_maps_to_error(self):
         """ERROR should map to ERROR."""
-        mapping = SimplifiedSandboxStateMachine.legacy_to_simplified(
-            ProjectSandboxStatus.ERROR
-        )
+        mapping = SimplifiedSandboxStateMachine.legacy_to_simplified(ProjectSandboxStatus.ERROR)
         assert mapping == SimplifiedSandboxState.ERROR
 
     def test_disconnected_maps_to_error(self):
@@ -102,9 +92,7 @@ class TestStateMapping:
 
     def test_stopped_maps_to_terminated(self):
         """STOPPED should map to TERMINATED (since containers can't be restarted)."""
-        mapping = SimplifiedSandboxStateMachine.legacy_to_simplified(
-            ProjectSandboxStatus.STOPPED
-        )
+        mapping = SimplifiedSandboxStateMachine.legacy_to_simplified(ProjectSandboxStatus.STOPPED)
         assert mapping == SimplifiedSandboxState.TERMINATED
 
     def test_terminated_maps_to_terminated(self):
@@ -116,9 +104,7 @@ class TestStateMapping:
 
     def test_orphan_maps_to_error(self):
         """ORPHAN should map to ERROR (as metadata flag, not a state)."""
-        mapping = SimplifiedSandboxStateMachine.legacy_to_simplified(
-            ProjectSandboxStatus.ORPHAN
-        )
+        mapping = SimplifiedSandboxStateMachine.legacy_to_simplified(ProjectSandboxStatus.ORPHAN)
         assert mapping == SimplifiedSandboxState.ERROR
 
 
@@ -138,25 +124,19 @@ class TestBackwardCompatibility:
 
         # Running maps to RUNNING
         assert (
-            SimplifiedSandboxStateMachine.simplified_to_legacy(
-                SimplifiedSandboxState.RUNNING
-            )
+            SimplifiedSandboxStateMachine.simplified_to_legacy(SimplifiedSandboxState.RUNNING)
             == ProjectSandboxStatus.RUNNING
         )
 
         # Error maps to ERROR (most generic)
         assert (
-            SimplifiedSandboxStateMachine.simplified_to_legacy(
-                SimplifiedSandboxState.ERROR
-            )
+            SimplifiedSandboxStateMachine.simplified_to_legacy(SimplifiedSandboxState.ERROR)
             == ProjectSandboxStatus.ERROR
         )
 
         # Terminated maps to TERMINATED
         assert (
-            SimplifiedSandboxStateMachine.simplified_to_legacy(
-                SimplifiedSandboxState.TERMINATED
-            )
+            SimplifiedSandboxStateMachine.simplified_to_legacy(SimplifiedSandboxState.TERMINATED)
             == ProjectSandboxStatus.TERMINATED
         )
 
@@ -167,53 +147,39 @@ class TestValidTransitions:
     def test_starting_to_running(self):
         """STARTING can transition to RUNNING."""
         sm = SimplifiedSandboxStateMachine()
-        assert sm.can_transition(
-            SimplifiedSandboxState.STARTING, SimplifiedSandboxState.RUNNING
-        )
+        assert sm.can_transition(SimplifiedSandboxState.STARTING, SimplifiedSandboxState.RUNNING)
 
     def test_starting_to_error(self):
         """STARTING can transition to ERROR."""
         sm = SimplifiedSandboxStateMachine()
-        assert sm.can_transition(
-            SimplifiedSandboxState.STARTING, SimplifiedSandboxState.ERROR
-        )
+        assert sm.can_transition(SimplifiedSandboxState.STARTING, SimplifiedSandboxState.ERROR)
 
     def test_running_to_error(self):
         """RUNNING can transition to ERROR."""
         sm = SimplifiedSandboxStateMachine()
-        assert sm.can_transition(
-            SimplifiedSandboxState.RUNNING, SimplifiedSandboxState.ERROR
-        )
+        assert sm.can_transition(SimplifiedSandboxState.RUNNING, SimplifiedSandboxState.ERROR)
 
     def test_running_to_terminated(self):
         """RUNNING can transition to TERMINATED."""
         sm = SimplifiedSandboxStateMachine()
-        assert sm.can_transition(
-            SimplifiedSandboxState.RUNNING, SimplifiedSandboxState.TERMINATED
-        )
+        assert sm.can_transition(SimplifiedSandboxState.RUNNING, SimplifiedSandboxState.TERMINATED)
 
     def test_error_to_starting(self):
         """ERROR can transition to STARTING (retry)."""
         sm = SimplifiedSandboxStateMachine()
-        assert sm.can_transition(
-            SimplifiedSandboxState.ERROR, SimplifiedSandboxState.STARTING
-        )
+        assert sm.can_transition(SimplifiedSandboxState.ERROR, SimplifiedSandboxState.STARTING)
 
     def test_error_to_terminated(self):
         """ERROR can transition to TERMINATED."""
         sm = SimplifiedSandboxStateMachine()
-        assert sm.can_transition(
-            SimplifiedSandboxState.ERROR, SimplifiedSandboxState.TERMINATED
-        )
+        assert sm.can_transition(SimplifiedSandboxState.ERROR, SimplifiedSandboxState.TERMINATED)
 
     def test_terminated_is_terminal(self):
         """TERMINATED cannot transition to any other state."""
         sm = SimplifiedSandboxStateMachine()
         for state in SimplifiedSandboxState:
             if state != SimplifiedSandboxState.TERMINATED:
-                assert not sm.can_transition(
-                    SimplifiedSandboxState.TERMINATED, state
-                )
+                assert not sm.can_transition(SimplifiedSandboxState.TERMINATED, state)
 
 
 class TestInvalidTransitions:
@@ -233,9 +199,7 @@ class TestInvalidTransitions:
     def test_same_state_is_allowed(self):
         """Transition to same state should be allowed (no-op)."""
         sm = SimplifiedSandboxStateMachine()
-        assert sm.can_transition(
-            SimplifiedSandboxState.RUNNING, SimplifiedSandboxState.RUNNING
-        )
+        assert sm.can_transition(SimplifiedSandboxState.RUNNING, SimplifiedSandboxState.RUNNING)
 
 
 class TestStateQueries:
@@ -279,9 +243,7 @@ class TestTransitionExecution:
     def test_successful_transition(self):
         """Valid transition should return new state."""
         sm = SimplifiedSandboxStateMachine()
-        new_state = sm.transition(
-            SimplifiedSandboxState.STARTING, SimplifiedSandboxState.RUNNING
-        )
+        new_state = sm.transition(SimplifiedSandboxState.STARTING, SimplifiedSandboxState.RUNNING)
         assert new_state == SimplifiedSandboxState.RUNNING
 
     def test_transition_with_sandbox_id(self):
@@ -352,6 +314,7 @@ class TestInvalidMappingInputs:
 
     def test_invalid_legacy_status_raises_error(self):
         """Mapping invalid legacy status should raise ValueError."""
+
         # Create a mock enum value that doesn't exist
         class FakeStatus(Enum):
             FAKE = "fake"
@@ -361,6 +324,7 @@ class TestInvalidMappingInputs:
 
     def test_invalid_simplified_status_raises_error(self):
         """Mapping invalid simplified status should raise ValueError."""
+
         # Create a mock enum value that doesn't exist
         class FakeState(Enum):
             FAKE = "fake"

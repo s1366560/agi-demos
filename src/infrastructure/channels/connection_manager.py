@@ -46,8 +46,6 @@ API_PING_CYCLE = 10  # Ping Feishu API every Nth health check cycle
 MAX_RECONNECT_ATTEMPTS = 20  # Max attempts before circuit breaker opens
 
 
-
-
 class ConnectionStatus(str, Enum):
     """Status of a managed channel connection."""
 
@@ -277,7 +275,9 @@ class ChannelConnectionManager:
         from src.infrastructure.security.encryption_service import get_encryption_service
 
         plugin_registry = get_plugin_registry()
-        metadata = plugin_registry.list_channel_type_metadata().get((config.channel_type or "").lower())
+        metadata = plugin_registry.list_channel_type_metadata().get(
+            (config.channel_type or "").lower()
+        )
         secret_paths_raw = getattr(metadata, "secret_paths", None)
         secret_paths = (
             [path for path in secret_paths_raw if isinstance(path, str)]

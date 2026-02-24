@@ -260,7 +260,9 @@ class FailureRecoveryService:
 
             # Attempt recovery
             if auto_recover:
-                asyncio.create_task(self._attempt_recovery(event))
+                _recover_task = asyncio.create_task(self._attempt_recovery(event))
+                self._background_tasks.add(_recover_task)
+                _recover_task.add_done_callback(self._background_tasks.discard)
 
         return event
 
@@ -271,9 +273,7 @@ class FailureRecoveryService:
     ) -> list[FailureEvent]:
         """Get failure history."""
         if instance_key:
-            return list(
-                reversed(self._failure_history.get(instance_key, [])[-limit:])
-            )
+            return list(reversed(self._failure_history.get(instance_key, [])[-limit:]))
 
         # All failures, sorted by time
         all_failures = []
@@ -354,9 +354,7 @@ class FailureRecoveryService:
         event.recovery_strategy = action.strategy
         event.recovery_status = RecoveryStatus.IN_PROGRESS
 
-        task = asyncio.create_task(
-            self._execute_recovery(instance_key, event, action)
-        )
+        task = asyncio.create_task(self._execute_recovery(instance_key, event, action))
         self._active_recoveries[instance_key] = task
 
     async def _execute_recovery(
@@ -370,7 +368,7 @@ class FailureRecoveryService:
             # Calculate delay with backoff
             attempts = self._recovery_attempts.get(instance_key, 0)
             delay = min(
-                action.retry_delay_seconds * (action.backoff_multiplier ** attempts),
+                action.retry_delay_seconds * (action.backoff_multiplier**attempts),
                 action.max_delay_seconds,
             )
 
@@ -405,7 +403,9 @@ class FailureRecoveryService:
 
             # Retry if possible
             if self._recovery_attempts[instance_key] < action.max_retries:
-                asyncio.create_task(self._attempt_recovery(event))
+                _retry_task = asyncio.create_task(self._attempt_recovery(event))
+                self._background_tasks.add(_retry_task)
+                _retry_task.add_done_callback(self._background_tasks.discard)
             else:
                 await self._escalate(instance_key, event, str(e))
 

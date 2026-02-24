@@ -197,9 +197,7 @@ class TestFailureRecoveryService:
                 auto_recover=False,
             )
 
-        history = await failure_service.get_failure_history(
-            instance_key="tenant:project:mode"
-        )
+        history = await failure_service.get_failure_history(instance_key="tenant:project:mode")
 
         assert len(history) == 3
 

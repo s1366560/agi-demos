@@ -70,4 +70,3 @@ def test_runtime_registry_enriches_summary_with_failures_and_file_activity() -> 
     assert "File activity" in summary
     assert "enrich_summary_with_tool_failures" in summary_meta["applied"]
     assert "enrich_summary_with_file_activity" in summary_meta["applied"]
-

@@ -117,7 +117,9 @@ class TestSqlToolEnvironmentVariableRepositoryUpdate:
         assert result.encrypted_value == "new_encrypted_value"
 
     @pytest.mark.asyncio
-    async def test_update_nonexistent_raises_error(self, v2_env_var_repo: SqlToolEnvironmentVariableRepository):
+    async def test_update_nonexistent_raises_error(
+        self, v2_env_var_repo: SqlToolEnvironmentVariableRepository
+    ):
         """Test updating a non-existent environment variable raises ValueError."""
         env_var = make_env_var("non-existent", "tenant-1", "search", "API_KEY")
 
@@ -140,7 +142,9 @@ class TestSqlToolEnvironmentVariableRepositoryDelete:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_delete_nonexistent_raises_error(self, v2_env_var_repo: SqlToolEnvironmentVariableRepository):
+    async def test_delete_nonexistent_raises_error(
+        self, v2_env_var_repo: SqlToolEnvironmentVariableRepository
+    ):
         """Test deleting a non-existent environment variable raises ValueError."""
         with pytest.raises(ValueError):
             await v2_env_var_repo.delete("non-existent")
@@ -182,7 +186,9 @@ class TestSqlToolEnvironmentVariableRepositoryList:
         assert len(results) == 3
 
     @pytest.mark.asyncio
-    async def test_list_by_tenant_with_scope(self, v2_env_var_repo: SqlToolEnvironmentVariableRepository):
+    async def test_list_by_tenant_with_scope(
+        self, v2_env_var_repo: SqlToolEnvironmentVariableRepository
+    ):
         """Test listing environment variables by tenant and scope."""
         env_var1 = make_env_var("env-scope-1", "tenant-scope-1", "tool1", "VAR1")
         env_var1.scope = EnvVarScope.TENANT

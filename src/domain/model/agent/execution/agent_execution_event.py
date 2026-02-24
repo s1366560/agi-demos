@@ -96,9 +96,7 @@ class AgentExecutionEvent(Entity):
     def is_message_event(self) -> bool:
         """Check if this event represents a user or assistant message."""
         event_type_str = (
-            self.event_type.value
-            if hasattr(self.event_type, "value")
-            else str(self.event_type)
+            self.event_type.value if hasattr(self.event_type, "value") else str(self.event_type)
         )
         return event_type_str in (USER_MESSAGE, ASSISTANT_MESSAGE)
 
@@ -106,9 +104,7 @@ class AgentExecutionEvent(Entity):
     def is_delta_event(self) -> bool:
         """Check if this is a streaming delta event (not persisted for replay)."""
         event_type_str = (
-            self.event_type.value
-            if hasattr(self.event_type, "value")
-            else str(self.event_type)
+            self.event_type.value if hasattr(self.event_type, "value") else str(self.event_type)
         )
         return event_type_str in ("text_delta", "thought_delta")
 

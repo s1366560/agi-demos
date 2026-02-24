@@ -115,7 +115,9 @@ class OverflowRecoveryCoordinator:
 
         return updated, truncated_count
 
-    def _tail_trim_messages(self, messages: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    def _tail_trim_messages(
+        self, messages: list[dict[str, Any]]
+    ) -> tuple[list[dict[str, Any]], int]:
         """Keep system prefix + recent tail for final fallback stage."""
         if not messages:
             return messages, 0
@@ -152,7 +154,9 @@ class OverflowRecoveryCoordinator:
         recovered_messages = current_messages
 
         try:
-            recovery_manager = ContextWindowManager(self.build_aggressive_config(base_manager.config))
+            recovery_manager = ContextWindowManager(
+                self.build_aggressive_config(base_manager.config)
+            )
             recovery_result = await build_context(context_request, recovery_manager)
             recovered_messages = recovery_result.messages
             metadata["forced_compaction"] = bool(recovery_result.was_compressed)
@@ -215,4 +219,3 @@ class OverflowRecoveryCoordinator:
         metadata["final_stage"] = "tail_trim" if dropped_messages > 0 else "truncate"
 
         return OverflowRecoveryResult(messages=recovered_messages, metadata=metadata)
-

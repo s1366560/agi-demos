@@ -14,7 +14,9 @@ from src.infrastructure.adapters.secondary.persistence.sql_message_execution_sta
 
 
 @pytest.fixture
-async def v2_msg_exec_status_repo(v2_db_session: AsyncSession) -> SqlMessageExecutionStatusRepository:
+async def v2_msg_exec_status_repo(
+    v2_db_session: AsyncSession,
+) -> SqlMessageExecutionStatusRepository:
     """Create a V2 message execution status repository for testing."""
     return SqlMessageExecutionStatusRepository(v2_db_session)
 
@@ -44,7 +46,9 @@ class TestSqlMessageExecutionStatusRepositoryCreate:
     """Tests for creating execution status records."""
 
     @pytest.mark.asyncio
-    async def test_create_new_execution(self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository):
+    async def test_create_new_execution(
+        self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository
+    ):
         """Test creating a new execution status record."""
         execution = make_agent_execution("exec-1", "conv-1", "msg-1")
 
@@ -58,7 +62,9 @@ class TestSqlMessageExecutionStatusRepositoryFind:
     """Tests for finding execution status records."""
 
     @pytest.mark.asyncio
-    async def test_get_by_id_existing(self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository):
+    async def test_get_by_id_existing(
+        self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository
+    ):
         """Test getting an execution status by ID."""
         execution = make_agent_execution("exec-find-1", "conv-1", "msg-1")
         await v2_msg_exec_status_repo.create(execution)
@@ -68,13 +74,17 @@ class TestSqlMessageExecutionStatusRepositoryFind:
         assert result.message_id == "msg-1"
 
     @pytest.mark.asyncio
-    async def test_get_by_id_not_found(self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository):
+    async def test_get_by_id_not_found(
+        self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository
+    ):
         """Test getting a non-existent execution returns None."""
         result = await v2_msg_exec_status_repo.get_by_id("non-existent")
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_get_by_message_id(self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository):
+    async def test_get_by_message_id(
+        self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository
+    ):
         """Test getting execution by message ID."""
         execution = make_agent_execution("exec-msg-1", "conv-1", "msg-find-1")
         await v2_msg_exec_status_repo.create(execution)
@@ -84,7 +94,9 @@ class TestSqlMessageExecutionStatusRepositoryFind:
         assert result.id == "exec-msg-1"
 
     @pytest.mark.asyncio
-    async def test_get_by_message_id_with_conversation(self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository):
+    async def test_get_by_message_id_with_conversation(
+        self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository
+    ):
         """Test getting execution by message ID and conversation."""
         execution1 = make_agent_execution("exec-msg-conv-1", "conv-1", "msg-shared-1")
         execution2 = make_agent_execution("exec-msg-conv-2", "conv-2", "msg-shared-2")
@@ -96,7 +108,9 @@ class TestSqlMessageExecutionStatusRepositoryFind:
         assert result.conversation_id == "conv-1"
 
     @pytest.mark.asyncio
-    async def test_get_running_by_conversation(self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository):
+    async def test_get_running_by_conversation(
+        self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository
+    ):
         """Test getting running execution by conversation."""
         execution = make_agent_execution("exec-running-1", "conv-running-1", "msg-1")
         await v2_msg_exec_status_repo.create(execution)
@@ -110,18 +124,24 @@ class TestSqlMessageExecutionStatusRepositoryUpdate:
     """Tests for updating execution status."""
 
     @pytest.mark.asyncio
-    async def test_update_status_to_completed(self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository):
+    async def test_update_status_to_completed(
+        self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository
+    ):
         """Test updating status to completed."""
         execution = make_agent_execution("exec-update-1", "conv-1", "msg-1")
         await v2_msg_exec_status_repo.create(execution)
 
-        result = await v2_msg_exec_status_repo.update_status("exec-update-1", AgentExecutionStatus.COMPLETED)
+        result = await v2_msg_exec_status_repo.update_status(
+            "exec-update-1", AgentExecutionStatus.COMPLETED
+        )
         assert result is not None
         assert result.status == AgentExecutionStatus.COMPLETED
         assert result.completed_at is not None
 
     @pytest.mark.asyncio
-    async def test_update_status_with_error(self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository):
+    async def test_update_status_with_error(
+        self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository
+    ):
         """Test updating status with error message."""
         execution = make_agent_execution("exec-error-1", "conv-1", "msg-1")
         await v2_msg_exec_status_repo.create(execution)
@@ -134,13 +154,19 @@ class TestSqlMessageExecutionStatusRepositoryUpdate:
         assert result.error_message == "Test error"
 
     @pytest.mark.asyncio
-    async def test_update_status_nonexistent(self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository):
+    async def test_update_status_nonexistent(
+        self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository
+    ):
         """Test updating status of non-existent execution returns None."""
-        result = await v2_msg_exec_status_repo.update_status("non-existent", AgentExecutionStatus.COMPLETED)
+        result = await v2_msg_exec_status_repo.update_status(
+            "non-existent", AgentExecutionStatus.COMPLETED
+        )
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_update_sequence(self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository):
+    async def test_update_sequence(
+        self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository
+    ):
         """Test updating last event sequence."""
         execution = make_agent_execution("exec-seq-1", "conv-1", "msg-1")
         await v2_msg_exec_status_repo.create(execution)
@@ -150,7 +176,9 @@ class TestSqlMessageExecutionStatusRepositoryUpdate:
         assert result.last_event_sequence == 5
 
     @pytest.mark.asyncio
-    async def test_update_sequence_only_increments(self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository):
+    async def test_update_sequence_only_increments(
+        self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository
+    ):
         """Test that sequence only updates if new value is higher."""
         execution = make_agent_execution("exec-seq-inc-1", "conv-1", "msg-1")
         await v2_msg_exec_status_repo.create(execution)
@@ -165,7 +193,9 @@ class TestSqlMessageExecutionStatusRepositoryDelete:
     """Tests for deleting execution status."""
 
     @pytest.mark.asyncio
-    async def test_delete_existing(self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository):
+    async def test_delete_existing(
+        self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository
+    ):
         """Test deleting an existing execution."""
         execution = make_agent_execution("exec-delete-1", "conv-1", "msg-1")
         await v2_msg_exec_status_repo.create(execution)
@@ -177,7 +207,9 @@ class TestSqlMessageExecutionStatusRepositoryDelete:
         assert retrieved is None
 
     @pytest.mark.asyncio
-    async def test_delete_nonexistent(self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository):
+    async def test_delete_nonexistent(
+        self, v2_msg_exec_status_repo: SqlMessageExecutionStatusRepository
+    ):
         """Test deleting a non-existent execution returns False."""
         result = await v2_msg_exec_status_repo.delete("non-existent")
         assert result is False

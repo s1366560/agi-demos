@@ -61,9 +61,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
         db_app = result.scalar_one_or_none()
         return self._to_domain(db_app) if db_app else None
 
-    async def find_by_server_name_and_tool(
-        self, server_name: str, tool_name: str
-    ) -> MCPApp | None:
+    async def find_by_server_name_and_tool(self, server_name: str, tool_name: str) -> MCPApp | None:
         """Find an MCP App by server name and tool name."""
         result = await self._session.execute(
             select(MCPAppModel).where(

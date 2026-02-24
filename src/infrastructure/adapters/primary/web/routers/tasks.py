@@ -386,7 +386,9 @@ async def stop_task_endpoint(
 
 
 @router.get("/{task_id}/stream", response_class=EventSourceResponse, response_model=None)
-async def stream_task_status(task_id: str, db: AsyncSession = Depends(get_db)) -> AsyncGenerator[Any, None]:
+async def stream_task_status(
+    task_id: str, db: AsyncSession = Depends(get_db)
+) -> AsyncGenerator[Any, None]:
     """Stream task status updates using Server-Sent Events (SSE).
 
     This endpoint provides real-time updates for task progress, completion, and errors.

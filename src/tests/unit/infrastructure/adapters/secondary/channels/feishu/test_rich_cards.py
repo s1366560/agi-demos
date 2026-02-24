@@ -98,7 +98,7 @@ class TestArtifactCard:
         card = builder.build_artifact_card("report.pdf", url="https://example.com/download")
         assert card["schema"] == "2.0"
         assert len(card["body"]["elements"]) == 2
-        button = card["body"]["elements"][1]["actions"][0]
+        button = card["body"]["elements"][1]
         assert button["text"]["content"] == "Download"
         assert button["url"] == "https://example.com/download"
 
@@ -140,7 +140,7 @@ class TestErrorCard:
         )
         assert card["schema"] == "2.0"
         assert len(card["body"]["elements"]) == 2
-        button = card["body"]["elements"][1]["actions"][0]
+        button = card["body"]["elements"][1]
         assert button["text"]["content"] == "Retry"
         assert button["value"]["action"] == "retry"
         assert button["value"]["conversation_id"] == "conv-1"

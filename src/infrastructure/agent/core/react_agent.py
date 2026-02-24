@@ -71,6 +71,7 @@ if TYPE_CHECKING:
     from src.domain.ports.services.graph_service_port import GraphServicePort
 
 logger = logging.getLogger(__name__)
+_react_bg_tasks: set[asyncio.Task[Any]] = set()
 
 
 class ReActAgent:
@@ -1976,11 +1977,13 @@ class ReActAgent:
                 try:
                     import asyncio
 
-                    asyncio.create_task(
+                    _idx_task = asyncio.create_task(
                         self._background_index_conversation(
                             conversation_context, project_id, conversation_id
                         )
                     )
+                    _react_bg_tasks.add(_idx_task)
+                    _idx_task.add_done_callback(_react_bg_tasks.discard)
                 except Exception as e:
                     logger.debug(f"[ReActAgent] Conversation indexing skipped: {e}")
 

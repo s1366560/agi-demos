@@ -23,9 +23,7 @@ router = APIRouter(prefix="/api/v1", tags=["shares"])
 logger = logging.getLogger(__name__)
 
 
-async def _check_project_admin_access(
-    db: AsyncSession, user_id: str, project_id: str
-) -> bool:
+async def _check_project_admin_access(db: AsyncSession, user_id: str, project_id: str) -> bool:
     """Check if user has admin/owner access to the project.
 
     Args:

@@ -85,7 +85,9 @@ class MCPAuthStorage:
     _SENSITIVE_TOKEN_FIELDS = ("accessToken", "refreshToken")
     _SENSITIVE_CLIENT_FIELDS = ("clientSecret",)
 
-    def __init__(self, data_dir: Path | None = None, encryption_service: EncryptionService | None=None) -> None:
+    def __init__(
+        self, data_dir: Path | None = None, encryption_service: EncryptionService | None = None
+    ) -> None:
         """Initialize auth storage.
 
         Args:
@@ -285,9 +287,7 @@ class MCPAuthStorage:
 
         return entry
 
-    async def set(
-        self, mcp_name: str, entry: MCPAuthEntry, server_url: str | None = None
-    ) -> None:
+    async def set(self, mcp_name: str, entry: MCPAuthEntry, server_url: str | None = None) -> None:
         """Save auth entry for MCP server.
 
         Args:
@@ -625,9 +625,10 @@ class MCPOAuthProvider:
             if client_info.client_secret:
                 data["client_secret"] = client_info.client_secret
 
-            async with aiohttp.ClientSession() as session, session.post(
-                token_url, data=data, timeout=aiohttp.ClientTimeout(total=30)
-            ) as resp:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(token_url, data=data, timeout=aiohttp.ClientTimeout(total=30)) as resp,
+            ):
                 if resp.status != 200:
                     body = await resp.text()
                     logger.warning(

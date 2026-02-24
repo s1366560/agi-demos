@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from redis.asyncio import Redis
 
 
-
 class RedisDistributedLockAdapter(DistributedLockPort):
     """
     Redis-based implementation of DistributedLockPort.

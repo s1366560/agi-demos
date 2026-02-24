@@ -13,6 +13,7 @@ from dataclasses import dataclass
 @dataclass
 class SandboxInstanceInfo:
     """Sandbox 实例信息，用于 URL 构建."""
+
     mcp_port: int | None = None
     desktop_port: int | None = None
     terminal_port: int | None = None
@@ -23,6 +24,7 @@ class SandboxInstanceInfo:
 @dataclass
 class SandboxUrls:
     """所有 Sandbox 相关的 URL."""
+
     mcp_url: str | None
     desktop_url: str | None
     desktop_url_with_token: str | None

@@ -1,6 +1,5 @@
 """Unit tests for MCP transport layer."""
 
-
 import pytest
 
 from src.domain.model.mcp.transport import TransportConfig, TransportType

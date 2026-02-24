@@ -70,13 +70,7 @@ class ToolWithSchemaDict:
 
     def __init__(self, visibility: list) -> None:
         self.description = "Tool with schema dict"
-        self._schema = {
-            "_meta": {
-                "ui": {
-                    "visibility": visibility
-                }
-            }
-        }
+        self._schema = {"_meta": {"ui": {"visibility": visibility}}}
 
     def execute(self, **kwargs):
         return "Executed"
@@ -182,6 +176,7 @@ class TestToolConverter:
     @pytest.mark.asyncio
     async def test_execute_wrapper_handles_error(self):
         """Test execute wrapper handles errors gracefully."""
+
         class ErrorTool:
             description = "Error tool"
             _tool_schema = MagicMock()
@@ -223,6 +218,7 @@ class TestToolConverter:
     @pytest.mark.unit
     def test_convert_tools_default_description(self):
         """Test default description when tool has none."""
+
         class NoDescTool:
             _tool_schema = MagicMock()
             _tool_schema.is_model_visible = True
@@ -235,6 +231,7 @@ class TestToolConverter:
     @pytest.mark.unit
     def test_convert_tools_args_schema_fallback(self):
         """Test fallback to args_schema for parameters."""
+
         class ArgsSchemaTool:
             description = "Args schema tool"
             _tool_schema = MagicMock()
@@ -259,6 +256,7 @@ class TestToolConverter:
     @pytest.mark.asyncio
     async def test_execute_wrapper_ainvoke_fallback(self):
         """Test fallback to ainvoke method."""
+
         class AinvokeTool:
             description = "Ainvoke tool"
             _tool_schema = MagicMock()
@@ -278,6 +276,7 @@ class TestToolConverter:
     @pytest.mark.asyncio
     async def test_execute_wrapper_run_fallback(self):
         """Test fallback to run method."""
+
         class RunTool:
             description = "Run tool"
             _tool_schema = MagicMock()
@@ -297,6 +296,7 @@ class TestToolConverter:
     @pytest.mark.asyncio
     async def test_execute_wrapper_no_execute_method_error(self):
         """Test error when tool has no execute method."""
+
         class NoMethodTool:
             description = "No method tool"
             _tool_schema = MagicMock()

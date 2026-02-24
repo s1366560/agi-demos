@@ -65,7 +65,9 @@ class TestSqlConversationRepositorySave:
         assert retrieved.current_mode == AgentMode.BUILD
 
     @pytest.mark.asyncio
-    async def test_save_upsert_existing_conversation(self, v2_conversation_repo: SqlConversationRepository):
+    async def test_save_upsert_existing_conversation(
+        self, v2_conversation_repo: SqlConversationRepository
+    ):
         """Test upserting an existing conversation."""
         # Create initial conversation
         conversation = Conversation(
@@ -215,7 +217,9 @@ class TestSqlConversationRepositoryList:
         assert all(c.project_id == "proj-1" for c in conversations)
 
     @pytest.mark.asyncio
-    async def test_list_by_project_with_status_filter(self, v2_conversation_repo: SqlConversationRepository):
+    async def test_list_by_project_with_status_filter(
+        self, v2_conversation_repo: SqlConversationRepository
+    ):
         """Test listing conversations by project with status filter."""
         # Create conversations with different statuses
         active_conv = Conversation(
@@ -258,7 +262,9 @@ class TestSqlConversationRepositoryList:
         assert active_convs[0].status == ConversationStatus.ACTIVE
 
     @pytest.mark.asyncio
-    async def test_list_by_project_with_pagination(self, v2_conversation_repo: SqlConversationRepository):
+    async def test_list_by_project_with_pagination(
+        self, v2_conversation_repo: SqlConversationRepository
+    ):
         """Test listing conversations by project with pagination."""
         # Create 5 conversations
         for i in range(5):
@@ -330,7 +336,9 @@ class TestSqlConversationRepositoryList:
         assert all(c.user_id == "user-1" for c in conversations)
 
     @pytest.mark.asyncio
-    async def test_list_by_user_with_project_filter(self, v2_conversation_repo: SqlConversationRepository):
+    async def test_list_by_user_with_project_filter(
+        self, v2_conversation_repo: SqlConversationRepository
+    ):
         """Test listing conversations by user with project filter."""
         # Create conversations for different projects
         conv1 = Conversation(
@@ -437,7 +445,9 @@ class TestSqlConversationRepositoryToDomain:
     """Tests for _to_domain conversion."""
 
     @pytest.mark.asyncio
-    async def test_to_domain_converts_all_fields(self, v2_conversation_repo: SqlConversationRepository):
+    async def test_to_domain_converts_all_fields(
+        self, v2_conversation_repo: SqlConversationRepository
+    ):
         """Test that _to_domain correctly converts all DB fields."""
         conversation = Conversation(
             id="conv-domain",
@@ -468,7 +478,9 @@ class TestSqlConversationRepositoryToDomain:
         assert retrieved.current_plan_id == "plan-123"
 
     @pytest.mark.asyncio
-    async def test_to_domain_with_none_db_model(self, v2_conversation_repo: SqlConversationRepository):
+    async def test_to_domain_with_none_db_model(
+        self, v2_conversation_repo: SqlConversationRepository
+    ):
         """Test that _to_domain returns None for None input."""
         result = v2_conversation_repo._to_domain(None)
         assert result is None
@@ -505,7 +517,9 @@ class TestSqlConversationRepositoryTransaction:
     """Tests for transaction support."""
 
     @pytest.mark.asyncio
-    async def test_transaction_context_manager(self, v2_conversation_repo: SqlConversationRepository):
+    async def test_transaction_context_manager(
+        self, v2_conversation_repo: SqlConversationRepository
+    ):
         """Test using transaction context manager."""
         async with v2_conversation_repo.transaction():
             conv1 = Conversation(

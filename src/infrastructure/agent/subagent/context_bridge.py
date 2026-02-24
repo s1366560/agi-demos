@@ -116,30 +116,38 @@ class ContextBridge:
         messages: list[dict[str, Any]] = []
 
         # System prompt
-        messages.append({
-            "role": "system",
-            "content": context.system_prompt,
-        })
+        messages.append(
+            {
+                "role": "system",
+                "content": context.system_prompt,
+            }
+        )
 
         # Condensed conversation context (if any)
         for msg in context.context_messages:
-            messages.append({
-                "role": msg.get("role", "user"),
-                "content": msg.get("content", ""),
-            })
+            messages.append(
+                {
+                    "role": msg.get("role", "user"),
+                    "content": msg.get("content", ""),
+                }
+            )
 
         # Memory context from knowledge graph (if available)
         if context.memory_context:
-            messages.append({
-                "role": "system",
-                "content": context.memory_context,
-            })
+            messages.append(
+                {
+                    "role": "system",
+                    "content": context.memory_context,
+                }
+            )
 
         # Task message
-        messages.append({
-            "role": "user",
-            "content": context.task_description,
-        })
+        messages.append(
+            {
+                "role": "user",
+                "content": context.task_description,
+            }
+        )
 
         return messages
 
@@ -162,7 +170,7 @@ class ContextBridge:
             return []
 
         # Take the most recent N messages
-        recent = conversation_context[-self._max_context_messages:]
+        recent = conversation_context[-self._max_context_messages :]
 
         condensed: list[dict[str, str]] = []
         total_chars = 0

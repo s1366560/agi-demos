@@ -48,7 +48,9 @@ class TestTokenDeltaSampling:
         """Test that sampler respects configured sample rate."""
         from src.infrastructure.agent.core.llm_stream import TokenDeltaSampler
 
-        sampler = TokenDeltaSampler(sample_rate=0.5, min_sample_interval=0.0)  # 50% sample rate, no interval
+        sampler = TokenDeltaSampler(
+            sample_rate=0.5, min_sample_interval=0.0
+        )  # 50% sample rate, no interval
         sampler.reset()
 
         # Sample multiple deltas and check distribution

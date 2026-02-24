@@ -3,8 +3,6 @@
 Tests the metrics collection, storage, and export functionality.
 """
 
-
-
 from src.domain.model.sandbox.metrics import (
     HistogramBucket,
     HistogramMetric,
@@ -114,7 +112,7 @@ class TestPrometheusExporter:
 
         assert "sandbox_execution_duration_ms" in result
         assert "le=" in result  # Prometheus uses le= for bucket labels
-        assert '10' in result
+        assert "10" in result
         assert "_count" in result
         assert "_sum" in result
 

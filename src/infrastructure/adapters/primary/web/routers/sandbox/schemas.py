@@ -25,9 +25,7 @@ class CreateSandboxRequest(BaseModel):
     memory_limit: str | None = Field(
         default=None, description="Memory limit (overrides profile if set)"
     )
-    cpu_limit: str | None = Field(
-        default=None, description="CPU limit (overrides profile if set)"
-    )
+    cpu_limit: str | None = Field(default=None, description="CPU limit (overrides profile if set)")
     timeout_seconds: int | None = Field(
         default=None, description="Max sandbox lifetime (overrides profile if set)"
     )

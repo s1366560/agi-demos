@@ -265,10 +265,12 @@ class TestHybridSearch:
             for i in range(20)
         ]
 
-        with patch.object(hybrid_search, "_vector_search_entities", return_value=items[:10]):
-            with patch.object(hybrid_search, "_keyword_search_entities", return_value=items[10:]):
-                with patch.object(hybrid_search, "_keyword_search_episodes", return_value=[]):
-                    result = await hybrid_search.search("test", limit=5)
+        with (
+            patch.object(hybrid_search, "_vector_search_entities", return_value=items[:10]),
+            patch.object(hybrid_search, "_keyword_search_entities", return_value=items[10:]),
+            patch.object(hybrid_search, "_keyword_search_episodes", return_value=[]),
+        ):
+            result = await hybrid_search.search("test", limit=5)
 
         assert len(result.items) <= 5
 
@@ -279,9 +281,11 @@ class TestHybridSearch:
         """Test search handles errors from individual searches."""
         mock_embedding_service.embed_text.side_effect = RuntimeError("Embedding failed")
 
-        with patch.object(hybrid_search, "_keyword_search_entities", return_value=[]):
-            with patch.object(hybrid_search, "_keyword_search_episodes", return_value=[]):
-                result = await hybrid_search.search("test")
+        with (
+            patch.object(hybrid_search, "_keyword_search_entities", return_value=[]),
+            patch.object(hybrid_search, "_keyword_search_episodes", return_value=[]),
+        ):
+            result = await hybrid_search.search("test")
 
         assert isinstance(result, HybridSearchResult)
 
@@ -295,27 +299,23 @@ class TestHybridSearch:
     @pytest.mark.unit
     async def test_search_excludes_episodes_when_disabled(self, hybrid_search):
         """Test search excludes episodes when include_episodes=False."""
-        with patch.object(hybrid_search, "_vector_search_entities", return_value=[]):
-            with patch.object(hybrid_search, "_keyword_search_entities", return_value=[]):
-                with patch.object(
-                    hybrid_search, "_keyword_search_episodes", return_value=[]
-                ) as mock_kw_ep:
-                    await hybrid_search.search(
-                        "test", include_episodes=False, include_entities=True
-                    )
+        with (
+            patch.object(hybrid_search, "_vector_search_entities", return_value=[]),
+            patch.object(hybrid_search, "_keyword_search_entities", return_value=[]),
+            patch.object(hybrid_search, "_keyword_search_episodes", return_value=[]) as mock_kw_ep,
+        ):
+            await hybrid_search.search("test", include_episodes=False, include_entities=True)
         mock_kw_ep.assert_not_called()
 
     @pytest.mark.unit
     async def test_search_excludes_entities_when_disabled(self, hybrid_search):
         """Test search excludes entities when include_entities=False."""
-        with patch.object(hybrid_search, "_vector_search_entities", return_value=[]) as mock_vec:
-            with patch.object(
-                hybrid_search, "_keyword_search_entities", return_value=[]
-            ) as mock_kw_ent:
-                with patch.object(hybrid_search, "_keyword_search_episodes", return_value=[]):
-                    await hybrid_search.search(
-                        "test", include_episodes=True, include_entities=False
-                    )
+        with (
+            patch.object(hybrid_search, "_vector_search_entities", return_value=[]) as mock_vec,
+            patch.object(hybrid_search, "_keyword_search_entities", return_value=[]) as mock_kw_ent,
+            patch.object(hybrid_search, "_keyword_search_episodes", return_value=[]),
+        ):
+            await hybrid_search.search("test", include_episodes=True, include_entities=False)
         mock_vec.assert_not_called()
         mock_kw_ent.assert_not_called()
 
@@ -460,14 +460,12 @@ class TestQueryExpansion:
     @pytest.mark.unit
     async def test_query_expansion_in_search(self, hybrid_search):
         """search() applies query expansion to keyword search queries."""
-        with patch.object(hybrid_search, "_vector_search_entities", return_value=[]) as mock_vec:
-            with patch.object(
-                hybrid_search, "_keyword_search_entities", return_value=[]
-            ) as mock_kw_ent:
-                with patch.object(
-                    hybrid_search, "_keyword_search_episodes", return_value=[]
-                ) as mock_kw_ep:
-                    await hybrid_search.search("What is machine learning?")
+        with (
+            patch.object(hybrid_search, "_vector_search_entities", return_value=[]) as mock_vec,
+            patch.object(hybrid_search, "_keyword_search_entities", return_value=[]) as mock_kw_ent,
+            patch.object(hybrid_search, "_keyword_search_episodes", return_value=[]) as mock_kw_ep,
+        ):
+            await hybrid_search.search("What is machine learning?")
 
         # Vector search should receive the original query
         vec_query = mock_vec.call_args[0][0]
@@ -484,12 +482,14 @@ class TestQueryExpansion:
     @pytest.mark.unit
     async def test_query_expansion_disabled(self, hybrid_search_no_enhancements):
         """Query expansion is skipped when disabled."""
-        with patch.object(
-            hybrid_search_no_enhancements, "_vector_search_entities", return_value=[]
-        ), patch.object(
-            hybrid_search_no_enhancements, "_keyword_search_entities", return_value=[]
-        ) as mock_kw, patch.object(
-            hybrid_search_no_enhancements, "_keyword_search_episodes", return_value=[]
+        with (
+            patch.object(hybrid_search_no_enhancements, "_vector_search_entities", return_value=[]),
+            patch.object(
+                hybrid_search_no_enhancements, "_keyword_search_entities", return_value=[]
+            ) as mock_kw,
+            patch.object(
+                hybrid_search_no_enhancements, "_keyword_search_episodes", return_value=[]
+            ),
         ):
             await hybrid_search_no_enhancements.search("What is machine learning?")
 
@@ -524,10 +524,12 @@ class TestOverFetch:
     @pytest.mark.unit
     async def test_overfetch_with_mmr_enabled(self, hybrid_search):
         """With MMR enabled, fetch_limit = limit * 3."""
-        with patch.object(hybrid_search, "_vector_search_entities", return_value=[]) as mock_vec:
-            with patch.object(hybrid_search, "_keyword_search_entities", return_value=[]):
-                with patch.object(hybrid_search, "_keyword_search_episodes", return_value=[]):
-                    await hybrid_search.search("test", limit=10)
+        with (
+            patch.object(hybrid_search, "_vector_search_entities", return_value=[]) as mock_vec,
+            patch.object(hybrid_search, "_keyword_search_entities", return_value=[]),
+            patch.object(hybrid_search, "_keyword_search_episodes", return_value=[]),
+        ):
+            await hybrid_search.search("test", limit=10)
 
         # Vector search should be called with limit * 3 = 30
         called_limit = mock_vec.call_args[0][2]
@@ -536,12 +538,16 @@ class TestOverFetch:
     @pytest.mark.unit
     async def test_overfetch_without_mmr(self, hybrid_search_no_enhancements):
         """Without MMR, fetch_limit = limit * 2."""
-        with patch.object(
-            hybrid_search_no_enhancements, "_vector_search_entities", return_value=[]
-        ) as mock_vec, patch.object(
-            hybrid_search_no_enhancements, "_keyword_search_entities", return_value=[]
-        ), patch.object(
-            hybrid_search_no_enhancements, "_keyword_search_episodes", return_value=[]
+        with (
+            patch.object(
+                hybrid_search_no_enhancements, "_vector_search_entities", return_value=[]
+            ) as mock_vec,
+            patch.object(
+                hybrid_search_no_enhancements, "_keyword_search_entities", return_value=[]
+            ),
+            patch.object(
+                hybrid_search_no_enhancements, "_keyword_search_episodes", return_value=[]
+            ),
         ):
             await hybrid_search_no_enhancements.search("test", limit=10)
 

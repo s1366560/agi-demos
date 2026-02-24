@@ -10,6 +10,7 @@ Design:
 - Drop oldest strategy when queue is full
 - Timeout protection: WebSocket send has 5s timeout
 """
+
 from __future__ import annotations
 
 import asyncio

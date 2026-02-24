@@ -220,9 +220,13 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
                 agent_event.event_time_us == from_time_us
                 and agent_event.event_counter >= from_counter
             ):
-                if to_time_us is None or agent_event.event_time_us < to_time_us or (
-                    agent_event.event_time_us == to_time_us
-                    and (to_counter is None or agent_event.event_counter <= to_counter)
+                if (
+                    to_time_us is None
+                    or agent_event.event_time_us < to_time_us
+                    or (
+                        agent_event.event_time_us == to_time_us
+                        and (to_counter is None or agent_event.event_counter <= to_counter)
+                    )
                 ):
                     events.append(agent_event)
 
@@ -270,9 +274,7 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
 
         # Note: The unified bus doesn't have a direct mark_complete concept.
         # We could trim or set a flag, but for now we just log it.
-        logger.debug(
-            f"[LegacyAdapter] Marked complete: {routing_key} (TTL={ttl_seconds}s)"
-        )
+        logger.debug(f"[LegacyAdapter] Marked complete: {routing_key} (TTL={ttl_seconds}s)")
 
     async def cleanup_old_streams(
         self,

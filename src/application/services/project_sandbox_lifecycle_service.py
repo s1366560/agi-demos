@@ -145,6 +145,7 @@ class ProjectSandboxLifecycleService:
         self._auto_recover = auto_recover
         self._memory_limit_override = memory_limit_override
         self._cpu_limit_override = cpu_limit_override
+        self._background_tasks: set[asyncio.Task[Any]] = set()
 
         # Per-project locks to prevent concurrent sandbox creation for the same project
         # This ensures exactly one sandbox per project even under high concurrency
@@ -792,7 +793,9 @@ class ProjectSandboxLifecycleService:
             logger.warning(f"Could not terminate old sandbox {original_sandbox_id}: {e}")
 
         # Clear MCPApp resources so the frontend doesn't show stale READY state (D3)
-        asyncio.create_task(self._clear_mcp_app_resources(association.project_id))
+        _clear_task = asyncio.create_task(self._clear_mcp_app_resources(association.project_id))
+        self._background_tasks.add(_clear_task)
+        _clear_task.add_done_callback(self._background_tasks.discard)
 
         # Step 2: Clean up any other containers for this project (orphans)
         try:
@@ -834,12 +837,14 @@ class ProjectSandboxLifecycleService:
                 logger.warning(f"Failed to connect MCP for {instance.id}: {e}")
 
             # Reinstall child MCP servers that were configured for this project (D1)
-            asyncio.create_task(
+            _reinstall_task = asyncio.create_task(
                 self._reinstall_mcp_servers(
                     project_id=association.project_id,
                     tenant_id=association.tenant_id,
                 )
             )
+            self._background_tasks.add(_reinstall_task)
+            _reinstall_task.add_done_callback(self._background_tasks.discard)
 
             logger.info(
                 f"Recreated sandbox for project {association.project_id}: "

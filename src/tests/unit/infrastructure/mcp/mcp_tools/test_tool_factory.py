@@ -127,10 +127,12 @@ class TestBaseMCPToolAdapter:
     async def test_list_tools(self):
         """Test list_tools returns MCPTool entities."""
         adapter = ConcreteTestAdapter("test-server")
-        adapter.set_tools([
-            MCPToolSchema(name="tool1", description="First tool"),
-            MCPToolSchema(name="tool2", description="Second tool"),
-        ])
+        adapter.set_tools(
+            [
+                MCPToolSchema(name="tool1", description="First tool"),
+                MCPToolSchema(name="tool2", description="Second tool"),
+            ]
+        )
 
         tools = await adapter.list_tools()
 

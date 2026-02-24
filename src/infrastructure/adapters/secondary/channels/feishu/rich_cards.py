@@ -140,15 +140,10 @@ class RichCardBuilder:
         if url:
             elements.append(
                 {
-                    "tag": "action",
-                    "actions": [
-                        {
-                            "tag": "button",
-                            "text": {"tag": "plain_text", "content": "Download"},
-                            "type": "primary",
-                            "url": url,
-                        },
-                    ],
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "Download"},
+                    "type": "primary",
+                    "url": url,
                 }
             )
 
@@ -194,18 +189,13 @@ class RichCardBuilder:
         if retryable and conversation_id:
             elements.append(
                 {
-                    "tag": "action",
-                    "actions": [
-                        {
-                            "tag": "button",
-                            "text": {"tag": "plain_text", "content": "Retry"},
-                            "type": "primary",
-                            "value": {
-                                "action": "retry",
-                                "conversation_id": conversation_id,
-                            },
-                        },
-                    ],
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "Retry"},
+                    "type": "primary",
+                    "value": {
+                        "action": "retry",
+                        "conversation_id": conversation_id,
+                    },
                 }
             )
 

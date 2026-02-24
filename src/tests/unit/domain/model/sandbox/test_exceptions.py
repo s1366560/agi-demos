@@ -3,7 +3,6 @@
 Tests the exception hierarchy, retry logic, and serialization.
 """
 
-
 from src.domain.model.sandbox.exceptions import (
     SandboxConnectionError,
     SandboxError,

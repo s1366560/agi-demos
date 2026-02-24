@@ -15,15 +15,18 @@ class TestSandboxMCPServerToolAdapter:
         sandbox_adapter = overrides.get("sandbox_adapter", AsyncMock())
         sandbox_id = overrides.get("sandbox_id", "sandbox-1")
         server_name = overrides.get("server_name", "test-server")
-        tool_info = overrides.get("tool_info", {
-            "name": "read_file",
-            "description": "Read a file",
-            "input_schema": {
-                "type": "object",
-                "properties": {"path": {"type": "string"}},
-                "required": ["path"],
+        tool_info = overrides.get(
+            "tool_info",
+            {
+                "name": "read_file",
+                "description": "Read a file",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                    "required": ["path"],
+                },
             },
-        })
+        )
         return SandboxMCPServerToolAdapter(
             sandbox_adapter=sandbox_adapter,
             sandbox_id=sandbox_id,
@@ -61,11 +64,13 @@ class TestSandboxMCPServerToolAdapter:
         assert schema["required"] == []
 
     def test_get_parameters_schema_fills_defaults(self):
-        adapter = self._make_adapter(tool_info={
-            "name": "t",
-            "description": "d",
-            "input_schema": {"properties": {"x": {"type": "string"}}},
-        })
+        adapter = self._make_adapter(
+            tool_info={
+                "name": "t",
+                "description": "d",
+                "input_schema": {"properties": {"x": {"type": "string"}}},
+            }
+        )
         schema = adapter.get_parameters_schema()
         assert schema["type"] == "object"
         assert schema["required"] == []

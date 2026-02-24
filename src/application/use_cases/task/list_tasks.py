@@ -2,7 +2,6 @@
 Use case for listing task logs.
 """
 
-
 from pydantic import BaseModel, Field
 
 from src.domain.model.task.task_log import TaskLog

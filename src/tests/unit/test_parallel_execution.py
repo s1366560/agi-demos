@@ -122,22 +122,24 @@ class TestTaskDecomposer:
                 {
                     "function": {
                         "name": "decompose_task",
-                        "arguments": json.dumps({
-                            "subtasks": [
-                                {
-                                    "id": "t1",
-                                    "description": "Research the API",
-                                    "target_agent": "researcher",
-                                },
-                                {
-                                    "id": "t2",
-                                    "description": "Implement the code",
-                                    "target_agent": "coder",
-                                    "depends_on": ["t1"],
-                                },
-                            ],
-                            "reasoning": "Research first, then implement",
-                        }),
+                        "arguments": json.dumps(
+                            {
+                                "subtasks": [
+                                    {
+                                        "id": "t1",
+                                        "description": "Research the API",
+                                        "target_agent": "researcher",
+                                    },
+                                    {
+                                        "id": "t2",
+                                        "description": "Implement the code",
+                                        "target_agent": "coder",
+                                        "depends_on": ["t1"],
+                                    },
+                                ],
+                                "reasoning": "Research first, then implement",
+                            }
+                        ),
                     }
                 }
             ],
@@ -162,12 +164,14 @@ class TestTaskDecomposer:
                 {
                     "function": {
                         "name": "decompose_task",
-                        "arguments": json.dumps({
-                            "subtasks": [
-                                {"id": "t1", "description": "Fix the bug"},
-                            ],
-                            "reasoning": "Simple single task",
-                        }),
+                        "arguments": json.dumps(
+                            {
+                                "subtasks": [
+                                    {"id": "t1", "description": "Fix the bug"},
+                                ],
+                                "reasoning": "Simple single task",
+                            }
+                        ),
                     }
                 }
             ],
@@ -212,13 +216,14 @@ class TestTaskDecomposer:
                 {
                     "function": {
                         "name": "decompose_task",
-                        "arguments": json.dumps({
-                            "subtasks": [
-                                {"id": f"t{i}", "description": f"Task {i}"}
-                                for i in range(10)
-                            ],
-                            "reasoning": "Many tasks",
-                        }),
+                        "arguments": json.dumps(
+                            {
+                                "subtasks": [
+                                    {"id": f"t{i}", "description": f"Task {i}"} for i in range(10)
+                                ],
+                                "reasoning": "Many tasks",
+                            }
+                        ),
                     }
                 }
             ],
@@ -234,12 +239,18 @@ class TestTaskDecomposer:
                 {
                     "function": {
                         "name": "decompose_task",
-                        "arguments": json.dumps({
-                            "subtasks": [
-                                {"id": "t1", "description": "Auto task", "target_agent": "auto"},
-                            ],
-                            "reasoning": "Auto-detect agent",
-                        }),
+                        "arguments": json.dumps(
+                            {
+                                "subtasks": [
+                                    {
+                                        "id": "t1",
+                                        "description": "Auto task",
+                                        "target_agent": "auto",
+                                    },
+                                ],
+                                "reasoning": "Auto-detect agent",
+                            }
+                        ),
                     }
                 }
             ],

@@ -450,7 +450,9 @@ class TestSandboxResourceMonitoring:
         adapter._active_sandboxes["test-1"] = MCPSandboxInstance(
             id="test-1",
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(image="sandbox-mcp-server:latest", memory_limit="1g", cpu_limit="1"),
+            config=SandboxConfig(
+                image="sandbox-mcp-server:latest", memory_limit="1g", cpu_limit="1"
+            ),
             project_path="/test1",
             endpoint="ws://localhost:8765",
             created_at=now,
@@ -459,7 +461,9 @@ class TestSandboxResourceMonitoring:
         adapter._active_sandboxes["test-2"] = MCPSandboxInstance(
             id="test-2",
             status=SandboxStatus.RUNNING,
-            config=SandboxConfig(image="sandbox-mcp-server:latest", memory_limit="2g", cpu_limit="2"),
+            config=SandboxConfig(
+                image="sandbox-mcp-server:latest", memory_limit="2g", cpu_limit="2"
+            ),
             project_path="/test2",
             endpoint="ws://localhost:8766",
             created_at=now,

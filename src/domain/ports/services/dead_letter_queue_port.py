@@ -76,10 +76,7 @@ class DeadLetterMessage:
     @property
     def can_retry(self) -> bool:
         """Check if this message can be retried."""
-        return (
-            self.status == DLQMessageStatus.PENDING
-            and self.retry_count < self.max_retries
-        )
+        return self.status == DLQMessageStatus.PENDING and self.retry_count < self.max_retries
 
     @property
     def age_seconds(self) -> float:

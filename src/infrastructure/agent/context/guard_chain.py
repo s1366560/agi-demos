@@ -73,4 +73,3 @@ class ContextGuardChain:
             metadata["details"][guard.name] = guard_meta
 
         return GuardChainResult(messages=current, metadata=metadata)
-

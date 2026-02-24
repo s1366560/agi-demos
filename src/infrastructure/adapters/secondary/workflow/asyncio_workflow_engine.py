@@ -77,8 +77,7 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
                         timeout=timeout_seconds,
                     )
                 logger.warning(
-                    f"No handler registered for workflow '{workflow_name}', "
-                    f"skipping execution"
+                    f"No handler registered for workflow '{workflow_name}', skipping execution"
                 )
                 return None
 
@@ -87,9 +86,7 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
         self._manager.tasks[workflow_id] = bg_task
         bg_task._task = asyncio.create_task(bg_task.run())
 
-        logger.info(
-            f"Started workflow '{workflow_name}' id={workflow_id} run={run_id}"
-        )
+        logger.info(f"Started workflow '{workflow_name}' id={workflow_id} run={run_id}")
         return WorkflowExecution(
             workflow_id=workflow_id,
             run_id=run_id,
@@ -116,29 +113,20 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
             return {"status": "not_found"}
 
         if task._task and not task._task.done():
-            await asyncio.wait_for(
-                asyncio.shield(task._task), timeout=timeout_seconds
-            )
+            await asyncio.wait_for(asyncio.shield(task._task), timeout=timeout_seconds)
 
         return {"result": task.result, "error": task.error}
 
-    async def cancel_workflow(
-        self, workflow_id: str, reason: str | None = None
-    ) -> bool:
+    async def cancel_workflow(self, workflow_id: str, reason: str | None = None) -> bool:
         return await self._manager.cancel_task(workflow_id)
 
-    async def terminate_workflow(
-        self, workflow_id: str, reason: str | None = None
-    ) -> bool:
+    async def terminate_workflow(self, workflow_id: str, reason: str | None = None) -> bool:
         return await self._manager.cancel_task(workflow_id)
 
     async def signal_workflow(
         self, workflow_id: str, signal_name: str, payload: dict[str, Any]
     ) -> bool:
-        logger.debug(
-            f"Signal '{signal_name}' to workflow {workflow_id} "
-            f"(no-op in asyncio engine)"
-        )
+        logger.debug(f"Signal '{signal_name}' to workflow {workflow_id} (no-op in asyncio engine)")
         return True
 
     async def list_workflows(

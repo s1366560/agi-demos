@@ -1,6 +1,5 @@
 """DI sub-container for task domain."""
 
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.task_service import TaskService

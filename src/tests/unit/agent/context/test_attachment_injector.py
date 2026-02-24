@@ -9,7 +9,6 @@ Tests cover:
 - Configuration customization
 """
 
-
 from src.domain.ports.agent.context_manager_port import (
     AttachmentContent,
     AttachmentMetadata,
@@ -425,9 +424,7 @@ class TestCustomTemplate:
 
     def test_custom_context_template(self):
         """Test using custom context template."""
-        config = AttachmentInjectorConfig(
-            context_template="Files: {file_list}\n\n---\n\n"
-        )
+        config = AttachmentInjectorConfig(context_template="Files: {file_list}\n\n---\n\n")
         injector = AttachmentInjector(config)
         metadata = [
             AttachmentMetadata(
@@ -442,8 +439,7 @@ class TestCustomTemplate:
     def test_custom_file_template(self):
         """Test using custom file template."""
         config = AttachmentInjectorConfig(
-            file_template="[{filename}] -> {sandbox_path}",
-            context_template="{file_list}"
+            file_template="[{filename}] -> {sandbox_path}", context_template="{file_list}"
         )
         injector = AttachmentInjector(config)
         metadata = [

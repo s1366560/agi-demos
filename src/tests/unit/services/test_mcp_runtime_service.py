@@ -370,15 +370,13 @@ class TestMCPRuntimeService:
         sandbox_manager = SimpleNamespace(
             list_servers=AsyncMock(return_value=[]),
         )
-        
+
         # Mock Redis lock
         lock_mock = AsyncMock()
         lock_mock.acquire = AsyncMock(return_value=True)
         lock_mock.release = AsyncMock()
-        
-        redis_client = SimpleNamespace(
-            lock=lambda key, timeout: lock_mock
-        )
+
+        redis_client = SimpleNamespace(lock=lambda key, timeout: lock_mock)
 
         service = MCPRuntimeService(
             db=db,
@@ -397,22 +395,20 @@ class TestMCPRuntimeService:
 
     async def test_reconcile_project_skips_when_lock_busy(self):
         db = AsyncMock()
-        # Even if lock fails, we don't reach db/repo calls ideally, 
+        # Even if lock fails, we don't reach db/repo calls ideally,
         # but let's mock them just in case implementation changes slightly.
-        
+
         server_repo = SimpleNamespace()
         app_repo = SimpleNamespace()
         app_service = SimpleNamespace()
         sandbox_manager = SimpleNamespace()
-        
+
         # Mock Redis lock failing to acquire
         lock_mock = AsyncMock()
         lock_mock.acquire = AsyncMock(return_value=False)
         lock_mock.release = AsyncMock()
-        
-        redis_client = SimpleNamespace(
-            lock=lambda key, timeout: lock_mock
-        )
+
+        redis_client = SimpleNamespace(lock=lambda key, timeout: lock_mock)
 
         service = MCPRuntimeService(
             db=db,
@@ -429,15 +425,15 @@ class TestMCPRuntimeService:
         assert result.project_id == "proj-1"
         assert result.total_enabled_servers == 0
         assert result.restored == 0
-        
+
         # Lock acquired failed, so body skipped
         assert lock_mock.acquire.await_count == 1
-        # Release shouldn't be called if acquire returns False in our implementation 
+        # Release shouldn't be called if acquire returns False in our implementation
         # (because we raise RuntimeError in _lock which is caught)
         # Wait, looking at _lock implementation:
         # if not acquired: raise RuntimeError("Lock ... busy")
         # Except block catches RuntimeError if "Lock" in str(e)
-        
+
         # Release is in finally block of context manager, but we don't enter yield if not acquired.
         # So release is NOT called.
         assert lock_mock.release.await_count == 0

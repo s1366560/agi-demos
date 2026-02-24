@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_background_tasks: set[asyncio.Task[Any]] = set()
+
 
 class AgentRuntimeBootstrapper:
     """Handles Ray/Local runtime initialization for agent execution."""
@@ -149,7 +151,9 @@ class AgentRuntimeBootstrapper:
                         exc_info=True,
                     )
 
-            asyncio.create_task(_fire_and_forget_ray())
+            task = asyncio.create_task(_fire_and_forget_ray())
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
             logger.info(
                 "[AgentService] Using Ray Actor (AGENT_RUNTIME_MODE=%s) for conversation %s",
                 runtime_mode,
@@ -214,7 +218,9 @@ class AgentRuntimeBootstrapper:
     def _schedule_local_chat_cleanup(cls, conversation_id: str, task: asyncio.Task[Any]) -> None:
         """Schedule async cleanup for tracked local task."""
         try:
-            asyncio.create_task(cls._cleanup_local_chat_task(conversation_id, task))
+            task = asyncio.create_task(cls._cleanup_local_chat_task(conversation_id, task))
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
         except RuntimeError:
             # Event loop closed; best-effort direct cleanup.
             if cls._local_chat_tasks.get(conversation_id) is task:

@@ -196,9 +196,7 @@ class EventRouter:
         """
         try:
             self._handlers.remove(registration)
-            logger.debug(
-                f"[EventRouter] Unregistered handler '{registration.name}'"
-            )
+            logger.debug(f"[EventRouter] Unregistered handler '{registration.name}'")
             return True
         except ValueError:
             return False
@@ -216,9 +214,7 @@ class EventRouter:
         self._handlers = [h for h in self._handlers if h.pattern != pattern]
         removed = original_count - len(self._handlers)
         if removed:
-            logger.debug(
-                f"[EventRouter] Unregistered {removed} handlers for pattern '{pattern}'"
-            )
+            logger.debug(f"[EventRouter] Unregistered {removed} handlers for pattern '{pattern}'")
         return removed
 
     async def route(self, event: EventWithMetadata) -> RoutingResult:
@@ -234,9 +230,7 @@ class EventRouter:
         matching_handlers = self._get_matching_handlers(event)
 
         if not matching_handlers:
-            logger.debug(
-                f"[EventRouter] No handlers for {event.routing_key}"
-            )
+            logger.debug(f"[EventRouter] No handlers for {event.routing_key}")
             self._metrics.no_handler_count += 1
             return result
 
@@ -246,7 +240,7 @@ class EventRouter:
                 f"[EventRouter] Truncating handlers for {event.routing_key} "
                 f"({len(matching_handlers)} -> {self._max_handlers})"
             )
-            matching_handlers = matching_handlers[:self._max_handlers]
+            matching_handlers = matching_handlers[: self._max_handlers]
 
         # Execute handlers
         if self._parallel:
@@ -295,9 +289,7 @@ class EventRouter:
                 await registration.handler(event)
                 result.handlers_invoked += 1
             except Exception as e:
-                logger.error(
-                    f"[EventRouter] Handler '{registration.name}' failed: {e}"
-                )
+                logger.error(f"[EventRouter] Handler '{registration.name}' failed: {e}")
                 result.errors.append((registration.name, e))
                 if not self._continue_on_error:
                     break
@@ -323,9 +315,7 @@ class EventRouter:
                 await task
                 result.handlers_invoked += 1
             except Exception as e:
-                logger.error(
-                    f"[EventRouter] Handler '{registration.name}' failed: {e}"
-                )
+                logger.error(f"[EventRouter] Handler '{registration.name}' failed: {e}")
                 result.errors.append((registration.name, e))
 
     async def _safe_invoke(

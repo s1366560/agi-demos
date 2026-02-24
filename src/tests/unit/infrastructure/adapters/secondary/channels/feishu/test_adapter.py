@@ -281,9 +281,11 @@ async def test_connect_raises_when_websocket_thread_not_alive(
     adapter._ws_thread = _DeadThread()
     adapter._ws_ready.set()
 
-    with patch.object(adapter, "_connect_websocket", new=AsyncMock()):
-        with pytest.raises(RuntimeError, match="failed to stay alive"):
-            await adapter.connect()
+    with (
+        patch.object(adapter, "_connect_websocket", new=AsyncMock()),
+        pytest.raises(RuntimeError, match="failed to stay alive"),
+    ):
+        await adapter.connect()
 
     assert adapter.connected is False
 

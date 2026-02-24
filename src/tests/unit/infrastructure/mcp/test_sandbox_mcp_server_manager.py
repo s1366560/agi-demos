@@ -165,10 +165,12 @@ class TestSandboxMCPServerManager:
 
     async def test_list_servers(self):
         mgr, resource = self._make_manager()
-        resource.execute_tool.return_value = self._tool_result([
-            {"name": "server1", "server_type": "stdio", "status": "running", "pid": 100},
-            {"name": "server2", "server_type": "sse", "status": "stopped"},
-        ])
+        resource.execute_tool.return_value = self._tool_result(
+            [
+                {"name": "server1", "server_type": "stdio", "status": "running", "pid": 100},
+                {"name": "server2", "server_type": "sse", "status": "stopped"},
+            ]
+        )
 
         servers = await mgr.list_servers(project_id="proj-1")
 
@@ -180,14 +182,14 @@ class TestSandboxMCPServerManager:
 
     async def test_parse_tool_result_json(self):
         mgr, _ = self._make_manager()
-        result = mgr._parse_tool_result({
-            "content": [{"type": "text", "text": '{"key": "value"}'}]
-        })
+        result = mgr._parse_tool_result({"content": [{"type": "text", "text": '{"key": "value"}'}]})
         assert result == {"key": "value"}
 
     async def test_parse_tool_result_plain_text(self):
         mgr, _ = self._make_manager()
-        result = mgr._parse_tool_result({
-            "content": [{"type": "text", "text": "just plain text"}]
-        })
-        assert result == {"success": False, "error": "just plain text", "raw_output": "just plain text"}
+        result = mgr._parse_tool_result({"content": [{"type": "text", "text": "just plain text"}]})
+        assert result == {
+            "success": False,
+            "error": "just plain text",
+            "raw_output": "just plain text",
+        }

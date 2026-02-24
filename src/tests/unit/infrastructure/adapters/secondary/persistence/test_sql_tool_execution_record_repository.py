@@ -50,7 +50,9 @@ class TestSqlToolExecutionRecordRepositoryCreate:
         assert result.status == "pending"
 
     @pytest.mark.asyncio
-    async def test_save_updates_existing(self, v2_tool_record_repo: SqlToolExecutionRecordRepository):
+    async def test_save_updates_existing(
+        self, v2_tool_record_repo: SqlToolExecutionRecordRepository
+    ):
         """Test saving updates an existing record."""
         record = ToolExecutionRecord(
             id="record-update-1",
@@ -112,7 +114,9 @@ class TestSqlToolExecutionRecordRepositoryFind:
         assert result.tool_name == "search"
 
     @pytest.mark.asyncio
-    async def test_find_by_id_not_found(self, v2_tool_record_repo: SqlToolExecutionRecordRepository):
+    async def test_find_by_id_not_found(
+        self, v2_tool_record_repo: SqlToolExecutionRecordRepository
+    ):
         """Test finding a non-existent record returns None."""
         result = await v2_tool_record_repo.find_by_id("non-existent")
         assert result is None
@@ -172,7 +176,9 @@ class TestSqlToolExecutionRecordRepositoryFind:
         assert results[2].sequence_number == 2
 
     @pytest.mark.asyncio
-    async def test_list_by_conversation(self, v2_tool_record_repo: SqlToolExecutionRecordRepository):
+    async def test_list_by_conversation(
+        self, v2_tool_record_repo: SqlToolExecutionRecordRepository
+    ):
         """Test listing records by conversation ID."""
         for i in range(3):
             record = ToolExecutionRecord(
@@ -239,7 +245,9 @@ class TestSqlToolExecutionRecordRepositoryDelete:
     """Tests for deleting records."""
 
     @pytest.mark.asyncio
-    async def test_delete_by_conversation(self, v2_tool_record_repo: SqlToolExecutionRecordRepository):
+    async def test_delete_by_conversation(
+        self, v2_tool_record_repo: SqlToolExecutionRecordRepository
+    ):
         """Test deleting records by conversation ID."""
         for i in range(3):
             record = ToolExecutionRecord(

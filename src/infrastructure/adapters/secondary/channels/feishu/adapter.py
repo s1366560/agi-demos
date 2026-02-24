@@ -20,6 +20,8 @@ from src.domain.model.channels.message import (
 
 logger = logging.getLogger(__name__)
 
+_ws_bg_tasks: set[asyncio.Task[Any]] = set()
+
 MessageHandler = Callable[[Message], None]
 ErrorHandler = Callable[[Exception], None]
 
@@ -240,7 +242,9 @@ class FeishuAdapter:
                     raise
 
             self._ws_ready.set()
-            ws_loop.create_task(self._ws_client._ping_loop())
+            _ws_ping_task = ws_loop.create_task(self._ws_client._ping_loop())
+            _ws_bg_tasks.add(_ws_ping_task)
+            _ws_ping_task.add_done_callback(_ws_bg_tasks.discard)
             ws_loop.run_until_complete(ws_client_module._select())
         except Exception as e:
             self._ws_start_error = e
@@ -424,7 +428,7 @@ class FeishuAdapter:
             responder = HITLChannelResponder()
             try:
                 loop = asyncio.get_running_loop()
-                loop.create_task(
+                _hitl_task = loop.create_task(
                     responder.respond(
                         request_id=hitl_request_id,
                         hitl_type=hitl_type,
@@ -434,6 +438,8 @@ class FeishuAdapter:
                         responder_id=user_id,
                     )
                 )
+                _ws_bg_tasks.add(_hitl_task)
+                _hitl_task.add_done_callback(_ws_bg_tasks.discard)
             except RuntimeError:
                 logger.warning("[Feishu] No running event loop for card action")
 

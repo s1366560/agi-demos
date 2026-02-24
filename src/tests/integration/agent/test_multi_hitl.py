@@ -55,10 +55,7 @@ class MultiHITLTester:
             return False
 
     async def receive_events_until(
-        self, 
-        target_events: list[str], 
-        timeout: float = 60.0,
-        max_events: int = 1000
+        self, target_events: list[str], timeout: float = 60.0, max_events: int = 1000
     ) -> list[dict[str, Any]]:
         """Receive events until target event or timeout."""
         events = []
@@ -73,12 +70,14 @@ class MultiHITLTester:
                     self.events_log.append(data)
 
                     event_type = data.get("type", "unknown")
-                    
+
                     # Log important events
                     if event_type in ["clarification_asked", "decision_asked", "env_var_requested"]:
                         self.hitl_count += 1
                         request_id = data.get("data", {}).get("request_id")
-                        print(f"      >>> HITL #{self.hitl_count} detected: {event_type} / {request_id}")
+                        print(
+                            f"      >>> HITL #{self.hitl_count} detected: {event_type} / {request_id}"
+                        )
                     elif event_type in ["complete", "error"]:
                         print(f"      >>> {event_type.upper()} event received")
 
@@ -150,30 +149,40 @@ class MultiHITLTester:
             "Then, should I optimize for speed or accuracy? "
             "Please guide me through this step by step."
         )
-        await self.ws.send(json.dumps({
-            "type": "send_message",
-            "conversation_id": self.conversation_id,
-            "message": message,
-            "project_id": self.project_id,
-        }))
+        await self.ws.send(
+            json.dumps(
+                {
+                    "type": "send_message",
+                    "conversation_id": self.conversation_id,
+                    "message": message,
+                    "project_id": self.project_id,
+                }
+            )
+        )
 
         # Step 3: Handle multiple HITL cycles
         print("\n[Step 3] Handling HITL cycles...")
-        
+
         cycle = 0
         while cycle < self.max_hitls:
             cycle += 1
             print(f"\n   --- HITL Cycle #{cycle} ---")
-            
+
             # Wait for HITL request or completion
             events = await self.receive_events_until(
-                target_events=["clarification_asked", "decision_asked", "env_var_requested", "complete", "error"],
-                timeout=60.0
+                target_events=[
+                    "clarification_asked",
+                    "decision_asked",
+                    "env_var_requested",
+                    "complete",
+                    "error",
+                ],
+                timeout=60.0,
             )
 
             # Check what happened
             event_types = [e.get("type") for e in events]
-            
+
             if "error" in event_types:
                 error_event = [e for e in events if e.get("type") == "error"][-1]
                 print(f"   ✗ Error during cycle #{cycle}: {error_event.get('data', {})}")
@@ -202,7 +211,7 @@ class MultiHITLTester:
             hitl_type = hitl_event.get("type").replace("_asked", "").replace("_requested", "")
             request_id = hitl_event.get("data", {}).get("request_id")
             question = hitl_event.get("data", {}).get("question", "")
-            
+
             print(f"   HITL type: {hitl_type}")
             print(f"   Question: {question[:80]}...")
 
@@ -238,13 +247,13 @@ class MultiHITLTester:
         print("=" * 70)
         print(f"Total HITL interactions: {self.hitl_count}")
         print(f"Total events received: {len(self.events_log)}")
-        
+
         # Count event types
         event_type_counts = {}
         for e in self.events_log:
             et = e.get("type", "unknown")
             event_type_counts[et] = event_type_counts.get(et, 0) + 1
-        
+
         print("\nEvent type breakdown:")
         for et, count in sorted(event_type_counts.items(), key=lambda x: -x[1]):
             print(f"  {et}: {count}")
@@ -292,6 +301,7 @@ async def main():
     except Exception as e:
         print(f"\n✗ TEST ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
     finally:

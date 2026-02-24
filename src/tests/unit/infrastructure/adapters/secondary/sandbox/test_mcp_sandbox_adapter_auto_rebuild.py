@@ -211,23 +211,24 @@ class TestSandboxAutoRebuild:
                 mcp_client=mock_mcp_client,
             )
 
-            with patch.object(adapter, "create_sandbox", return_value=new_instance):
-                with patch.object(adapter, "connect_mcp", return_value=True):
-                    mock_mcp_client.call_tool.return_value = MagicMock(
-                        content=[{"type": "text", "text": "Success after rebuild"}],
-                        isError=False,
-                    )
+            with (
+                patch.object(adapter, "create_sandbox", return_value=new_instance),
+                patch.object(adapter, "connect_mcp", return_value=True),
+            ):
+                mock_mcp_client.call_tool.return_value = MagicMock(
+                    content=[{"type": "text", "text": "Success after rebuild"}],
+                    isError=False,
+                )
+                # Act: Call tool on stopped container
+                await adapter.call_tool(
+                    sandbox_id=sandbox_id,
+                    tool_name="read",
+                    arguments={"file_path": "/workspace/test.txt"},
+                )
 
-                    # Act: Call tool on stopped container
-                    await adapter.call_tool(
-                        sandbox_id=sandbox_id,
-                        tool_name="read",
-                        arguments={"file_path": "/workspace/test.txt"},
-                    )
-
-                    # Assert: Should have attempted to create new sandbox
-                    # Note: This will fail until we implement the fix
-                    # For now, we expect the function to handle it gracefully
+                # Assert: Should have attempted to create new sandbox
+                # Note: This will fail until we implement the fix
+                # For now, we expect the function to handle it gracefully
 
     @pytest.mark.asyncio
     async def test_health_check_returns_false_for_dead_container(self, adapter, mock_docker):
@@ -601,25 +602,22 @@ class TestSandboxSyncFromDocker:
             return await original_sync(self)
 
         # Patch sync_from_docker to track calls
-        with patch.object(MCPSandboxAdapter, "sync_from_docker", tracking_sync):
+        with (
+            patch.object(MCPSandboxAdapter, "sync_from_docker", tracking_sync),
             # Act: Create adapter (should trigger sync)
-            with patch(
+            patch(
                 "src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter.docker.from_env",
                 return_value=mock_docker,
-            ):
-                adapter = MCPSandboxAdapter()
-
-                # Note: sync_from_docker is async and would need to be awaited
-                # For now, we verify it exists and can be called
-                assert hasattr(adapter, "sync_from_docker"), (
-                    "Adapter should have sync_from_docker method"
-                )
-
-                # Verify sync_from_docker can be called successfully
-                count = await adapter.sync_from_docker()
-
-                # Assert: Should have found the existing container
-                assert count >= 0, "sync_from_docker should return a count"
+            ),
+        ):
+            adapter = MCPSandboxAdapter()
+            # For now, we verify it exists and can be called
+            assert hasattr(adapter, "sync_from_docker"), (
+                "Adapter should have sync_from_docker method"
+            )
+            # Verify sync_from_docker can be called successfully
+            count = await adapter.sync_from_docker()
+            assert count >= 0, "sync_from_docker should return a count"
 
     @pytest.mark.asyncio
     async def test_sync_from_docker_populates_active_sandboxes(self, adapter, mock_docker):

@@ -16,10 +16,11 @@ from src.infrastructure.agent.config import ExecutionConfig
 
 class ExecutionPath(Enum):
     """Possible execution paths for a request."""
-    DIRECT_SKILL = "direct_skill"      # Execute skill directly without LLM
-    SUBAGENT = "subagent"              # Route to specialized sub-agent
-    PLAN_MODE = "plan_mode"            # Use planning mode
-    REACT_LOOP = "react_loop"          # Standard ReAct reasoning loop
+
+    DIRECT_SKILL = "direct_skill"  # Execute skill directly without LLM
+    SUBAGENT = "subagent"  # Route to specialized sub-agent
+    PLAN_MODE = "plan_mode"  # Use planning mode
+    REACT_LOOP = "react_loop"  # Standard ReAct reasoning loop
 
 
 @dataclass
@@ -289,7 +290,12 @@ class ExecutionRouter:
             return False
 
         skill = self._skill_matcher.match(message, context)
-        return skill is not None and self._skill_matcher.can_execute_directly(skill) and self._calculate_skill_confidence(message, skill, context) >= self._config.skill_match_threshold
+        return (
+            skill is not None
+            and self._skill_matcher.can_execute_directly(skill)
+            and self._calculate_skill_confidence(message, skill, context)
+            >= self._config.skill_match_threshold
+        )
 
     def get_routing_summary(self, decisions: list[RoutingDecision]) -> dict[str, Any]:
         """Get summary statistics for routing decisions.

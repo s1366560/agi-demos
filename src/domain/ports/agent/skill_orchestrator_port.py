@@ -158,9 +158,7 @@ class SkillOrchestratorPort(Protocol):
         """
         ...
 
-    async def execute_stream(
-        self, request: SkillExecutionRequest
-    ) -> AsyncIterator[dict[str, Any]]:
+    async def execute_stream(self, request: SkillExecutionRequest) -> AsyncIterator[dict[str, Any]]:
         """
         Execute a skill with streaming output.
 

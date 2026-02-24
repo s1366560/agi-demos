@@ -76,15 +76,76 @@ def sample_image_base64():
     # 1x1 red PNG
     png_bytes = bytes(
         [
-            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-            0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
-            0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,
-            0x54, 0x08, 0xD7, 0x63, 0xF8, 0xCF, 0xC0, 0x00,
-            0x00, 0x00, 0x03, 0x00, 0x01, 0x00, 0x05, 0xFE,
-            0xD4, 0xEF, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45,
-            0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+            0x89,
+            0x50,
+            0x4E,
+            0x47,
+            0x0D,
+            0x0A,
+            0x1A,
+            0x0A,
+            0x00,
+            0x00,
+            0x00,
+            0x0D,
+            0x49,
+            0x48,
+            0x44,
+            0x52,
+            0x00,
+            0x00,
+            0x00,
+            0x01,
+            0x00,
+            0x00,
+            0x00,
+            0x01,
+            0x08,
+            0x02,
+            0x00,
+            0x00,
+            0x00,
+            0x90,
+            0x77,
+            0x53,
+            0xDE,
+            0x00,
+            0x00,
+            0x00,
+            0x0C,
+            0x49,
+            0x44,
+            0x41,
+            0x54,
+            0x08,
+            0xD7,
+            0x63,
+            0xF8,
+            0xCF,
+            0xC0,
+            0x00,
+            0x00,
+            0x00,
+            0x03,
+            0x00,
+            0x01,
+            0x00,
+            0x05,
+            0xFE,
+            0xD4,
+            0xEF,
+            0x00,
+            0x00,
+            0x00,
+            0x00,
+            0x49,
+            0x45,
+            0x4E,
+            0x44,
+            0xAE,
+            0x42,
+            0x60,
+            0x82,
         ]
     )
     return base64.b64encode(png_bytes).decode("ascii")
@@ -167,9 +228,7 @@ class TestArtifactExtractionResult:
     def test_has_artifacts_true(self):
         """Test has_artifacts when artifacts present."""
         result = ArtifactExtractionResult(
-            artifacts=[
-                ArtifactData(content=b"test", filename="test.txt", mime_type="text/plain")
-            ]
+            artifacts=[ArtifactData(content=b"test", filename="test.txt", mime_type="text/plain")]
         )
         assert result.has_artifacts is True
 
@@ -408,9 +467,7 @@ class TestProcessWithService:
     ):
         """Test that process creates artifacts via service."""
         result = {
-            "content": [
-                {"type": "image", "data": sample_image_base64, "mimeType": "image/png"}
-            ]
+            "content": [{"type": "image", "data": sample_image_base64, "mimeType": "image/png"}]
         }
 
         events = []
@@ -429,9 +486,7 @@ class TestProcessWithService:
     async def test_process_without_service(self, extractor, valid_context, sample_image_base64):
         """Test that process skips when no service configured."""
         result = {
-            "content": [
-                {"type": "image", "data": sample_image_base64, "mimeType": "image/png"}
-            ]
+            "content": [{"type": "image", "data": sample_image_base64, "mimeType": "image/png"}]
         }
 
         events = []
@@ -442,15 +497,11 @@ class TestProcessWithService:
 
         assert len(events) == 0
 
-    async def test_process_with_invalid_context(
-        self, extractor_with_service, sample_image_base64
-    ):
+    async def test_process_with_invalid_context(self, extractor_with_service, sample_image_base64):
         """Test that process skips with invalid context."""
         invalid_context = ExtractionContext(project_id="", tenant_id="")
         result = {
-            "content": [
-                {"type": "image", "data": sample_image_base64, "mimeType": "image/png"}
-            ]
+            "content": [{"type": "image", "data": sample_image_base64, "mimeType": "image/png"}]
         }
 
         events = []
@@ -471,9 +522,7 @@ class TestProcessWithService:
 
         assert len(events) == 0
 
-    async def test_process_no_artifacts_in_result(
-        self, extractor_with_service, valid_context
-    ):
+    async def test_process_no_artifacts_in_result(self, extractor_with_service, valid_context):
         """Test processing result with no artifacts."""
         result = {"content": [{"type": "text", "text": "Just text"}]}
 
@@ -576,9 +625,7 @@ class TestEdgeCases:
     def test_extract_only_method(self, extractor, sample_image_base64):
         """Test extract_only for preview/testing."""
         result = {
-            "content": [
-                {"type": "image", "data": sample_image_base64, "mimeType": "image/png"}
-            ]
+            "content": [{"type": "image", "data": sample_image_base64, "mimeType": "image/png"}]
         }
 
         extraction = extractor.extract_only(result, "test")
@@ -590,9 +637,7 @@ class TestEdgeCases:
     def test_invalid_base64_handling(self, extractor):
         """Test handling of invalid base64 data."""
         result = {
-            "content": [
-                {"type": "image", "data": "not-valid-base64!!!", "mimeType": "image/png"}
-            ]
+            "content": [{"type": "image", "data": "not-valid-base64!!!", "mimeType": "image/png"}]
         }
 
         extraction = extractor.extract_only(result, "test")
@@ -626,9 +671,7 @@ class TestEdgeCases:
         )
 
         result = {
-            "content": [
-                {"type": "image", "data": sample_image_base64, "mimeType": "image/png"}
-            ]
+            "content": [{"type": "image", "data": sample_image_base64, "mimeType": "image/png"}]
         }
 
         events = []

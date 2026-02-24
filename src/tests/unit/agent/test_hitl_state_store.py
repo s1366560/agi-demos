@@ -291,7 +291,7 @@ class TestHITLStateStore:
         """Test that save generates correct keys."""
         # We need to verify that both main key and request key are set
         redis = state_store._redis
-        
+
         await state_store.save_state(sample_state)
 
         # Should have called setex twice (main key + request key)

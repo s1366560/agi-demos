@@ -1,7 +1,5 @@
 """DI sub-container for infrastructure services."""
 
-
-
 from __future__ import annotations
 
 from typing import Any
@@ -24,7 +22,7 @@ class InfraContainer:
         self,
         redis_client: redis.Redis | None = None,
         workflow_engine: WorkflowEnginePort | None = None,
-        settings: Settings | None=None,
+        settings: Settings | None = None,
     ) -> None:
         self._redis_client = redis_client
         self._workflow_engine = workflow_engine

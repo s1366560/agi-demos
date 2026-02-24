@@ -34,9 +34,7 @@ class TestEdgeCases:
 
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.side_effect = RuntimeError("Server error")
 
             prompts = await client.list_prompts()
@@ -51,9 +49,7 @@ class TestEdgeCases:
 
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = None
 
             prompt = await client.get_prompt("test", {})
@@ -67,9 +63,7 @@ class TestEdgeCases:
 
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.side_effect = ConnectionError("Connection lost")
 
             result = await client.subscribe_resource("file:///test.txt")
@@ -83,9 +77,7 @@ class TestEdgeCases:
 
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.side_effect = Exception("Unexpected error")
 
             result = await client.unsubscribe_resource("file:///test.txt")
@@ -99,9 +91,7 @@ class TestEdgeCases:
 
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.side_effect = Exception("Unexpected error")
 
             result = await client.ping()
@@ -115,9 +105,7 @@ class TestEdgeCases:
 
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.side_effect = Exception("Unexpected error")
 
             result = await client.set_logging_level("debug")
@@ -153,9 +141,7 @@ class TestEdgeCases:
             "messages": [],
         }
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = mock_response
 
             prompt = await client.get_prompt("test", {})
@@ -177,9 +163,7 @@ class TestEdgeCases:
             "messages": [],
         }
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = mock_response
 
             _prompt = await client.get_prompt("test", None)
@@ -208,18 +192,22 @@ class TestEdgeCases:
         client.on_progress = on_progress
 
         # Send resource update
-        await client._handle_message({
-            "jsonrpc": "2.0",
-            "method": "notifications/resources/updated",
-            "params": {"uri": "file:///test.txt"},
-        })
+        await client._handle_message(
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/resources/updated",
+                "params": {"uri": "file:///test.txt"},
+            }
+        )
 
         # Send progress update
-        await client._handle_message({
-            "jsonrpc": "2.0",
-            "method": "notifications/progress",
-            "params": {"progress": 50},
-        })
+        await client._handle_message(
+            {
+                "jsonrpc": "2.0",
+                "method": "notifications/progress",
+                "params": {"progress": 50},
+            }
+        )
 
         # Verify correct handlers called
         assert len(resource_updates) == 1
@@ -234,9 +222,7 @@ class TestEdgeCases:
 
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {}
 
             result = await client.ping(timeout=120)
@@ -253,9 +239,7 @@ class TestEdgeCases:
 
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {}
 
             result = await client.subscribe_resource("file:///test.txt", timeout=45)
@@ -288,9 +272,7 @@ class TestPingMechanism:
         client._ws = mock_ws
 
         # Mock _send_request to return success
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {}  # Ping returns empty result
 
             result = await client.ping()
@@ -307,9 +289,7 @@ class TestPingMechanism:
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
         # Mock _send_request to return None (timeout)
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = None
 
             result = await client.ping()
@@ -336,9 +316,7 @@ class TestPingMechanism:
         client = MCPSubprocessClient(command="test")
 
         # Mock _send_request to return success
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {"result": {}}
 
             result = await client.ping()
@@ -355,9 +333,7 @@ class TestPingMechanism:
         client = MCPSubprocessClient(command="test")
 
         # Mock _send_request to return None (timeout)
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = None
 
             result = await client.ping()
@@ -396,9 +372,7 @@ class TestPromptsAPI:
             ]
         }
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = mock_response
 
             prompts = await client.list_prompts()
@@ -424,9 +398,7 @@ class TestPromptsAPI:
             ],
         }
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = mock_response
 
             prompt = await client.get_prompt("code_review", {"code": "def foo(): pass"})
@@ -445,9 +417,7 @@ class TestPromptsAPI:
 
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {"prompts": []}
 
             prompts = await client.list_prompts()
@@ -475,9 +445,7 @@ class TestResourceSubscriptions:
         mock_ws.closed = False
         client._ws = mock_ws
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {}  # Success
 
             result = await client.subscribe_resource("file:///path/to/file.txt")
@@ -501,9 +469,7 @@ class TestResourceSubscriptions:
         mock_ws.closed = False
         client._ws = mock_ws
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {}  # Success
 
             result = await client.unsubscribe_resource("file:///path/to/file.txt")
@@ -636,9 +602,7 @@ class TestLogging:
         mock_ws.closed = False
         client._ws = mock_ws
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {}  # Success
 
             result = await client.set_logging_level("debug")
@@ -662,9 +626,7 @@ class TestLogging:
         mock_ws.closed = False
         client._ws = mock_ws
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.side_effect = RuntimeError("Invalid log level")
 
             result = await client.set_logging_level("invalid")
@@ -793,9 +755,7 @@ class TestSampling:
             "id": 123,
             "method": "sampling/createMessage",
             "params": {
-                "messages": [
-                    {"role": "user", "content": {"type": "text", "text": "Hello"}}
-                ],
+                "messages": [{"role": "user", "content": {"type": "text", "text": "Hello"}}],
                 "modelPreferences": {
                     "hints": [{"name": "claude"}],
                     "costPriority": 0.5,
@@ -831,9 +791,7 @@ class TestSampling:
             "id": 123,
             "method": "sampling/createMessage",
             "params": {
-                "messages": [
-                    {"role": "user", "content": {"type": "text", "text": "Hello"}}
-                ],
+                "messages": [{"role": "user", "content": {"type": "text", "text": "Hello"}}],
             },
         }
 
@@ -872,9 +830,7 @@ class TestSampling:
             "id": 456,
             "method": "sampling/createMessage",
             "params": {
-                "messages": [
-                    {"role": "user", "content": {"type": "text", "text": "Hello"}}
-                ],
+                "messages": [{"role": "user", "content": {"type": "text", "text": "Hello"}}],
             },
         }
 
@@ -917,9 +873,7 @@ class TestSampling:
             "id": 789,
             "method": "sampling/createMessage",
             "params": {
-                "messages": [
-                    {"role": "user", "content": {"type": "text", "text": "Hello"}}
-                ],
+                "messages": [{"role": "user", "content": {"type": "text", "text": "Hello"}}],
                 "maxTokens": 50,
             },
         }
@@ -1289,9 +1243,7 @@ class TestCompletion:
         mock_ws.closed = False
         client._ws = mock_ws
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {
                 "completion": {
                     "values": ["option1", "option2", "option3"],
@@ -1323,9 +1275,7 @@ class TestCompletion:
 
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {
                 "completion": {
                     "values": ["file1.txt", "file2.txt"],
@@ -1348,9 +1298,7 @@ class TestCompletion:
 
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.side_effect = Exception("Server error")
 
             result = await client.complete(
@@ -1367,9 +1315,7 @@ class TestCompletion:
 
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {
                 "completion": {
                     "values": ["contextual_suggestion"],
@@ -1562,9 +1508,7 @@ class TestPhase2EdgeCases:
 
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.return_value = {"completion": {"values": []}}
 
             await client.complete(
@@ -1624,9 +1568,7 @@ class TestPhase2EdgeCases:
 
         client = MCPWebSocketClient(url="ws://localhost:8765")
 
-        with patch.object(
-            client, "_send_request", new_callable=AsyncMock
-        ) as mock_send:
+        with patch.object(client, "_send_request", new_callable=AsyncMock) as mock_send:
             mock_send.side_effect = Exception("Network error")
 
             result = await client.complete(

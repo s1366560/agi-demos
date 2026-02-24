@@ -90,9 +90,7 @@ class MessageProtocol(Protocol):
         """Add reasoning content."""
         ...
 
-    def add_tool_call(
-        self, call_id: str, tool: str, input: dict[str, Any]
-    ) -> "ToolPartProtocol":
+    def add_tool_call(self, call_id: str, tool: str, input: dict[str, Any]) -> "ToolPartProtocol":
         """Add a tool call and return the tool part."""
         ...
 
@@ -327,10 +325,7 @@ class LLMInvoker:
 
             except Exception as e:
                 # Check if retryable
-                if (
-                    self._retry_policy.is_retryable(e)
-                    and attempt < config.max_attempts
-                ):
+                if self._retry_policy.is_retryable(e) and attempt < config.max_attempts:
                     attempt += 1
                     delay_ms = self._retry_policy.calculate_delay(attempt, e)
 

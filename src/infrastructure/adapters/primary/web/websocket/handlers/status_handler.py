@@ -45,9 +45,7 @@ class SubscribeStatusHandler(WebSocketMessageHandler):
                 )
             )
 
-            await context.connection_manager.subscribe_status(
-                context.session_id, project_id, task
-            )
+            await context.connection_manager.subscribe_status(context.session_id, project_id, task)
             await context.send_ack("subscribe_status", project_id=project_id)
 
         except Exception as e:

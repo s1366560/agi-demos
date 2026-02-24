@@ -210,7 +210,9 @@ class TestSqlProjectRepositoryFind:
         assert retrieved is None
 
     @pytest.mark.asyncio
-    async def test_find_by_id_empty_string_raises_error(self, v2_project_repo: SqlProjectRepository):
+    async def test_find_by_id_empty_string_raises_error(
+        self, v2_project_repo: SqlProjectRepository
+    ):
         """Test that empty ID raises ValueError."""
         with pytest.raises(ValueError, match="ID cannot be empty"):
             await v2_project_repo.find_by_id("")

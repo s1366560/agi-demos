@@ -52,7 +52,9 @@ class TestSqlExecutionCheckpointRepositoryCreate:
         assert retrieved.execution_state == {"step": 1, "data": "test"}
 
     @pytest.mark.asyncio
-    async def test_save_without_message_id(self, v2_checkpoint_repo: SqlExecutionCheckpointRepository):
+    async def test_save_without_message_id(
+        self, v2_checkpoint_repo: SqlExecutionCheckpointRepository
+    ):
         """Test saving a checkpoint without message_id."""
         checkpoint = ExecutionCheckpoint(
             id="ckpt-no-msg-1",
@@ -95,7 +97,9 @@ class TestSqlExecutionCheckpointRepositoryFind:
         assert retrieved.execution_state == {"index": 2}
 
     @pytest.mark.asyncio
-    async def test_get_latest_none_when_empty(self, v2_checkpoint_repo: SqlExecutionCheckpointRepository):
+    async def test_get_latest_none_when_empty(
+        self, v2_checkpoint_repo: SqlExecutionCheckpointRepository
+    ):
         """Test getting latest checkpoint returns None when no checkpoints exist."""
         retrieved = await v2_checkpoint_repo.get_latest("conv-empty")
         assert retrieved is None
@@ -122,7 +126,9 @@ class TestSqlExecutionCheckpointRepositoryFind:
         assert llm_checkpoints[0].checkpoint_type == "llm_complete"
 
     @pytest.mark.asyncio
-    async def test_get_by_type_with_limit(self, v2_checkpoint_repo: SqlExecutionCheckpointRepository):
+    async def test_get_by_type_with_limit(
+        self, v2_checkpoint_repo: SqlExecutionCheckpointRepository
+    ):
         """Test getting checkpoints with a limit."""
         # Create 5 checkpoints
         for i in range(5):
@@ -146,7 +152,9 @@ class TestSqlExecutionCheckpointRepositoryDelete:
     """Tests for deleting checkpoints."""
 
     @pytest.mark.asyncio
-    async def test_delete_by_conversation(self, v2_checkpoint_repo: SqlExecutionCheckpointRepository):
+    async def test_delete_by_conversation(
+        self, v2_checkpoint_repo: SqlExecutionCheckpointRepository
+    ):
         """Test deleting all checkpoints for a conversation."""
         # Create checkpoints
         for i in range(3):
@@ -178,7 +186,9 @@ class TestSqlExecutionCheckpointRepositoryToDomain:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_to_domain_handles_empty_state(self, v2_checkpoint_repo: SqlExecutionCheckpointRepository):
+    async def test_to_domain_handles_empty_state(
+        self, v2_checkpoint_repo: SqlExecutionCheckpointRepository
+    ):
         """Test that _to_domain handles empty execution_state."""
         checkpoint = ExecutionCheckpoint(
             id="ckpt-empty-state",

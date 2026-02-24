@@ -123,9 +123,7 @@ class TestWebSocketClientLockOptimization:
 
         # Total time should be ~0.05s (parallel sends), not ~0.10s (serial sends)
         # Allow some margin for test overhead
-        assert total_time < 0.10, (
-            f"Sends took {total_time:.2f}s - likely serialized by lock"
-        )
+        assert total_time < 0.10, f"Sends took {total_time:.2f}s - likely serialized by lock"
 
     @pytest.mark.asyncio
     async def test_concurrent_sends_dont_block_on_id_generation(self):

@@ -36,6 +36,7 @@ from src.infrastructure.agent.hitl.state_store import HITLAgentState, HITLStateS
 from src.infrastructure.agent.state.agent_worker_state import get_redis_client
 
 logger = logging.getLogger(__name__)
+_background_tasks: set[asyncio.Task[Any]] = set()
 
 # Flush accumulated events to DB every N seconds during streaming,
 # so they survive service restarts.
@@ -136,9 +137,11 @@ async def execute_project_chat(
                 _resource_html = event_data.get("resource_html", "")
                 _resource_uri = event_data.get("resource_uri", "")
                 if _app_id and _resource_html:
-                    asyncio.create_task(
+                    _save_task = asyncio.create_task(
                         _save_mcp_app_html(_app_id, _resource_uri, _resource_html)
                     )
+                    _background_tasks.add(_save_task)
+                    _save_task.add_done_callback(_background_tasks.discard)
 
             now = time_module.time()
             if now - last_refresh > 60:
@@ -551,8 +554,7 @@ async def _persist_events(
         has_text_end_messages = False
         async with async_session_factory() as session, session.begin():
             existing_assistant_result = await session.execute(
-                select(AgentExecutionEvent.event_data)
-                .where(
+                select(AgentExecutionEvent.event_data).where(
                     AgentExecutionEvent.conversation_id == conversation_id,
                     AgentExecutionEvent.message_id == message_id,
                     AgentExecutionEvent.event_type == "assistant_message",

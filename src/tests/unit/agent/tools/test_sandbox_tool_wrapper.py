@@ -29,12 +29,7 @@ class TestSandboxMCPToolWrapper:
             "description": "Execute bash commands",
             "input_schema": {
                 "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "Command to execute"
-                    }
-                },
+                "properties": {"command": {"type": "string", "description": "Command to execute"}},
                 "required": ["command"],
             },
         }
@@ -130,9 +125,7 @@ class TestSandboxMCPToolWrapper:
             "description": "Tool with optional params",
             "input_schema": {
                 "type": "object",
-                "properties": {
-                    "optional": {"type": "string"}
-                },
+                "properties": {"optional": {"type": "string"}},
             },
         }
 

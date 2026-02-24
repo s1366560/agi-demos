@@ -165,6 +165,7 @@ class TestResourcePool:
     async def test_remove_resource(self) -> None:
         """Should remove a resource from the pool."""
         cleanup_called = []
+
         def cleanup(r):
             cleanup_called.append(r)
 
@@ -187,6 +188,7 @@ class TestResourcePool:
     async def test_remove_in_use_resource(self) -> None:
         """Should remove resource even if in use."""
         cleanup_called = []
+
         def cleanup(r):
             cleanup_called.append(r)
 
@@ -209,6 +211,7 @@ class TestResourcePool:
     async def test_close_pool(self) -> None:
         """Should close pool and cleanup all resources."""
         cleanup_called = []
+
         def cleanup(r):
             cleanup_called.append(r)
 
@@ -261,11 +264,13 @@ class TestResourcePool:
     async def test_validate_unhealthy_resource(self) -> None:
         """Should recreate unhealthy resources."""
         create_count = [0]
+
         def factory():
             create_count[0] += 1
             return {"data": "value", "id": create_count[0]}
 
         healthy = [True]
+
         def validate(r):
             return healthy[0]
 
@@ -319,6 +324,7 @@ class TestResourcePool:
     @pytest.mark.asyncio
     async def test_cleanup_exception_logged(self) -> None:
         """Should log cleanup exceptions without raising."""
+
         def bad_cleanup(r):
             raise RuntimeError("Cleanup failed!")
 

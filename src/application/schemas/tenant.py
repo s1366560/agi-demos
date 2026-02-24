@@ -9,9 +9,7 @@ class TenantCreate(BaseModel):
     """Request model for creating a tenant."""
 
     name: str = Field(..., description="Tenant name", min_length=1, max_length=255)
-    description: str | None = Field(
-        default=None, description="Tenant description", max_length=1000
-    )
+    description: str | None = Field(default=None, description="Tenant description", max_length=1000)
     plan: str = Field(default="free", description="Tenant plan")
     max_projects: int = Field(default=3, ge=1, le=100, description="Maximum number of projects")
     max_users: int = Field(default=10, ge=1, le=1000, description="Maximum number of users")
@@ -34,12 +32,8 @@ class TenantCreate(BaseModel):
 class TenantUpdate(BaseModel):
     """Request model for updating a tenant."""
 
-    name: str | None = Field(
-        default=None, description="Tenant name", min_length=1, max_length=255
-    )
-    description: str | None = Field(
-        default=None, description="Tenant description", max_length=1000
-    )
+    name: str | None = Field(default=None, description="Tenant name", min_length=1, max_length=255)
+    description: str | None = Field(default=None, description="Tenant description", max_length=1000)
     plan: str | None = Field(default=None, description="Tenant plan")
     max_projects: int | None = Field(
         default=None, ge=1, le=100, description="Maximum number of projects"

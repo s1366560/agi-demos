@@ -8,7 +8,6 @@ Tests the retry mechanism with:
 - Jitter for thundering herd prevention
 """
 
-
 import contextlib
 
 import pytest
@@ -86,6 +85,7 @@ class TestRetryWithBackoff:
 
     async def test_success_on_first_attempt(self):
         """Test successful execution on first attempt."""
+
         async def success_func():
             return "success"
 
@@ -111,6 +111,7 @@ class TestRetryWithBackoff:
 
     async def test_max_retries_exceeded(self):
         """Test that MaxRetriesExceededError is raised after max retries."""
+
         async def failing_func():
             raise ConnectionError("Always fails")
 
@@ -144,6 +145,7 @@ class TestRetryWithBackoff:
         async def record_delays():
             nonlocal attempt, total_time
             import time
+
             before = time.time()
             attempt += 1
             if attempt < 4:
@@ -192,6 +194,7 @@ class TestRetryWithBackoff:
 
         async def record_delays(delays_list):
             import time
+
             for _ in range(5):
                 before = time.time()
                 with contextlib.suppress(MaxRetriesExceededError):
@@ -212,6 +215,7 @@ class TestRetryWithBackoff:
 
     async def test_custom_transient_check(self):
         """Test custom transient error detection."""
+
         def is_custom_transient(error):
             return isinstance(error, RuntimeError) and "transient" in str(error).lower()
 
@@ -277,6 +281,7 @@ class TestRetryWithBackoff:
 
     async def test_negative_base_delay(self):
         """Test that negative base_delay is treated as 0."""
+
         async def success_func():
             return "success"
 
@@ -286,6 +291,7 @@ class TestRetryWithBackoff:
 
     async def test_return_value_preserved(self):
         """Test that return value is preserved through retries."""
+
         async def return_complex_value():
             return {"key": "value", "nested": {"a": 1}}
 
@@ -295,6 +301,7 @@ class TestRetryWithBackoff:
 
     async def test_exception_with_custom_attributes(self):
         """Test that exception attributes are preserved."""
+
         class CustomError(Exception):
             def __init__(self, message, code) -> None:
                 super().__init__(message)
@@ -324,6 +331,7 @@ class TestRetryDecorator:
 
     async def test_decorator_success(self):
         """Test decorator on successful function."""
+
         @retry_decorator(max_retries=3, base_delay=0.01)
         async def my_function():
             return "success"
@@ -351,6 +359,7 @@ class TestRetryDecorator:
 
     async def test_decorator_with_args(self):
         """Test decorator preserves function arguments."""
+
         @retry_decorator(max_retries=2, base_delay=0.01)
         async def greet(name, greeting="Hello"):
             return f"{greeting}, {name}!"
@@ -361,6 +370,7 @@ class TestRetryDecorator:
 
     async def test_decorator_with_kwargs(self):
         """Test decorator preserves keyword arguments."""
+
         @retry_decorator(max_retries=2, base_delay=0.01)
         async def calculate(a, b, operation="add"):
             if operation == "add":
@@ -373,6 +383,7 @@ class TestRetryDecorator:
 
     async def test_decorator_on_method(self):
         """Test decorator on class method."""
+
         class MyClass:
             def __init__(self) -> None:
                 self.attempts = 0
@@ -392,6 +403,7 @@ class TestRetryDecorator:
 
     async def test_decorator_preserves_docstring(self):
         """Test that decorator preserves function docstring."""
+
         @retry_decorator(max_retries=2)
         async def documented_function():
             """This is a documented function."""
@@ -401,6 +413,7 @@ class TestRetryDecorator:
 
     async def test_decorator_preserves_name(self):
         """Test that decorator preserves function name."""
+
         @retry_decorator(max_retries=2)
         async def named_function():
             return "success"
@@ -409,6 +422,7 @@ class TestRetryDecorator:
 
     async def test_decorator_with_sync_function(self):
         """Test decorator with sync function (should wrap in async)."""
+
         # Note: The decorator expects async functions.
         # For sync functions, make them async or call in an async context
         @retry_decorator(max_retries=2, base_delay=0.01)
@@ -422,6 +436,7 @@ class TestRetryDecorator:
 
     async def test_decorator_max_retries_parameter(self):
         """Test decorator with different max_retries values."""
+
         @retry_decorator(max_retries=1, base_delay=0.01)
         async def low_retry():
             raise ConnectionError("Failed")

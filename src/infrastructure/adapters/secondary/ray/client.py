@@ -42,6 +42,7 @@ async def init_ray_if_needed() -> bool:
 
         # TCP pre-check to avoid hanging on ray.init()
         from src.infrastructure.adapters.secondary.ray import _check_ray_reachable
+
         reachable = await asyncio.get_running_loop().run_in_executor(
             None, _check_ray_reachable, settings.ray_address, 3
         )

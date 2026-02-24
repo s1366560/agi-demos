@@ -116,9 +116,7 @@ class TestSkillResourceInjector:
         assert mock_sandbox_adapter.call_tool.call_count == 0
 
     @pytest.mark.asyncio
-    async def test_inject_skill_handles_write_error(
-        self, resource_loader: SkillResourceLoader
-    ):
+    async def test_inject_skill_handles_write_error(self, resource_loader: SkillResourceLoader):
         """Test injection handles write errors gracefully."""
         # Mock adapter that returns error
         mock_adapter = AsyncMock()

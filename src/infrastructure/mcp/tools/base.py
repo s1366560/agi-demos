@@ -71,7 +71,9 @@ class BaseMCPToolAdapter(ABC):
 
             # Validate tool exists if cache is populated
             if self._tools_cache and tool_name not in self._tools_cache:
-                return MCPToolResult.error(f"Tool '{tool_name}' not found on server '{self._server_name}'")
+                return MCPToolResult.error(
+                    f"Tool '{tool_name}' not found on server '{self._server_name}'"
+                )
 
             # Execute through transport-specific implementation
             result = await self._execute_tool_internal(tool_name, arguments, timeout_ms)

@@ -26,8 +26,8 @@ class TestHITLCardBuilder:
         assert card["schema"] == "2.0"
         assert card["header"]["template"] == "blue"
         assert card["header"]["title"]["content"] == "Agent needs clarification"
-        assert len(card["body"]["elements"]) == 2
-        actions = card["body"]["elements"][1]["actions"]
+        assert len(card["body"]["elements"]) == 3
+        actions = card["body"]["elements"][1:]
         assert len(actions) == 2
         assert actions[0]["value"]["hitl_request_id"] == "req-1"
         assert actions[0]["value"]["response_data"] == json.dumps({"answer": "Postgres"})
@@ -86,7 +86,7 @@ class TestHITLCardBuilder:
         assert card["schema"] == "2.0"
         assert card["header"]["template"] == "red"
         assert card["header"]["title"]["content"] == "Permission Request"
-        actions = card["body"]["elements"][1]["actions"]
+        actions = card["body"]["elements"][1:]
         assert len(actions) == 2
         assert actions[0]["text"]["content"] == "Allow"
         assert actions[0]["type"] == "primary"
@@ -140,7 +140,7 @@ class TestHITLCardBuilder:
             {"question": "Pick", "options": [f"opt{i}" for i in range(10)]},
         )
         assert card is not None
-        actions = card["body"]["elements"][1]["actions"]
+        actions = card["body"]["elements"][1:]
         assert len(actions) == 5  # Max 5 buttons
 
     def test_dict_options(self, builder: HITLCardBuilder) -> None:
@@ -156,7 +156,7 @@ class TestHITLCardBuilder:
             },
         )
         assert card is not None
-        actions = card["body"]["elements"][1]["actions"]
+        actions = card["body"]["elements"][1:]
         assert actions[0]["text"]["content"] == "Option A"
         assert actions[0]["value"]["response_data"] == json.dumps({"answer": "a"})
 
@@ -168,7 +168,7 @@ class TestHITLCardBuilder:
             {"question": "Which?", "options": ["A", "B"]},
         )
         assert card is not None
-        actions = card["body"]["elements"][1]["actions"]
+        actions = card["body"]["elements"][1:]
         for action in actions:
             assert action["value"]["hitl_type"] == "decision"
 
@@ -180,7 +180,7 @@ class TestHITLCardBuilder:
             {"tool_name": "terminal"},
         )
         assert card is not None
-        actions = card["body"]["elements"][1]["actions"]
+        actions = card["body"]["elements"][1:]
         assert actions[0]["value"]["hitl_type"] == "permission"
         assert actions[1]["value"]["hitl_type"] == "permission"
 

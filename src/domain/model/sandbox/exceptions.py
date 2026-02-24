@@ -107,8 +107,7 @@ class SandboxStateTransitionError(SandboxError):
         allowed_transitions: dict[str, set] | None = None,
     ) -> None:
         message = (
-            f"Invalid state transition for sandbox {sandbox_id}: "
-            f"{current_state} -> {target_state}"
+            f"Invalid state transition for sandbox {sandbox_id}: {current_state} -> {target_state}"
         )
         super().__init__(message, sandbox_id, "transition")
         self.current_state = current_state

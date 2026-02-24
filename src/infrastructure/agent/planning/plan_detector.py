@@ -8,12 +8,32 @@ logger = logging.getLogger(__name__)
 
 # Keywords that suggest a complex task needing planning
 _COMPLEX_KEYWORDS = [
-    "refactor", "redesign", "implement", "migrate", "upgrade",
-    "重构", "重新设计", "实现", "迁移", "升级",
-    "add feature", "new feature", "build", "create system",
-    "添加功能", "新功能", "构建", "创建系统",
-    "integrate", "optimize", "overhaul", "architecture",
-    "集成", "优化", "全面改造", "架构",
+    "refactor",
+    "redesign",
+    "implement",
+    "migrate",
+    "upgrade",
+    "重构",
+    "重新设计",
+    "实现",
+    "迁移",
+    "升级",
+    "add feature",
+    "new feature",
+    "build",
+    "create system",
+    "添加功能",
+    "新功能",
+    "构建",
+    "创建系统",
+    "integrate",
+    "optimize",
+    "overhaul",
+    "architecture",
+    "集成",
+    "优化",
+    "全面改造",
+    "架构",
 ]
 
 # Patterns that indicate multi-step work
@@ -66,9 +86,7 @@ class PlanDetector:
             reasons.append(f"complexity keywords ({keyword_matches})")
 
         # Check for multi-step patterns
-        pattern_matches = sum(
-            1 for p in _MULTI_STEP_PATTERNS if re.search(p, query, re.IGNORECASE)
-        )
+        pattern_matches = sum(1 for p in _MULTI_STEP_PATTERNS if re.search(p, query, re.IGNORECASE))
         if pattern_matches > 0:
             pattern_score = min(pattern_matches * 0.15, 0.3)
             score += pattern_score

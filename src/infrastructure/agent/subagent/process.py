@@ -147,12 +147,15 @@ class SubAgentProcess:
         )
 
         # Emit subagent_started event
-        yield self._make_event("subagent_started", {
-            "subagent_id": self._subagent.id,
-            "subagent_name": self._subagent.display_name,
-            "task": self._context.task_description[:200],
-            "model": self._model,
-        })
+        yield self._make_event(
+            "subagent_started",
+            {
+                "subagent_id": self._subagent.id,
+                "subagent_name": self._subagent.display_name,
+                "task": self._context.task_description[:200],
+                "model": self._model,
+            },
+        )
 
         try:
             # Run the independent ReAct loop
@@ -187,11 +190,14 @@ class SubAgentProcess:
             success = False
             error_msg = str(e)
 
-            yield self._make_event("subagent_failed", {
-                "subagent_id": self._subagent.id,
-                "subagent_name": self._subagent.display_name,
-                "error": error_msg,
-            })
+            yield self._make_event(
+                "subagent_failed",
+                {
+                    "subagent_id": self._subagent.id,
+                    "subagent_name": self._subagent.display_name,
+                    "error": error_msg,
+                },
+            )
 
         finally:
             end_time = time.time()
@@ -252,9 +258,7 @@ class SubAgentProcess:
                 "subagent_id": self._subagent.id,
                 "subagent_name": self._subagent.display_name,
             },
-            "timestamp": event_dict.get(
-                "timestamp", datetime.now(UTC).isoformat()
-            ),
+            "timestamp": event_dict.get("timestamp", datetime.now(UTC).isoformat()),
         }
 
     def _make_event(self, event_type: str, data: dict[str, Any]) -> dict[str, Any]:
@@ -293,6 +297,6 @@ class SubAgentProcess:
         cut_point = max(last_period, last_newline)
 
         if cut_point > max_length // 2:
-            return truncated[:cut_point + 1].strip()
+            return truncated[: cut_point + 1].strip()
 
         return truncated.strip() + "..."

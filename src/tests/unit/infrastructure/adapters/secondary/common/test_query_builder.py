@@ -14,11 +14,13 @@ from sqlalchemy.sql import Select
 
 class Base(DeclarativeBase):
     """Test base for SQLAlchemy models."""
+
     pass
 
 
 class TestModel(Base):
     """Test SQLAlchemy model."""
+
     __tablename__ = "test_entities"
 
     id = Column(String, primary_key=True)
@@ -31,6 +33,7 @@ class TestModel(Base):
 @dataclass
 class FilterOptions:
     """Filter options for testing."""
+
     tenant_id: str | None = None
     status: str | None = None
     name_contains: str | None = None
@@ -46,6 +49,7 @@ class TestQueryBuilder:
         from src.infrastructure.adapters.secondary.common.query_builder import (
             QueryBuilder,
         )
+
         assert QueryBuilder is not None
 
     # === TEST: Initialization ===

@@ -67,7 +67,9 @@ class TestSqlAgentExecutionRepositoryCreate:
         assert retrieved.metadata == {"meta": "data"}
 
     @pytest.mark.asyncio
-    async def test_save_with_minimal_fields(self, v2_agent_execution_repo: SqlAgentExecutionRepository):
+    async def test_save_with_minimal_fields(
+        self, v2_agent_execution_repo: SqlAgentExecutionRepository
+    ):
         """Test saving an execution with only required fields."""
         execution = AgentExecution(
             id="exec-minimal",
@@ -101,7 +103,9 @@ class TestSqlAgentExecutionRepositoryUpdate:
     """Tests for updating existing executions."""
 
     @pytest.mark.asyncio
-    async def test_update_existing_execution(self, v2_agent_execution_repo: SqlAgentExecutionRepository):
+    async def test_update_existing_execution(
+        self, v2_agent_execution_repo: SqlAgentExecutionRepository
+    ):
         """Test updating an existing execution."""
         # Create initial execution
         execution = AgentExecution(
@@ -279,7 +283,9 @@ class TestSqlAgentExecutionRepositoryFind:
         assert all(e.conversation_id == "conv-1" for e in executions)
 
     @pytest.mark.asyncio
-    async def test_list_by_conversation_with_limit(self, v2_agent_execution_repo: SqlAgentExecutionRepository):
+    async def test_list_by_conversation_with_limit(
+        self, v2_agent_execution_repo: SqlAgentExecutionRepository
+    ):
         """Test listing executions by conversation with limit."""
         # Create 5 executions
         for i in range(5):
@@ -309,7 +315,9 @@ class TestSqlAgentExecutionRepositoryDelete:
     """Tests for deleting executions."""
 
     @pytest.mark.asyncio
-    async def test_delete_by_conversation(self, v2_agent_execution_repo: SqlAgentExecutionRepository):
+    async def test_delete_by_conversation(
+        self, v2_agent_execution_repo: SqlAgentExecutionRepository
+    ):
         """Test deleting all executions for a conversation."""
         # Create executions
         for i in range(3):
@@ -342,7 +350,9 @@ class TestSqlAgentExecutionRepositoryToDomain:
     """Tests for _to_domain conversion."""
 
     @pytest.mark.asyncio
-    async def test_to_domain_converts_all_fields(self, v2_agent_execution_repo: SqlAgentExecutionRepository):
+    async def test_to_domain_converts_all_fields(
+        self, v2_agent_execution_repo: SqlAgentExecutionRepository
+    ):
         """Test that _to_domain correctly converts all DB fields."""
         execution = AgentExecution(
             id="exec-domain-1",
@@ -374,7 +384,9 @@ class TestSqlAgentExecutionRepositoryToDomain:
         assert retrieved.tool_output == "Domain output"
         assert retrieved.metadata == {"domain": "metadata"}
 
-    def test_to_domain_with_none_db_model(self, v2_agent_execution_repo: SqlAgentExecutionRepository):
+    def test_to_domain_with_none_db_model(
+        self, v2_agent_execution_repo: SqlAgentExecutionRepository
+    ):
         """Test that _to_domain returns None for None input."""
         result = v2_agent_execution_repo._to_domain(None)
         assert result is None
@@ -440,7 +452,9 @@ class TestSqlAgentExecutionRepositoryEdgeCases:
         assert retrieved.tool_input == {} or retrieved.tool_input is None
 
     @pytest.mark.asyncio
-    async def test_status_enum_conversion(self, v2_agent_execution_repo: SqlAgentExecutionRepository):
+    async def test_status_enum_conversion(
+        self, v2_agent_execution_repo: SqlAgentExecutionRepository
+    ):
         """Test that status enum is correctly converted."""
         for status in ExecutionStatus:
             execution = AgentExecution(

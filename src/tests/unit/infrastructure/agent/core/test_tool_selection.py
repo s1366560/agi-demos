@@ -197,9 +197,7 @@ class TestToolRelevanceScoring:
         tool.description = "This tool sends emails to users"
 
         context = MagicMock()
-        context.conversation_history = [
-            {"role": "user", "content": "I need to send an email"}
-        ]
+        context.conversation_history = [{"role": "user", "content": "I need to send an email"}]
 
         score = selector.score_tool_relevance(tool, context)
 

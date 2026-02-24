@@ -56,7 +56,9 @@ class TestMCPServerRegistryPingHealthCheck:
         # list_tools should NOT be called
         mock_client_with_ping.list_tools.assert_not_called()
 
-    async def test_health_check_ping_returns_false_on_failure(self, registry, mock_client_with_ping):
+    async def test_health_check_ping_returns_false_on_failure(
+        self, registry, mock_client_with_ping
+    ):
         """Test that health check returns False when ping fails."""
         # Configure ping to return False
         mock_client_with_ping.ping.return_value = False
@@ -167,7 +169,9 @@ class TestMCPServerRegistryLoggingControl:
         result = await registry.set_server_logging_level("nonexistent", "debug")
         assert result is False
 
-    async def test_set_server_logging_level_handles_exception(self, registry, mock_client_with_logging):
+    async def test_set_server_logging_level_handles_exception(
+        self, registry, mock_client_with_logging
+    ):
         """Test that set_server_logging_level handles exceptions."""
         # Configure to raise exception
         mock_client_with_logging.set_logging_level.side_effect = RuntimeError("Failed")
@@ -179,19 +183,32 @@ class TestMCPServerRegistryLoggingControl:
         result = await registry.set_server_logging_level("test-server", "debug")
         assert result is False
 
-    async def test_set_server_logging_level_validates_level(self, registry, mock_client_with_logging):
+    async def test_set_server_logging_level_validates_level(
+        self, registry, mock_client_with_logging
+    ):
         """Test that set_server_logging_level validates logging level."""
         # Register the mock client
         registry._clients["test-server"] = mock_client_with_logging
 
         # Valid levels should work
-        for level in ["debug", "info", "notice", "warning", "error", "critical", "alert", "emergency"]:
+        for level in [
+            "debug",
+            "info",
+            "notice",
+            "warning",
+            "error",
+            "critical",
+            "alert",
+            "emergency",
+        ]:
             mock_client_with_logging.set_logging_level.reset_mock()
             result = await registry.set_server_logging_level("test-server", level)
             assert result is True
             mock_client_with_logging.set_logging_level.assert_called_once_with(level)
 
-    async def test_set_server_logging_level_rejects_invalid_level(self, registry, mock_client_with_logging):
+    async def test_set_server_logging_level_rejects_invalid_level(
+        self, registry, mock_client_with_logging
+    ):
         """Test that set_server_logging_level rejects invalid level."""
         # Register the mock client
         registry._clients["test-server"] = mock_client_with_logging

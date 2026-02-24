@@ -93,6 +93,7 @@ class TestDistributedTransactionCoordinatorImport:
         from src.infrastructure.graph.distributed_transaction_coordinator import (
             DistributedTransactionCoordinator,
         )
+
         assert DistributedTransactionCoordinator is not None
 
 
@@ -247,9 +248,7 @@ class TestRollbackHandling:
         )
 
         # Make Neo4j commit fail
-        mock_neo4j_client._mock_tx.commit = MagicMock(
-            side_effect=Exception("Neo4j commit failed")
-        )
+        mock_neo4j_client._mock_tx.commit = MagicMock(side_effect=Exception("Neo4j commit failed"))
 
         with pytest.raises(Exception, match="Neo4j commit failed"):
             async with coordinator.begin() as tx:
@@ -320,9 +319,7 @@ class TestPartialFailureScenarios:
         mock_pg_session.commit = AsyncMock()
 
         # Neo4j fails after PostgreSQL commit
-        mock_neo4j_client._mock_tx.commit = MagicMock(
-            side_effect=Exception("Neo4j unavailable")
-        )
+        mock_neo4j_client._mock_tx.commit = MagicMock(side_effect=Exception("Neo4j unavailable"))
 
         with pytest.raises(Exception, match="Neo4j unavailable"):
             async with coordinator.begin() as tx:
@@ -351,9 +348,7 @@ class TestPartialFailureScenarios:
         mock_pg_session.commit = AsyncMock()
 
         # Redis fails
-        mock_redis_client.pipeline().execute = AsyncMock(
-            side_effect=Exception("Redis unavailable")
-        )
+        mock_redis_client.pipeline().execute = AsyncMock(side_effect=Exception("Redis unavailable"))
 
         # Should not raise - Redis failures are non-critical
         async with coordinator.begin() as tx:
@@ -516,9 +511,7 @@ class TestCompensatingTransactions:
         mock_pg_session.commit = AsyncMock()
 
         # Neo4j fails
-        mock_neo4j_client._mock_tx.commit = MagicMock(
-            side_effect=Exception("Neo4j failed")
-        )
+        mock_neo4j_client._mock_tx.commit = MagicMock(side_effect=Exception("Neo4j failed"))
 
         episode_id = str(uuid4())
 
@@ -577,9 +570,7 @@ class TestNativeGraphAdapterIntegration:
     """Tests for integration with NativeGraphAdapter."""
 
     @pytest.mark.asyncio
-    async def test_adapter_has_set_transaction_coordinator_method(
-        self, mock_neo4j_client
-    ):
+    async def test_adapter_has_set_transaction_coordinator_method(self, mock_neo4j_client):
         """Test NativeGraphAdapter has set_transaction_coordinator method."""
         from src.infrastructure.graph.native_graph_adapter import NativeGraphAdapter
 
@@ -635,9 +626,7 @@ class TestEdgeCases:
         mock_pg_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_none_optional_clients_handled_gracefully(
-        self, mock_pg_session
-    ):
+    async def test_none_optional_clients_handled_gracefully(self, mock_pg_session):
         """Test coordinator works with optional Neo4j/Redis clients."""
         from src.infrastructure.graph.distributed_transaction_coordinator import (
             DistributedTransactionCoordinator,
@@ -657,9 +646,7 @@ class TestEdgeCases:
         mock_pg_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_nested_context_managers_supported(
-        self, mock_pg_session, mock_neo4j_client
-    ):
+    async def test_nested_context_managers_supported(self, mock_pg_session, mock_neo4j_client):
         """Test nested distributed transaction context managers."""
         from src.infrastructure.graph.distributed_transaction_coordinator import (
             DistributedTransactionCoordinator,

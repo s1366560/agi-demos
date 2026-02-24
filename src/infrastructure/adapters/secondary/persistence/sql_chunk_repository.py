@@ -157,9 +157,7 @@ class SqlChunkRepository:
             if not keywords:
                 keywords = [query.strip()]
             # Build OR-based ILIKE conditions for each keyword
-            conditions = " OR ".join(
-                f"content ILIKE :kw{i}" for i in range(len(keywords))
-            )
+            conditions = " OR ".join(f"content ILIKE :kw{i}" for i in range(len(keywords)))
             params = {f"kw{i}": f"%{kw}%" for i, kw in enumerate(keywords)}
             params["project_id"] = project_id
             params["limit"] = limit

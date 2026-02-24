@@ -119,9 +119,7 @@ class LLMInvokerPort(Protocol):
                 return LLMInvocationResult(...)
     """
 
-    async def invoke_stream(
-        self, request: LLMInvocationRequest
-    ) -> AsyncIterator[StreamChunk]:
+    async def invoke_stream(self, request: LLMInvocationRequest) -> AsyncIterator[StreamChunk]:
         """
         Invoke LLM with streaming response.
 

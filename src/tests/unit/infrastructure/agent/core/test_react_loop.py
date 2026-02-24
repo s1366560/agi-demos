@@ -86,11 +86,13 @@ class MockToolExecutor:
         call_id: str,
         context: dict[str, Any] | None = None,
     ) -> AsyncIterator[AgentDomainEvent]:
-        self._executed_tools.append({
-            "name": tool_name,
-            "args": tool_args,
-            "call_id": call_id,
-        })
+        self._executed_tools.append(
+            {
+                "name": tool_name,
+                "args": tool_args,
+                "call_id": call_id,
+            }
+        )
         for event in self._events_to_yield:
             yield event
 
@@ -374,9 +376,7 @@ class TestLoopExecution:
     async def test_run_emits_start_event(self, loop, sample_messages, sample_tools, context):
         """Test that run emits start event."""
         # Set up LLM to return completion (no tool calls → COMPLETE)
-        loop._llm_invoker.set_events([
-            make_thought('{"goal_achieved": true, "reason": "done"}')
-        ])
+        loop._llm_invoker.set_events([make_thought('{"goal_achieved": true, "reason": "done"}')])
 
         events = []
         async for event in loop.run(sample_messages, sample_tools, context):
@@ -386,9 +386,7 @@ class TestLoopExecution:
 
     async def test_run_emits_complete_event(self, loop, sample_messages, sample_tools, context):
         """Test that run emits complete event on success."""
-        loop._llm_invoker.set_events([
-            make_thought('{"goal_achieved": true, "reason": "done"}')
-        ])
+        loop._llm_invoker.set_events([make_thought('{"goal_achieved": true, "reason": "done"}')])
 
         events = []
         async for event in loop.run(sample_messages, sample_tools, context):
@@ -402,14 +400,14 @@ class TestLoopExecution:
         config.max_steps = 3
 
         invoker = MockLLMInvoker()
-        invoker.set_events([
-            AgentActEvent(tool_name="search", tool_input={}, call_id="1"),
-        ])
+        invoker.set_events(
+            [
+                AgentActEvent(tool_name="search", tool_input={}, call_id="1"),
+            ]
+        )
 
         executor = MockToolExecutor()
-        executor.set_events([
-            AgentObserveEvent(tool_name="search", result="done", call_id="1")
-        ])
+        executor.set_events([AgentObserveEvent(tool_name="search", result="done", call_id="1")])
 
         loop = ReActLoop(
             llm_invoker=invoker,
@@ -422,8 +420,7 @@ class TestLoopExecution:
             events.append(event)
 
         assert any(
-            e.event_type == AgentEventType.ERROR and "Maximum steps" in e.message
-            for e in events
+            e.event_type == AgentEventType.ERROR and "Maximum steps" in e.message for e in events
         )
 
     async def test_run_handles_abort(self, loop, sample_messages, sample_tools, context):
@@ -432,17 +429,14 @@ class TestLoopExecution:
         abort_event.set()  # Already aborted
 
         loop.set_abort_event(abort_event)
-        loop._llm_invoker.set_events([
-            make_thought("should not run")
-        ])
+        loop._llm_invoker.set_events([make_thought("should not run")])
 
         events = []
         async for event in loop.run(sample_messages, sample_tools, context):
             events.append(event)
 
         assert any(
-            e.event_type == AgentEventType.ERROR and "aborted" in e.message.lower()
-            for e in events
+            e.event_type == AgentEventType.ERROR and "aborted" in e.message.lower() for e in events
         )
 
     async def test_run_no_progress_goal_false_emits_goal_error(
@@ -450,9 +444,7 @@ class TestLoopExecution:
     ):
         """No tool calls + goal_achieved=false should stop with GOAL_NOT_ACHIEVED."""
         invoker = MockLLMInvoker()
-        invoker.set_events(
-            [make_thought('{"goal_achieved": false, "reason": "work remains"}')]
-        )
+        invoker.set_events([make_thought('{"goal_achieved": false, "reason": "work remains"}')])
         loop = ReActLoop(
             llm_invoker=invoker,
             tool_executor=MockToolExecutor(),
@@ -464,8 +456,7 @@ class TestLoopExecution:
             events.append(event)
 
         assert any(
-            e.event_type == AgentEventType.ERROR and e.code == "GOAL_NOT_ACHIEVED"
-            for e in events
+            e.event_type == AgentEventType.ERROR and e.code == "GOAL_NOT_ACHIEVED" for e in events
         )
 
 
@@ -487,12 +478,16 @@ class TestToolExecution:
         self, loop, mock_tool_executor, sample_messages, sample_tools, context
     ):
         """Test that tool calls are executed."""
-        loop._llm_invoker.set_events([
-            AgentActEvent(tool_name="search", tool_input={"query": "test"}, call_id="call-1"),
-        ])
-        mock_tool_executor.set_events([
-            AgentObserveEvent(tool_name="search", result="found", call_id="call-1"),
-        ])
+        loop._llm_invoker.set_events(
+            [
+                AgentActEvent(tool_name="search", tool_input={"query": "test"}, call_id="call-1"),
+            ]
+        )
+        mock_tool_executor.set_events(
+            [
+                AgentObserveEvent(tool_name="search", result="found", call_id="call-1"),
+            ]
+        )
 
         # Make loop complete after one tool execution
         loop._llm_invoker._events_to_yield = [
@@ -523,9 +518,11 @@ class TestDoomLoopDetection:
         mock_doom_loop_detector.set_detect_loop(True)
 
         invoker = MockLLMInvoker()
-        invoker.set_events([
-            AgentActEvent(tool_name="search", tool_input={}, call_id="1"),
-        ])
+        invoker.set_events(
+            [
+                AgentActEvent(tool_name="search", tool_input={}, call_id="1"),
+            ]
+        )
 
         executor = MockToolExecutor()
         executor.set_events([])

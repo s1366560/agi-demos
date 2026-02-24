@@ -234,7 +234,9 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
     return container.sandbox_adapter()
 
 
-def get_lifecycle_service(request: Request, db: AsyncSession=Depends(get_db)) -> ProjectSandboxLifecycleService:
+def get_lifecycle_service(
+    request: Request, db: AsyncSession = Depends(get_db)
+) -> ProjectSandboxLifecycleService:
     """Get the project sandbox lifecycle service.
 
     Uses the properly initialized container from app.state which has
@@ -255,7 +257,7 @@ def get_lifecycle_service(request: Request, db: AsyncSession=Depends(get_db)) ->
 
 
 def get_lifecycle_service_for_websocket(
-    websocket: WebSocket, db: AsyncSession=Depends(get_db)
+    websocket: WebSocket, db: AsyncSession = Depends(get_db)
 ) -> ProjectSandboxLifecycleService:
     """Get the project sandbox lifecycle service for WebSocket endpoints.
 

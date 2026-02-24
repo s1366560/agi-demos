@@ -41,7 +41,9 @@ class MockLockHandle:
 
 # Patch paths for imports inside the function
 REPO_PATCH_PATH = "src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository.SqlMCPServerRepository"
-SESSION_FACTORY_PATCH_PATH = "src.infrastructure.adapters.secondary.persistence.database.async_session_factory"
+SESSION_FACTORY_PATCH_PATH = (
+    "src.infrastructure.adapters.secondary.persistence.database.async_session_factory"
+)
 
 
 class TestAutoRestoreMCPServersWithLock:
@@ -301,9 +303,7 @@ class TestAutoRestoreMCPServersWithLock:
             _auto_restore_mcp_servers,
         )
 
-        db_servers = [
-            MockMCPServer(id="server-1", name="my-server", project_id="proj-123")
-        ]
+        db_servers = [MockMCPServer(id="server-1", name="my-server", project_id="proj-123")]
 
         # Track lock key used
         lock_keys_used = []
@@ -353,9 +353,7 @@ class TestAutoRestoreMCPServersWithLock:
             _auto_restore_mcp_servers,
         )
 
-        db_servers = [
-            MockMCPServer(id="server-1", name="test-server", project_id="proj-1")
-        ]
+        db_servers = [MockMCPServer(id="server-1", name="test-server", project_id="proj-1")]
 
         # Track TTL used
         ttl_used = []
@@ -424,7 +422,10 @@ class TestAutoRestoreMCPServersWithLock:
                 if server_name == "failing-server":
                     return {"is_error": True, "content": [{"type": "text", "text": "error"}]}
             if tool_name == "mcp_server_list":
-                return {"is_error": False, "content": [{"type": "text", "text": json.dumps({"servers": []})}]}
+                return {
+                    "is_error": False,
+                    "content": [{"type": "text", "text": json.dumps({"servers": []})}],
+                }
             return {"is_error": False, "content": [{"type": "text", "text": "ok"}]}
 
         mock_sandbox_adapter.call_tool = AsyncMock(side_effect=mock_call_tool)

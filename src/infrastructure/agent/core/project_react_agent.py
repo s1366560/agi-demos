@@ -318,12 +318,9 @@ class ProjectReActAgent:
             # Get LLM provider configuration
             # Use tenant-specific provider resolution via AIServiceFactory
             provider_config = await get_or_create_provider_config(
-                tenant_id=self.config.tenant_id,
-                force_refresh=force_refresh
+                tenant_id=self.config.tenant_id, force_refresh=force_refresh
             )
-            llm_client = await get_or_create_llm_client(
-                tenant_id=self.config.tenant_id
-            )
+            llm_client = await get_or_create_llm_client(tenant_id=self.config.tenant_id)
 
             # Load tools
             self._tools = await get_or_create_tools(

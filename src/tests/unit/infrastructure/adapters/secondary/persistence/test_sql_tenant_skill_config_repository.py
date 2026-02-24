@@ -72,7 +72,9 @@ class TestSqlTenantSkillConfigRepositoryFind:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_get_by_tenant_and_skill(self, v2_skill_config_repo: SqlTenantSkillConfigRepository):
+    async def test_get_by_tenant_and_skill(
+        self, v2_skill_config_repo: SqlTenantSkillConfigRepository
+    ):
         """Test getting a config by tenant and skill name."""
         config = TenantSkillConfig(
             id="config-tenant-skill-1",
@@ -94,7 +96,9 @@ class TestSqlTenantSkillConfigRepositoryUpdate:
     """Tests for updating skill configs."""
 
     @pytest.mark.asyncio
-    async def test_update_existing_config(self, v2_skill_config_repo: SqlTenantSkillConfigRepository):
+    async def test_update_existing_config(
+        self, v2_skill_config_repo: SqlTenantSkillConfigRepository
+    ):
         """Test updating an existing config."""
         config = TenantSkillConfig(
             id="config-update-1",
@@ -114,7 +118,9 @@ class TestSqlTenantSkillConfigRepositoryUpdate:
         assert result.action == TenantSkillAction.OVERRIDE
 
     @pytest.mark.asyncio
-    async def test_update_nonexistent_raises_error(self, v2_skill_config_repo: SqlTenantSkillConfigRepository):
+    async def test_update_nonexistent_raises_error(
+        self, v2_skill_config_repo: SqlTenantSkillConfigRepository
+    ):
         """Test updating a non-existent config raises ValueError."""
         config = TenantSkillConfig(
             id="config-update-nonexist",
@@ -153,7 +159,9 @@ class TestSqlTenantSkillConfigRepositoryDelete:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_delete_by_tenant_and_skill(self, v2_skill_config_repo: SqlTenantSkillConfigRepository):
+    async def test_delete_by_tenant_and_skill(
+        self, v2_skill_config_repo: SqlTenantSkillConfigRepository
+    ):
         """Test deleting a config by tenant and skill name."""
         config = TenantSkillConfig(
             id="config-del-ts-1",

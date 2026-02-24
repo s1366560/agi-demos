@@ -48,6 +48,7 @@ class TestTransactionManager:
         from src.infrastructure.adapters.secondary.common.transaction_manager import (
             TransactionManager,
         )
+
         assert TransactionManager is not None
 
     # === TEST: Initialization ===
@@ -417,6 +418,7 @@ class TestTransactionManager:
 
         # Mock execute to handle SAVEPOINT commands
         execute_call_count = 0
+
         async def mock_execute(stmt):
             nonlocal execute_call_count
             execute_call_count += 1

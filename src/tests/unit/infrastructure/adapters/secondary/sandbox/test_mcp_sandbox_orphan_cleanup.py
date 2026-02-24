@@ -183,9 +183,7 @@ class TestOrphanContainerCleanup:
         active_container.remove.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_cleanup_orphans_handles_docker_errors_gracefully(
-        self, adapter, mock_docker
-    ):
+    async def test_cleanup_orphans_handles_docker_errors_gracefully(self, adapter, mock_docker):
         """
         Test that cleanup_orphans handles Docker errors gracefully.
 
@@ -278,9 +276,7 @@ class TestPeriodicCleanup:
         await adapter.stop_periodic_cleanup()
 
         # Assert: Cleanup should have run at least 2 times
-        assert cleanup_count[0] >= 2, (
-            f"Expected at least 2 cleanup runs, got {cleanup_count[0]}"
-        )
+        assert cleanup_count[0] >= 2, f"Expected at least 2 cleanup runs, got {cleanup_count[0]}"
 
 
 class TestStartupCleanup:

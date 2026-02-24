@@ -511,13 +511,15 @@ class ContainerBackend(Backend):
 
         while time.time() - start_time < timeout:
             try:
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(url, timeout=5) as response:
-                        if response.status == 200:
-                            data = await response.json()
-                            if data.get("lifecycle_state") == "ready":
-                                logger.info(f"Container ready: {container_info.container_id[:12]}")
-                                return
+                async with (
+                    aiohttp.ClientSession() as session,
+                    session.get(url, timeout=5) as response,
+                ):
+                    if response.status == 200:
+                        data = await response.json()
+                        if data.get("lifecycle_state") == "ready":
+                            logger.info(f"Container ready: {container_info.container_id[:12]}")
+                            return
             except Exception:
                 pass
 

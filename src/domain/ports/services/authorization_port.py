@@ -50,9 +50,7 @@ class AuthorizationPort(ABC):
         ...
 
     @abstractmethod
-    async def get_user_roles(
-        self, user_id: str, tenant_id: str | None = None
-    ) -> list[dict]:
+    async def get_user_roles(self, user_id: str, tenant_id: str | None = None) -> list[dict]:
         """Get all roles assigned to a user."""
         ...
 

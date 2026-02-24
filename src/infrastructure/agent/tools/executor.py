@@ -276,7 +276,10 @@ class ToolExecutor:
         call_id: str,
         work_plan_steps: list[dict[str, Any]] | None = None,
         tool_to_step_mapping: dict[str, int] | None = None,
-        hitl_callback: Callable[[str, str, str, dict[str, Any], ToolPartProtocol], AsyncIterator[AgentDomainEvent]] | None = None,
+        hitl_callback: Callable[
+            [str, str, str, dict[str, Any], ToolPartProtocol], AsyncIterator[AgentDomainEvent]
+        ]
+        | None = None,
     ) -> AsyncIterator[AgentDomainEvent]:
         """
         Execute a tool with full lifecycle management.
@@ -510,7 +513,10 @@ class ToolExecutor:
                 return parsed, None
             else:
                 preview = raw_args[:500] if len(raw_args) > 500 else raw_args
-                return arguments, f"Invalid JSON in tool arguments. Raw arguments preview: {preview}"
+                return (
+                    arguments,
+                    f"Invalid JSON in tool arguments. Raw arguments preview: {preview}",
+                )
 
         return arguments, None
 
@@ -586,7 +592,7 @@ class ToolExecutor:
     _MAX_TOOL_OUTPUT_BYTES = 30_000
 
     # Regex matching long base64-like sequences (256+ chars)
-    _BASE64_PATTERN = re.compile(r'[A-Za-z0-9+/=]{256,}')
+    _BASE64_PATTERN = re.compile(r"[A-Za-z0-9+/=]{256,}")
 
     def _process_result(self, result: Any) -> tuple[str, Any]:
         """
@@ -622,9 +628,7 @@ class ToolExecutor:
 
         encoded = sanitized.encode("utf-8", errors="replace")
         if len(encoded) > self._MAX_TOOL_OUTPUT_BYTES:
-            sanitized = encoded[: self._MAX_TOOL_OUTPUT_BYTES].decode(
-                "utf-8", errors="ignore"
-            )
+            sanitized = encoded[: self._MAX_TOOL_OUTPUT_BYTES].decode("utf-8", errors="ignore")
             sanitized += "\n... [output truncated]"
 
         return sanitized

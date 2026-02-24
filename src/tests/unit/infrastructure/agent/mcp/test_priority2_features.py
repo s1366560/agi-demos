@@ -274,22 +274,26 @@ class TestMCPClientProgressSupport:
             total: float | None,
             message: str | None,
         ):
-            callback_calls.append({
-                "token": progress_token,
-                "progress": progress,
-                "total": total,
-                "message": message,
-            })
+            callback_calls.append(
+                {
+                    "token": progress_token,
+                    "progress": progress,
+                    "total": total,
+                    "message": message,
+                }
+            )
 
         client.register_progress_callback(progress_callback)
 
         # Simulate progress notification
-        await client._handle_progress_notification({
-            "progressToken": "task-1",
-            "progress": 0.5,
-            "total": 1.0,
-            "message": "Halfway there",
-        })
+        await client._handle_progress_notification(
+            {
+                "progressToken": "task-1",
+                "progress": 0.5,
+                "total": 1.0,
+                "message": "Halfway there",
+            }
+        )
 
         # Verify callback was invoked
         assert len(callback_calls) == 1

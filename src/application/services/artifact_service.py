@@ -176,9 +176,7 @@ class ArtifactService:
             artifact.mark_uploading()
 
             # Upload to storage
-            logger.warning(
-                f"[ArtifactUpload] Starting S3 upload: key={object_key}"
-            )
+            logger.warning(f"[ArtifactUpload] Starting S3 upload: key={object_key}")
             result = await self._storage.upload_file(
                 file_content=file_content,
                 object_key=object_key,
@@ -191,9 +189,7 @@ class ArtifactService:
                     "source_tool": source_tool or "",
                 },
             )
-            logger.warning(
-                f"[ArtifactUpload] S3 upload done: key={object_key}, etag={result.etag}"
-            )
+            logger.warning(f"[ArtifactUpload] S3 upload done: key={object_key}, etag={result.etag}")
 
             # Generate presigned URL
             logger.warning("[ArtifactUpload] Generating presigned URL...")
@@ -356,9 +352,7 @@ class ArtifactService:
             logger.error(f"Failed to delete artifact {artifact_id}: {e}")
             return False
 
-    async def update_artifact_content(
-        self, artifact_id: str, content: str
-    ) -> Artifact | None:
+    async def update_artifact_content(self, artifact_id: str, content: str) -> Artifact | None:
         """Update the text content of an artifact (canvas save-back).
 
         Overwrites the file in storage and refreshes the presigned URL.
@@ -384,10 +378,7 @@ class ArtifactService:
             )
             artifact.url = url
 
-            logger.info(
-                f"Updated artifact content: {artifact_id}, "
-                f"new_size={len(content_bytes)}"
-            )
+            logger.info(f"Updated artifact content: {artifact_id}, new_size={len(content_bytes)}")
             return artifact
         except Exception as e:
             logger.error(f"Failed to update artifact {artifact_id}: {e}")

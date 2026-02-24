@@ -11,7 +11,6 @@ from src.infrastructure.agent.context.window_manager import ContextWindowConfig
 
 @pytest.mark.unit
 def test_truncate_messages_truncates_tool_output() -> None:
-
     messages = [
         {"role": "system", "content": "sys"},
         {"role": "tool", "content": "a" * 1000},
@@ -28,7 +27,6 @@ def test_truncate_messages_truncates_tool_output() -> None:
 
 @pytest.mark.unit
 def test_truncate_messages_truncates_assistant_output() -> None:
-
     messages = [
         {"role": "system", "content": "sys"},
         {"role": "tool", "content": "ok"},
@@ -44,7 +42,6 @@ def test_truncate_messages_truncates_assistant_output() -> None:
 
 @pytest.mark.unit
 def test_truncate_messages_truncates_both_roles() -> None:
-
     messages = [
         {"role": "system", "content": "sys"},
         {"role": "tool", "content": "a" * 1000},
@@ -60,7 +57,6 @@ def test_truncate_messages_truncates_both_roles() -> None:
 
 @pytest.mark.unit
 def test_truncate_messages_empty_list() -> None:
-
     truncated, count = OverflowRecoveryCoordinator.truncate_messages([])
 
     assert truncated == []
@@ -69,7 +65,6 @@ def test_truncate_messages_empty_list() -> None:
 
 @pytest.mark.unit
 def test_truncate_messages_preserves_non_string_content() -> None:
-
     messages = [
         {"role": "assistant", "content": [{"type": "text", "text": "x" * 5000}]},
     ]
@@ -82,7 +77,6 @@ def test_truncate_messages_preserves_non_string_content() -> None:
 
 @pytest.mark.unit
 def test_tail_trim_keeps_system_prefix_and_recent_tail() -> None:
-
     config = OverflowRecoveryConfig(tail_keep_messages=3)
     coordinator = OverflowRecoveryCoordinator(config)
 
@@ -105,7 +99,6 @@ def test_tail_trim_keeps_system_prefix_and_recent_tail() -> None:
 
 @pytest.mark.unit
 def test_tail_trim_no_drop_when_within_limit() -> None:
-
     config = OverflowRecoveryConfig(tail_keep_messages=10)
     coordinator = OverflowRecoveryCoordinator(config)
 
@@ -123,7 +116,6 @@ def test_tail_trim_no_drop_when_within_limit() -> None:
 
 @pytest.mark.unit
 def test_build_aggressive_config_reduces_context_and_thresholds() -> None:
-
     coordinator = OverflowRecoveryCoordinator()
     base_config = ContextWindowConfig(
         max_context_tokens=100000,

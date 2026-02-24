@@ -38,7 +38,9 @@ def get_rate_limiter() -> Limiter:
             default_limits=["200/minute"],
             storage_uri=settings.redis_url,
         )
-        logger.info(f"Rate limiter initialized with Redis at {settings.redis_host}:{settings.redis_port}")
+        logger.info(
+            f"Rate limiter initialized with Redis at {settings.redis_host}:{settings.redis_port}"
+        )
 
     return _rate_limiter
 

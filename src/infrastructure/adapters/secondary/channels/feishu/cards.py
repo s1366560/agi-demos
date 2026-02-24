@@ -6,20 +6,18 @@ from typing import Any
 
 class CardBuilder:
     """Builder for Feishu interactive cards."""
-    
+
     @staticmethod
     def create_markdown_card(
-        content: str,
-        title: str | None = None,
-        wide_screen: bool = True
+        content: str, title: str | None = None, wide_screen: bool = True
     ) -> dict[str, Any]:
         """Create a simple markdown card.
-        
+
         Args:
             content: Markdown content
             title: Optional card title
             wide_screen: Whether to use wide screen mode
-            
+
         Returns:
             Card configuration dict
         """
@@ -35,9 +33,9 @@ class CardBuilder:
                         "content": content,
                     }
                 ]
-            }
+            },
         }
-        
+
         if title:
             card["header"] = {
                 "title": {
@@ -45,22 +43,20 @@ class CardBuilder:
                     "content": title,
                 }
             }
-        
+
         return card
-    
+
     @staticmethod
     def create_info_card(
-        title: str,
-        content: list[dict[str, Any]],
-        actions: list[dict[str, Any]] | None = None
+        title: str, content: list[dict[str, Any]], actions: list[dict[str, Any]] | None = None
     ) -> dict[str, Any]:
         """Create an info card with title and content elements.
-        
+
         Args:
             title: Card title
             content: List of content elements (div, markdown, etc.)
             actions: Optional action buttons
-            
+
         Returns:
             Card configuration dict
         """
@@ -75,65 +71,59 @@ class CardBuilder:
                     "content": title,
                 }
             },
-            "body": {
-                "elements": content
-            }
+            "body": {"elements": content},
         }
-        
+
         if actions:
-            card["body"]["elements"].append({
-                "tag": "action",
-                "actions": actions
-            })
-        
+            card["body"]["elements"].extend(actions)
+
         return card
-    
+
     @staticmethod
     def create_table_card(
         title: str,
         headers: list[str],
         rows: list[list[str]],
-        column_widths: list[str] | None = None
+        column_widths: list[str] | None = None,
     ) -> dict[str, Any]:
         """Create a card with a table.
-        
+
         Args:
             title: Card title
             headers: Column headers
             rows: Table rows
             column_widths: Optional column width percentages
-            
+
         Returns:
             Card configuration dict
         """
         # Build table markdown
         header_line = " | ".join(headers)
         separator = " | ".join(["---"] * len(headers))
-        
+
         rows_lines = []
         for row in rows:
             rows_lines.append(" | ".join(row))
-        
+
         table_md = f"{header_line}\n{separator}\n" + "\n".join(rows_lines)
-        
+
         return CardBuilder.create_markdown_card(
-            content=f"**{title}**\n\n{table_md}",
-            wide_screen=True
+            content=f"**{title}**\n\n{table_md}", wide_screen=True
         )
-    
+
     @staticmethod
     def create_note_card(
         title: str,
         note_text: str,
-        note_type: str = "default"  # default, info, warning, danger
+        note_type: str = "default",  # default, info, warning, danger
     ) -> dict[str, Any]:
         """Create a note/callout card.
-        
+
         Args:
             title: Card title
             note_text: Note content
             note_type: Note style type
-            
+
         Returns:
             Card configuration dict
         """
@@ -143,27 +133,27 @@ class CardBuilder:
             "warning": "⚠️",
             "danger": "🚨",
         }
-        
+
         emoji = type_emoji.get(note_type, "💡")
         content = f"{emoji} **{title}**\n\n{note_text}"
-        
+
         return CardBuilder.create_markdown_card(content=content)
-    
+
     @staticmethod
     def create_button(
         text: str,
         url: str | None = None,
         value: dict[str, Any] | None = None,
-        button_type: str = "default"  # default, primary, danger
+        button_type: str = "default",  # default, primary, danger
     ) -> dict[str, Any]:
         """Create a button element.
-        
+
         Args:
             text: Button text
             url: Optional URL for link button
             value: Optional value for callback button
             button_type: Button style
-            
+
         Returns:
             Button element dict
         """
@@ -175,33 +165,31 @@ class CardBuilder:
             },
             "type": button_type,
         }
-        
+
         if url:
             button["url"] = url
-        
+
         if value:
             button["value"] = value
-        
+
         return button
-    
+
     @staticmethod
     def create_divider() -> dict[str, Any]:
         """Create a divider element."""
         return {"tag": "hr"}
-    
+
     @staticmethod
     def create_text_element(
-        text: str,
-        text_type: str = "plain_text",
-        bold: bool = False
+        text: str, text_type: str = "plain_text", bold: bool = False
     ) -> dict[str, Any]:
         """Create a text element.
-        
+
         Args:
             text: Text content
             text_type: "plain_text" or "lark_md"
             bold: Whether to make text bold
-            
+
         Returns:
             Text element dict
         """
@@ -209,114 +197,119 @@ class CardBuilder:
             "tag": "text",
             "text": text,
         }
-        
+
         if text_type == "lark_md":
             element["tag"] = "markdown"
             element["content"] = text
             del element["text"]
-        
+
         return element
 
 
 class PostBuilder:
     """Builder for Feishu rich text posts."""
-    
+
     def __init__(self, title: str = "") -> None:
         self.title = title
         self.content: list[list[dict[str, Any]]] = []
         self.current_paragraph: list[dict[str, Any]] = []
-    
+
     def add_text(self, text: str) -> "PostBuilder":
         """Add plain text."""
-        self.current_paragraph.append({
-            "tag": "text",
-            "text": text,
-        })
+        self.current_paragraph.append(
+            {
+                "tag": "text",
+                "text": text,
+            }
+        )
         return self
-    
+
     def add_link(self, text: str, href: str) -> "PostBuilder":
         """Add a hyperlink."""
-        self.current_paragraph.append({
-            "tag": "a",
-            "text": text,
-            "href": href,
-        })
+        self.current_paragraph.append(
+            {
+                "tag": "a",
+                "text": text,
+                "href": href,
+            }
+        )
         return self
-    
+
     def add_mention(self, user_id: str, user_name: str = "") -> "PostBuilder":
         """Add a user mention."""
-        self.current_paragraph.append({
-            "tag": "at",
-            "user_id": user_id,
-            "user_name": user_name,
-        })
+        self.current_paragraph.append(
+            {
+                "tag": "at",
+                "user_id": user_id,
+                "user_name": user_name,
+            }
+        )
         return self
-    
+
     def add_image(self, image_key: str) -> "PostBuilder":
         """Add an image."""
-        self.current_paragraph.append({
-            "tag": "img",
-            "image_key": image_key,
-        })
+        self.current_paragraph.append(
+            {
+                "tag": "img",
+                "image_key": image_key,
+            }
+        )
         return self
-    
+
     def new_paragraph(self) -> "PostBuilder":
         """Start a new paragraph."""
         if self.current_paragraph:
             self.content.append(self.current_paragraph)
             self.current_paragraph = []
         return self
-    
+
     def build(self) -> dict[str, Any]:
         """Build the post content."""
         if self.current_paragraph:
             self.content.append(self.current_paragraph)
-        
+
         post = {
             "zh_cn": {
                 "title": self.title,
                 "content": self.content,
             }
         }
-        
+
         return post
-    
+
     def to_json(self) -> str:
         """Convert to JSON string."""
         return json.dumps(self.build())
 
 
-def build_mentioned_message(
-    mentions: list[dict[str, str]],
-    message_text: str
-) -> str:
+def build_mentioned_message(mentions: list[dict[str, str]], message_text: str) -> str:
     """Build message text with @mentions.
-    
+
     Args:
         mentions: List of mention targets with 'id' and 'name' keys
         message_text: Original message text
-        
+
     Returns:
         Message text with @mentions prepended
     """
     if not mentions:
         return message_text
-    
+
     mention_texts = []
     for m in mentions:
         name = m.get("name", "")
         _user_id = m.get("id", "")
         mention_texts.append(f"@{name}")
-    
+
     return " ".join(mention_texts) + " " + message_text
 
 
 def extract_post_text(content: str | dict[str, Any]) -> str:
     """Extract plain text from a post message.
-    
+
     Args:
         content: Post content (JSON string or dict)
-        
+
     Returns:
         Extracted plain text
     """
@@ -325,17 +318,17 @@ def extract_post_text(content: str | dict[str, Any]) -> str:
             content = json.loads(content)
         except json.JSONDecodeError:
             return content
-    
+
     # Handle both zh_cn and en_us
     post_data = content.get("zh_cn", content.get("en_us", content))
-    
+
     title = post_data.get("title", "")
     paragraphs = post_data.get("content", [])
-    
+
     text_parts = []
     if title:
         text_parts.append(title)
-    
+
     for paragraph in paragraphs:
         if isinstance(paragraph, list):
             para_text = ""
@@ -350,5 +343,5 @@ def extract_post_text(content: str | dict[str, Any]) -> str:
                 elif tag == "img":
                     para_text += "[图片]"
             text_parts.append(para_text)
-    
+
     return "\n".join(text_parts)

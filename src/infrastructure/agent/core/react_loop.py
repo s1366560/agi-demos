@@ -359,9 +359,7 @@ class ReActLoop:
                             # explicit goal_achieved=false signal — treat as a
                             # deliberate conversational reply.
                             self._no_progress_steps = 0
-                            yield AgentStatusEvent(
-                                status="goal_achieved:conversational_response"
-                            )
+                            yield AgentStatusEvent(status="goal_achieved:conversational_response")
                             step_result.result = LoopResult.COMPLETE
                         elif goal_check.should_stop:
                             yield AgentErrorEvent(
@@ -440,7 +438,11 @@ class ReActLoop:
         statuses = [s.lower() for s in self._task_statuses.values()]
         pending_count = sum(1 for s in statuses if s in {"pending", "in_progress"})
         failed_count = sum(1 for s in statuses if s == "failed")
-        unknown_count = sum(1 for s in statuses if s not in {"pending", "in_progress", "completed", "cancelled", "failed"})
+        unknown_count = sum(
+            1
+            for s in statuses
+            if s not in {"pending", "in_progress", "completed", "cancelled", "failed"}
+        )
         pending_count += unknown_count
 
         if pending_count > 0:
@@ -587,9 +589,9 @@ class ReActLoop:
         tool_calls_to_execute = []
 
         if self._llm_invoker:
-            tools_list = [
-                {"type": "function", "function": t} for t in tools.values()
-            ] if tools else []
+            tools_list = (
+                [{"type": "function", "function": t} for t in tools.values()] if tools else []
+            )
 
             async for event in self._llm_invoker.invoke(
                 messages, tools_list, {"step": self._step_count}
@@ -598,22 +600,22 @@ class ReActLoop:
 
                 # Collect tool calls
                 if event.event_type == AgentEventType.ACT:
-                    tool_calls_to_execute.append({
-                        "name": event.tool_name,
-                        "args": event.tool_input,
-                        "call_id": event.call_id,
-                    })
+                    tool_calls_to_execute.append(
+                        {
+                            "name": event.tool_name,
+                            "args": event.tool_input,
+                            "call_id": event.call_id,
+                        }
+                    )
 
         # Execute tool calls
         if tool_calls_to_execute:
             self._state = LoopState.ACTING
 
-            for tool_call in tool_calls_to_execute[:self._config.max_tool_calls_per_step]:
+            for tool_call in tool_calls_to_execute[: self._config.max_tool_calls_per_step]:
                 # Check doom loop
                 if self._config.enable_doom_loop_detection and self._doom_loop_detector:
-                    if self._doom_loop_detector.record_call(
-                        tool_call["name"], tool_call["args"]
-                    ):
+                    if self._doom_loop_detector.record_call(tool_call["name"], tool_call["args"]):
                         yield AgentErrorEvent(
                             message="Doom loop detected",
                             code="DOOM_LOOP_DETECTED",
@@ -681,8 +683,7 @@ def get_react_loop() -> ReActLoop:
     global _loop
     if _loop is None:
         raise RuntimeError(
-            "ReActLoop not initialized. "
-            "Call set_react_loop() or create_react_loop() first."
+            "ReActLoop not initialized. Call set_react_loop() or create_react_loop() first."
         )
     return _loop
 

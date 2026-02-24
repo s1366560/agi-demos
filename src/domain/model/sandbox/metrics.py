@@ -35,15 +35,17 @@ LATENCY_MS_BUCKETS = [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
 
 class MetricType(Enum):
     """Types of metrics."""
-    COUNTER = "counter"      # Monotonically increasing value
-    GAUGE = "gauge"          # Value that can go up or down
+
+    COUNTER = "counter"  # Monotonically increasing value
+    GAUGE = "gauge"  # Value that can go up or down
     HISTOGRAM = "histogram"  # Distribution of values
-    SUMMARY = "summary"      # Similar to histogram with quantiles
+    SUMMARY = "summary"  # Similar to histogram with quantiles
 
 
 @dataclass
 class MetricLabel:
     """A label/dimension for a metric."""
+
     name: str
     value: str
 
@@ -51,6 +53,7 @@ class MetricLabel:
 @dataclass
 class Metric:
     """A single metric data point."""
+
     name: str
     type: MetricType
     value: float
@@ -62,6 +65,7 @@ class Metric:
 @dataclass
 class HistogramBucket:
     """A histogram bucket."""
+
     upper_bound: float
     count: int
 
@@ -69,6 +73,7 @@ class HistogramBucket:
 @dataclass
 class HistogramMetric(Metric):
     """A histogram metric with buckets."""
+
     buckets: list[HistogramBucket] = field(default_factory=list)
     sum: float = 0.0
     count: int = 0
@@ -196,7 +201,9 @@ class MetricsCollector:
             return []
         return [MetricLabel(k, v) for k, v in sorted(labels.items())]
 
-    def increment(self, name: str, value: float = 1.0, labels: dict[str, str] | None = None) -> None:
+    def increment(
+        self, name: str, value: float = 1.0, labels: dict[str, str] | None = None
+    ) -> None:
         """Increment a counter metric."""
         key = self._make_key(name, labels)
         current = self._metrics.get(key)
@@ -307,7 +314,7 @@ class SandboxMetrics:
         """Record a sandbox creation event."""
         self._collector.increment(
             SandboxMetricNames.CREATED_TOTAL,
-            labels={SandboxMetricNames.LABEL_SANDBOX_ID: sandbox_id}
+            labels={SandboxMetricNames.LABEL_SANDBOX_ID: sandbox_id},
         )
 
     def record_sandbox_started(self, sandbox_id: str, startup_time_ms: float) -> None:
@@ -315,7 +322,7 @@ class SandboxMetrics:
         self._collector.timing(
             SandboxMetricNames.STARTUP_TIME_MS,
             startup_time_ms,
-            labels={SandboxMetricNames.LABEL_SANDBOX_ID: sandbox_id}
+            labels={SandboxMetricNames.LABEL_SANDBOX_ID: sandbox_id},
         )
 
         # Track active count
@@ -328,7 +335,7 @@ class SandboxMetrics:
         self._collector.timing(
             SandboxMetricNames.UPTIME_MS,
             uptime_ms,
-            labels={SandboxMetricNames.LABEL_SANDBOX_ID: sandbox_id}
+            labels={SandboxMetricNames.LABEL_SANDBOX_ID: sandbox_id},
         )
 
         # Decrement active count
@@ -342,8 +349,8 @@ class SandboxMetrics:
             SandboxMetricNames.ERRORS_TOTAL,
             labels={
                 SandboxMetricNames.LABEL_SANDBOX_ID: sandbox_id,
-                SandboxMetricNames.LABEL_ERROR_TYPE: error_type
-            }
+                SandboxMetricNames.LABEL_ERROR_TYPE: error_type,
+            },
         )
 
     def record_execution_time(self, sandbox_id: str, operation: str, duration_ms: float) -> None:
@@ -353,8 +360,8 @@ class SandboxMetrics:
             duration_ms,
             labels={
                 SandboxMetricNames.LABEL_SANDBOX_ID: sandbox_id,
-                SandboxMetricNames.LABEL_OPERATION: operation
-            }
+                SandboxMetricNames.LABEL_OPERATION: operation,
+            },
         )
 
     def record_resource_usage(self, sandbox_id: str, cpu_percent: float, memory_mb: float) -> None:
@@ -362,12 +369,12 @@ class SandboxMetrics:
         self._collector.gauge(
             SandboxMetricNames.CPU_PERCENT,
             cpu_percent,
-            labels={SandboxMetricNames.LABEL_SANDBOX_ID: sandbox_id}
+            labels={SandboxMetricNames.LABEL_SANDBOX_ID: sandbox_id},
         )
         self._collector.gauge(
             SandboxMetricNames.MEMORY_MB,
             memory_mb,
-            labels={SandboxMetricNames.LABEL_SANDBOX_ID: sandbox_id}
+            labels={SandboxMetricNames.LABEL_SANDBOX_ID: sandbox_id},
         )
 
     @property

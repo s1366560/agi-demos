@@ -49,7 +49,9 @@ class TestSqlMessageRepositorySave:
     """Tests for saving messages."""
 
     @pytest.mark.asyncio
-    async def test_save_new_message(self, v2_message_repo: SqlMessageRepository, test_conversation_db):
+    async def test_save_new_message(
+        self, v2_message_repo: SqlMessageRepository, test_conversation_db
+    ):
         """Test saving a new message."""
         message = Message(
             id="msg-test-1",
@@ -235,7 +237,9 @@ class TestSqlMessageRepositoryList:
         assert messages[1].id == "msg-ordered-2"
 
     @pytest.mark.asyncio
-    async def test_list_by_conversation_with_pagination(self, v2_message_repo: SqlMessageRepository):
+    async def test_list_by_conversation_with_pagination(
+        self, v2_message_repo: SqlMessageRepository
+    ):
         """Test listing messages with pagination."""
         # Create 5 messages
         for i in range(5):
@@ -341,12 +345,8 @@ class TestSqlMessageRepositoryToDomain:
             role=MessageRole.ASSISTANT,
             content="Domain test",
             message_type=MessageType.TEXT,
-            tool_calls=[
-                ToolCall(name="test_tool", arguments={"arg": "value"}, call_id="call-123")
-            ],
-            tool_results=[
-                ToolResult(tool_call_id="call-123", result="Success", is_error=False)
-            ],
+            tool_calls=[ToolCall(name="test_tool", arguments={"arg": "value"}, call_id="call-123")],
+            tool_results=[ToolResult(tool_call_id="call-123", result="Success", is_error=False)],
             metadata={"key": "value"},
             created_at=datetime.now(UTC),
         )

@@ -37,7 +37,9 @@ async def get_task_status(task_id: str, current_user: User = Depends(get_current
 
 
 @router.post("/{task_id}/cancel")
-async def cancel_task(task_id: str, current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+async def cancel_task(
+    task_id: str, current_user: User = Depends(get_current_user)
+) -> dict[str, Any]:
     """
     Cancel a running background task.
 

@@ -35,7 +35,9 @@ class CreateMemoryCommand(BaseModel):
 
 
 class CreateMemoryUseCase:
-    def __init__(self, memory_repository: MemoryRepository, graph_service: GraphServicePort) -> None:
+    def __init__(
+        self, memory_repository: MemoryRepository, graph_service: GraphServicePort
+    ) -> None:
         self._memory_repo = memory_repository
         self._graph_service = graph_service
 

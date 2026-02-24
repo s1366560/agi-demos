@@ -243,9 +243,7 @@ class HITLTimeoutError(HITLServiceError):
     def __init__(self, request_id: str, timeout_seconds: float) -> None:
         self.request_id = request_id
         self.timeout_seconds = timeout_seconds
-        super().__init__(
-            f"HITL request timed out after {timeout_seconds}s: {request_id}"
-        )
+        super().__init__(f"HITL request timed out after {timeout_seconds}s: {request_id}")
 
 
 class HITLCancelledError(HITLServiceError):

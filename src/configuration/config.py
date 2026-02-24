@@ -34,9 +34,7 @@ class Settings(BaseSettings):
     postgres_pool_pre_ping: bool = Field(default=True, alias="POSTGRES_POOL_PRE_PING")
 
     # PostgreSQL Read Replica Settings (for read scaling)
-    postgres_read_replica_host: str | None = Field(
-        default=None, alias="POSTGRES_READ_REPLICA_HOST"
-    )
+    postgres_read_replica_host: str | None = Field(default=None, alias="POSTGRES_READ_REPLICA_HOST")
     postgres_read_replica_port: int = Field(default=5432, alias="POSTGRES_READ_REPLICA_PORT")
 
     # Redis Settings
@@ -69,12 +67,8 @@ class Settings(BaseSettings):
     tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
     tavily_max_results: int = Field(default=10, alias="TAVILY_MAX_RESULTS")
     tavily_search_depth: str = Field(default="basic", alias="TAVILY_SEARCH_DEPTH")
-    tavily_include_domains: list[str] | None = Field(
-        default=None, alias="TAVILY_INCLUDE_DOMAINS"
-    )
-    tavily_exclude_domains: list[str] | None = Field(
-        default=None, alias="TAVILY_EXCLUDE_DOMAINS"
-    )
+    tavily_include_domains: list[str] | None = Field(default=None, alias="TAVILY_INCLUDE_DOMAINS")
+    tavily_exclude_domains: list[str] | None = Field(default=None, alias="TAVILY_EXCLUDE_DOMAINS")
 
     # Web Scraping Settings (Playwright)
     playwright_timeout: int = Field(default=30000, alias="PLAYWRIGHT_TIMEOUT")
@@ -367,9 +361,7 @@ class Settings(BaseSettings):
     otel_exporter_otlp_endpoint: str | None = Field(
         default=None, alias="OTEL_EXPORTER_OTLP_ENDPOINT"
     )
-    otel_exporter_otlp_headers: str | None = Field(
-        default=None, alias="OTEL_EXPORTER_OTLP_HEADERS"
-    )
+    otel_exporter_otlp_headers: str | None = Field(default=None, alias="OTEL_EXPORTER_OTLP_HEADERS")
     otel_traces_sampler: str = Field(default="traceidratio", alias="OTEL_TRACES_SAMPLER")
     otel_traces_sampler_arg: float = Field(default=1.0, alias="OTEL_TRACES_SAMPLER_ARG")
     otel_batch_timeout: int = Field(default=30000, alias="OTEL_BATCH_TIMEOUT")

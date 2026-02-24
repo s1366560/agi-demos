@@ -2,7 +2,6 @@
 Unit tests for token estimator with caching.
 """
 
-
 from src.infrastructure.llm.token_estimator import (
     DEFAULT_TOKEN_CACHE_MAXSIZE,
     TokenEstimator,

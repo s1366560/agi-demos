@@ -3,7 +3,6 @@
 Tests the retry logic with exponential backoff for sandbox operations.
 """
 
-
 import pytest
 
 from src.domain.model.sandbox.exceptions import (
@@ -242,6 +241,7 @@ class TestRetryableError:
     @pytest.mark.asyncio
     async def test_decorator_marks_function_as_retryable(self) -> None:
         """Should mark function as retryable."""
+
         @RetryableError(max_attempts=2, base_delay=0.1)
         async def failing_operation():
             if not getattr(failing_operation, "called", False):

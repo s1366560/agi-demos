@@ -35,6 +35,7 @@ class LocalHITLResumeConsumer:
         self._running = False
         self._listen_task: asyncio.Task | None = None
         self._worker_id = f"local-resume-{os.getpid()}"
+        self._background_tasks: set[asyncio.Task[Any]] = set()
 
     async def start(self) -> None:
         if self._running:
@@ -123,9 +124,11 @@ class LocalHITLResumeConsumer:
                 f"project={tenant_id}:{project_id}"
             )
 
-            asyncio.create_task(
+            _resume_task = asyncio.create_task(
                 self._resume_agent(tenant_id, project_id, request_id, response_data)
             )
+            self._background_tasks.add(_resume_task)
+            _resume_task.add_done_callback(self._background_tasks.discard)
             await self._ack(stream_key, msg_id)
 
         except Exception as e:

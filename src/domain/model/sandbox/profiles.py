@@ -12,6 +12,7 @@ from enum import Enum
 
 class SandboxProfileType(str, Enum):
     """Sandbox 配置类型."""
+
     LITE = "lite"
     STANDARD = "standard"
     FULL = "full"
@@ -23,6 +24,7 @@ class SandboxProfile:
 
     定义 Sandbox 的资源配置、功能启用和预装工具。
     """
+
     name: str
     description: str
     profile_type: SandboxProfileType

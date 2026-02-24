@@ -122,7 +122,9 @@ class TestSqlSkillRepositoryFind:
     @pytest.mark.asyncio
     async def test_get_by_name_with_scope(self, v2_skill_repo: SqlSkillRepository):
         """Test getting a skill by name with scope filter."""
-        skill = create_test_skill("skill-name-scope", name="project-skill", scope=SkillScope.PROJECT)
+        skill = create_test_skill(
+            "skill-name-scope", name="project-skill", scope=SkillScope.PROJECT
+        )
         await v2_skill_repo.create(skill)
 
         retrieved = await v2_skill_repo.get_by_name(
@@ -340,15 +342,11 @@ class TestSqlSkillRepositoryFindMatching:
         """Test finding skills that match a query."""
         # Create skills with different patterns
         search_skill = create_test_skill("skill-search", name="search-skill")
-        search_skill.trigger_patterns = [
-            TriggerPattern(pattern="search", weight=0.8)
-        ]
+        search_skill.trigger_patterns = [TriggerPattern(pattern="search", weight=0.8)]
         await v2_skill_repo.create(search_skill)
 
         analyze_skill = create_test_skill("skill-analyze", name="analyze-skill")
-        analyze_skill.trigger_patterns = [
-            TriggerPattern(pattern="analyze", weight=0.8)
-        ]
+        analyze_skill.trigger_patterns = [TriggerPattern(pattern="analyze", weight=0.8)]
         await v2_skill_repo.create(analyze_skill)
 
         # Find skills matching "search"

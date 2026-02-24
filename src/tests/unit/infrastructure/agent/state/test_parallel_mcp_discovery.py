@@ -42,9 +42,7 @@ class TestParallelMCPToolDiscovery:
             call_count += 1
             # Simulate network delay
             await asyncio.sleep(0.1)
-            return [
-                {"name": f"{server_name}_tool1", "description": "Test tool"}
-            ]
+            return [{"name": f"{server_name}_tool1", "description": "Test tool"}]
 
         # Run discovery
         start = time.time()
@@ -90,9 +88,7 @@ class TestParallelMCPToolDiscovery:
         async def mock_discover_single(sandbox_adapter, sandbox_id, server_name):
             if server_name == "server2":
                 raise Exception("Connection failed for server2")
-            return [
-                {"name": f"{server_name}_tool1", "description": "Test tool"}
-            ]
+            return [{"name": f"{server_name}_tool1", "description": "Test tool"}]
 
         # Run discovery
         with patch(
@@ -190,11 +186,10 @@ class TestDiscoverSingleServerTools:
 
         # Use JSON format that _parse_discovered_tools expects
         tools_data = [{"name": "test_tool", "description": "Test tool"}]
+
         async def mock_call_tool(*args, **kwargs):
             return {
-                "content": [
-                    {"type": "text", "text": json.dumps(tools_data)}
-                ],
+                "content": [{"type": "text", "text": json.dumps(tools_data)}],
                 "is_error": False,
             }
 
@@ -283,9 +278,7 @@ class TestLoadUserMCPServerToolsIntegration:
 
             if tool_name == "mcp_server_list":
                 return {
-                    "content": [
-                        {"type": "text", "text": "some text"}
-                    ],
+                    "content": [{"type": "text", "text": "some text"}],
                     "is_error": False,
                 }
             elif tool_name == "mcp_server_discover_tools":
@@ -322,23 +315,25 @@ class TestLoadUserMCPServerToolsIntegration:
             ]
 
         # Mock _auto_restore_mcp_servers to avoid DB dependency
-        with patch(
-            "src.infrastructure.agent.state.agent_worker_state._auto_restore_mcp_servers",
-            new_callable=AsyncMock,
-        ):
-            with patch(
+        with (
+            patch(
+                "src.infrastructure.agent.state.agent_worker_state._auto_restore_mcp_servers",
+                new_callable=AsyncMock,
+            ),
+            patch(
                 "src.infrastructure.agent.state.agent_worker_state._parse_mcp_server_list",
                 side_effect=mock_parse,
-            ):
-                with patch(
-                    "src.infrastructure.agent.state.agent_worker_state._discover_tools_for_servers_parallel",
-                    side_effect=mock_parallel,
-                ):
-                    await _load_user_mcp_server_tools(
-                        sandbox_adapter=mock_adapter,
-                        sandbox_id="test-sandbox",
-                        project_id="test-project",
-                    )
+            ),
+            patch(
+                "src.infrastructure.agent.state.agent_worker_state._discover_tools_for_servers_parallel",
+                side_effect=mock_parallel,
+            ),
+        ):
+            await _load_user_mcp_server_tools(
+                sandbox_adapter=mock_adapter,
+                sandbox_id="test-sandbox",
+                project_id="test-project",
+            )
 
         # Verify parallel function was called with correct arguments
         assert captured_args is not None, "Parallel function should have been called"

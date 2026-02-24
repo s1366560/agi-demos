@@ -27,6 +27,8 @@ from .task_decomposer import SubTask
 
 logger = logging.getLogger(__name__)
 
+_scheduler_bg_tasks: set[asyncio.Task[Any]] = set()
+
 
 @dataclass
 class ParallelSchedulerConfig:
@@ -151,15 +153,17 @@ class ParallelScheduler:
 
             async with semaphore:
                 execution.started = True
-                await event_queue.put({
-                    "type": "subtask_started",
-                    "data": {
-                        "task_id": task_id,
-                        "subagent_name": execution.subagent.display_name,
-                        "description": execution.subtask.description[:200],
-                    },
-                    "timestamp": datetime.now(UTC).isoformat(),
-                })
+                await event_queue.put(
+                    {
+                        "type": "subtask_started",
+                        "data": {
+                            "task_id": task_id,
+                            "subagent_name": execution.subagent.display_name,
+                            "description": execution.subtask.description[:200],
+                        },
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
 
                 try:
                     # Build context for this sub-task
@@ -206,15 +210,17 @@ class ParallelScheduler:
                     if execution.result:
                         results.append(execution.result)
 
-                    await event_queue.put({
-                        "type": "subtask_completed",
-                        "data": {
-                            "task_id": task_id,
-                            "success": execution.completed and not execution.error,
-                            "error": execution.error,
-                        },
-                        "timestamp": datetime.now(UTC).isoformat(),
-                    })
+                    await event_queue.put(
+                        {
+                            "type": "subtask_completed",
+                            "data": {
+                                "task_id": task_id,
+                                "success": execution.completed and not execution.error,
+                                "error": execution.error,
+                            },
+                            "timestamp": datetime.now(UTC).isoformat(),
+                        }
+                    )
 
         # Launch all tasks concurrently
         tasks = []
@@ -229,7 +235,9 @@ class ParallelScheduler:
             all_done.set()
             await event_queue.put(None)  # Sentinel
 
-        asyncio.create_task(wait_for_all())
+        _sentinel_task = asyncio.create_task(wait_for_all())
+        _scheduler_bg_tasks.add(_sentinel_task)
+        _sentinel_task.add_done_callback(_scheduler_bg_tasks.discard)
 
         # Yield events as they arrive
         while True:
@@ -264,9 +272,7 @@ class ParallelScheduler:
             yield event_data
 
     @staticmethod
-    def _resolve_agent(
-        subtask: SubTask, agent_map: dict[str, SubAgent]
-    ) -> SubAgent | None:
+    def _resolve_agent(subtask: SubTask, agent_map: dict[str, SubAgent]) -> SubAgent | None:
         """Resolve which SubAgent to use for a sub-task."""
         if subtask.target_subagent and subtask.target_subagent in agent_map:
             return agent_map[subtask.target_subagent]

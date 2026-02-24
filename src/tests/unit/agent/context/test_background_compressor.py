@@ -1,6 +1,5 @@
 """Tests for BackgroundCompressor."""
 
-
 import pytest
 
 from src.infrastructure.agent.context.background_compressor import BackgroundCompressor

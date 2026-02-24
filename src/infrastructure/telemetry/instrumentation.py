@@ -3,7 +3,6 @@
 This module provides automatic tracing for HTTP clients and databases.
 """
 
-
 from typing import Any
 
 from src.infrastructure.telemetry.config import _TRACER_PROVIDER

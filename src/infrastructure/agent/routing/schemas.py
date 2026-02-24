@@ -104,13 +104,15 @@ def build_routing_system_prompt(candidates: list[RoutingCandidate]) -> str:
             examples_str = "; ".join(c.examples[:3])
             lines.append(f"  Examples: {examples_str}")
 
-    lines.extend([
-        "",
-        "Rules:",
-        "- Only route if confidence >= 0.6",
-        "- Choose 'none' if the query is general or doesn't clearly match any agent",
-        "- Prefer the most specific agent when multiple could match",
-    ])
+    lines.extend(
+        [
+            "",
+            "Rules:",
+            "- Only route if confidence >= 0.6",
+            "- Choose 'none' if the query is general or doesn't clearly match any agent",
+            "- Prefer the most specific agent when multiple could match",
+        ]
+    )
 
     return "\n".join(lines)
 

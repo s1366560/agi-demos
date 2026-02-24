@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 @dataclass
 class SandboxToolRegistration:
     """Record of a sandbox's tool registration."""
+
     sandbox_id: str
     project_id: str
     tenant_id: str
@@ -93,13 +94,11 @@ class SandboxToolRegistry:
                 tool_list = await self._mcp_adapter.list_tools(sandbox_id)
                 tools = [t["name"] for t in tool_list]
                 logger.info(
-                    f"[SandboxToolRegistry] Fetched {len(tools)} tools "
-                    f"from sandbox={sandbox_id}"
+                    f"[SandboxToolRegistry] Fetched {len(tools)} tools from sandbox={sandbox_id}"
                 )
             except Exception as e:
                 logger.warning(
-                    f"[SandboxToolRegistry] Failed to fetch tools from "
-                    f"sandbox={sandbox_id}: {e}"
+                    f"[SandboxToolRegistry] Failed to fetch tools from sandbox={sandbox_id}: {e}"
                 )
                 return []
 
@@ -120,9 +119,7 @@ class SandboxToolRegistry:
         if self._redis:
             await self._save_to_redis(registration)
 
-        logger.info(
-            f"[SandboxToolRegistry] Registered {len(tools)} tools for sandbox={sandbox_id}"
-        )
+        logger.info(f"[SandboxToolRegistry] Registered {len(tools)} tools for sandbox={sandbox_id}")
 
         return tools
 
@@ -140,9 +137,7 @@ class SandboxToolRegistry:
             True if tools were unregistered, False if sandbox not found
         """
         if sandbox_id not in self._registrations:
-            logger.warning(
-                f"[SandboxToolRegistry] Sandbox {sandbox_id} not found in registry"
-            )
+            logger.warning(f"[SandboxToolRegistry] Sandbox {sandbox_id} not found in registry")
             return False
 
         registration = self._registrations.pop(sandbox_id)
@@ -188,9 +183,7 @@ class SandboxToolRegistry:
             List of sandbox IDs
         """
         return [
-            reg.sandbox_id
-            for reg in self._registrations.values()
-            if reg.project_id == project_id
+            reg.sandbox_id for reg in self._registrations.values() if reg.project_id == project_id
         ]
 
     def is_sandbox_active(
@@ -237,9 +230,7 @@ class SandboxToolRegistry:
         for sandbox_id in expired_ids:
             await self.unregister_sandbox_tools(sandbox_id)
 
-        logger.info(
-            f"[SandboxToolRegistry] Cleaned up {len(expired_ids)} expired registrations"
-        )
+        logger.info(f"[SandboxToolRegistry] Cleaned up {len(expired_ids)} expired registrations")
 
         return len(expired_ids)
 
@@ -338,9 +329,7 @@ class SandboxToolRegistry:
         registration = await self.load_from_redis(sandbox_id)
         if registration:
             self._registrations[sandbox_id] = registration
-            logger.info(
-                f"[SandboxToolRegistry] Restored registration for sandbox={sandbox_id}"
-            )
+            logger.info(f"[SandboxToolRegistry] Restored registration for sandbox={sandbox_id}")
             return True
 
         return False
@@ -377,9 +366,7 @@ class SandboxToolRegistry:
             logger.warning(f"[SandboxToolRegistry] Failed to refresh from Redis: {e}")
             return 0
 
-    async def get_or_restore_registration(
-        self, sandbox_id: str
-    ) -> SandboxToolRegistration | None:
+    async def get_or_restore_registration(self, sandbox_id: str) -> SandboxToolRegistration | None:
         """
         Get registration from memory or restore from Redis.
 

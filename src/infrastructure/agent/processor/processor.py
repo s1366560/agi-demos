@@ -82,6 +82,7 @@ from .hitl_tool_handler import (
 from .message_utils import classify_tool_by_description, extract_user_query
 
 logger = logging.getLogger(__name__)
+_processor_bg_tasks: set[asyncio.Task[Any]] = set()
 
 
 def _strip_artifact_binary_data(result: dict[str, Any]) -> dict[str, Any]:
@@ -2417,7 +2418,7 @@ class SessionProcessor:
                         except Exception:
                             logger.error("[ArtifactUpload] Failed to persist error event")
 
-                asyncio.create_task(
+                _upload_task = asyncio.create_task(
                     _threaded_upload(
                         content=file_content,
                         fname=filename,
@@ -2432,6 +2433,8 @@ class SessionProcessor:
                         cat=category.value,
                     )
                 )
+                _processor_bg_tasks.add(_upload_task)
+                _upload_task.add_done_callback(_processor_bg_tasks.discard)
                 return
 
             except Exception as e:

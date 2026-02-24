@@ -136,9 +136,7 @@ class MutationLedger:
     def _normalize_record(record: Mapping[str, Any]) -> dict[str, Any]:
         payload = dict(record)
         parsed_timestamp = _parse_iso_datetime(payload.get("timestamp"))
-        payload["timestamp"] = (
-            parsed_timestamp or datetime.now(UTC)
-        ).astimezone(UTC).isoformat()
+        payload["timestamp"] = (parsed_timestamp or datetime.now(UTC)).astimezone(UTC).isoformat()
         return payload
 
 

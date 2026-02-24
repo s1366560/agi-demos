@@ -14,6 +14,7 @@ import pytest
 @dataclass
 class TestEntity:
     """Test entity for caching."""
+
     id: str
     name: str
     tenant_id: str
@@ -47,6 +48,7 @@ class TestCachedRepositoryMixin:
         from src.infrastructure.adapters.secondary.common.cached_repository_mixin import (
             CachedRepositoryMixin,
         )
+
         assert CachedRepositoryMixin is not None
 
     # === TEST: Initialization ===
@@ -180,9 +182,7 @@ class TestCachedRepositoryMixin:
         await repo._cache_set("entity-123", entity)
 
         mock_redis.set.assert_called_once()
-        mock_redis.expire.assert_called_once_with(
-            "cache:entity-123", 300
-        )
+        mock_redis.expire.assert_called_once_with("cache:entity-123", 300)
 
     @pytest.mark.asyncio
     async def test_cache_set_with_custom_ttl(self, mock_redis):
@@ -198,9 +198,7 @@ class TestCachedRepositoryMixin:
         repo = TestRepo(redis_client=mock_redis)
         await repo._cache_set("entity-123", {"id": "123"}, ttl=600)
 
-        mock_redis.expire.assert_called_once_with(
-            "cache:entity-123", 600
-        )
+        mock_redis.expire.assert_called_once_with("cache:entity-123", 600)
 
     # === TEST: Cache delete operations ===
 

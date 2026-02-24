@@ -1267,7 +1267,9 @@ class ChannelMessageRouter:
             and hasattr(adapter, "send_card_entity_message")
         )
 
-    async def _send_initial_streaming_card(self, adapter: ChannelAdapter, message: Message) -> str | None:
+    async def _send_initial_streaming_card(
+        self, adapter: ChannelAdapter, message: Message
+    ) -> str | None:
         """Send the initial 'Thinking...' card and return its message_id."""
         try:
             reply_to = self._extract_channel_message_id(message)

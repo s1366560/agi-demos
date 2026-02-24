@@ -18,9 +18,7 @@ class SkillVersionRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_by_version(
-        self, skill_id: str, version_number: int
-    ) -> SkillVersion | None:
+    async def get_by_version(self, skill_id: str, version_number: int) -> SkillVersion | None:
         """Get a specific version of a skill."""
         pass
 

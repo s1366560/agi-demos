@@ -104,7 +104,9 @@ class TestReActAgentHotPlug:
         with pytest.raises(ValueError) as exc_info:
             ReActAgent(model="test-model")
 
-        assert "tools" in str(exc_info.value).lower() or "tool_provider" in str(exc_info.value).lower()
+        assert (
+            "tools" in str(exc_info.value).lower() or "tool_provider" in str(exc_info.value).lower()
+        )
 
     def test_cached_tools_take_precedence(self):
         """Should use cached tool definitions if provided (Session Pool)."""
@@ -147,6 +149,7 @@ class TestReActAgentHotPlug:
 
     def test_empty_tool_provider_result(self):
         """Should handle empty tools from provider gracefully."""
+
         def empty_provider() -> dict[str, Any]:
             return {}
 

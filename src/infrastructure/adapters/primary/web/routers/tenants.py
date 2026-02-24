@@ -557,9 +557,7 @@ async def get_tenant_analytics(
     _start_date = datetime.now(UTC) - timedelta(days=days)
 
     # Get projects for this tenant
-    projects_result = await db.execute(
-        select(Project).where(Project.tenant_id == tenant_id)
-    )
+    projects_result = await db.execute(select(Project).where(Project.tenant_id == tenant_id))
     projects = projects_result.scalars().all()
 
     # Calculate per-project storage
@@ -567,9 +565,7 @@ async def get_tenant_analytics(
     for project in projects:
         # Sum memory content lengths as proxy for storage
         storage_result = await db.execute(
-            select(func.sum(func.length(Memory.content))).where(
-                Memory.project_id == project.id
-            )
+            select(func.sum(func.length(Memory.content))).where(Memory.project_id == project.id)
         )
         storage_bytes = storage_result.scalar() or 0
         project_storage.append(
@@ -607,9 +603,7 @@ async def _get_memory_count(db: AsyncSession, project_id: str) -> int:
     return result.scalar() or 0
 
 
-async def _get_memory_growth_by_day(
-    db: AsyncSession, project_ids: list, days: int
-) -> list:
+async def _get_memory_growth_by_day(db: AsyncSession, project_ids: list, days: int) -> list:
     """Get memory creation counts by day for the last N days."""
     if not project_ids:
         return []

@@ -55,6 +55,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_background_tasks: set[asyncio.Task[Any]] = set()
+
 
 class AgentService(AgentServicePort):
     """
@@ -79,17 +81,17 @@ class AgentService(AgentServicePort):
         execute_step_use_case: "ExecuteStepUseCase | None" = None,
         synthesize_results_use_case: "SynthesizeResultsUseCase | None" = None,
         workflow_learner: "WorkflowLearner | None" = None,
-        skill_repository: SkillRepositoryPort | None=None,
+        skill_repository: SkillRepositoryPort | None = None,
         skill_service: "SkillService | None" = None,
-        subagent_repository: SubAgentRepositoryPort | None=None,
-        redis_client: Any=None,
+        subagent_repository: SubAgentRepositoryPort | None = None,
+        redis_client: Any = None,
         tool_execution_record_repository: "ToolExecutionRecordRepository | None" = None,
         agent_execution_event_repository: "AgentExecutionEventRepository | None" = None,
         execution_checkpoint_repository: "ExecutionCheckpointRepository | None" = None,
-        storage_service: Any=None,
-        db_session: AsyncSession | None=None,
-        sequence_service: Any=None,
-        context_loader: Any=None,
+        storage_service: Any = None,
+        db_session: AsyncSession | None = None,
+        sequence_service: Any = None,
+        context_loader: Any = None,
     ) -> None:
         """
         Initialize the agent service.
@@ -613,13 +615,15 @@ class AgentService(AgentServicePort):
                                     except Exception:
                                         pass
                                 if first_user_msg:
-                                    asyncio.create_task(
+                                    _title_task = asyncio.create_task(
                                         self._trigger_title_generation(
                                             conversation_id=conversation_id,
                                             project_id=conv.project_id,
                                             user_message=first_user_msg,
                                         )
                                     )
+                                    _background_tasks.add(_title_task)
+                                    _title_task.add_done_callback(_background_tasks.discard)
                         except Exception as title_err:
                             logger.debug(f"Title generation check failed: {title_err}")
 

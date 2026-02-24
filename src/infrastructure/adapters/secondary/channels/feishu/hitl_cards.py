@@ -92,7 +92,7 @@ class HITLCardBuilder:
                 tenant_id=tenant_id,
                 project_id=project_id,
             )
-            elements.append({"tag": "action", "actions": actions})
+            elements.extend(actions)
 
         return self._wrap_card(
             title="Agent needs clarification",
@@ -135,7 +135,7 @@ class HITLCardBuilder:
                 tenant_id=tenant_id,
                 project_id=project_id,
             )
-            elements.append({"tag": "action", "actions": actions})
+            elements.extend(actions)
 
         return self._wrap_card(
             title="Agent needs a decision",
@@ -162,36 +162,35 @@ class HITLCardBuilder:
 
         elements: list[dict[str, Any]] = [
             {"tag": "markdown", "content": content},
-            {
-                "tag": "action",
-                "actions": [
-                    {
-                        "tag": "button",
-                        "text": {"tag": "plain_text", "content": "Allow"},
-                        "type": "primary",
-                        "value": {
-                            "hitl_request_id": request_id,
-                            "hitl_type": hitl_type,
-                            "response_data": json.dumps({"action": "allow"}),
-                            "tenant_id": tenant_id,
-                            "project_id": project_id,
-                        },
-                    },
-                    {
-                        "tag": "button",
-                        "text": {"tag": "plain_text", "content": "Deny"},
-                        "type": "danger",
-                        "value": {
-                            "hitl_request_id": request_id,
-                            "hitl_type": hitl_type,
-                            "response_data": json.dumps({"action": "deny"}),
-                            "tenant_id": tenant_id,
-                            "project_id": project_id,
-                        },
-                    },
-                ],
-            },
         ]
+        elements.extend(
+            [
+                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "Allow"},
+                    "type": "primary",
+                    "value": {
+                        "hitl_request_id": request_id,
+                        "hitl_type": hitl_type,
+                        "response_data": json.dumps({"action": "allow"}),
+                        "tenant_id": tenant_id,
+                        "project_id": project_id,
+                    },
+                },
+                {
+                    "tag": "button",
+                    "text": {"tag": "plain_text", "content": "Deny"},
+                    "type": "danger",
+                    "value": {
+                        "hitl_request_id": request_id,
+                        "hitl_type": hitl_type,
+                        "response_data": json.dumps({"action": "deny"}),
+                        "tenant_id": tenant_id,
+                        "project_id": project_id,
+                    },
+                },
+            ]
+        )
 
         return self._wrap_card(
             title="Permission Request",

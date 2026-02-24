@@ -721,8 +721,7 @@ class TestDurationAwareTimeoutClassification:
         """Real-world scenario: command outputs 'timeout' but ran quickly."""
         # Simulates: python script that encounters a database timeout after 47s
         error = Exception(
-            "Error: Tool execution failed after 1 attempts: "
-            "request timeout after 5 seconds"
+            "Error: Tool execution failed after 1 attempts: request timeout after 5 seconds"
         )
 
         mcp_error = MCPToolErrorClassifier.classify(

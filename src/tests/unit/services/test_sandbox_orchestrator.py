@@ -207,16 +207,20 @@ class TestSandboxOrchestrator:
         """Test successful desktop start."""
         # Setup mock response
         mock_adapter.call_tool.return_value = {
-            "content": [{
-                "text": json.dumps({
-                    "success": True,
-                    "url": "http://localhost:6080/vnc.html",
-                    "display": ":1",
-                    "resolution": "1920x1080",  # Should match requested resolution
-                    "port": 6080,
-                    "kasmvnc_pid": 12345,
-                })
-            }],
+            "content": [
+                {
+                    "text": json.dumps(
+                        {
+                            "success": True,
+                            "url": "http://localhost:6080/vnc.html",
+                            "display": ":1",
+                            "resolution": "1920x1080",  # Should match requested resolution
+                            "port": 6080,
+                            "kasmvnc_pid": 12345,
+                        }
+                    )
+                }
+            ],
             "is_error": False,
         }
 
@@ -248,15 +252,19 @@ class TestSandboxOrchestrator:
     async def test_start_desktop_with_default_config(self, orchestrator, mock_adapter):
         """Test desktop start with default configuration."""
         mock_adapter.call_tool.return_value = {
-            "content": [{
-                "text": json.dumps({
-                    "success": True,
-                    "url": "http://localhost:6080/vnc.html",
-                    "display": ":1",
-                    "resolution": "1280x720",
-                    "port": 6080,
-                })
-            }],
+            "content": [
+                {
+                    "text": json.dumps(
+                        {
+                            "success": True,
+                            "url": "http://localhost:6080/vnc.html",
+                            "display": ":1",
+                            "resolution": "1280x720",
+                            "port": 6080,
+                        }
+                    )
+                }
+            ],
             "is_error": False,
         }
 
@@ -269,13 +277,17 @@ class TestSandboxOrchestrator:
     async def test_start_desktop_already_running(self, orchestrator, mock_adapter):
         """Test desktop start when already running."""
         mock_adapter.call_tool.return_value = {
-            "content": [{
-                "text": json.dumps({
-                    "success": True,
-                    "message": "Desktop already running",
-                    "url": "http://localhost:6080/vnc.html",
-                })
-            }],
+            "content": [
+                {
+                    "text": json.dumps(
+                        {
+                            "success": True,
+                            "message": "Desktop already running",
+                            "url": "http://localhost:6080/vnc.html",
+                        }
+                    )
+                }
+            ],
             "is_error": False,
         }
 
@@ -296,9 +308,7 @@ class TestSandboxOrchestrator:
     async def test_stop_desktop_success(self, orchestrator, mock_adapter, mock_event_publisher):
         """Test successful desktop stop."""
         mock_adapter.call_tool.return_value = {
-            "content": [{
-                "text": json.dumps({"success": True})
-            }],
+            "content": [{"text": json.dumps({"success": True})}],
             "is_error": False,
         }
 
@@ -326,15 +336,19 @@ class TestSandboxOrchestrator:
     async def test_get_desktop_status_running(self, orchestrator, mock_adapter):
         """Test getting desktop status when running."""
         mock_adapter.call_tool.return_value = {
-            "content": [{
-                "text": json.dumps({
-                    "running": True,
-                    "url": "http://localhost:6080/vnc.html",
-                    "display": ":1",
-                    "resolution": "1280x720",
-                    "port": 6080,
-                })
-            }],
+            "content": [
+                {
+                    "text": json.dumps(
+                        {
+                            "running": True,
+                            "url": "http://localhost:6080/vnc.html",
+                            "display": ":1",
+                            "resolution": "1280x720",
+                            "port": 6080,
+                        }
+                    )
+                }
+            ],
             "is_error": False,
         }
 
@@ -347,11 +361,15 @@ class TestSandboxOrchestrator:
     async def test_get_desktop_status_not_running(self, orchestrator, mock_adapter):
         """Test getting desktop status when not running."""
         mock_adapter.call_tool.return_value = {
-            "content": [{
-                "text": json.dumps({
-                    "running": False,
-                })
-            }],
+            "content": [
+                {
+                    "text": json.dumps(
+                        {
+                            "running": False,
+                        }
+                    )
+                }
+            ],
             "is_error": False,
         }
 
@@ -368,14 +386,18 @@ class TestSandboxOrchestrator:
     async def test_start_terminal_success(self, orchestrator, mock_adapter, mock_event_publisher):
         """Test successful terminal start."""
         mock_adapter.call_tool.return_value = {
-            "content": [{
-                "text": json.dumps({
-                    "success": True,
-                    "url": "ws://localhost:7681",
-                    "port": 7681,
-                    "pid": 54321,
-                })
-            }],
+            "content": [
+                {
+                    "text": json.dumps(
+                        {
+                            "success": True,
+                            "url": "ws://localhost:7681",
+                            "port": 7681,
+                            "pid": 54321,
+                        }
+                    )
+                }
+            ],
             "is_error": False,
         }
 
@@ -402,9 +424,7 @@ class TestSandboxOrchestrator:
     async def test_stop_terminal_success(self, orchestrator, mock_adapter, mock_event_publisher):
         """Test successful terminal stop."""
         mock_adapter.call_tool.return_value = {
-            "content": [{
-                "text": json.dumps({"success": True})
-            }],
+            "content": [{"text": json.dumps({"success": True})}],
             "is_error": False,
         }
 
@@ -423,14 +443,18 @@ class TestSandboxOrchestrator:
     async def test_get_terminal_status_running(self, orchestrator, mock_adapter):
         """Test getting terminal status when running."""
         mock_adapter.call_tool.return_value = {
-            "content": [{
-                "text": json.dumps({
-                    "running": True,
-                    "url": "ws://localhost:7681",
-                    "port": 7681,
-                    "pid": 54321,
-                })
-            }],
+            "content": [
+                {
+                    "text": json.dumps(
+                        {
+                            "running": True,
+                            "url": "ws://localhost:7681",
+                            "port": 7681,
+                            "pid": 54321,
+                        }
+                    )
+                }
+            ],
             "is_error": False,
         }
 
@@ -447,9 +471,7 @@ class TestSandboxOrchestrator:
     async def test_execute_command_success(self, orchestrator, mock_adapter):
         """Test successful command execution."""
         mock_adapter.call_tool.return_value = {
-            "content": [{
-                "text": "file1.txt\nfile2.txt\n"
-            }],
+            "content": [{"text": "file1.txt\nfile2.txt\n"}],
             "is_error": False,
         }
 
@@ -481,9 +503,7 @@ class TestSandboxOrchestrator:
     async def test_execute_command_with_error(self, orchestrator, mock_adapter):
         """Test command execution that produces error output."""
         mock_adapter.call_tool.return_value = {
-            "content": [{
-                "text": "Error: Command not found"
-            }],
+            "content": [{"text": "Error: Command not found"}],
             "is_error": True,
         }
 
@@ -523,16 +543,20 @@ class TestSandboxOrchestrator:
     def test_parse_desktop_result_running(self, orchestrator):
         """Test parsing desktop result when running."""
         result = {
-            "content": [{
-                "text": json.dumps({
-                    "running": True,
-                    "url": "http://localhost:6080/vnc.html",
-                    "display": ":1",
-                    "resolution": "1920x1080",
-                    "port": 6080,
-                    "kasmvnc_pid": 12345,
-                })
-            }],
+            "content": [
+                {
+                    "text": json.dumps(
+                        {
+                            "running": True,
+                            "url": "http://localhost:6080/vnc.html",
+                            "display": ":1",
+                            "resolution": "1920x1080",
+                            "port": 6080,
+                            "kasmvnc_pid": 12345,
+                        }
+                    )
+                }
+            ],
             "is_error": False,
         }
 
@@ -548,9 +572,7 @@ class TestSandboxOrchestrator:
     def test_parse_desktop_result_not_running(self, orchestrator):
         """Test parsing desktop result when not running."""
         result = {
-            "content": [{
-                "text": json.dumps({"running": False})
-            }],
+            "content": [{"text": json.dumps({"running": False})}],
             "is_error": False,
         }
 
@@ -583,14 +605,18 @@ class TestSandboxOrchestrator:
     def test_parse_terminal_result_running(self, orchestrator):
         """Test parsing terminal result when running."""
         result = {
-            "content": [{
-                "text": json.dumps({
-                    "running": True,
-                    "url": "ws://localhost:7681",
-                    "port": 7681,
-                    "pid": 54321,
-                })
-            }],
+            "content": [
+                {
+                    "text": json.dumps(
+                        {
+                            "running": True,
+                            "url": "ws://localhost:7681",
+                            "port": 7681,
+                            "pid": 54321,
+                        }
+                    )
+                }
+            ],
             "is_error": False,
         }
 
@@ -604,9 +630,7 @@ class TestSandboxOrchestrator:
     def test_parse_terminal_result_not_running(self, orchestrator):
         """Test parsing terminal result when not running."""
         result = {
-            "content": [{
-                "text": json.dumps({"running": False})
-            }],
+            "content": [{"text": json.dumps({"running": False})}],
             "is_error": False,
         }
 

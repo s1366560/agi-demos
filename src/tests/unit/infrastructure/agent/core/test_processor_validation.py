@@ -314,6 +314,7 @@ class TestProcessorToolInputValidation:
     @pytest.fixture
     def mock_tool_with_schema(self):
         """Create a mock tool with JSON schema."""
+
         async def execute(**kwargs):
             return f"Executed with: {kwargs}"
 

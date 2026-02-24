@@ -262,6 +262,7 @@ def build_file_size_limits(
         AttachmentPurpose.BOTH: min(llm_max_mb, sandbox_max_mb) * 1024 * 1024,
     }
 
+
 # Allowed MIME types by purpose
 ALLOWED_MIME_TYPES = {
     AttachmentPurpose.LLM_CONTEXT: [

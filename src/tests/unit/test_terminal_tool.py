@@ -65,7 +65,7 @@ class TestTerminalTool:
             "content": [
                 {
                     "type": "text",
-                    "text": '{"success": true, "url": "ws://localhost:7681", "port": 7681}'
+                    "text": '{"success": true, "url": "ws://localhost:7681", "port": 7681}',
                 }
             ],
             "is_error": False,
@@ -83,7 +83,7 @@ class TestTerminalTool:
             "content": [
                 {
                     "type": "text",
-                    "text": '{"success": true, "url": "ws://localhost:8681", "port": 8681}'
+                    "text": '{"success": true, "url": "ws://localhost:8681", "port": 8681}',
                 }
             ],
             "is_error": False,
@@ -100,10 +100,7 @@ class TestTerminalTool:
         """Test stopping terminal successfully."""
         mock_sandbox_adapter.call_tool.return_value = {
             "content": [
-                {
-                    "type": "text",
-                    "text": '{"success": true, "message": "Terminal stopped"}'
-                }
+                {"type": "text", "text": '{"success": true, "message": "Terminal stopped"}'}
             ],
             "is_error": False,
         }
@@ -111,7 +108,11 @@ class TestTerminalTool:
         result = await terminal_tool.execute(action="stop")
 
         # Stop command returns success message
-        assert "successfully" in result.lower() or "stopped" in result.lower() or "not running" in result.lower()
+        assert (
+            "successfully" in result.lower()
+            or "stopped" in result.lower()
+            or "not running" in result.lower()
+        )
 
     @pytest.mark.asyncio
     async def test_execute_status_running(self, terminal_tool, mock_sandbox_adapter):
@@ -120,7 +121,7 @@ class TestTerminalTool:
             "content": [
                 {
                     "type": "text",
-                    "text": '{"running": true, "url": "ws://localhost:7681", "port": 7681}'
+                    "text": '{"running": true, "url": "ws://localhost:7681", "port": 7681}',
                 }
             ],
             "is_error": False,

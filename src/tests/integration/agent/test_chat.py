@@ -35,7 +35,8 @@ async def test_chat():
     print("\n1. Testing Ray connection...")
     try:
         import ray
-        ray.init(address='ray://localhost:10001', namespace='memstack', ignore_reinit_error=True)
+
+        ray.init(address="ray://localhost:10001", namespace="memstack", ignore_reinit_error=True)
         print(f"   ✓ Ray connected: {ray.is_initialized()}")
         print(f"   ✓ Cluster resources: {ray.cluster_resources()}")
         ray.shutdown()
@@ -49,6 +50,7 @@ async def test_chat():
         from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
             SqlConversationRepository,
         )
+
         async with async_session_factory() as db:
             repo = SqlConversationRepository(db)
             conversation = await repo.find_by_id("822fed4e-b7f9-447d-9bbf-b1600d685e49")
@@ -62,6 +64,7 @@ async def test_chat():
     except Exception as e:
         print(f"   ✗ Database error: {e}")
         import traceback
+
         traceback.print_exc()
         return
 
@@ -91,13 +94,13 @@ async def test_chat():
             from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
                 SqlAgentExecutionEventRepository,
             )
-            
+
             event_repo = SqlAgentExecutionEventRepository(db)
-            
+
             # Create Redis client for event bus
             redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
             redis_client = aioredis.from_url(redis_url)
-            
+
             agent_service = AgentService(
                 conversation_repository=conversation_repo,
                 execution_repository=execution_repo,
@@ -136,6 +139,7 @@ async def test_chat():
     except Exception as e:
         print(f"   ✗ Agent Service error: {e}")
         import traceback
+
         traceback.print_exc()
         return
 

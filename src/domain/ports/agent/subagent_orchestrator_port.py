@@ -117,9 +117,7 @@ class SubAgentOrchestratorPort(Protocol):
         """
         ...
 
-    def get_execution_config(
-        self, subagent_name: str
-    ) -> SubAgentExecutionConfig:
+    def get_execution_config(self, subagent_name: str) -> SubAgentExecutionConfig:
         """
         Get execution configuration for a sub-agent.
 

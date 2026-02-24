@@ -37,16 +37,13 @@ class SkillLike(Protocol):
     """Protocol for Skill-like objects to avoid circular imports."""
 
     @property
-    def id(self) -> str:
-        ...
+    def id(self) -> str: ...
 
     @property
-    def name(self) -> str:
-        ...
+    def name(self) -> str: ...
 
     @property
-    def tools(self) -> list:
-        ...
+    def tools(self) -> list: ...
 
 
 class EventConverter:
@@ -120,9 +117,7 @@ class EventConverter:
             return None
 
         # OBSERVE event: add redundant 'observation' field for legacy compat
-        if event_type == AgentEventType.OBSERVE and isinstance(
-            domain_event, AgentObserveEvent
-        ):
+        if event_type == AgentEventType.OBSERVE and isinstance(domain_event, AgentObserveEvent):
             observation = (
                 domain_event.result
                 if domain_event.result is not None
@@ -138,18 +133,14 @@ class EventConverter:
             event_dict["type"] = "doom_loop"
 
         # THOUGHT: rename content to thought
-        if event_type == AgentEventType.THOUGHT and isinstance(
-            domain_event, AgentThoughtEvent
-        ):
+        if event_type == AgentEventType.THOUGHT and isinstance(domain_event, AgentThoughtEvent):
             event_dict["data"] = {
                 "thought": domain_event.content,
                 "thought_level": domain_event.thought_level,
             }
 
         # ACT: normalize call_id and tool_input
-        if event_type == AgentEventType.ACT and isinstance(
-            domain_event, AgentActEvent
-        ):
+        if event_type == AgentEventType.ACT and isinstance(domain_event, AgentActEvent):
             event_dict["data"] = {
                 "tool_name": domain_event.tool_name,
                 "tool_input": domain_event.tool_input or {},
@@ -158,9 +149,7 @@ class EventConverter:
             }
 
         # ERROR: provide default code
-        if event_type == AgentEventType.ERROR and isinstance(
-            domain_event, AgentErrorEvent
-        ):
+        if event_type == AgentEventType.ERROR and isinstance(domain_event, AgentErrorEvent):
             event_dict["data"]["code"] = domain_event.code or "UNKNOWN"
 
         # ARTIFACT_CREATED: forward artifact info to frontend
@@ -230,9 +219,7 @@ class EventConverter:
             return self._convert_skill_act(domain_event, skill, current_step, timestamp)
 
         elif event_type == AgentEventType.OBSERVE:
-            return self._convert_skill_observe(
-                domain_event, skill, current_step, timestamp
-            )
+            return self._convert_skill_observe(domain_event, skill, current_step, timestamp)
 
         elif event_type == AgentEventType.SKILL_EXECUTION_COMPLETE:
             # Completion handled in _execute_skill_directly

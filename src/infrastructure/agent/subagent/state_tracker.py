@@ -199,9 +199,7 @@ class StateTracker:
             state.error = error
         return state
 
-    def cancel(
-        self, execution_id: str, conversation_id: str
-    ) -> SubAgentState | None:
+    def cancel(self, execution_id: str, conversation_id: str) -> SubAgentState | None:
         """Mark execution as cancelled."""
         state = self._get(execution_id, conversation_id)
         if state:
@@ -218,9 +216,7 @@ class StateTracker:
             state.progress = min(max(progress, 0), 100)
         return state
 
-    def get_state(
-        self, execution_id: str, conversation_id: str
-    ) -> SubAgentState | None:
+    def get_state(self, execution_id: str, conversation_id: str) -> SubAgentState | None:
         """Get state for a specific execution."""
         return self._get(execution_id, conversation_id)
 
@@ -241,9 +237,7 @@ class StateTracker:
         """Clear all tracked states for a conversation."""
         self._states.pop(conversation_id, None)
 
-    def _get(
-        self, execution_id: str, conversation_id: str
-    ) -> SubAgentState | None:
+    def _get(self, execution_id: str, conversation_id: str) -> SubAgentState | None:
         """Get state by execution and conversation ID."""
         return self._states.get(conversation_id, {}).get(execution_id)
 

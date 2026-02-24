@@ -81,10 +81,12 @@ class TestSandboxToolRegistry:
     def mock_adapter(self):
         """Create a mock MCP adapter."""
         adapter = AsyncMock()
-        adapter.list_tools = AsyncMock(return_value=[
-            {"name": "bash", "description": "Execute bash"},
-            {"name": "file_read", "description": "Read file"},
-        ])
+        adapter.list_tools = AsyncMock(
+            return_value=[
+                {"name": "bash", "description": "Execute bash"},
+                {"name": "file_read", "description": "Read file"},
+            ]
+        )
         return adapter
 
     @pytest.fixture
@@ -110,9 +112,7 @@ class TestSandboxToolRegistry:
         assert registry._registrations["abc123"].tool_names == ["bash", "file_read"]
 
     @pytest.mark.asyncio
-    async def test_register_sandbox_tools_fetch_from_adapter(
-        self, registry, mock_adapter
-    ):
+    async def test_register_sandbox_tools_fetch_from_adapter(self, registry, mock_adapter):
         """Test registering tools fetches from adapter when not provided."""
         mock_adapter.list_tools.return_value = [
             {"name": "bash", "description": "Execute bash"},

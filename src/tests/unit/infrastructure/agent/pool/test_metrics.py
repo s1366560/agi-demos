@@ -28,8 +28,12 @@ class TestPoolMetricsCollector:
 
     def test_counter_increment(self):
         """测试计数器递增."""
-        self.collector.requests_total.inc({"tenant_id": "t1", "project_id": "p1", "status": "success"})
-        self.collector.requests_total.inc({"tenant_id": "t1", "project_id": "p1", "status": "success"})
+        self.collector.requests_total.inc(
+            {"tenant_id": "t1", "project_id": "p1", "status": "success"}
+        )
+        self.collector.requests_total.inc(
+            {"tenant_id": "t1", "project_id": "p1", "status": "success"}
+        )
 
         value = self.collector.requests_total.get(
             {"tenant_id": "t1", "project_id": "p1", "status": "success"}
@@ -38,8 +42,12 @@ class TestPoolMetricsCollector:
 
     def test_counter_with_different_labels(self):
         """测试不同标签的计数器."""
-        self.collector.requests_total.inc({"tenant_id": "t1", "project_id": "p1", "status": "success"})
-        self.collector.requests_total.inc({"tenant_id": "t1", "project_id": "p1", "status": "error"})
+        self.collector.requests_total.inc(
+            {"tenant_id": "t1", "project_id": "p1", "status": "success"}
+        )
+        self.collector.requests_total.inc(
+            {"tenant_id": "t1", "project_id": "p1", "status": "error"}
+        )
 
         success = self.collector.requests_total.get(
             {"tenant_id": "t1", "project_id": "p1", "status": "success"}
@@ -220,7 +228,9 @@ class TestPoolMetricsCollector:
     def test_collect_all(self):
         """测试收集所有指标."""
         self.collector.instances_total.set(10)
-        self.collector.requests_total.inc({"tenant_id": "t1", "project_id": "p1", "status": "success"})
+        self.collector.requests_total.inc(
+            {"tenant_id": "t1", "project_id": "p1", "status": "success"}
+        )
 
         metrics = self.collector.collect_all()
         assert len(metrics) >= 2  # At least the two we set

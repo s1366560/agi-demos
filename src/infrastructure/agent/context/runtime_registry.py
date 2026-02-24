@@ -73,4 +73,3 @@ class ContextRuntimeRegistry:
         messages: list[dict[str, Any]],
     ) -> tuple[str, dict[str, Any]]:
         return self._registry.apply_summary_enrichment(summary_text, messages)
-

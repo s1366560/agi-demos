@@ -45,4 +45,3 @@ class HistoryTurnGuard:
             "dropped_messages": dropped,
             "modified_messages": dropped,
         }
-

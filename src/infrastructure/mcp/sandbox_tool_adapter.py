@@ -6,6 +6,7 @@ interface. Tool calls are proxied through the sandbox's mcp_server_call_tool.
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 import logging
@@ -14,6 +15,8 @@ from typing import TYPE_CHECKING, Any
 from src.infrastructure.agent.tools.base import AgentTool
 
 logger = logging.getLogger(__name__)
+
+_mcp_bg_tasks: set[asyncio.Task[Any]] = set()
 
 if TYPE_CHECKING:
     from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
@@ -64,12 +67,14 @@ class SandboxMCPServerToolAdapter(AgentTool):
         if self._ui_metadata:
             logger.info(
                 "SandboxMCPServerToolAdapter %s: _ui_metadata=%s",
-                self._name, self._ui_metadata,
+                self._name,
+                self._ui_metadata,
             )
         else:
             logger.debug(
                 "SandboxMCPServerToolAdapter %s: no _meta.ui in tool_info (keys=%s)",
-                self._name, list(tool_info.keys()),
+                self._name,
+                list(tool_info.keys()),
             )
 
         # MCP App ID (set externally after auto-detection)
@@ -119,10 +124,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
         Accepts any non-empty resourceUri scheme (ui://, mcp-resource://, etc.)
         as long as _meta.ui is present with a resourceUri field.
         """
-        return (
-            self._ui_metadata is not None
-            and bool(self._ui_metadata.get("resourceUri"))
-        )
+        return self._ui_metadata is not None and bool(self._ui_metadata.get("resourceUri"))
 
     @property
     def resource_uri(self) -> str:
@@ -157,9 +159,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
         # Cache miss or expired - fetch fresh
         self._cache_stats["misses"] += 1
         try:
-            html = await self._sandbox_adapter.read_resource(
-                self._sandbox_id, uri
-            )
+            html = await self._sandbox_adapter.read_resource(self._sandbox_id, uri)
             html = html or ""
 
             # Cache successful result
@@ -197,7 +197,9 @@ class SandboxMCPServerToolAdapter(AgentTool):
 
         # Create background task (fire and forget)
         with contextlib.suppress(RuntimeError):
-            asyncio.create_task(_prefetch())
+            _prefetch_task = asyncio.create_task(_prefetch())
+            _mcp_bg_tasks.add(_prefetch_task)
+            _prefetch_task.add_done_callback(_mcp_bg_tasks.discard)
 
     def get_cache_stats(self) -> dict[str, Any]:
         """Get cache statistics.
@@ -289,5 +291,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
                 self._last_html: str = text
                 self._cached_html = text
                 self._cache_fetched_at = time.time()
-                logger.debug("Captured HTML from tool result for %s (%d bytes)", self._name, len(text))
+                logger.debug(
+                    "Captured HTML from tool result for %s (%d bytes)", self._name, len(text)
+                )
                 return

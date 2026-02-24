@@ -124,9 +124,7 @@ class UserRole(IdGeneratorMixin, Base):
     id: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     role_id: Mapped[str] = mapped_column(String, ForeignKey("roles.id"), nullable=False)
-    tenant_id: Mapped[str | None] = mapped_column(
-        String, ForeignKey("tenants.id"), nullable=True
-    )
+    tenant_id: Mapped[str | None] = mapped_column(String, ForeignKey("tenants.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped["User"] = relationship(back_populates="roles")
@@ -274,9 +272,7 @@ class Memory(Base):
     status: Mapped[str] = mapped_column(String, default=DataStatus.ENABLED)
     processing_status: Mapped[str] = mapped_column(String, default=ProcessingStatus.PENDING)
     meta: Mapped[dict] = mapped_column(JSON, default=dict)
-    task_id: Mapped[str | None] = mapped_column(
-        String, nullable=True
-    )  # Task ID for SSE streaming
+    task_id: Mapped[str | None] = mapped_column(String, nullable=True)  # Task ID for SSE streaming
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), onupdate=func.now(), nullable=True
@@ -376,9 +372,7 @@ class MemoryShare(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     memory_id: Mapped[str] = mapped_column(String, ForeignKey("memories.id"), nullable=False)
-    share_token: Mapped[str | None] = mapped_column(
-        String, unique=True, index=True, nullable=True
-    )
+    share_token: Mapped[str | None] = mapped_column(String, unique=True, index=True, nullable=True)
     shared_with_user_id: Mapped[str | None] = mapped_column(
         String, ForeignKey("users.id"), nullable=True
     )
@@ -438,9 +432,7 @@ class SupportTicket(Base):
     __tablename__ = "support_tickets"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    tenant_id: Mapped[str | None] = mapped_column(
-        String, ForeignKey("tenants.id"), nullable=True
-    )
+    tenant_id: Mapped[str | None] = mapped_column(String, ForeignKey("tenants.id"), nullable=True)
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
     subject: Mapped[str] = mapped_column(String, nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)

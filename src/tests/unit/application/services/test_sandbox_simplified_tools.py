@@ -8,7 +8,6 @@ This test file defines the simplified behavior for tool management:
 3. Agent can get tools directly from SandboxResourcePort
 """
 
-
 import pytest
 
 from src.domain.ports.services.sandbox_resource_port import (
@@ -110,9 +109,7 @@ class TestSandboxResourcePortProvidesTools:
     @pytest.mark.asyncio
     async def test_tools_can_be_updated_dynamically(self):
         """Available tools should be updatable."""
-        port = MockSandboxResourceWithTools(
-            available_tools=["bash", "read"]
-        )
+        port = MockSandboxResourceWithTools(available_tools=["bash", "read"])
 
         info = await port.get_sandbox_info("proj-123")
         assert info.available_tools == ["bash", "read"]
@@ -164,9 +161,7 @@ class TestSimplifiedToolManagement:
     @pytest.mark.asyncio
     async def test_no_separate_registry_needed(self):
         """Tools should be available through SandboxInfo, not separate registry."""
-        port = MockSandboxResourceWithTools(
-            available_tools=["bash", "read", "write"]
-        )
+        port = MockSandboxResourceWithTools(available_tools=["bash", "read", "write"])
 
         # Get sandbox info - contains tools
         info = await port.get_sandbox_info("proj-123")

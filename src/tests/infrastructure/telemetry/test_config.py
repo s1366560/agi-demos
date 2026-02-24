@@ -1,6 +1,5 @@
 """Tests for OpenTelemetry configuration module."""
 
-
 from src.infrastructure.telemetry import config
 
 
@@ -12,9 +11,7 @@ class TestConfigureTracerProvider:
         # Reset state
         config._reset_providers()
 
-        result = config.configure_tracer_provider(
-            settings_override={"enable_telemetry": False}
-        )
+        result = config.configure_tracer_provider(settings_override={"enable_telemetry": False})
 
         assert result is None
 
@@ -38,13 +35,9 @@ class TestConfigureTracerProvider:
         config._reset_providers()
 
         # First call should create provider
-        provider1 = config.configure_tracer_provider(
-            settings_override={"enable_telemetry": True}
-        )
+        provider1 = config.configure_tracer_provider(settings_override={"enable_telemetry": True})
         # Second call should return cached
-        provider2 = config.configure_tracer_provider(
-            settings_override={"enable_telemetry": True}
-        )
+        provider2 = config.configure_tracer_provider(settings_override={"enable_telemetry": True})
 
         assert provider1 is not None
         assert provider1 is provider2
@@ -84,9 +77,7 @@ class TestConfigureMeterProvider:
         # Reset state
         config._reset_providers()
 
-        result = config.configure_meter_provider(
-            settings_override={"enable_telemetry": False}
-        )
+        result = config.configure_meter_provider(settings_override={"enable_telemetry": False})
 
         assert result is None
 
@@ -96,13 +87,9 @@ class TestConfigureMeterProvider:
         config._reset_providers()
 
         # First call should create provider
-        provider1 = config.configure_meter_provider(
-            settings_override={"enable_telemetry": True}
-        )
+        provider1 = config.configure_meter_provider(settings_override={"enable_telemetry": True})
         # Second call should return cached
-        provider2 = config.configure_meter_provider(
-            settings_override={"enable_telemetry": True}
-        )
+        provider2 = config.configure_meter_provider(settings_override={"enable_telemetry": True})
 
         assert provider1 is not None
         assert provider1 is provider2
@@ -120,9 +107,7 @@ class TestGetTracer:
         config._reset_providers()
 
         # Configure with enabled telemetry - this sets _TRACER_PROVIDER
-        config.configure_tracer_provider(
-            settings_override={"enable_telemetry": True}
-        )
+        config.configure_tracer_provider(settings_override={"enable_telemetry": True})
         # get_tracer() calls configure_tracer_provider() without override,
         # but should return cached provider since _TRACER_PROVIDER is already set
         # However, default settings may have enable_telemetry=False, which
@@ -140,9 +125,7 @@ class TestGetTracer:
         # Reset state
         config._reset_providers()
 
-        result = config.configure_tracer_provider(
-            settings_override={"enable_telemetry": False}
-        )
+        result = config.configure_tracer_provider(settings_override={"enable_telemetry": False})
         assert result is None
 
         # Cleanup
@@ -158,9 +141,7 @@ class TestGetMeter:
         config._reset_providers()
 
         # Configure with enabled telemetry
-        config.configure_meter_provider(
-            settings_override={"enable_telemetry": True}
-        )
+        config.configure_meter_provider(settings_override={"enable_telemetry": True})
         # get_meter() uses default settings which may have enable_telemetry=False,
         # so we verify via the global provider directly
         provider = config._get_meter_provider_global()
@@ -180,9 +161,7 @@ class TestConfigureTelemetry:
         # Reset state
         config._reset_providers()
 
-        config.configure_telemetry(
-            settings_override={"enable_telemetry": True}
-        )
+        config.configure_telemetry(settings_override={"enable_telemetry": True})
 
         # Verify providers are configured
         assert config._get_tracer_provider_global() is not None
@@ -201,9 +180,7 @@ class TestShutdownTelemetry:
         config._reset_providers()
 
         # Configure telemetry
-        config.configure_telemetry(
-            settings_override={"enable_telemetry": True}
-        )
+        config.configure_telemetry(settings_override={"enable_telemetry": True})
 
         # Verify providers exist
         assert config._get_tracer_provider_global() is not None

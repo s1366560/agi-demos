@@ -153,7 +153,9 @@ def discover_plugins(
                         version=manifest_metadata.version if manifest_metadata else None,
                         kind=manifest_metadata.kind if manifest_metadata else None,
                         manifest_id=manifest_metadata.id if manifest_metadata else None,
-                        manifest_path=manifest_metadata.manifest_path if manifest_metadata else None,
+                        manifest_path=manifest_metadata.manifest_path
+                        if manifest_metadata
+                        else None,
                         channels=manifest_metadata.channels if manifest_metadata else (),
                         providers=manifest_metadata.providers if manifest_metadata else (),
                         skills=manifest_metadata.skills if manifest_metadata else (),
@@ -255,7 +257,9 @@ def discover_plugins(
                         version=version,
                         kind=manifest_metadata.kind if manifest_metadata else None,
                         manifest_id=manifest_metadata.id if manifest_metadata else None,
-                        manifest_path=manifest_metadata.manifest_path if manifest_metadata else None,
+                        manifest_path=manifest_metadata.manifest_path
+                        if manifest_metadata
+                        else None,
                         channels=manifest_metadata.channels if manifest_metadata else (),
                         providers=manifest_metadata.providers if manifest_metadata else (),
                         skills=manifest_metadata.skills if manifest_metadata else (),

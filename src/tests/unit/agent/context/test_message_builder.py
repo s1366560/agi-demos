@@ -9,7 +9,6 @@ Tests cover:
 - Validation and utilities
 """
 
-
 from src.domain.ports.agent.context_manager_port import AttachmentContent
 from src.infrastructure.agent.context.builder.message_builder import (
     MessageBuilder,
@@ -120,9 +119,7 @@ class TestConvertToOpenAIFormat:
         """Test assistant message with tool_calls."""
         builder = MessageBuilder()
         tool_calls = [{"id": "call_1", "function": {"name": "test"}}]
-        messages = [
-            {"role": "assistant", "content": "", "tool_calls": tool_calls}
-        ]
+        messages = [{"role": "assistant", "content": "", "tool_calls": tool_calls}]
         result = builder.convert_to_openai_format(messages)
         assert result[0]["tool_calls"] == tool_calls
 
@@ -283,9 +280,7 @@ class TestBuildAssistantMessage:
     def test_with_tool_calls(self):
         """Test assistant message with tool calls."""
         builder = MessageBuilder()
-        tool_calls = [
-            {"id": "call_1", "function": {"name": "grep", "arguments": "{}"}}
-        ]
+        tool_calls = [{"id": "call_1", "function": {"name": "grep", "arguments": "{}"}}]
         result = builder.build_assistant_message("", tool_calls=tool_calls)
         assert result["role"] == "assistant"
         assert result["tool_calls"] == tool_calls

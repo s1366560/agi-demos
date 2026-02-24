@@ -10,10 +10,10 @@ logger = logging.getLogger(__name__)
 
 class FeishuBitableClient:
     """Client for Feishu Bitable operations."""
-    
+
     def __init__(self, client: FeishuClient) -> None:
         self._client = client
-    
+
     async def create_app(
         self,
         name: str,
@@ -21,12 +21,12 @@ class FeishuBitableClient:
         time_zone: str = "Asia/Shanghai",
     ) -> str:
         """Create a new Bitable app.
-        
+
         Args:
             name: App name
             folder_token: Optional folder to create in
             time_zone: Default timezone
-            
+
         Returns:
             App token
         """
@@ -36,46 +36,46 @@ class FeishuBitableClient:
         }
         if folder_token:
             data["folder_token"] = folder_token
-        
+
         response = self._client.bitable.app.create(data=data)
-        
+
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to create Bitable: {response.get('msg')}")
-        
+
         return response["data"]["app_token"]
-    
+
     async def get_app(self, app_token: str) -> dict[str, Any]:
         """Get Bitable app info.
-        
+
         Args:
             app_token: App token
-            
+
         Returns:
             App info
         """
         response = self._client.bitable.app.get_info(path={"app_token": app_token})
-        
+
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to get Bitable: {response.get('msg')}")
-        
+
         return response["data"]
-    
+
     async def list_tables(self, app_token: str) -> list[dict[str, Any]]:
         """List tables in a Bitable.
-        
+
         Args:
             app_token: App token
-            
+
         Returns:
             List of tables
         """
         response = self._client.bitable.table.list(path={"app_token": app_token})
-        
+
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to list tables: {response.get('msg')}")
-        
+
         return response["data"].get("items", [])
-    
+
     async def create_table(
         self,
         app_token: str,
@@ -83,29 +83,26 @@ class FeishuBitableClient:
         fields: list[dict[str, Any]] | None = None,
     ) -> str:
         """Create a new table.
-        
+
         Args:
             app_token: App token
             name: Table name
             fields: Optional initial fields
-            
+
         Returns:
             Table ID
         """
         data: dict[str, Any] = {"table": {"name": name}}
         if fields:
             data["table"]["fields"] = fields
-        
-        response = self._client.bitable.table.create(
-            path={"app_token": app_token},
-            data=data
-        )
-        
+
+        response = self._client.bitable.table.create(path={"app_token": app_token}, data=data)
+
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to create table: {response.get('msg')}")
-        
+
         return response["data"]["table_id"]
-    
+
     async def list_fields(
         self,
         app_token: str,
@@ -113,29 +110,28 @@ class FeishuBitableClient:
         view_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """List fields in a table.
-        
+
         Args:
             app_token: App token
             table_id: Table ID
             view_id: Optional view ID to filter
-            
+
         Returns:
             List of fields
         """
         params = {}
         if view_id:
             params["view_id"] = view_id
-        
+
         response = self._client.bitable.field.list(
-            path={"app_token": app_token, "table_id": table_id},
-            params=params
+            path={"app_token": app_token, "table_id": table_id}, params=params
         )
-        
+
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to list fields: {response.get('msg')}")
-        
+
         return response["data"].get("items", [])
-    
+
     async def create_field(
         self,
         app_token: str,
@@ -145,14 +141,14 @@ class FeishuBitableClient:
         property: dict[str, Any] | None = None,
     ) -> str:
         """Create a new field.
-        
+
         Args:
             app_token: App token
             table_id: Table ID
             field_name: Field name
             field_type: Field type number
             property: Field-specific properties
-            
+
         Returns:
             Field ID
         """
@@ -162,17 +158,16 @@ class FeishuBitableClient:
         }
         if property:
             data["property"] = property
-        
+
         response = self._client.bitable.field.create(
-            path={"app_token": app_token, "table_id": table_id},
-            data=data
+            path={"app_token": app_token, "table_id": table_id}, data=data
         )
-        
+
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to create field: {response.get('msg')}")
-        
+
         return response["data"]["field_id"]
-    
+
     async def list_records(
         self,
         app_token: str,
@@ -183,7 +178,7 @@ class FeishuBitableClient:
         page_size: int = 500,
     ) -> list[dict[str, Any]]:
         """List records in a table.
-        
+
         Args:
             app_token: App token
             table_id: Table ID
@@ -191,13 +186,13 @@ class FeishuBitableClient:
             filter_: Optional filter formula
             sort: Optional sort rules
             page_size: Records per page
-            
+
         Returns:
             List of records
         """
         records = []
         page_token = None
-        
+
         while True:
             params: dict[str, Any] = {"page_size": min(page_size, 500)}
             if view_id:
@@ -208,26 +203,25 @@ class FeishuBitableClient:
                 params["sort"] = sort
             if page_token:
                 params["page_token"] = page_token
-            
+
             response = self._client.bitable.record.list(
-                path={"app_token": app_token, "table_id": table_id},
-                params=params
+                path={"app_token": app_token, "table_id": table_id}, params=params
             )
-            
+
             if response.get("code") != 0:
                 raise RuntimeError(f"Failed to list records: {response.get('msg')}")
-            
+
             items = response["data"].get("items", [])
             records.extend(items)
-            
+
             page_token = response["data"].get("page_token")
             has_more = response["data"].get("has_more", False)
-            
+
             if not has_more or not page_token:
                 break
-        
+
         return records
-    
+
     async def get_record(
         self,
         app_token: str,
@@ -235,12 +229,12 @@ class FeishuBitableClient:
         record_id: str,
     ) -> dict[str, Any]:
         """Get a specific record.
-        
+
         Args:
             app_token: App token
             table_id: Table ID
             record_id: Record ID
-            
+
         Returns:
             Record data
         """
@@ -251,12 +245,12 @@ class FeishuBitableClient:
                 "record_id": record_id,
             }
         )
-        
+
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to get record: {response.get('msg')}")
-        
+
         return response["data"]["record"]
-    
+
     async def create_record(
         self,
         app_token: str,
@@ -264,25 +258,24 @@ class FeishuBitableClient:
         fields: dict[str, Any],
     ) -> str:
         """Create a new record.
-        
+
         Args:
             app_token: App token
             table_id: Table ID
             fields: Field values
-            
+
         Returns:
             Record ID
         """
         response = self._client.bitable.record.create(
-            path={"app_token": app_token, "table_id": table_id},
-            data={"fields": fields}
+            path={"app_token": app_token, "table_id": table_id}, data={"fields": fields}
         )
-        
+
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to create record: {response.get('msg')}")
-        
+
         return response["data"]["record"]["record_id"]
-    
+
     async def update_record(
         self,
         app_token: str,
@@ -291,7 +284,7 @@ class FeishuBitableClient:
         fields: dict[str, Any],
     ) -> None:
         """Update a record.
-        
+
         Args:
             app_token: App token
             table_id: Table ID
@@ -304,12 +297,12 @@ class FeishuBitableClient:
                 "table_id": table_id,
                 "record_id": record_id,
             },
-            data={"fields": fields}
+            data={"fields": fields},
         )
-        
+
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to update record: {response.get('msg')}")
-    
+
     async def delete_record(
         self,
         app_token: str,
@@ -317,7 +310,7 @@ class FeishuBitableClient:
         record_id: str,
     ) -> None:
         """Delete a record.
-        
+
         Args:
             app_token: App token
             table_id: Table ID
@@ -330,10 +323,10 @@ class FeishuBitableClient:
                 "record_id": record_id,
             }
         )
-        
+
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to delete record: {response.get('msg')}")
-    
+
     async def search_records(
         self,
         app_token: str,
@@ -341,23 +334,22 @@ class FeishuBitableClient:
         query: str,
     ) -> list[dict[str, Any]]:
         """Search records by text.
-        
+
         Args:
             app_token: App token
             table_id: Table ID
             query: Search query
-            
+
         Returns:
             Matching records
         """
         response = self._client.bitable.record.search(
-            path={"app_token": app_token, "table_id": table_id},
-            data={"query": query}
+            path={"app_token": app_token, "table_id": table_id}, data={"query": query}
         )
-        
+
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to search records: {response.get('msg')}")
-        
+
         return response["data"].get("items", [])
 
 

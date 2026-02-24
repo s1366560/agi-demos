@@ -4,8 +4,6 @@ The DIContainer delegates to domain-specific sub-containers while preserving
 the exact same public interface for all callers.
 """
 
-
-
 from typing import Any
 
 import redis.asyncio as redis
@@ -184,6 +182,7 @@ class DIContainer:
     def ai_service_factory(self) -> Any:
         """Get the AIServiceFactory singleton."""
         from src.infrastructure.llm.provider_factory import get_ai_service_factory
+
         return get_ai_service_factory()
 
     # === Properties that stay on the main class ===
@@ -412,7 +411,7 @@ class DIContainer:
     def attachment_injector(self) -> Any:
         return self._agent.attachment_injector()
 
-    def context_facade(self, window_manager: ContextWindowManager | None=None) -> Any:
+    def context_facade(self, window_manager: ContextWindowManager | None = None) -> Any:
         return self._agent.context_facade(window_manager)
 
     def create_conversation_use_case(self, llm: LLMClient) -> CreateConversationUseCase:

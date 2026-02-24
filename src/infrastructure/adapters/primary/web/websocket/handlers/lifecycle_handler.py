@@ -70,9 +70,7 @@ class SubscribeLifecycleStateHandler(WebSocketMessageHandler):
                             "timestamp": datetime.now(UTC).isoformat(),
                         }
                     )
-                    logger.debug(
-                        f"[WS] Agent actor not found for {project_id}, sent uninitialized"
-                    )
+                    logger.debug(f"[WS] Agent actor not found for {project_id}, sent uninitialized")
                     return
 
                 status = await await_ray(actor.status.remote())
@@ -190,7 +188,7 @@ class StartAgentHandler(WebSocketMessageHandler):
             # Resolve provider config from DB
             factory = get_ai_service_factory()
             provider_config = await factory.resolve_provider(context.tenant_id)
-            
+
             # Decrypt API key for the actor
             encryption_service = get_encryption_service()
             api_key = encryption_service.decrypt(provider_config.api_key_encrypted)
@@ -380,7 +378,7 @@ class RestartAgentHandler(WebSocketMessageHandler):
             # Resolve provider config from DB
             factory = get_ai_service_factory()
             provider_config = await factory.resolve_provider(context.tenant_id)
-            
+
             # Decrypt API key for the actor
             encryption_service = get_encryption_service()
             api_key = encryption_service.decrypt(provider_config.api_key_encrypted)

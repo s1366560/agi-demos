@@ -52,7 +52,9 @@ class HITLReactLoopTester:
             self.errors.append(f"Connection failed: {e}")
             return False
 
-    async def receive_until_event(self, target_events: list[str], timeout: float = 30.0) -> list[dict[str, Any]]:
+    async def receive_until_event(
+        self, target_events: list[str], timeout: float = 30.0
+    ) -> list[dict[str, Any]]:
         """Receive events until one of target events is received."""
         events = []
         start_time = time.time()
@@ -109,10 +111,14 @@ class HITLReactLoopTester:
 
         # Step 2: Subscribe to conversation
         print("\n[Step 2] Subscribing to conversation...")
-        await self.ws.send(json.dumps({
-            "type": "subscribe",
-            "conversation_id": self.conversation_id,
-        }))
+        await self.ws.send(
+            json.dumps(
+                {
+                    "type": "subscribe",
+                    "conversation_id": self.conversation_id,
+                }
+            )
+        )
 
         # Step 3: Send message that triggers HITL
         print("\n[Step 3] Sending message that triggers HITL...")
@@ -121,19 +127,29 @@ class HITLReactLoopTester:
             "I need to delete all user data from the database. "
             "This is a destructive operation. What should I do?"
         )
-        await self.ws.send(json.dumps({
-            "type": "send_message",
-            "conversation_id": self.conversation_id,
-            "message": message,
-            "project_id": self.project_id,
-        }))
+        await self.ws.send(
+            json.dumps(
+                {
+                    "type": "send_message",
+                    "conversation_id": self.conversation_id,
+                    "message": message,
+                    "project_id": self.project_id,
+                }
+            )
+        )
 
         # Step 4: Wait for HITL request
         print("\n[Step 4] Waiting for HITL request...")
         print("   Receiving events:")
         self.events_before_hitl = await self.receive_until_event(
-            target_events=["clarification_asked", "decision_asked", "env_var_requested", "complete", "error"],
-            timeout=45.0
+            target_events=[
+                "clarification_asked",
+                "decision_asked",
+                "env_var_requested",
+                "complete",
+                "error",
+            ],
+            timeout=45.0,
         )
 
         if not self.hitl_request_id:
@@ -183,8 +199,7 @@ class HITLReactLoopTester:
         print("   Receiving events:")
 
         self.events_after_hitl = await self.receive_until_event(
-            target_events=["complete", "error"],
-            timeout=45.0
+            target_events=["complete", "error"], timeout=45.0
         )
 
         # Step 7: Analyze results
@@ -269,6 +284,7 @@ async def main():
     except Exception as e:
         print(f"\n✗ TEST ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
     finally:

@@ -43,9 +43,7 @@ class TestRegisterMCPServerTool:
         assert not tool.validate_args()
         assert not tool.validate_args(server_name="test")
         assert not tool.validate_args(server_name="test", server_type="stdio")
-        assert tool.validate_args(
-            server_name="test", server_type="stdio", command="node"
-        )
+        assert tool.validate_args(server_name="test", server_type="stdio", command="node")
 
     def test_validate_args_sse(self):
         tool = self._make_tool()
@@ -56,9 +54,7 @@ class TestRegisterMCPServerTool:
 
     async def test_execute_no_sandbox(self):
         tool = self._make_tool()
-        result = await tool.execute(
-            server_name="my-server", server_type="stdio", command="node"
-        )
+        result = await tool.execute(server_name="my-server", server_type="stdio", command="node")
         assert "Error" in result
         assert "Sandbox not available" in result
 
@@ -70,37 +66,33 @@ class TestRegisterMCPServerTool:
 
     async def test_execute_invalid_server_type(self):
         tool = self._make_tool(sandbox_adapter=AsyncMock(), sandbox_id="sb-1")
-        result = await tool.execute(
-            server_name="my-server", server_type="invalid", command="node"
-        )
+        result = await tool.execute(server_name="my-server", server_type="invalid", command="node")
         assert "Error" in result
         assert "Invalid server_type" in result
 
     async def test_execute_stdio_missing_command(self):
         tool = self._make_tool(sandbox_adapter=AsyncMock(), sandbox_id="sb-1")
-        result = await tool.execute(
-            server_name="my-server", server_type="stdio"
-        )
+        result = await tool.execute(server_name="my-server", server_type="stdio")
         assert "Error" in result
         assert "'command' is required" in result
 
     async def test_execute_sse_missing_url(self):
         tool = self._make_tool(sandbox_adapter=AsyncMock(), sandbox_id="sb-1")
-        result = await tool.execute(
-            server_name="my-server", server_type="sse"
-        )
+        result = await tool.execute(server_name="my-server", server_type="sse")
         assert "Error" in result
         assert "'url' is required" in result
 
     async def test_execute_install_failure(self):
         mock_adapter = AsyncMock()
-        mock_adapter.call_tool = AsyncMock(return_value={
-            "content": [{"type": "text", "text": '{"success": false, "error": "pkg not found"}'}]
-        })
-        tool = self._make_tool(sandbox_adapter=mock_adapter, sandbox_id="sb-1")
-        result = await tool.execute(
-            server_name="bad-server", server_type="stdio", command="node"
+        mock_adapter.call_tool = AsyncMock(
+            return_value={
+                "content": [
+                    {"type": "text", "text": '{"success": false, "error": "pkg not found"}'}
+                ]
+            }
         )
+        tool = self._make_tool(sandbox_adapter=mock_adapter, sandbox_id="sb-1")
+        result = await tool.execute(server_name="bad-server", server_type="stdio", command="node")
         assert "Error" in result
         assert "Failed to install" in result
 
@@ -114,13 +106,15 @@ class TestRegisterMCPServerTool:
             if call_count == 1:  # install succeeds
                 return {"content": [{"type": "text", "text": '{"success": true}'}]}
             else:  # start fails
-                return {"content": [{"type": "text", "text": '{"success": false, "error": "port busy"}'}]}
+                return {
+                    "content": [
+                        {"type": "text", "text": '{"success": false, "error": "port busy"}'}
+                    ]
+                }
 
         mock_adapter.call_tool = mock_call_tool
         tool = self._make_tool(sandbox_adapter=mock_adapter, sandbox_id="sb-1")
-        result = await tool.execute(
-            server_name="fail-server", server_type="stdio", command="node"
-        )
+        result = await tool.execute(server_name="fail-server", server_type="stdio", command="node")
         assert "Error" in result
         assert "Failed to start" in result
 
@@ -134,13 +128,16 @@ class TestRegisterMCPServerTool:
             if call_count <= 2:  # install + start succeed
                 return {"content": [{"type": "text", "text": '{"success": true}'}]}
             else:  # discover returns tools
-                return {"content": [{"type": "text", "text": '[{"name": "query_db", "description": "Run SQL"}]'}]}
+                return {
+                    "content": [
+                        {"type": "text", "text": '[{"name": "query_db", "description": "Run SQL"}]'}
+                    ]
+                }
 
         mock_adapter.call_tool = mock_call_tool
         tool = self._make_tool(sandbox_adapter=mock_adapter, sandbox_id="sb-1")
         result = await tool.execute(
-            server_name="my-server", server_type="stdio", command="node",
-            args=["server.js"]
+            server_name="my-server", server_type="stdio", command="node", args=["server.js"]
         )
         assert "registered and started successfully" in result
         assert "query_db" in result
@@ -159,20 +156,26 @@ class TestRegisterMCPServerTool:
                 return {"content": [{"type": "text", "text": '{"success": true}'}]}
             else:
                 tools = [
-                    {"name": "render_dashboard", "_meta": {"ui": {"resourceUri": "ui://dashboard/index.html", "title": "Dashboard"}}},
+                    {
+                        "name": "render_dashboard",
+                        "_meta": {
+                            "ui": {"resourceUri": "ui://dashboard/index.html", "title": "Dashboard"}
+                        },
+                    },
                     {"name": "query_data", "description": "Query backend"},
                 ]
                 import json
+
                 return {"content": [{"type": "text", "text": json.dumps(tools)}]}
 
         mock_adapter.call_tool = mock_call_tool
         tool = self._make_tool(
-            sandbox_adapter=mock_adapter, sandbox_id="sb-1",
+            sandbox_adapter=mock_adapter,
+            sandbox_id="sb-1",
             session_factory=AsyncMock(),
         )
         result = await tool.execute(
-            server_name="dashboard-server", server_type="stdio", command="node",
-            args=["server.js"]
+            server_name="dashboard-server", server_type="stdio", command="node", args=["server.js"]
         )
         assert "registered and started successfully" in result
         assert "2 tool(s)" in result
@@ -193,16 +196,16 @@ class TestRegisterMCPServerTool:
         tools_events = [e for e in events if hasattr(e, "tool_names")]
         assert len(tools_events) == 1
         assert "mcp__dashboard-server__render_dashboard" in tools_events[0].tool_names
-        toolset_events = [e for e in events if isinstance(e, dict) and e.get("type") == "toolset_changed"]
+        toolset_events = [
+            e for e in events if isinstance(e, dict) and e.get("type") == "toolset_changed"
+        ]
         assert len(toolset_events) == 1
 
     async def test_execute_exception_handling(self):
         mock_adapter = AsyncMock()
         mock_adapter.call_tool = AsyncMock(side_effect=Exception("Connection lost"))
         tool = self._make_tool(sandbox_adapter=mock_adapter, sandbox_id="sb-1")
-        result = await tool.execute(
-            server_name="broken", server_type="stdio", command="node"
-        )
+        result = await tool.execute(server_name="broken", server_type="stdio", command="node")
         assert "Error" in result
         assert "Connection lost" in result
 

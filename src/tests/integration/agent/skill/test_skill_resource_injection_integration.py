@@ -261,10 +261,12 @@ class TestSkillResourceInjectionEdgeCases:
         """Test injector handles sandbox write errors gracefully."""
         # Create adapter that returns errors
         error_adapter = MagicMock()
-        error_adapter.call_tool = AsyncMock(return_value={
-            "content": [{"type": "text", "text": "Error"}],
-            "isError": True,
-        })
+        error_adapter.call_tool = AsyncMock(
+            return_value={
+                "content": [{"type": "text", "text": "Error"}],
+                "isError": True,
+            }
+        )
 
         injector = SkillResourceInjector(SkillResourceLoader(skill_project))
 
@@ -288,10 +290,12 @@ class TestSkillResourceInjectionEdgeCases:
         """Test SkillExecutor continues when injection fails."""
         # Create adapter that returns errors for write
         error_adapter = MagicMock()
-        error_adapter.call_tool = AsyncMock(return_value={
-            "content": [{"type": "text", "text": "Error"}],
-            "isError": True,
-        })
+        error_adapter.call_tool = AsyncMock(
+            return_value={
+                "content": [{"type": "text", "text": "Error"}],
+                "isError": True,
+            }
+        )
 
         skill = Skill(
             id="skill-1",

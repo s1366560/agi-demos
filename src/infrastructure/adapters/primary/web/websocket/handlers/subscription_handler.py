@@ -37,9 +37,7 @@ class SubscribeHandler(WebSocketMessageHandler):
             conversation = await conversation_repo.find_by_id(conversation_id)
 
             if not conversation:
-                await context.send_error(
-                    "Conversation not found", conversation_id=conversation_id
-                )
+                await context.send_error("Conversation not found", conversation_id=conversation_id)
                 return
 
             if conversation.user_id != context.user_id:

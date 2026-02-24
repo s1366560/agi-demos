@@ -289,9 +289,7 @@ class PoolMetricsAnalyzer:
             return []
 
         # Calculate average load per hour
-        hour_averages = {
-            hour: sum(loads) / len(loads) for hour, loads in hourly_load.items()
-        }
+        hour_averages = {hour: sum(loads) / len(loads) for hour, loads in hourly_load.items()}
 
         # Find hours above 75th percentile
         if len(hour_averages) < 4:
@@ -372,7 +370,10 @@ class PoolMetricsAnalyzer:
         if action == "scale_up":
             if analysis.cpu_trend.trend_strength > 0.8:
                 return "critical"
-            elif analysis.cpu_trend.trend_strength > 0.5 or analysis.error_rate_trend.trend_direction == "increasing":
+            elif (
+                analysis.cpu_trend.trend_strength > 0.5
+                or analysis.error_rate_trend.trend_direction == "increasing"
+            ):
                 return "high"
             else:
                 return "medium"

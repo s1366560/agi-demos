@@ -53,9 +53,7 @@ class TestEnsureDefaultProject:
         await db_session.commit()
 
         # Assert
-        result = await db_session.execute(
-            select(UserProject).where(UserProject.user_id == user.id)
-        )
+        result = await db_session.execute(select(UserProject).where(UserProject.user_id == user.id))
         user_projects = result.scalars().all()
         assert len(user_projects) == 1
 
@@ -118,9 +116,7 @@ class TestEnsureDefaultProject:
         await db_session.commit()
 
         # Assert
-        result = await db_session.execute(
-            select(Project).where(Project.owner_id == user.id)
-        )
+        result = await db_session.execute(select(Project).where(Project.owner_id == user.id))
         projects = result.scalars().all()
         assert len(projects) == 1
         assert projects[0].name == "Existing Project"
@@ -138,9 +134,7 @@ class TestEnsureDefaultProject:
         await db_session.commit()
 
         # Assert
-        result = await db_session.execute(
-            select(UserProject).where(UserProject.user_id == user.id)
-        )
+        result = await db_session.execute(select(UserProject).where(UserProject.user_id == user.id))
         user_projects = result.scalars().all()
         assert len(user_projects) == 0
 
@@ -177,8 +171,6 @@ class TestEnsureDefaultProject:
         await db_session.commit()
 
         # Assert
-        result = await db_session.execute(
-            select(Project).where(Project.owner_id == user.id)
-        )
+        result = await db_session.execute(select(Project).where(Project.owner_id == user.id))
         project = result.scalar_one()
         assert user.email in project.description

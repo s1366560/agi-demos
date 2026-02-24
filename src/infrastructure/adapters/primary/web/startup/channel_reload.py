@@ -113,7 +113,9 @@ async def reconcile_channel_connections(
         for config_id in plan.to_add:
             config = enabled_by_id.get(config_id)
             if config is None:
-                logger.warning("[ChannelReload] Missing config while applying add for %s", config_id)
+                logger.warning(
+                    "[ChannelReload] Missing config while applying add for %s", config_id
+                )
                 continue
             await manager.add_connection(config)
 
@@ -151,8 +153,7 @@ async def _notify_plugin_reload_hooks(*, plan: ChannelReloadPlan, dry_run: bool)
 def _log_plugin_diagnostic(diagnostic: PluginDiagnostic) -> None:
     """Log plugin diagnostics emitted during channel reload hooks."""
     message = (
-        f"[ChannelReload][Plugin:{diagnostic.plugin_name}] "
-        f"{diagnostic.code}: {diagnostic.message}"
+        f"[ChannelReload][Plugin:{diagnostic.plugin_name}] {diagnostic.code}: {diagnostic.message}"
     )
     if diagnostic.level == "error":
         logger.error(message)

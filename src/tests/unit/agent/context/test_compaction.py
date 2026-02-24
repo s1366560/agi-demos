@@ -116,8 +116,12 @@ class TestToolPart:
         """Test compacted state."""
         now = datetime.now()
         tp = ToolPart(
-            id="1", tool="grep", status="completed", output="compacted",
-            compacted=True, compacted_at=now
+            id="1",
+            tool="grep",
+            status="completed",
+            output="compacted",
+            compacted=True,
+            compacted_at=now,
         )
         assert tp.compacted is True
         assert tp.compacted_at == now
@@ -141,7 +145,7 @@ class TestMessage:
             MessagePart(id="p3", type="tool", tool_part=tool2),
         ]
         msg = Message(info=MessageInfo(id="1", role="assistant"), parts=parts)
-        
+
         tool_parts = msg.get_tool_parts()
         assert len(tool_parts) == 2
         assert tool_parts[0].id == "t1"
@@ -270,7 +274,7 @@ class TestPruneToolOutputs:
         for i in range(10):
             role = "user" if i % 2 == 0 else "assistant"
             messages.append(_create_message_with_tool(f"m{i}", role, "grep", 15_000))
-        
+
         result = prune_tool_outputs(messages)
         # Should have some pruning statistics
         assert isinstance(result.pruned_count, int)
@@ -364,7 +368,7 @@ class TestShouldCompact:
         limits = ModelLimits(context=128_000, input=124_000)
         # 50% of 124_000 = 62_000
         assert should_compact(tokens, limits, threshold=0.5) is False
-        
+
         tokens2 = TokenCount(input=65_000)
         assert should_compact(tokens2, limits, threshold=0.5) is True
 
@@ -455,6 +459,7 @@ class TestConstants:
 
 
 # Helper functions for test data creation
+
 
 def _create_message_with_tool(
     msg_id: str,

@@ -28,15 +28,15 @@ class MockConnectionManager:
     def __init__(self) -> None:
         self.broadcast_calls = []
 
-    async def broadcast_to_project(
-        self, tenant_id: str, project_id: str, message: dict
-    ) -> int:
+    async def broadcast_to_project(self, tenant_id: str, project_id: str, message: dict) -> int:
         """Mock broadcast that records calls."""
-        self.broadcast_calls.append({
-            "tenant_id": tenant_id,
-            "project_id": project_id,
-            "message": message,
-        })
+        self.broadcast_calls.append(
+            {
+                "tenant_id": tenant_id,
+                "project_id": project_id,
+                "message": message,
+            }
+        )
         return 1
 
 
@@ -133,55 +133,57 @@ class TestProjectReActAgentLifecycleNotifications:
 
         # Patch all the dependencies imported in initialize()
         # Note: Must use the full import path since they're imported inside the method
-        with patch(
-            f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-            new_callable=AsyncMock,
-            return_value=mock_graph_service,
-        ):
-            with patch(
+        with (
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
+                new_callable=AsyncMock,
+                return_value=mock_graph_service,
+            ),
+            patch(
                 f"{WORKER_STATE_MODULE}.get_redis_client",
                 return_value=mock_redis_client,
-            ):
-                with patch(
-                    f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
-                    new_callable=AsyncMock,
-                    return_value=mock_provider_config,
-                ):
-                    with patch(
-                        f"{WORKER_STATE_MODULE}.get_or_create_llm_client",
-                        new_callable=AsyncMock,
-                        return_value=mock_llm_client,
-                    ):
-                        with patch(
-                            f"{WORKER_STATE_MODULE}.get_or_create_tools",
-                            new_callable=AsyncMock,
-                            return_value=mock_tools,
-                        ):
-                            with patch(
-                                f"{WORKER_STATE_MODULE}.get_or_create_skills",
-                                new_callable=AsyncMock,
-                                return_value=mock_skills,
-                            ):
-                                with patch.object(
-                                    agent,
-                                    "_load_subagents",
-                                    new_callable=AsyncMock,
-                                    return_value=mock_subagents,
-                                ):
-                                    with patch(
-                                        f"{WORKER_STATE_MODULE}.get_or_create_agent_session",
-                                        new_callable=AsyncMock,
-                                        return_value=mock_session_context,
-                                    ):
-                                        with patch(
-                                            "src.infrastructure.agent.core.react_agent.ReActAgent",
-                                        ):
-                                            # Inject the mock notifier
-                                            with patch(
-                                                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
-                                                return_value=mock_notifier,
-                                            ):
-                                                await agent.initialize()
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
+                new_callable=AsyncMock,
+                return_value=mock_provider_config,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_llm_client",
+                new_callable=AsyncMock,
+                return_value=mock_llm_client,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_tools",
+                new_callable=AsyncMock,
+                return_value=mock_tools,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_skills",
+                new_callable=AsyncMock,
+                return_value=mock_skills,
+            ),
+            patch.object(
+                agent,
+                "_load_subagents",
+                new_callable=AsyncMock,
+                return_value=mock_subagents,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_agent_session",
+                new_callable=AsyncMock,
+                return_value=mock_session_context,
+            ),
+            patch(
+                "src.infrastructure.agent.core.react_agent.ReActAgent",
+            ),
+            # Inject the mock notifier
+            patch(
+                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                return_value=mock_notifier,
+            ),
+        ):
+            await agent.initialize()
 
         # Verify broadcast calls
         calls = mock_notifier._manager.broadcast_calls
@@ -214,17 +216,19 @@ class TestProjectReActAgentLifecycleNotifications:
         agent = ProjectReActAgent(agent_config)
 
         # Patch tenant graph-service resolver to return no service
-        with patch(
-            f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-            new_callable=AsyncMock,
-            return_value=None,
-        ):
-            # Inject the mock notifier
-            with patch(
+        # Inject the mock notifier
+        with (
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch(
                 "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
                 return_value=mock_notifier,
-            ):
-                result = await agent.initialize()
+            ),
+        ):
+            result = await agent.initialize()
 
         # Verify initialization failed
         assert result is False
@@ -232,9 +236,7 @@ class TestProjectReActAgentLifecycleNotifications:
         # Verify error notification was sent
         calls = mock_notifier._manager.broadcast_calls
         error_calls = [
-            c
-            for c in calls
-            if c["message"].get("data", {}).get("lifecycle_state") == "error"
+            c for c in calls if c["message"].get("data", {}).get("lifecycle_state") == "error"
         ]
         assert len(error_calls) >= 1
         assert "error_message" in error_calls[0]["message"]["data"]
@@ -257,54 +259,54 @@ class TestProjectReActAgentLifecycleNotifications:
         mock_skills = [MagicMock(name="skill1")]
         mock_subagents = []
 
-        with patch(
-            f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-            new_callable=AsyncMock,
-            return_value=mock_graph_service,
-        ):
-            with patch(
+        with (
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
+                new_callable=AsyncMock,
+                return_value=mock_graph_service,
+            ),
+            patch(
                 f"{WORKER_STATE_MODULE}.get_redis_client",
                 return_value=mock_redis_client,
-            ):
-                with patch(
-                    f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
-                    new_callable=AsyncMock,
-                    return_value=mock_provider_config,
-                ):
-                    with patch(
-                        f"{WORKER_STATE_MODULE}.get_or_create_llm_client",
-                        new_callable=AsyncMock,
-                        return_value=mock_llm_client,
-                    ):
-                        with patch(
-                            f"{WORKER_STATE_MODULE}.get_or_create_tools",
-                            new_callable=AsyncMock,
-                            return_value=mock_tools,
-                        ):
-                            with patch(
-                                f"{WORKER_STATE_MODULE}.get_or_create_skills",
-                                new_callable=AsyncMock,
-                                return_value=mock_skills,
-                            ):
-                                with patch.object(
-                                    agent,
-                                    "_load_subagents",
-                                    new_callable=AsyncMock,
-                                    return_value=mock_subagents,
-                                ):
-                                    with patch(
-                                        f"{WORKER_STATE_MODULE}.get_or_create_agent_session",
-                                        new_callable=AsyncMock,
-                                        return_value=mock_session_context,
-                                    ):
-                                        with patch(
-                                            "src.infrastructure.agent.core.react_agent.ReActAgent"
-                                        ) as mock_react_cls:
-                                            with patch(
-                                                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
-                                                return_value=mock_notifier,
-                                            ):
-                                                await agent.initialize()
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
+                new_callable=AsyncMock,
+                return_value=mock_provider_config,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_llm_client",
+                new_callable=AsyncMock,
+                return_value=mock_llm_client,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_tools",
+                new_callable=AsyncMock,
+                return_value=mock_tools,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_skills",
+                new_callable=AsyncMock,
+                return_value=mock_skills,
+            ),
+            patch.object(
+                agent,
+                "_load_subagents",
+                new_callable=AsyncMock,
+                return_value=mock_subagents,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_agent_session",
+                new_callable=AsyncMock,
+                return_value=mock_session_context,
+            ),
+            patch("src.infrastructure.agent.core.react_agent.ReActAgent") as mock_react_cls,
+            patch(
+                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                return_value=mock_notifier,
+            ),
+        ):
+            await agent.initialize()
 
         lifecycle_hook = mock_react_cls.call_args.kwargs.get("subagent_lifecycle_hook")
         assert callable(lifecycle_hook)
@@ -358,9 +360,7 @@ class TestProjectReActAgentLifecycleNotifications:
         assert calls[0]["message"]["data"]["run_id"] == "run-456"
 
     @pytest.mark.asyncio
-    async def test_pause_sends_paused_notification(
-        self, agent_config, mock_notifier
-    ):
+    async def test_pause_sends_paused_notification(self, agent_config, mock_notifier):
         """
         Test that pause() sends 'paused' notification.
 
@@ -384,9 +384,7 @@ class TestProjectReActAgentLifecycleNotifications:
         assert calls[0]["message"]["data"]["is_active"] is False
 
     @pytest.mark.asyncio
-    async def test_resume_sends_ready_notification(
-        self, agent_config, mock_notifier
-    ):
+    async def test_resume_sends_ready_notification(self, agent_config, mock_notifier):
         """
         Test that resume() sends 'ready' notification.
 
@@ -410,9 +408,7 @@ class TestProjectReActAgentLifecycleNotifications:
         assert calls[0]["message"]["data"]["is_active"] is True
 
     @pytest.mark.asyncio
-    async def test_stop_sends_shutting_down_notification(
-        self, agent_config, mock_notifier
-    ):
+    async def test_stop_sends_shutting_down_notification(self, agent_config, mock_notifier):
         """
         Test that stop() sends 'shutting_down' notification.
 
@@ -436,9 +432,7 @@ class TestProjectReActAgentLifecycleNotifications:
         assert calls[0]["message"]["data"]["is_active"] is False
 
     @pytest.mark.asyncio
-    async def test_execute_chat_sends_executing_notification(
-        self, agent_config, mock_notifier
-    ):
+    async def test_execute_chat_sends_executing_notification(self, agent_config, mock_notifier):
         """
         Test that execute_chat() sends 'executing' notification.
 
@@ -475,20 +469,13 @@ class TestProjectReActAgentLifecycleNotifications:
 
         # Should have 'executing' notification
         executing_calls = [
-            c
-            for c in calls
-            if c["message"].get("data", {}).get("lifecycle_state") == "executing"
+            c for c in calls if c["message"].get("data", {}).get("lifecycle_state") == "executing"
         ]
         assert len(executing_calls) >= 1
-        assert (
-            executing_calls[0]["message"]["data"]["conversation_id"]
-            == "test-conv"
-        )
+        assert executing_calls[0]["message"]["data"]["conversation_id"] == "test-conv"
 
     @pytest.mark.asyncio
-    async def test_execute_chat_sends_ready_after_completion(
-        self, agent_config, mock_notifier
-    ):
+    async def test_execute_chat_sends_ready_after_completion(self, agent_config, mock_notifier):
         """
         Test that execute_chat() sends 'ready' notification after completion.
 
@@ -523,17 +510,13 @@ class TestProjectReActAgentLifecycleNotifications:
         # Verify 'ready' notification was sent after completion
         calls = mock_notifier._manager.broadcast_calls
         ready_calls = [
-            c
-            for c in calls
-            if c["message"].get("data", {}).get("lifecycle_state") == "ready"
+            c for c in calls if c["message"].get("data", {}).get("lifecycle_state") == "ready"
         ]
         # At least one 'ready' call (after execution completes)
         assert len(ready_calls) >= 1
 
     @pytest.mark.asyncio
-    async def test_execute_chat_error_sends_error_notification(
-        self, agent_config, mock_notifier
-    ):
+    async def test_execute_chat_error_sends_error_notification(self, agent_config, mock_notifier):
         """
         Test that execute_chat() errors send 'error' notification.
 
@@ -568,9 +551,7 @@ class TestProjectReActAgentLifecycleNotifications:
         # Verify error notification
         calls = mock_notifier._manager.broadcast_calls
         error_calls = [
-            c
-            for c in calls
-            if c["message"].get("data", {}).get("lifecycle_state") == "error"
+            c for c in calls if c["message"].get("data", {}).get("lifecycle_state") == "error"
         ]
         assert len(error_calls) >= 1
         assert "error_message" in error_calls[0]["message"]["data"]
@@ -606,64 +587,62 @@ class TestProjectReActAgentNotificationContent:
         mock_skills = [MagicMock(name="skill1"), MagicMock(name="skill2")]
         mock_subagents = [MagicMock(name="subagent1")]
 
-        with patch(
-            f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-            new_callable=AsyncMock,
-            return_value=mock_graph_service,
-        ):
-            with patch(
+        with (
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
+                new_callable=AsyncMock,
+                return_value=mock_graph_service,
+            ),
+            patch(
                 f"{WORKER_STATE_MODULE}.get_redis_client",
                 return_value=mock_redis_client,
-            ):
-                with patch(
-                    f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
-                    new_callable=AsyncMock,
-                    return_value=mock_provider_config,
-                ):
-                    with patch(
-                        f"{WORKER_STATE_MODULE}.get_or_create_llm_client",
-                        new_callable=AsyncMock,
-                        return_value=mock_llm_client,
-                    ):
-                        with patch(
-                            f"{WORKER_STATE_MODULE}.get_or_create_tools",
-                            new_callable=AsyncMock,
-                            return_value=mock_tools,
-                        ):
-                            with patch(
-                                f"{WORKER_STATE_MODULE}.get_or_create_skills",
-                                new_callable=AsyncMock,
-                                return_value=mock_skills,
-                            ):
-                                with patch.object(
-                                    agent,
-                                    "_load_subagents",
-                                    new_callable=AsyncMock,
-                                    return_value=mock_subagents,
-                                ):
-                                    with patch(
-                                        f"{WORKER_STATE_MODULE}.get_or_create_agent_session",
-                                        new_callable=AsyncMock,
-                                        return_value=mock_session_context,
-                                    ):
-                                        with patch(
-                                            "src.infrastructure.agent.core.react_agent.ReActAgent",
-                                        ):
-                                            # Inject the mock notifier
-                                            with patch(
-                                                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
-                                                return_value=mock_notifier,
-                                            ):
-                                                await agent.initialize()
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_provider_config",
+                new_callable=AsyncMock,
+                return_value=mock_provider_config,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_llm_client",
+                new_callable=AsyncMock,
+                return_value=mock_llm_client,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_tools",
+                new_callable=AsyncMock,
+                return_value=mock_tools,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_skills",
+                new_callable=AsyncMock,
+                return_value=mock_skills,
+            ),
+            patch.object(
+                agent,
+                "_load_subagents",
+                new_callable=AsyncMock,
+                return_value=mock_subagents,
+            ),
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_agent_session",
+                new_callable=AsyncMock,
+                return_value=mock_session_context,
+            ),
+            patch(
+                "src.infrastructure.agent.core.react_agent.ReActAgent",
+            ),
+            # Inject the mock notifier
+            patch(
+                "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
+                return_value=mock_notifier,
+            ),
+        ):
+            await agent.initialize()
 
         # Find the 'ready' notification
         calls = mock_notifier._manager.broadcast_calls
         ready_call = next(
-            (
-                c
-                for c in calls
-                if c["message"].get("data", {}).get("lifecycle_state") == "ready"
-            ),
+            (c for c in calls if c["message"].get("data", {}).get("lifecycle_state") == "ready"),
             None,
         )
 
@@ -717,9 +696,7 @@ class TestProjectReActAgentNotificationContent:
         )
 
         assert executing_call is not None
-        assert (
-            executing_call["message"]["data"]["conversation_id"] == "conv-12345"
-        )
+        assert executing_call["message"]["data"]["conversation_id"] == "conv-12345"
 
     @pytest.mark.asyncio
     async def test_error_notification_includes_error_message(
@@ -734,26 +711,24 @@ class TestProjectReActAgentNotificationContent:
         agent = ProjectReActAgent(agent_config)
 
         # Mock initialization to raise a specific error
-        with patch(
-            f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
-            new_callable=AsyncMock,
-            return_value=None,
-        ):
+        with (
+            patch(
+                f"{WORKER_STATE_MODULE}.get_or_create_agent_graph_service",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
             # Inject the mock notifier
-            with patch(
+            patch(
                 "src.infrastructure.agent.core.project_react_agent.get_websocket_notifier",
                 return_value=mock_notifier,
-            ):
-                await agent.initialize()
+            ),
+        ):
+            await agent.initialize()
 
         # Find the 'error' notification
         calls = mock_notifier._manager.broadcast_calls
         error_call = next(
-            (
-                c
-                for c in calls
-                if c["message"].get("data", {}).get("lifecycle_state") == "error"
-            ),
+            (c for c in calls if c["message"].get("data", {}).get("lifecycle_state") == "error"),
             None,
         )
 

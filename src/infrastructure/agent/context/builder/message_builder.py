@@ -68,9 +68,7 @@ class MessageBuilder(MessageBuilderPort):
         self.config = config or MessageBuilderConfig()
         self._debug = self.config.debug_logging
 
-    def convert_to_openai_format(
-        self, messages: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+    def convert_to_openai_format(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
         Convert conversation messages to OpenAI message format.
 
@@ -188,7 +186,9 @@ class MessageBuilder(MessageBuilderPort):
         content = self._build_multimodal_content(text, attachments)
 
         if self._debug:
-            logger.debug(f"[MessageBuilder] Built multimodal message with {len(attachments)} attachments")
+            logger.debug(
+                f"[MessageBuilder] Built multimodal message with {len(attachments)} attachments"
+            )
 
         return {"role": "user", "content": content}
 
@@ -356,15 +356,11 @@ class MessageBuilder(MessageBuilderPort):
             # Check for overly long content
             content = msg.get("content", "")
             if isinstance(content, str) and len(content) > self.config.max_text_length:
-                warnings.append(
-                    f"Message {i}: content exceeds {self.config.max_text_length} chars"
-                )
+                warnings.append(f"Message {i}: content exceeds {self.config.max_text_length} chars")
 
         return warnings
 
-    def count_messages_by_role(
-        self, messages: list[dict[str, Any]]
-    ) -> dict[str, int]:
+    def count_messages_by_role(self, messages: list[dict[str, Any]]) -> dict[str, int]:
         """
         Count messages by role.
 

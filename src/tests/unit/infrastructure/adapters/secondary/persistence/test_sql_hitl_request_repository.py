@@ -91,11 +91,15 @@ class TestSqlHITLRequestRepositoryFind:
         await v2_hitl_repo.create(request1)
         await v2_hitl_repo.create(request2)
 
-        results = await v2_hitl_repo.get_pending_by_conversation("conv-pend-1", "tenant-1", "project-1")
+        results = await v2_hitl_repo.get_pending_by_conversation(
+            "conv-pend-1", "tenant-1", "project-1"
+        )
         assert len(results) == 2
 
     @pytest.mark.asyncio
-    async def test_get_pending_by_conversation_exclude_expired(self, v2_hitl_repo: SqlHITLRequestRepository):
+    async def test_get_pending_by_conversation_exclude_expired(
+        self, v2_hitl_repo: SqlHITLRequestRepository
+    ):
         """Test getting pending HITL requests excludes expired ones."""
         # Create expired request
         expired_request = make_hitl_request("hitl-exp-1", "conv-exp-1")
@@ -106,7 +110,9 @@ class TestSqlHITLRequestRepositoryFind:
         valid_request = make_hitl_request("hitl-valid-1", "conv-exp-1")
         await v2_hitl_repo.create(valid_request)
 
-        results = await v2_hitl_repo.get_pending_by_conversation("conv-exp-1", "tenant-1", "project-1", exclude_expired=True)
+        results = await v2_hitl_repo.get_pending_by_conversation(
+            "conv-exp-1", "tenant-1", "project-1", exclude_expired=True
+        )
         assert len(results) == 1
         assert results[0].id == "hitl-valid-1"
 

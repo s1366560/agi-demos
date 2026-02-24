@@ -403,6 +403,7 @@ class TestStreamOrchestration:
             patch.object(agent._task_decomposer, "decompose") as mock_decompose,
             patch.object(agent, "_execute_subagent") as mock_exec,
         ):
+
             async def mock_events(*a, **kw):
                 yield {"type": "subagent_started", "data": {}, "timestamp": "t"}
                 yield {"type": "complete", "data": {"content": "done"}, "timestamp": "t"}
@@ -635,7 +636,9 @@ class TestSessionizedRuntime:
 
         with (
             patch.object(agent, "_execute_subagent", side_effect=_mock_execute_subagent),
-            patch.object(agent._subagent_run_registry, "attach_metadata", side_effect=_flaky_attach),
+            patch.object(
+                agent._subagent_run_registry, "attach_metadata", side_effect=_flaky_attach
+            ),
         ):
             await agent._launch_subagent_session(
                 run_id=run.run_id,
@@ -870,7 +873,9 @@ class TestNestedSessionToolInjection:
                 if False:
                     yield {}
 
-        with patch("src.infrastructure.agent.subagent.process.SubAgentProcess", FakeSubAgentProcess):
+        with patch(
+            "src.infrastructure.agent.subagent.process.SubAgentProcess", FakeSubAgentProcess
+        ):
             events = []
             async for event in agent._execute_subagent(
                 subagent=researcher,
@@ -916,7 +921,9 @@ class TestNestedSessionToolInjection:
                 if False:
                     yield {}
 
-        with patch("src.infrastructure.agent.subagent.process.SubAgentProcess", FakeSubAgentProcess):
+        with patch(
+            "src.infrastructure.agent.subagent.process.SubAgentProcess", FakeSubAgentProcess
+        ):
             events = []
             async for event in agent._execute_subagent(
                 subagent=researcher,
@@ -1010,9 +1017,7 @@ class TestExecuteChain:
             ),
         ]
 
-        with patch(
-            "src.infrastructure.agent.subagent.chain.SubAgentChain"
-        ) as MockChain:
+        with patch("src.infrastructure.agent.subagent.chain.SubAgentChain") as MockChain:
             mock_chain_instance = MockChain.return_value
 
             from src.infrastructure.agent.subagent.chain import ChainResult
@@ -1060,9 +1065,7 @@ class TestExecuteBackground:
         sa = _make_subagent("researcher")
         agent = _make_react_agent(subagents=[sa])
 
-        with patch.object(
-            agent._background_executor, "launch", return_value="bg-abc123"
-        ):
+        with patch.object(agent._background_executor, "launch", return_value="bg-abc123"):
             events = []
             async for event in agent._execute_background(
                 subagent=sa,

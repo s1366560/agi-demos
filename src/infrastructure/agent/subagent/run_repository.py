@@ -133,9 +133,7 @@ class PostgresSubAgentRunRepository:
             with closing(conn):
                 with conn.cursor() as cursor:
                     self._ensure_schema(cursor)
-                    cursor.execute(
-                        f"SELECT payload FROM {self._table_name} WHERE id = 1"
-                    )
+                    cursor.execute(f"SELECT payload FROM {self._table_name} WHERE id = 1")
                     row = cursor.fetchone()
                 conn.commit()
         except Exception as exc:
@@ -191,9 +189,7 @@ class PostgresSubAgentRunRepository:
         try:
             import psycopg2
         except Exception as exc:
-            raise RuntimeError(
-                "psycopg2 is required for PostgresSubAgentRunRepository"
-            ) from exc
+            raise RuntimeError("psycopg2 is required for PostgresSubAgentRunRepository") from exc
         return psycopg2.connect(self._postgres_dsn)
 
     def _ensure_schema(self, cursor: Any) -> None:
@@ -321,10 +317,7 @@ def _serialize_snapshot(runs: Mapping[str, Mapping[str, SubAgentRun]]) -> str:
     payload = {
         "version": 1,
         "conversations": {
-            conversation_id: {
-                run_id: run.to_event_data()
-                for run_id, run in bucket.items()
-            }
+            conversation_id: {run_id: run.to_event_data() for run_id, run in bucket.items()}
             for conversation_id, bucket in runs.items()
         },
     }

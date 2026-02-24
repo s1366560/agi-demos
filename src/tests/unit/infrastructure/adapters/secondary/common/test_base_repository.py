@@ -16,11 +16,13 @@ from sqlalchemy.orm import DeclarativeBase
 
 class Base(DeclarativeBase):
     """Test base for SQLAlchemy models."""
+
     pass
 
 
 class TestModel(Base):
     """Test SQLAlchemy model."""
+
     __tablename__ = "test_entities"
 
     id = Column(String, primary_key=True)
@@ -31,6 +33,7 @@ class TestModel(Base):
 @dataclass
 class TestDomainEntity:
     """Test domain entity."""
+
     id: str
     name: str
     tenant_id: str | None = None
@@ -59,6 +62,7 @@ class TestBaseRepository:
         from src.infrastructure.adapters.secondary.common.base_repository import (
             BaseRepository,
         )
+
         assert BaseRepository is not None
 
     # === TEST: Initialization ===
@@ -122,7 +126,7 @@ class TestBaseRepository:
                 return TestDomainEntity(
                     id=db_model.id,
                     name=db_model.name,
-                    tenant_id=getattr(db_model, "tenant_id", None)
+                    tenant_id=getattr(db_model, "tenant_id", None),
                 )
 
         repo = TestRepository(mock_session)
@@ -175,7 +179,9 @@ class TestBaseRepository:
         # First call to _find_db_model_by_id returns None (not exists)
         # Second call to execute returns None for flush
         mock_session.execute = AsyncMock()
-        mock_session.execute.return_value = MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        mock_session.execute.return_value = MagicMock(
+            scalar_one_or_none=MagicMock(return_value=None)
+        )
 
         class TestRepository(BaseRepository[TestModel, TestDomainEntity]):
             _model_class = TestModel
@@ -319,7 +325,7 @@ class TestBaseRepository:
                 return TestDomainEntity(
                     id=db_model.id,
                     name=db_model.name,
-                    tenant_id=getattr(db_model, "tenant_id", None)
+                    tenant_id=getattr(db_model, "tenant_id", None),
                 )
 
         repo = TestRepository(mock_session)
@@ -541,10 +547,7 @@ class TestBaseRepository:
         )
 
         # Arrange
-        entities = [
-            TestDomainEntity(id=f"id-{i}", name=f"Entity {i}")
-            for i in range(3)
-        ]
+        entities = [TestDomainEntity(id=f"id-{i}", name=f"Entity {i}") for i in range(3)]
 
         class TestRepository(BaseRepository[TestModel, TestDomainEntity]):
             _model_class = TestModel
@@ -616,6 +619,7 @@ class TestBaseRepository:
         assert query is not None
         # Verify query is a Select object
         from sqlalchemy.sql import Select
+
         assert isinstance(query, Select)
 
     @pytest.mark.asyncio
@@ -639,6 +643,7 @@ class TestBaseRepository:
         # Assert
         assert query is not None
         from sqlalchemy.sql import Select
+
         assert isinstance(query, Select)
 
     @pytest.mark.asyncio
@@ -662,6 +667,7 @@ class TestBaseRepository:
         # Assert
         assert query is not None
         from sqlalchemy.sql import Select
+
         assert isinstance(query, Select)
 
     # === TEST: Edge cases ===

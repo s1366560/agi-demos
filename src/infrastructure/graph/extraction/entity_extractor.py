@@ -393,7 +393,9 @@ class EntityExtractor:
                 stack.append("[")
             elif char == "[" and stack:
                 stack.append("[")
-            elif (char == "}" and stack and stack[-1] == "{") or (char == "]" and stack and stack[-1] == "["):
+            elif (char == "}" and stack and stack[-1] == "{") or (
+                char == "]" and stack and stack[-1] == "["
+            ):
                 stack.pop()
                 if not stack and start_idx is not None:
                     json_str = text[start_idx : i + 1]

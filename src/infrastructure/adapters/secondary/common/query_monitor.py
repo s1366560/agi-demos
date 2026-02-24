@@ -20,6 +20,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+_bg_tasks: set[asyncio.Task[Any]] = set()
+
 
 class SlowQueryError(Exception):
     """
@@ -534,7 +536,7 @@ class QueryMonitor:
                 """Record operation completion."""
                 duration_ms = (time.time() - self._start) * 1000
                 # Create sync task for recording
-                asyncio.create_task(
+                _record_task = asyncio.create_task(
                     self._monitor._record_query(
                         query_hash=self._monitor._generate_hash(self._query),
                         query_text=self._query,
@@ -542,6 +544,8 @@ class QueryMonitor:
                         error=None,
                     )
                 )
+                _bg_tasks.add(_record_task)
+                _record_task.add_done_callback(_bg_tasks.discard)
 
         yield Tracker(self, query_text, start_time)
 

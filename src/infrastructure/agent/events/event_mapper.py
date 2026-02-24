@@ -108,7 +108,9 @@ class EventMapper:
         self._include_conversation_id = include_conversation_id
         self._include_sandbox_id = include_sandbox_id
         self._event_filters: list[Callable[[AgentDomainEvent], bool]] = []
-        self._event_transformers: dict[AgentEventType, Callable[[AgentDomainEvent], dict[str, Any]]] = {}
+        self._event_transformers: dict[
+            AgentEventType, Callable[[AgentDomainEvent], dict[str, Any]]
+        ] = {}
 
     def register_filter(self, filter_fn: Callable[[AgentDomainEvent], bool]) -> None:
         """Register an event filter.
@@ -304,10 +306,7 @@ class EventBus:
             List of historical events
         """
         if event_type:
-            return [
-                e for e in self._event_history
-                if e.event_type == event_type
-            ][-limit:]
+            return [e for e in self._event_history if e.event_type == event_type][-limit:]
 
         return self._event_history[-limit:]
 

@@ -107,9 +107,7 @@ class SqlExecutionCheckpointRepository(
 
     # === Conversion methods ===
 
-    def _to_domain(
-        self, db_checkpoint: DBExecutionCheckpoint | None
-    ) -> ExecutionCheckpoint | None:
+    def _to_domain(self, db_checkpoint: DBExecutionCheckpoint | None) -> ExecutionCheckpoint | None:
         """
         Convert database model to domain model.
 

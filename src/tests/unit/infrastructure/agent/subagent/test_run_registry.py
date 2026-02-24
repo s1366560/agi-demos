@@ -281,15 +281,11 @@ class TestSubAgentRunRegistry:
 
             def load_runs(self):
                 runs = shared_store.get(self._postgres_dsn, {})
-                return {
-                    conversation_id: dict(bucket)
-                    for conversation_id, bucket in runs.items()
-                }
+                return {conversation_id: dict(bucket) for conversation_id, bucket in runs.items()}
 
             def save_runs(self, runs):
                 shared_store[self._postgres_dsn] = {
-                    conversation_id: dict(bucket)
-                    for conversation_id, bucket in runs.items()
+                    conversation_id: dict(bucket) for conversation_id, bucket in runs.items()
                 }
 
             def close(self) -> None:

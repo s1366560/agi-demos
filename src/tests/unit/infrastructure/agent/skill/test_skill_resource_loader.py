@@ -96,9 +96,7 @@ class TestSkillResourceLoader:
         assert any(r.name == "template.json" for r in resources)
 
     @pytest.mark.asyncio
-    async def test_get_skill_resources_empty_skill(
-        self, temp_project_path: Path, mock_scanner
-    ):
+    async def test_get_skill_resources_empty_skill(self, temp_project_path: Path, mock_scanner):
         """Test get_skill_resources with skill that has no resources."""
         # Create skill without resource directories
         empty_skill = temp_project_path / ".memstack" / "skills" / "empty-skill"
@@ -115,9 +113,7 @@ class TestSkillResourceLoader:
         assert len(resources) == 0
 
     @pytest.mark.asyncio
-    async def test_get_skill_resources_skill_not_found(
-        self, temp_project_path: Path, mock_scanner
-    ):
+    async def test_get_skill_resources_skill_not_found(self, temp_project_path: Path, mock_scanner):
         """Test get_skill_resources when skill is not found."""
         mock_scanner.find_skill.return_value = None
 
@@ -163,9 +159,7 @@ class TestSkillResourceLoader:
         assert "references/guide.md" in referred
 
     @pytest.mark.asyncio
-    async def test_detect_referred_resources_empty_content(
-        self, temp_project_path: Path
-    ):
+    async def test_detect_referred_resources_empty_content(self, temp_project_path: Path):
         """Test detect_referred_resources with empty content."""
         loader = SkillResourceLoader(temp_project_path)
 
@@ -183,9 +177,7 @@ class TestSkillResourceLoader:
         resource_path = Path("/some/path/scripts/analyze.py")
         skill_dir = Path("/some/path")
 
-        container_path = loader.get_resource_container_path(
-            "test-skill", resource_path, skill_dir
-        )
+        container_path = loader.get_resource_container_path("test-skill", resource_path, skill_dir)
 
         # Should be /workspace/.memstack/skills/test-skill/scripts/analyze.py
         assert container_path == "/workspace/.memstack/skills/test-skill/scripts/analyze.py"

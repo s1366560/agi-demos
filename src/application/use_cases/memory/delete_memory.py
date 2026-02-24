@@ -1,4 +1,3 @@
-
 from pydantic import BaseModel, field_validator
 
 from src.domain.ports.repositories.memory_repository import MemoryRepository
@@ -22,7 +21,9 @@ class DeleteMemoryCommand(BaseModel):
 
 
 class DeleteMemoryUseCase:
-    def __init__(self, memory_repository: MemoryRepository, graph_service: GraphServicePort) -> None:
+    def __init__(
+        self, memory_repository: MemoryRepository, graph_service: GraphServicePort
+    ) -> None:
         self._memory_repo = memory_repository
         self._graph_service = graph_service
 

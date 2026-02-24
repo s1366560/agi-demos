@@ -5,7 +5,6 @@ next_retry_at has passed, and attempts to resend them via the appropriate
 channel adapter.
 """
 
-
 from __future__ import annotations
 
 import asyncio
@@ -87,7 +86,9 @@ class OutboxRetryWorker:
             for item in items:
                 await self._retry_item(item, repo, session)
 
-    async def _retry_item(self, item: ChannelOutboxModel, repo: ChannelOutboxRepository, session: AsyncSession) -> None:
+    async def _retry_item(
+        self, item: ChannelOutboxModel, repo: ChannelOutboxRepository, session: AsyncSession
+    ) -> None:
         """Retry a single outbox message."""
         try:
             connection = self._get_connection(item.channel_config_id)

@@ -829,9 +829,7 @@ class NativeGraphAdapter(GraphServicePort):
 
         await self._neo4j_client.execute_query(query, **params)
 
-    async def search(
-        self, query: str, project_id: str | None = None, limit: int = 10
-    ) -> list[Any]:
+    async def search(self, query: str, project_id: str | None = None, limit: int = 10) -> list[Any]:
         """
         Search the knowledge graph.
 

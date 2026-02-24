@@ -268,7 +268,9 @@ class TestQueryMonitor:
         mock_session.execute.return_value = MagicMock()
 
         # Execute
-        with patch("src.infrastructure.adapters.secondary.common.query_monitor.logger") as _mock_logger:
+        with patch(
+            "src.infrastructure.adapters.secondary.common.query_monitor.logger"
+        ) as _mock_logger:
             _ = await monitor.execute(
                 session=mock_session,
                 query=text("SELECT * FROM users"),
@@ -400,8 +402,8 @@ class TestQueryMonitor:
 
         assert len(frequent) == 3
         assert frequent[0]["count"] == 10  # users query
-        assert frequent[1]["count"] == 5   # posts query
-        assert frequent[2]["count"] == 2   # comments query
+        assert frequent[1]["count"] == 5  # posts query
+        assert frequent[2]["count"] == 2  # comments query
 
     def test_reset_statistics(self, monitor):
         """Test resetting statistics."""
@@ -537,10 +539,7 @@ class TestQueryMonitorIntegration:
     @pytest.mark.asyncio
     async def test_aggregated_monitoring(self):
         """Test aggregating stats from multiple monitors."""
-        monitors = [
-            QueryMonitor(name=f"monitor_{i}")
-            for i in range(3)
-        ]
+        monitors = [QueryMonitor(name=f"monitor_{i}") for i in range(3)]
 
         mock_session = AsyncMock()
         mock_session.execute.return_value = MagicMock()

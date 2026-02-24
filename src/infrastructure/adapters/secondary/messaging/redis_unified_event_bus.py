@@ -88,7 +88,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
     def _extract_routing_key(self, stream_key: str) -> str:
         """Extract routing key from stream key."""
         if stream_key.startswith(self._stream_prefix):
-            return stream_key[len(self._stream_prefix):]
+            return stream_key[len(self._stream_prefix) :]
         return stream_key
 
     async def publish(
@@ -143,9 +143,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
             )
 
         except redis.RedisError as e:
-            logger.error(
-                f"[UnifiedEventBus] Failed to publish to {stream_key}: {e}"
-            )
+            logger.error(f"[UnifiedEventBus] Failed to publish to {stream_key}: {e}")
             raise EventPublishError(
                 f"Failed to publish event: {e}",
                 routing_key=routing_key_str,
@@ -164,7 +162,9 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
         async with self._redis.pipeline(transaction=True) as pipe:
             for event, routing_key in events:
                 stream_key = self._get_stream_key(routing_key)
-                routing_key_str = str(routing_key) if isinstance(routing_key, RoutingKey) else routing_key
+                routing_key_str = (
+                    str(routing_key) if isinstance(routing_key, RoutingKey) else routing_key
+                )
 
                 event_json = self._serializer.serialize(event)
                 stream_data = {
@@ -190,10 +190,12 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                     if isinstance(seq_id, bytes):
                         seq_id = seq_id.decode("utf-8")
 
-                    results.append(PublishResult(
-                        sequence_id=seq_id,
-                        stream_key=self._get_stream_key(events[i][1]),
-                    ))
+                    results.append(
+                        PublishResult(
+                            sequence_id=seq_id,
+                            stream_key=self._get_stream_key(events[i][1]),
+                        )
+                    )
 
                 return results
 
@@ -324,9 +326,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
 
                             # Auto-ack if configured
                             if opts.ack_immediately:
-                                await self._redis.xack(
-                                    stream_name, consumer_group, msg_id
-                                )
+                                await self._redis.xack(stream_name, consumer_group, msg_id)
 
             except redis.ResponseError as e:
                 if "NOGROUP" in str(e):

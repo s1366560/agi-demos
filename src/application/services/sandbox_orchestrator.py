@@ -214,7 +214,9 @@ class SandboxOrchestrator:
             # Parse result
             status = self._parse_desktop_result(result)
 
-            logger.info(f"Desktop started for sandbox {sandbox_id}: {status.url}, running={status.running}")
+            logger.info(
+                f"Desktop started for sandbox {sandbox_id}: {status.url}, running={status.running}"
+            )
 
             return status
 
@@ -265,7 +267,9 @@ class SandboxOrchestrator:
         config = config or TerminalConfig()
 
         try:
-            logger.debug(f"Starting terminal for sandbox {sandbox_id} with config: port={config.port}")
+            logger.debug(
+                f"Starting terminal for sandbox {sandbox_id} with config: port={config.port}"
+            )
             result = await self._adapter.call_tool(
                 sandbox_id,
                 "start_terminal",

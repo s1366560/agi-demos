@@ -257,9 +257,7 @@ class TestExecutionRouter:
         skill_matcher = MockSkillMatcher({"search": True})
         router = ExecutionRouter(skill_matcher=skill_matcher)
 
-        context_with_history = {
-            "recent_messages": ["I want to search", "search for files"]
-        }
+        context_with_history = {"recent_messages": ["I want to search", "search for files"]}
 
         decision = router.decide("search", context_with_history)
 

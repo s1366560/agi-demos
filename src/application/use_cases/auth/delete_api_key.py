@@ -2,7 +2,6 @@
 Use case for listing API keys.
 """
 
-
 from pydantic import BaseModel, Field, field_validator
 
 from src.domain.model.auth.api_key import APIKey

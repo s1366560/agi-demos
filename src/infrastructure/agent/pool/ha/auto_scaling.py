@@ -207,9 +207,7 @@ class AutoScalingService:
             # Keep only recent history
             policy = self.get_policy(instance_key)
             max_history = policy.evaluation_periods * 2
-            self._metrics_history[instance_key] = self._metrics_history[instance_key][
-                -max_history:
-            ]
+            self._metrics_history[instance_key] = self._metrics_history[instance_key][-max_history:]
 
             # Evaluate scaling
             decision = self._evaluate_scaling(instance_key, metrics)
@@ -292,9 +290,7 @@ class AutoScalingService:
 
     async def get_scaling_stats(self) -> dict[str, Any]:
         """Get scaling statistics."""
-        scale_up_count = sum(
-            1 for e in self._scaling_events if e.direction == ScalingDirection.UP
-        )
+        scale_up_count = sum(1 for e in self._scaling_events if e.direction == ScalingDirection.UP)
         scale_down_count = sum(
             1 for e in self._scaling_events if e.direction == ScalingDirection.DOWN
         )
@@ -395,7 +391,7 @@ class AutoScalingService:
         if current >= policy.max_instances:
             return None
 
-        recent = history[-policy.evaluation_periods:]
+        recent = history[-policy.evaluation_periods :]
         metrics = recent[-1]
 
         # Check CPU
@@ -451,9 +447,7 @@ class AutoScalingService:
                     policy.max_instances,
                 ),
                 metrics=metrics,
-                confidence=min(
-                    avg_latency / policy.latency_scale_up_threshold_ms, 1.0
-                ),
+                confidence=min(avg_latency / policy.latency_scale_up_threshold_ms, 1.0),
             )
 
         return None
@@ -469,9 +463,7 @@ class AutoScalingService:
         # Check cooldown
         last_down = self._last_scale_down.get(instance_key)
         if last_down:
-            cooldown_end = last_down + timedelta(
-                seconds=policy.scale_down_cooldown_seconds
-            )
+            cooldown_end = last_down + timedelta(seconds=policy.scale_down_cooldown_seconds)
             if now < cooldown_end:
                 return None
 
@@ -479,7 +471,7 @@ class AutoScalingService:
         if current <= policy.min_instances:
             return None
 
-        recent = history[-policy.evaluation_periods:]
+        recent = history[-policy.evaluation_periods :]
         metrics = recent[-1]
 
         # All metrics must be below threshold
@@ -502,7 +494,8 @@ class AutoScalingService:
                     policy.min_instances,
                 ),
                 metrics=metrics,
-                confidence=1.0 - max(
+                confidence=1.0
+                - max(
                     avg_cpu / policy.cpu_scale_up_threshold,
                     avg_memory / policy.memory_scale_up_threshold,
                 ),
@@ -553,4 +546,4 @@ class AutoScalingService:
         self._scaling_events.append(event)
         # Trim history
         if len(self._scaling_events) > self._max_events:
-            self._scaling_events = self._scaling_events[-self._max_events:]
+            self._scaling_events = self._scaling_events[-self._max_events :]

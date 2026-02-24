@@ -147,9 +147,7 @@ class TestContextLoader:
         assert result.messages[0]["role"] == "user"
         assert result.messages[1]["role"] == "assistant"
         assert result.total_message_count == 10
-        event_repo.get_message_events.assert_called_once_with(
-            conversation_id="conv-1", limit=50
-        )
+        event_repo.get_message_events.assert_called_once_with(conversation_id="conv-1", limit=50)
 
     async def test_load_with_cached_summary(self):
         """When summary exists, loads summary + recent messages."""

@@ -86,20 +86,25 @@ class TestCircuitBreaker:
     @pytest.fixture
     def success_func(self):
         """Create a function that always succeeds."""
+
         async def func():
             return "success"
+
         return func
 
     @pytest.fixture
     def failing_func(self):
         """Create a function that always fails."""
+
         async def func():
             raise ConnectionError("Connection failed")
+
         return func
 
     @pytest.fixture
     def flaky_func(self):
         """Create a function that fails first N times then succeeds."""
+
         def create(attempts_to_fail=2):
             attempt = 0
 
@@ -362,6 +367,7 @@ class TestCircuitBreaker:
 
     async def test_fallback_on_exception(self, breaker):
         """Test fallback function on specific exception."""
+
         async def raise_specific_error():
             raise ValueError("Specific error")
 
@@ -369,7 +375,9 @@ class TestCircuitBreaker:
             return f"Handled: {error}"
 
         # Circuit is closed, fallback on exception
-        result = await breaker.call(raise_specific_error, fallback_on_exception=ValueError, fallback=fallback)
+        result = await breaker.call(
+            raise_specific_error, fallback_on_exception=ValueError, fallback=fallback
+        )
 
         assert result == "Handled: Specific error"
         # The exception was handled by fallback, so no failure counted

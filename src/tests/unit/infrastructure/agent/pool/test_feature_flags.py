@@ -206,17 +206,13 @@ class TestFeatureFlags:
 
         # Project enabled
         assert (
-            await flags.is_enabled(
-                "project_test", tenant_id="tenant-1", project_id="project-1"
-            )
+            await flags.is_enabled("project_test", tenant_id="tenant-1", project_id="project-1")
             is True
         )
 
         # Other project not enabled
         assert (
-            await flags.is_enabled(
-                "project_test", tenant_id="tenant-1", project_id="project-2"
-            )
+            await flags.is_enabled("project_test", tenant_id="tenant-1", project_id="project-2")
             is False
         )
 

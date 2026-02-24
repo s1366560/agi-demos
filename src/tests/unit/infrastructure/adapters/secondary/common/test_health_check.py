@@ -93,10 +93,7 @@ class TestPostgresHealthChecker:
         mock_engine.connect.return_value.__aenter__.return_value = mock_connection
         mock_connection.execute.return_value.scalar.return_value = 5
 
-        checker = PostgresHealthChecker(
-            engine=mock_engine,
-            query="SELECT COUNT(*) FROM users"
-        )
+        checker = PostgresHealthChecker(engine=mock_engine, query="SELECT COUNT(*) FROM users")
 
         # Execute
         result = await checker.check()
@@ -107,9 +104,11 @@ class TestPostgresHealthChecker:
 
     async def test_health_check_timeout(self, checker, mock_engine):
         """Test health check respects timeout."""
+
         # Setup: Mock timeout
         async def slow_connect():
             import asyncio
+
             await asyncio.sleep(2)  # Longer than timeout
 
         mock_engine.connect.side_effect = slow_connect
@@ -270,10 +269,7 @@ class TestNeo4jHealthChecker:
         mock_result.__iter__.return_value = iter(mock_result.records)
         mock_driver.execute_query.return_value = (mock_result, mock_summary)
 
-        checker = Neo4jHealthChecker(
-            driver=mock_driver,
-            query="RETURN count(*) AS count"
-        )
+        checker = Neo4jHealthChecker(driver=mock_driver, query="RETURN count(*) AS count")
 
         # Execute
         result = await checker.check()
@@ -406,7 +402,9 @@ class TestSystemHealthChecker:
         checks = result.details.get("checks", {})
         assert checks["neo4j"]["healthy"] is False
 
-    async def test_multiple_unhealthy(self, system_checker, mock_postgres_checker, mock_redis_checker):
+    async def test_multiple_unhealthy(
+        self, system_checker, mock_postgres_checker, mock_redis_checker
+    ):
         """Test when multiple services are unhealthy."""
         # Setup
         mock_postgres_checker.check.return_value = HealthStatus(
@@ -447,11 +445,15 @@ class TestSystemHealthChecker:
         with pytest.raises(ValueError, match="Unknown service"):
             await system_checker.check_service("unknown")
 
-    async def test_parallel_execution(self, system_checker, mock_postgres_checker, mock_redis_checker, mock_neo4j_checker):
+    async def test_parallel_execution(
+        self, system_checker, mock_postgres_checker, mock_redis_checker, mock_neo4j_checker
+    ):
         """Test that health checks run in parallel."""
+
         # Setup: Make checks take some time
         async def slow_check(service_name):
             import asyncio
+
             await asyncio.sleep(0.1)
             return HealthStatus(
                 service=service_name,
@@ -466,6 +468,7 @@ class TestSystemHealthChecker:
 
         # Execute
         import time
+
         start = time.time()
         result = await system_checker.check_all()
         elapsed = time.time() - start

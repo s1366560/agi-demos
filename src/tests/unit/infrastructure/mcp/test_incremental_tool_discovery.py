@@ -144,12 +144,7 @@ class TestIncrementalDiscovery:
         async def track_discovery(**kwargs):
             server_name = kwargs.get("arguments", {}).get("name", "")
             discovered_servers.append(server_name)
-            return {
-                "content": [{
-                    "type": "text",
-                    "text": f'[{{"name": "{server_name}_tool1"}}]'
-                }]
-            }
+            return {"content": [{"type": "text", "text": f'[{{"name": "{server_name}_tool1"}}]'}]}
 
         mock_adapter.call_tool = track_discovery
 

@@ -33,7 +33,11 @@ class TestDesktopTool:
         """Test tool is initialized with correct name and description."""
         assert desktop_tool.name == "desktop"
         assert "remote desktop" in desktop_tool.description.lower()
-        assert "noVNC" in desktop_tool.description or "LXDE" in desktop_tool.description or "KasmVNC" in desktop_tool.description
+        assert (
+            "noVNC" in desktop_tool.description
+            or "LXDE" in desktop_tool.description
+            or "KasmVNC" in desktop_tool.description
+        )
 
     def test_get_parameters_schema(self, desktop_tool):
         """Test parameters schema is correctly defined."""
@@ -76,7 +80,7 @@ class TestDesktopTool:
             "content": [
                 {
                     "type": "text",
-                    "text": '{"success": true, "url": "http://localhost:6080/vnc.html", "port": 6080}'
+                    "text": '{"success": true, "url": "http://localhost:6080/vnc.html", "port": 6080}',
                 }
             ],
             "is_error": False,
@@ -95,7 +99,7 @@ class TestDesktopTool:
             "content": [
                 {
                     "type": "text",
-                    "text": '{"success": true, "url": "http://localhost:6080/vnc.html"}'
+                    "text": '{"success": true, "url": "http://localhost:6080/vnc.html"}',
                 }
             ],
             "is_error": False,
@@ -120,7 +124,7 @@ class TestDesktopTool:
             "content": [
                 {
                     "type": "text",
-                    "text": '{"success": true, "message": "Desktop stopped successfully"}'
+                    "text": '{"success": true, "message": "Desktop stopped successfully"}',
                 }
             ],
             "is_error": False,
@@ -140,7 +144,7 @@ class TestDesktopTool:
             "content": [
                 {
                     "type": "text",
-                    "text": '{"running": true, "url": "http://localhost:6080/vnc.html", "port": 6080, "display": ":1"}'
+                    "text": '{"running": true, "url": "http://localhost:6080/vnc.html", "port": 6080, "display": ":1"}',
                 }
             ],
             "is_error": False,
@@ -155,12 +159,7 @@ class TestDesktopTool:
     async def test_execute_status_stopped(self, desktop_tool, mock_sandbox_adapter):
         """Test getting status when desktop is stopped."""
         mock_sandbox_adapter.call_tool.return_value = {
-            "content": [
-                {
-                    "type": "text",
-                    "text": '{"running": false, "url": null}'
-                }
-            ],
+            "content": [{"type": "text", "text": '{"running": false, "url": null}'}],
             "is_error": False,
         }
 

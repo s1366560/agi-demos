@@ -227,9 +227,7 @@ class SubAgentOrchestrator:
             )
         else:
             if self._debug_logging:
-                logger.debug(
-                    f"[SubAgentOrchestrator] No SubAgent matched: {match.match_reason}"
-                )
+                logger.debug(f"[SubAgentOrchestrator] No SubAgent matched: {match.match_reason}")
             return SubAgentRoutingResult(
                 confidence=match.confidence,
                 match_reason=match.match_reason,
@@ -262,9 +260,7 @@ class SubAgentOrchestrator:
 
         # Check if router supports async matching (HybridRouter)
         if hasattr(self._router, "match_async"):
-            match = await self._router.match_async(
-                query, threshold, conversation_context
-            )
+            match = await self._router.match_async(query, threshold, conversation_context)
         else:
             match = self._router.match(query, threshold)
 
@@ -402,9 +398,7 @@ class SubAgentOrchestrator:
                     f"time={execution_time_ms}ms, success={success}"
                 )
         except Exception as e:
-            logger.warning(
-                f"[SubAgentOrchestrator] Failed to record execution: {e}"
-            )
+            logger.warning(f"[SubAgentOrchestrator] Failed to record execution: {e}")
 
     def get_subagents_data(self) -> list[dict[str, Any]] | None:
         """

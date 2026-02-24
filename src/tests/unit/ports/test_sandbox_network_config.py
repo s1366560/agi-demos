@@ -1,6 +1,5 @@
 """Tests for Sandbox network configuration."""
 
-
 from src.domain.ports.services.sandbox_port import SandboxConfig
 
 
@@ -91,8 +90,8 @@ class TestSandboxNetworkSecurity:
             image="sandbox-mcp-server:latest",
             network_mode="bridge",
             allowed_networks=[
-                "10.0.0.0/8",      # Private Class A
-                "172.16.0.0/12",   # Private Class B
+                "10.0.0.0/8",  # Private Class A
+                "172.16.0.0/12",  # Private Class B
                 "192.168.0.0/16",  # Private Class C
             ],
             blocked_ports=[22, 3389],
@@ -103,14 +102,18 @@ class TestSandboxNetworkSecurity:
 
     def test_container_network_mode(self) -> None:
         """应该支持连接到另一个容器网络."""
-        config = SandboxConfig(image="sandbox-mcp-server:latest", network_mode="container:another-container")
+        config = SandboxConfig(
+            image="sandbox-mcp-server:latest", network_mode="container:another-container"
+        )
 
         assert config.network_mode.startswith("container:")
 
     def test_security_profile_network_mapping(self) -> None:
         """安全 profile 应该映射到网络配置."""
         # Standard profile - 基本隔离
-        standard_config = SandboxConfig(image="sandbox-mcp-server:latest", security_profile="standard")
+        standard_config = SandboxConfig(
+            image="sandbox-mcp-server:latest", security_profile="standard"
+        )
         assert standard_config.network_isolated is True
 
         # Strict profile - 更严格

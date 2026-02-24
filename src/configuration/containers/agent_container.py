@@ -89,7 +89,7 @@ class AgentContainer:
         db: AsyncSession | None = None,
         graph_service: GraphServicePort | None = None,
         redis_client: redis.Redis | None = None,
-        settings: Settings | None=None,
+        settings: Settings | None = None,
         neo4j_client_factory: Callable | None = None,
         storage_service_factory: Callable | None = None,
         sandbox_orchestrator_factory: Callable | None = None,
@@ -365,7 +365,7 @@ class AgentContainer:
 
         return AttachmentInjector()
 
-    def context_facade(self, window_manager: ContextWindowManager | None=None) -> Any:
+    def context_facade(self, window_manager: ContextWindowManager | None = None) -> Any:
         """Get ContextFacade for unified context management."""
         from src.infrastructure.agent.context import ContextFacade
 

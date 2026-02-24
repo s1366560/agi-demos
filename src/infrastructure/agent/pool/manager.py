@@ -73,6 +73,7 @@ class AgentPoolManager:
         # 后台任务
         self._cleanup_task: asyncio.Task | None = None
         self._running = False
+        self._background_tasks: set[asyncio.Task[Any]] = set()
 
         # 事件回调
         self._on_instance_created: list[Callable[[AgentInstance], None]] = []
@@ -492,7 +493,9 @@ class AgentPoolManager:
         action = self._health_monitor.determine_recovery_action(instance, result)
 
         # 异步执行恢复
-        asyncio.create_task(self._execute_recovery(instance, action))
+        _recovery_task = asyncio.create_task(self._execute_recovery(instance, action))
+        self._background_tasks.add(_recovery_task)
+        _recovery_task.add_done_callback(self._background_tasks.discard)
 
     def _on_instance_recovered(self, instance: AgentInstance) -> None:
         """处理实例恢复事件.

@@ -304,13 +304,15 @@ class TemplateRegistry:
                     continue
 
             if query_lower:
-                searchable = " ".join([
-                    template.name,
-                    template.description,
-                    template.trigger_description,
-                    " ".join(template.trigger_keywords),
-                    " ".join(template.tags),
-                ]).lower()
+                searchable = " ".join(
+                    [
+                        template.name,
+                        template.description,
+                        template.trigger_description,
+                        " ".join(template.trigger_keywords),
+                        " ".join(template.tags),
+                    ]
+                ).lower()
 
                 if query_lower not in searchable:
                     continue

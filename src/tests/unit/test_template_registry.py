@@ -1,6 +1,5 @@
 """Tests for Phase 5.3: SubAgent Template Registry (Marketplace)."""
 
-
 import pytest
 
 from src.domain.model.agent.subagent import SubAgent
@@ -109,11 +108,25 @@ class TestSubAgentTemplate:
         data = template.to_dict()
 
         expected_keys = {
-            "template_id", "name", "description", "version", "author",
-            "category", "system_prompt", "model_preference", "temperature",
-            "max_iterations", "max_tokens", "trigger_keywords",
-            "trigger_description", "trigger_examples", "tool_filter_tags",
-            "tags", "metadata", "created_at", "usage_count",
+            "template_id",
+            "name",
+            "description",
+            "version",
+            "author",
+            "category",
+            "system_prompt",
+            "model_preference",
+            "temperature",
+            "max_iterations",
+            "max_tokens",
+            "trigger_keywords",
+            "trigger_description",
+            "trigger_examples",
+            "tool_filter_tags",
+            "tags",
+            "metadata",
+            "created_at",
+            "usage_count",
         }
         assert set(data.keys()) == expected_keys
 
@@ -192,18 +205,30 @@ class TestTemplateRegistry:
 
     def test_search_combined_filters(self):
         registry = TemplateRegistry()
-        registry.register(SubAgentTemplate(
-            name="py-reviewer", category="code", tags=["python"],
-            description="Reviews Python code",
-        ))
-        registry.register(SubAgentTemplate(
-            name="js-reviewer", category="code", tags=["javascript"],
-            description="Reviews JS code",
-        ))
-        registry.register(SubAgentTemplate(
-            name="blog-writer", category="writing", tags=["python"],
-            description="Writes blog posts about Python",
-        ))
+        registry.register(
+            SubAgentTemplate(
+                name="py-reviewer",
+                category="code",
+                tags=["python"],
+                description="Reviews Python code",
+            )
+        )
+        registry.register(
+            SubAgentTemplate(
+                name="js-reviewer",
+                category="code",
+                tags=["javascript"],
+                description="Reviews JS code",
+            )
+        )
+        registry.register(
+            SubAgentTemplate(
+                name="blog-writer",
+                category="writing",
+                tags=["python"],
+                description="Writes blog posts about Python",
+            )
+        )
 
         results = registry.search(query="python", category="code")
         assert len(results) == 1

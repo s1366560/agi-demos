@@ -104,7 +104,9 @@ class CancelHandler:
                 await client.cancel_request(request_id)
                 logger.info(f"Sent cancellation for request: {request_id}")
             else:
-                logger.debug(f"Client does not support cancel_request, marked as cancelled: {request_id}")
+                logger.debug(
+                    f"Client does not support cancel_request, marked as cancelled: {request_id}"
+                )
 
             # Unregister the request after cancellation
             self.unregister_request(request_id)

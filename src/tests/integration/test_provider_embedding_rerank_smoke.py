@@ -75,7 +75,9 @@ def _ensure_real_litellm_loaded() -> None:
 
     module_path = str(getattr(litellm, "__file__", "")).replace("\\", "/")
     if "/src/tests/unit/llm/litellm/" in module_path:
-        pytest.skip("litellm unit-test stub loaded; run provider smoke tests in separate pytest process")
+        pytest.skip(
+            "litellm unit-test stub loaded; run provider smoke tests in separate pytest process"
+        )
 
 
 @pytest.mark.integration

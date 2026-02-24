@@ -264,14 +264,14 @@ class SQLAlchemyProviderRepository(ProviderRepository):
                 config.embedding_model,
                 config.embedding_config,
             )
-            
+
             if embedding_payload:
                 updated_config["embedding"] = embedding_payload
                 orm.embedding_model = embedding_payload.get("model")
             else:
                 updated_config.pop("embedding", None)
                 orm.embedding_model = None
-                
+
         elif config.embedding_model is not None:
             existing_embedding = (
                 dict(updated_config.get("embedding", {}))

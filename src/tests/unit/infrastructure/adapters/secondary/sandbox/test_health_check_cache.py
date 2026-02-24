@@ -26,7 +26,9 @@ class TestHealthCheckCache:
 
             # Verify health check cache exists
             assert hasattr(adapter, "_last_healthy_at"), "Missing _last_healthy_at cache"
-            assert hasattr(adapter, "_health_check_ttl_seconds"), "Missing _health_check_ttl_seconds"
+            assert hasattr(adapter, "_health_check_ttl_seconds"), (
+                "Missing _health_check_ttl_seconds"
+            )
             assert adapter._health_check_ttl_seconds > 0, "Health check TTL should be positive"
 
     @pytest.mark.asyncio
@@ -61,6 +63,7 @@ class TestHealthCheckCache:
             adapter = MCPSandboxAdapter()
             # Use very short TTL for the test
             from src.infrastructure.adapters.secondary.sandbox.health_monitor import TTLCache
+
             adapter._last_healthy_at = TTLCache(default_ttl_seconds=0.1, max_size=100)
 
             sandbox_id = "test-sandbox"
@@ -255,7 +258,5 @@ class TestHealthCheckCacheTTLConfig:
             adapter = MCPSandboxAdapter()
 
             # TTLCache should have max_size configured
-            assert hasattr(adapter._last_healthy_at, "_max_size"), (
-                "TTLCache should have max_size"
-            )
+            assert hasattr(adapter._last_healthy_at, "_max_size"), "TTLCache should have max_size"
             assert adapter._last_healthy_at._max_size > 0, "max_size should be positive"

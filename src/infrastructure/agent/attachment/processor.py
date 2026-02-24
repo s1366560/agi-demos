@@ -151,9 +151,7 @@ class AttachmentProcessor:
         if attachment_metadata:
             context.context_prompt = self._build_context_prompt(attachment_metadata)
             context.file_count = len(attachment_metadata)
-            context.total_size_bytes = sum(
-                m.get("size_bytes", 0) for m in attachment_metadata
-            )
+            context.total_size_bytes = sum(m.get("size_bytes", 0) for m in attachment_metadata)
 
         # Process content into LLM-compatible format
         if attachment_content:
@@ -167,9 +165,7 @@ class AttachmentProcessor:
 
         return context
 
-    def _build_context_prompt(
-        self, attachment_metadata: list[dict[str, Any]]
-    ) -> str:
+    def _build_context_prompt(self, attachment_metadata: list[dict[str, Any]]) -> str:
         """
         Build human-readable context prompt from metadata.
 
@@ -297,9 +293,7 @@ class AttachmentProcessor:
 
         if context.processed_attachments:
             # Build multimodal content array
-            user_content: list[dict[str, Any]] = [
-                {"type": "text", "text": enhanced_message}
-            ]
+            user_content: list[dict[str, Any]] = [{"type": "text", "text": enhanced_message}]
 
             for attachment in context.processed_attachments:
                 user_content.append(attachment.to_llm_content())

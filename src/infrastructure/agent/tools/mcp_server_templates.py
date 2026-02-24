@@ -125,7 +125,7 @@ if __name__ == "__main__":
             },
             {
                 "path": "{{server_name}}/pyproject.toml",
-                "content": '''[project]
+                "content": """[project]
 name = "{{server_name}}"
 version = "0.1.0"
 dependencies = ["mcp", "jinja2"]
@@ -133,7 +133,7 @@ dependencies = ["mcp", "jinja2"]
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
-''',
+""",
             },
         ],
     },
@@ -217,7 +217,7 @@ if __name__ == "__main__":
             },
             {
                 "path": "{{server_name}}/pyproject.toml",
-                "content": '''[project]
+                "content": """[project]
 name = "{{server_name}}"
 version = "0.1.0"
 dependencies = ["mcp", "httpx"]
@@ -225,7 +225,7 @@ dependencies = ["mcp", "httpx"]
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
-''',
+""",
             },
         ],
     },
@@ -312,7 +312,7 @@ if __name__ == "__main__":
             },
             {
                 "path": "{{server_name}}/pyproject.toml",
-                "content": '''[project]
+                "content": """[project]
 name = "{{server_name}}"
 version = "0.1.0"
 dependencies = ["mcp", "pandas"]
@@ -320,7 +320,7 @@ dependencies = ["mcp", "pandas"]
 [build-system]
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
-''',
+""",
             },
         ],
     },
@@ -338,10 +338,7 @@ def list_available_templates() -> list[dict[str, str]]:
     Returns:
         List of template info dicts with name and description
     """
-    return [
-        {"name": t["name"], "description": t["description"]}
-        for t in TEMPLATES.values()
-    ]
+    return [{"name": t["name"], "description": t["description"]} for t in TEMPLATES.values()]
 
 
 def get_template_by_name(name: str) -> dict[str, Any] | None:
@@ -476,10 +473,7 @@ class CreateMCPServerFromTemplateTool(AgentTool):
                 "Use lowercase letters, numbers, and dashes only."
             )
 
-        logger.info(
-            "Creating MCP server '%s' from template '%s'",
-            server_name, template
-        )
+        logger.info("Creating MCP server '%s' from template '%s'", server_name, template)
 
         # Render and write files
         server_path = f"{self._workspace_path}/{server_name}"
@@ -489,14 +483,11 @@ class CreateMCPServerFromTemplateTool(AgentTool):
             # Render content
             rendered_content = render_template_content(
                 file_info["content"],
-                {"server_name": server_name, "description": f"{server_name} MCP server"}
+                {"server_name": server_name, "description": f"{server_name} MCP server"},
             )
 
             # Render path
-            rendered_path = render_template_content(
-                file_info["path"],
-                {"server_name": server_name}
-            )
+            rendered_path = render_template_content(file_info["path"], {"server_name": server_name})
 
             full_path = f"{self._workspace_path}/{rendered_path}"
 

@@ -103,10 +103,12 @@ class IntentRouter:
         messages = [{"role": "system", "content": self._system_prompt}]
 
         if conversation_context:
-            messages.append({
-                "role": "user",
-                "content": f"Recent context:\n{conversation_context}\n\nNew query: {query}",
-            })
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Recent context:\n{conversation_context}\n\nNew query: {query}",
+                }
+            )
         else:
             messages.append({"role": "user", "content": query})
 

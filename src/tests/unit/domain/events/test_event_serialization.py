@@ -30,10 +30,7 @@ class TestEventSerialization:
     def test_act_event_serialization(self):
         """ActEvent should serialize correctly."""
         event = AgentActEvent(
-            tool_name="search",
-            tool_input={"query": "test"},
-            call_id="call_123",
-            status="running"
+            tool_name="search", tool_input={"query": "test"}, call_id="call_123", status="running"
         )
         event_dict = event.to_event_dict()
 

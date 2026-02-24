@@ -9,7 +9,7 @@ Provides structured logging utilities for LLM calls with support for:
 
 Usage:
     from src.infrastructure.llm.structured_logger import get_llm_logger
-    
+
     logger = get_llm_logger()
     logger.log_call_start(request_id="req-123", provider="dashscope", model="qwen-max")
     logger.log_call_end(request_id="req-123", tokens=150, latency_ms=450)
@@ -27,20 +27,20 @@ logger = logging.getLogger(__name__)
 class LLMMetrics:
     """
     Metrics for a single LLM call.
-    
+
     Captures all relevant information for observability and cost tracking.
     """
-    
+
     request_id: str
     provider: str
     model: str
     operation: str = "completion"  # completion, embedding, rerank, stream
-    
+
     # Timing
     start_time: float = field(default_factory=time.time)
     end_time: float | None = None
     latency_ms: float | None = None
-    
+
     # Token usage
     input_tokens: int = 0
     output_tokens: int = 0
@@ -48,24 +48,24 @@ class LLMMetrics:
     reasoning_tokens: int = 0
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
-    
+
     # Request metadata
     tenant_id: str | None = None
     user_id: str | None = None
     project_id: str | None = None
     conversation_id: str | None = None
-    
+
     # Response metadata
     finish_reason: str | None = None
     tool_calls: int = 0
     has_error: bool = False
     error_type: str | None = None
     error_message: str | None = None
-    
+
     # Cost tracking (if available)
     estimated_cost: float | None = None
     currency: str = "USD"
-    
+
     def to_dict(self) -> dict[str, Any]:
         """Convert metrics to dictionary."""
         return {
@@ -97,20 +97,20 @@ class LLMMetrics:
 class StructuredLLMLogger:
     """
     Structured logger for LLM operations.
-    
+
     Provides consistent logging across all LLM calls with support
     for metrics tracking and observability integration.
-    
+
     Example:
         logger = StructuredLLMLogger()
-        
+
         # Start tracking
         request_id = logger.log_call_start(
             provider="dashscope",
             model="qwen-max",
             tenant_id="tenant-1",
         )
-        
+
         try:
             # ... make LLM call ...
             logger.log_call_end(
@@ -125,24 +125,24 @@ class StructuredLLMLogger:
                 error=e,
             )
     """
-    
+
     def __init__(self, base_logger: logging.Logger | None = None) -> None:
         """
         Initialize structured LLM logger.
-        
+
         Args:
             base_logger: Base logger instance (uses 'llm' logger if None)
         """
         self._logger = base_logger or logging.getLogger("llm")
         self._active_calls: dict[str, LLMMetrics] = {}
-    
+
     def _get_extra(self, metrics: LLMMetrics) -> dict[str, Any]:
         """
         Get extra fields for structured logging.
-        
+
         Args:
             metrics: LLM metrics
-        
+
         Returns:
             Dictionary of extra fields
         """
@@ -153,7 +153,7 @@ class StructuredLLMLogger:
             "llm_operation": metrics.operation,
             **metrics.to_dict(),
         }
-    
+
     def log_call_start(
         self,
         provider: str,
@@ -168,7 +168,7 @@ class StructuredLLMLogger:
     ) -> str:
         """
         Log start of LLM call.
-        
+
         Args:
             provider: LLM provider name
             model: Model name
@@ -179,14 +179,14 @@ class StructuredLLMLogger:
             project_id: Project identifier
             conversation_id: Conversation identifier
             **kwargs: Additional metadata
-            
+
         Returns:
             Request ID for tracking
         """
         import uuid
-        
+
         request_id = request_id or str(uuid.uuid4())
-        
+
         metrics = LLMMetrics(
             request_id=request_id,
             provider=provider,
@@ -197,17 +197,17 @@ class StructuredLLMLogger:
             project_id=project_id,
             conversation_id=conversation_id,
         )
-        
+
         # Store for later completion
         self._active_calls[request_id] = metrics
-        
+
         self._logger.info(
             f"LLM call started: {provider}/{model} ({operation})",
             extra=self._get_extra(metrics),
         )
-        
+
         return request_id
-    
+
     def log_call_end(
         self,
         request_id: str,
@@ -225,7 +225,7 @@ class StructuredLLMLogger:
     ) -> None:
         """
         Log end of LLM call.
-        
+
         Args:
             request_id: Request ID from log_call_start
             input_tokens: Input token count
@@ -241,11 +241,11 @@ class StructuredLLMLogger:
             **kwargs: Additional metadata
         """
         metrics = self._active_calls.get(request_id)
-        
+
         if metrics is None:
             self._logger.warning(f"LLM call end without start: {request_id}")
             return
-        
+
         # Update metrics
         metrics.input_tokens = input_tokens
         metrics.output_tokens = output_tokens
@@ -258,27 +258,27 @@ class StructuredLLMLogger:
         metrics.tool_calls = tool_calls
         metrics.estimated_cost = estimated_cost
         metrics.end_time = time.time()
-        
+
         # Calculate latency if not provided
         if latency_ms is None:
             metrics.latency_ms = (metrics.end_time - metrics.start_time) * 1000
-        
+
         # Remove from active calls
         del self._active_calls[request_id]
-        
+
         # Log with level based on finish reason
         if finish_reason == "error":
             level = logging.WARNING
         else:
             level = logging.INFO
-        
+
         self._logger.log(
             level,
             f"LLM call completed: {metrics.provider}/{metrics.model} "
             f"(tokens={total_tokens}, latency={metrics.latency_ms:.0f}ms)",
             extra=self._get_extra(metrics),
         )
-    
+
     def log_call_error(
         self,
         request_id: str,
@@ -288,7 +288,7 @@ class StructuredLLMLogger:
     ) -> None:
         """
         Log LLM call error.
-        
+
         Args:
             request_id: Request ID from log_call_start
             error: Exception that occurred
@@ -296,13 +296,11 @@ class StructuredLLMLogger:
             **kwargs: Additional metadata
         """
         metrics = self._active_calls.get(request_id)
-        
+
         if metrics is None:
-            self._logger.error(
-                f"LLM call error without start: {request_id}, error={error}"
-            )
+            self._logger.error(f"LLM call error without start: {request_id}, error={error}")
             return
-        
+
         # Update metrics
         metrics.has_error = True
         metrics.error_type = type(error).__name__
@@ -310,16 +308,16 @@ class StructuredLLMLogger:
         metrics.input_tokens = input_tokens
         metrics.end_time = time.time()
         metrics.latency_ms = (metrics.end_time - metrics.start_time) * 1000
-        
+
         # Remove from active calls
         del self._active_calls[request_id]
-        
+
         self._logger.error(
             f"LLM call failed: {metrics.provider}/{metrics.model} "
             f"({metrics.error_type}: {metrics.error_message})",
             extra=self._get_extra(metrics),
         )
-    
+
     def log_stream_event(
         self,
         request_id: str,
@@ -328,45 +326,45 @@ class StructuredLLMLogger:
     ) -> None:
         """
         Log streaming event.
-        
+
         Args:
             request_id: Request ID from log_call_start
             event_type: Type of stream event
             event_data: Event data
         """
         metrics = self._active_calls.get(request_id)
-        
+
         if metrics is None:
             return
-        
+
         extra = self._get_extra(metrics)
         extra["stream_event_type"] = event_type
         if event_data:
             extra["stream_event_data"] = event_data
-        
+
         self._logger.debug(
             f"Stream event: {event_type}",
             extra=extra,
         )
-    
+
     def cleanup_stale_calls(self, max_age_seconds: float = 300) -> int:
         """
         Clean up stale active calls.
-        
+
         Args:
             max_age_seconds: Maximum age of active calls
-            
+
         Returns:
             Number of cleaned up calls
         """
         current_time = time.time()
         stale_requests = []
-        
+
         for request_id, metrics in self._active_calls.items():
             age = current_time - metrics.start_time
             if age > max_age_seconds:
                 stale_requests.append(request_id)
-        
+
         for request_id in stale_requests:
             metrics = self._active_calls[request_id]
             self._logger.warning(
@@ -374,7 +372,7 @@ class StructuredLLMLogger:
                 f"(age={current_time - metrics.start_time:.0f}s)"
             )
             del self._active_calls[request_id]
-        
+
         return len(stale_requests)
 
 
@@ -385,7 +383,7 @@ _global_logger: StructuredLLMLogger | None = None
 def get_llm_logger() -> StructuredLLMLogger:
     """
     Get or create global structured LLM logger.
-    
+
     Returns:
         Global StructuredLLMLogger instance
     """
@@ -403,13 +401,13 @@ def log_llm_call(
 ) -> tuple[str, StructuredLLMLogger]:
     """
     Convenience function to log LLM call start.
-    
+
     Args:
         provider: LLM provider name
         model: Model name
         operation: Operation type
         **kwargs: Additional metadata
-        
+
     Returns:
         Tuple of (request_id, logger)
     """

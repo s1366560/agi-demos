@@ -44,7 +44,7 @@ class TestAgentEventType:
     def test_error_events(self) -> None:
         """Should have error event types."""
         assert AgentEventType.ERROR.value == "error"
-    
+
     def test_event_type_is_alias(self) -> None:
         """EventType should be an alias for AgentEventType."""
         assert EventType is AgentEventType
@@ -411,10 +411,12 @@ class TestEventBus:
         bus = EventBus()
 
         for i in range(150):
-            bus.publish(AgentDomainEvent(
-                event_type=AgentEventType.STATUS,
-                data={"v": i},
-            ))
+            bus.publish(
+                AgentDomainEvent(
+                    event_type=AgentEventType.STATUS,
+                    data={"v": i},
+                )
+            )
 
         history = bus.get_history(limit=10)
 
@@ -469,10 +471,12 @@ class TestEventBus:
 
         # Publish more than default max_history (1000)
         for i in range(1100):
-            bus.publish(AgentDomainEvent(
-                event_type=AgentEventType.STATUS,
-                data={"v": i},
-            ))
+            bus.publish(
+                AgentDomainEvent(
+                    event_type=AgentEventType.STATUS,
+                    data={"v": i},
+                )
+            )
 
         history = bus.get_history()
 
@@ -521,17 +525,23 @@ class TestEventIntegration:
         bus.subscribe(callback=sse_collector)
 
         # Publish events
-        bus.publish(AgentDomainEvent(
-            event_type=AgentEventType.START,
-            conversation_id="conv-123",
-        ))
-        bus.publish(AgentDomainEvent(
-            event_type=AgentEventType.STATUS,
-            data={"progress": 50},
-        ))
-        bus.publish(AgentDomainEvent(
-            event_type=AgentEventType.COMPLETE,
-        ))
+        bus.publish(
+            AgentDomainEvent(
+                event_type=AgentEventType.START,
+                conversation_id="conv-123",
+            )
+        )
+        bus.publish(
+            AgentDomainEvent(
+                event_type=AgentEventType.STATUS,
+                data={"progress": 50},
+            )
+        )
+        bus.publish(
+            AgentDomainEvent(
+                event_type=AgentEventType.COMPLETE,
+            )
+        )
 
         # Create stream
         mapper = bus.get_mapper()

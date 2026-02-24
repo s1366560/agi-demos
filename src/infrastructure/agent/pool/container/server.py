@@ -292,9 +292,7 @@ class AgentContainerServer:
 
             self._is_initialized = True
             self._lifecycle_state = "ready"
-            logger.info(
-                f"Agent initialized: tools={getattr(self._agent, 'tool_count', 0)}"
-            )
+            logger.info(f"Agent initialized: tools={getattr(self._agent, 'tool_count', 0)}")
 
         except Exception as e:
             self._lifecycle_state = "error"
@@ -414,9 +412,7 @@ class AgentContainerServer:
             if len(self._metrics.latencies) > 1000:
                 self._metrics.latencies = self._metrics.latencies[-1000:]
 
-    async def Pause(
-        self, drain_requests: bool = True, timeout_seconds: int = 30
-    ) -> dict[str, Any]:
+    async def Pause(self, drain_requests: bool = True, timeout_seconds: int = 30) -> dict[str, Any]:
         """Pause the agent."""
         self._is_paused = True
         self._lifecycle_state = "paused"
@@ -438,9 +434,7 @@ class AgentContainerServer:
         self._lifecycle_state = "ready" if self._active_requests == 0 else "executing"
         return {"success": True, "message": "Agent resumed"}
 
-    async def Shutdown(
-        self, graceful: bool = True, timeout_seconds: int = 30
-    ) -> dict[str, Any]:
+    async def Shutdown(self, graceful: bool = True, timeout_seconds: int = 30) -> dict[str, Any]:
         """Shutdown the agent."""
         await self.stop(graceful=graceful)
         return {"success": True, "message": "Agent shutdown"}
@@ -498,10 +492,12 @@ async def main() -> None:
 
     # Handle shutdown signals
     loop = asyncio.get_event_loop()
+    _shutdown_task: asyncio.Task[Any] | None = None
 
     def handle_signal(sig: int) -> None:
+        nonlocal _shutdown_task
         logger.info(f"Received signal {sig}, shutting down...")
-        asyncio.create_task(server.stop(graceful=True))
+        _shutdown_task = asyncio.create_task(server.stop(graceful=True))
 
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, lambda s=sig: handle_signal(s))

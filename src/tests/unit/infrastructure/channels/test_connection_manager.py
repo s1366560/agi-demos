@@ -227,7 +227,7 @@ async def test_create_adapter_prefers_plugin_factory() -> None:
     plugin_adapter = object()
     plugin_registry = SimpleNamespace(
         list_channel_type_metadata=lambda: {},
-        build_channel_adapter=AsyncMock(return_value=(plugin_adapter, []))
+        build_channel_adapter=AsyncMock(return_value=(plugin_adapter, [])),
     )
     config = SimpleNamespace(
         enabled=True,
@@ -325,8 +325,11 @@ async def test_create_adapter_raises_when_plugin_adapter_missing() -> None:
         channel_type="feishu",
     )
 
-    with patch(
-        "src.infrastructure.agent.plugins.registry.get_plugin_registry",
-        return_value=plugin_registry,
-    ), pytest.raises(ValueError, match="Unsupported channel type"):
+    with (
+        patch(
+            "src.infrastructure.agent.plugins.registry.get_plugin_registry",
+            return_value=plugin_registry,
+        ),
+        pytest.raises(ValueError, match="Unsupported channel type"),
+    ):
         await manager._create_adapter(config)

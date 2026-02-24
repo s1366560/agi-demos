@@ -31,6 +31,7 @@ class TestToolDefinition:
 
     def test_create_definition(self) -> None:
         """Test creating a tool definition."""
+
         async def dummy_execute(**kwargs):
             return "result"
 
@@ -68,6 +69,7 @@ class TestFunctionToTool:
     @pytest.mark.asyncio
     async def test_convert_sync_function(self) -> None:
         """Test converting a synchronous function."""
+
         def add(a: int, b: int) -> int:
             """Add two numbers.
 

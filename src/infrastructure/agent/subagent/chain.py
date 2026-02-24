@@ -157,10 +157,13 @@ class SubAgentChain:
         all_success = True
         prev_result: SubAgentResult | None = None
 
-        yield self._make_event("chain_started", {
-            "total_steps": len(self._steps),
-            "step_names": [s.name for s in self._steps],
-        })
+        yield self._make_event(
+            "chain_started",
+            {
+                "total_steps": len(self._steps),
+                "step_names": [s.name for s in self._steps],
+            },
+        )
 
         for idx, step in enumerate(self._steps):
             # Check abort signal
@@ -173,23 +176,32 @@ class SubAgentChain:
                 should_run = step.condition(prev_result)
                 if not should_run:
                     skipped.append(step.name)
-                    yield self._make_event("chain_step_skipped", {
-                        "step_index": idx,
-                        "step_name": step.name,
-                        "reason": "condition not met",
-                    })
+                    yield self._make_event(
+                        "chain_step_skipped",
+                        {
+                            "step_index": idx,
+                            "step_name": step.name,
+                            "reason": "condition not met",
+                        },
+                    )
                     continue
 
             # Build task message from template
             task_message = self._render_template(
-                step.task_template, user_message, prev_result, idx,
+                step.task_template,
+                user_message,
+                prev_result,
+                idx,
             )
 
-            yield self._make_event("chain_step_started", {
-                "step_index": idx,
-                "step_name": step.name,
-                "task_preview": task_message[:200],
-            })
+            yield self._make_event(
+                "chain_step_started",
+                {
+                    "step_index": idx,
+                    "step_name": step.name,
+                    "task_preview": task_message[:200],
+                },
+            )
 
             # Build context and process
             bridge = ContextBridge()
@@ -225,21 +237,27 @@ class SubAgentChain:
 
                 if not step_result.success:
                     all_success = False
-                    yield self._make_event("chain_step_failed", {
-                        "step_index": idx,
-                        "step_name": step.name,
-                        "error": step_result.error or "Unknown error",
-                    })
+                    yield self._make_event(
+                        "chain_step_failed",
+                        {
+                            "step_index": idx,
+                            "step_name": step.name,
+                            "error": step_result.error or "Unknown error",
+                        },
+                    )
                     break
             else:
                 all_success = False
                 break
 
-            yield self._make_event("chain_step_completed", {
-                "step_index": idx,
-                "step_name": step.name,
-                "summary": step_result.summary[:200] if step_result else "",
-            })
+            yield self._make_event(
+                "chain_step_completed",
+                {
+                    "step_index": idx,
+                    "step_name": step.name,
+                    "summary": step_result.summary[:200] if step_result else "",
+                },
+            )
 
         end_time = time.time()
         execution_time_ms = int((end_time - start_time) * 1000)

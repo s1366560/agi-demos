@@ -560,7 +560,9 @@ class TestHealthCheck:
         assert result is True
 
     @pytest.mark.asyncio
-    async def test_health_check_returns_false_for_unhealthy(self, mock_repository, mock_adapter, mock_lock):
+    async def test_health_check_returns_false_for_unhealthy(
+        self, mock_repository, mock_adapter, mock_lock
+    ):
         """Should return False when sandbox is unhealthy and auto_recover is disabled."""
         service = UnifiedSandboxService(
             repository=mock_repository,
@@ -583,9 +585,7 @@ class TestHealthCheck:
         mock_repository.save.assert_called()
 
     @pytest.mark.asyncio
-    async def test_health_check_returns_false_for_non_existing(
-        self, service, mock_repository
-    ):
+    async def test_health_check_returns_false_for_non_existing(self, service, mock_repository):
         """Should return False if sandbox doesn't exist."""
         mock_repository.find_by_project.return_value = None
 
@@ -606,6 +606,7 @@ class TestHealthCheck:
         )
         # Mock recent health check (using timezone-aware datetime to match domain model)
         import datetime
+
         existing.health_checked_at = datetime.datetime.now(datetime.UTC)
         service._repository.find_by_project.return_value = existing
 

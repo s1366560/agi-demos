@@ -54,9 +54,7 @@ def create_tool_def(
 
 def create_ask_permission_manager(permission_type: str = "bash") -> PermissionManager:
     """Create a PermissionManager with ASK rule for the given permission type."""
-    return PermissionManager(ruleset=[
-        PermissionRule(permission_type, "*", PermissionAction.ASK)
-    ])
+    return PermissionManager(ruleset=[PermissionRule(permission_type, "*", PermissionAction.ASK)])
 
 
 @pytest.mark.unit
@@ -90,7 +88,9 @@ class TestProcessorPermissionUsesHITLCoordinator:
         )
 
         # Create mock coordinator with spec to ensure proper attribute access
-        mock_coordinator = MagicMock(spec=["conversation_id", "prepare_request", "wait_for_response"])
+        mock_coordinator = MagicMock(
+            spec=["conversation_id", "prepare_request", "wait_for_response"]
+        )
         mock_coordinator.conversation_id = "conv-123"
         mock_coordinator.prepare_request = AsyncMock(return_value="perm_test123")
         mock_coordinator.wait_for_response = AsyncMock(return_value=True)
@@ -139,7 +139,9 @@ class TestProcessorPermissionUsesHITLCoordinator:
         )
 
         # Create mock coordinator with spec to ensure proper attribute access
-        mock_coordinator = MagicMock(spec=["conversation_id", "prepare_request", "wait_for_response"])
+        mock_coordinator = MagicMock(
+            spec=["conversation_id", "prepare_request", "wait_for_response"]
+        )
         mock_coordinator.conversation_id = "conv-456"
         mock_coordinator.prepare_request = AsyncMock(return_value="perm_test456")
         mock_coordinator.wait_for_response = AsyncMock(return_value=True)
@@ -332,9 +334,9 @@ class TestProcessorPermissionBackwardCompatibility:
     async def test_permission_allow_without_ask_continues_normally(self):
         """Should execute tool without HITL when permission rule is ALLOW."""
         config = ProcessorConfig(model="test-model")
-        permission_manager = PermissionManager(ruleset=[
-            PermissionRule("read", "*", PermissionAction.ALLOW)
-        ])
+        permission_manager = PermissionManager(
+            ruleset=[PermissionRule("read", "*", PermissionAction.ALLOW)]
+        )
 
         processor = SessionProcessor(
             config=config,
@@ -374,9 +376,9 @@ class TestProcessorPermissionBackwardCompatibility:
     async def test_permission_deny_without_ask_errors_immediately(self):
         """Should error immediately when permission rule is DENY."""
         config = ProcessorConfig(model="test-model")
-        permission_manager = PermissionManager(ruleset=[
-            PermissionRule("dangerous", "*", PermissionAction.DENY)
-        ])
+        permission_manager = PermissionManager(
+            ruleset=[PermissionRule("dangerous", "*", PermissionAction.DENY)]
+        )
 
         processor = SessionProcessor(
             config=config,
@@ -482,7 +484,9 @@ class TestProcessorPermissionEventData:
         )
 
         # Create mock coordinator with spec to ensure proper attribute access
-        mock_coordinator = MagicMock(spec=["conversation_id", "prepare_request", "wait_for_response"])
+        mock_coordinator = MagicMock(
+            spec=["conversation_id", "prepare_request", "wait_for_response"]
+        )
         mock_coordinator.conversation_id = "conv-event"
         mock_coordinator.prepare_request = AsyncMock(return_value="perm_event")
         mock_coordinator.wait_for_response = AsyncMock(return_value=True)

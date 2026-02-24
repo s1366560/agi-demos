@@ -389,7 +389,9 @@ class TestAgentWorkerSandboxConsistency:
         finally:
             worker_state._mcp_sandbox_adapter = original_adapter
 
-    @pytest.mark.skip(reason="_sync_files_to_sandbox was removed; file sync now handled differently")
+    @pytest.mark.skip(
+        reason="_sync_files_to_sandbox was removed; file sync now handled differently"
+    )
     async def test_sync_files_uses_db_sandbox_not_cache(self, mock_sandbox_adapter, monkeypatch):
         """Verify _sync_files_to_sandbox uses database as source of truth.
 
@@ -491,9 +493,7 @@ class TestWebSocketSandboxIntegration:
         source = inspect.getsource(StartAgentHandler)
 
         # Verify sandbox lifecycle is referenced
-        assert "sandbox" in source.lower(), (
-            "StartAgentHandler should have sandbox integration"
-        )
+        assert "sandbox" in source.lower(), "StartAgentHandler should have sandbox integration"
 
     def test_handle_restart_agent_has_sandbox_integration(self):
         """
@@ -508,9 +508,7 @@ class TestWebSocketSandboxIntegration:
         source = inspect.getsource(RestartAgentHandler)
 
         # Verify sandbox lifecycle is referenced
-        assert "sandbox" in source.lower(), (
-            "RestartAgentHandler should have sandbox integration"
-        )
+        assert "sandbox" in source.lower(), "RestartAgentHandler should have sandbox integration"
 
     def test_sandbox_integration_handles_errors_gracefully(self):
         """

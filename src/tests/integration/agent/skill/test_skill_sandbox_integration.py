@@ -77,6 +77,7 @@ exit 0
 def mock_tool():
     """Create a mock tool that simulates bash execution."""
     from unittest.mock import AsyncMock
+
     tool = AsyncMock()
     tool.execute.return_value = "Script executed successfully"
     return tool
@@ -97,9 +98,7 @@ def sandbox_adapter():
 @pytest.fixture
 def resource_injector(temp_skill_project):
     """Create SkillResourceInjector with temp project."""
-    return SkillResourceInjector(
-        SkillResourceLoader(temp_skill_project)
-    )
+    return SkillResourceInjector(SkillResourceLoader(temp_skill_project))
 
 
 class TestSkillSandboxIntegration:
@@ -337,9 +336,7 @@ class TestSkillSandboxErrorHandling:
         )
 
         # Create injector with wrong project path (no skills)
-        bad_injector = SkillResourceInjector(
-            SkillResourceLoader(Path("/nonexistent"))
-        )
+        bad_injector = SkillResourceInjector(SkillResourceLoader(Path("/nonexistent")))
 
         tools = {"bash": mock_tool}
         executor = SkillExecutor(

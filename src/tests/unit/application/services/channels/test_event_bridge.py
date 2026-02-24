@@ -109,9 +109,9 @@ async def test_hitl_event_sends_card_with_options() -> None:
     card = adapter.send_card.call_args[0][1]
     assert card["schema"] == "2.0"
     assert card["header"]["title"]["content"] == "Agent needs clarification"
-    # Should have markdown element + action element
-    assert len(card["body"]["elements"]) == 2
-    actions = card["body"]["elements"][1]["actions"]
+    # Should have markdown element + one button per option
+    assert len(card["body"]["elements"]) == 3
+    actions = card["body"]["elements"][1:]
     assert len(actions) == 2
     assert actions[0]["value"]["hitl_request_id"] == "hitl-123"
 
@@ -146,7 +146,7 @@ async def test_decision_event_sends_decision_card() -> None:
     assert card["header"]["template"] == "orange"
     assert card["config"] == {"wide_screen_mode": True}
     assert "[!]" in card["body"]["elements"][0]["content"]
-    actions = card["body"]["elements"][1]["actions"]
+    actions = card["body"]["elements"][1:]
     assert len(actions) == 3
     assert actions[0]["value"]["hitl_request_id"] == "hitl-456"
 
@@ -226,7 +226,7 @@ async def test_artifact_ready_sends_rich_card() -> None:
     assert card["header"]["template"] == "green"
     assert "report.pdf" in card["body"]["elements"][0]["content"]
     # Download button present
-    assert card["body"]["elements"][1]["actions"][0]["url"] == "https://example.com/dl"
+    assert card["body"]["elements"][1]["url"] == "https://example.com/dl"
 
 
 @pytest.mark.unit

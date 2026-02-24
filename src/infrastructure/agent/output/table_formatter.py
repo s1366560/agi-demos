@@ -80,7 +80,10 @@ class TableFormatter(OutputFormatter):
             # Dict of lists
             if all(isinstance(v, list) for v in data.values()):
                 columns = list(data.keys())
-                rows = [dict(zip(columns, values, strict=False)) for values in zip(*data.values(), strict=False)]
+                rows = [
+                    dict(zip(columns, values, strict=False))
+                    for values in zip(*data.values(), strict=False)
+                ]
                 return rows, columns
             else:
                 # Single dict - convert to single row

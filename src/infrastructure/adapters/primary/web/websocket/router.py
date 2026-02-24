@@ -47,9 +47,7 @@ def get_container_from_app(websocket: WebSocket) -> DIContainer:
 async def agent_websocket_endpoint(
     websocket: WebSocket,
     token: str = Query(..., description="API key for authentication"),
-    session_id: str | None = Query(
-        None, description="Client session ID for multi-tab support"
-    ),
+    session_id: str | None = Query(None, description="Client session ID for multi-tab support"),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """
@@ -204,6 +202,7 @@ async def get_dispatcher_stats() -> dict[str, Any]:
 # =============================================================================
 # Backward Compatibility Exports
 # =============================================================================
+
 
 # Export manager for use in other modules (e.g., websocket_notifier.py)
 def get_ws_connection_manager() -> get_connection_manager:

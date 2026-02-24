@@ -68,9 +68,7 @@ class TestSkillExecutorWithResourceInjection:
         assert executor._resource_injector is None
         assert executor._sandbox_adapter is None
 
-    def test_init_with_resource_injector(
-        self, mock_tool, resource_injector, mock_sandbox_adapter
-    ):
+    def test_init_with_resource_injector(self, mock_tool, resource_injector, mock_sandbox_adapter):
         """Test SkillResourceInjector initialization with dependencies."""
         tools = {"bash": mock_tool}
 
@@ -140,9 +138,7 @@ class TestSkillExecutorWithResourceInjection:
         assert len(events) > 0
 
     @pytest.mark.asyncio
-    async def test_execute_without_sandbox_id_skips_injection(
-        self, mock_tool, resource_injector
-    ):
+    async def test_execute_without_sandbox_id_skips_injection(self, mock_tool, resource_injector):
         """Test execute without sandbox_id skips resource injection."""
         skill = Skill(
             id="skill-1",
@@ -243,4 +239,5 @@ class TestSkillExecutorWithResourceInjection:
 
         # Should have completion event
         from src.domain.events.agent_events import AgentSkillExecutionCompleteEvent
+
         assert any(isinstance(e, AgentSkillExecutionCompleteEvent) for e in events)

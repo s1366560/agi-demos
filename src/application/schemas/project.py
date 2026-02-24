@@ -133,9 +133,7 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     """Request model for updating a project."""
 
-    name: str | None = Field(
-        default=None, description="Project name", min_length=1, max_length=255
-    )
+    name: str | None = Field(default=None, description="Project name", min_length=1, max_length=255)
     description: str | None = Field(
         default=None, description="Project description", max_length=1000
     )

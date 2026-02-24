@@ -44,4 +44,3 @@ def test_get_plugin_tenant_scope_falls_back_to_global_metadata(tmp_path) -> None
     assert plugin_state["kind"] == "channel"
     assert plugin_state["manifest_id"] == "global-demo-plugin"
     assert plugin_state["providers"] == ["global-provider"]
-

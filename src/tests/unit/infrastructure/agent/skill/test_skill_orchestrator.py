@@ -384,25 +384,19 @@ class TestExecutionModeDetermination:
 
     def test_direct_mode_with_high_score(self, orchestrator):
         """Test direct mode for high scores."""
-        skill = MockSkill(
-            id="1", name="test", description="test", tools=[], _match_score=0.96
-        )
+        skill = MockSkill(id="1", name="test", description="test", tools=[], _match_score=0.96)
         mode = orchestrator._determine_mode(skill, 0.96)
         assert mode == SkillExecutionMode.DIRECT
 
     def test_inject_mode_with_medium_score(self, orchestrator):
         """Test inject mode for medium scores."""
-        skill = MockSkill(
-            id="1", name="test", description="test", tools=[], _match_score=0.8
-        )
+        skill = MockSkill(id="1", name="test", description="test", tools=[], _match_score=0.8)
         mode = orchestrator._determine_mode(skill, 0.8)
         assert mode == SkillExecutionMode.INJECT
 
     def test_none_mode_with_low_score(self, orchestrator):
         """Test none mode for low scores."""
-        skill = MockSkill(
-            id="1", name="test", description="test", tools=[], _match_score=0.5
-        )
+        skill = MockSkill(id="1", name="test", description="test", tools=[], _match_score=0.5)
         mode = orchestrator._determine_mode(skill, 0.5)
         assert mode == SkillExecutionMode.NONE
 
@@ -522,9 +516,7 @@ class TestDirectExecution:
             config=config,
         )
         skill = sample_skills[0]
-        ctx = SkillExecutionContext(
-            project_id="p", user_id="u", tenant_id="t", query="test"
-        )
+        ctx = SkillExecutionContext(project_id="p", user_id="u", tenant_id="t", query="test")
 
         with pytest.raises(ValueError, match="not initialized"):
             async for _ in orch.execute_directly(skill, ctx):
@@ -547,9 +539,7 @@ class TestDirectExecution:
             config=config,
         )
         skill = sample_skills[0]
-        ctx = SkillExecutionContext(
-            project_id="p", user_id="u", tenant_id="t", query="test"
-        )
+        ctx = SkillExecutionContext(project_id="p", user_id="u", tenant_id="t", query="test")
 
         events = []
         async for event in orch.execute_directly(skill, ctx):

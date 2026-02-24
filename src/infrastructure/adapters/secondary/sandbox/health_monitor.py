@@ -182,7 +182,7 @@ class EnhancedHealthMonitor:
     def __init__(
         self,
         sandbox_adapter: MCPSandboxAdapter | None,
-        local_sandbox_adapter: LocalSandboxAdapter | None=None,
+        local_sandbox_adapter: LocalSandboxAdapter | None = None,
         check_interval_seconds: float = 60.0,
         heartbeat_interval_seconds: float = 30.0,
         auto_recover: bool = True,

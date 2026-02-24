@@ -1,6 +1,5 @@
 """DI sub-container for authentication and authorization domain."""
 
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository

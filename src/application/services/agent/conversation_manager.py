@@ -103,9 +103,7 @@ class ConversationManager:
         status: ConversationStatus | None = None,
     ) -> int:
         """Count conversations for a project, optionally filtered by status."""
-        return await self._conversation_repo.count_by_project(
-            project_id=project_id, status=status
-        )
+        return await self._conversation_repo.count_by_project(project_id=project_id, status=status)
 
     async def delete_conversation(
         self, conversation_id: str, project_id: str, user_id: str

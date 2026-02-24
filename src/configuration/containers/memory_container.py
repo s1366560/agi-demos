@@ -1,6 +1,5 @@
 """DI sub-container for memory domain."""
 
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.memory_service import MemoryService

@@ -98,4 +98,3 @@ class ToolResultGuard:
             "ratio_compacted": ratio_compacted,
             "modified_messages": modified_messages,
         }
-

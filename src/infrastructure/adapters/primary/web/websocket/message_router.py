@@ -91,9 +91,7 @@ class MessageRouter:
             try:
                 await handler.handle(context, message)
             except Exception as e:
-                logger.error(
-                    f"[WS Router] Error in handler for {msg_type}: {e}", exc_info=True
-                )
+                logger.error(f"[WS Router] Error in handler for {msg_type}: {e}", exc_info=True)
                 await context.send_error(f"Handler error: {e!s}")
         else:
             await context.send_error(f"Unknown message type: {msg_type}")

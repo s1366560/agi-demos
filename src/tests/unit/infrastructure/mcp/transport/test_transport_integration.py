@@ -1,6 +1,5 @@
 """Integration tests for MCP Transport Factory (Phase 7)."""
 
-
 import pytest
 
 from src.domain.model.mcp.transport import TransportConfig, TransportType

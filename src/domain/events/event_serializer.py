@@ -92,8 +92,10 @@ class EventSerializer:
         """
         return [
             EventSerializer.to_dict(
-                event, message_id=msg_id,
-                event_time_us=time_us, event_counter=counter,
+                event,
+                message_id=msg_id,
+                event_time_us=time_us,
+                event_counter=counter,
             )
             for event, msg_id, time_us, counter in events
         ]
@@ -161,6 +163,8 @@ def serialize_event(
         Serialized event dictionary
     """
     return EventSerializer.to_dict(
-        event, message_id=message_id,
-        event_time_us=event_time_us, event_counter=event_counter,
+        event,
+        message_id=message_id,
+        event_time_us=event_time_us,
+        event_counter=event_counter,
     )

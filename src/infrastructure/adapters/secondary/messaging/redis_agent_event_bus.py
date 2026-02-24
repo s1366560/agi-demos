@@ -220,12 +220,15 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 if event:
                     # Filter by event time range
                     if event.event_time_us > from_time_us or (
-                        event.event_time_us == from_time_us
-                        and event.event_counter >= from_counter
+                        event.event_time_us == from_time_us and event.event_counter >= from_counter
                     ):
-                        if to_time_us is None or event.event_time_us < to_time_us or (
-                            event.event_time_us == to_time_us
-                            and (to_counter is None or event.event_counter <= to_counter)
+                        if (
+                            to_time_us is None
+                            or event.event_time_us < to_time_us
+                            or (
+                                event.event_time_us == to_time_us
+                                and (to_counter is None or event.event_counter <= to_counter)
+                            )
                         ):
                             events.append(event)
                             if len(events) >= limit:
@@ -413,9 +416,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
     # Stream info and debugging
     # =========================================================================
 
-    async def get_stream_info(
-        self, conversation_id: str, message_id: str
-    ) -> dict[str, Any] | None:
+    async def get_stream_info(self, conversation_id: str, message_id: str) -> dict[str, Any] | None:
         """Get stream information for debugging."""
         stream_key = self._get_stream_key(conversation_id, message_id)
 

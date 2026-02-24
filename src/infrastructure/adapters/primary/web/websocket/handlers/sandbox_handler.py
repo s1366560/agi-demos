@@ -75,9 +75,7 @@ class SubscribeSandboxHandler(WebSocketMessageHandler):
             logger.error(f"[WS] Error subscribing to sandbox: {e}", exc_info=True)
             await context.send_error(str(e), project_id=project_id)
 
-    async def _start_sandbox_bridge(
-        self, context: MessageContext, project_id: str
-    ) -> None:
+    async def _start_sandbox_bridge(self, context: MessageContext, project_id: str) -> None:
         """Start background task to bridge Redis sandbox events to WebSocket."""
         container = context.get_scoped_container()
 
@@ -88,15 +86,11 @@ class SubscribeSandboxHandler(WebSocketMessageHandler):
             event_publisher = None
 
         if not event_publisher or not event_publisher._event_bus:
-            logger.warning(
-                f"[WS] Sandbox event bus not available for project {project_id}"
-            )
+            logger.warning(f"[WS] Sandbox event bus not available for project {project_id}")
             return
 
         # Create bridge task
-        task = asyncio.create_task(
-            self._sandbox_bridge_loop(context, project_id, event_publisher)
-        )
+        task = asyncio.create_task(self._sandbox_bridge_loop(context, project_id, event_publisher))
 
         # Store task for cleanup (using status_tasks as sandbox_tasks)
         manager = get_connection_manager()

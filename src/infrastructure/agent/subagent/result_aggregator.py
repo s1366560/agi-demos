@@ -108,9 +108,7 @@ class ResultAggregator:
             failed_agents=tuple(failed),
         )
 
-    async def aggregate_with_llm(
-        self, results: list[SubAgentResult]
-    ) -> AggregatedResult:
+    async def aggregate_with_llm(self, results: list[SubAgentResult]) -> AggregatedResult:
         """Aggregate results using LLM for coherent summarization.
 
         Falls back to simple aggregation if LLM is unavailable.

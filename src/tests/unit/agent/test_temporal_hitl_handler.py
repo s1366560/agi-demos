@@ -4,7 +4,6 @@ Unit tests for HITL strategies.
 Tests the HITL strategy classes in src/infrastructure/agent/hitl/hitl_strategies.py
 """
 
-
 import pytest
 
 from src.domain.model.agent.hitl_types import (
@@ -250,5 +249,3 @@ class TestPermissionStrategy:
         response_data = {"action": "allow_always", "remember": True}
         value = strategy.extract_response_value(response_data)
         assert value is True
-
-

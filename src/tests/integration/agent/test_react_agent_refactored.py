@@ -150,6 +150,7 @@ class TestModuleImports:
         from src.infrastructure.agent.events.converter import (
             EventConverter,
         )
+
         assert EventConverter is not None
 
     def test_import_attachment_processor(self):
@@ -157,6 +158,7 @@ class TestModuleImports:
         from src.infrastructure.agent.attachment.processor import (
             AttachmentProcessor,
         )
+
         assert AttachmentProcessor is not None
 
     def test_import_skill_orchestrator(self):
@@ -164,6 +166,7 @@ class TestModuleImports:
         from src.infrastructure.agent.skill.orchestrator import (
             SkillOrchestrator,
         )
+
         assert SkillOrchestrator is not None
 
     def test_import_subagent_orchestrator(self):
@@ -171,16 +174,19 @@ class TestModuleImports:
         from src.infrastructure.agent.routing.subagent_orchestrator import (
             SubAgentOrchestrator,
         )
+
         assert SubAgentOrchestrator is not None
 
     def test_import_llm_invoker(self):
         """Test LLMInvoker module imports."""
         from src.infrastructure.agent.llm.invoker import LLMInvoker
+
         assert LLMInvoker is not None
 
     def test_import_tool_executor(self):
         """Test ToolExecutor module imports."""
         from src.infrastructure.agent.tools.executor import ToolExecutor
+
         assert ToolExecutor is not None
 
     def test_import_hitl_strategies(self):
@@ -188,6 +194,7 @@ class TestModuleImports:
         from src.infrastructure.agent.hitl.hitl_strategies import (
             ClarificationStrategy,
         )
+
         assert ClarificationStrategy is not None
 
     def test_import_artifact_extractor(self):
@@ -195,6 +202,7 @@ class TestModuleImports:
         from src.infrastructure.agent.artifact.extractor import (
             ArtifactExtractor,
         )
+
         assert ArtifactExtractor is not None
 
     def test_import_work_plan_generator(self):
@@ -202,11 +210,13 @@ class TestModuleImports:
         from src.infrastructure.agent.planning.work_plan_generator import (
             WorkPlanGenerator,
         )
+
         assert WorkPlanGenerator is not None
 
     def test_import_react_loop(self):
         """Test ReActLoop module imports."""
         from src.infrastructure.agent.core.react_loop import ReActLoop
+
         assert ReActLoop is not None
 
     def test_import_agent_ports(self):
@@ -215,6 +225,7 @@ class TestModuleImports:
             LLMInvokerPort,
             ReActLoopPort,
         )
+
         assert LLMInvokerPort is not None
         assert ReActLoopPort is not None
 
@@ -226,6 +237,7 @@ class TestReActAgentIntegration:
     def test_react_agent_imports(self):
         """Test ReActAgent can be imported."""
         from src.infrastructure.agent.core.react_agent import ReActAgent
+
         assert ReActAgent is not None
 
     def test_react_agent_uses_orchestrators(self):
@@ -234,11 +246,10 @@ class TestReActAgentIntegration:
         import inspect
 
         from src.infrastructure.agent.core.react_agent import ReActAgent
+
         init_source = inspect.getsource(ReActAgent.__init__)
-        
+
         # Verify orchestrators are used
         assert "EventConverter" in init_source or "event_converter" in init_source
         assert "SkillOrchestrator" in init_source or "skill_orchestrator" in init_source
         assert "SubAgentOrchestrator" in init_source or "subagent_orchestrator" in init_source
-
-

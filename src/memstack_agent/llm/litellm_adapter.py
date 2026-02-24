@@ -1,5 +1,5 @@
-"""LiteLLM adapter for memstack-agent.
-"""
+"""LiteLLM adapter for memstack-agent."""
+
 from __future__ import annotations
 
 import json

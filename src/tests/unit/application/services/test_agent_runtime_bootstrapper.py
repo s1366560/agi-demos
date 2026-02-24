@@ -177,7 +177,8 @@ async def test_start_chat_actor_ray_mode_raises_when_router_unavailable(bootstra
             bootstrapper,
             "_register_project_local",
             new_callable=AsyncMock,
-        ) as register_local_mock,pytest.raises(RuntimeError, match="AGENT_RUNTIME_MODE=ray")
+        ) as register_local_mock,
+        pytest.raises(RuntimeError, match="AGENT_RUNTIME_MODE=ray"),
     ):
         await bootstrapper.start_chat_actor(
             conversation=conversation,

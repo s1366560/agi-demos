@@ -195,9 +195,7 @@ class TestEventSchemaRegistry:
 
         # Test migration
         original = {"content": "test"}
-        migrated = EventSchemaRegistry.migrate(
-            original, "test_event", "1.0", "2.0"
-        )
+        migrated = EventSchemaRegistry.migrate(original, "test_event", "1.0", "2.0")
 
         assert migrated["content"] == "test"
         assert migrated["new_field"] == "default_value"
@@ -227,9 +225,7 @@ class TestEventSchemaRegistry:
 
         # Migrate from 1.0 to 3.0 (should find path through 2.0)
         original = {"content": "test"}
-        migrated = EventSchemaRegistry.migrate(
-            original, "test_event", "1.0", "3.0"
-        )
+        migrated = EventSchemaRegistry.migrate(original, "test_event", "1.0", "3.0")
 
         assert migrated["v2_field"] is True
         assert migrated["v3_field"] is True
@@ -247,6 +243,7 @@ class TestEventSchemaRegistry:
             pass
 
         import logging
+
         caplog.set_level(logging.WARNING)
 
         schema = EventSchemaRegistry.get_schema("old_event", "1.0")
@@ -300,15 +297,17 @@ class TestEventSerializer:
     def test_deserialize_envelope(self):
         """Test deserializing JSON to envelope."""
         serializer = EventSerializer(auto_migrate=False)
-        json_str = json.dumps({
-            "schema_version": "1.0",
-            "event_id": "evt_test123",
-            "event_type": "thought",
-            "timestamp": "2024-01-01T00:00:00Z",
-            "source": "memstack",
-            "payload": {"content": "test"},
-            "metadata": {},
-        })
+        json_str = json.dumps(
+            {
+                "schema_version": "1.0",
+                "event_id": "evt_test123",
+                "event_type": "thought",
+                "timestamp": "2024-01-01T00:00:00Z",
+                "source": "memstack",
+                "payload": {"content": "test"},
+                "metadata": {},
+            }
+        )
 
         result = serializer.deserialize(json_str)
 
@@ -318,6 +317,7 @@ class TestEventSerializer:
 
     def test_auto_migrate_on_deserialize(self):
         """Test automatic migration during deserialization."""
+
         # Register schemas and migration
         @EventSchemaRegistry.register("custom_event", "1.0")
         class V1:
@@ -332,12 +332,14 @@ class TestEventSerializer:
             return {**data, "new_field": "migrated"}
 
         serializer = EventSerializer(auto_migrate=True)
-        json_str = json.dumps({
-            "schema_version": "1.0",
-            "event_type": "custom_event",
-            "payload": {"old_field": "value"},
-            "metadata": {},
-        })
+        json_str = json.dumps(
+            {
+                "schema_version": "1.0",
+                "event_type": "custom_event",
+                "payload": {"old_field": "value"},
+                "metadata": {},
+            }
+        )
 
         result = serializer.deserialize(json_str)
 
@@ -367,10 +369,12 @@ class TestEventSerializer:
     def test_deserialize_batch_jsonl(self):
         """Test batch deserialization from JSONL."""
         serializer = EventSerializer(auto_migrate=False)
-        jsonl = "\n".join([
-            '{"schema_version": "1.0", "event_type": "start", "payload": {}, "metadata": {}}',
-            '{"schema_version": "1.0", "event_type": "thought", "payload": {"content": "test"}, "metadata": {}}',
-        ])
+        jsonl = "\n".join(
+            [
+                '{"schema_version": "1.0", "event_type": "start", "payload": {}, "metadata": {}}',
+                '{"schema_version": "1.0", "event_type": "thought", "payload": {"content": "test"}, "metadata": {}}',
+            ]
+        )
 
         results = serializer.deserialize_batch(jsonl, format="jsonl")
 
@@ -395,6 +399,7 @@ class TestSchemaVersionCompatibility:
 
     def test_backward_compatibility_new_optional_field(self):
         """Test backward compatibility: new optional field."""
+
         # v1.0 has only content
         @EventSchemaRegistry.register("thought", "1.0")
         class ThoughtV1:
@@ -412,12 +417,14 @@ class TestSchemaVersionCompatibility:
 
         # Old event (v1.0) should be deserializable by new code
         serializer = EventSerializer(auto_migrate=True)
-        old_event = json.dumps({
-            "schema_version": "1.0",
-            "event_type": "thought",
-            "payload": {"content": "old thought"},
-            "metadata": {},
-        })
+        old_event = json.dumps(
+            {
+                "schema_version": "1.0",
+                "event_type": "thought",
+                "payload": {"content": "old thought"},
+                "metadata": {},
+            }
+        )
 
         result = serializer.deserialize(old_event)
 
@@ -427,6 +434,7 @@ class TestSchemaVersionCompatibility:
 
     def test_forward_compatibility_ignore_unknown_fields(self):
         """Test forward compatibility: ignore unknown fields."""
+
         # Register only v1.0
         @EventSchemaRegistry.register("thought", "1.0")
         class ThoughtV1:
@@ -434,16 +442,18 @@ class TestSchemaVersionCompatibility:
 
         # Receive an event with v2.0 schema (has extra fields)
         serializer = EventSerializer(auto_migrate=False)  # Don't try to migrate
-        new_event = json.dumps({
-            "schema_version": "2.0",
-            "event_type": "thought",
-            "payload": {
-                "content": "new thought",
-                "thinking_time_ms": 500,  # Unknown field
-                "reasoning_steps": ["a", "b"],  # Unknown field
-            },
-            "metadata": {},
-        })
+        new_event = json.dumps(
+            {
+                "schema_version": "2.0",
+                "event_type": "thought",
+                "payload": {
+                    "content": "new thought",
+                    "thinking_time_ms": 500,  # Unknown field
+                    "reasoning_steps": ["a", "b"],  # Unknown field
+                },
+                "metadata": {},
+            }
+        )
 
         result = serializer.deserialize(new_event)
 

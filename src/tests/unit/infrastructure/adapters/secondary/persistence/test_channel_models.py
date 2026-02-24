@@ -76,10 +76,9 @@ class TestChannelConfigModel:
             for fk in col.foreign_keys:
                 fk_columns.append((col.key, fk.target_fullname))
 
-        assert any(
-            col == "project_id" and "projects.id" in target
-            for col, target in fk_columns
-        ), "Missing foreign key to projects.id"
+        assert any(col == "project_id" and "projects.id" in target for col, target in fk_columns), (
+            "Missing foreign key to projects.id"
+        )
 
     def test_has_user_foreign_key(self):
         """ChannelConfigModel should have foreign key to users for created_by."""
@@ -89,9 +88,9 @@ class TestChannelConfigModel:
             for fk in col.foreign_keys:
                 fk_columns.append((col.key, fk.target_fullname))
 
-        assert any(
-            col == "created_by" and "users.id" in target for col, target in fk_columns
-        ), "Missing foreign key to users.id"
+        assert any(col == "created_by" and "users.id" in target for col, target in fk_columns), (
+            "Missing foreign key to users.id"
+        )
 
 
 class TestChannelMessageModel:
@@ -148,10 +147,9 @@ class TestChannelMessageModel:
             for fk in col.foreign_keys:
                 fk_columns.append((col.key, fk.target_fullname))
 
-        assert any(
-            col == "project_id" and "projects.id" in target
-            for col, target in fk_columns
-        ), "Missing foreign key to projects.id"
+        assert any(col == "project_id" and "projects.id" in target for col, target in fk_columns), (
+            "Missing foreign key to projects.id"
+        )
 
 
 class TestModelIndexes:
@@ -165,9 +163,9 @@ class TestModelIndexes:
             if hasattr(arg, "name"):
                 index_names.append(arg.name)
 
-        assert (
-            "ix_channel_configs_project_type" in index_names
-        ), "Missing composite index on (project_id, channel_type)"
+        assert "ix_channel_configs_project_type" in index_names, (
+            "Missing composite index on (project_id, channel_type)"
+        )
 
     def test_channel_config_has_project_enabled_index(self):
         """ChannelConfigModel should have composite index on (project_id, enabled)."""
@@ -177,9 +175,9 @@ class TestModelIndexes:
             if hasattr(arg, "name"):
                 index_names.append(arg.name)
 
-        assert (
-            "ix_channel_configs_project_enabled" in index_names
-        ), "Missing composite index on (project_id, enabled)"
+        assert "ix_channel_configs_project_enabled" in index_names, (
+            "Missing composite index on (project_id, enabled)"
+        )
 
     def test_channel_message_has_project_chat_index(self):
         """ChannelMessageModel should have composite index on (project_id, chat_id)."""
@@ -189,9 +187,9 @@ class TestModelIndexes:
             if hasattr(arg, "name"):
                 index_names.append(arg.name)
 
-        assert (
-            "ix_channel_messages_project_chat" in index_names
-        ), "Missing composite index on (project_id, chat_id)"
+        assert "ix_channel_messages_project_chat" in index_names, (
+            "Missing composite index on (project_id, chat_id)"
+        )
 
 
 class TestChannelSessionBindingModel:

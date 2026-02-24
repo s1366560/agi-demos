@@ -77,7 +77,7 @@ class TestBuildContext:
             user_message="How are you?",
         )
         result = await facade.build_context(request)
-        
+
         assert result.messages is not None
         assert len(result.messages) >= 3  # system + 2 history + 1 user
         assert result.final_message_count > 0
@@ -101,7 +101,7 @@ class TestBuildContext:
             ],
         )
         result = await facade.build_context(request)
-        
+
         # User message should contain attachment context
         last_msg = result.messages[-1]
         content = last_msg.get("content", "")
@@ -128,7 +128,7 @@ class TestBuildContext:
             ],
         )
         result = await facade.build_context(request)
-        
+
         # User message should be multimodal
         last_msg = result.messages[-1]
         assert isinstance(last_msg.get("content"), list)
@@ -143,7 +143,7 @@ class TestBuildContext:
             user_message="Hi",
         )
         result = await facade.build_context(request)
-        
+
         # Small context should not be compressed
         assert result.compression_strategy == CompressionStrategy.NONE
         assert result.was_compressed is False
@@ -158,7 +158,7 @@ class TestBuildContext:
             user_message="Hello",
         )
         result = await facade.build_context(request)
-        
+
         assert result.token_budget > 0
         assert 0 <= result.budget_utilization_pct <= 100
 
@@ -172,7 +172,7 @@ class TestBuildContext:
             user_message="Hello",
         )
         result = await facade.build_context(request)
-        
+
         event_data = result.to_event_data()
         assert "was_compressed" in event_data
         assert "compression_strategy" in event_data
@@ -234,7 +234,7 @@ class TestBuildSimpleContext:
             ],
             user_message="Bye",
         )
-        
+
         # Should have: system + 2 conversation + 1 user
         assert len(messages) == 4
         assert messages[0]["role"] == "system"
@@ -249,7 +249,7 @@ class TestBuildSimpleContext:
             conversation=[],
             user_message="Hi",
         )
-        
+
         # Should have: system + user
         assert len(messages) == 2
         assert messages[0]["role"] == "system"
@@ -263,26 +263,26 @@ class TestUpdateConfig:
         """Test updating max context tokens."""
         facade = ContextFacade()
         original = facade.window_manager.config.max_context_tokens
-        
+
         facade.update_config(max_context_tokens=64000)
-        
+
         assert facade.window_manager.config.max_context_tokens == 64000
         assert facade.window_manager.config.max_context_tokens != original
 
     def test_update_max_output_tokens(self):
         """Test updating max output tokens."""
         facade = ContextFacade()
-        
+
         facade.update_config(max_output_tokens=8192)
-        
+
         assert facade.window_manager.config.max_output_tokens == 8192
 
     def test_update_both(self):
         """Test updating both config values."""
         facade = ContextFacade()
-        
+
         facade.update_config(max_context_tokens=32000, max_output_tokens=2048)
-        
+
         assert facade.window_manager.config.max_context_tokens == 32000
         assert facade.window_manager.config.max_output_tokens == 2048
 
@@ -291,8 +291,8 @@ class TestUpdateConfig:
         facade = ContextFacade()
         original_context = facade.window_manager.config.max_context_tokens
         original_output = facade.window_manager.config.max_output_tokens
-        
+
         facade.update_config()  # No args
-        
+
         assert facade.window_manager.config.max_context_tokens == original_context
         assert facade.window_manager.config.max_output_tokens == original_output

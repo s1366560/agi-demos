@@ -45,9 +45,10 @@ async def test():
 
             # Try raw SQL
             from sqlalchemy import text
+
             result = await session.execute(
                 text("SELECT id, request_type, status FROM hitl_requests WHERE id = :id"),
-                {"id": request_id}
+                {"id": request_id},
             )
             row = result.fetchone()
             if row:

@@ -12,6 +12,7 @@ from typing import Any
 
 class ErrorSeverity(Enum):
     """Severity levels for agent errors."""
+
     DEBUG = "debug"
     INFO = "info"
     WARNING = "warning"
@@ -21,18 +22,20 @@ class ErrorSeverity(Enum):
 
 class ErrorCategory(Enum):
     """Categories of agent errors."""
-    VALIDATION = "validation"           # Input validation errors
-    EXECUTION = "execution"             # Runtime execution errors
-    PERMISSION = "permission"           # Permission/authorization errors
-    RESOURCE = "resource"               # Resource exhaustion/unavailable
-    COMMUNICATION = "communication"     # External service communication
-    TIMEOUT = "timeout"                 # Operation timeout
-    INTERNAL = "internal"               # Internal system errors
+
+    VALIDATION = "validation"  # Input validation errors
+    EXECUTION = "execution"  # Runtime execution errors
+    PERMISSION = "permission"  # Permission/authorization errors
+    RESOURCE = "resource"  # Resource exhaustion/unavailable
+    COMMUNICATION = "communication"  # External service communication
+    TIMEOUT = "timeout"  # Operation timeout
+    INTERNAL = "internal"  # Internal system errors
 
 
 @dataclass
 class ErrorContext:
     """Context information for an error."""
+
     operation: str
     sandbox_id: str | None = None
     conversation_id: str | None = None
