@@ -129,7 +129,7 @@ class HITLStateStore:
     # Default TTL buffer (added to HITL timeout)
     TTL_BUFFER_SECONDS = 60
 
-    def __init__(self, redis_client) -> None:
+    def __init__(self, redis_client: Any) -> None:
         """
         Initialize state store.
 

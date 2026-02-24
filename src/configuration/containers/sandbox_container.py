@@ -1,6 +1,7 @@
 """DI sub-container for sandbox domain."""
 
 from collections.abc import Callable
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,8 +23,8 @@ class SandboxContainer:
     def __init__(
         self,
         db: AsyncSession | None = None,
-        redis_client=None,
-        settings=None,
+        redis_client: Any=None,
+        settings: Any=None,
         sandbox_adapter_factory: Callable | None = None,
         sandbox_event_publisher_factory: Callable | None = None,
         distributed_lock_factory: Callable | None = None,

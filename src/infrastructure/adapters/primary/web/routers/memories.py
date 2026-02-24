@@ -2,6 +2,7 @@
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
@@ -215,8 +216,8 @@ async def create_memory(
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client=Depends(get_graphiti_client),
-    workflow_engine=Depends(get_workflow_engine),
+    graphiti_client: Any=Depends(get_graphiti_client),
+    workflow_engine: Any=Depends(get_workflow_engine),
 ):
     """Create a new memory.
 
@@ -499,7 +500,7 @@ async def delete_memory(
     memory_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graph_service=Depends(get_graph_service),
+    graph_service: Any=Depends(get_graph_service),
 ):
     """Delete a memory from all storage systems (DB, Graphiti)."""
     # 1. Get memory to check permissions and project_id
@@ -560,8 +561,8 @@ async def reprocess_memory(
     memory_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    workflow_engine=Depends(get_workflow_engine),
-    graph_service=Depends(get_graph_service),
+    workflow_engine: Any=Depends(get_workflow_engine),
+    graph_service: Any=Depends(get_graph_service),
 ):
     """Manually trigger re-processing of a memory."""
     # 1. Get memory
@@ -691,7 +692,7 @@ async def update_memory(
     memory_data: MemoryUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    workflow_engine=Depends(get_workflow_engine),
+    workflow_engine: Any=Depends(get_workflow_engine),
 ):
     """Update an existing memory with optimistic locking."""
     # 1. Get memory

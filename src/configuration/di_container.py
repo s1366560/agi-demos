@@ -5,6 +5,8 @@ the exact same public interface for all callers.
 """
 
 
+from typing import Any
+
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -374,7 +376,7 @@ class DIContainer:
     def skill_service(self) -> SkillService:
         return self._agent.skill_service()
 
-    def agent_service(self, llm) -> AgentService:
+    def agent_service(self, llm: Any) -> AgentService:
         return self._agent.agent_service(llm)
 
     def event_converter(self):
@@ -389,7 +391,7 @@ class DIContainer:
     def attachment_processor(self):
         return self._agent.attachment_processor()
 
-    def llm_invoker(self, llm):
+    def llm_invoker(self, llm: Any):
         return self._agent.llm_invoker(llm)
 
     def tool_executor(self, tools: dict):
@@ -398,7 +400,7 @@ class DIContainer:
     def artifact_extractor(self):
         return self._agent.artifact_extractor()
 
-    def react_loop(self, llm, tools: dict):
+    def react_loop(self, llm: Any, tools: dict):
         return self._agent.react_loop(llm, tools)
 
     def message_builder(self):
@@ -407,25 +409,25 @@ class DIContainer:
     def attachment_injector(self):
         return self._agent.attachment_injector()
 
-    def context_facade(self, window_manager=None):
+    def context_facade(self, window_manager: Any=None):
         return self._agent.context_facade(window_manager)
 
-    def create_conversation_use_case(self, llm) -> CreateConversationUseCase:
+    def create_conversation_use_case(self, llm: Any) -> CreateConversationUseCase:
         return self._agent.create_conversation_use_case(llm)
 
-    def list_conversations_use_case(self, llm) -> ListConversationsUseCase:
+    def list_conversations_use_case(self, llm: Any) -> ListConversationsUseCase:
         return self._agent.list_conversations_use_case(llm)
 
-    def get_conversation_use_case(self, llm) -> GetConversationUseCase:
+    def get_conversation_use_case(self, llm: Any) -> GetConversationUseCase:
         return self._agent.get_conversation_use_case(llm)
 
-    def chat_use_case(self, llm) -> ChatUseCase:
+    def chat_use_case(self, llm: Any) -> ChatUseCase:
         return self._agent.chat_use_case(llm)
 
-    def execute_step_use_case(self, llm) -> ExecuteStepUseCase:
+    def execute_step_use_case(self, llm: Any) -> ExecuteStepUseCase:
         return self._agent.execute_step_use_case(llm)
 
-    def synthesize_results_use_case(self, llm) -> SynthesizeResultsUseCase:
+    def synthesize_results_use_case(self, llm: Any) -> SynthesizeResultsUseCase:
         return self._agent.synthesize_results_use_case(llm)
 
     def find_similar_pattern_use_case(self) -> FindSimilarPattern:
@@ -437,5 +439,5 @@ class DIContainer:
     def workflow_learner(self) -> WorkflowLearner:
         return self._agent.workflow_learner()
 
-    def compose_tools_use_case(self, llm) -> ComposeToolsUseCase:
+    def compose_tools_use_case(self, llm: Any) -> ComposeToolsUseCase:
         return self._agent.compose_tools_use_case(llm)

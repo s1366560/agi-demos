@@ -86,9 +86,9 @@ class SandboxReconciler:
 
     def __init__(
         self,
-        docker_client,
-        sandbox_adapter,
-        repository=None,
+        docker_client: Any,
+        sandbox_adapter: Any,
+        repository: Any=None,
         default_action: OrphanAction = OrphanAction.ADOPT,
         max_orphan_age_hours: int = 24,  # Terminate orphans older than this
     ) -> None:
@@ -244,7 +244,7 @@ class SandboxReconciler:
                 return set(self._adapter._active_sandboxes.keys())
         return set()
 
-    def _container_to_orphan(self, container) -> OrphanContainer:
+    def _container_to_orphan(self, container: Any) -> OrphanContainer:
         """Convert a Docker container to an OrphanContainer object."""
         labels = container.labels or {}
 

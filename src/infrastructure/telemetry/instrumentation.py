@@ -4,6 +4,8 @@ This module provides automatic tracing for HTTP clients and databases.
 """
 
 
+from typing import Any
+
 from src.infrastructure.telemetry.config import _TRACER_PROVIDER
 
 
@@ -79,7 +81,7 @@ def instrument_redis() -> bool | None:
         return False
 
 
-def instrument_fastapi(app) -> bool | None:
+def instrument_fastapi(app: Any) -> bool | None:
     """Instrument FastAPI for automatic tracing.
 
     Args:

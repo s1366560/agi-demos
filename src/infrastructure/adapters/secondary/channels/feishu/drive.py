@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class FeishuDriveClient:
     """Client for Feishu Drive operations."""
     
-    def __init__(self, client) -> None:
+    def __init__(self, client: Any) -> None:
         self._client = client
     
     async def list_files(

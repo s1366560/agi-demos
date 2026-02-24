@@ -3,6 +3,7 @@ V2 SQLAlchemy implementation of TenantAgentConfigRepository using BaseRepository
 """
 
 import logging
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -121,7 +122,7 @@ class SqlTenantAgentConfigRepository(
 
         return result.scalar_one_or_none() is not None
 
-    def _to_domain(self, db_config) -> TenantAgentConfig | None:
+    def _to_domain(self, db_config: Any) -> TenantAgentConfig | None:
         """Convert database model to domain entity."""
         if db_config is None:
             return None

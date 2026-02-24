@@ -608,8 +608,8 @@ async def get_conversation_execution_status(
 
 
 async def _get_recovery_info(
-    container,
-    redis_client,
+    container: Any,
+    redis_client: Any,
     conversation_id: str,
     message_id: str | None,
     from_time_us: int,

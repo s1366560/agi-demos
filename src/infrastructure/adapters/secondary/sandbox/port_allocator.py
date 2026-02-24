@@ -15,6 +15,7 @@ import logging
 import socket
 import time
 from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +77,7 @@ class PortAllocator:
 
     def __init__(
         self,
-        docker_client,
+        docker_client: Any,
         mcp_port_range: tuple[int, int] = (18765, 19765),
         desktop_port_range: tuple[int, int] = (16080, 17080),
         terminal_port_range: tuple[int, int] = (17681, 18681),

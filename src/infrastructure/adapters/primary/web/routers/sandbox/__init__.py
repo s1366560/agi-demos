@@ -3,6 +3,8 @@
 This module aggregates all sandbox-related endpoints from sub-modules.
 """
 
+from typing import Any
+
 from fastapi import APIRouter, Depends
 
 from . import events, lifecycle, services, tokens, tools
@@ -55,8 +57,8 @@ router.include_router(events.router)
 @router.get("/", response_model=ListSandboxesResponse, include_in_schema=False)
 async def list_sandboxes_root(
     status: str | None = None,
-    current_user=Depends(get_current_user),
-    adapter=Depends(get_sandbox_adapter),
+    current_user: Any=Depends(get_current_user),
+    adapter: Any=Depends(get_sandbox_adapter),
 ):
     """List all sandboxes (root path alias)."""
     from .lifecycle import list_sandboxes

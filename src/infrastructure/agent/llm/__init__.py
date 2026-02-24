@@ -10,6 +10,8 @@ This package provides unified streaming interface for LLM responses:
 - High-level LLM invocation with retry (LLMInvoker)
 """
 
+from typing import Any
+
 from src.infrastructure.agent.llm.token_sampler import (
     BatchLogBuffer,
     TokenDeltaSampler,
@@ -32,7 +34,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name):
+def __getattr__(name: Any):
     """Lazy import components to avoid circular imports."""
     # LLM stream components
     if name in (

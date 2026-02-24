@@ -6,6 +6,7 @@ Provides all CRUD operations, tenant resolution, and usage tracking.
 """
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, desc, func, select
@@ -67,7 +68,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             )
         return self.session
 
-    async def _run_with_session(self, operation):
+    async def _run_with_session(self, operation: Any):
         """Run operation with existing session or create a new ephemeral one."""
         if self.session:
             return await operation(self.session)
@@ -182,7 +183,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
     async def get_by_id(self, provider_id: UUID) -> ProviderConfig | None:
         """Get provider by ID."""
 
-        async def op(session):
+        async def op(session: Any):
             from uuid import UUID as _UUID
 
             pid = _UUID(str(provider_id))
@@ -195,7 +196,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
     async def get_by_name(self, name: str) -> ProviderConfig | None:
         """Get provider by name."""
 
-        async def op(session):
+        async def op(session: Any):
             result = await session.execute(
                 select(LLMProviderORM).where(LLMProviderORM.name == name)
             )
@@ -207,7 +208,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
     async def list_all(self, include_inactive: bool = False) -> list[ProviderConfig]:
         """List all providers."""
 
-        async def op(session):
+        async def op(session: Any):
             query = select(LLMProviderORM)
             if not include_inactive:
                 query = query.where(LLMProviderORM.is_active)
@@ -338,7 +339,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
     async def find_default_provider(self) -> ProviderConfig | None:
         """Find the default provider."""
 
-        async def op(session):
+        async def op(session: Any):
             result = await session.execute(
                 select(LLMProviderORM)
                 .where(LLMProviderORM.is_default)
@@ -352,7 +353,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
     async def find_first_active_provider(self) -> ProviderConfig | None:
         """Find the first active provider as fallback."""
 
-        async def op(session):
+        async def op(session: Any):
             result = await session.execute(
                 select(LLMProviderORM)
                 .where(LLMProviderORM.is_active)
@@ -371,7 +372,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
     ) -> ProviderConfig | None:
         """Find provider assigned to specific tenant."""
 
-        async def op(session):
+        async def op(session: Any):
             operation_value = operation_type.value
             query = (
                 select(LLMProviderORM)

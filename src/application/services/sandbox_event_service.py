@@ -4,6 +4,7 @@ Publishes sandbox lifecycle and status events to Redis streams.
 """
 
 import logging
+from typing import Any
 
 from src.domain.events.agent_events import (
     AgentDesktopStartedEvent,
@@ -175,7 +176,7 @@ class SandboxEventPublisher:
         )
         return await self._publish(project_id, event)
 
-    async def _publish(self, project_id: str, event) -> str:
+    async def _publish(self, project_id: str, event: Any) -> str:
         """Publish event to project-level Redis stream."""
         if not self._event_bus:
             logger.warning("Event bus not available, skipping sandbox event")

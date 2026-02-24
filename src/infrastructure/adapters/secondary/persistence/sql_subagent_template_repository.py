@@ -35,7 +35,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
         )
         return DBTemplate
 
-    def _row_to_dict(self, row) -> dict[str, Any]:
+    def _row_to_dict(self, row: Any) -> dict[str, Any]:
         return {
             "id": row.id,
             "tenant_id": row.tenant_id,

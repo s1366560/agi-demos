@@ -394,14 +394,14 @@ class AgentRuntimeBootstrapper:
 
             AgentRuntimeBootstrapper._local_bootstrapped = True
 
-    def _get_api_key(self, settings) -> None:
+    def _get_api_key(self, settings: Any) -> None:
         # Deprecated: Using ProviderResolutionService now
         return None
 
-    def _get_base_url(self, settings) -> None:
+    def _get_base_url(self, settings: Any) -> None:
         # Deprecated: Using ProviderResolutionService now
         return None
 
-    def _get_model(self, settings) -> str:
+    def _get_model(self, settings: Any) -> str:
         # Deprecated: Using ProviderResolutionService now
         return "qwen-plus"

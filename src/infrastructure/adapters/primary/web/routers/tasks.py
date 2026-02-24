@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -72,7 +73,7 @@ async def get_di_container(db: AsyncSession = Depends(get_db)) -> DIContainer:
 # --- Helper Functions ---
 
 
-def task_to_response(task) -> TaskLogResponse:
+def task_to_response(task: Any) -> TaskLogResponse:
     """Convert domain TaskLog to response DTO"""
     duration_str = "-"
     if task.started_at and task.completed_at:

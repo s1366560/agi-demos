@@ -3,6 +3,7 @@ V2 SQLAlchemy implementation of ToolEnvironmentVariableRepository using BaseRepo
 """
 
 import logging
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -323,7 +324,7 @@ class SqlToolEnvironmentVariableRepository(
             results.append(result)
         return results
 
-    def _to_domain(self, db_record) -> ToolEnvironmentVariable | None:
+    def _to_domain(self, db_record: Any) -> ToolEnvironmentVariable | None:
         """Convert database model to domain entity."""
         if db_record is None:
             return None

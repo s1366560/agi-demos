@@ -2,6 +2,7 @@
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -68,8 +69,8 @@ async def create_episode(
         False, description="Process in background (returns task_id for SSE streaming)"
     ),
     current_user: User = Depends(get_current_user),
-    graphiti_client=Depends(get_graphiti_client),
-    workflow_engine=Depends(get_workflow_engine),
+    graphiti_client: Any=Depends(get_graphiti_client),
+    workflow_engine: Any=Depends(get_workflow_engine),
 ):
     """
     Create a new episode and ingest it into the knowledge graph.
@@ -205,7 +206,7 @@ async def create_episode(
 async def get_episode(
     episode_name: str,
     current_user: User = Depends(get_current_user),
-    graphiti_client=Depends(get_graphiti_client),
+    graphiti_client: Any=Depends(get_graphiti_client),
 ):
     """
     Get episode details by name.
@@ -253,7 +254,7 @@ async def list_episodes(
     sort_by: str = Query("created_at", description="Sort field"),
     sort_desc: bool = Query(True, description="Sort descending if True"),
     current_user: User = Depends(get_current_user),
-    graphiti_client=Depends(get_graphiti_client),
+    graphiti_client: Any=Depends(get_graphiti_client),
 ):
     """
     List episodes with filtering and pagination.
@@ -331,7 +332,7 @@ async def list_episodes(
 async def delete_episode(
     episode_name: str,
     current_user: User = Depends(get_current_user),
-    graphiti_client=Depends(get_graphiti_client),
+    graphiti_client: Any=Depends(get_graphiti_client),
 ):
     """
     Delete an episode and its relationships.
@@ -363,7 +364,7 @@ async def delete_episode(
 
 @router.get("/health", response_model=dict)
 async def health_check(
-    current_user: User = Depends(get_current_user), graphiti_client=Depends(get_graphiti_client)
+    current_user: User = Depends(get_current_user), graphiti_client: Any=Depends(get_graphiti_client)
 ):
     """
     Health check endpoint for episode service.

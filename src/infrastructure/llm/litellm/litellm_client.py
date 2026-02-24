@@ -351,7 +351,7 @@ class LiteLLMClient(LLMClient):
         ]
         return any(indicator in error_str for indicator in client_indicators)
 
-    async def _execute_with_resilience(self, coro_factory):
+    async def _execute_with_resilience(self, coro_factory: Any):
         """Execute an LLM call with circuit breaker and rate limiter.
 
         Args:

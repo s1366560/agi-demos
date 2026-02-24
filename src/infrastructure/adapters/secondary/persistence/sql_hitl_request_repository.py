@@ -4,6 +4,7 @@ V2 SQLAlchemy implementation of HITLRequestRepository using BaseRepository.
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -363,7 +364,7 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
 
         return False
 
-    def _to_domain(self, record) -> HITLRequest:
+    def _to_domain(self, record: Any) -> HITLRequest:
         """Convert database record to domain entity."""
         return HITLRequest(
             id=record.id,

@@ -2,6 +2,7 @@
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/data", tags=["data"])
 
 
-def _records(result):
+def _records(result: Any):
     try:
         recs = getattr(result, "records", None)
         if isinstance(recs, (list, tuple)):
@@ -29,7 +30,7 @@ def _records(result):
         return []
 
 
-def _first_value(recs, key):
+def _first_value(recs: Any, key: Any):
     if not recs:
         return 0
     r0 = recs[0]
@@ -63,7 +64,7 @@ async def export_data(
     include_relationships: bool = Body(True, description="Include relationship data"),
     include_communities: bool = Body(True, description="Include community data"),
     current_user: User = Depends(get_current_user),
-    graphiti_client=Depends(get_graphiti_client),
+    graphiti_client: Any=Depends(get_graphiti_client),
 ):
     """
     Export graph data as JSON.
@@ -158,7 +159,7 @@ async def export_data(
 async def get_graph_stats(
     tenant_id: str | None = Query(None, description="Filter by tenant ID"),
     current_user: User = Depends(get_current_user),
-    graphiti_client=Depends(get_graphiti_client),
+    graphiti_client: Any=Depends(get_graphiti_client),
 ):
     """
     Get graph statistics.
@@ -244,7 +245,7 @@ async def cleanup_data(
     tenant_id: str | None = Query(None, description="Filter by tenant ID"),
     body: dict | None = Body(None),
     current_user: User = Depends(get_current_user),
-    graphiti_client=Depends(get_graphiti_client),
+    graphiti_client: Any=Depends(get_graphiti_client),
 ):
     """
     Clean up old graph data.

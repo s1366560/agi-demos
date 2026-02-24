@@ -8,6 +8,7 @@ when frequently accessing patterns for matching.
 import json
 import logging
 from datetime import UTC
+from typing import Any
 
 from src.domain.model.agent.workflow_pattern import WorkflowPattern
 from src.domain.ports.repositories.workflow_pattern_repository import WorkflowPatternRepositoryPort
@@ -30,7 +31,7 @@ class CachedWorkflowPatternRepository(WorkflowPatternRepositoryPort):
     def __init__(
         self,
         backing_repository: WorkflowPatternRepositoryPort,
-        redis_client,
+        redis_client: Any,
         pattern_ttl: int = 3600,  # 1 hour
         list_ttl: int = 900,  # 15 minutes
     ) -> None:

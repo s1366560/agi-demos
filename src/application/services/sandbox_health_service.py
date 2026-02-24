@@ -77,7 +77,7 @@ class SandboxHealthService:
     执行不同级别的健康检查并返回结果。
     """
 
-    def __init__(self, sandbox_adapter=None, default_timeout: float = 5.0) -> None:
+    def __init__(self, sandbox_adapter: Any=None, default_timeout: float = 5.0) -> None:
         """初始化健康检查服务.
 
         Args:

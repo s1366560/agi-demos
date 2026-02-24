@@ -52,7 +52,7 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._workflow_handlers: dict[str, Any] = {}
 
-    def register_handler(self, workflow_name: str, handler) -> None:
+    def register_handler(self, workflow_name: str, handler: Any) -> None:
         """Register an async handler function for a workflow name."""
         self._workflow_handlers[workflow_name] = handler
 

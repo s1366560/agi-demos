@@ -3,6 +3,7 @@ V2 SQLAlchemy implementation of TenantSkillConfigRepository using BaseRepository
 """
 
 import logging
+from typing import Any
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -173,7 +174,7 @@ class SqlTenantSkillConfigRepository(
         result = await self._session.execute(query)
         return result.scalar() or 0
 
-    def _to_domain(self, db_config) -> TenantSkillConfig | None:
+    def _to_domain(self, db_config: Any) -> TenantSkillConfig | None:
         """Convert database model to domain entity."""
         if db_config is None:
             return None

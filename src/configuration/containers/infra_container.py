@@ -1,6 +1,8 @@
 """DI sub-container for infrastructure services."""
 
 
+from typing import Any
+
 import redis.asyncio as redis
 
 from src.domain.ports.services.hitl_message_bus_port import HITLMessageBusPort
@@ -18,7 +20,7 @@ class InfraContainer:
         self,
         redis_client: redis.Redis | None = None,
         workflow_engine: WorkflowEnginePort | None = None,
-        settings=None,
+        settings: Any=None,
     ) -> None:
         self._redis_client = redis_client
         self._workflow_engine = workflow_engine

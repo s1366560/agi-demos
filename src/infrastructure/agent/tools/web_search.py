@@ -61,7 +61,7 @@ class WebSearchTool(AgentTool):
     # Maximum query length for cache key
     MAX_QUERY_LENGTH = 200
 
-    def __init__(self, redis_client) -> None:
+    def __init__(self, redis_client: Any) -> None:
         """
         Initialize the web search tool.
 

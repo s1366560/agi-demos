@@ -18,7 +18,7 @@ class ContextGuard(Protocol):
         self,
         messages: list[dict[str, Any]],
         *,
-        estimate_message_tokens,
+        estimate_message_tokens: Any,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Apply guard transformation."""
         ...
@@ -46,7 +46,7 @@ class ContextGuardChain:
         self,
         messages: list[dict[str, Any]],
         *,
-        estimate_message_tokens,
+        estimate_message_tokens: Any,
     ) -> GuardChainResult:
         current = list(messages)
         metadata: dict[str, Any] = {

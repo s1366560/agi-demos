@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import BinaryIO
+from typing import Any, BinaryIO
 
 import httpx
 
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class FeishuMediaManager:
     """Manager for Feishu media operations (upload/download)."""
     
-    def __init__(self, client) -> None:
+    def __init__(self, client: Any) -> None:
         self._client = client
     
     async def upload_image(

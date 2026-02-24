@@ -11,6 +11,7 @@ message generation status.
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,7 +48,7 @@ class SqlMessageExecutionStatusRepository(
         super().__init__(session)
         self._session = session
 
-    def _to_domain(self, model) -> AgentExecution:
+    def _to_domain(self, model: Any) -> AgentExecution:
         """Convert database model to domain entity."""
         return AgentExecution(
             id=model.id,

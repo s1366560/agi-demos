@@ -31,6 +31,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +298,7 @@ class CircuitBreakerRegistry:
 
     def get(
         self,
-        provider_type,
+        provider_type: Any,
         config: CircuitBreakerConfig | None = None,
     ) -> CircuitBreaker:
         """

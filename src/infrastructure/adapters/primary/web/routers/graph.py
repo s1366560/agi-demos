@@ -7,6 +7,7 @@ moved to enhanced_search.py to avoid duplication.
 
 import logging
 from datetime import UTC
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -24,7 +25,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/graph", tags=["graph"])
 
 
-def _serialize_datetime(value) -> str | None:
+def _serialize_datetime(value: Any) -> str | None:
     """Convert Neo4j DateTime to ISO string for JSON serialization."""
     if value is None:
         return None
@@ -81,7 +82,7 @@ async def list_communities(
     limit: int = Query(50, ge=1, le=200, description="Maximum items to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: User = Depends(get_current_user),
-    neo4j_client=Depends(get_neo4j_client),
+    neo4j_client: Any=Depends(get_neo4j_client),
 ):
     """
     List communities in the knowledge graph with filtering and pagination.
@@ -158,7 +159,7 @@ async def list_entities(
     limit: int = Query(50, ge=1, le=200, description="Maximum items to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: User = Depends(get_current_user),
-    neo4j_client=Depends(get_neo4j_client),
+    neo4j_client: Any=Depends(get_neo4j_client),
 ):
     """List entities in the knowledge graph with filtering and pagination."""
     try:
@@ -230,7 +231,7 @@ async def list_entities(
 async def get_entity_types(
     project_id: str | None = None,
     current_user: User = Depends(get_current_user),
-    neo4j_client=Depends(get_neo4j_client),
+    neo4j_client: Any=Depends(get_neo4j_client),
 ):
     """
     Get all available entity types with their counts.
@@ -275,7 +276,7 @@ async def get_entity_types(
 async def get_entity(
     entity_id: str,
     current_user: User = Depends(get_current_user),
-    neo4j_client=Depends(get_neo4j_client),
+    neo4j_client: Any=Depends(get_neo4j_client),
 ):
     """
     Get entity details by UUID.
@@ -341,7 +342,7 @@ async def get_entity_relationships(
     relationship_type: str | None = Query(None, description="Filter by relationship type"),
     limit: int = Query(50, ge=1, le=200, description="Maximum relationships to return"),
     current_user: User = Depends(get_current_user),
-    neo4j_client=Depends(get_neo4j_client),
+    neo4j_client: Any=Depends(get_neo4j_client),
 ):
     """
     Get relationships for an entity.
@@ -430,7 +431,7 @@ async def get_graph(
     project_id: str | None = None,
     limit: int = 100,
     current_user: User = Depends(get_current_user),
-    neo4j_client=Depends(get_neo4j_client),
+    neo4j_client: Any=Depends(get_neo4j_client),
 ):
     """Get graph data for visualization."""
     try:
@@ -513,7 +514,7 @@ async def get_graph(
 async def get_subgraph(
     params: SubgraphRequest,
     current_user: User = Depends(get_current_user),
-    neo4j_client=Depends(get_neo4j_client),
+    neo4j_client: Any=Depends(get_neo4j_client),
 ):
     """Get subgraph for specific nodes."""
     try:
@@ -618,7 +619,7 @@ async def get_subgraph(
 async def get_community(
     community_id: str,
     current_user: User = Depends(get_current_user),
-    neo4j_client=Depends(get_neo4j_client),
+    neo4j_client: Any=Depends(get_neo4j_client),
 ):
     """
     Get community details by UUID.
@@ -665,7 +666,7 @@ async def get_community_members(
     community_id: str,
     limit: int = Query(100, ge=1, le=500, description="Maximum members to return"),
     current_user: User = Depends(get_current_user),
-    neo4j_client=Depends(get_neo4j_client),
+    neo4j_client: Any=Depends(get_neo4j_client),
 ):
     """
     Get members (entities) of a community.
@@ -714,9 +715,9 @@ async def rebuild_communities(
     background: bool = Query(False, description="Run in background mode"),
     project_id: str | None = Query(None, description="Project ID to rebuild communities for"),
     current_user: User = Depends(get_current_user),
-    neo4j_client=Depends(get_neo4j_client),
-    workflow_engine=Depends(get_workflow_engine),
-    graph_service=Depends(get_graph_service),
+    neo4j_client: Any=Depends(get_neo4j_client),
+    workflow_engine: Any=Depends(get_workflow_engine),
+    graph_service: Any=Depends(get_graph_service),
 ):
     """
     Rebuild communities using the Louvain algorithm for the specified project.

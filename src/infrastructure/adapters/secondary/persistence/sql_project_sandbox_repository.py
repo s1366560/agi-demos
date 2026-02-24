@@ -7,6 +7,7 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,7 +35,7 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
         super().__init__(session)
         self._session = session
 
-    def _to_domain(self, orm) -> ProjectSandbox:
+    def _to_domain(self, orm: Any) -> ProjectSandbox:
         """Convert ORM model to domain entity."""
         return ProjectSandbox(
             id=orm.id,

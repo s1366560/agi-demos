@@ -4,6 +4,7 @@ V2 SQLAlchemy implementation of SubAgentRepository using BaseRepository.
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -264,7 +265,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
 
         return matching
 
-    def _to_domain(self, db_subagent) -> SubAgent | None:
+    def _to_domain(self, db_subagent: Any) -> SubAgent | None:
         """Convert database model to domain entity."""
         if db_subagent is None:
             return None

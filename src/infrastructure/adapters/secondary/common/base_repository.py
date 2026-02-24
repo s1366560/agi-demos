@@ -114,7 +114,7 @@ def transactional(func: Callable) -> Callable:
     """
 
     @wraps(func)
-    async def wrapper(self, *args: Any, **kwargs: Any):
+    async def wrapper(self: Any, *args: Any, **kwargs: Any):
         session = getattr(self, "_session", None)
         if session is None:
             raise RepositoryError("No session available for transaction")

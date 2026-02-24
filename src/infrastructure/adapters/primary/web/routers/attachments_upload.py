@@ -7,6 +7,7 @@ Provides REST API endpoints for:
 """
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import RedirectResponse
@@ -134,7 +135,7 @@ class AttachmentListResponse(BaseModel):
 # === Helper Functions ===
 
 
-def _attachment_to_response(attachment) -> AttachmentResponse:
+def _attachment_to_response(attachment: Any) -> AttachmentResponse:
     """Convert attachment entity to response model."""
     return AttachmentResponse(
         id=attachment.id,

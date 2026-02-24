@@ -17,7 +17,7 @@ class HistoryTurnGuard:
         self,
         messages: list[dict[str, Any]],
         *,
-        estimate_message_tokens,
+        estimate_message_tokens: Any,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         if len(messages) <= self._max_messages:
             return messages, {

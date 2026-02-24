@@ -6,6 +6,7 @@ in-progress MCP requests.
 
 import logging
 from dataclasses import dataclass, field
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ class CancelHandler:
         """
         return [(req_id, server_id) for req_id, server_id in self._pending_requests.items()]
 
-    async def handle_cancel(self, request_id: str, client) -> bool:
+    async def handle_cancel(self, request_id: str, client: Any) -> bool:
         """
         Handle a cancellation notification.
 

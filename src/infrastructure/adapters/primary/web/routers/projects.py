@@ -3,6 +3,7 @@
 import logging
 import re
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -121,7 +122,7 @@ async def list_projects(
     search: str | None = Query(None, description="Search query"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client=Depends(get_graphiti_client),
+    graphiti_client: Any=Depends(get_graphiti_client),
 ) -> ProjectListResponse:
     """List projects for the current user."""
     # Get project IDs user has access to
@@ -586,7 +587,7 @@ async def get_project_stats(
     project_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client=Depends(get_graphiti_client),
+    graphiti_client: Any=Depends(get_graphiti_client),
 ) -> ProjectStats:
     """Get project statistics for the dashboard."""
     # Use project_id directly
@@ -758,7 +759,7 @@ async def get_trending_entities(
     limit: int = Query(default=10, ge=1, le=50),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graphiti_client=Depends(get_graphiti_client),
+    graphiti_client: Any=Depends(get_graphiti_client),
 ) -> TrendingResponse:
     """Get trending entities in a project's knowledge graph."""
     try:

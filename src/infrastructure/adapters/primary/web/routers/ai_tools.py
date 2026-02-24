@@ -1,6 +1,7 @@
 """AI tools API routes."""
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -44,7 +45,7 @@ class TitleResponse(BaseModel):
 async def optimize_content(
     request: OptimizeRequest,
     current_user: User = Depends(get_current_user),
-    graphiti_client=Depends(get_graphiti_client),
+    graphiti_client: Any=Depends(get_graphiti_client),
 ):
     """
     Optimize content using AI.
@@ -91,7 +92,7 @@ async def optimize_content(
 async def generate_title(
     request: TitleRequest,
     current_user: User = Depends(get_current_user),
-    graphiti_client=Depends(get_graphiti_client),
+    graphiti_client: Any=Depends(get_graphiti_client),
 ):
     """
     Generate a title for the content using AI.
