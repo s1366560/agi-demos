@@ -1635,7 +1635,7 @@ class ReActAgent:
                     subagent_name: str,
                     task: str,
                     run_id: str,
-                    **spawn_options: Any,
+                    **spawn_options: Any,  # noqa: ANN401
                 ) -> str:
                     target = subagent_map.get(subagent_name)
                     if not target:
@@ -2183,7 +2183,7 @@ class ReActAgent:
                     subagent_name: str,
                     task: str,
                     run_id: str,
-                    **spawn_options: Any,
+                    **spawn_options: Any,  # noqa: ANN401
                 ) -> str:
                     target = nested_map.get(subagent_name)
                     if not target:

@@ -154,7 +154,7 @@ class EventEnvelope:
             metadata=metadata or {},
         )
 
-    def with_metadata(self, **kwargs: Any) -> "EventEnvelope":
+    def with_metadata(self, **kwargs: Any) -> "EventEnvelope":  # noqa: ANN401
         """Create a new envelope with additional metadata.
 
         Args:
@@ -211,7 +211,7 @@ def create_child_envelope(
     parent: EventEnvelope,
     event_type: AgentEventType,
     payload: Dict[str, Any],
-    **extra_metadata: Any,
+    **extra_metadata: Any,  # noqa: ANN401
 ) -> EventEnvelope:
     """Create a child envelope from a parent envelope.
 

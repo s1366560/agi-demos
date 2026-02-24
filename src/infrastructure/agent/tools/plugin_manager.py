@@ -86,7 +86,7 @@ class PluginManagerTool(AgentTool):
             "required": [],
         }
 
-    async def execute(self, **kwargs: Any) -> Dict[str, Any]:
+    async def execute(self, **kwargs: Any) -> Dict[str, Any]:  # noqa: ANN401
         """Execute plugin management operation."""
         action = str(kwargs.get("action", "list")).strip().lower() or "list"
         dry_run = self._as_bool(kwargs.get("dry_run", False))
@@ -1228,7 +1228,7 @@ class PluginManagerTool(AgentTool):
         return "\n".join(lines)
 
     @staticmethod
-    def _error_response(message: str, **extra: Any) -> Dict[str, Any]:
+    def _error_response(message: str, **extra: Any) -> Dict[str, Any]:  # noqa: ANN401
         return {
             "title": "Plugin Manager Failed",
             "output": f"Error: {message}",

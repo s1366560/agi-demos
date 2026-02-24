@@ -41,7 +41,7 @@ class AgentToolBase(ABC):
         ...
 
     @abstractmethod
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
         """Execute the tool with the given arguments.
 
         Args:
@@ -55,7 +55,7 @@ class AgentToolBase(ABC):
         """
         ...
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """Validate tool arguments before execution.
 
         Default implementation always returns True.
@@ -63,7 +63,7 @@ class AgentToolBase(ABC):
         """
         return True
 
-    async def safe_execute(self, **kwargs: Any) -> str:
+    async def safe_execute(self, **kwargs: Any) -> str:  # noqa: ANN401
         """Safely execute the tool with error handling."""
         try:
             if not self.validate_args(**kwargs):

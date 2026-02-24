@@ -92,7 +92,7 @@ class GetEnvVarTool(AgentTool):
         self._tenant_id = tenant_id
         self._project_id = project_id
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """Validate arguments."""
         if not self._tenant_id:
             logger.error("tenant_id not set")
@@ -397,7 +397,7 @@ class RequestEnvVarTool(AgentTool):
         """Set the HITL handler (for late binding)."""
         self._hitl_handler = handler
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """Validate arguments."""
         if not self._tenant_id:
             logger.error("tenant_id not set")
@@ -660,7 +660,7 @@ class CheckEnvVarsTool(AgentTool):
         self._tenant_id = tenant_id
         self._project_id = project_id
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """Validate arguments."""
         if not self._tenant_id:
             logger.error("tenant_id not set")

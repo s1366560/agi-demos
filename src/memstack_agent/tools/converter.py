@@ -215,7 +215,7 @@ def _build_function_schema(func: Callable) -> Dict[str, Any]:
     }
 
 
-async def _execute_wrapped(func: Callable, /, **kwargs: Any) -> Any:
+async def _execute_wrapped(func: Callable, /, **kwargs: Any) -> Any:  # noqa: ANN401
     """Wrapper to execute sync/async functions uniformly.
 
     Args:

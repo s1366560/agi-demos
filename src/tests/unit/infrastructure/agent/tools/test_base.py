@@ -24,7 +24,7 @@ class ConcreteAgentTool(AgentTool):
         """Set the return value for execute."""
         self._return_value = value
 
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
         if self._should_raise:
             raise Exception(self._error_msg)
         return self._return_value
@@ -36,12 +36,12 @@ class ConcreteToolWithValidation(AgentTool):
     def __init__(self):
         super().__init__(name="validated_tool", description="Tool with validation")
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """Require 'query' argument to be a non-empty string."""
         query = kwargs.get("query")
         return isinstance(query, str) and len(query.strip()) > 0
 
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
         return f"Executed with query: {kwargs.get('query')}"
 
 

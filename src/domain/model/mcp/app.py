@@ -176,7 +176,7 @@ class MCPApp:
     created_at: datetime = field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = None
 
-    def _record_lifecycle(self, status: MCPAppStatus, **metadata: Any) -> None:
+    def _record_lifecycle(self, status: MCPAppStatus, **metadata: Any) -> None:  # noqa: ANN401
         """Record lifecycle transition metadata for persistence/audit."""
         now = datetime.utcnow()
         self.lifecycle_metadata["last_status"] = status.value

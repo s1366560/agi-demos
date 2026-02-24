@@ -441,7 +441,7 @@ class DistributedTransaction:
             self._context.redis_pipeline = self._context.redis_client.pipeline()
             self._prepared["redis"] = True
 
-    async def execute_postgres(self, query: str, **params: Any) -> Any:
+    async def execute_postgres(self, query: str, **params: Any) -> Any:  # noqa: ANN401
         """
         Execute a PostgreSQL query within this transaction.
 
@@ -458,7 +458,7 @@ class DistributedTransaction:
         self._context.operations.append(f"postgres:{query[:50]}")
         return await self._context.pg_session.execute(query, params)
 
-    async def execute_neo4j(self, query: str, **params: Any) -> Any:
+    async def execute_neo4j(self, query: str, **params: Any) -> Any:  # noqa: ANN401
         """
         Execute a Neo4j query within this transaction.
 

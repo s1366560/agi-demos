@@ -262,7 +262,7 @@ class StructuredOutputValidator:
         llm_client: LLMClient,
         messages: list[Message] | list[dict[str, Any]],
         response_model: Type[T],
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> ValidationResult:
         """
         Generate a response and validate it, with automatic retry.

@@ -123,7 +123,7 @@ class MemoryTestDataBuilder:
         self._metadata = metadata
         return self
 
-    def add_metadata(self, key: str, value: Any) -> "MemoryTestDataBuilder":
+    def add_metadata(self, key: str, value: Any) -> "MemoryTestDataBuilder":  # noqa: ANN401
         """Add a single metadata key-value pair."""
         self._metadata[key] = value
         return self

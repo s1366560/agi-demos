@@ -65,7 +65,7 @@ class LiteLLMAdapter(LLMClient):
         self,
         messages: List[Message],
         tools: Optional[List[ToolDefinition]] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> Dict[str, Any]:
         """Build parameters for litellm completion call.
 
@@ -170,7 +170,7 @@ class LiteLLMAdapter(LLMClient):
         self,
         messages: List[Message],
         tools: Optional[List[ToolDefinition]] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> ChatResponse:
         """Generate a non-streaming response.
 
@@ -227,7 +227,7 @@ class LiteLLMAdapter(LLMClient):
         self,
         messages: List[Message],
         tools: Optional[List[ToolDefinition]] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> AsyncGenerator[StreamChunk, None]:
         """Generate a streaming response.
 
@@ -276,7 +276,7 @@ class LiteLLMAdapter(LLMClient):
             logger.error(f"LiteLLM stream error: {e}")
             raise
 
-    def with_config(self, **kwargs: Any) -> "LiteLLMAdapter":
+    def with_config(self, **kwargs: Any) -> "LiteLLMAdapter":  # noqa: ANN401
         """Create a new adapter with modified configuration.
 
         Args:
@@ -300,7 +300,7 @@ class LiteLLMAdapter(LLMClient):
 def create_llm_client(
     model: str,
     api_key: Optional[str] = None,
-    **kwargs: Any,
+    **kwargs: Any,  # noqa: ANN401
 ) -> LiteLLMAdapter:
     """Factory function to create an LLM client.
 

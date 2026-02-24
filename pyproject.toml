@@ -104,6 +104,7 @@ select = [
     "C4",     # flake8-comprehensions
     "SIM",    # flake8-simplify
     "RUF",    # Ruff-specific rules
+    "ANN401", # disallow Any type annotations
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)

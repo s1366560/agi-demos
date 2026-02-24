@@ -106,7 +106,7 @@ class UnifiedLLMClient(LLMClient):
     async def ainvoke(
         self,
         messages: list[Message] | str,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> ChatResponse:
         """
         Async invoke method for chat completion.
@@ -143,7 +143,7 @@ class UnifiedLLMClient(LLMClient):
         self,
         system_prompt: str,
         user_message: str,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> ChatResponse:
         """
         Convenience method for simple system + user message chat.

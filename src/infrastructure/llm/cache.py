@@ -106,7 +106,7 @@ class ResponseCache:
         messages: list[dict[str, Any]],
         model: str,
         temperature: float = 0.0,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> str:
         """
         Generate a cache key from request parameters.
@@ -155,7 +155,7 @@ class ResponseCache:
         messages: list[dict[str, Any]],
         model: str,
         temperature: float = 0.0,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> Optional[dict[str, Any]]:
         """
         Get a cached response if available.
@@ -209,7 +209,7 @@ class ResponseCache:
         response: dict[str, Any],
         model: str,
         temperature: float = 0.0,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """
         Cache a response.
@@ -256,7 +256,7 @@ class ResponseCache:
         messages: list[dict[str, Any]],
         model: str,
         temperature: float = 0.0,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> bool:
         """
         Invalidate a cached entry.

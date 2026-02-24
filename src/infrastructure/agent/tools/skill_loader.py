@@ -232,14 +232,14 @@ class SkillLoaderTool(AgentTool):
 
         return schema
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """Validate that skill_name argument is provided."""
         skill_name = kwargs.get("skill_name")
         if not isinstance(skill_name, str) or not skill_name.strip():
             return False
         return True
 
-    async def execute(self, **kwargs: Any) -> Union[str, Dict[str, Any]]:
+    async def execute(self, **kwargs: Any) -> Union[str, Dict[str, Any]]:  # noqa: ANN401
         """
         Execute skill loading.
 

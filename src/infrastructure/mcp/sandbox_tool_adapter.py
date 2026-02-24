@@ -217,7 +217,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
             schema["required"] = []
         return schema
 
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
         """Execute the tool by proxying through sandbox's mcp_server_call_tool."""
         logger.info("Executing sandbox MCP tool: %s", self._name)
 

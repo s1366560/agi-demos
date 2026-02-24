@@ -167,7 +167,7 @@ class Neo4jClient:
         self,
         query: str,
         timeout: float = TRANSACTION_TIMEOUT,
-        **parameters: Any,
+        **parameters: Any,  # noqa: ANN401
     ) -> Any:
         """
         Execute a Cypher query with timeout handling.

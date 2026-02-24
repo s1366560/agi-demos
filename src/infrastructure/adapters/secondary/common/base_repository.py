@@ -247,7 +247,7 @@ class BaseRepository(ABC, Generic[T, M]):
             if hasattr(db_model, key) and not key.startswith("_"):
                 setattr(db_model, key, value)
 
-    def _apply_filters(self, query: Select, **filters: Any) -> Select:
+    def _apply_filters(self, query: Select, **filters: Any) -> Select:  # noqa: ANN401
         """
         Apply filters to a query.
 
@@ -318,7 +318,7 @@ class BaseRepository(ABC, Generic[T, M]):
         db_models = result.scalars().all()
         return [self._to_domain(m) for m in db_models if m is not None]
 
-    async def find_one(self, **filters: Any) -> Optional[T]:
+    async def find_one(self, **filters: Any) -> Optional[T]:  # noqa: ANN401
         """
         Find a single entity matching the given filters.
 
@@ -430,7 +430,7 @@ class BaseRepository(ABC, Generic[T, M]):
         self,
         limit: int = 50,
         offset: int = 0,
-        **filters: Any,
+        **filters: Any,  # noqa: ANN401
     ) -> List[T]:
         """
         List all entities with optional filtering and pagination.
@@ -463,7 +463,7 @@ class BaseRepository(ABC, Generic[T, M]):
         db_models = result.scalars().all()
         return [self._to_domain(m) for m in db_models if m is not None]
 
-    async def count(self, **filters: Any) -> int:
+    async def count(self, **filters: Any) -> int:  # noqa: ANN401
         """
         Count entities matching the given filters.
 

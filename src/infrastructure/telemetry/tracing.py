@@ -104,7 +104,7 @@ def with_tracer(component_name: str, attributes: Optional[dict[str, Any]] = None
 
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
             tracer = get_tracer(component_name)
             if tracer is None:
                 return func(*args, **kwargs)
@@ -147,7 +147,7 @@ def async_with_tracer(component_name: str, attributes: Optional[dict[str, Any]] 
 
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
             tracer = get_tracer(component_name)
             if tracer is None:
                 return await func(*args, **kwargs)

@@ -35,7 +35,7 @@ class AdapterFactory(Protocol):
         self,
         config: LLMConfig,
         provider_config: ProviderConfig,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> LLMClient:
         """Create an adapter instance."""
         ...
@@ -101,7 +101,7 @@ class ProviderAdapterRegistry:
         self,
         provider_config: ProviderConfig,
         llm_config: LLMConfig | None = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> LLMClient:
         """
         Create an adapter instance for a provider.

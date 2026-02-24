@@ -325,7 +325,7 @@ def create_skill(
     trigger_patterns: Optional[List[str]] = None,
     trigger_type: TriggerType = TriggerType.KEYWORD,
     steps: Optional[List[Dict[str, Any]]] = None,
-    **kwargs: Any,
+    **kwargs: Any,  # noqa: ANN401
 ) -> SkillDefinition:
     """Factory function to create a skill definition.
 

@@ -107,7 +107,7 @@ class WebScrapeTool(AgentTool):
             "required": ["url"],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """Validate that url argument is provided and valid."""
         url = kwargs.get("url")
         if not isinstance(url, str) or not url.strip():
@@ -159,7 +159,7 @@ class WebScrapeTool(AgentTool):
             return "https://" + url
         return url
 
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
         """
         Execute web scrape.
 

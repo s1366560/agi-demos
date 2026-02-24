@@ -43,7 +43,7 @@ class LLMClient(Protocol):
         self,
         messages: List[Message],
         tools: Optional[List[ToolDefinition]] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> ChatResponse:
         """Generate a non-streaming response.
 
@@ -61,7 +61,7 @@ class LLMClient(Protocol):
         self,
         messages: List[Message],
         tools: Optional[List[ToolDefinition]] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> AsyncGenerator[StreamChunk, None]:
         """Generate a streaming response.
 
@@ -87,7 +87,7 @@ class LLMClientSync(Protocol):
         self,
         messages: List[Message],
         tools: Optional[List[ToolDefinition]] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> ChatResponse:
         """Generate a non-streaming response synchronously.
 

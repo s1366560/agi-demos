@@ -76,7 +76,7 @@ class LLMCache:
         self,
         model: str,
         prompt: str | list[Dict[str, Any]],
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> str:
         """
         Generate a consistent cache key for the request.
@@ -129,7 +129,7 @@ class LLMCache:
         self,
         model: str,
         prompt: str | list[Dict[str, Any]],
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> Optional[str]:
         """
         Get cached response for the given prompt.
@@ -177,7 +177,7 @@ class LLMCache:
         model: str,
         prompt: str | list[Dict[str, Any]],
         response: str,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """
         Cache the response for the given prompt.
@@ -214,7 +214,7 @@ class LLMCache:
         self,
         model: str,
         prompt: str | list[Dict[str, Any]],
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """
         Remove cached response for the given prompt.

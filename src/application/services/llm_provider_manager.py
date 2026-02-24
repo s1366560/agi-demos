@@ -165,7 +165,7 @@ class LLMProviderManager:
         preferred_provider: ProviderType | None = None,
         llm_config: LLMConfig | None = None,
         allow_fallback: bool = True,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> LLMClient:
         """
         Get an LLM client with automatic health checking and fallback.

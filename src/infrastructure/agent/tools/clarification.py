@@ -133,7 +133,7 @@ class ClarificationTool(AgentTool):
             "required": ["question", "clarification_type", "options"],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """Validate clarification arguments."""
         if "question" not in kwargs:
             logger.error("Missing required argument: question")

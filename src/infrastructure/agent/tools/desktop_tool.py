@@ -95,7 +95,7 @@ class DesktopTool(AgentTool):
             "required": ["action"],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """
         Validate tool arguments before execution.
 
@@ -117,7 +117,7 @@ class DesktopTool(AgentTool):
 
         return True
 
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
         """
         Execute the desktop tool with the given arguments.
 
@@ -145,7 +145,7 @@ class DesktopTool(AgentTool):
         else:
             return f"Error: Unknown action '{action}'. Valid actions are: start, stop, status"
 
-    async def _start_desktop(self, **kwargs: Any) -> str:
+    async def _start_desktop(self, **kwargs: Any) -> str:  # noqa: ANN401
         """
         Start the remote desktop server.
 
@@ -173,7 +173,7 @@ class DesktopTool(AgentTool):
             logger.error(f"Failed to start desktop: {e}")
             return f"Error: Failed to start desktop - {e!s}"
 
-    async def _start_desktop_legacy(self, **kwargs: Any) -> str:
+    async def _start_desktop_legacy(self, **kwargs: Any) -> str:  # noqa: ANN401
         """Legacy start_desktop using direct adapter call."""
         if not self._sandbox_adapter:
             return "Error: No orchestrator or sandbox adapter available"

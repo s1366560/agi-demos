@@ -142,7 +142,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
             "required": ["skill_source"],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """Validate that skill_source argument is provided."""
         skill_source = kwargs.get("skill_source")
         if not isinstance(skill_source, str) or not skill_source.strip():
@@ -407,7 +407,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
             "files_installed": ["SKILL.md"],
         }
 
-    async def execute(self, **kwargs: Any) -> Union[str, Dict[str, Any]]:
+    async def execute(self, **kwargs: Any) -> Union[str, Dict[str, Any]]:  # noqa: ANN401
         """
         Execute skill installation.
 
@@ -571,7 +571,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
         )
         return lifecycle_result
 
-    def _error_response(self, message: str, **extra: Any) -> Dict[str, Any]:
+    def _error_response(self, message: str, **extra: Any) -> Dict[str, Any]:  # noqa: ANN401
         """
         Create an error response.
 

@@ -98,7 +98,7 @@ class SkillSyncTool(AgentTool):
             "required": ["skill_name"],
         }
 
-    async def execute(self, **kwargs: Any) -> Union[str, Dict[str, Any]]:
+    async def execute(self, **kwargs: Any) -> Union[str, Dict[str, Any]]:  # noqa: ANN401
         """Execute the skill sync operation."""
         skill_name = kwargs.get("skill_name", "").strip()
         if not skill_name:

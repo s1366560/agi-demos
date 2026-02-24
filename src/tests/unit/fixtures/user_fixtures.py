@@ -58,7 +58,7 @@ class UserTestDataBuilder:
         self._profile = profile
         return self
 
-    def add_profile_field(self, key: str, value: Any) -> "UserTestDataBuilder":
+    def add_profile_field(self, key: str, value: Any) -> "UserTestDataBuilder":  # noqa: ANN401
         """Add a single profile field."""
         self._profile[key] = value
         return self

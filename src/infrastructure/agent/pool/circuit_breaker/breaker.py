@@ -158,8 +158,8 @@ class CircuitBreaker:
     async def call(
         self,
         func: Callable[..., T],
-        *args: Any,
-        **kwargs: Any,
+        *args: Any,  # noqa: ANN401
+        **kwargs: Any,  # noqa: ANN401
     ) -> T:
         """执行受保护的调用.
 

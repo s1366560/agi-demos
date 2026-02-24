@@ -44,7 +44,7 @@ class Tool(Protocol):
         """Human-readable description of what the tool does."""
         ...
 
-    async def execute(self, **kwargs: Any) -> Any:
+    async def execute(self, **kwargs: Any) -> Any:  # noqa: ANN401
         """Execute the tool with given arguments.
 
         Args:
@@ -211,7 +211,7 @@ class SimpleTool:
         """Tool metadata."""
         return ToolMetadata()
 
-    async def execute(self, **kwargs: Any) -> Any:
+    async def execute(self, **kwargs: Any) -> Any:  # noqa: ANN401
         """Execute the tool. Must be implemented by subclasses."""
         raise NotImplementedError(f"{self.name}.execute() not implemented")
 

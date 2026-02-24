@@ -164,7 +164,7 @@ class StructuredLLMLogger:
         user_id: Optional[str] = None,
         project_id: Optional[str] = None,
         conversation_id: Optional[str] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> str:
         """
         Log start of LLM call.
@@ -221,7 +221,7 @@ class StructuredLLMLogger:
         finish_reason: Optional[str] = None,
         tool_calls: int = 0,
         estimated_cost: Optional[float] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """
         Log end of LLM call.
@@ -284,7 +284,7 @@ class StructuredLLMLogger:
         request_id: str,
         error: Exception,
         input_tokens: int = 0,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> None:
         """
         Log LLM call error.
@@ -399,7 +399,7 @@ def log_llm_call(
     provider: str,
     model: str,
     operation: str = "completion",
-    **kwargs: Any,
+    **kwargs: Any,  # noqa: ANN401
 ) -> tuple[str, StructuredLLMLogger]:
     """
     Convenience function to log LLM call start.

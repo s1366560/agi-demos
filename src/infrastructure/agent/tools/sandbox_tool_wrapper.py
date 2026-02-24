@@ -99,7 +99,7 @@ class SandboxMCPToolWrapper(AgentTool):
             "required": required,
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """Validate arguments against the MCP tool schema."""
         input_schema = self._schema.get("input_schema", {})
 
@@ -109,7 +109,7 @@ class SandboxMCPToolWrapper(AgentTool):
         required = input_schema.get("required", [])
         return all(arg in kwargs for arg in required)
 
-    async def execute(self, **kwargs: Any) -> Any:
+    async def execute(self, **kwargs: Any) -> Any:  # noqa: ANN401
         """
         Execute the tool with automatic error handling and retry.
 

@@ -49,7 +49,7 @@ class TodoReadTool(AgentTool):
             "required": [],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         status = kwargs.get("status")
         valid = {"pending", "in_progress", "completed", "failed", "cancelled"}
         if status and status not in valid:
@@ -60,7 +60,7 @@ class TodoReadTool(AgentTool):
         self,
         session_id: str,
         status: Optional[str] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> str:
         if not self._session_factory:
             return json.dumps({"error": "Task storage not configured", "todos": []})
@@ -142,7 +142,7 @@ class TodoWriteTool(AgentTool):
             "required": ["action"],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         action = kwargs.get("action")
         if action not in {"replace", "add", "update"}:
             return False
@@ -162,7 +162,7 @@ class TodoWriteTool(AgentTool):
         action: str,
         todos: Optional[List[Dict[str, Any]]] = None,
         todo_id: Optional[str] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> str:
         self._pending_events.clear()
 

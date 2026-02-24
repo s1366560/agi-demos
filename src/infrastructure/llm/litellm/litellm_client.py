@@ -148,7 +148,7 @@ class LiteLLMClient(LLMClient):
         max_tokens: int,
         temperature: float | None = None,
         langfuse_context: dict[str, Any] | None = None,
-        **extra: Any,
+        **extra: Any,  # noqa: ANN401
     ) -> dict[str, Any]:
         """Build common completion kwargs for LiteLLM calls.
 
@@ -415,7 +415,7 @@ class LiteLLMClient(LLMClient):
         max_tokens: int = 4096,
         model_size: ModelSize = ModelSize.medium,
         langfuse_context: dict[str, Any] | None = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> dict[str, Any]:
         """
         Generate a non-streaming response with optional tool calling support.

@@ -223,7 +223,7 @@ class SessionsSpawnTool(AgentTool):
         agent_id: str = "",
         model: str = "",
         thinking: str = "",
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> str:
         self._pending_events.clear()
         if not subagent_name or subagent_name not in self._subagent_names:
@@ -516,7 +516,7 @@ class SessionsListTool(AgentTool):
         status: str = "active",
         visibility: str = "",
         limit: int = 20,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> str:
         statuses: Optional[List[SubAgentRunStatus]]
         if status == "active":
@@ -598,7 +598,7 @@ class SessionsHistoryTool(AgentTool):
             "required": [],
         }
 
-    async def execute(self, visibility: str = "", limit: int = 50, **kwargs: Any) -> str:
+    async def execute(self, visibility: str = "", limit: int = 50, **kwargs: Any) -> str:  # noqa: ANN401
         effective_visibility = (visibility or self._visibility_default).strip().lower()
         if effective_visibility not in {"self", "tree", "all"}:
             return f"Error: invalid visibility '{effective_visibility}'"
@@ -655,7 +655,7 @@ class SessionsTimelineTool(AgentTool):
         run_id: str = "",
         include_descendants: bool = False,
         include_announce: bool = True,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> str:
         if not run_id:
             return "Error: run_id is required"
@@ -816,7 +816,7 @@ class SessionsOverviewTool(AgentTool):
             "required": [],
         }
 
-    async def execute(self, visibility: str = "", **kwargs: Any) -> str:
+    async def execute(self, visibility: str = "", **kwargs: Any) -> str:  # noqa: ANN401
         effective_visibility = (visibility or self._visibility_default).strip().lower()
         if effective_visibility not in {"self", "tree", "all"}:
             return f"Error: invalid visibility '{effective_visibility}'"
@@ -999,7 +999,7 @@ class SessionsWaitTool(AgentTool):
         run_id: str = "",
         timeout_seconds: float = 30,
         poll_interval_ms: int = 200,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> str:
         if not run_id:
             return "Error: run_id is required"
@@ -1083,7 +1083,7 @@ class SessionsAckTool(AgentTool):
             "required": ["run_id"],
         }
 
-    async def execute(self, run_id: str = "", note: str = "", **kwargs: Any) -> str:
+    async def execute(self, run_id: str = "", note: str = "", **kwargs: Any) -> str:  # noqa: ANN401
         if not run_id:
             return "Error: run_id is required"
         run = self._run_registry.get_run(self._conversation_id, run_id)
@@ -1201,7 +1201,7 @@ class SessionsSendTool(AgentTool):
         run_id: str = "",
         task: str = "",
         run_timeout_seconds: int = 0,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> str:
         self._pending_events.clear()
         if not run_id:
@@ -1532,7 +1532,7 @@ class SubAgentsControlTool(AgentTool):
         run_timeout_seconds: int = 0,
         include_descendants: bool = True,
         include_announce: bool = True,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> str:
         self._pending_events.clear()
         normalized_action = (action or "list").strip().lower()

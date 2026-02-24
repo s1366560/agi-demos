@@ -61,7 +61,7 @@ class MockSubAgentMatcher:
                 return subagent
         return None
 
-    def get_subagent(self, name: str) -> Any:
+    def get_subagent(self, name: str) -> Any:  # noqa: ANN401
         """Get sub-agent by name."""
         return f"SubAgent({name})"
 

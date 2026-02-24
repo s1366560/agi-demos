@@ -66,7 +66,7 @@ class ProjectTestDataBuilder:
         self._memory_rules = rules
         return self
 
-    def add_memory_rule(self, key: str, value: Any) -> "ProjectTestDataBuilder":
+    def add_memory_rule(self, key: str, value: Any) -> "ProjectTestDataBuilder":  # noqa: ANN401
         """Add a single memory rule."""
         self._memory_rules[key] = value
         return self
@@ -76,7 +76,7 @@ class ProjectTestDataBuilder:
         self._graph_config = config
         return self
 
-    def add_graph_config(self, key: str, value: Any) -> "ProjectTestDataBuilder":
+    def add_graph_config(self, key: str, value: Any) -> "ProjectTestDataBuilder":  # noqa: ANN401
         """Add a single graph config setting."""
         self._graph_config[key] = value
         return self

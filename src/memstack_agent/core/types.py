@@ -163,7 +163,7 @@ class AgentContext:
     max_steps: int = 50
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def with_metadata(self, **kwargs: Any) -> "AgentContext":
+    def with_metadata(self, **kwargs: Any) -> "AgentContext":  # noqa: ANN401
         """Return a new context with updated metadata.
 
         This preserves immutability while allowing metadata extension.

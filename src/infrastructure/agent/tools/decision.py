@@ -159,7 +159,7 @@ class DecisionTool(AgentTool):
             "required": ["question", "decision_type", "options"],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """Validate decision arguments."""
         if "question" not in kwargs:
             logger.error("Missing required argument: question")

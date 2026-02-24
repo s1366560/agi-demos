@@ -374,7 +374,7 @@ async def get_or_create_tools(
     redis_client: Any,
     llm: Any = None,
     agent_mode: str = "default",
-    **kwargs: Any,
+    **kwargs: Any,  # noqa: ANN401
 ) -> Dict[str, Any]:
     """Get or create a cached tool set for a project, including sandbox tools and skills.
 

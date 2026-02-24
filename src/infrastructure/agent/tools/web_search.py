@@ -178,7 +178,7 @@ class WebSearchTool(AgentTool):
         except Exception as e:
             logger.warning(f"Failed to cache results: {e}")
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """Validate that query argument is provided."""
         query = kwargs.get("query")
         if not isinstance(query, str) or len(query.strip()) == 0:
@@ -267,7 +267,7 @@ class WebSearchTool(AgentTool):
 
         return results
 
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
         """
         Execute web search.
 

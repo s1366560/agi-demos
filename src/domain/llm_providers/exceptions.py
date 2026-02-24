@@ -31,7 +31,7 @@ class LLMError(Exception):
         provider: Optional[str] = None,
         model: Optional[str] = None,
         request_id: Optional[str] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ):
         super().__init__(message)
         self.message = message
@@ -66,7 +66,7 @@ class ProviderError(LLMError):
         self,
         message: str,
         provider: Optional[str] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ):
         super().__init__(message=message, provider=provider, **kwargs)
 
@@ -99,7 +99,7 @@ class RateLimitError(ProviderError):
         message: str,
         provider: Optional[str] = None,
         retry_after: Optional[int] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ):
         super().__init__(message=message, provider=provider, **kwargs)
         self.retry_after = retry_after  # Seconds to wait before retry
@@ -120,7 +120,7 @@ class CircuitBreakerOpenError(ProviderError):
         message: str,
         provider: Optional[str] = None,
         reopen_after: Optional[float] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ):
         super().__init__(message=message, provider=provider, **kwargs)
         self.reopen_after = reopen_after  # Seconds until circuit breaker half-opens
@@ -155,7 +155,7 @@ class ModelError(LLMError):
         message: str,
         model: Optional[str] = None,
         response: Optional[Any] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ):
         super().__init__(message=message, model=model, **kwargs)
         self.response = response
@@ -189,7 +189,7 @@ class JSONParseError(ModelError):
         message: str,
         raw_response: Optional[str] = None,
         expected_schema: Optional[str] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ):
         super().__init__(message=message, **kwargs)
         self.raw_response = raw_response
@@ -224,7 +224,7 @@ class ContextLengthExceededError(ModelError):
         model: Optional[str] = None,
         input_tokens: Optional[int] = None,
         max_tokens: Optional[int] = None,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ):
         super().__init__(message=message, model=model, **kwargs)
         self.input_tokens = input_tokens

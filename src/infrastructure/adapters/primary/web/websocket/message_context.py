@@ -56,7 +56,7 @@ class MessageContext:
         await self.websocket.send_json(message)
 
     async def send_ack(
-        self, action: str, extra: Optional[Dict[str, Any]] = None, **kwargs: Any
+        self, action: str, extra: Optional[Dict[str, Any]] = None, **kwargs: Any  # noqa: ANN401
     ) -> None:
         """Send an acknowledgment message."""
         message = {

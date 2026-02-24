@@ -60,7 +60,7 @@ class MockTool(Tool):
         self,
         name: str = "test_tool",
         description: str = "A test tool",
-        execute_result: Any = "success",
+        execute_result: Any = "success",  # noqa: ANN401
     ) -> None:
         self._name = name
         self._description = description
@@ -74,7 +74,7 @@ class MockTool(Tool):
     def description(self) -> str:
         return self._description
 
-    async def execute(self, **kwargs) -> Any:
+    async def execute(self, **kwargs) -> Any:  # noqa: ANN401
         return self._execute_result
 
     def get_metadata(self) -> ToolMetadata:
@@ -198,7 +198,7 @@ class TestToolAndEventIntegration:
             def description(self) -> str:
                 return "A failing tool"
 
-            async def execute(self, **kwargs) -> Any:
+            async def execute(self, **kwargs) -> Any:  # noqa: ANN401
                 raise ValueError("Tool failed!")
 
         registry.register(FailingTool())
@@ -319,7 +319,7 @@ class TestFullIntegration:
             def description(self) -> str:
                 return "This tool is broken"
 
-            async def execute(self, **kwargs) -> Any:
+            async def execute(self, **kwargs) -> Any:  # noqa: ANN401
                 raise RuntimeError("Something went wrong!")
 
         tool_registry.register(BrokenTool())
@@ -491,7 +491,7 @@ class TestToolScenarios:
             def description(self) -> str:
                 return "Fails"
 
-            async def execute(self, **kwargs) -> Any:
+            async def execute(self, **kwargs) -> Any:  # noqa: ANN401
                 raise ValueError("Failed!")
 
         registry.register(FailingTool())

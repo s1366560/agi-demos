@@ -85,7 +85,7 @@ class TerminalTool(AgentTool):
             "required": ["action"],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """
         Validate tool arguments before execution.
 
@@ -107,7 +107,7 @@ class TerminalTool(AgentTool):
 
         return True
 
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
         """
         Execute the terminal tool with the given arguments.
 
@@ -133,7 +133,7 @@ class TerminalTool(AgentTool):
         else:
             return f"Error: Unknown action '{action}'. Valid actions are: start, stop, status"
 
-    async def _start_terminal(self, **kwargs: Any) -> str:
+    async def _start_terminal(self, **kwargs: Any) -> str:  # noqa: ANN401
         """
         Start the web terminal server.
 
@@ -160,7 +160,7 @@ class TerminalTool(AgentTool):
             logger.error(f"Failed to start terminal: {e}")
             return f"Error: Failed to start terminal - {e!s}"
 
-    async def _start_terminal_legacy(self, **kwargs: Any) -> str:
+    async def _start_terminal_legacy(self, **kwargs: Any) -> str:  # noqa: ANN401
         """Legacy start_terminal using direct adapter call."""
         if not self._sandbox_adapter:
             return "Error: No orchestrator or sandbox adapter available"

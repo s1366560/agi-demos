@@ -56,7 +56,7 @@ class AgentTool(AgentToolBase):
         """Get the tool description."""
         return self._description
 
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
         """Execute the tool with the given arguments.
 
         Args:

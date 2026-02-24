@@ -262,7 +262,7 @@ def retry_decorator(
         func: Callable[..., Coroutine[Any, Any, T]],
     ) -> Callable[..., Coroutine[Any, Any, T]]:
         @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:
+        async def wrapper(*args: Any, **kwargs: Any) -> T:  # noqa: ANN401
             async def bound_func() -> T:
                 return await func(*args, **kwargs)
 

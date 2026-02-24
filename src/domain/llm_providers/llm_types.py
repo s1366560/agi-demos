@@ -153,7 +153,7 @@ class LLMClient(ABC):
     async def ainvoke(
         self,
         messages: list[Message] | str,
-        **kwargs: Any,
+        **kwargs: Any,  # noqa: ANN401
     ) -> ChatResponse:
         """
         Async invoke method for chat completion (LangChain-style interface).

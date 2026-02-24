@@ -14,7 +14,7 @@ class _MockTool:
         self.name = name
         self.description = description
 
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
         return "ok"
 
     def get_parameters_schema(self) -> Dict[str, Any]:

@@ -300,7 +300,7 @@ class Skill(Protocol):
         """
         ...
 
-    async def execute(self, context: Dict[str, Any], **kwargs: Any) -> Any:
+    async def execute(self, context: Dict[str, Any], **kwargs: Any) -> Any:  # noqa: ANN401
         """Execute the skill.
 
         Args:

@@ -54,7 +54,7 @@ class MCPToolAdapter(AgentTool):
 
         self.original_name = tool_name
 
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
         """
         Execute the MCP tool via the registry.
 
@@ -85,7 +85,7 @@ class MCPToolAdapter(AgentTool):
             logger.error(f"{error_msg} (server={self.server_id}, tool={self.original_name})")
             return error_msg
 
-    def validate_args(self, **kwargs: Any) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
         """
         Validate arguments against the MCP input schema.
 

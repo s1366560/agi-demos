@@ -68,7 +68,7 @@ class MemorySearchTool(AgentTool):
             "required": ["query"],
         }
 
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
         query = kwargs.get("query", "")
         max_results = kwargs.get("max_results", 5)
         category = kwargs.get("category")
@@ -183,7 +183,7 @@ class MemoryGetTool(AgentTool):
             "required": ["source_id"],
         }
 
-    async def execute(self, **kwargs: Any) -> str:
+    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
         source_id = kwargs.get("source_id", "")
         if not source_id:
             return json.dumps({"error": "source_id parameter is required"})

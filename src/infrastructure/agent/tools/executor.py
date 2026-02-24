@@ -61,7 +61,7 @@ class ToolDefinitionProtocol(Protocol):
     name: str
     permission: Optional[str]
 
-    async def execute(self, **kwargs: Any) -> Any:
+    async def execute(self, **kwargs: Any) -> Any:  # noqa: ANN401
         """Execute the tool."""
         ...
 
