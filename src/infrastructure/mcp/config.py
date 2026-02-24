@@ -19,7 +19,7 @@ existing database records and API contracts.
 """
 
 from enum import Enum
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -135,7 +135,7 @@ class McpWebSocketConfig(BaseModel):
 
 
 # Union type for MCP configuration
-McpConfig = Union[McpLocalConfig, McpRemoteConfig, McpWebSocketConfig]
+McpConfig = McpLocalConfig | McpRemoteConfig | McpWebSocketConfig
 
 
 class MCPStatusType(str, Enum):

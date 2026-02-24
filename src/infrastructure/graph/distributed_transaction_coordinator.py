@@ -527,11 +527,8 @@ class DistributedTransaction:
         Returns:
             True if prepare succeeded
         """
-        if not self._context.pg_session:
-            return False
-
         # PostgreSQL uses implicit prepare
-        return True
+        return bool(self._context.pg_session)
 
     async def prepare_neo4j(self) -> bool:
         """
@@ -540,11 +537,8 @@ class DistributedTransaction:
         Returns:
             True if prepare succeeded
         """
-        if not self._context.neo4j_client:
-            return False
-
         # Neo4j uses implicit prepare
-        return True
+        return bool(self._context.neo4j_client)
 
     async def prepare_redis(self) -> bool:
         """
@@ -553,11 +547,8 @@ class DistributedTransaction:
         Returns:
             True if prepare succeeded
         """
-        if not self._context.redis_client:
-            return False
-
         # Redis pipeline is already prepared
-        return True
+        return bool(self._context.redis_client)
 
     async def _commit_all(self) -> None:
         """

@@ -5,7 +5,7 @@ This module provides the abstract base class and implementations for output form
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any
 
 
 class OutputFormatter(ABC):

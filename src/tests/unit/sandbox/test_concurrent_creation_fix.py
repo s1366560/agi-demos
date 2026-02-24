@@ -1,6 +1,7 @@
 """Test that concurrent sandbox creation is prevented by distributed locks."""
 
 import asyncio
+import contextlib
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -126,13 +127,11 @@ class TestConcurrentCreationFix:
         mock_adapter.connect_mcp = AsyncMock(return_value=True)
         mock_adapter.health_check = AsyncMock(return_value=True)
 
-        try:
+        with contextlib.suppress(Exception):
             await lifecycle_service.get_or_create_sandbox(
                 project_id="test-proj",
                 tenant_id="test-tenant",
             )
-        except Exception:
-            pass  # Ignore any errors from incomplete mocking
 
         # Verify database SESSION lock was called with correct parameters
         mock_repository.acquire_project_lock.assert_called_with(
@@ -171,13 +170,11 @@ class TestConcurrentCreationFix:
         mock_adapter.create_sandbox = AsyncMock(return_value=mock_instance)
         mock_adapter.connect_mcp = AsyncMock(return_value=True)
 
-        try:
+        with contextlib.suppress(Exception):
             await lifecycle_service.get_or_create_sandbox(
                 project_id="test-proj",
                 tenant_id="test-tenant",
             )
-        except Exception:
-            pass  # Ignore any errors from incomplete mocking
 
         # Verify container existence was checked
         mock_adapter.container_exists.assert_called_with("old-container-id")

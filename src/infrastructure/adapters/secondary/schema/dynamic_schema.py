@@ -7,7 +7,7 @@ based on project-specific entity and edge type definitions stored in the databas
 
 import logging
 from datetime import datetime
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 from pydantic import BaseModel, Field, create_model
 from sqlalchemy import select
@@ -143,7 +143,7 @@ async def get_project_schema(project_id: str) -> tuple[dict, dict, dict]:
                 elif type_str == "Dict":
                     py_type = dict
 
-                fields[field_name] = (Optional[py_type], Field(None, description=desc))
+                fields[field_name] = (py_type | None, Field(None, description=desc))
 
             model = create_model(et.name, **fields, __base__=BaseModel)
             if et.description:
@@ -172,7 +172,7 @@ async def get_project_schema(project_id: str) -> tuple[dict, dict, dict]:
                 elif type_str == "DateTime":
                     py_type = datetime
 
-                fields[field_name] = (Optional[py_type], Field(None, description=desc))
+                fields[field_name] = (py_type | None, Field(None, description=desc))
 
             edge_types[et.name] = create_model(et.name, **fields, __base__=BaseModel)
 

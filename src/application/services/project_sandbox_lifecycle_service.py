@@ -14,6 +14,7 @@ Threading Safety:
 """
 
 import asyncio
+import contextlib
 import logging
 import uuid
 from dataclasses import dataclass
@@ -1041,12 +1042,9 @@ class ProjectSandboxLifecycleService:
         2. Cleans up any orphan containers for this project
         3. Deletes the database association record
         """
-        try:
-            # Terminate the container by sandbox_id
+        # Terminate the container by sandbox_id - container might not exist
+        with contextlib.suppress(Exception):
             await self._adapter.terminate_sandbox(association.sandbox_id)
-        except Exception:
-            # Ignore errors during cleanup - container might not exist
-            pass
 
         try:
             # Also cleanup any orphan containers for this project

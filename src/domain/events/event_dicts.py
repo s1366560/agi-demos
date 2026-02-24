@@ -6,7 +6,7 @@ is well-known and stable, providing better type safety and IDE support.
 
 from __future__ import annotations
 
-from typing import Any, TypedDict, Union
+from typing import Any, TypedDict
 
 # =============================================================================
 # SSE / Streaming Event Dicts
@@ -58,7 +58,7 @@ class ReasoningPartDict(TypedDict):
 
 
 # Union of all part dicts
-MessagePartDict = Union[ToolPartDict, TextPartDict, ReasoningPartDict]
+MessagePartDict = ToolPartDict | TextPartDict | ReasoningPartDict
 
 
 class MessageDict(TypedDict):
@@ -114,4 +114,4 @@ class TaskUpdatedEventData(TypedDict):
     content: str | None
 
 
-TodoPendingEvent = Union[TaskListUpdatedEventData, TaskUpdatedEventData]
+TodoPendingEvent = TaskListUpdatedEventData | TaskUpdatedEventData

@@ -4,6 +4,7 @@ Agent实例生命周期状态机.
 管理 Agent 实例的状态转换，确保状态变更的合法性和一致性。
 """
 
+import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -232,10 +233,8 @@ class LifecycleStateMachine:
 
         # 通知监听器
         for listener in self._listeners:
-            try:
+            with contextlib.suppress(Exception):
                 listener(event)
-            except Exception:
-                pass  # 忽略监听器错误
 
     def add_listener(self, listener: Callable[[LifecycleEvent], None]) -> None:
         """添加状态变更监听器.

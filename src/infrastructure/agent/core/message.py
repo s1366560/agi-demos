@@ -5,7 +5,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Union
+from typing import Any
 
 from src.domain.events.event_dicts import (
     LLMMessageDict,
@@ -110,7 +110,7 @@ class ReasoningPart:
 
 
 # Union type for all message parts
-MessagePart = Union[ToolPart, TextPart, ReasoningPart]
+MessagePart = ToolPart | TextPart | ReasoningPart
 
 
 @dataclass

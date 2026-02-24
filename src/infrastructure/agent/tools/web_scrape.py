@@ -4,6 +4,7 @@ This tool allows the agent to extract content from web pages,
 including JavaScript-rendered content.
 """
 
+import contextlib
 import logging
 import re
 from typing import Any
@@ -215,13 +216,11 @@ class WebScrapeTool(AgentTool):
                     # Remove unwanted elements if using body content
                     if not selector:
                         for unwanted in self.UNWANTED_SELECTORS:
-                            try:
+                            with contextlib.suppress(Exception):
                                 # Use JavaScript to remove elements
                                 await page.evaluate(
                                     f"document.querySelectorAll('{unwanted}').forEach(el => el.remove())"
                                 )
-                            except Exception:
-                                pass  # Element may not exist
 
                     # Extract content
                     if selector:

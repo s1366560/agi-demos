@@ -6,6 +6,7 @@ interface. Tool calls are proxied through the sandbox's mcp_server_call_tool.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 from typing import TYPE_CHECKING, Any
@@ -195,11 +196,8 @@ class SandboxMCPServerToolAdapter(AgentTool):
                 logger.warning("Prefetch failed for %s: %s", self.resource_uri, e)
 
         # Create background task (fire and forget)
-        try:
+        with contextlib.suppress(RuntimeError):
             asyncio.create_task(_prefetch())
-        except RuntimeError:
-            # No event loop available, skip prefetch
-            pass
 
     def get_cache_stats(self) -> dict[str, Any]:
         """Get cache statistics.

@@ -1722,7 +1722,7 @@ class MCPSandboxAdapter(SandboxPort):
                 if container.name not in self._active_sandboxes:
                     logger.warning(f"Found orphaned sandbox container: {container.name}")
                     try:
-                        await loop.run_in_executor(None, lambda: container.stop(timeout=5))
+                        await loop.run_in_executor(None, lambda c=container: c.stop(timeout=5))
                         await loop.run_in_executor(None, container.remove)
                         count += 1
                     except Exception as e:

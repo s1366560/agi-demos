@@ -2,8 +2,7 @@
 Use case for creating API keys.
 """
 
-from datetime import UTC, datetime, timedelta, timezone
-from typing import List, Optional
+from datetime import UTC, datetime, timedelta
 
 from pydantic import BaseModel, field_validator
 

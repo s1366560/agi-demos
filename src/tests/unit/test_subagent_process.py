@@ -476,7 +476,7 @@ class TestSubAgentProcess:
 
         async def mock_process_error(*args, **kwargs):
             raise RuntimeError("LLM connection failed")
-            yield  # noqa: unreachable
+            yield  # makes this an async generator
 
         mock_processor_instance = MagicMock()
         mock_processor_instance.process = mock_process_error

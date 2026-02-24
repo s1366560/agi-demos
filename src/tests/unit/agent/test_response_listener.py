@@ -1,6 +1,7 @@
 """Tests for HITLResponseListener."""
 
 import asyncio
+import contextlib
 import json
 from unittest.mock import AsyncMock
 
@@ -244,10 +245,8 @@ class TestListenLoop:
         await listener.start()
 
         # Wait for message processing with timeout
-        try:
+        with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(message_delivered.wait(), timeout=2.0)
-        except TimeoutError:
-            pass  # Test will fail on assertion anyway
 
         # Stop
         await listener.stop()

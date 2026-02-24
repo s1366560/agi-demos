@@ -9,6 +9,7 @@ Provides:
 - Savepoint support for nested transactions
 """
 
+import contextlib
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -273,10 +274,9 @@ class TransactionManager:
             raise
         finally:
             # Release savepoint
-            try:
+            # Release savepoint (may have been rolled back)
+            with contextlib.suppress(Exception):
                 await self._session.execute(f"RELEASE SAVEPOINT {name}")
-            except Exception:
-                pass  # Savepoint may have been rolled back
 
     # === Error handling ===
 

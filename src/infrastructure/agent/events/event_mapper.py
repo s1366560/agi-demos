@@ -7,6 +7,7 @@ as the single source of truth. The legacy EventType is provided as an alias
 for backward compatibility.
 """
 
+import contextlib
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -279,20 +280,14 @@ class EventBus:
 
         # Notify global subscribers
         for callback in self._global_subscribers:
-            try:
+            with contextlib.suppress(Exception):
                 callback(event)
-            except Exception:
-                # Log but don't fail publishing
-                pass
 
         # Notify type-specific subscribers
         if event.event_type in self._subscribers:
             for callback in self._subscribers[event.event_type]:
-                try:
+                with contextlib.suppress(Exception):
                     callback(event)
-                except Exception:
-                    # Log but don't fail publishing
-                    pass
 
     def get_history(
         self,

@@ -4,7 +4,7 @@ Aggregates all MCP-related endpoints from sub-modules.
 MCP servers provide external tools and capabilities via the Model Context Protocol.
 """
 
-from typing import List, Optional
+
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession

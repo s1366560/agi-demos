@@ -221,12 +221,7 @@ class LocalSkillResourceAdapter(SkillResourcePort):
         environment variables that can be used by the skill.
         """
         skill_dir = await self._get_skill_dir(context)
-        if not skill_dir:
-            return False
-
-        # Environment setup is handled by the caller for local execution
-        # We just verify the skill directory exists
-        return True
+        return bool(skill_dir)
 
     async def get_execution_path(
         self,

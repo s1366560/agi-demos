@@ -249,7 +249,7 @@ def prune_tool_outputs(
 
     # Only prune if we can recover at least PRUNE_MINIMUM_TOKENS
     if pruned_tokens > PRUNE_MINIMUM_TOKENS:
-        for msg, tool_part in parts_to_prune:
+        for _msg, tool_part in parts_to_prune:
             # Mark as compacted
             tool_part.compacted = True
             tool_part.compacted_at = datetime.now()

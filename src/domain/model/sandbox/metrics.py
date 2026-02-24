@@ -134,7 +134,7 @@ class PrometheusExporter(MetricsExporter):
         """Format labels for Prometheus format."""
         if not labels:
             return ""
-        label_pairs = [f'{l.name}="{l.value}"' for l in labels]
+        label_pairs = [f'{label.name}="{label.value}"' for label in labels]
         return "{" + ",".join(label_pairs) + "}"
 
 
@@ -159,7 +159,7 @@ class StatsDExporter(MetricsExporter):
             # Format tags/labels
             tag_str = ""
             if metric.labels:
-                tags = [f"{l.name}:{l.value}" for l in metric.labels]
+                tags = [f"{label.name}:{label.value}" for label in metric.labels]
                 # Datadog style tags
                 tag_str = "|#" + ",".join(tags)
 

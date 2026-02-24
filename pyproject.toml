@@ -136,13 +136,16 @@ ignore = [
 "src/tests/unit/infrastructure/llm/conftest.py" = ["E402"]
 
 # Test files relaxed
-"src/tests/**" = ["ANN001", "ANN201", "ANN202", "N802", "N803"]
+"src/tests/**" = ["ANN001", "ANN002", "ANN003", "ANN201", "ANN202", "N802", "N803", "E741", "B017", "B023", "RUF043"]
 
 # Alembic migration files
 "src/alembic/**" = ["ANN", "N999"]
 
 # Legacy modules (progressively tighten)
-"src/memstack_agent/**" = ["ANN"]
+"src/memstack_agent/**" = ["ANN", "UP007", "UP045"]
+
+# DDD marker base classes (ABC without abstract methods is intentional)
+"src/domain/shared_kernel.py" = ["B024"]
 
 # High cyclomatic complexity files (progressively refactor)
 "src/application/services/agent_service.py" = ["C901"]
