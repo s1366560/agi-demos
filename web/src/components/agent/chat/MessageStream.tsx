@@ -285,7 +285,7 @@ function ToolResultDisplay({ result, isError }: ToolResultDisplayProps) {
           {isFolded && (
             <button
               type="button"
-              onClick={() => setIsExpanded(!isExpanded)}
+              onClick={() => { setIsExpanded(!isExpanded); }}
               className="text-[10px] text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
             >
               <span className="material-symbols-outlined text-[12px]">
@@ -312,7 +312,7 @@ function ToolResultDisplay({ result, isError }: ToolResultDisplayProps) {
         {isFolded && (
           <button
             type="button"
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={() => { setIsExpanded(!isExpanded); }}
             className="text-[10px] text-emerald-600 hover:text-emerald-700 font-medium flex items-center gap-1"
           >
             <span className="material-symbols-outlined text-[12px]">

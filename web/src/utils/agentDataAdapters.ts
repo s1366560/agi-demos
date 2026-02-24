@@ -103,7 +103,7 @@ export function extractTokenData(message: Message): {
   tokenData?: TokenData;
   costData?: CostData;
 } {
-  const metadata = message.metadata as Record<string, unknown> | undefined;
+  const metadata = message.metadata;
 
   if (!metadata) return {};
 

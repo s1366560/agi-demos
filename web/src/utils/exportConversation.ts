@@ -177,7 +177,7 @@ function timelineToHtml(timeline: TimelineEvent[], title?: string): string {
           lines.push(
             `<div style="margin-bottom: 12px; padding: 6px 12px; background: #f8fafc; border-radius: 4px; font-size: 11px; font-family: monospace; color: #475569; overflow: hidden;">`
           );
-          lines.push(`${escapeHtml(output)}`);
+          lines.push(escapeHtml(output));
           lines.push(`</div>`);
         }
         break;

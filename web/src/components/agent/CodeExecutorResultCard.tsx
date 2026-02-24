@@ -167,7 +167,7 @@ export const CodeExecutorResultCard: React.FC<CodeExecutorResultCardProps> = ({ 
             ghost
             size="small"
             activeKey={showLogs ? ['logs'] : []}
-            onChange={(keys) => setShowLogs(keys.includes('logs'))}
+            onChange={(keys) => { setShowLogs(keys.includes('logs')); }}
             items={[
               {
                 key: 'logs',

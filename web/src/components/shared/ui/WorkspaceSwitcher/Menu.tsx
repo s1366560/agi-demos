@@ -29,7 +29,7 @@ export const WorkspaceSwitcherMenu: React.FC<WorkspaceMenuProps> = ({
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => { document.removeEventListener('mousedown', handleClickOutside); };
   }, [isOpen, setIsOpen]);
 
   // Handle keyboard navigation at menu level

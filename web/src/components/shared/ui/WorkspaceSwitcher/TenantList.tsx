@@ -81,9 +81,9 @@ export const TenantList: React.FC<TenantListProps> = ({
         return (
           <button
             key={tenant.id}
-            ref={(el) => registerMenuItemRef(index, el)}
-            onClick={() => onTenantSelect(tenant)}
-            onKeyDown={(e) => handleKeyDown(e, index)}
+            ref={(el) => { registerMenuItemRef(index, el); }}
+            onClick={() => { onTenantSelect(tenant); }}
+            onKeyDown={(e) => { handleKeyDown(e, index); }}
             role="option"
             aria-selected={isSelected}
             tabIndex={focusedIndex === index ? 0 : -1}
@@ -107,9 +107,9 @@ export const TenantList: React.FC<TenantListProps> = ({
       })}
       <div className="h-px bg-slate-100 dark:bg-slate-700 my-2" />
       <button
-        ref={(el) => registerMenuItemRef(tenants.length, el)}
+        ref={(el) => { registerMenuItemRef(tenants.length, el); }}
         onClick={onCreateTenant}
-        onKeyDown={(e) => handleKeyDown(e, tenants.length)}
+        onKeyDown={(e) => { handleKeyDown(e, tenants.length); }}
         role="option"
         tabIndex={focusedIndex === tenants.length ? 0 : -1}
         className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors focus:outline-none focus:ring-1 focus:ring-primary/50"

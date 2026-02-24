@@ -147,7 +147,7 @@ export const TableView: React.FC<TableViewProps> = ({
                 placeholder="Search..."
                 prefix={<SearchOutlined />}
                 value={searchText}
-                onChange={(e: any) => handleSearch(e.target.value)}
+                onChange={(e: any) => { handleSearch(e.target.value); }}
                 allowClear
                 style={{ width: 200 }}
               />
@@ -169,7 +169,7 @@ export const TableView: React.FC<TableViewProps> = ({
       <LazyTable
         columns={detectedColumns}
         dataSource={filteredData}
-        rowKey={(record: any, index: number) => (record as any).id || index}
+        rowKey={(record: any, index: number) => (record).id || index}
         size={size}
         pagination={pagination}
         scroll={{ x: 'max-content' }}

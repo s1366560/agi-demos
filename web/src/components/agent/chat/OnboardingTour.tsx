@@ -151,7 +151,7 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({ onComplete }) =>
       if (e.key === 'Escape') onComplete();
     };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); };
   }, [onComplete]);
 
   const isLast = step === TOUR_STEPS.length - 1;

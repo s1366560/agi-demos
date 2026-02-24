@@ -366,7 +366,7 @@ export const useUnifiedHITLStore = create<UnifiedHITLStore>()(
           get().checkTimeouts();
         }, 1000);
 
-        return () => clearInterval(intervalId);
+        return () => { clearInterval(intervalId); };
       },
 
       // =========================================================================

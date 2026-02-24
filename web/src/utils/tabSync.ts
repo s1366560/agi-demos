@@ -334,24 +334,24 @@ export const getTabSyncManager = (): TabSyncManager => TabSyncManager.getInstanc
 export const tabSync = {
   subscribe: (handler: TabSyncHandler) => getTabSyncManager().subscribe(handler),
   broadcastUserMessageSent: (conversationId: string, messageId: string, content: string) =>
-    getTabSyncManager().broadcastUserMessageSent(conversationId, messageId, content),
+    { getTabSyncManager().broadcastUserMessageSent(conversationId, messageId, content); },
   broadcastStreamingStateChanged: (
     conversationId: string,
     isStreaming: boolean,
     streamStatus: 'idle' | 'connecting' | 'streaming' | 'error'
   ) =>
-    getTabSyncManager().broadcastStreamingStateChanged(conversationId, isStreaming, streamStatus),
+    { getTabSyncManager().broadcastStreamingStateChanged(conversationId, isStreaming, streamStatus); },
   broadcastConversationCompleted: (conversationId: string) =>
-    getTabSyncManager().broadcastConversationCompleted(conversationId),
+    { getTabSyncManager().broadcastConversationCompleted(conversationId); },
   broadcastHITLStateChanged: (
     conversationId: string,
     hasPendingHITL: boolean,
     hitlType?: 'clarification' | 'decision' | 'env_var' | 'permission'
-  ) => getTabSyncManager().broadcastHITLStateChanged(conversationId, hasPendingHITL, hitlType),
+  ) => { getTabSyncManager().broadcastHITLStateChanged(conversationId, hasPendingHITL, hitlType); },
   broadcastConversationDeleted: (conversationId: string) =>
-    getTabSyncManager().broadcastConversationDeleted(conversationId),
+    { getTabSyncManager().broadcastConversationDeleted(conversationId); },
   broadcastConversationRenamed: (conversationId: string, newTitle: string) =>
-    getTabSyncManager().broadcastConversationRenamed(conversationId, newTitle),
+    { getTabSyncManager().broadcastConversationRenamed(conversationId, newTitle); },
   getTabId: () => getTabSyncManager().getTabId(),
   isSupported: () => getTabSyncManager().isSyncSupported(),
 };

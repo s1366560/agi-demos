@@ -89,7 +89,7 @@ export const AgentLayout: React.FC = () => {
         projectId={projectId}
         conversationId={conversationId}
         collapsed={sidebarCollapsed}
-        onCollapseToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        onCollapseToggle={() => { setSidebarCollapsed(!sidebarCollapsed); }}
       />
 
       {/* Main Workspace Area */}
@@ -133,7 +133,7 @@ export const AgentLayout: React.FC = () => {
               {TOP_TABS.map((tab) => (
                 <button
                   key={tab.id}
-                  onClick={() => handleTabClick(tab)}
+                  onClick={() => { handleTabClick(tab); }}
                   className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
                     activeTab === tab.id
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'

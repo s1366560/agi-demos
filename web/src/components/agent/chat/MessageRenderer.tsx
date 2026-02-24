@@ -110,7 +110,7 @@ const SystemMessageRenderer: React.FC<{
     <div className="py-2 text-center">
       <button
         type="button"
-        onClick={() => setCollapsed(!collapsed)}
+        onClick={() => { setCollapsed(!collapsed); }}
         className="text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
         aria-expanded={!collapsed}
       >

@@ -70,7 +70,7 @@ export const useCanvasStore = create<CanvasState>()(
       activeTabId: null,
 
       openTab: (tab) =>
-        set((state) => {
+        { set((state) => {
           const existing = state.tabs.find((t) => t.id === tab.id);
           if (existing) {
             // Merge new data into existing tab (preserves history/dirty state)
@@ -90,10 +90,10 @@ export const useCanvasStore = create<CanvasState>()(
             tabs: [...state.tabs, newTab],
             activeTabId: newTab.id,
           };
-        }),
+        }); },
 
       closeTab: (id) =>
-        set((state) => {
+        { set((state) => {
           const filtered = state.tabs.filter((t) => t.id !== id);
           const nextActive =
             state.activeTabId === id
@@ -102,17 +102,17 @@ export const useCanvasStore = create<CanvasState>()(
                 : null
               : state.activeTabId;
           return { tabs: filtered, activeTabId: nextActive };
-        }),
+        }); },
 
-      setActiveTab: (id) => set({ activeTabId: id }),
+      setActiveTab: (id) => { set({ activeTabId: id }); },
 
       updateTab: (id, updates) =>
-        set((state) => ({
+        { set((state) => ({
           tabs: state.tabs.map((t) => (t.id === id ? { ...t, ...updates } : t)),
-        })),
+        })); },
 
       updateContent: (id, content) =>
-        set((state) => ({
+        { set((state) => ({
           tabs: state.tabs.map((t) => {
             if (t.id !== id) return t;
             // Push previous content to history, truncate any forward history
@@ -127,10 +127,10 @@ export const useCanvasStore = create<CanvasState>()(
               historyIndex: newHistory.length - 1,
             };
           }),
-        })),
+        })); },
 
       undo: (tabId) =>
-        set((state) => ({
+        { set((state) => ({
           tabs: state.tabs.map((t) => {
             if (t.id !== tabId || t.historyIndex < 0) return t;
             const restoredContent = t.history[t.historyIndex] ?? '';
@@ -144,10 +144,10 @@ export const useCanvasStore = create<CanvasState>()(
               history: newHistory,
             };
           }),
-        })),
+        })); },
 
       redo: (tabId) =>
-        set((state) => ({
+        { set((state) => ({
           tabs: state.tabs.map((t) => {
             if (t.id !== tabId) return t;
             const nextIndex = t.historyIndex + 2;
@@ -158,7 +158,7 @@ export const useCanvasStore = create<CanvasState>()(
               historyIndex: t.historyIndex + 1,
             };
           }),
-        })),
+        })); },
 
       canUndo: (tabId) => {
         const tab = get().tabs.find((t) => t.id === tabId);
@@ -170,7 +170,7 @@ export const useCanvasStore = create<CanvasState>()(
         return tab ? tab.historyIndex + 2 < tab.history.length : false;
       },
 
-      reset: () => set({ tabs: [], activeTabId: null }),
+      reset: () => { set({ tabs: [], activeTabId: null }); },
     }),
     { name: 'canvas-store' }
   )

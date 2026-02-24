@@ -528,7 +528,7 @@ const PoolDashboard: React.FC = () => {
             total: totalInstances,
             showSizeChanger: true,
             showTotal: (total) => `Total ${total} instances`,
-            onChange: (page) => setPage(page),
+            onChange: (page) => { setPage(page); },
           }}
           scroll={{ x: 1200 }}
           size="small"

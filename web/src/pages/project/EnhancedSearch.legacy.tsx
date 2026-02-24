@@ -377,7 +377,7 @@ export const EnhancedSearch: React.FC = () => {
     e.stopPropagation();
     navigator.clipboard.writeText(id);
     setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+    setTimeout(() => { setCopiedId(null); }, 2000);
   }, []);
 
   const handleResultClick = useCallback((result: SearchResult) => {
@@ -416,8 +416,8 @@ export const EnhancedSearch: React.FC = () => {
           onSearchFocusChange={setIsSearchFocused}
           onSearch={handleSearch}
           onVoiceSearch={handleVoiceSearch}
-          onConfigToggle={() => setIsConfigOpen(!isConfigOpen)}
-          onHistoryToggle={() => setShowHistory(!showHistory)}
+          onConfigToggle={() => { setIsConfigOpen(!isConfigOpen); }}
+          onHistoryToggle={() => { setShowHistory(!showHistory); }}
           onHistoryItemClick={(item) => {
             setQuery(item.query);
             setSearchMode(item.mode as SearchMode);
@@ -446,7 +446,7 @@ export const EnhancedSearch: React.FC = () => {
             availableTags={availableTags}
             communityUuid={communityUuid}
             includeEpisodes={includeEpisodes}
-            onMobileConfigClose={() => setShowMobileConfig(false)}
+            onMobileConfigClose={() => { setShowMobileConfig(false); }}
             onConfigTabChange={setConfigTab}
             onRetrievalModeChange={setRetrievalMode}
             onStrategyChange={setStrategy}
@@ -482,7 +482,7 @@ export const EnhancedSearch: React.FC = () => {
               <div className="absolute top-4 left-4 z-10 flex gap-2">
                 <div className="bg-white/90 dark:bg-slate-800/90 backdrop-blur border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm p-1 flex gap-1">
                   <button
-                    onClick={() => setIsResultsCollapsed(!isResultsCollapsed)}
+                    onClick={() => { setIsResultsCollapsed(!isResultsCollapsed); }}
                     className={`p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors ${isResultsCollapsed ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' : ''}`}
                     title={isResultsCollapsed ? 'Show Results' : 'Expand Graph'}
                   >
@@ -490,7 +490,7 @@ export const EnhancedSearch: React.FC = () => {
                   </button>
                   {highlightNodeIds.length > 0 && (
                     <button
-                      onClick={() => setIsSubgraphMode(!isSubgraphMode)}
+                      onClick={() => { setIsSubgraphMode(!isSubgraphMode); }}
                       className={`p-1.5 hover:bg-slate-100 dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-400 transition-colors ${isSubgraphMode ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20' : ''}`}
                       title={isSubgraphMode ? 'Show Full Graph' : 'Show Result Subgraph'}
                     >
@@ -526,11 +526,11 @@ export const EnhancedSearch: React.FC = () => {
               viewMode={viewMode}
               copiedId={copiedId}
               selectedSubgraphIds={selectedSubgraphIds}
-              onResultsCollapseToggle={() => setIsResultsCollapsed(!isResultsCollapsed)}
+              onResultsCollapseToggle={() => { setIsResultsCollapsed(!isResultsCollapsed); }}
               onViewModeChange={setViewMode}
               onResultClick={handleResultClick}
               onCopyId={handleCopyId}
-              onSubgraphModeToggle={() => setIsSubgraphMode(!isSubgraphMode)}
+              onSubgraphModeToggle={() => { setIsSubgraphMode(!isSubgraphMode); }}
             />
           </div>
         </div>

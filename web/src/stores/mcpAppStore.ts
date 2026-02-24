@@ -189,14 +189,14 @@ export const useMCPAppStore = create<MCPAppState>()(
       },
 
       reset: () =>
-        set({
+        { set({
           apps: {},
           resources: {},
           resourceCachedAt: {},
           htmlByUri: {},
           loading: false,
           error: null,
-        }),
+        }); },
     }),
     { name: 'mcp-app-store' }
   )

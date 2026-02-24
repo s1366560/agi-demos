@@ -289,7 +289,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           const newMode = store.isPlanMode ? 'build' : 'plan';
           import('@/services/planService').then(({ planService }) => {
             planService
-              .switchMode(convId, newMode as 'plan' | 'build')
+              .switchMode(convId, newMode)
               .then(() => {
                 useAgentV3Store.getState().updateConversationState(convId, {
                   isPlanMode: newMode === 'plan',
@@ -316,7 +316,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
         }
       };
       window.addEventListener('keydown', handleKeyShortcut);
-      return () => window.removeEventListener('keydown', handleKeyShortcut);
+      return () => { window.removeEventListener('keydown', handleKeyShortcut); };
     }, []);
 
     // Load conversations
@@ -354,7 +354,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           );
           textarea?.focus();
         }, 100);
-        return () => clearTimeout(timer);
+        return () => { clearTimeout(timer); };
       }
       return undefined;
     }, [isLoadingHistory, activeConversationId]);
@@ -368,7 +368,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           );
           textarea?.focus();
         }, 200);
-        return () => clearTimeout(timer);
+        return () => { clearTimeout(timer); };
       }
       return undefined;
     }, [isStreaming, activeConversationId]);
@@ -573,7 +573,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
           <ChatSearch
             timeline={timeline}
             visible={chatSearchVisible}
-            onClose={() => setChatSearchVisible(false)}
+            onClose={() => { setChatSearchVisible(false); }}
           />
         </div>
         <div
@@ -659,8 +659,8 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setShowExportMenu((v) => !v)}
-                onBlur={() => setTimeout(() => setShowExportMenu(false), 150)}
+                onClick={() => { setShowExportMenu((v) => !v); }}
+                onBlur={() => setTimeout(() => { setShowExportMenu(false); }, 150)}
                 className="flex items-center gap-0.5 p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 title={t('agent.actions.export', 'Export')}
                 aria-label={t('agent.actions.export', 'Export')}
@@ -714,14 +714,14 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
               setCompareMode(false);
               setCompareConversationId(null);
             }}
-            onSelectRight={() => setShowComparePicker(true)}
+            onSelectRight={() => { setShowComparePicker(true); }}
           />
           <ConversationPickerModal
             visible={showComparePicker}
             currentConversationId={activeConversationId}
             conversations={conversations}
-            onSelect={(id) => setCompareConversationId(id)}
-            onClose={() => setShowComparePicker(false)}
+            onSelect={(id) => { setCompareConversationId(id); }}
+            onClose={() => { setShowComparePicker(false); }}
           />
           {statusBarWithLayout}
         </div>

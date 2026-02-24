@@ -192,7 +192,7 @@ function OverflowMenu({ items }: { items: NavItem[] }) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => { document.removeEventListener('mousedown', handleClickOutside); };
   }, []);
 
   const isAnyActive = items.some((item) => location.pathname.startsWith(item.path));
@@ -201,7 +201,7 @@ function OverflowMenu({ items }: { items: NavItem[] }) {
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => { setOpen(!open); }}
         className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${
           isAnyActive
             ? 'bg-primary/10 text-primary'
@@ -312,7 +312,7 @@ function HeaderUserMenu({ tenantId }: { tenantId: string }) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => { document.removeEventListener('mousedown', handleClickOutside); };
   }, []);
 
   if (!user) return null;
@@ -363,7 +363,7 @@ function HeaderUserMenu({ tenantId }: { tenantId: string }) {
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen(!open)}
+        onClick={() => { setOpen(!open); }}
         className="flex items-center gap-1.5 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
         aria-label="User menu"
       >

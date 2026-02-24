@@ -138,7 +138,7 @@ export const TemplateMarketplace: React.FC = () => {
           prefix={<Search size={14} className="text-slate-400" />}
           placeholder={t('agent.templates.search', 'Search templates...')}
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => { setSearch(e.target.value); }}
           className="max-w-sm"
           allowClear
         />
@@ -146,7 +146,7 @@ export const TemplateMarketplace: React.FC = () => {
           <Tag
             color={selectedCategory === '' ? 'blue' : undefined}
             className="cursor-pointer"
-            onClick={() => setSelectedCategory('')}
+            onClick={() => { setSelectedCategory(''); }}
           >
             {t('agent.templates.all', 'All')}
           </Tag>
@@ -155,7 +155,7 @@ export const TemplateMarketplace: React.FC = () => {
               key={cat}
               color={selectedCategory === cat ? CATEGORY_COLORS[cat] || 'blue' : undefined}
               className="cursor-pointer"
-              onClick={() => setSelectedCategory(cat)}
+              onClick={() => { setSelectedCategory(cat); }}
             >
               {cat}
             </Tag>

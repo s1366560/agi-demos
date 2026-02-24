@@ -980,7 +980,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
           clearTimeout(loadingIndicatorTimeoutRef.current);
           loadingIndicatorTimeoutRef.current = null;
         }
-        setTimeout(() => setShowLoadingIndicator(false), 0);
+        setTimeout(() => { setShowLoadingIndicator(false); }, 0);
         return;
       }
 
@@ -995,9 +995,9 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
               containerRef.current.scrollTop = containerRef.current.scrollHeight;
             }
           });
-          setTimeout(() => setShowScrollButton(false), 0);
+          setTimeout(() => { setShowScrollButton(false); }, 0);
         } else {
-          setTimeout(() => setShowScrollButton(true), 0);
+          setTimeout(() => { setShowScrollButton(true); }, 0);
         }
       }
 
@@ -1191,7 +1191,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
       };
 
       window.addEventListener('keydown', handleNav);
-      return () => window.removeEventListener('keydown', handleNav);
+      return () => { window.removeEventListener('keydown', handleNav); };
     }, [navigableIndices, groupedItems]);
 
     return (
@@ -1227,7 +1227,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
             <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/50">
               <button
                 type="button"
-                onClick={() => setPinnedCollapsed(!pinnedCollapsed)}
+                onClick={() => { setPinnedCollapsed(!pinnedCollapsed); }}
                 className="flex items-center gap-2 w-full px-4 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
               >
                 <Pin size={12} />
@@ -1418,7 +1418,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
                           isStreaming={isStreaming && index === timeline.length - 1}
                           allEvents={timeline}
                           isPinned={!!event.id && pinnedEventIds.has(event.id)}
-                          onPin={event.id ? () => togglePinEvent(event.id!) : undefined}
+                          onPin={event.id ? () => { togglePinEvent(event.id); } : undefined}
                         />
                       </div>
                     </div>

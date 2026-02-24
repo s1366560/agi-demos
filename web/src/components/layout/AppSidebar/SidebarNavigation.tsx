@@ -120,7 +120,7 @@ export function SidebarNavigation({ config }: SidebarNavigationProps) {
           key={group.id}
           group={group}
           isOpen={openGroups[group.id] ?? group.defaultOpen ?? true}
-          onToggle={() => onGroupToggle(group.id)}
+          onToggle={() => { onGroupToggle(group.id); }}
         />
       ))}
 

@@ -67,7 +67,7 @@ export const Maintenance: React.FC = () => {
 
   const handleDedupMerge = async () => {
     setDedupProcessing(true);
-    setTimeout(() => setDedupProcessing(false), 2000);
+    setTimeout(() => { setDedupProcessing(false); }, 2000);
   };
 
   const handleCleanCheck = () => {
@@ -76,7 +76,7 @@ export const Maintenance: React.FC = () => {
 
   const handleClean = () => {
     setCleanProcessing(true);
-    setTimeout(() => setCleanProcessing(false), 2000);
+    setTimeout(() => { setCleanProcessing(false); }, 2000);
   };
 
   const handleRebuild = async () => {

@@ -217,7 +217,7 @@ const TimelineStepItem = memo<{
       <div className="flex-1 pb-1.5 min-w-0 flex flex-col">
         <button
           type="button"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={() => { setExpanded((v) => !v); }}
           className={`
             w-full text-left rounded-md border px-2.5 py-1.5 transition-colors
             ${statusBg}
@@ -346,7 +346,7 @@ const TimelineStepItem = memo<{
                 }
               }
 
-              const resourceUri = match?.ui_metadata?.resourceUri as string | undefined;
+              const resourceUri = match?.ui_metadata?.resourceUri;
               const tabKey = resourceUri || match?.id || step.id;
               const tabId = `mcp-app-${tabKey}`;
 
@@ -441,7 +441,7 @@ export const ExecutionTimeline = memo<ExecutionTimelineProps>(
         {/* Summary header */}
         <button
           type="button"
-          onClick={() => setCollapsed((v) => !v)}
+          onClick={() => { setCollapsed((v) => !v); }}
           className="flex items-center gap-2 w-full text-left mb-1.5 group cursor-pointer"
         >
           {collapsed ? (

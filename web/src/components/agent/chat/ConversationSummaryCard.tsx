@@ -34,7 +34,7 @@ export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(
     if (collapsed) {
       return (
         <button
-          onClick={() => setCollapsed(false)}
+          onClick={() => { setCollapsed(false); }}
           className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors mx-auto mb-4"
         >
           <Sparkles size={12} />
@@ -54,7 +54,7 @@ export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(
                 {t('agent.summary.title', 'Conversation Summary')}
               </span>
               <button
-                onClick={() => setCollapsed(true)}
+                onClick={() => { setCollapsed(true); }}
                 className="p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400"
               >
                 <ChevronUp size={12} />

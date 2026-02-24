@@ -182,8 +182,8 @@ export const SlashCommandDropdown = memo(
                   ref={(el) => {
                     if (el) itemRefs.current.set(index, el);
                   }}
-                  onClick={() => handleItemClick(skill)}
-                  onMouseEnter={() => onSelectedIndexChange(index)}
+                  onClick={() => { handleItemClick(skill); }}
+                  onMouseEnter={() => { onSelectedIndexChange(index); }}
                   className={`
                   px-3 py-2 cursor-pointer flex items-start gap-3 transition-colors
                   ${

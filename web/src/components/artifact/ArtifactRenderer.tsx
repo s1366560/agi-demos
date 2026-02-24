@@ -213,7 +213,7 @@ function ImageContent({ artifact, maxHeight, compact, onLoad, onError }: Content
       maxHeight={maxHeight}
       compact={compact}
       onLoad={onLoad}
-      onError={() => onError('Failed to load image')}
+      onError={() => { onError('Failed to load image'); }}
     />
   );
 }
@@ -227,7 +227,7 @@ function VideoContent({ artifact, maxHeight, compact, onLoad, onError }: Content
       maxHeight={maxHeight}
       compact={compact}
       onLoad={onLoad}
-      onError={() => onError('Failed to load video')}
+      onError={() => { onError('Failed to load video'); }}
     />
   );
 }
@@ -240,7 +240,7 @@ function AudioContent({ artifact, compact, onLoad, onError }: ContentRendererPro
       filename={artifact.filename}
       compact={compact}
       onLoad={onLoad}
-      onError={() => onError('Failed to load audio')}
+      onError={() => { onError('Failed to load audio'); }}
     />
   );
 }
@@ -274,7 +274,7 @@ function DocumentContent({ artifact, onLoad, onError }: ContentRendererProps) {
         }}
         title={artifact.filename}
         onLoad={onLoad}
-        onError={() => onError('Failed to load PDF')}
+        onError={() => { onError('Failed to load PDF'); }}
       />
     );
   }
@@ -567,7 +567,7 @@ export function ArtifactRenderer(props: ArtifactRendererRootProps) {
                   type="text"
                   size="small"
                   icon={<ExpandOutlined />}
-                  onClick={() => onExpand(artifact)}
+                  onClick={() => { onExpand(artifact); }}
                 />
               </Tooltip>
             )}

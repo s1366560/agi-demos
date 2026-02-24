@@ -175,7 +175,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
     if (!element) return;
 
     element.addEventListener('scroll', handleScroll, { passive: true });
-    return () => element.removeEventListener('scroll', handleScroll);
+    return () => { element.removeEventListener('scroll', handleScroll); };
   }, [handleScroll]);
 
   /**

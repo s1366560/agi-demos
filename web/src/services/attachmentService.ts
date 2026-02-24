@@ -154,7 +154,7 @@ class AttachmentServiceClass {
       const headers = getAuthHeaders();
       Object.entries(headers).forEach(([key, value]) => {
         if (key.toLowerCase() !== 'content-type') {
-          xhr.setRequestHeader(key, value as string);
+          xhr.setRequestHeader(key, value);
         }
       });
 

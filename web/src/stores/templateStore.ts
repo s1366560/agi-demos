@@ -63,7 +63,7 @@ export const useTemplateStore = create<TemplateState>()(
         }
       },
 
-      reset: () => set({ templates: [], loading: false, error: null }),
+      reset: () => { set({ templates: [], loading: false, error: null }); },
     }),
     { name: 'template-store' }
   )

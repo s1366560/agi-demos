@@ -93,7 +93,7 @@ export function parseEventData<T = Record<string, unknown>>(
   if (typeof legacy.type === 'string' && legacy.data !== undefined) {
     return {
       envelope: null,
-      legacyEvent: { type: legacy.type as string, data: legacy.data as T },
+      legacyEvent: { type: legacy.type, data: legacy.data as T },
     };
   }
 

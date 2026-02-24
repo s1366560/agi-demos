@@ -176,7 +176,7 @@ export const McpAppsTabV2: React.FC = () => {
                 placeholder="搜索应用..."
                 prefix={<Search size={14} className="text-slate-400" />}
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); }}
                 className="w-48"
                 allowClear
               />

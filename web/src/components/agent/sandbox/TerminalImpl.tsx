@@ -256,7 +256,7 @@ export function TerminalImpl({
       const rafId = requestAnimationFrame(() => {
         connect();
       });
-      return () => cancelAnimationFrame(rafId);
+      return () => { cancelAnimationFrame(rafId); };
     }
     return undefined;
   }, [connect]);
@@ -279,7 +279,7 @@ export function TerminalImpl({
       }
     }, 30000);
 
-    return () => clearInterval(interval);
+    return () => { clearInterval(interval); };
   }, []);
 
   return <div ref={terminalRef} className="h-full w-full" style={{ padding: '4px' }} />;

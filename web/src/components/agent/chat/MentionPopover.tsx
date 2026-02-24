@@ -93,7 +93,7 @@ export const MentionPopover = memo(
           }
         }, 200);
 
-        return () => clearTimeout(timer);
+        return () => { clearTimeout(timer); };
       }, [query, projectId, visible, onSelectedIndexChange, subagents]);
 
       // Scroll selected item into view
@@ -134,7 +134,7 @@ export const MentionPopover = memo(
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => onSelect(item)}
+                  onClick={() => { onSelect(item); }}
                   className={`w-full text-left px-3 py-2 flex items-start gap-2 transition-colors ${
                     idx === selectedIndex
                       ? 'bg-primary/10 text-primary'

@@ -216,7 +216,7 @@ export const Root: React.FC<ProjectManagerProps> = ({
           <Empty
             variant={searchTerm ? 'no-results' : 'no-projects'}
             showCreateButton={!searchTerm}
-            onCreateClick={() => setIsCreateModalOpen(true)}
+            onCreateClick={() => { setIsCreateModalOpen(true); }}
           />
         );
       }

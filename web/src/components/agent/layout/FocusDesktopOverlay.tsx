@@ -32,7 +32,7 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
   isStreaming,
 }) => {
   const [focusChatExpanded, setFocusChatExpanded] = useState(false);
-  const toggleFocusChat = useCallback(() => setFocusChatExpanded((v) => !v), []);
+  const toggleFocusChat = useCallback(() => { setFocusChatExpanded((v) => !v); }, []);
   const { setMode } = useLayoutModeStore(
     useShallow((state) => ({
       setMode: state.setMode,
@@ -55,7 +55,7 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => { window.removeEventListener('keydown', handleKeyDown); };
   }, [handleKeyDown]);
 
   const handleSend = useCallback(() => {
@@ -72,7 +72,7 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
       {/* Exit Focus Mode Button */}
       <button
         type="button"
-        onClick={() => setMode('chat')}
+        onClick={() => { setMode('chat'); }}
         className="absolute top-4 right-4 z-[60] flex items-center gap-2 px-3 py-1.5 rounded-lg
           bg-black/60 hover:bg-black/80 text-white/80 hover:text-white text-xs font-medium
           backdrop-blur-sm transition-all cursor-pointer"
@@ -139,7 +139,7 @@ export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({
               <textarea
                 ref={inputRef}
                 value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
+                onChange={(e) => { setInputValue(e.target.value); }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();

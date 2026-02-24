@@ -35,7 +35,7 @@ export const WorkspaceSwitcherTrigger = forwardRef<HTMLButtonElement, WorkspaceT
         const timeoutId = setTimeout(() => {
           getMenuItemRef(0)?.focus();
         }, 0);
-        return () => clearTimeout(timeoutId);
+        return () => { clearTimeout(timeoutId); };
       }
       return undefined;
     }, [isOpen, menuItemsCount, setFocusedIndex, getMenuItemRef]);

@@ -79,7 +79,7 @@ export const ContextMonitor: FC<ContextMonitorProps> = ({ compact = true }) => {
             color: '#666',
             transition: 'background 0.2s',
           }}
-          onClick={() => setDetailExpanded(true)}
+          onClick={() => { setDetailExpanded(true); }}
           onMouseEnter={(e) => {
             e.currentTarget.style.background = 'rgba(0,0,0,0.04)';
           }}

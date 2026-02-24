@@ -88,7 +88,7 @@ export const ReportViewer: React.FC<ReportViewerProps> = ({
     try {
       await navigator.clipboard.writeText(content);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => { setCopied(false); }, 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
     }

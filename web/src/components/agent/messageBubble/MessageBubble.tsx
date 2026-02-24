@@ -146,7 +146,7 @@ const toEnvVarData = (event: TimelineEvent): EnvVarRequestedEventData | undefine
  */
 const toPermissionData = (event: TimelineEvent): PermissionAskedEventData | undefined => {
   if (event.type !== 'permission_asked' && event.type !== 'permission_requested') return undefined;
-  const e = event as PermissionAskedTimelineEvent | PermissionRequestedTimelineEvent;
+  const e = event;
   if (event.type === 'permission_asked') {
     const asked = e as PermissionAskedTimelineEvent;
     return {
@@ -417,7 +417,7 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
                   isPinned={isPinned}
                   onPin={onPin}
                   onReply={onReply}
-                  onSaveAsTemplate={() => setShowSaveTemplate(true)}
+                  onSaveAsTemplate={() => { setShowSaveTemplate(true); }}
                 />
               </div>
             )}
@@ -427,8 +427,8 @@ const AssistantMessage: React.FC<AssistantMessageProps> = memo(
           <SaveTemplateModal
             content={content || ''}
             visible={showSaveTemplate}
-            onClose={() => setShowSaveTemplate(false)}
-            onSave={() => setShowSaveTemplate(false)}
+            onClose={() => { setShowSaveTemplate(false); }}
+            onSave={() => { setShowSaveTemplate(false); }}
           />
         )}
       </div>
@@ -479,7 +479,7 @@ const Thought: React.FC<ThoughtProps> = memo(({ content }) => {
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/40 rounded-xl overflow-hidden">
           <button
-            onClick={() => setExpanded(!expanded)}
+            onClick={() => { setExpanded(!expanded); }}
             className="w-full px-4 py-2.5 flex items-center gap-2 hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors"
           >
             <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
@@ -546,7 +546,7 @@ const ToolExecution: React.FC<ToolExecutionProps> = memo(({ event, observeEvent 
         <div className="bg-white dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/50 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-200">
           {/* Header */}
           <button
-            onClick={() => setExpanded(!expanded)}
+            onClick={() => { setExpanded(!expanded); }}
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors"
           >
             <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -664,7 +664,7 @@ const WorkPlan: React.FC<WorkPlanProps> = memo(({ event }) => {
       <div className="flex-1 max-w-[85%] md:max-w-[75%] lg:max-w-[70%]">
         <div className="bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/40 rounded-xl overflow-hidden">
           <button
-            onClick={() => setExpanded(!expanded)}
+            onClick={() => { setExpanded(!expanded); }}
             className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-100/50 dark:hover:bg-slate-700/30 transition-colors"
           >
             <div className="flex items-center gap-2">
@@ -740,7 +740,7 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
               isPinned={isPinned}
               onPin={onPin}
               onReply={onReply}
-              onSaveAsTemplate={() => setShowSaveTemplate(true)}
+              onSaveAsTemplate={() => { setShowSaveTemplate(true); }}
             />
           </div>
         </div>
@@ -748,8 +748,8 @@ const TextEnd: React.FC<TextEndProps> = memo(({ event, isPinned, onPin, onReply 
           <SaveTemplateModal
             content={fullText}
             visible={showSaveTemplate}
-            onClose={() => setShowSaveTemplate(false)}
-            onSave={() => setShowSaveTemplate(false)}
+            onClose={() => { setShowSaveTemplate(false); }}
+            onSave={() => { setShowSaveTemplate(false); }}
           />
         )}
       </div>
@@ -912,8 +912,8 @@ const ArtifactCreated: React.FC<ArtifactCreatedProps> = memo(({ event }) => {
                 className={`max-w-full max-h-[300px] object-contain ${
                   imageLoaded ? 'opacity-100' : 'opacity-0'
                 } transition-opacity duration-300`}
-                onLoad={() => setImageLoaded(true)}
-                onError={() => setImageError(true)}
+                onLoad={() => { setImageLoaded(true); }}
+                onError={() => { setImageError(true); }}
               />
             </div>
           )}
@@ -1100,9 +1100,9 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
 
       case 'act': {
         const observeEvent = allEvents
-          ? findMatchingObserve(event as ActEvent, allEvents)
+          ? findMatchingObserve(event, allEvents)
           : undefined;
-        return <ToolExecution event={event as ActEvent} observeEvent={observeEvent} />;
+        return <ToolExecution event={event} observeEvent={observeEvent} />;
       }
 
       case 'observe':

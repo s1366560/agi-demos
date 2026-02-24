@@ -309,9 +309,9 @@ export const useSubAgentStore = create<SubAgentState>()(
 
       // ========== Utility ==========
 
-      clearError: () => set({ error: null }),
+      clearError: () => { set({ error: null }); },
 
-      reset: () => set(initialState),
+      reset: () => { set(initialState); },
     }),
     {
       name: 'SubAgentStore',

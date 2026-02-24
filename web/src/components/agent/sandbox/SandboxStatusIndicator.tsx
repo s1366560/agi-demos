@@ -581,7 +581,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
     if (!popoverOpen || sandbox?.status !== 'running') return;
 
     const interval = setInterval(fetchStats, 5000);
-    return () => clearInterval(interval);
+    return () => { clearInterval(interval); };
   }, [popoverOpen, sandbox?.status, fetchStats]);
 
   const StatusIcon = useMemo(() => {

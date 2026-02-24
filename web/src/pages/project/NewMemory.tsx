@@ -330,7 +330,7 @@ export const NewMemory: React.FC = () => {
                 <input
                   type="text"
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  onChange={(e) => { setTitle(e.target.value); }}
                   className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
                   placeholder={t('project.memories.new.form.title_placeholder')}
                 />
@@ -364,7 +364,7 @@ export const NewMemory: React.FC = () => {
                     >
                       #{tag}
                       <button
-                        onClick={() => removeTag(tag)}
+                        onClick={() => { removeTag(tag); }}
                         className="ml-1 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                       >
                         <span className="material-symbols-outlined text-[14px]">close</span>
@@ -374,7 +374,7 @@ export const NewMemory: React.FC = () => {
                   <input
                     type="text"
                     value={newTag}
-                    onChange={(e) => setNewTag(e.target.value)}
+                    onChange={(e) => { setNewTag(e.target.value); }}
                     onKeyDown={handleAddTag}
                     className="bg-transparent text-sm outline-none placeholder:text-slate-500 text-slate-900 dark:text-white min-w-[100px]"
                     placeholder={t('project.memories.new.form.add_tag')}
@@ -388,21 +388,21 @@ export const NewMemory: React.FC = () => {
               <div className="flex items-center gap-1">
                 <div className="flex items-center rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 shadow-sm">
                   <button
-                    onClick={() => insertMarkdown('**', '**')}
+                    onClick={() => { insertMarkdown('**', '**'); }}
                     className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
                     title="Bold"
                   >
                     <span className="material-symbols-outlined text-[20px]">format_bold</span>
                   </button>
                   <button
-                    onClick={() => insertMarkdown('*', '*')}
+                    onClick={() => { insertMarkdown('*', '*'); }}
                     className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
                     title="Italic"
                   >
                     <span className="material-symbols-outlined text-[20px]">format_italic</span>
                   </button>
                   <button
-                    onClick={() => insertMarkdown('### ')}
+                    onClick={() => { insertMarkdown('### '); }}
                     className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
                     title="Heading"
                   >
@@ -412,7 +412,7 @@ export const NewMemory: React.FC = () => {
                 <div className="w-px h-6 bg-slate-300 dark:bg-slate-700 mx-2"></div>
                 <div className="flex items-center rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-1 shadow-sm">
                   <button
-                    onClick={() => insertMarkdown('- ')}
+                    onClick={() => { insertMarkdown('- '); }}
                     className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
                     title="List"
                   >
@@ -421,14 +421,14 @@ export const NewMemory: React.FC = () => {
                     </span>
                   </button>
                   <button
-                    onClick={() => insertMarkdown('[', '](url)')}
+                    onClick={() => { insertMarkdown('[', '](url)'); }}
                     className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
                     title="Link"
                   >
                     <span className="material-symbols-outlined text-[20px]">link</span>
                   </button>
                   <button
-                    onClick={() => insertMarkdown('```\n', '\n```')}
+                    onClick={() => { insertMarkdown('```\n', '\n```'); }}
                     className="rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-primary dark:text-slate-400 dark:hover:bg-slate-700 transition-colors"
                     title="Code Block"
                   >
@@ -477,7 +477,7 @@ export const NewMemory: React.FC = () => {
                   className="w-full h-full resize-none border-none p-6 outline-none text-slate-800 dark:text-slate-200 font-mono text-sm leading-relaxed bg-transparent focus:ring-0"
                   placeholder={t('project.memories.new.editor.placeholder')}
                   value={content}
-                  onChange={(e) => setContent(e.target.value)}
+                  onChange={(e) => { setContent(e.target.value); }}
                 ></textarea>
                 <div className="absolute bottom-4 right-4 text-xs text-slate-400 pointer-events-none">
                   {t('project.memories.new.editor.markdown_supported')}

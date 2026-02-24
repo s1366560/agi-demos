@@ -72,7 +72,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, onClose, onSucce
       }
       // Defer tab update to avoid synchronous setState in effect
       if (openStateChanged) {
-        setTimeout(() => setActiveTab('basic'), 0);
+        setTimeout(() => { setActiveTab('basic'); }, 0);
       }
     }
 
@@ -301,7 +301,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, onClose, onSucce
                   <Input
                     placeholder={t('tenant.skills.modal.addPattern')}
                     value={patternInput}
-                    onChange={(e) => setPatternInput(e.target.value)}
+                    onChange={(e) => { setPatternInput(e.target.value); }}
                   />
                 </div>
 
@@ -314,7 +314,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, onClose, onSucce
                     max={1}
                     step={0.1}
                     value={patternWeight}
-                    onChange={(val) => setPatternWeight(val || 1.0)}
+                    onChange={(val) => { setPatternWeight(val || 1.0); }}
                     className="w-full"
                   />
                 </div>
@@ -327,7 +327,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, onClose, onSucce
                     <Input
                       placeholder={t('tenant.skills.modal.addExample')}
                       value={currentExample}
-                      onChange={(e) => setCurrentExample(e.target.value)}
+                      onChange={(e) => { setCurrentExample(e.target.value); }}
                       onPressEnter={handleAddExample}
                     />
                     <button
@@ -343,7 +343,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, onClose, onSucce
                       <Tag
                         key={idx}
                         closable
-                        onClose={() => handleRemoveExample(example)}
+                        onClose={() => { handleRemoveExample(example); }}
                         className="px-2 py-1"
                       >
                         {example}
@@ -381,7 +381,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, onClose, onSucce
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleRemovePattern(idx)}
+                      onClick={() => { handleRemovePattern(idx); }}
                       className="text-slate-400 hover:text-red-500 transition-colors"
                     >
                       <span className="material-symbols-outlined text-lg">close</span>
@@ -422,7 +422,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, onClose, onSucce
               <Input
                 placeholder={t('tenant.skills.modal.addTool')}
                 value={toolInput}
-                onChange={(e) => setToolInput(e.target.value)}
+                onChange={(e) => { setToolInput(e.target.value); }}
                 onPressEnter={handleAddTool}
               />
               <button
@@ -438,7 +438,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, onClose, onSucce
                 <Tag
                   key={idx}
                   closable
-                  onClose={() => handleRemoveTool(tool)}
+                  onClose={() => { handleRemoveTool(tool); }}
                   className="px-3 py-1.5 text-sm"
                 >
                   {tool}

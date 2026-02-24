@@ -76,7 +76,7 @@ export const useStreamingStore = create<StreamingState>()(
        *
        * @param status - Optional stream status (default: 'connecting')
        */
-      startStreaming: (status: StreamStatus = 'connecting') => {
+      startStreaming: (status: StreamStatus) => {
         set({
           isStreaming: true,
           streamStatus: status,

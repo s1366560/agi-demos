@@ -89,7 +89,7 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
               </label>
               <select
                 value={operationType}
-                onChange={(e) => setOperationType(e.target.value as any)}
+                onChange={(e) => { setOperationType(e.target.value as any); }}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
               >
                 <option value="llm">LLM (Chat/Completion)</option>
@@ -108,7 +108,7 @@ export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({
               <input
                 type="number"
                 value={priority}
-                onChange={(e) => setPriority(parseInt(e.target.value))}
+                onChange={(e) => { setPriority(parseInt(e.target.value)); }}
                 min={0}
                 className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow"
               />

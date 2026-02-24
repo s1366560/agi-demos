@@ -119,7 +119,7 @@ export function IdleState({
           return (
             <button
               key={tile.id}
-              onClick={() => handleTileClick(tile)}
+              onClick={() => { handleTileClick(tile); }}
               className={`group flex flex-col items-start p-5 bg-white dark:bg-surface-dark border border-slate-200 dark:border-border-dark rounded-xl hover:border-primary hover:shadow-xl hover:-translate-y-1 transition-all duration-200 cursor-pointer text-left`}
             >
               <div className={`mb-4 p-2 rounded-lg ${colors.bg} ${colors.text}`}>

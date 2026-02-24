@@ -386,7 +386,7 @@ export const ProjectOverview: React.FC = () => {
                               trigger={['click']}
                             >
                               <button
-                                onClick={(e) => e.stopPropagation()}
+                                onClick={(e) => { e.stopPropagation(); }}
                                 className="text-slate-400 hover:text-primary p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
                               >
                                 <span

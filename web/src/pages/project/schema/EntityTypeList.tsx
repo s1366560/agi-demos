@@ -500,7 +500,7 @@ const HeaderInternal: React.FC<HeaderProps> = (props) => {
             <p className="text-slate-500 dark:text-[#95a0c6] text-sm mt-1">{TEXTS.subtitle}</p>
           </div>
           <button
-            onClick={() => handleCreate(null)}
+            onClick={() => { handleCreate(null); }}
             className="flex items-center gap-2 cursor-pointer rounded-lg h-10 px-5 bg-blue-600 dark:bg-[#193db3] hover:bg-blue-700 dark:hover:bg-[#254bcc] text-white text-sm font-bold shadow-lg shadow-blue-900/20 transition-all active:scale-95"
           >
             <Plus className="w-5 h-5" />
@@ -550,7 +550,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
             className="w-full bg-transparent border-none text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-[#95a0c6] focus:ring-0 text-sm px-3 outline-none"
             placeholder={TEXTS.searchPlaceholder}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); }}
           />
         </label>
       </div>
@@ -563,7 +563,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
         </button>
         <div className="h-6 w-px bg-slate-200 dark:bg-[#2a324a] mx-1"></div>
         <button
-          onClick={() => setViewMode('list')}
+          onClick={() => { setViewMode('list'); }}
           className={`flex items-center justify-center h-9 w-9 rounded-lg transition-colors ${
             viewMode === 'list'
               ? 'bg-slate-200 dark:bg-[#252d46] text-slate-900 dark:text-white'
@@ -574,7 +574,7 @@ const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
           <List className="w-5 h-5" />
         </button>
         <button
-          onClick={() => setViewMode('grid')}
+          onClick={() => { setViewMode('grid'); }}
           className={`flex items-center justify-center h-9 w-9 rounded-lg transition-colors ${
             viewMode === 'grid'
               ? 'bg-slate-200 dark:bg-[#252d46] text-slate-900 dark:text-white'
@@ -927,7 +927,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
         ></div>
         <div
           className="relative w-full max-w-3xl bg-white dark:bg-[#111521] shadow-2xl flex flex-col h-full border-l border-slate-200 dark:border-[#2a324a] animate-in slide-in-from-right duration-300"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => { e.stopPropagation(); }}
         >
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-[#2a324a] bg-slate-50 dark:bg-[#1e2433]">
             <div className="flex items-center gap-4">
@@ -957,7 +957,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
           <div className="flex-1 overflow-y-auto">
             <div className="flex border-b border-slate-200 dark:border-[#2a324a] sticky top-0 bg-white dark:bg-[#111521] z-10 px-6 pt-2">
               <button
-                onClick={() => setActiveTab('general')}
+                onClick={() => { setActiveTab('general'); }}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'general'
                     ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/5'
@@ -967,7 +967,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                 {TEXTS.generalSettings}
               </button>
               <button
-                onClick={() => setActiveTab('attributes')}
+                onClick={() => { setActiveTab('attributes'); }}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'attributes'
                     ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/5'
@@ -977,7 +977,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                 {TEXTS.attributesSchema}
               </button>
               <button
-                onClick={() => setActiveTab('relationships')}
+                onClick={() => { setActiveTab('relationships'); }}
                 className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === 'relationships'
                     ? 'text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/5'
@@ -1003,7 +1003,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                         className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
                         type="text"
                         value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
                         placeholder={TEXTS.modal.namePlaceholder}
                         disabled={!!editingEntity}
                       />
@@ -1015,7 +1015,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                       <textarea
                         className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors h-32"
                         value={formData.description}
-                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        onChange={(e) => { setFormData({ ...formData, description: e.target.value }); }}
                         placeholder={TEXTS.modal.descPlaceholder}
                       />
                     </div>
@@ -1063,7 +1063,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                               </span>
                             </div>
                             <button
-                              onClick={() => removeAttribute(idx)}
+                              onClick={() => { removeAttribute(idx); }}
                               className="text-xs text-red-600 dark:text-red-400 hover:text-red-500 dark:hover:text-red-300 font-medium flex items-center gap-1"
                             >
                               {TEXTS.modal.deleteField}
@@ -1079,7 +1079,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                   className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 font-mono focus:border-blue-600 dark:focus:border-[#193db3] focus:ring-1 focus:ring-blue-600 dark:focus:ring-[#193db3] outline-none transition-colors"
                                   type="text"
                                   value={attr.name}
-                                  onChange={(e) => updateAttribute(idx, 'name', e.target.value)}
+                                  onChange={(e) => { updateAttribute(idx, 'name', e.target.value); }}
                                   placeholder={TEXTS.modal.attrNamePlaceholder}
                                 />
                               </div>
@@ -1091,7 +1091,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                   <select
                                     className="w-full bg-slate-50 dark:bg-[#121521] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm text-slate-900 dark:text-white px-3 py-2 outline-none appearance-none focus:border-blue-600 dark:focus:border-[#193db3]"
                                     value={attr.type}
-                                    onChange={(e) => updateAttribute(idx, 'type', e.target.value)}
+                                    onChange={(e) => { updateAttribute(idx, 'type', e.target.value); }}
                                   >
                                     <option value="String">String</option>
                                     <option value="Integer">Integer</option>
@@ -1110,7 +1110,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                     type="checkbox"
                                     checked={attr.required}
                                     onChange={(e) =>
-                                      updateAttribute(idx, 'required', e.target.checked)
+                                      { updateAttribute(idx, 'required', e.target.checked); }
                                     }
                                     className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 h-4 w-4"
                                   />
@@ -1129,7 +1129,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                 type="text"
                                 value={attr.description}
                                 onChange={(e) =>
-                                  updateAttribute(idx, 'description', e.target.value)
+                                  { updateAttribute(idx, 'description', e.target.value); }
                                 }
                                 placeholder={TEXTS.modal.docstringPlaceholder}
                               />
@@ -1155,11 +1155,11 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                         className="w-full bg-white dark:bg-[#1e2433] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
                                         value={attr.validation?.ge || ''}
                                         onChange={(e) =>
-                                          updateAttribute(
+                                          { updateAttribute(
                                             idx,
                                             'validation.ge',
                                             e.target.value ? Number(e.target.value) : undefined
-                                          )
+                                          ); }
                                         }
                                       />
                                     </div>
@@ -1172,11 +1172,11 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                         className="w-full bg-white dark:bg-[#1e2433] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
                                         value={attr.validation?.le || ''}
                                         onChange={(e) =>
-                                          updateAttribute(
+                                          { updateAttribute(
                                             idx,
                                             'validation.le',
                                             e.target.value ? Number(e.target.value) : undefined
-                                          )
+                                          ); }
                                         }
                                       />
                                     </div>
@@ -1193,11 +1193,11 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                         className="w-full bg-white dark:bg-[#1e2433] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
                                         value={attr.validation?.min_len || ''}
                                         onChange={(e) =>
-                                          updateAttribute(
+                                          { updateAttribute(
                                             idx,
                                             'validation.min_len',
                                             e.target.value ? Number(e.target.value) : undefined
-                                          )
+                                          ); }
                                         }
                                       />
                                     </div>
@@ -1210,11 +1210,11 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                         className="w-full bg-white dark:bg-[#1e2433] border border-slate-200 dark:border-[#2a324a] rounded-lg text-sm px-2 py-1.5 focus:border-blue-600 focus:ring-0"
                                         value={attr.validation?.max_len || ''}
                                         onChange={(e) =>
-                                          updateAttribute(
+                                          { updateAttribute(
                                             idx,
                                             'validation.max_len',
                                             e.target.value ? Number(e.target.value) : undefined
-                                          )
+                                          ); }
                                         }
                                       />
                                     </div>
@@ -1228,7 +1228,7 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
                                         placeholder="e.g. ^[a-z]+$"
                                         value={attr.validation?.regex || ''}
                                         onChange={(e) =>
-                                          updateAttribute(idx, 'validation.regex', e.target.value)
+                                          { updateAttribute(idx, 'validation.regex', e.target.value); }
                                         }
                                       />
                                     </div>

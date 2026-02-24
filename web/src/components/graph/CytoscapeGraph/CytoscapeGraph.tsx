@@ -281,7 +281,7 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
           {nodeInfoPanelChild && (
             <NodeInfoPanelComponent
               node={nodeInfoPanelProps.node ?? selectedNode}
-              onClose={nodeInfoPanelProps.onClose || (() => setSelectedNode(null))}
+              onClose={nodeInfoPanelProps.onClose || (() => { setSelectedNode(null); })}
             />
           )}
           {!controlsChild && config.features?.showToolbar !== false && (
@@ -316,7 +316,7 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
         {config.features?.showLegend !== false && (
           <GraphLegend includeCommunities={config.data.includeCommunities} />
         )}
-        <NodeInfoPanelComponent node={selectedNode} onClose={() => setSelectedNode(null)} />
+        <NodeInfoPanelComponent node={selectedNode} onClose={() => { setSelectedNode(null); }} />
       </div>
     </GraphContext.Provider>
   );

@@ -288,7 +288,7 @@ class UnifiedEventServiceImpl {
     logger.debug(`[UnifiedWS] Subscribed to ${topic}`);
 
     // Return unsubscribe function
-    return () => this.unsubscribe(topic, handler);
+    return () => { this.unsubscribe(topic, handler); };
   }
 
   /**
@@ -313,7 +313,7 @@ class UnifiedEventServiceImpl {
    */
   subscribeMultiple(topics: string[], handler: EventHandler): () => void {
     const unsubscribeFns = topics.map((topic) => this.subscribe(topic, handler));
-    return () => unsubscribeFns.forEach((fn) => fn());
+    return () => { unsubscribeFns.forEach((fn) => { fn(); }); };
   }
 
   // ===========================================================================
@@ -613,7 +613,7 @@ class UnifiedEventServiceImpl {
     this.subscriptions.forEach((_, topic) => {
       const [type] = topic.split(':');
       if (type && type in topicsByType) {
-        const key = type as keyof typeof topicsByType;
+        const key = type;
         topicsByType[key] = (topicsByType[key] ?? 0) + 1;
       }
     });

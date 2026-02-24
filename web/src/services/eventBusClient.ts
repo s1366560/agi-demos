@@ -288,7 +288,7 @@ export class EventBusClient {
   private setState(state: ConnectionState): void {
     if (this.state !== state) {
       this.state = state;
-      this.stateListeners.forEach((listener) => listener(state));
+      this.stateListeners.forEach((listener) => { listener(state); });
     }
   }
 
@@ -305,7 +305,7 @@ export class EventBusClient {
       if (message.type === 'event' && message.envelope) {
         const envelope = message.envelope;
         if (isEventEnvelope(envelope)) {
-          this.dispatchEvent(message.pattern, envelope as EventEnvelope);
+          this.dispatchEvent(message.pattern, envelope);
         }
       }
 

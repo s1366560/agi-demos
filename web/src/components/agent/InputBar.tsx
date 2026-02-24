@@ -636,7 +636,7 @@ export const InputBar = memo<InputBarProps>(
               query={slashQuery}
               visible={slashDropdownVisible}
               onSelect={handleSkillSelect}
-              onClose={() => setSlashDropdownVisible(false)}
+              onClose={() => { setSlashDropdownVisible(false); }}
               selectedIndex={slashSelectedIndex}
               onSelectedIndexChange={setSlashSelectedIndex}
             />
@@ -661,8 +661,8 @@ export const InputBar = memo<InputBarProps>(
               onChange={handleInput}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
-              onFocus={() => setIsFocused(true)}
-              onBlur={() => setIsFocused(false)}
+              onFocus={() => { setIsFocused(true); }}
+              onBlur={() => { setIsFocused(false); }}
               aria-label={
                 inputMode === 'command'
                   ? t('agent.inputBar.commandPlaceholder', 'Enter a command...')
@@ -722,7 +722,7 @@ export const InputBar = memo<InputBarProps>(
                   type="text"
                   size="small"
                   icon={<BookOpen size={18} />}
-                  onClick={() => setTemplateLibraryVisible((v) => !v)}
+                  onClick={() => { setTemplateLibraryVisible((v) => !v); }}
                   className={`
                     text-slate-500 hover:text-slate-700 dark:hover:text-slate-300
                     hover:bg-slate-100 dark:hover:bg-slate-700/50
@@ -797,7 +797,7 @@ export const InputBar = memo<InputBarProps>(
               >
                 <button
                   type="button"
-                  onClick={() => setInputMode(inputMode === 'chat' ? 'command' : 'chat')}
+                  onClick={() => { setInputMode(inputMode === 'chat' ? 'command' : 'chat'); }}
                   className={`
                     flex items-center justify-center h-8 w-8 rounded-lg transition-all
                     ${
@@ -863,7 +863,7 @@ export const InputBar = memo<InputBarProps>(
           <PromptTemplateLibrary
             visible={templateLibraryVisible}
             onSelect={handleTemplateSelect}
-            onClose={() => setTemplateLibraryVisible(false)}
+            onClose={() => { setTemplateLibraryVisible(false); }}
           />
         </div>
       </div>
@@ -902,7 +902,7 @@ const AttachmentChip = memo<{
         </LazyTooltip>
         <button
           type="button"
-          onClick={() => onRetry(file.id)}
+          onClick={() => { onRetry(file.id); }}
           className="p-0.5 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors"
         >
           <RotateCw size={12} className="text-red-500" />
@@ -911,7 +911,7 @@ const AttachmentChip = memo<{
     )}
     <button
       type="button"
-      onClick={() => onRemove(file.id)}
+      onClick={() => { onRemove(file.id); }}
       disabled={file.status === 'uploading'}
       className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-600 rounded transition-colors ml-0.5 disabled:opacity-30"
     >

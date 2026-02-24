@@ -47,7 +47,7 @@ export const useBackgroundStore = create<BackgroundState>()(
       panelOpen: false,
 
       launch: (executionId, subagentName, task) =>
-        set((state) => {
+        { set((state) => {
           const next = new Map(state.executions);
           next.set(executionId, {
             executionId,
@@ -57,10 +57,10 @@ export const useBackgroundStore = create<BackgroundState>()(
             startedAt: Date.now(),
           });
           return { executions: next };
-        }),
+        }); },
 
       complete: (executionId, summary, tokensUsed, executionTimeMs) =>
-        set((state) => {
+        { set((state) => {
           const next = new Map(state.executions);
           const existing = next.get(executionId);
           if (existing) {
@@ -74,10 +74,10 @@ export const useBackgroundStore = create<BackgroundState>()(
             });
           }
           return { executions: next };
-        }),
+        }); },
 
       fail: (executionId, error) =>
-        set((state) => {
+        { set((state) => {
           const next = new Map(state.executions);
           const existing = next.get(executionId);
           if (existing) {
@@ -89,10 +89,10 @@ export const useBackgroundStore = create<BackgroundState>()(
             });
           }
           return { executions: next };
-        }),
+        }); },
 
       cancel: (executionId) =>
-        set((state) => {
+        { set((state) => {
           const next = new Map(state.executions);
           const existing = next.get(executionId);
           if (existing) {
@@ -103,20 +103,20 @@ export const useBackgroundStore = create<BackgroundState>()(
             });
           }
           return { executions: next };
-        }),
+        }); },
 
       clear: (executionId) =>
-        set((state) => {
+        { set((state) => {
           const next = new Map(state.executions);
           next.delete(executionId);
           return { executions: next };
-        }),
+        }); },
 
-      clearAll: () => set({ executions: new Map() }),
+      clearAll: () => { set({ executions: new Map() }); },
 
-      togglePanel: () => set((state) => ({ panelOpen: !state.panelOpen })),
+      togglePanel: () => { set((state) => ({ panelOpen: !state.panelOpen })); },
 
-      setPanel: (open) => set({ panelOpen: open }),
+      setPanel: (open) => { set({ panelOpen: open }); },
     }),
     { name: 'background-store' }
   )

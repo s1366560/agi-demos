@@ -130,7 +130,7 @@ class SandboxUploadServiceClass {
         const base64 = result.split(',')[1] || result;
         resolve(base64);
       };
-      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.onerror = () => { reject(new Error('Failed to read file')); };
       reader.readAsDataURL(file);
     });
   }

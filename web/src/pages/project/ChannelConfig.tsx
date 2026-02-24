@@ -465,7 +465,7 @@ const ChannelConfigPage: React.FC = () => {
             />
           </Tooltip>
           <Tooltip title="Edit">
-            <Button icon={<EditOutlined />} size="small" onClick={() => handleEdit(record)} />
+            <Button icon={<EditOutlined />} size="small" onClick={() => { handleEdit(record); }} />
           </Tooltip>
           <Popconfirm
             title="Delete configuration?"
@@ -649,7 +649,7 @@ const ChannelConfigPage: React.FC = () => {
             <Input
               placeholder="my-plugin-package==0.1.0"
               value={installRequirement}
-              onChange={(event) => setInstallRequirement(event.target.value)}
+              onChange={(event) => { setInstallRequirement(event.target.value); }}
               style={{ width: 280 }}
             />
             <Button
@@ -759,8 +759,8 @@ const ChannelConfigPage: React.FC = () => {
       <Modal
         title={editingConfig ? 'Edit Channel Configuration' : 'Add Channel Configuration'}
         open={isModalVisible}
-        onCancel={() => setIsModalVisible(false)}
-        onOk={() => form.submit()}
+        onCancel={() => { setIsModalVisible(false); }}
+        onOk={() => { form.submit(); }}
         width={720}
         destroyOnClose
       >

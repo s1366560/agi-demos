@@ -73,7 +73,7 @@ export const SubAgentCard = memo<SubAgentCardProps>(
     const isReadonly = isFilesystem;
 
     const handleToggle = useCallback(
-      (checked: boolean) => onToggle(subagent.id, checked),
+      (checked: boolean) => { onToggle(subagent.id, checked); },
       [subagent.id, onToggle]
     );
 
@@ -143,14 +143,14 @@ export const SubAgentCard = memo<SubAgentCardProps>(
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => setMenuOpen(!menuOpen)}
+                  onClick={() => { setMenuOpen(!menuOpen); }}
                   className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 >
                   <MoreHorizontal size={16} />
                 </button>
                 {menuOpen && (
                   <>
-                    <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />
+                    <div className="fixed inset-0 z-10" onClick={() => { setMenuOpen(false); }} />
                     <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-slate-800 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1 z-20">
                       {isReadonly ? (
                         <>

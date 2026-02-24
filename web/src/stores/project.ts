@@ -219,7 +219,7 @@ export const useProjectStore = create<ProjectState>()(
         }
       },
 
-      clearError: () => set({ error: null }),
+      clearError: () => { set({ error: null }); },
     }),
     {
       name: 'ProjectStore',

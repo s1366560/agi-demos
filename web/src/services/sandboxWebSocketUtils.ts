@@ -159,14 +159,14 @@ export function buildTerminalWebSocketUrl(sandboxId: string, sessionId: string):
  * Detect if running in development mode
  */
 export function isDevelopment(): boolean {
-  return import.meta.env.DEV === true;
+  return import.meta.env.DEV;
 }
 
 /**
  * Detect if running in production mode
  */
 export function isProduction(): boolean {
-  return import.meta.env.PROD === true;
+  return import.meta.env.PROD;
 }
 
 /**

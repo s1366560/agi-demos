@@ -218,7 +218,7 @@ export const TokenUsageChart: React.FC<TokenUsageChartProps> = ({
     return (
       <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
         <button
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={() => { setIsExpanded(!isExpanded); }}
           className="flex items-center gap-1 hover:text-slate-700 dark:hover:text-slate-300 transition-colors"
         >
           {isExpanded ? (

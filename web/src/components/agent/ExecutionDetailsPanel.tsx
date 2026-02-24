@@ -256,8 +256,8 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
       case 'tokens':
         return includeTokens && tokenInfo.tokenData ? (
           <TokenUsageChart
-            tokenData={tokenInfo.tokenData as TokenData}
-            costData={tokenInfo.costData as CostData | undefined}
+            tokenData={tokenInfo.tokenData}
+            costData={tokenInfo.costData}
             variant={compact ? 'compact' : 'detailed'}
           />
         ) : null;

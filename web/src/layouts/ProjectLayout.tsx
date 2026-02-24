@@ -56,8 +56,8 @@ export const ProjectLayout: React.FC = memo(() => {
               const firstTenant = tenants[0];
               if (firstTenant) {
                 setCurrentTenant(firstTenant);
-                getProject(firstTenant.id, projectId!)
-                  .then((p) => setCurrentProject(p))
+                getProject(firstTenant.id, projectId)
+                  .then((p) => { setCurrentProject(p); })
                   .catch(console.error);
               }
             }
@@ -66,8 +66,8 @@ export const ProjectLayout: React.FC = memo(() => {
           const firstTenant = tenants[0];
           if (firstTenant) {
             setCurrentTenant(firstTenant);
-            getProject(firstTenant.id, projectId!)
-              .then((p) => setCurrentProject(p))
+            getProject(firstTenant.id, projectId)
+              .then((p) => { setCurrentProject(p); })
               .catch(console.error);
           }
         }

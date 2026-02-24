@@ -66,7 +66,7 @@ const ExecutionItem = memo<{
             </span>
             {execution.status !== 'running' && (
               <button
-                onClick={() => onClear(execution.executionId)}
+                onClick={() => { onClear(execution.executionId); }}
                 className="p-0.5 rounded text-slate-400 hover:text-red-500 transition-colors"
                 title={t('agent.background.clear', 'Clear')}
               >
@@ -156,7 +156,7 @@ const BackgroundSubAgentDrawer = memo(() => {
       placement="right"
       width={380}
       open={true}
-      onClose={() => setPanel(false)}
+      onClose={() => { setPanel(false); }}
       destroyOnClose
       extra={
         sorted.length > 0 && (

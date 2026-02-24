@@ -56,7 +56,7 @@ export const MermaidBlock = memo<{ chart: string }>(({ chart }) => {
     try {
       await navigator.clipboard.writeText(chart);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => { setCopied(false); }, 2000);
     } catch {
       // silent fail
     }

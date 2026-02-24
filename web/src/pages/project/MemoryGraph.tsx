@@ -45,7 +45,7 @@ export const MemoryGraph: React.FC = () => {
                   {selectedNode.type}
                 </div>
                 <button
-                  onClick={() => setSelectedNode(null)}
+                  onClick={() => { setSelectedNode(null); }}
                   className="text-slate-400 hover:text-slate-600 dark:hover:text-white transition-colors"
                 >
                   <span className="material-symbols-outlined text-[20px]">close</span>

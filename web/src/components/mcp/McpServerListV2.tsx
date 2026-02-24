@@ -77,7 +77,7 @@ export const McpServerListV2: React.FC = () => {
   const apps = useMCPAppStore((s) => s.apps);
 
   useEffect(() => {
-    return () => clearError();
+    return () => { clearError(); };
   }, [clearError]);
 
   // Computed stats
@@ -98,7 +98,7 @@ export const McpServerListV2: React.FC = () => {
       if (status === 'running') serverStats.running++;
       else if (status === 'starting') serverStats.starting++;
       else if (status === 'error') serverStats.error++;
-      else if (s.enabled === false) serverStats.disabled++;
+      else if (!s.enabled) serverStats.disabled++;
     });
 
     const appStats: AppStats = {
@@ -112,12 +112,12 @@ export const McpServerListV2: React.FC = () => {
       total: servers.reduce((acc, s) => acc + (s.discovered_tools?.length || 0), 0),
       available: servers.reduce(
         (acc, s) =>
-          acc + (s.discovered_tools?.filter((t) => !(t as MCPToolInfo).is_error)?.length || 0),
+          acc + (s.discovered_tools?.filter((t) => !(t).is_error)?.length || 0),
         0
       ),
       error: servers.reduce(
         (acc, s) =>
-          acc + (s.discovered_tools?.filter((t) => (t as MCPToolInfo).is_error)?.length || 0),
+          acc + (s.discovered_tools?.filter((t) => (t).is_error)?.length || 0),
         0
       ),
     };
@@ -240,7 +240,7 @@ export const McpServerListV2: React.FC = () => {
         <div className="border-b border-slate-200 dark:border-slate-800">
           <nav className="flex items-center gap-2 px-4" aria-label="Tabs">
             <button
-              onClick={() => setActiveTab('servers')}
+              onClick={() => { setActiveTab('servers'); }}
               className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'servers'
                   ? 'border-primary text-primary'
@@ -251,7 +251,7 @@ export const McpServerListV2: React.FC = () => {
               Servers
             </button>
             <button
-              onClick={() => setActiveTab('tools')}
+              onClick={() => { setActiveTab('tools'); }}
               className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'tools'
                   ? 'border-primary text-primary'
@@ -262,7 +262,7 @@ export const McpServerListV2: React.FC = () => {
               Tools
             </button>
             <button
-              onClick={() => setActiveTab('apps')}
+              onClick={() => { setActiveTab('apps'); }}
               className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                 activeTab === 'apps'
                   ? 'border-primary text-primary'

@@ -129,7 +129,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
         <div className="border-b border-gray-200 dark:border-slate-800">
           <nav className="flex space-x-8 px-6">
             <button
-              onClick={() => setActiveTab('basic')}
+              onClick={() => { setActiveTab('basic'); }}
               className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'basic'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -142,7 +142,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               </div>
             </button>
             <button
-              onClick={() => setActiveTab('memory')}
+              onClick={() => { setActiveTab('memory'); }}
               className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'memory'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -155,7 +155,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               </div>
             </button>
             <button
-              onClick={() => setActiveTab('graph')}
+              onClick={() => { setActiveTab('graph'); }}
               className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'graph'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -168,7 +168,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
               </div>
             </button>
             <button
-              onClick={() => setActiveTab('sandbox')}
+              onClick={() => { setActiveTab('sandbox'); }}
               className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors ${
                 activeTab === 'sandbox'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -212,7 +212,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     type="text"
                     id="project-create-name"
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                     placeholder="输入项目名称"
                     required
@@ -231,7 +231,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                   <textarea
                     id="project-create-description"
                     value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    onChange={(e) => { setFormData({ ...formData, description: e.target.value }); }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                     placeholder="描述这个项目的目标和用途"
                     rows={3}
@@ -256,7 +256,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                   <select
                     id="project-create-status"
                     value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                    onChange={(e) => { setFormData({ ...formData, status: e.target.value as any }); }}
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
                     disabled={isLoading}
                   >
@@ -283,13 +283,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       id="project-create-max-episodes"
                       value={formData.memory_rules.max_episodes}
                       onChange={(e) =>
-                        setFormData({
+                        { setFormData({
                           ...formData,
                           memory_rules: {
                             ...formData.memory_rules,
                             max_episodes: parseInt(e.target.value) || 1000,
                           },
-                        })
+                        }); }
                       }
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                       min="100"
@@ -317,13 +317,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       id="project-create-retention-days"
                       value={formData.memory_rules.retention_days}
                       onChange={(e) =>
-                        setFormData({
+                        { setFormData({
                           ...formData,
                           memory_rules: {
                             ...formData.memory_rules,
                             retention_days: parseInt(e.target.value) || 30,
                           },
-                        })
+                        }); }
                       }
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                       min="1"
@@ -352,13 +352,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     id="project-create-refresh-interval"
                     value={formData.memory_rules.refresh_interval}
                     onChange={(e) =>
-                      setFormData({
+                      { setFormData({
                         ...formData,
                         memory_rules: {
                           ...formData.memory_rules,
                           refresh_interval: parseInt(e.target.value) || 24,
                         },
-                      })
+                      }); }
                     }
                     className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                     min="1"
@@ -380,13 +380,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     id="project-create-auto-refresh"
                     checked={formData.memory_rules.auto_refresh}
                     onChange={(e) =>
-                      setFormData({
+                      { setFormData({
                         ...formData,
                         memory_rules: {
                           ...formData.memory_rules,
                           auto_refresh: e.target.checked,
                         },
-                      })
+                      }); }
                     }
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 rounded bg-white dark:bg-slate-800"
                     disabled={isLoading}
@@ -416,13 +416,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       id="project-create-max-nodes"
                       value={formData.graph_config.max_nodes}
                       onChange={(e) =>
-                        setFormData({
+                        { setFormData({
                           ...formData,
                           graph_config: {
                             ...formData.graph_config,
                             max_nodes: parseInt(e.target.value) || 5000,
                           },
-                        })
+                        }); }
                       }
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                       min="100"
@@ -450,13 +450,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                       id="project-create-max-edges"
                       value={formData.graph_config.max_edges}
                       onChange={(e) =>
-                        setFormData({
+                        { setFormData({
                           ...formData,
                           graph_config: {
                             ...formData.graph_config,
                             max_edges: parseInt(e.target.value) || 10000,
                           },
-                        })
+                        }); }
                       }
                       className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
                       min="100"
@@ -488,13 +488,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     step="0.1"
                     value={formData.graph_config.similarity_threshold}
                     onChange={(e) =>
-                      setFormData({
+                      { setFormData({
                         ...formData,
                         graph_config: {
                           ...formData.graph_config,
                           similarity_threshold: parseFloat(e.target.value),
                         },
-                      })
+                      }); }
                     }
                     className="w-full"
                     disabled={isLoading}
@@ -516,13 +516,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                     id="project-create-community-detection"
                     checked={formData.graph_config.community_detection}
                     onChange={(e) =>
-                      setFormData({
+                      { setFormData({
                         ...formData,
                         graph_config: {
                           ...formData.graph_config,
                           community_detection: e.target.checked,
                         },
-                      })
+                      }); }
                     }
                     className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded bg-white dark:bg-slate-800"
                     disabled={isLoading}
@@ -559,13 +559,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                         value="cloud"
                         checked={formData.sandbox_config.sandbox_type === 'cloud'}
                         onChange={() =>
-                          setFormData({
+                          { setFormData({
                             ...formData,
                             sandbox_config: {
                               ...formData.sandbox_config,
                               sandbox_type: 'cloud',
                             },
-                          })
+                          }); }
                         }
                         className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                         disabled={isLoading}
@@ -593,13 +593,13 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                         value="local"
                         checked={formData.sandbox_config.sandbox_type === 'local'}
                         onChange={() =>
-                          setFormData({
+                          { setFormData({
                             ...formData,
                             sandbox_config: {
                               ...formData.sandbox_config,
                               sandbox_type: 'local',
                             },
-                          })
+                          }); }
                         }
                         className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
                         disabled={isLoading}
@@ -641,7 +641,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                         id="project-create-tunnel-url"
                         value={formData.sandbox_config.local_config?.tunnel_url || ''}
                         onChange={(e) =>
-                          setFormData({
+                          { setFormData({
                             ...formData,
                             sandbox_config: {
                               ...formData.sandbox_config,
@@ -655,7 +655,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                                 tunnel_url: e.target.value,
                               },
                             },
-                          })
+                          }); }
                         }
                         placeholder="wss://your-tunnel.ngrok.io"
                         className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
@@ -679,7 +679,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                         id="project-create-workspace-path"
                         value={formData.sandbox_config.local_config?.workspace_path || ''}
                         onChange={(e) =>
-                          setFormData({
+                          { setFormData({
                             ...formData,
                             sandbox_config: {
                               ...formData.sandbox_config,
@@ -693,7 +693,7 @@ export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({
                                 workspace_path: e.target.value,
                               },
                             },
-                          })
+                          }); }
                         }
                         placeholder="/home/user/workspace"
                         className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"

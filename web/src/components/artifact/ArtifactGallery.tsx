@@ -118,7 +118,7 @@ export const ArtifactGallery: React.FC<ArtifactGalleryProps> = ({
             { value: 'list', icon: <BarsOutlined /> },
           ]}
           value={viewMode}
-          onChange={(value) => setViewMode(value as 'grid' | 'list')}
+          onChange={(value) => { setViewMode(value as 'grid' | 'list'); }}
         />
       </div>
 
@@ -156,7 +156,7 @@ export const ArtifactGallery: React.FC<ArtifactGalleryProps> = ({
       {/* Show more button */}
       {hasMore && !showAll && (
         <div className="text-center mt-4">
-          <a onClick={() => setShowAll(true)} className="text-blue-500 hover:underline">
+          <a onClick={() => { setShowAll(true); }} className="text-blue-500 hover:underline">
             Show {filteredArtifacts.length - maxItems} more artifacts
           </a>
         </div>
@@ -165,7 +165,7 @@ export const ArtifactGallery: React.FC<ArtifactGalleryProps> = ({
       {/* Expanded artifact modal */}
       <Modal
         open={!!expandedArtifact}
-        onCancel={() => setExpandedArtifact(null)}
+        onCancel={() => { setExpandedArtifact(null); }}
         footer={null}
         width="80%"
         style={{ top: 20 }}

@@ -101,35 +101,35 @@ export const SearchForm = memo<SearchFormProps>(
           <SearchModeButton
             mode="semantic"
             currentMode={searchMode}
-            onClick={() => onSearchModeChange('semantic')}
+            onClick={() => { onSearchModeChange('semantic'); }}
             icon={<Search className="w-4 h-4" />}
             label={t('project.search.modes.semantic')}
           />
           <SearchModeButton
             mode="graphTraversal"
             currentMode={searchMode}
-            onClick={() => onSearchModeChange('graphTraversal')}
+            onClick={() => { onSearchModeChange('graphTraversal'); }}
             icon={<Network className="w-4 h-4" />}
             label={t('project.search.modes.graph')}
           />
           <SearchModeButton
             mode="temporal"
             currentMode={searchMode}
-            onClick={() => onSearchModeChange('temporal')}
+            onClick={() => { onSearchModeChange('temporal'); }}
             icon={<Grid className="w-4 h-4" />}
             label={t('project.search.modes.temporal')}
           />
           <SearchModeButton
             mode="faceted"
             currentMode={searchMode}
-            onClick={() => onSearchModeChange('faceted')}
+            onClick={() => { onSearchModeChange('faceted'); }}
             icon={<Network className="w-4 h-4" />}
             label={t('project.search.modes.faceted')}
           />
           <SearchModeButton
             mode="community"
             currentMode={searchMode}
-            onClick={() => onSearchModeChange('community')}
+            onClick={() => { onSearchModeChange('community'); }}
             icon={<Grid className="w-4 h-4" />}
             label={t('project.search.modes.community')}
           />
@@ -172,8 +172,8 @@ export const SearchForm = memo<SearchFormProps>(
                   else if (searchMode === 'community') onCommunityUuidChange(e.target.value);
                   else onQueryChange(e.target.value);
                 }}
-                onFocus={() => onSearchFocusChange(true)}
-                onBlur={() => onSearchFocusChange(false)}
+                onFocus={() => { onSearchFocusChange(true); }}
+                onBlur={() => { onSearchFocusChange(false); }}
                 onKeyDown={handleSearchKeyDown}
               />
               {(searchMode === 'semantic' ||
@@ -293,7 +293,7 @@ const SearchHistoryDropdown = memo<SearchHistoryDropdownProps>(({ history, onIte
     {history.map((item, idx) => (
       <button
         key={idx}
-        onClick={() => onItemClick(item)}
+        onClick={() => { onItemClick(item); }}
         className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-between group"
       >
         <div className="flex flex-col">

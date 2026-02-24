@@ -102,7 +102,7 @@ export const useChannelStore = create<ChannelState>()(
         return result;
       },
 
-      reset: () => set({ configs: [], loading: false, error: null }),
+      reset: () => { set({ configs: [], loading: false, error: null }); },
     }),
     { name: 'channel-store' }
   )

@@ -270,7 +270,7 @@ export function KasmVNCViewer({
       setIsFullscreen(!!document.fullscreenElement);
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    return () => { document.removeEventListener('fullscreenchange', handleFullscreenChange); };
   }, []);
 
   // Handle resolution change
@@ -340,7 +340,7 @@ export function KasmVNCViewer({
                 type="text"
                 size="small"
                 icon={isMuted ? <AudioMutedOutlined /> : <AudioOutlined />}
-                onClick={() => setIsMuted((prev) => !prev)}
+                onClick={() => { setIsMuted((prev) => !prev); }}
                 className={`text-gray-400 hover:text-white ${!isMuted ? '!text-blue-400' : ''}`}
                 aria-label={isMuted ? 'Unmute audio' : 'Mute audio'}
               />
@@ -399,7 +399,7 @@ export function KasmVNCViewer({
           ref={canvasContainerRef}
           className="w-full h-full"
           style={{ touchAction: 'none', userSelect: 'none' }}
-          onDragStart={(e) => e.preventDefault()}
+          onDragStart={(e) => { e.preventDefault(); }}
         />
       </div>
     </div>

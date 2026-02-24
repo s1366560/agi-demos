@@ -66,7 +66,7 @@ const customColorPalette = [
 // eslint-disable-next-line react-refresh/only-export-components
 export const getEntityTypeColor = (entityType: string): string => {
   if (predefinedColors[entityType]) {
-    return predefinedColors[entityType]!;
+    return predefinedColors[entityType];
   }
   // Generate a consistent color based on entity type name hash
   const hash = entityType.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);

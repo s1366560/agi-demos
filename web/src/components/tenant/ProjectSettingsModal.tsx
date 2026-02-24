@@ -96,7 +96,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => { setName(e.target.value); }}
               disabled={isSaving}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white disabled:opacity-50 disabled:cursor-not-allowed"
               placeholder="输入项目名称"
@@ -110,7 +110,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             </label>
             <textarea
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => { setDescription(e.target.value); }}
               disabled={isSaving}
               rows={3}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -124,7 +124,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
               <input
                 type="checkbox"
                 checked={isPublic}
-                onChange={(e) => setIsPublic(e.target.checked)}
+                onChange={(e) => { setIsPublic(e.target.checked); }}
                 disabled={isSaving}
                 className="w-4 h-4 text-blue-600 border-gray-300 dark:border-slate-600 rounded focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               />
@@ -161,7 +161,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                   <div className="flex space-x-3">
                     <button
                       type="button"
-                      onClick={() => setShowDeleteConfirm(false)}
+                      onClick={() => { setShowDeleteConfirm(false); }}
                       disabled={isDeleting}
                       className="flex-1 px-4 py-2 border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-300 rounded-md hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
@@ -180,7 +180,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
               ) : (
                 <button
                   type="button"
-                  onClick={() => setShowDeleteConfirm(true)}
+                  onClick={() => { setShowDeleteConfirm(true); }}
                   className="w-full px-4 py-2 border border-red-300 dark:border-red-900 text-red-600 dark:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center justify-center space-x-2"
                 >
                   <Trash2 className="h-4 w-4" />

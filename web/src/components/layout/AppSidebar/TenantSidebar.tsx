@@ -51,7 +51,7 @@ export function TenantSidebar({
 
   const collapsed = controlledCollapsed ?? internalCollapsed;
   const openGroups = controlledOpenGroups ?? internalOpenGroups;
-  const handleCollapseToggle = onCollapseToggle ?? (() => setInternalCollapsed(!collapsed));
+  const handleCollapseToggle = onCollapseToggle ?? (() => { setInternalCollapsed(!collapsed); });
   const handleGroupToggle =
     onGroupToggle ??
     ((groupId: string) => {

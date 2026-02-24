@@ -233,7 +233,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
       {/* Card Footer - Actions */}
       <div className="flex items-center gap-1 p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
         <button
-          onClick={() => onCheckHealth(provider.id)}
+          onClick={() => { onCheckHealth(provider.id); }}
           disabled={isCheckingHealth}
           className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-slate-200 dark:hover:border-slate-600"
           title="Check Health"
@@ -249,7 +249,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         {provider.resilience?.circuit_breaker_state &&
           provider.resilience.circuit_breaker_state !== 'closed' && (
             <button
-              onClick={() => onResetCircuitBreaker(provider.provider_type)}
+              onClick={() => { onResetCircuitBreaker(provider.provider_type); }}
               disabled={isResettingCircuitBreaker}
               className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-amber-600 dark:text-amber-400 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-amber-200 dark:hover:border-amber-800"
               title="Reset Circuit Breaker"
@@ -265,7 +265,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
 
         {onViewStats && (
           <button
-            onClick={() => onViewStats(provider)}
+            onClick={() => { onViewStats(provider); }}
             className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
             title="View Statistics"
           >
@@ -274,7 +274,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         )}
 
         <button
-          onClick={() => onAssign(provider)}
+          onClick={() => { onAssign(provider); }}
           className="p-2 text-slate-400 hover:text-blue-500 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
           title="Assign to Tenant"
         >
@@ -282,7 +282,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         </button>
 
         <button
-          onClick={() => onEdit(provider)}
+          onClick={() => { onEdit(provider); }}
           className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
           title="Edit"
         >
@@ -290,7 +290,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
         </button>
 
         <button
-          onClick={() => onDelete(provider.id)}
+          onClick={() => { onDelete(provider.id); }}
           className="p-2 text-slate-400 hover:text-red-500 hover:bg-white dark:hover:bg-slate-700 rounded-lg transition-colors"
           title="Delete"
         >

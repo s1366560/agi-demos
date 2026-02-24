@@ -398,7 +398,7 @@ export function SandboxPanel(props: SandboxPanelRootProps) {
         {tabItems.length > 0 && (
           <Tabs
             activeKey={internalActiveTab}
-            onChange={(key) => setInternalActiveTab(key as SandboxTabKey)}
+            onChange={(key) => { setInternalActiveTab(key as SandboxTabKey); }}
             items={tabItems}
             className="flex-1 sandbox-panel-tabs"
             tabBarStyle={{ margin: 0, paddingLeft: 16, paddingRight: 16 }}

@@ -492,7 +492,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     } catch (_err) {
       message.error('停止 Agent 失败');
     } finally {
-      setTimeout(() => setIsActionPending(false), 3000);
+      setTimeout(() => { setIsActionPending(false); }, 3000);
     }
   }, [projectId, enablePoolManagement, poolEnabled, poolInstance, instanceKey]);
 
@@ -510,7 +510,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     } catch (_err) {
       message.error('重启 Agent 失败');
     } finally {
-      setTimeout(() => setIsActionPending(false), 5000);
+      setTimeout(() => { setIsActionPending(false); }, 5000);
     }
   }, [projectId, enablePoolManagement, poolEnabled, poolInstance, instanceKey]);
 
@@ -523,7 +523,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     } catch (_err) {
       message.error('暂停 Agent 失败');
     } finally {
-      setTimeout(() => setIsActionPending(false), 2000);
+      setTimeout(() => { setIsActionPending(false); }, 2000);
     }
   }, [poolInstance, instanceKey]);
 
@@ -536,7 +536,7 @@ export const ProjectAgentStatusBar: FC<ProjectAgentStatusBarProps> = ({
     } catch (_err) {
       message.error('恢复 Agent 失败');
     } finally {
-      setTimeout(() => setIsActionPending(false), 2000);
+      setTimeout(() => { setIsActionPending(false); }, 2000);
     }
   }, [poolInstance, instanceKey]);
 

@@ -78,7 +78,7 @@ export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props })
   const highlighter = useSyntaxHighlighter();
 
   useEffect(() => {
-    return () => clearTimeout(timerRef.current);
+    return () => { clearTimeout(timerRef.current); };
   }, []);
 
   const { text, language } = extractCodeContent(children);
@@ -88,7 +88,7 @@ export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props })
       await navigator.clipboard.writeText(text);
       setCopied(true);
       clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setCopied(false), 2000);
+      timerRef.current = setTimeout(() => { setCopied(false); }, 2000);
     } catch {
       // silent fail
     }

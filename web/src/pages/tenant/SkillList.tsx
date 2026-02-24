@@ -91,7 +91,7 @@ export const SkillList: React.FC = () => {
 
   // Clear error on unmount
   useEffect(() => {
-    return () => clearError();
+    return () => { clearError(); };
   }, [clearError]);
 
   // Show error message
@@ -264,7 +264,7 @@ export const SkillList: React.FC = () => {
             <Search
               placeholder={t('tenant.skills.searchPlaceholder')}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); }}
               allowClear
             />
           </div>
@@ -410,7 +410,7 @@ export const SkillList: React.FC = () => {
                 />
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleEdit(skill)}
+                    onClick={() => { handleEdit(skill); }}
                     className="p-2 text-slate-600 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
                   >
                     <span className="material-symbols-outlined text-lg">edit</span>

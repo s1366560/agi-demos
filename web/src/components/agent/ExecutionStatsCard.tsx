@@ -35,8 +35,8 @@ export function ExecutionStatsCard({ stats }: ExecutionStatsCardProps) {
     .map(([tool, count]) => ({
       key: tool,
       tool,
-      count: count as number,
-      percentage: (((count as number) / stats.total_executions) * 100).toFixed(1),
+      count: count,
+      percentage: (((count) / stats.total_executions) * 100).toFixed(1),
     }))
     .sort((a, b) => b.count - a.count);
 

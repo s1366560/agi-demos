@@ -363,7 +363,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                   type="text"
                   placeholder={t('project.graph.entities.filter.search_placeholder')}
                   value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
+                  onChange={(e) => { setSearchInput(e.target.value); }}
                   className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md text-sm text-slate-900 dark:text-white placeholder:text-slate-400"
                 />
               </div>
@@ -379,7 +379,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                 <select
                   id="sort-by-filter"
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as SortOption)}
+                  onChange={(e) => { setSortBy(e.target.value as SortOption); }}
                   className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md text-sm text-slate-900 dark:text-white"
                 >
                   <option value="created_at">
@@ -491,7 +491,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                       data-testid="entities-pagination"
                     >
                       <button
-                        onClick={() => setPage((p) => Math.max(0, p - 1))}
+                        onClick={() => { setPage((p) => Math.max(0, p - 1)); }}
                         disabled={page === 0}
                         className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
@@ -505,7 +505,7 @@ const EntitiesListInner: React.FC<EntitiesListRootProps> = memo(
                         })}
                       </span>
                       <button
-                        onClick={() => setPage((p) => p + 1)}
+                        onClick={() => { setPage((p) => p + 1); }}
                         disabled={(page + 1) * limit >= totalCount}
                         className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
                       >

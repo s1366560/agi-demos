@@ -1092,21 +1092,21 @@ export interface AgentStreamHandler {
   onPlanExecutionComplete?: (event: AgentEvent<PlanExecutionCompleteEvent>) => void;
   onReflectionComplete?: (event: AgentEvent<ReflectionCompleteEvent>) => void;
   // Plan Mode change handler
-  onPlanModeChanged?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onPlanModeChanged?: (event: AgentEvent) => void;
   // Plan Mode HITL handlers (legacy, kept for backward compatibility)
-  onPlanSuggested?: (event: AgentEvent<Record<string, unknown>>) => void;
-  onPlanExplorationStarted?: (event: AgentEvent<Record<string, unknown>>) => void;
-  onPlanExplorationCompleted?: (event: AgentEvent<Record<string, unknown>>) => void;
-  onPlanDraftCreated?: (event: AgentEvent<Record<string, unknown>>) => void;
-  onPlanApproved?: (event: AgentEvent<Record<string, unknown>>) => void;
-  onPlanRejected?: (event: AgentEvent<Record<string, unknown>>) => void;
-  onPlanCancelled?: (event: AgentEvent<Record<string, unknown>>) => void;
-  onWorkPlanCreated?: (event: AgentEvent<Record<string, unknown>>) => void;
-  onWorkPlanStepStarted?: (event: AgentEvent<Record<string, unknown>>) => void;
-  onWorkPlanStepCompleted?: (event: AgentEvent<Record<string, unknown>>) => void;
-  onWorkPlanStepFailed?: (event: AgentEvent<Record<string, unknown>>) => void;
-  onWorkPlanCompleted?: (event: AgentEvent<Record<string, unknown>>) => void;
-  onWorkPlanFailed?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onPlanSuggested?: (event: AgentEvent) => void;
+  onPlanExplorationStarted?: (event: AgentEvent) => void;
+  onPlanExplorationCompleted?: (event: AgentEvent) => void;
+  onPlanDraftCreated?: (event: AgentEvent) => void;
+  onPlanApproved?: (event: AgentEvent) => void;
+  onPlanRejected?: (event: AgentEvent) => void;
+  onPlanCancelled?: (event: AgentEvent) => void;
+  onWorkPlanCreated?: (event: AgentEvent) => void;
+  onWorkPlanStepStarted?: (event: AgentEvent) => void;
+  onWorkPlanStepCompleted?: (event: AgentEvent) => void;
+  onWorkPlanStepFailed?: (event: AgentEvent) => void;
+  onWorkPlanCompleted?: (event: AgentEvent) => void;
+  onWorkPlanFailed?: (event: AgentEvent) => void;
   // Permission handlers
   onPermissionAsked?: (event: AgentEvent<PermissionAskedEventData>) => void;
   onPermissionReplied?: (event: AgentEvent<PermissionRepliedEventData>) => void;
@@ -1143,8 +1143,8 @@ export interface AgentStreamHandler {
   onTaskStart?: (event: AgentEvent<TaskStartEventData>) => void;
   onTaskComplete?: (event: AgentEvent<TaskCompleteEventData>) => void;
   // MCP App handlers
-  onMCPAppResult?: (event: AgentEvent<Record<string, unknown>>) => void;
-  onMCPAppRegistered?: (event: AgentEvent<Record<string, unknown>>) => void;
+  onMCPAppResult?: (event: AgentEvent) => void;
+  onMCPAppRegistered?: (event: AgentEvent) => void;
   // Memory handlers (auto-recall / auto-capture)
   onMemoryRecalled?: (event: AgentEvent<MemoryRecalledEventData>) => void;
   onMemoryCaptured?: (event: AgentEvent<MemoryCapturedEventData>) => void;

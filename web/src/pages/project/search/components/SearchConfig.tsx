@@ -241,14 +241,14 @@ interface ConfigTabSelectorProps {
 const ConfigTabSelector = memo<ConfigTabSelectorProps>(({ currentTab, onTabChange }) => (
   <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg shrink-0">
     <button
-      onClick={() => onTabChange('params')}
+      onClick={() => { onTabChange('params'); }}
       className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1.5 ${currentTab === 'params' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
     >
       <Sliders className="w-3.5 h-3.5" />
       Parameters
     </button>
     <button
-      onClick={() => onTabChange('filters')}
+      onClick={() => { onTabChange('filters'); }}
       className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center justify-center gap-1.5 ${currentTab === 'filters' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
     >
       <Filter className="w-3.5 h-3.5" />
@@ -292,8 +292,8 @@ const SemanticSearchParams = memo<SemanticSearchParamsProps>(
         onChange={onFocalNodeChange}
         disabled={retrievalMode !== 'nodeDistance'}
         showTooltip={showTooltip === 'focal'}
-        onShowTooltip={() => onShowTooltip('focal')}
-        onHideTooltip={() => onShowTooltip(null)}
+        onShowTooltip={() => { onShowTooltip('focal'); }}
+        onHideTooltip={() => { onShowTooltip(null); }}
       />
       <CrossEncoderSelector value={crossEncoder} onChange={onCrossEncoderChange} />
     </>
@@ -311,13 +311,13 @@ const RetrievalModeSelector = memo<{
     </label>
     <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-lg flex">
       <button
-        onClick={() => onChange('hybrid')}
+        onClick={() => { onChange('hybrid'); }}
         className={`flex-1 py-2 px-2 rounded-md shadow-sm text-xs font-semibold transition-all ${value === 'hybrid' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
       >
         Hybrid
       </button>
       <button
-        onClick={() => onChange('nodeDistance')}
+        onClick={() => { onChange('nodeDistance'); }}
         className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-all ${value === 'nodeDistance' ? 'bg-white dark:bg-[#1e212b] text-blue-600 dark:text-white ring-1 ring-black/5 dark:ring-white/10' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}
       >
         Node Distance
@@ -336,7 +336,7 @@ const StrategySelector = memo<{ value: string; onChange: (value: string) => void
       <div className="relative">
         <select
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => { onChange(e.target.value); }}
           className="w-full text-xs py-2.5 pl-3 pr-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-slate-700 dark:text-slate-200 appearance-none shadow-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
         >
           <option value="COMBINED_HYBRID_SEARCH_RRF">Combined Hybrid (RRF)</option>
@@ -386,7 +386,7 @@ const FocalNodeInput = memo<{
         placeholder="e.g. node-1234-uuid..."
         type="text"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => { onChange(e.target.value); }}
         disabled={disabled}
       />
       <Network className="absolute left-2.5 top-2.5 w-4 h-4 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
@@ -404,7 +404,7 @@ const CrossEncoderSelector = memo<{ value: string; onChange: (value: string) => 
       <div className="relative">
         <select
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => { onChange(e.target.value); }}
           className="w-full text-xs py-2.5 pl-3 pr-8 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 focus:border-blue-600 text-slate-700 dark:text-slate-200 appearance-none shadow-sm cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
         >
           <option value="openai">OpenAI</option>
@@ -436,7 +436,7 @@ const GraphTraversalParams = memo<GraphTraversalParamsProps>(
         </label>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => onMaxDepthChange(Math.max(1, maxDepth - 1))}
+            onClick={() => { onMaxDepthChange(Math.max(1, maxDepth - 1)); }}
             className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
           >
             <Minus className="w-4 h-4" />
@@ -445,7 +445,7 @@ const GraphTraversalParams = memo<GraphTraversalParamsProps>(
             {maxDepth}
           </span>
           <button
-            onClick={() => onMaxDepthChange(Math.min(5, maxDepth + 1))}
+            onClick={() => { onMaxDepthChange(Math.min(5, maxDepth + 1)); }}
             className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -461,7 +461,7 @@ const GraphTraversalParams = memo<GraphTraversalParamsProps>(
           {['RELATES_TO', 'MENTIONS', 'PART_OF', 'CONTAINS', 'BELONGS_TO'].map((rel) => (
             <button
               key={rel}
-              onClick={() => onToggleRelationshipType(rel)}
+              onClick={() => { onToggleRelationshipType(rel); }}
               className={`px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${
                 relationshipTypes.includes(rel)
                   ? 'bg-blue-600 text-white'
@@ -507,7 +507,7 @@ const TemporalFilters = memo<TemporalFiltersProps>(
             name="time"
             type="radio"
             checked={timeRange === 'all'}
-            onChange={() => onTimeRangeChange('all')}
+            onChange={() => { onTimeRangeChange('all'); }}
           />
           <span className="text-xs text-slate-700 dark:text-slate-300">All Time</span>
         </label>
@@ -519,7 +519,7 @@ const TemporalFilters = memo<TemporalFiltersProps>(
             name="time"
             type="radio"
             checked={timeRange === 'last30'}
-            onChange={() => onTimeRangeChange('last30')}
+            onChange={() => { onTimeRangeChange('last30'); }}
           />
           <span
             className={`text-xs font-medium ${timeRange === 'last30' ? 'text-blue-600 dark:text-blue-400' : 'text-slate-700 dark:text-slate-300'}`}
@@ -533,7 +533,7 @@ const TemporalFilters = memo<TemporalFiltersProps>(
             name="time"
             type="radio"
             checked={timeRange === 'custom'}
-            onChange={() => onTimeRangeChange('custom')}
+            onChange={() => { onTimeRangeChange('custom'); }}
           />
           <span className="text-xs text-slate-700 dark:text-slate-300">Custom Range</span>
         </label>
@@ -549,10 +549,10 @@ const TemporalFilters = memo<TemporalFiltersProps>(
               type="datetime-local"
               value={customTimeRange.since || ''}
               onChange={(e) =>
-                onCustomTimeRangeChange({
+                { onCustomTimeRangeChange({
                   ...customTimeRange,
                   since: e.target.value ? new Date(e.target.value).toISOString() : undefined,
-                })
+                }); }
               }
               className="w-full text-xs py-2.5 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 text-slate-700 dark:text-slate-200"
             />
@@ -565,10 +565,10 @@ const TemporalFilters = memo<TemporalFiltersProps>(
               type="datetime-local"
               value={customTimeRange.until || ''}
               onChange={(e) =>
-                onCustomTimeRangeChange({
+                { onCustomTimeRangeChange({
                   ...customTimeRange,
                   until: e.target.value ? new Date(e.target.value).toISOString() : undefined,
-                })
+                }); }
               }
               className="w-full text-xs py-2.5 px-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-blue-600 text-slate-700 dark:text-slate-200"
             />
@@ -597,7 +597,7 @@ const FacetedFilters = memo<FacetedFiltersProps>(
           {['Person', 'Organization', 'Location', 'Event', 'Concept', 'Product'].map((type) => (
             <button
               key={type}
-              onClick={() => onToggleEntityType(type)}
+              onClick={() => { onToggleEntityType(type); }}
               className={`px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${
                 selectedEntityTypes.includes(type)
                   ? 'bg-blue-600 text-white'
@@ -618,7 +618,7 @@ const FacetedFilters = memo<FacetedFiltersProps>(
           {availableTags.map((tag) => (
             <button
               key={tag}
-              onClick={() => onToggleTag(tag)}
+              onClick={() => { onToggleTag(tag); }}
               className={`px-2 py-1 rounded-md text-[10px] font-medium transition-colors ${
                 selectedTags.includes(tag)
                   ? 'bg-blue-600/10 text-blue-600 border border-blue-600/10'
@@ -652,7 +652,7 @@ const CommunityFilters = memo<CommunityFiltersProps>(
           <input
             type="checkbox"
             checked={includeEpisodes}
-            onChange={(e) => onIncludeEpisodesChange(e.target.checked)}
+            onChange={(e) => { onIncludeEpisodesChange(e.target.checked); }}
             className="w-4 h-4 text-blue-600 focus:ring-blue-600 bg-white dark:bg-[#1e212b] border-slate-300 dark:border-slate-600 rounded"
           />
           <span className="text-xs text-slate-700 dark:text-slate-300">Include Episodes</span>

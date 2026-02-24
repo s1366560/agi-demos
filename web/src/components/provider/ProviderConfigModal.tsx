@@ -519,7 +519,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     <input
                       type="text"
                       value={formData.name}
-                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
                       className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
                       placeholder="My OpenAI Provider"
                     />
@@ -534,7 +534,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         <input
                           type="password"
                           value={formData.api_key}
-                          onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
+                          onChange={(e) => { setFormData({ ...formData, api_key: e.target.value }); }}
                           className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
                           placeholder={
                             PROVIDERS.find((p) => p.value === formData.provider_type)
@@ -578,7 +578,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                     <input
                       type="url"
                       value={formData.base_url}
-                      onChange={(e) => setFormData({ ...formData, base_url: e.target.value })}
+                      onChange={(e) => { setFormData({ ...formData, base_url: e.target.value }); }}
                       className="w-full px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
                       placeholder="https://api.example.com"
                     />
@@ -610,7 +610,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       <input
                         type="checkbox"
                         checked={formData.is_active}
-                        onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                        onChange={(e) => { setFormData({ ...formData, is_active: e.target.checked }); }}
                         className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
                       />
                       <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -621,7 +621,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       <input
                         type="checkbox"
                         checked={formData.is_default}
-                        onChange={(e) => setFormData({ ...formData, is_default: e.target.checked })}
+                        onChange={(e) => { setFormData({ ...formData, is_default: e.target.checked }); }}
                         className="w-4 h-4 text-primary border-slate-300 rounded focus:ring-primary"
                       />
                       <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -653,7 +653,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                       <input
                         type="text"
                         value={formData.llm_model}
-                        onChange={(e) => setFormData({ ...formData, llm_model: e.target.value })}
+                        onChange={(e) => { setFormData({ ...formData, llm_model: e.target.value }); }}
                         placeholder="Enter custom model name"
                         className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
                       />
@@ -713,7 +713,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         type="text"
                         value={formData.llm_small_model}
                         onChange={(e) =>
-                          setFormData({ ...formData, llm_small_model: e.target.value })
+                          { setFormData({ ...formData, llm_small_model: e.target.value }); }
                         }
                         placeholder="Enter custom model name"
                         className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -763,7 +763,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                   <button
                     type="button"
-                    onClick={() => setShowAdvancedLLM(!showAdvancedLLM)}
+                    onClick={() => { setShowAdvancedLLM(!showAdvancedLLM); }}
                     className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                   >
                     <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -929,7 +929,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         type="text"
                         value={formData.embedding_model}
                         onChange={(e) =>
-                          setFormData({ ...formData, embedding_model: e.target.value })
+                          { setFormData({ ...formData, embedding_model: e.target.value }); }
                         }
                         placeholder="Enter custom model name"
                         className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -980,7 +980,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                   <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                     <button
                       type="button"
-                      onClick={() => setShowAdvancedEmbedding(!showAdvancedEmbedding)}
+                      onClick={() => { setShowAdvancedEmbedding(!showAdvancedEmbedding); }}
                       className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     >
                       <span className="text-sm font-medium text-slate-700 dark:text-slate-300">
@@ -1004,7 +1004,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               type="number"
                               value={formData.embedding_dimensions}
                               onChange={(e) =>
-                                setFormData({ ...formData, embedding_dimensions: e.target.value })
+                                { setFormData({ ...formData, embedding_dimensions: e.target.value }); }
                               }
                               placeholder="e.g. 1536"
                               className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
@@ -1017,10 +1017,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                             <select
                               value={formData.embedding_encoding_format}
                               onChange={(e) =>
-                                setFormData({
+                                { setFormData({
                                   ...formData,
                                   embedding_encoding_format: e.target.value as any,
-                                })
+                                }); }
                               }
                               className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                             >
@@ -1040,7 +1040,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               type="text"
                               value={formData.embedding_user}
                               onChange={(e) =>
-                                setFormData({ ...formData, embedding_user: e.target.value })
+                                { setFormData({ ...formData, embedding_user: e.target.value }); }
                               }
                               placeholder="End-user ID"
                               className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
@@ -1054,7 +1054,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                               type="number"
                               value={formData.embedding_timeout}
                               onChange={(e) =>
-                                setFormData({ ...formData, embedding_timeout: e.target.value })
+                                { setFormData({ ...formData, embedding_timeout: e.target.value }); }
                               }
                               placeholder="e.g. 30000"
                               className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
@@ -1069,10 +1069,10 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                           <textarea
                             value={formData.embedding_provider_options_json}
                             onChange={(e) =>
-                              setFormData({
+                              { setFormData({
                                 ...formData,
                                 embedding_provider_options_json: e.target.value,
-                              })
+                              }); }
                             }
                             placeholder="{}"
                             rows={2}
@@ -1095,7 +1095,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                         type="text"
                         value={formData.reranker_model}
                         onChange={(e) =>
-                          setFormData({ ...formData, reranker_model: e.target.value })
+                          { setFormData({ ...formData, reranker_model: e.target.value }); }
                         }
                         placeholder="Enter custom model name"
                         className="flex-1 px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-transparent"
@@ -1261,7 +1261,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 currentStep === 'provider'
                   ? onClose
                   : () =>
-                      setCurrentStep(steps[steps.findIndex((s) => s.key === currentStep) - 1]?.key ?? 'provider')
+                      { setCurrentStep(steps[steps.findIndex((s) => s.key === currentStep) - 1]?.key ?? 'provider'); }
               }
               className="px-4 py-2 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
             >
@@ -1287,7 +1287,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
               ) : (
                 <button
                   onClick={() =>
-                    setCurrentStep(steps[steps.findIndex((s) => s.key === currentStep) + 1]?.key ?? 'review')
+                    { setCurrentStep(steps[steps.findIndex((s) => s.key === currentStep) + 1]?.key ?? 'review'); }
                   }
                   disabled={!canProceed()}
                   className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"

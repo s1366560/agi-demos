@@ -28,10 +28,10 @@ export function CytoscapeGraphControls({ setCyInstance }: ControlsProps) {
   useEffect(() => {
     if (setCyInstance) {
       const handler = (e: Event) => {
-        setCyInstance((e as CustomEvent<any>).detail);
+        setCyInstance((e as CustomEvent).detail);
       };
       window.addEventListener('cytoscape-ready', handler);
-      return () => window.removeEventListener('cytoscape-ready', handler);
+      return () => { window.removeEventListener('cytoscape-ready', handler); };
     }
     return undefined;
   }, [setCyInstance]);

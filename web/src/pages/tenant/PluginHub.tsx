@@ -789,7 +789,7 @@ export const PluginHub: React.FC = () => {
             loading={configActionKey === `test:${record.id}`}
             onClick={() => handleTestConfig(record.id)}
           />
-          <Button size="small" icon={<EditOutlined />} onClick={() => handleEditConfig(record)} />
+          <Button size="small" icon={<EditOutlined />} onClick={() => { handleEditConfig(record); }} />
           <Popconfirm
             title="Delete configuration?"
             onConfirm={() => handleDeleteConfig(record.id)}
@@ -840,13 +840,13 @@ export const PluginHub: React.FC = () => {
               placeholder="Select project context for channel configs"
               value={selectedProjectId || undefined}
               options={projectOptions}
-              onChange={(value) => setSelectedProjectId(value)}
+              onChange={(value) => { setSelectedProjectId(value); }}
               loading={projectLoading}
             />
             <Input
               placeholder="my-plugin-package==0.1.0"
               value={installRequirement}
-              onChange={(event) => setInstallRequirement(event.target.value)}
+              onChange={(event) => { setInstallRequirement(event.target.value); }}
               style={{ width: 280 }}
             />
             <Button

@@ -72,7 +72,7 @@ export const LayoutModeSelector: FC = () => {
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => { window.removeEventListener('keydown', handleKeyDown); };
   }, [handleKeyDown]);
 
   return (
@@ -100,7 +100,7 @@ export const LayoutModeSelector: FC = () => {
           >
             <button
               type="button"
-              onClick={() => setMode(m.key)}
+              onClick={() => { setMode(m.key); }}
               className={`
                 flex items-center gap-1 px-2 py-1 rounded text-xs font-medium
                 transition-all duration-150 cursor-pointer

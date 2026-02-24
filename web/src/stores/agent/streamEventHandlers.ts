@@ -157,7 +157,7 @@ export function createStreamEventHandlers(
 
       const updatedTimeline = appendSSEEventToTimeline(
         convState.timeline,
-        event as AgentEvent<MessageEventData>
+        event
       );
       updateConversationState(handlerConversationId, { timeline: updatedTimeline });
 
@@ -199,7 +199,7 @@ export function createStreamEventHandlers(
       const newThought = event.data.thought;
       const { updateConversationState, getConversationState } = get();
 
-      const thoughtEvent: AgentEvent<ThoughtEventData> = event as AgentEvent<ThoughtEventData>;
+      const thoughtEvent: AgentEvent<ThoughtEventData> = event;
       const convState = getConversationState(handlerConversationId);
       const updatedTimeline = appendSSEEventToTimeline(convState.timeline, thoughtEvent);
 
@@ -306,7 +306,7 @@ export function createStreamEventHandlers(
 
     onExecutionPathDecided: (event) => {
       const { updateConversationState, getConversationState } = get();
-      const decision = event.data as ExecutionPathDecidedEventData;
+      const decision = event.data;
       const convState = getConversationState(handlerConversationId);
       const insight = `[Routing] ${decision.path} (${decision.confidence.toFixed(2)}) - ${decision.reason}`;
       const updatedTimeline = appendExecutionInsightMarker(convState.timeline, event, insight);
@@ -319,7 +319,7 @@ export function createStreamEventHandlers(
         route_id: decision.route_id,
         domain_lane:
           decision.metadata && typeof decision.metadata['domain_lane'] === 'string'
-            ? (decision.metadata['domain_lane'] as string)
+            ? (decision.metadata['domain_lane'])
             : null,
         metadata: {
           target: decision.target,
@@ -339,7 +339,7 @@ export function createStreamEventHandlers(
 
     onSelectionTrace: (event) => {
       const { updateConversationState, getConversationState } = get();
-      const selection = event.data as SelectionTraceEventData;
+      const selection = event.data;
       const convState = getConversationState(handlerConversationId);
       const budgetText =
         typeof selection.tool_budget === 'number' ? `, budget=${selection.tool_budget}` : '';
@@ -371,7 +371,7 @@ export function createStreamEventHandlers(
 
     onPolicyFiltered: (event) => {
       const { updateConversationState, getConversationState } = get();
-      const filtered = event.data as PolicyFilteredEventData;
+      const filtered = event.data;
       const convState = getConversationState(handlerConversationId);
       const insight = `[Policy] filtered ${filtered.removed_total} tools across ${filtered.stage_count} stages`;
       const updatedTimeline = appendExecutionInsightMarker(convState.timeline, event, insight);
@@ -401,7 +401,7 @@ export function createStreamEventHandlers(
 
     onToolsetChanged: (event) => {
       const { updateConversationState, getConversationState } = get();
-      const changed = event.data as ToolsetChangedEventData;
+      const changed = event.data;
       const convState = getConversationState(handlerConversationId);
       const actionText = changed.action || 'update';
       const pluginText = changed.plugin_name ? ` ${changed.plugin_name}` : '';
@@ -861,7 +861,7 @@ export function createStreamEventHandlers(
     onCostUpdate: (event) => {
       const { updateConversationState } = get();
 
-      const costData = event.data as CostUpdateEventData;
+      const costData = event.data;
       const costTracking: CostTrackingState = {
         inputTokens: costData.input_tokens,
         outputTokens: costData.output_tokens,
@@ -904,7 +904,7 @@ export function createStreamEventHandlers(
 
     onArtifactReady: (event) => {
       const { updateConversationState, getConversationState } = get();
-      const data = event.data as ArtifactReadyEventData;
+      const data = event.data;
 
       const convState = getConversationState(handlerConversationId);
 
@@ -912,7 +912,7 @@ export function createStreamEventHandlers(
       const updatedTimeline = convState.timeline.map((item) => {
         if (
           item.type === 'artifact_created' &&
-          (item as ArtifactCreatedEvent).artifactId === data.artifact_id
+          (item).artifactId === data.artifact_id
         ) {
           return {
             ...item,
@@ -928,7 +928,7 @@ export function createStreamEventHandlers(
 
     onArtifactError: (event) => {
       const { updateConversationState, getConversationState } = get();
-      const data = event.data as ArtifactErrorEventData;
+      const data = event.data;
 
       if (import.meta.env.DEV) {
         console.warn('[AgentV3] Artifact error event:', data.artifact_id, data.error);
@@ -939,7 +939,7 @@ export function createStreamEventHandlers(
       const updatedTimeline = convState.timeline.map((item) => {
         if (
           item.type === 'artifact_created' &&
-          (item as ArtifactCreatedEvent).artifactId === data.artifact_id
+          (item).artifactId === data.artifact_id
         ) {
           return {
             ...item,
@@ -1221,7 +1221,7 @@ export function createStreamEventHandlers(
 
           if (!resourceUri) {
             const app = store.apps[appId];
-            const storeUri = app?.ui_metadata?.resourceUri as string | undefined;
+            const storeUri = app?.ui_metadata?.resourceUri;
             if (storeUri) {
               openMCPAppTab(storeUri, {
                 title: (app?.ui_metadata?.title as string) || toolName || 'MCP App',
@@ -1325,7 +1325,7 @@ export function createStreamEventHandlers(
 
       // Only add assistant_message from complete event when no text_end segment exists,
       // to avoid duplicating final output.
-      const completeEvent: AgentEvent<CompleteEventData> = event as AgentEvent<CompleteEventData>;
+      const completeEvent: AgentEvent<CompleteEventData> = event;
       const hasContent = !!(completeEvent.data as any)?.content?.trim();
       const updatedTimeline =
         hasContent && !hasTextEndMessages

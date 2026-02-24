@@ -217,7 +217,7 @@ export const StandardMCPAppRenderer = forwardRef<
         }
       });
       observer.observe(el);
-      return () => observer.disconnect();
+      return () => { observer.disconnect(); };
     }, []);
 
     // Defer hostContext until the sandbox bridge is connected to avoid
@@ -238,13 +238,13 @@ export const StandardMCPAppRenderer = forwardRef<
       if (useDirectClient) {
         // Mode A: WS client connected; iframe proxy handshake still needed.
         // 1500ms covers lazy-bundle load + proxy handshake on cold cache.
-        const timer = setTimeout(() => setAppInitialized(true), 1500);
-        return () => clearTimeout(timer);
+        const timer = setTimeout(() => { setAppInitialized(true); }, 1500);
+        return () => { clearTimeout(timer); };
       }
       // Mode B: no direct client. 3000ms generous fallback for cold cache.
       // handleSizeChanged fires earlier when the app reports its size.
-      const timer = setTimeout(() => setAppInitialized(true), 3000);
-      return () => clearTimeout(timer);
+      const timer = setTimeout(() => { setAppInitialized(true); }, 3000);
+      return () => { clearTimeout(timer); };
     }, [useDirectClient, appId, resourceUri]);
 
     // Normalize: treat empty strings as undefined
@@ -277,7 +277,7 @@ export const StandardMCPAppRenderer = forwardRef<
       () =>
         appInitialized
           ? {
-              theme: computedTheme as 'light' | 'dark',
+              theme: computedTheme,
               styles: hostStyles,
               platform: 'web' as const,
               userAgent: 'memstack',
@@ -495,7 +495,7 @@ export const StandardMCPAppRenderer = forwardRef<
       return (
         <div className="flex flex-col items-center justify-center gap-3 p-4" style={{ height }}>
           <Alert type="error" title="Failed to load MCP App" description={error} showIcon />
-          <Button icon={<RefreshCw size={14} />} onClick={() => setError(null)} size="small">
+          <Button icon={<RefreshCw size={14} />} onClick={() => { setError(null); }} size="small">
             Retry
           </Button>
         </div>

@@ -166,7 +166,7 @@ export const ContextDetailPanel: FC = () => {
       placement="right"
       size="default"
       open={expanded}
-      onClose={() => setDetailExpanded(false)}
+      onClose={() => { setDetailExpanded(false); }}
       styles={{ body: { padding: '16px 20px' } }}
     >
       {/* Overall Usage */}

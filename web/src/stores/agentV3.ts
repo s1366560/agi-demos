@@ -207,7 +207,7 @@ function scheduleSave(conversationId: string, state: ConversationState): void {
  */
 async function flushPendingSaves(): Promise<void> {
   // Clear all timers
-  pendingSaves.forEach((timer) => clearTimeout(timer));
+  pendingSaves.forEach((timer) => { clearTimeout(timer); });
   pendingSaves.clear();
 
   // Get current store state and save all conversation states
@@ -1493,7 +1493,7 @@ export const useAgentV3Store = create<AgentV3State>()(
           const userMsgId = uuidv4();
           const userMsg: Message = {
             id: userMsgId,
-            conversation_id: conversationId!,
+            conversation_id: conversationId,
             role: 'user',
             content,
             message_type: 'text',
@@ -1523,8 +1523,8 @@ export const useAgentV3Store = create<AgentV3State>()(
           const newTimeline = [...timeline, userMessageEvent];
           set((state) => {
             const newStates = new Map(state.conversationStates);
-            const convState = newStates.get(conversationId!) || createDefaultConversationState();
-            newStates.set(conversationId!, {
+            const convState = newStates.get(conversationId) || createDefaultConversationState();
+            newStates.set(conversationId, {
               ...convState,
               timeline: newTimeline,
               isStreaming: true,
@@ -1561,7 +1561,7 @@ export const useAgentV3Store = create<AgentV3State>()(
           // Capture conversationId in closure for event handler isolation
           // This is critical for multi-conversation support - events must only update
           // the conversation they belong to, not the currently active one
-          const handlerConversationId = conversationId!;
+          const handlerConversationId = conversationId;
 
           // Define handler first (needed for both new and existing conversations)
           const handler: AgentStreamHandler = createStreamEventHandlers(
@@ -1583,13 +1583,13 @@ export const useAgentV3Store = create<AgentV3State>()(
           // This allows the UI to navigate to the conversation URL right away
           if (isNewConversation) {
             // Get app model context from conversation state (SEP-1865)
-            const convState = get().conversationStates.get(conversationId!);
+            const convState = get().conversationStates.get(conversationId);
             const appCtx = convState?.appModelContext || undefined;
 
             agentService
               .chat(
                 {
-                  conversation_id: conversationId!,
+                  conversation_id: conversationId,
                   message: content,
                   project_id: projectId,
                   file_metadata: additionalHandlers?.fileMetadata,
@@ -1611,18 +1611,18 @@ export const useAgentV3Store = create<AgentV3State>()(
                   streamStatus: 'error',
                 });
               });
-            return conversationId!;
+            return conversationId;
           }
 
           // For existing conversations, wait for stream to complete
           try {
             // Get app model context from conversation state (SEP-1865)
-            const convState2 = get().conversationStates.get(conversationId!);
+            const convState2 = get().conversationStates.get(conversationId);
             const appCtx2 = convState2?.appModelContext || undefined;
 
             await agentService.chat(
               {
-                conversation_id: conversationId!,
+                conversation_id: conversationId,
                 message: content,
                 project_id: projectId,
                 file_metadata: additionalHandlers?.fileMetadata,
@@ -1631,7 +1631,7 @@ export const useAgentV3Store = create<AgentV3State>()(
               },
               handler
             );
-            return conversationId!;
+            return conversationId;
           } catch (_e) {
             const { updateConversationState } = get();
             updateConversationState(handlerConversationId, {
@@ -1653,7 +1653,7 @@ export const useAgentV3Store = create<AgentV3State>()(
           if (targetConvId) {
             const stopSent = agentService.stopChat(targetConvId);
 
-            if (stopSent === false) {
+            if (!stopSent) {
               const { updateConversationState, activeConversationId } = get();
               updateConversationState(targetConvId, {
                 error: 'Failed to send stop request',

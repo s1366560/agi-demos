@@ -10,7 +10,7 @@ export const ThemeToggle: React.FC = () => {
   return (
     <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-full p-1 border border-slate-200 dark:border-slate-700">
       <button
-        onClick={() => setTheme('light')}
+        onClick={() => { setTheme('light'); }}
         aria-label="切换到浅色模式"
         aria-pressed={theme === 'light'}
         className={`p-1.5 rounded-full transition-all ${
@@ -23,7 +23,7 @@ export const ThemeToggle: React.FC = () => {
         <Sun size={16} />
       </button>
       <button
-        onClick={() => setTheme('system')}
+        onClick={() => { setTheme('system'); }}
         aria-label="跟随系统主题"
         aria-pressed={theme === 'system'}
         className={`p-1.5 rounded-full transition-all ${
@@ -36,7 +36,7 @@ export const ThemeToggle: React.FC = () => {
         <Monitor size={16} />
       </button>
       <button
-        onClick={() => setTheme('dark')}
+        onClick={() => { setTheme('dark'); }}
         aria-label="切换到深色模式"
         aria-pressed={theme === 'dark'}
         className={`p-1.5 rounded-full transition-all ${

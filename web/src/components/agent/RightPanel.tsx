@@ -63,7 +63,7 @@ const ExecutionInsights = memo<ExecutionInsightsProps>(
     const metadataLane =
       executionPathDecision?.metadata &&
       typeof executionPathDecision.metadata['domain_lane'] === 'string'
-        ? (executionPathDecision.metadata['domain_lane'] as string)
+        ? (executionPathDecision.metadata['domain_lane'])
         : null;
     const lane = metadataLane ?? selectionTrace?.domain_lane ?? policyFiltered?.domain_lane ?? null;
     const traceId =
@@ -293,7 +293,7 @@ export const RightPanel = memo<RightPanelProps>(
               <div className="inline-flex items-center rounded-lg border border-slate-200 dark:border-slate-700 p-0.5 bg-slate-50 dark:bg-slate-800/70">
                 <button
                   type="button"
-                  onClick={() => setPreferredTab('tasks')}
+                  onClick={() => { setPreferredTab('tasks'); }}
                   className={`px-2 py-1 text-xs rounded-md transition-colors ${
                     activeTab === 'tasks'
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100'

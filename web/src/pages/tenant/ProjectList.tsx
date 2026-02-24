@@ -103,7 +103,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); }}
             className="block w-full pl-10 pr-3 py-2.5 border-none rounded-lg bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-primary/20 focus:bg-white dark:focus:bg-slate-700 transition-all outline-none"
             placeholder={t('tenant.projects.searchPlaceholder')}
           />
@@ -124,13 +124,13 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
           <div className="w-px h-6 bg-slate-200 dark:bg-slate-700 mx-1"></div>
           <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
             <button
-              onClick={() => setViewMode('grid')}
+              onClick={() => { setViewMode('grid'); }}
               className={`p-1.5 rounded transition-all ${viewMode === 'grid' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
             >
               <span className="material-symbols-outlined text-lg block">grid_view</span>
             </button>
             <button
-              onClick={() => setViewMode('list')}
+              onClick={() => { setViewMode('list'); }}
               className={`p-1.5 rounded transition-all ${viewMode === 'list' ? 'bg-white dark:bg-slate-700 text-primary shadow-sm' : 'text-slate-400 hover:text-slate-900 dark:hover:text-white'}`}
             >
               <span className="material-symbols-outlined text-lg block">view_list</span>
@@ -228,7 +228,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                       <Link
                         to={`/tenant/${currentTenant.id}/projects/${project.id}/edit`}
                         className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
-                        onClick={() => setActiveMenu(null)}
+                        onClick={() => { setActiveMenu(null); }}
                       >
                         <span className="material-symbols-outlined text-lg">edit</span>
                         {t('common.edit')}
@@ -385,7 +385,7 @@ const ProjectListInner: React.FC<ProjectListProps> = () => {
                             <Link
                               to={`/tenant/${currentTenant.id}/projects/${project.id}/edit`}
                               className="w-full text-left px-4 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700/50 flex items-center gap-2"
-                              onClick={() => setActiveMenu(null)}
+                              onClick={() => { setActiveMenu(null); }}
                             >
                               <span className="material-symbols-outlined text-lg">edit</span>
                               {t('common.edit')}

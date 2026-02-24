@@ -322,14 +322,14 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
       <div className="absolute top-6 left-6 flex flex-col gap-2 z-10">
         <div className="bg-[#1e2332] border border-slate-700 rounded-lg shadow-xl overflow-hidden flex flex-col">
           <button
-            onClick={() => setInteractionMode('select')}
+            onClick={() => { setInteractionMode('select'); }}
             className={`p-2.5 hover:bg-slate-700 border-b border-slate-700 transition-colors ${interactionMode === 'select' ? 'text-white bg-slate-700' : 'text-slate-400'}`}
             title="Select Tool"
           >
             <MousePointer2 className="w-5 h-5" />
           </button>
           <button
-            onClick={() => setInteractionMode('pan')}
+            onClick={() => { setInteractionMode('pan'); }}
             className={`p-2.5 hover:bg-slate-700 transition-colors ${interactionMode === 'pan' ? 'text-white bg-slate-700' : 'text-slate-400'}`}
             title="Pan Tool"
           >
@@ -414,7 +414,7 @@ export const GraphVisualization: React.FC<GraphVisualizationProps> = ({
                 {selectedNode.type}
               </div>
               <button
-                onClick={() => setSelectedNode(null)}
+                onClick={() => { setSelectedNode(null); }}
                 className="text-slate-400 hover:text-white transition-colors"
               >
                 <X className="w-5 h-5" />

@@ -104,7 +104,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: (tabId: string) => void }>(
               key={tab.id}
               role="tab"
               tabIndex={0}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => { setActiveTab(tab.id); }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') setActiveTab(tab.id);
               }}
@@ -149,7 +149,7 @@ const CanvasTabBar = memo<{ onBeforeCloseTab?: (tabId: string) => void }>(
         </div>
         <button
           type="button"
-          onClick={() => setMode('chat')}
+          onClick={() => { setMode('chat'); }}
           className="flex-shrink-0 p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           title={t('agent.canvas.backToChat', 'Back to chat')}
         >
@@ -244,7 +244,7 @@ const CanvasContent = memo<{
       <div className={`h-full overflow-auto ${tab.type === 'code' ? 'bg-slate-900' : ''}`}>
         <textarea
           value={tab.content}
-          onChange={(e) => onContentChange(e.target.value)}
+          onChange={(e) => { onContentChange(e.target.value); }}
           className={`w-full h-full font-mono text-sm p-4 resize-none focus:outline-none ${bgClass}`}
           spellCheck={false}
         />
@@ -294,7 +294,7 @@ const CanvasContent = memo<{
           serverName={tab.mcpServerName}
           appId={tab.mcpAppId}
           uiMetadata={tab.mcpAppUiMetadata as import('@/types/mcpApp').MCPAppUIMetadata | undefined}
-          onMessage={onSendPrompt ? (msg) => onSendPrompt(msg.content.text) : undefined}
+          onMessage={onSendPrompt ? (msg) => { onSendPrompt(msg.content.text); } : undefined}
           onUpdateModelContext={onUpdateModelContext}
           height="100%"
         />
@@ -318,7 +318,7 @@ const CanvasToolbar = memo<{
     try {
       await navigator.clipboard.writeText(tab.content);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => { setCopied(false); }, 2000);
     } catch {
       // fallback
       const textarea = document.createElement('textarea');
@@ -328,7 +328,7 @@ const CanvasToolbar = memo<{
       document.execCommand('copy');
       document.body.removeChild(textarea);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => { setCopied(false); }, 2000);
     }
   }, [tab.content]);
 
@@ -397,7 +397,7 @@ const CanvasToolbar = memo<{
       )}
       <button
         type="button"
-        onClick={() => undo(tab.id)}
+        onClick={() => { undo(tab.id); }}
         disabled={!canUndo(tab.id)}
         className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         title={t('agent.canvas.undo', 'Undo (Ctrl+Z)')}
@@ -406,7 +406,7 @@ const CanvasToolbar = memo<{
       </button>
       <button
         type="button"
-        onClick={() => redo(tab.id)}
+        onClick={() => { redo(tab.id); }}
         disabled={!canRedo(tab.id)}
         className="p-1.5 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
         title={t('agent.canvas.redo', 'Redo (Ctrl+Shift+Z)')}
@@ -516,7 +516,7 @@ const QuickActions = memo<{
         <button
           key={action.label}
           type="button"
-          onClick={() => onSendPrompt(action.prompt)}
+          onClick={() => { onSendPrompt(action.prompt); }}
           className="px-2 py-1 text-xs rounded-md bg-slate-50 dark:bg-slate-700/50 text-slate-600 dark:text-slate-300 hover:bg-primary/10 hover:text-primary transition-colors whitespace-nowrap"
         >
           {action.label}
@@ -557,7 +557,7 @@ const CanvasEmptyState = memo(() => {
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => handleNew('code', 'untitled.py')}
+          onClick={() => { handleNew('code', 'untitled.py'); }}
           className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
         >
           <FileCode2 size={14} />
@@ -565,7 +565,7 @@ const CanvasEmptyState = memo(() => {
         </button>
         <button
           type="button"
-          onClick={() => handleNew('markdown', 'untitled.md')}
+          onClick={() => { handleNew('markdown', 'untitled.md'); }}
           className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
         >
           <FileText size={14} />
@@ -573,7 +573,7 @@ const CanvasEmptyState = memo(() => {
         </button>
         <button
           type="button"
-          onClick={() => handleNew('data', 'notes.txt')}
+          onClick={() => { handleNew('data', 'notes.txt'); }}
           className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
         >
           <StickyNote size={14} />

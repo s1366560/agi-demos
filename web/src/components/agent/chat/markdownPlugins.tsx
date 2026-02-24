@@ -76,7 +76,7 @@ export function useMarkdownPlugins(content?: string) {
   useEffect(() => {
     if (hasMath && !cachedMathPlugins && !loadAttempted.current) {
       loadAttempted.current = true;
-      loadMathPlugins().then(() => setMathLoaded(true));
+      loadMathPlugins().then(() => { setMathLoaded(true); });
     }
   }, [hasMath]);
 

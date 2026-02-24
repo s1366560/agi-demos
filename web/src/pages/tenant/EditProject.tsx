@@ -121,7 +121,7 @@ export const EditProject: React.FC = () => {
                 type="text"
                 required
                 value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
                 placeholder="e.g. Finance Knowledge Base"
               />
@@ -132,7 +132,7 @@ export const EditProject: React.FC = () => {
               </label>
               <select
                 value={formData.status}
-                onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                onChange={(e) => { setFormData({ ...formData, status: e.target.value as any }); }}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
               >
                 <option value="active">{t('project.edit.status_options.active')}</option>
@@ -147,7 +147,7 @@ export const EditProject: React.FC = () => {
               <textarea
                 rows={3}
                 value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                onChange={(e) => { setFormData({ ...formData, description: e.target.value }); }}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2.5 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all resize-none"
                 placeholder="Briefly describe the purpose of this project..."
               />
@@ -178,13 +178,13 @@ export const EditProject: React.FC = () => {
                     max="10000"
                     value={formData.memory_rules.max_episodes}
                     onChange={(e) =>
-                      setFormData({
+                      { setFormData({
                         ...formData,
                         memory_rules: {
                           ...formData.memory_rules,
                           max_episodes: parseInt(e.target.value) || 1000,
                         },
-                      })
+                      }); }
                     }
                     className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
@@ -199,13 +199,13 @@ export const EditProject: React.FC = () => {
                     max="365"
                     value={formData.memory_rules.retention_days}
                     onChange={(e) =>
-                      setFormData({
+                      { setFormData({
                         ...formData,
                         memory_rules: {
                           ...formData.memory_rules,
                           retention_days: parseInt(e.target.value) || 30,
                         },
-                      })
+                      }); }
                     }
                     className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
@@ -222,13 +222,13 @@ export const EditProject: React.FC = () => {
                   max="168"
                   value={formData.memory_rules.refresh_interval}
                   onChange={(e) =>
-                    setFormData({
+                    { setFormData({
                       ...formData,
                       memory_rules: {
                         ...formData.memory_rules,
                         refresh_interval: parseInt(e.target.value) || 24,
                       },
-                    })
+                    }); }
                   }
                   className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                 />
@@ -240,10 +240,10 @@ export const EditProject: React.FC = () => {
                     type="checkbox"
                     checked={formData.memory_rules.auto_refresh}
                     onChange={(e) =>
-                      setFormData({
+                      { setFormData({
                         ...formData,
                         memory_rules: { ...formData.memory_rules, auto_refresh: e.target.checked },
-                      })
+                      }); }
                     }
                     className="sr-only peer"
                   />
@@ -278,13 +278,13 @@ export const EditProject: React.FC = () => {
                     min="100"
                     value={formData.graph_config.max_nodes}
                     onChange={(e) =>
-                      setFormData({
+                      { setFormData({
                         ...formData,
                         graph_config: {
                           ...formData.graph_config,
                           max_nodes: parseInt(e.target.value) || 5000,
                         },
-                      })
+                      }); }
                     }
                     className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
@@ -298,13 +298,13 @@ export const EditProject: React.FC = () => {
                     min="100"
                     value={formData.graph_config.max_edges}
                     onChange={(e) =>
-                      setFormData({
+                      { setFormData({
                         ...formData,
                         graph_config: {
                           ...formData.graph_config,
                           max_edges: parseInt(e.target.value) || 10000,
                         },
-                      })
+                      }); }
                     }
                     className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-4 py-2 text-slate-900 dark:text-white focus:border-primary focus:ring-1 focus:ring-primary outline-none"
                   />
@@ -327,13 +327,13 @@ export const EditProject: React.FC = () => {
                   step="0.1"
                   value={formData.graph_config.similarity_threshold}
                   onChange={(e) =>
-                    setFormData({
+                    { setFormData({
                       ...formData,
                       graph_config: {
                         ...formData.graph_config,
                         similarity_threshold: parseFloat(e.target.value),
                       },
-                    })
+                    }); }
                   }
                   className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-primary"
                 />
@@ -349,13 +349,13 @@ export const EditProject: React.FC = () => {
                     type="checkbox"
                     checked={formData.graph_config.community_detection}
                     onChange={(e) =>
-                      setFormData({
+                      { setFormData({
                         ...formData,
                         graph_config: {
                           ...formData.graph_config,
                           community_detection: e.target.checked,
                         },
-                      })
+                      }); }
                     }
                     className="sr-only peer"
                   />

@@ -51,7 +51,7 @@ export const SubAgentFilters = memo<SubAgentFiltersProps>(
     const { t } = useTranslation();
 
     const handleSearchInput = useCallback(
-      (e: React.ChangeEvent<HTMLInputElement>) => onSearchChange(e.target.value),
+      (e: React.ChangeEvent<HTMLInputElement>) => { onSearchChange(e.target.value); },
       [onSearchChange]
     );
 
@@ -77,7 +77,7 @@ export const SubAgentFilters = memo<SubAgentFiltersProps>(
                 <button
                   key={opt.value}
                   type="button"
-                  onClick={() => onStatusFilterChange(opt.value)}
+                  onClick={() => { onStatusFilterChange(opt.value); }}
                   className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                     statusFilter === opt.value
                       ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm'
@@ -93,7 +93,7 @@ export const SubAgentFilters = memo<SubAgentFiltersProps>(
             <select
               className="appearance-none text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-2 pr-8 text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
               value={sortField}
-              onChange={(e) => onSortChange(e.target.value as SortField)}
+              onChange={(e) => { onSortChange(e.target.value as SortField); }}
             >
               {SORT_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>

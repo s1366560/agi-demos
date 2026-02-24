@@ -231,7 +231,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
         }
       };
       document.addEventListener('mousedown', handleClick);
-      return () => document.removeEventListener('mousedown', handleClick);
+      return () => { document.removeEventListener('mousedown', handleClick); };
     }, [visible, handleClose]);
 
     // Close on Escape
@@ -241,7 +241,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
         if (e.key === 'Escape') handleClose();
       };
       window.addEventListener('keydown', handleKey);
-      return () => window.removeEventListener('keydown', handleKey);
+      return () => { window.removeEventListener('keydown', handleKey); };
     }, [visible, handleClose]);
 
     const filteredBuiltin = useMemo(() => {
@@ -340,7 +340,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
               ref={searchRef}
               type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); }}
               placeholder={t('agent.templates.search', 'Search templates...')}
               className="flex-1 bg-transparent text-sm text-slate-700 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none"
             />
@@ -351,7 +351,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
         <div className="flex items-center gap-1 px-4 py-2 border-b border-slate-100 dark:border-slate-700">
           <button
             type="button"
-            onClick={() => setSourceTab('builtin')}
+            onClick={() => { setSourceTab('builtin'); }}
             className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
               sourceTab === 'builtin'
                 ? 'bg-primary/10 text-primary'
@@ -363,7 +363,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
           </button>
           <button
             type="button"
-            onClick={() => setSourceTab('custom')}
+            onClick={() => { setSourceTab('custom'); }}
             className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
               sourceTab === 'custom'
                 ? 'bg-primary/10 text-primary'
@@ -386,7 +386,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
             <button
               key={cat.key}
               type="button"
-              onClick={() => setActiveCategory(cat.key)}
+              onClick={() => { setActiveCategory(cat.key); }}
               className={`
                 px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-colors
                 ${
@@ -417,7 +417,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
                     <button
                       key={tmpl.id}
                       type="button"
-                      onClick={() => handleSelectBuiltin(tmpl)}
+                      onClick={() => { handleSelectBuiltin(tmpl); }}
                       className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group flex items-start gap-3"
                     >
                       <div
@@ -461,7 +461,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
                   <button
                     key={tmpl.id}
                     type="button"
-                    onClick={() => handleSelectCustom(tmpl)}
+                    onClick={() => { handleSelectCustom(tmpl); }}
                     className="w-full text-left px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors group flex items-start gap-3"
                   >
                     <div
@@ -484,7 +484,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
                     {!tmpl.is_system && (
                       <button
                         type="button"
-                        onClick={(e) => handleDeleteCustom(e, tmpl.id)}
+                        onClick={(e) => { handleDeleteCustom(e, tmpl.id); }}
                         className="p-1 rounded-md opacity-0 group-hover:opacity-100 hover:bg-red-50 dark:hover:bg-red-900/20 text-slate-400 hover:text-red-500 transition-all"
                         aria-label="Delete"
                       >
@@ -501,7 +501,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
           <VariableInputModal
             template={variableTemplate}
             visible={!!variableTemplate}
-            onClose={() => setVariableTemplate(null)}
+            onClose={() => { setVariableTemplate(null); }}
             onSubmit={(interpolated) => {
               onSelect(interpolated);
               setVariableTemplate(null);

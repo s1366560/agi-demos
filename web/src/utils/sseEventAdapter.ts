@@ -139,7 +139,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
 
   switch (event.type) {
     case 'message': {
-      const data = event.data as unknown as MessageEventData;
+      const data = event.data as MessageEventData;
       const baseEvent: BaseTimelineEvent = {
         id: data.id || generateTimelineEventId('message'),
         type: data.role === 'user' ? ('user_message' as const) : ('assistant_message' as const),
@@ -168,7 +168,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'thought': {
-      const data = event.data as unknown as ThoughtEventData;
+      const data = event.data as ThoughtEventData;
       return {
         id: generateTimelineEventId('thought'),
         type: 'thought',
@@ -180,7 +180,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'act': {
-      const data = event.data as unknown as ActEventData;
+      const data = event.data as ActEventData;
       return {
         id: generateTimelineEventId('act'),
         type: 'act',
@@ -200,7 +200,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
 
     case 'observe':
     case 'tool_result': {
-      const data = event.data as unknown as ObserveEventData;
+      const data = event.data as ObserveEventData;
       // Get observation value - support both 'observation' (legacy) and 'result' (new) fields
       // Also handle case where result is an object (e.g., from export_artifact)
       let observationValue: string | undefined;
@@ -211,7 +211,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
         // If result is an object, try to extract meaningful text or stringify it
         if (typeof rawResult === 'object' && 'content' in rawResult) {
           // MCP-style result with content array
-          const content = (rawResult as any).content;
+          const content = (rawResult).content;
           if (Array.isArray(content) && content.length > 0) {
             observationValue = content[0]?.text ?? JSON.stringify(rawResult);
           } else {
@@ -257,7 +257,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'work_plan': {
-      const data = event.data as unknown as WorkPlanEventData;
+      const data = event.data as WorkPlanEventData;
       return {
         id: generateTimelineEventId('work_plan'),
         type: 'work_plan',
@@ -274,7 +274,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'complete': {
-      const data = event.data as unknown as CompleteEventData;
+      const data = event.data as CompleteEventData;
       return {
         id: data.id || data.message_id || generateTimelineEventId('assistant'),
         type: 'assistant_message',
@@ -301,7 +301,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'text_delta': {
-      const data = event.data as unknown as TextDeltaEventData;
+      const data = event.data as TextDeltaEventData;
       return {
         id: generateTimelineEventId('text_delta'),
         type: 'text_delta',
@@ -313,7 +313,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'text_end': {
-      const data = event.data as unknown as TextEndEventData;
+      const data = event.data as TextEndEventData;
       return {
         id: generateTimelineEventId('text_end'),
         type: 'text_end',
@@ -326,7 +326,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
 
     // Sandbox events - desktop and terminal
     case 'desktop_started': {
-      const data = event.data as unknown as DesktopStartedEventData;
+      const data = event.data as DesktopStartedEventData;
       return {
         id: generateTimelineEventId('desktop_started'),
         type: 'desktop_started',
@@ -342,7 +342,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'desktop_stopped': {
-      const data = event.data as unknown as DesktopStoppedEventData;
+      const data = event.data as DesktopStoppedEventData;
       return {
         id: generateTimelineEventId('desktop_stopped'),
         type: 'desktop_stopped',
@@ -354,7 +354,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'desktop_status': {
-      const data = event.data as unknown as DesktopStatusEventData;
+      const data = event.data as DesktopStatusEventData;
       return {
         id: generateTimelineEventId('desktop_status'),
         type: 'desktop_status',
@@ -371,7 +371,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'terminal_started': {
-      const data = event.data as unknown as TerminalStartedEventData;
+      const data = event.data as TerminalStartedEventData;
       return {
         id: generateTimelineEventId('terminal_started'),
         type: 'terminal_started',
@@ -386,7 +386,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'terminal_stopped': {
-      const data = event.data as unknown as TerminalStoppedEventData;
+      const data = event.data as TerminalStoppedEventData;
       return {
         id: generateTimelineEventId('terminal_stopped'),
         type: 'terminal_stopped',
@@ -399,7 +399,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'terminal_status': {
-      const data = event.data as unknown as TerminalStatusEventData;
+      const data = event.data as TerminalStatusEventData;
       return {
         id: generateTimelineEventId('terminal_status'),
         type: 'terminal_status',
@@ -416,7 +416,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
 
     // Sandbox events - container lifecycle
     case 'sandbox_created': {
-      const data = event.data as unknown as SandboxCreatedEventData;
+      const data = event.data as SandboxCreatedEventData;
       return {
         id: generateTimelineEventId('sandbox_created'),
         type: 'sandbox_created',
@@ -432,7 +432,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'sandbox_terminated': {
-      const data = event.data as unknown as SandboxTerminatedEventData;
+      const data = event.data as SandboxTerminatedEventData;
       return {
         id: generateTimelineEventId('sandbox_terminated'),
         type: 'sandbox_terminated',
@@ -444,7 +444,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'sandbox_status': {
-      const data = event.data as unknown as SandboxStatusEventData;
+      const data = event.data as SandboxStatusEventData;
       return {
         id: generateTimelineEventId('sandbox_status'),
         type: 'sandbox_status',
@@ -457,7 +457,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'screenshot_update': {
-      const data = event.data as unknown as ScreenshotUpdateEventData;
+      const data = event.data as ScreenshotUpdateEventData;
       return {
         id: generateTimelineEventId('screenshot_update'),
         type: 'screenshot_update',
@@ -471,7 +471,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
 
     // Human-in-the-loop event types
     case 'clarification_asked': {
-      const data = event.data as unknown as ClarificationAskedEventData;
+      const data = event.data as ClarificationAskedEventData;
       return {
         id: generateTimelineEventId('clarification_asked'),
         type: 'clarification_asked',
@@ -489,7 +489,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'clarification_answered': {
-      const data = event.data as unknown as ClarificationAnsweredEventData;
+      const data = event.data as ClarificationAnsweredEventData;
       return {
         id: generateTimelineEventId('clarification_answered'),
         type: 'clarification_answered',
@@ -502,7 +502,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'decision_asked': {
-      const data = event.data as unknown as DecisionAskedEventData;
+      const data = event.data as DecisionAskedEventData;
       return {
         id: generateTimelineEventId('decision_asked'),
         type: 'decision_asked',
@@ -521,7 +521,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'decision_answered': {
-      const data = event.data as unknown as DecisionAnsweredEventData;
+      const data = event.data as DecisionAnsweredEventData;
       return {
         id: generateTimelineEventId('decision_answered'),
         type: 'decision_answered',
@@ -534,7 +534,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'env_var_requested': {
-      const data = event.data as unknown as EnvVarRequestedEventData;
+      const data = event.data as EnvVarRequestedEventData;
       return {
         id: generateTimelineEventId('env_var_requested'),
         type: 'env_var_requested',
@@ -551,7 +551,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'env_var_provided': {
-      const data = event.data as unknown as EnvVarProvidedEventData;
+      const data = event.data as EnvVarProvidedEventData;
       return {
         id: generateTimelineEventId('env_var_provided'),
         type: 'env_var_provided',
@@ -565,7 +565,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'artifact_created': {
-      const data = event.data as unknown as ArtifactCreatedEventData;
+      const data = event.data as ArtifactCreatedEventData;
       return {
         id: generateTimelineEventId('artifact_created'),
         type: 'artifact_created',
@@ -586,7 +586,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
 
     // SubAgent events (L3 layer)
     case 'subagent_routed': {
-      const data = event.data as unknown as SubAgentRoutedEventData;
+      const data = event.data as SubAgentRoutedEventData;
       return {
         id: generateTimelineEventId('subagent_routed'),
         type: 'subagent_routed' as const,
@@ -601,7 +601,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'subagent_started': {
-      const data = event.data as unknown as SubAgentStartedEventData;
+      const data = event.data as SubAgentStartedEventData;
       return {
         id: generateTimelineEventId('subagent_started'),
         type: 'subagent_started' as const,
@@ -615,7 +615,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'subagent_completed': {
-      const data = event.data as unknown as SubAgentCompletedEventData;
+      const data = event.data as SubAgentCompletedEventData;
       return {
         id: generateTimelineEventId('subagent_completed'),
         type: 'subagent_completed' as const,
@@ -632,7 +632,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'subagent_failed': {
-      const data = event.data as unknown as SubAgentFailedEventData;
+      const data = event.data as SubAgentFailedEventData;
       return {
         id: generateTimelineEventId('subagent_failed'),
         type: 'subagent_failed' as const,
@@ -646,7 +646,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'parallel_started': {
-      const data = event.data as unknown as ParallelStartedEventData;
+      const data = event.data as ParallelStartedEventData;
       return {
         id: generateTimelineEventId('parallel_started'),
         type: 'parallel_started' as const,
@@ -659,7 +659,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'parallel_completed': {
-      const data = event.data as unknown as ParallelCompletedEventData;
+      const data = event.data as ParallelCompletedEventData;
       return {
         id: generateTimelineEventId('parallel_completed'),
         type: 'parallel_completed' as const,
@@ -672,7 +672,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'chain_started': {
-      const data = event.data as unknown as ChainStartedEventData;
+      const data = event.data as ChainStartedEventData;
       return {
         id: generateTimelineEventId('chain_started'),
         type: 'chain_started' as const,
@@ -685,7 +685,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'chain_step_started': {
-      const data = event.data as unknown as ChainStepStartedEventData;
+      const data = event.data as ChainStepStartedEventData;
       return {
         id: generateTimelineEventId('chain_step_started'),
         type: 'chain_step_started' as const,
@@ -699,7 +699,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'chain_step_completed': {
-      const data = event.data as unknown as ChainStepCompletedEventData;
+      const data = event.data as ChainStepCompletedEventData;
       return {
         id: generateTimelineEventId('chain_step_completed'),
         type: 'chain_step_completed' as const,
@@ -713,7 +713,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'chain_completed': {
-      const data = event.data as unknown as ChainCompletedEventData;
+      const data = event.data as ChainCompletedEventData;
       return {
         id: generateTimelineEventId('chain_completed'),
         type: 'chain_completed' as const,
@@ -727,7 +727,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'background_launched': {
-      const data = event.data as unknown as BackgroundLaunchedEventData;
+      const data = event.data as BackgroundLaunchedEventData;
       return {
         id: generateTimelineEventId('background_launched'),
         type: 'background_launched' as const,
@@ -742,7 +742,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
 
     // Task timeline events
     case 'task_start': {
-      const data = event.data as unknown as TaskStartEventData;
+      const data = event.data as TaskStartEventData;
       return {
         id: generateTimelineEventId('task_start'),
         type: 'task_start' as const,
@@ -757,7 +757,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'task_complete': {
-      const data = event.data as unknown as TaskCompleteEventData;
+      const data = event.data as TaskCompleteEventData;
       return {
         id: generateTimelineEventId('task_complete'),
         type: 'task_complete' as const,
@@ -789,7 +789,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     case 'skill_execution_complete':
     case 'skill_fallback':
     case 'memory_recalled': {
-      const data = event.data as unknown as MemoryRecalledEventData;
+      const data = event.data as MemoryRecalledEventData;
       return {
         id: generateTimelineEventId('memory_recalled'),
         type: 'memory_recalled' as const,
@@ -803,7 +803,7 @@ export function sseEventToTimeline(event: AgentEvent<unknown>): TimelineEvent | 
     }
 
     case 'memory_captured': {
-      const data = event.data as unknown as MemoryCapturedEventData;
+      const data = event.data as MemoryCapturedEventData;
       return {
         id: generateTimelineEventId('memory_captured'),
         type: 'memory_captured' as const,

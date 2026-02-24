@@ -37,7 +37,7 @@ export const SuggestionChips: React.FC<SuggestionChipsProps> = memo(
               <button
                 key={index}
                 type="button"
-                onClick={() => onSelect(suggestion)}
+                onClick={() => { onSelect(suggestion); }}
                 className="
                   group/chip inline-flex items-center gap-1.5
                   px-3.5 py-2 rounded-full

@@ -899,43 +899,43 @@ class AgentServiceImpl implements AgentService {
         break;
       // Plan Mode HITL events
       case 'plan_suggested':
-        handler.onPlanSuggested?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onPlanSuggested?.(event as AgentEvent);
         break;
       case 'plan_exploration_started':
-        handler.onPlanExplorationStarted?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onPlanExplorationStarted?.(event as AgentEvent);
         break;
       case 'plan_exploration_completed':
-        handler.onPlanExplorationCompleted?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onPlanExplorationCompleted?.(event as AgentEvent);
         break;
       case 'plan_draft_created':
-        handler.onPlanDraftCreated?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onPlanDraftCreated?.(event as AgentEvent);
         break;
       case 'plan_approved':
-        handler.onPlanApproved?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onPlanApproved?.(event as AgentEvent);
         break;
       case 'plan_rejected':
-        handler.onPlanRejected?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onPlanRejected?.(event as AgentEvent);
         break;
       case 'plan_cancelled':
-        handler.onPlanCancelled?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onPlanCancelled?.(event as AgentEvent);
         break;
       case 'workplan_created':
-        handler.onWorkPlanCreated?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onWorkPlanCreated?.(event as AgentEvent);
         break;
       case 'workplan_step_started':
-        handler.onWorkPlanStepStarted?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onWorkPlanStepStarted?.(event as AgentEvent);
         break;
       case 'workplan_step_completed':
-        handler.onWorkPlanStepCompleted?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onWorkPlanStepCompleted?.(event as AgentEvent);
         break;
       case 'workplan_step_failed':
-        handler.onWorkPlanStepFailed?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onWorkPlanStepFailed?.(event as AgentEvent);
         break;
       case 'workplan_completed':
-        handler.onWorkPlanCompleted?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onWorkPlanCompleted?.(event as AgentEvent);
         break;
       case 'workplan_failed':
-        handler.onWorkPlanFailed?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onWorkPlanFailed?.(event as AgentEvent);
         break;
       // Plan Mode execution events
       case 'plan_execution_start':
@@ -945,7 +945,7 @@ class AgentServiceImpl implements AgentService {
         handler.onPlanExecutionComplete?.(event as AgentEvent<PlanExecutionCompleteEvent>);
         break;
       case 'plan_mode_changed':
-        handler.onPlanModeChanged?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onPlanModeChanged?.(event as AgentEvent);
         break;
       case 'reflection_complete':
         handler.onReflectionComplete?.(event as AgentEvent<ReflectionCompleteEvent>);
@@ -1189,10 +1189,10 @@ class AgentServiceImpl implements AgentService {
         break;
       // MCP App events
       case 'mcp_app_result':
-        handler.onMCPAppResult?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onMCPAppResult?.(event as AgentEvent);
         break;
       case 'mcp_app_registered':
-        handler.onMCPAppRegistered?.(event as AgentEvent<Record<string, unknown>>);
+        handler.onMCPAppRegistered?.(event as AgentEvent);
         break;
       // Memory events (auto-recall / auto-capture)
       case 'memory_recalled':

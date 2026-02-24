@@ -165,9 +165,9 @@ export const useContextStore = create<ContextState>()(
         });
       },
 
-      setDetailExpanded: (expanded) => set({ detailExpanded: expanded }),
+      setDetailExpanded: (expanded) => { set({ detailExpanded: expanded }); },
 
-      reset: () => set({ status: null, detailExpanded: false }),
+      reset: () => { set({ status: null, detailExpanded: false }); },
     }),
     { name: 'context-store' }
   )

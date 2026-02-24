@@ -250,8 +250,8 @@ export const useMemoryStore = create<MemoryState>()(
         }
       },
 
-      clearError: () => set({ error: null }),
-      setCurrentMemory: (memory: Memory | null) => set({ currentMemory: memory }),
+      clearError: () => { set({ error: null }); },
+      setCurrentMemory: (memory: Memory | null) => { set({ currentMemory: memory }); },
     }),
     {
       name: 'MemoryStore',

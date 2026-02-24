@@ -61,7 +61,7 @@ export const AppInitializer: React.FC<AppInitializerProps> = ({ children }) => {
 
     if (!isReady) {
       const timer = setInterval(checkReady, 50);
-      return () => clearInterval(timer);
+      return () => { clearInterval(timer); };
     }
 
     return undefined;

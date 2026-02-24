@@ -45,7 +45,7 @@ function formatLastSync(dateStr?: string): string {
 }
 
 function formatConfigPreview(server: MCPServerResponse): string {
-  const config = server.transport_config as Record<string, unknown>;
+  const config = server.transport_config;
   if (server.server_type === 'stdio') {
     return (config.command as string) || 'N/A';
   }
@@ -68,7 +68,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
   }) => {
     const status = getRuntimeStatus(server);
     const runtimeStyle = RUNTIME_STATUS_STYLES[status] ?? RUNTIME_STATUS_STYLES.stopped!;
-    const typeStyle = SERVER_TYPE_STYLES[server.server_type] ?? SERVER_TYPE_STYLES.stdio!;
+    const typeStyle = SERVER_TYPE_STYLES[server.server_type] ?? SERVER_TYPE_STYLES.stdio;
     const toolCount = server.discovered_tools?.length || 0;
 
     const hasError = status === 'error' || server.sync_error;
@@ -104,7 +104,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
                   <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">
                     {server.name}
                   </h3>
-                  {server.enabled === false && (
+                  {!server.enabled && (
                     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500">
                       Disabled
                     </span>
@@ -120,8 +120,8 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
             <Tooltip title={server.enabled ? 'Disable server' : 'Enable server'}>
               <Switch
                 size="small"
-                checked={server.enabled !== false}
-                onChange={(checked) => onToggle(server, checked)}
+                checked={server.enabled}
+                onChange={(checked) => { onToggle(server, checked); }}
                 checkedChildren=""
                 unCheckedChildren=""
                 className="ml-2"
@@ -176,7 +176,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
           <div className="flex items-center gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
             <Tooltip title="Sync tools">
               <button
-                onClick={() => onSync(server)}
+                onClick={() => { onSync(server); }}
                 disabled={isSyncing}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
               >
@@ -191,7 +191,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
 
             <Tooltip title="Test connection">
               <button
-                onClick={() => onTest(server)}
+                onClick={() => { onTest(server); }}
                 disabled={isTesting}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50 border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
               >
@@ -206,7 +206,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
 
             <Tooltip title="View tools">
               <button
-                onClick={() => onShowTools(server)}
+                onClick={() => { onShowTools(server); }}
                 className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
               >
                 <MaterialIcon name="build" size={18} />
@@ -214,7 +214,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
             </Tooltip>
 
             <button
-              onClick={() => onEdit(server)}
+              onClick={() => { onEdit(server); }}
               className="p-2 text-slate-400 hover:text-primary hover:bg-white dark:hover:bg-slate-800 rounded-lg transition-colors"
             >
               <MaterialIcon name="edit" size={18} />
@@ -223,7 +223,7 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
             <Popconfirm
               title="Delete Server"
               description="Are you sure you want to delete this server?"
-              onConfirm={() => onDelete(server.id)}
+              onConfirm={() => { onDelete(server.id); }}
               okText="Delete"
               cancelText="Cancel"
               okButtonProps={{ danger: true }}

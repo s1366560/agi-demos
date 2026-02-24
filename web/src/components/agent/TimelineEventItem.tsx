@@ -209,8 +209,8 @@ function ObserveItem({ event, allEvents }: { event: TimelineEvent; allEvents?: T
   const hasMatchingAct = allEvents
     ? allEvents.some((e) => {
         if (e.type !== 'act') return false;
-        if ((e as ActEvent).execution_id && event.execution_id) {
-          return (e as ActEvent).execution_id === event.execution_id;
+        if ((e).execution_id && event.execution_id) {
+          return (e).execution_id === event.execution_id;
         }
         return e.toolName === event.toolName && e.timestamp < event.timestamp;
       })
@@ -266,7 +266,7 @@ function WorkPlanItem({ event }: { event: TimelineEvent }) {
  */
 function TaskStartItem({ event }: { event: TimelineEvent }) {
   if (event.type !== 'task_start') return null;
-  const e = event as TaskStartTimelineEvent;
+  const e = event;
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-start gap-3 my-3">
@@ -294,7 +294,7 @@ function TaskStartItem({ event }: { event: TimelineEvent }) {
  */
 function TaskCompleteItem({ event }: { event: TimelineEvent }) {
   if (event.type !== 'task_complete') return null;
-  const e = event as TaskCompleteTimelineEvent;
+  const e = event;
   const isSuccess = e.status === 'completed';
   return (
     <div className="flex items-start gap-3 my-2 opacity-70">
@@ -694,7 +694,7 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
                       <textarea
                         placeholder={field.placeholder || `请输入 ${field.label}`}
                         value={values[field.name] || field.default_value || ''}
-                        onChange={(e) => handleChange(field.name, e.target.value)}
+                        onChange={(e) => { handleChange(field.name, e.target.value); }}
                         disabled={isSubmitting}
                         rows={3}
                         className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -704,7 +704,7 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
                         type={field.input_type === 'password' ? 'password' : 'text'}
                         placeholder={field.placeholder || `请输入 ${field.label}`}
                         value={values[field.name] || field.default_value || ''}
-                        onChange={(e) => handleChange(field.name, e.target.value)}
+                        onChange={(e) => { handleChange(field.name, e.target.value); }}
                         disabled={isSubmitting}
                         className="w-full px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/50"
                       />
@@ -927,8 +927,8 @@ function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?
                   className={`max-w-full max-h-75 rounded-lg shadow-sm object-contain ${
                     imageLoaded ? 'opacity-100' : 'opacity-0'
                   } transition-opacity duration-300`}
-                  onLoad={() => setImageLoaded(true)}
-                  onError={() => setImageError(true)}
+                  onLoad={() => { setImageLoaded(true); }}
+                  onError={() => { setImageError(true); }}
                 />
               </div>
             )}

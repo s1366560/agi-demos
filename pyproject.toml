@@ -110,7 +110,7 @@ select = [
     "ANN003", # **kwargs type annotation missing
     "ANN201", # public function return type missing
     "ANN202", # private function return type missing
-    # "ANN401", # disallow Any (enable progressively)
+    "ANN401", # disallow Any in function signatures
     # Code quality
     "C901",   # cyclomatic complexity (threshold configurable)
     "PLR091", # Pylint refactoring rules
@@ -153,7 +153,7 @@ ignore = [
 # Delayed import exemptions (logging config etc.)
 "src/infrastructure/adapters/primary/web/main.py" = ["E402"]
 "src/infrastructure/adapters/secondary/ray/__init__.py" = ["E402"]
-"src/infrastructure/llm/litellm/litellm_client.py" = ["E402"]
+"src/infrastructure/llm/litellm/litellm_client.py" = ["E402", "ANN401"]
 "src/tests/unit/infrastructure/llm/conftest.py" = ["E402"]
 
 # Test files relaxed
@@ -172,12 +172,12 @@ ignore = [
 "src/domain/shared_kernel.py" = ["B024"]
 
 # High cyclomatic complexity files (progressively refactor)
-"src/application/services/agent_service.py" = ["C901", "S110", "PIE790"]
-"src/infrastructure/agent/core/react_agent.py" = ["C901"]
-"src/infrastructure/agent/processor/processor.py" = ["C901"]
+"src/application/services/agent_service.py" = ["C901", "S110", "PIE790", "ANN401"]
+"src/infrastructure/agent/core/react_agent.py" = ["C901", "ANN401"]
+"src/infrastructure/agent/processor/processor.py" = ["C901", "ANN401"]
 
 # Infrastructure modules that use subprocess (agent tools, MCP)
-"src/infrastructure/agent/tools/*" = ["S"]
+"src/infrastructure/agent/tools/*" = ["S", "ANN401"]
 "src/infrastructure/mcp/*" = ["S603", "S607"]
 
 # Files with intentional try-except-pass or TCH import optimization TODOs
@@ -185,16 +185,16 @@ ignore = [
 "src/application/services/agent/runtime_bootstrapper.py" = ["S110", "TC001"]
 "src/application/services/artifact_service.py" = ["S108"]
 "src/application/services/attachment_service.py" = ["S324"]
-"src/application/services/channels/channel_message_router.py" = ["S110"]
+"src/application/services/channels/channel_message_router.py" = ["S110", "ANN401"]
 "src/application/services/channels/media_import_service.py" = ["TC002", "PIE790"]
 "src/application/services/mcp_runtime_service.py" = ["TC001", "TC002", "TC003", "S110"]
 "src/application/services/project_sandbox_lifecycle_service.py" = ["S108"]
 "src/application/services/sandbox_health_service.py" = ["S110"]
-"src/application/services/sandbox_mcp_server_manager.py" = ["TC001"]
+"src/application/services/sandbox_mcp_server_manager.py" = ["TC001", "ANN401"]
 "src/application/services/sandbox_orchestrator.py" = ["TC001"]
-"src/application/services/skill_reverse_sync.py" = ["TC001", "S110"]
+"src/application/services/skill_reverse_sync.py" = ["TC001", "S110", "ANN401"]
 "src/application/services/unified_sandbox_service.py" = ["S108"]
-"src/application/use_cases/agent/execute_step.py" = ["TC001"]
+"src/application/use_cases/agent/execute_step.py" = ["TC001", "ANN401"]
 "src/application/use_cases/memory/delete_memory.py" = ["S608"]
 "src/infrastructure/agent/tools/memory_tools.py" = ["TC003"]
 "src/infrastructure/agent/tools/mutation_ledger.py" = ["TC003"]
@@ -202,9 +202,235 @@ ignore = [
 "src/infrastructure/agent/tools/tool_mutation_guard.py" = ["TC003"]
 "src/infrastructure/agent/tools/web_scrape.py" = ["PIE810"]
 "src/infrastructure/mcp/clients/subprocess_client.py" = ["S110"]
-"src/infrastructure/mcp/sandbox_tool_adapter.py" = ["TC003"]
+"src/infrastructure/mcp/sandbox_tool_adapter.py" = ["TC003", "ANN401"]
 "src/infrastructure/mcp/transport/base.py" = ["PIE790"]
 "src/infrastructure/mcp/transport/http.py" = ["PIE790"]
+
+# Application services and use cases
+"src/application/services/channels/event_bridge.py" = ["ANN401"]
+"src/application/services/llm_provider_manager.py" = ["ANN401"]
+"src/application/use_cases/agent/compose_tools.py" = ["ANN401"]
+
+# Example file
+"src/channels_enhanced_example.py" = ["ANN401"]
+
+# Configuration containers
+"src/configuration/containers/agent_container.py" = ["ANN401"]
+"src/configuration/di_container.py" = ["ANN401"]
+
+# Domain - events and exceptions
+"src/domain/events/agent_events.py" = ["ANN401"]
+"src/domain/events/envelope.py" = ["ANN401"]
+"src/domain/events/serialization.py" = ["ANN401"]
+"src/domain/exceptions/repository_exceptions.py" = ["ANN401"]
+"src/domain/llm_providers/llm_types.py" = ["ANN401"]
+"src/domain/model/agent/hitl/hitl_types.py" = ["ANN401"]
+"src/domain/model/sandbox/retry_policy.py" = ["ANN401"]
+"src/domain/ports/services/hitl_message_bus_port.py" = ["ANN401"]
+"src/domain/ports/services/hitl_service_port.py" = ["ANN401"]
+
+# Infrastructure - primary web adapters
+"src/infrastructure/adapters/primary/web/metrics.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/agent/messages.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/channels.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/maintenance.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/mcp/apps.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/memories.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/project_sandbox.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/projects.py" = ["ANN401"]
+
+# Infrastructure - secondary adapters (common)
+"src/infrastructure/adapters/secondary/common/query_monitor.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/common/retry.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/common/transaction_manager.py" = ["ANN401"]
+
+# Infrastructure - secondary adapters (messaging, persistence, sandbox)
+"src/infrastructure/adapters/secondary/messaging/redis_agent_event_bus.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/persistence/json_types.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/persistence/sql_hitl_request_repository.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/persistence/sql_subagent_repository.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/persistence/sql_tenant_agent_config_repository.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/persistence/sql_tenant_skill_config_repository.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/persistence/sql_tool_environment_variable_repository.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/sandbox/mcp_sandbox_adapter.py" = ["ANN401"]
+
+# Infrastructure - agent actor and artifact
+"src/infrastructure/agent/actor/hitl_router_actor.py" = ["ANN401"]
+"src/infrastructure/agent/artifact/extractor.py" = ["ANN401"]
+
+# Infrastructure - agent core config and errors
+"src/infrastructure/agent/config.py" = ["ANN401"]
+"src/infrastructure/agent/errors.py" = ["ANN401"]
+
+# Infrastructure - agent context
+"src/infrastructure/agent/context/compression_engine.py" = ["ANN401"]
+"src/infrastructure/agent/context/overflow_recovery.py" = ["ANN401"]
+
+# Infrastructure - agent cost and LLM
+"src/infrastructure/agent/cost/tracker.py" = ["ANN401"]
+"src/infrastructure/agent/llm/token_sampler.py" = ["ANN401"]
+
+# Infrastructure - agent HITL
+"src/infrastructure/agent/hitl/coordinator.py" = ["ANN401"]
+"src/infrastructure/agent/hitl/ray_hitl_handler.py" = ["ANN401"]
+
+# Infrastructure - agent MCP
+"src/infrastructure/agent/mcp/client.py" = ["ANN401"]
+"src/infrastructure/agent/mcp/registry.py" = ["ANN401"]
+
+# Infrastructure - agent plugins
+"src/infrastructure/agent/plugins/discovery.py" = ["ANN401"]
+"src/infrastructure/agent/plugins/manager.py" = ["ANN401"]
+"src/infrastructure/agent/plugins/registry.py" = ["ANN401"]
+"src/infrastructure/agent/plugins/runtime_api.py" = ["ANN401"]
+"src/infrastructure/agent/plugins/selection_pipeline.py" = ["ANN401"]
+"src/infrastructure/agent/plugins/state_store.py" = ["ANN401"]
+
+# Infrastructure - agent pool
+"src/infrastructure/agent/pool/circuit_breaker/breaker.py" = ["ANN401"]
+"src/infrastructure/agent/pool/container/server.py" = ["ANN401"]
+"src/infrastructure/agent/pool/ha/auto_scaling.py" = ["ANN401"]
+"src/infrastructure/agent/pool/ha/failure_recovery.py" = ["ANN401"]
+"src/infrastructure/agent/pool/orchestrator.py" = ["ANN401"]
+
+# Infrastructure - agent prompts
+"src/infrastructure/agent/prompts/manager.py" = ["ANN401"]
+
+# Infrastructure - agent state
+"src/infrastructure/agent/state/agent_session_pool.py" = ["ANN401"]
+"src/infrastructure/agent/state/agent_worker_state.py" = ["ANN401"]
+
+# Infrastructure - agent subagent
+"src/infrastructure/agent/subagent/process.py" = ["ANN401"]
+"src/infrastructure/agent/subagent/run_registry.py" = ["ANN401"]
+"src/infrastructure/agent/subagent/run_repository.py" = ["ANN401"]
+
+# Infrastructure - channels, graph, LLM
+"src/infrastructure/channels/connection_manager.py" = ["ANN401"]
+"src/infrastructure/graph/distributed_transaction_coordinator.py" = ["ANN401"]
+"src/infrastructure/graph/extraction/reflexion.py" = ["ANN401"]
+"src/infrastructure/graph/neo4j_client.py" = ["ANN401"]
+"src/infrastructure/llm/cache.py" = ["ANN401"]
+"src/infrastructure/llm/litellm/litellm_embedder.py" = ["ANN401"]
+"src/infrastructure/llm/litellm/litellm_reranker.py" = ["ANN401"]
+"src/infrastructure/llm/structured_logger.py" = ["ANN401"]
+"src/infrastructure/llm/validation.py" = ["ANN401"]
+
+# Infrastructure - MCP and queue
+"src/infrastructure/mcp/health_monitor.py" = ["ANN401"]
+"src/infrastructure/queue/request_queue.py" = ["ANN401"]
+
+# Infrastructure - skill and telemetry
+"src/infrastructure/skill/validator.py" = ["ANN401"]
+"src/infrastructure/telemetry/tracing.py" = ["ANN401"]
+
+# Application services (additional)
+"src/application/services/agent/tool_discovery.py" = ["ANN401"]
+"src/application/services/sandbox_status_sync_service.py" = ["ANN401"]
+
+# Configuration containers (additional)
+"src/configuration/containers/infra_container.py" = ["ANN401"]
+"src/configuration/containers/sandbox_container.py" = ["ANN401"]
+
+# Domain - LLM and models (additional exceptions)
+"src/domain/llm_providers/exceptions.py" = ["ANN401"]
+"src/domain/model/mcp/app.py" = ["ANN401"]
+"src/domain/model/sandbox/exceptions.py" = ["ANN401"]
+
+# Domain - ports (additional)
+"src/domain/ports/agent/agent_tool_port.py" = ["ANN401"]
+"src/domain/ports/repositories/agent_task_repository.py" = ["ANN401"]
+"src/domain/ports/tool_port.py" = ["ANN401"]
+
+# Infrastructure - primary web (additional)
+"src/infrastructure/adapters/primary/web/dependencies/authorization.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/agent/events.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/ai_tools.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/background_tasks.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/data_export.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/episodes.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/graph.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/mcp/servers.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/mcp/utils.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/recall.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/websocket/message_context.py" = ["ANN401"]
+
+# Infrastructure - secondary adapters (additional)
+"src/infrastructure/adapters/secondary/background_tasks.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/cache/cached_workflow_pattern_repository.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/channels/feishu/adapter.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/common/base_repository.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/common/cached_repository_mixin.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/common/query_builder.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/messaging/redis_hitl_message_bus.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/persistence/sql_agent_task_repository.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/persistence/sql_message_execution_status_repository.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/persistence/sql_project_sandbox_repository.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/persistence/sql_subagent_template_repository.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/persistence/type_decorators.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/ray/client.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/sandbox/health_monitor.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/sandbox/reconciler.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/storage/s3_storage_adapter.py" = ["ANN401"]
+
+# Infrastructure - agent core and actor (additional)
+"src/infrastructure/agent/actor/actor_manager.py" = ["ANN401"]
+"src/infrastructure/agent/core/llm_stream.py" = ["ANN401"]
+"src/infrastructure/agent/core/project_react_agent.py" = ["ANN401"]
+"src/infrastructure/agent/core/tool_converter.py" = ["ANN401"]
+"src/infrastructure/agent/core/tool_selector.py" = ["ANN401"]
+
+# Infrastructure - agent doom loop and HITL (additional)
+"src/infrastructure/agent/doom_loop/detector.py" = ["ANN401"]
+"src/infrastructure/agent/hitl/hitl_strategies.py" = ["ANN401"]
+
+# Infrastructure - agent LLM and MCP (additional)
+"src/infrastructure/agent/llm/invoker.py" = ["ANN401"]
+"src/infrastructure/agent/mcp/adapter.py" = ["ANN401"]
+"src/infrastructure/agent/mcp/cancel.py" = ["ANN401"]
+
+# Infrastructure - agent memory
+"src/infrastructure/agent/memory/capture.py" = ["ANN401"]
+"src/infrastructure/agent/memory/flush.py" = ["ANN401"]
+"src/infrastructure/agent/memory/recall.py" = ["ANN401"]
+
+# Infrastructure - agent output formatters (additional)
+"src/infrastructure/agent/output/__init__.py" = ["ANN401"]
+"src/infrastructure/agent/output/code_formatter.py" = ["ANN401"]
+"src/infrastructure/agent/output/markdown_formatter.py" = ["ANN401"]
+"src/infrastructure/agent/output/table_formatter.py" = ["ANN401"]
+
+# Infrastructure - agent plugins and processor (additional)
+"src/infrastructure/agent/plugins/manifest.py" = ["ANN401"]
+"src/infrastructure/agent/processor/hitl_tool_handler.py" = ["ANN401"]
+
+# Infrastructure - agent routing
+"src/infrastructure/agent/routing/execution_router.py" = ["ANN401"]
+"src/infrastructure/agent/routing/hybrid_router.py" = ["ANN401"]
+"src/infrastructure/agent/routing/subagent_orchestrator.py" = ["ANN401"]
+
+# Infrastructure - agent subagent (additional)
+"src/infrastructure/agent/subagent/memory_accessor.py" = ["ANN401"]
+"src/infrastructure/agent/subagent/template_registry.py" = ["ANN401"]
+
+# Infrastructure - cache, LLM, MCP, telemetry
+"src/infrastructure/cache/llm_cache.py" = ["ANN401"]
+"src/infrastructure/llm/litellm/unified_llm_client.py" = ["ANN401"]
+"src/infrastructure/llm/registry.py" = ["ANN401"]
+"src/infrastructure/mcp/resource_resolver.py" = ["ANN401"]
+"src/infrastructure/mcp/tools/factory.py" = ["ANN401"]
+"src/infrastructure/telemetry/config.py" = ["ANN401"]
+"src/infrastructure/telemetry/instrumentation.py" = ["ANN401"]
+
+# Test fixtures and components (already covered by src/tests/** but adding explicitly)
+"src/tests/unit/fixtures/memory_fixtures.py" = ["ANN401"]
+"src/tests/unit/fixtures/project_fixtures.py" = ["ANN401"]
+"src/tests/unit/fixtures/user_fixtures.py" = ["ANN401"]
+"src/tests/unit/infrastructure/agent/core/test_execution_path_integration.py" = ["ANN401"]
+"src/tests/unit/infrastructure/agent/core/test_react_agent_components.py" = ["ANN401"]
+"src/tests/unit/infrastructure/agent/routing/test_execution_router.py" = ["ANN401"]
+"src/tests/unit/infrastructure/agent/tools/test_base.py" = ["ANN401"]
+"src/tests/unit/infrastructure/agent/tools/test_tool_registry.py" = ["ANN401"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]

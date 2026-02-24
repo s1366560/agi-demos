@@ -160,7 +160,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
       }
       // Defer tab update to avoid synchronous setState in effect
       if (openStateChanged) {
-        setTimeout(() => setActiveTab('basic'), 0);
+        setTimeout(() => { setActiveTab('basic'); }, 0);
       }
     }
 
@@ -421,7 +421,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               <Input
                 placeholder={t('tenant.subagents.modal.addKeyword')}
                 value={keywordInput}
-                onChange={(e) => setKeywordInput(e.target.value)}
+                onChange={(e) => { setKeywordInput(e.target.value); }}
                 onPressEnter={handleAddKeyword}
               />
               <button
@@ -437,7 +437,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                 <Tag
                   key={idx}
                   closable
-                  onClose={() => handleRemoveKeyword(keyword)}
+                  onClose={() => { handleRemoveKeyword(keyword); }}
                   className="px-2 py-1"
                 >
                   {keyword}
@@ -459,7 +459,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               <Input
                 placeholder={t('tenant.subagents.modal.addExample')}
                 value={exampleInput}
-                onChange={(e) => setExampleInput(e.target.value)}
+                onChange={(e) => { setExampleInput(e.target.value); }}
                 onPressEnter={handleAddExample}
               />
               <button
@@ -479,7 +479,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
                   <span className="text-sm">{example}</span>
                   <button
                     type="button"
-                    onClick={() => handleRemoveExample(example)}
+                    onClick={() => { handleRemoveExample(example); }}
                     className="text-slate-400 hover:text-red-500 transition-colors"
                   >
                     <X size={16} />

@@ -295,7 +295,7 @@ export const useTenantStore = create<TenantState>()(
         }
       },
 
-      clearError: () => set({ error: null }),
+      clearError: () => { set({ error: null }); },
     }),
     {
       name: 'TenantStore',

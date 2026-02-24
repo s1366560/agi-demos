@@ -93,7 +93,7 @@ export const ShortcutOverlay = memo(() => {
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    return () => { window.removeEventListener('keydown', handleKeyDown); };
   }, [handleKeyDown]);
 
   // Auto-focus close button when overlay opens
@@ -102,7 +102,7 @@ export const ShortcutOverlay = memo(() => {
       const timer = setTimeout(() => {
         closeButtonRef.current?.focus();
       }, 50);
-      return () => clearTimeout(timer);
+      return () => { clearTimeout(timer); };
     }
     return undefined;
   }, [visible]);
@@ -123,12 +123,12 @@ export const ShortcutOverlay = memo(() => {
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in"
-      onClick={() => setVisible(false)}
+      onClick={() => { setVisible(false); }}
       onKeyDown={handleOverlayKeyDown}
     >
       <div
         className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg mx-4 overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); }}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-700">
@@ -140,7 +140,7 @@ export const ShortcutOverlay = memo(() => {
           </div>
           <button
             ref={closeButtonRef}
-            onClick={() => setVisible(false)}
+            onClick={() => { setVisible(false); }}
             className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
           >
             <X size={18} />

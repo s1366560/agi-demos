@@ -151,35 +151,35 @@ export function SearchHeader({
         <SearchModeButton
           mode="semantic"
           currentMode={searchMode}
-          onClick={() => setSearchMode('semantic')}
+          onClick={() => { setSearchMode('semantic'); }}
           icon={Search}
           label={t('project.search.modes.semantic')}
         />
         <SearchModeButton
           mode="graphTraversal"
           currentMode={searchMode}
-          onClick={() => setSearchMode('graphTraversal')}
+          onClick={() => { setSearchMode('graphTraversal'); }}
           icon={Network}
           label={t('project.search.modes.graph')}
         />
         <SearchModeButton
           mode="temporal"
           currentMode={searchMode}
-          onClick={() => setSearchMode('temporal')}
+          onClick={() => { setSearchMode('temporal'); }}
           icon={ArrowUpDown}
           label={t('project.search.modes.temporal')}
         />
         <SearchModeButton
           mode="faceted"
           currentMode={searchMode}
-          onClick={() => setSearchMode('faceted')}
+          onClick={() => { setSearchMode('faceted'); }}
           icon={Filter}
           label={t('project.search.modes.faceted')}
         />
         <SearchModeButton
           mode="community"
           currentMode={searchMode}
-          onClick={() => setSearchMode('community')}
+          onClick={() => { setSearchMode('community'); }}
           icon={Grid}
           label={t('project.search.modes.community')}
         />
@@ -191,7 +191,7 @@ export function SearchHeader({
             <HistoryButton
               count={searchHistory.length}
               show={showHistory}
-              onClick={() => setShowHistory(!showHistory)}
+              onClick={() => { setShowHistory(!showHistory); }}
               label={t('project.search.actions.history')}
             />
           )}
@@ -217,12 +217,12 @@ export function SearchHeader({
 
       <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
         <div className="flex-1 w-full flex gap-3">
-          {isMobile && <MobileConfigButton onClick={() => setShowMobileConfig(true)} />}
+          {isMobile && <MobileConfigButton onClick={() => { setShowMobileConfig(true); }} />}
           <SearchInput
             value={getInputValue()}
             onChange={handleInputChange}
-            onFocus={() => setIsSearchFocused(true)}
-            onBlur={() => setIsSearchFocused(false)}
+            onFocus={() => { setIsSearchFocused(true); }}
+            onBlur={() => { setIsSearchFocused(false); }}
             onKeyDown={(e) => e.key === 'Enter' && onSearch()}
             placeholder={getPlaceholder()}
             Icon={getInputIcon()}
@@ -340,7 +340,7 @@ function SearchHistoryDropdown({
       {history.map((item, idx) => (
         <button
           key={idx}
-          onClick={() => onSelect(item)}
+          onClick={() => { onSelect(item); }}
           className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-between group"
         >
           <div className="flex flex-col">
@@ -410,7 +410,7 @@ function SearchInput({
         placeholder={placeholder}
         type="text"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => { onChange(e.target.value); }}
         onFocus={onFocus}
         onBlur={onBlur}
         onKeyDown={onKeyDown}

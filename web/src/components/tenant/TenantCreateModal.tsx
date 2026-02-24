@@ -81,7 +81,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
               type="text"
               id="tenant-create-name"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={(e) => { setFormData({ ...formData, name: e.target.value }); }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
               placeholder="输入工作空间名称"
               required
@@ -100,7 +100,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
             <textarea
               id="tenant-create-description"
               value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              onChange={(e) => { setFormData({ ...formData, description: e.target.value }); }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none bg-white dark:bg-slate-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500"
               placeholder="描述这个工作空间的用途"
               rows={3}
@@ -125,7 +125,7 @@ export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({
             <select
               id="tenant-create-plan"
               value={formData.plan}
-              onChange={(e) => setFormData({ ...formData, plan: e.target.value as any })}
+              onChange={(e) => { setFormData({ ...formData, plan: e.target.value as any }); }}
               className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-900 dark:text-white"
               disabled={isLoading}
             >

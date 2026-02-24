@@ -154,7 +154,7 @@ export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({ request, onC
       }
     }, 1000);
 
-    return () => clearInterval(timer);
+    return () => { clearInterval(timer); };
   }, [request]);
 
   const config = TYPE_CONFIG[request.hitlType];
@@ -378,7 +378,7 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
       {/* Options */}
       <Radio.Group
         value={selectedOption}
-        onChange={(e) => setSelectedOption(e.target.value)}
+        onChange={(e) => { setSelectedOption(e.target.value); }}
         className="w-full"
       >
         <Space direction="vertical" className="w-full" size="middle">
@@ -409,7 +409,7 @@ const ClarificationContent: React.FC<HITLContentProps> = ({
                 {selectedOption === 'custom' && (
                   <TextArea
                     value={customInput}
-                    onChange={(e) => setCustomInput(e.target.value)}
+                    onChange={(e) => { setCustomInput(e.target.value); }}
                     placeholder="输入您的答案..."
                     rows={3}
                     className="mt-2"
@@ -501,13 +501,13 @@ const DecisionContent: React.FC<HITLContentProps> = ({
             key={option.id}
             option={option}
             selected={selectedOption === option.id}
-            onSelect={() => setSelectedOption(option.id)}
+            onSelect={() => { setSelectedOption(option.id); }}
           />
         ))}
 
         {data?.allowCustom && (
           <div
-            onClick={() => setSelectedOption('custom')}
+            onClick={() => { setSelectedOption('custom'); }}
             className={`
               p-4 rounded-lg border-2 cursor-pointer transition-all
               ${
@@ -524,12 +524,12 @@ const DecisionContent: React.FC<HITLContentProps> = ({
             {selectedOption === 'custom' && (
               <TextArea
                 value={customInput}
-                onChange={(e) => setCustomInput(e.target.value)}
+                onChange={(e) => { setCustomInput(e.target.value); }}
                 placeholder="输入您的决策..."
                 rows={3}
                 className="ml-6"
                 autoFocus
-                onClick={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); }}
               />
             )}
           </div>

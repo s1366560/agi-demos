@@ -232,7 +232,7 @@ const CountdownTimer: React.FC<{
     const interval = setInterval(() => {
       setRemaining(calculateRemaining());
     }, 1000);
-    return () => clearInterval(interval);
+    return () => { clearInterval(interval); };
   }, [expiresAt, calculateRemaining]);
 
   if (remaining === null) return null;
@@ -311,7 +311,7 @@ const ClarificationContent: React.FC<{
                     ? 'border-slate-100 dark:border-slate-800 opacity-50'
                     : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 cursor-pointer'
               }`}
-              onClick={!isAnswered ? () => setSelected(option.id) : undefined}
+              onClick={!isAnswered ? () => { setSelected(option.id); } : undefined}
             >
               <div className="flex items-center gap-2">
                 {isAnswered ? (
@@ -366,7 +366,7 @@ const ClarificationContent: React.FC<{
                 ? 'border-blue-400 bg-blue-50/50 dark:bg-blue-900/20'
                 : 'border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700'
             }`}
-            onClick={() => setSelected('__custom__')}
+            onClick={() => { setSelected('__custom__'); }}
           >
             <Radio value="__custom__" checked={selected === '__custom__'} className="w-full">
               <span className="font-medium text-sm text-slate-800 dark:text-slate-200">
@@ -380,7 +380,7 @@ const ClarificationContent: React.FC<{
       {!isAnswered && selected === '__custom__' && data.allow_custom && (
         <Input.TextArea
           value={customInput}
-          onChange={(e) => setCustomInput(e.target.value)}
+          onChange={(e) => { setCustomInput(e.target.value); }}
           placeholder="请输入您的回答..."
           rows={3}
           className="mt-2 rounded-xl"
@@ -449,7 +449,7 @@ const DecisionContent: React.FC<{
                       : 'border-slate-200 dark:border-slate-700 hover:border-amber-300 dark:hover:border-amber-700 cursor-pointer'
                 }
               `}
-              onClick={!isAnswered ? () => setSelected(option.id) : undefined}
+              onClick={!isAnswered ? () => { setSelected(option.id); } : undefined}
             >
               <div className="flex items-start gap-3">
                 {isAnswered ? (
@@ -675,7 +675,7 @@ const EnvVarContent: React.FC<{
             <input
               type="checkbox"
               checked={saveForLater}
-              onChange={(e) => setSaveForLater(e.target.checked)}
+              onChange={(e) => { setSaveForLater(e.target.checked); }}
               className="rounded w-4 h-4 accent-violet-500"
             />
             <span>保存配置以便下次使用</span>
@@ -794,7 +794,7 @@ const PermissionContent: React.FC<{
             <input
               type="checkbox"
               checked={remember}
-              onChange={(e) => setRemember(e.target.checked)}
+              onChange={(e) => { setRemember(e.target.checked); }}
               className="rounded w-4 h-4 accent-rose-500"
             />
             <span>记住此选择</span>
@@ -802,7 +802,7 @@ const PermissionContent: React.FC<{
           <div className="flex gap-2">
             <LazyButton
               danger
-              onClick={() => onSubmit({ action: 'deny', remember })}
+              onClick={() => { onSubmit({ action: 'deny', remember }); }}
               loading={isSubmitting}
               size="middle"
               className="rounded-lg"
@@ -811,7 +811,7 @@ const PermissionContent: React.FC<{
             </LazyButton>
             <LazyButton
               type="primary"
-              onClick={() => onSubmit({ action: 'allow', remember })}
+              onClick={() => { onSubmit({ action: 'allow', remember }); }}
               loading={isSubmitting}
               size="middle"
               className="rounded-lg"

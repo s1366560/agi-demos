@@ -265,7 +265,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
                         ? 'bg-red-50 dark:bg-red-900/10'
                         : 'bg-slate-50 dark:bg-slate-800/50'
                 }`}
-                onClick={() => toggleStep(step.stepNumber)}
+                onClick={() => { toggleStep(step.stepNumber); }}
                 data-step-number={step.stepNumber}
               >
                 <div
@@ -378,7 +378,7 @@ export const Timeline: React.FC<TimelineProps> = ({ children, timelineRef }) => 
                   isExpanded={isExpanded}
                   isCurrent={isCurrent}
                   isLast={isLast}
-                  onToggle={() => toggleStep(step.stepNumber)}
+                  onToggle={() => { toggleStep(step.stepNumber); }}
                 />
               );
             })}

@@ -43,7 +43,7 @@ export function useAgentChatPanelState(initialShowPlanPanel = false) {
 
     updateMaxWidth();
     window.addEventListener('resize', updateMaxWidth);
-    return () => window.removeEventListener('resize', updateMaxWidth);
+    return () => { window.removeEventListener('resize', updateMaxWidth); };
   }, []);
 
   // Clamp panel width when max changes - use useMemo for derived state
@@ -63,7 +63,7 @@ export function useAgentChatPanelState(initialShowPlanPanel = false) {
     setPanelWidth,
     setInputHeight,
     // Toggle helpers
-    togglePanel: () => setPanelCollapsed((prev) => !prev),
+    togglePanel: () => { setPanelCollapsed((prev) => !prev); },
   };
 }
 

@@ -269,7 +269,7 @@ export function WorkflowPatterns() {
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => { setSearchQuery(e.target.value); }}
             placeholder="Search patterns..."
             className="w-full pl-10 pr-4 py-2 rounded-lg border-0 focus:outline-none focus:ring-0 text-sm bg-transparent text-slate-900 dark:text-white placeholder:text-slate-400"
           />
@@ -278,7 +278,7 @@ export function WorkflowPatterns() {
         {/* Filter */}
         <select
           value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as 'name' | 'usage' | 'success')}
+          onChange={(e) => { setSortBy(e.target.value as 'name' | 'usage' | 'success'); }}
           className="px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-surface-dark text-slate-700 dark:text-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
         >
           <option value="usage">Sort by Usage</option>
@@ -310,7 +310,7 @@ export function WorkflowPatterns() {
         <div className="w-[480px] shrink-0">
           <PatternInspector
             pattern={selectedPattern}
-            onClose={() => setSelectedPattern(null)}
+            onClose={() => { setSelectedPattern(null); }}
             onSave={handleSavePattern}
             onDeprecate={() => selectedPattern && handleDeprecatePattern(selectedPattern.id)}
             adminNotes={adminNotes}

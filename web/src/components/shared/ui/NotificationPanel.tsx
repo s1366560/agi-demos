@@ -27,7 +27,7 @@ export const NotificationPanel: React.FC = () => {
 
     // Poll for new notifications every 30 seconds
     const interval = setInterval(() => fetchNotifications(true), 30000);
-    return () => clearInterval(interval);
+    return () => { clearInterval(interval); };
   }, [fetchNotifications]);
 
   useEffect(() => {
@@ -40,7 +40,7 @@ export const NotificationPanel: React.FC = () => {
 
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      return () => { document.removeEventListener('mousedown', handleClickOutside); };
     }
     return undefined;
   }, [isOpen]);
@@ -155,7 +155,7 @@ export const NotificationPanel: React.FC = () => {
                     <div className="flex items-center gap-1 ml-2">
                       {!notification.is_read && (
                         <button
-                          onClick={(e) => handleInlineMarkAsRead(e, notification.id)}
+                          onClick={(e) => { handleInlineMarkAsRead(e, notification.id); }}
                           className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded"
                           title="标记为已读"
                         >
@@ -163,7 +163,7 @@ export const NotificationPanel: React.FC = () => {
                         </button>
                       )}
                       <button
-                        onClick={(e) => handleInlineDelete(e, notification.id)}
+                        onClick={(e) => { handleInlineDelete(e, notification.id); }}
                         className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
                         title="删除"
                       >

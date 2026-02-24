@@ -255,7 +255,7 @@ export const McpServerTabV2: React.FC = () => {
             <AntSearch
               placeholder="搜索服务器名称或描述..."
               value={filters.search}
-              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+              onChange={(e) => { setFilters({ ...filters, search: e.target.value }); }}
               allowClear
               prefix={<Search size={16} className="text-slate-400" />}
               className="w-full"
@@ -268,7 +268,7 @@ export const McpServerTabV2: React.FC = () => {
               <Filter size={16} className="text-slate-400 flex-shrink-0" />
               <Select
                 value={filters.enabled}
-                onChange={(value) => setFilters({ ...filters, enabled: value })}
+                onChange={(value) => { setFilters({ ...filters, enabled: value }); }}
                 className="w-32"
                 size="middle"
                 options={[
@@ -280,7 +280,7 @@ export const McpServerTabV2: React.FC = () => {
             </div>
             <Select
               value={filters.type}
-              onChange={(value) => setFilters({ ...filters, type: value })}
+              onChange={(value) => { setFilters({ ...filters, type: value }); }}
               className="w-36"
               size="middle"
               placeholder="类型"
@@ -294,7 +294,7 @@ export const McpServerTabV2: React.FC = () => {
             />
             <Select
               value={filters.runtime}
-              onChange={(value) => setFilters({ ...filters, runtime: value })}
+              onChange={(value) => { setFilters({ ...filters, runtime: value }); }}
               className="w-40"
               size="middle"
               options={[
@@ -444,7 +444,7 @@ export const McpServerTabV2: React.FC = () => {
       <McpToolsDrawer
         open={!!toolsServer}
         server={toolsServer}
-        onClose={() => setToolsServer(null)}
+        onClose={() => { setToolsServer(null); }}
       />
     </div>
   );

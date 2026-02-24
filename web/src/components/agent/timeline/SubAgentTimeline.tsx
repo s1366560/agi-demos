@@ -254,7 +254,7 @@ export const SubAgentTimeline = memo<SubAgentTimelineProps>(({ group, isStreamin
     <div className={`rounded-lg border ${statusBg} transition-colors duration-200`}>
       {/* Header */}
       <button
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => { setExpanded(!expanded); }}
         className="w-full flex items-center gap-2 px-3 py-2 text-left
           hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors rounded-t-lg"
       >

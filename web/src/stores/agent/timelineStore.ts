@@ -153,7 +153,7 @@ export const useTimelineStore = create<TimelineState>()(
        *
        * Removes all events from the timeline.
        */
-      clearTimeline: () => set({ timeline: [] }),
+      clearTimeline: () => { set({ timeline: [] }); },
 
       /**
        * Prepend timeline events

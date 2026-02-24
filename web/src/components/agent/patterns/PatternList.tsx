@@ -209,7 +209,7 @@ export function PatternList({
         {computedPatterns.map((pattern) => (
           <div
             key={pattern.id}
-            onClick={() => handleRowClick(pattern)}
+            onClick={() => { handleRowClick(pattern); }}
             className={`grid grid-cols-12 gap-4 px-4 py-3 items-center cursor-pointer transition-colors ${pattern.rowClassName}`}
           >
             {/* Status */}
@@ -250,7 +250,7 @@ export function PatternList({
             {/* Actions */}
             <div className="col-span-1 flex justify-end">
               <button
-                onClick={(e) => handleDeprecateClick(e, pattern.id)}
+                onClick={(e) => { handleDeprecateClick(e, pattern.id); }}
                 className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-red-500 transition-colors"
                 title="Deprecate pattern"
               >

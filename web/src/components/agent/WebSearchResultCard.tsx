@@ -126,7 +126,7 @@ export function WebSearchResultCard({
                   )}
                   {result.content.length > 200 && (
                     <button
-                      onClick={() => toggleExpand(index)}
+                      onClick={() => { toggleExpand(index); }}
                       className="ml-2 text-blue-500 hover:underline"
                     >
                       {expanded.has(index) ? 'Show less' : 'Show more'}

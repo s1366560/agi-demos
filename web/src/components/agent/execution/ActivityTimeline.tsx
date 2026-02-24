@@ -371,13 +371,10 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
         const execution = toolExecutions[item.toolName];
         return {
           ...item,
-          result: result?.result as string | undefined,
-          error: result?.error as string | undefined,
-          status: (result ? (result.error ? 'failed' : 'success') : 'running') as
-            | 'running'
-            | 'success'
-            | 'failed',
-          duration: execution?.duration as number | undefined,
+          result: result?.result,
+          error: result?.error,
+          status: (result ? (result.error ? 'failed' : 'success') : 'running'),
+          duration: execution?.duration,
         };
       }
       return {
@@ -446,7 +443,7 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
               {!showAll && enrichedTimeline.length > maxItems && (
                 <div className="text-center mb-2">
                   <button
-                    onClick={() => setShowAll(true)}
+                    onClick={() => { setShowAll(true); }}
                     className="text-xs text-primary hover:underline"
                   >
                     Show {enrichedTimeline.length - maxItems} earlier activities

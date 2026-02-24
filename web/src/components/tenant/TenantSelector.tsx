@@ -85,7 +85,7 @@ export const TenantSelector: React.FC<TenantSelectorProps> = ({
                     ? 'border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-900/20'
                     : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 hover:bg-gray-50 dark:hover:bg-slate-800'
                 }`}
-                onClick={() => handleTenantSelect(tenant)}
+                onClick={() => { handleTenantSelect(tenant); }}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">

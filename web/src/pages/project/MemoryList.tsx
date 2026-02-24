@@ -631,7 +631,7 @@ const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
             )}
             {onDelete && (
               <button
-                onClick={() => onDelete(memory)}
+                onClick={() => { onDelete(memory); }}
                 disabled={state?.deletingId === memory.id}
                 className="text-slate-400 hover:text-red-500 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 title={TEXTS.deleteMemory}

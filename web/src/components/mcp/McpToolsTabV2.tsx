@@ -128,7 +128,7 @@ export const McpToolsTabV2: React.FC = () => {
             <AntSearch
               placeholder="搜索工具名称或描述..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => { setSearch(e.target.value); }}
               allowClear
               prefix={<Search size={16} className="text-slate-400" />}
               className="w-full"
@@ -171,7 +171,7 @@ export const McpToolsTabV2: React.FC = () => {
                 key={key}
                 tool={tool}
                 isExpanded={isExpanded}
-                onToggle={() => setExpandedKey(isExpanded ? null : key)}
+                onToggle={() => { setExpandedKey(isExpanded ? null : key); }}
               />
             );
           })}
