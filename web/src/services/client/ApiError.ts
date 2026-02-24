@@ -153,7 +153,7 @@ export class ApiError extends Error {
   getUserMessage(): string {
     // Check for code-specific message first
     if (this.code && ERROR_MESSAGES[this.code]) {
-      return ERROR_MESSAGES[this.code];
+      return ERROR_MESSAGES[this.code] ?? this.message;
     }
 
     // Fall back to type-specific default

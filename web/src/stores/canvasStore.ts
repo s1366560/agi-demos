@@ -98,7 +98,7 @@ export const useCanvasStore = create<CanvasState>()(
           const nextActive =
             state.activeTabId === id
               ? filtered.length > 0
-                ? filtered[filtered.length - 1].id
+                ? (filtered[filtered.length - 1]?.id ?? null)
                 : null
               : state.activeTabId;
           return { tabs: filtered, activeTabId: nextActive };
@@ -133,7 +133,7 @@ export const useCanvasStore = create<CanvasState>()(
         set((state) => ({
           tabs: state.tabs.map((t) => {
             if (t.id !== tabId || t.historyIndex < 0) return t;
-            const restoredContent = t.history[t.historyIndex];
+            const restoredContent = t.history[t.historyIndex] ?? '';
             // Save current content at the end if we're at the latest position
             const newHistory =
               t.historyIndex === t.history.length - 1 ? [...t.history, t.content] : t.history;
@@ -154,7 +154,7 @@ export const useCanvasStore = create<CanvasState>()(
             if (nextIndex >= t.history.length) return t;
             return {
               ...t,
-              content: t.history[nextIndex],
+              content: t.history[nextIndex] ?? '',
               historyIndex: t.historyIndex + 1,
             };
           }),

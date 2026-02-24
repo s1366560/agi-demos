@@ -608,4 +608,3 @@ class _HttpFallbackClient:
 
     async def close(self) -> None:
         """Close client."""
-        pass

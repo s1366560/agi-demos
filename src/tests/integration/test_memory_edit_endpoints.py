@@ -125,7 +125,6 @@ class TestMemoryUpdateEndpoint:
         """Test user without permission cannot update memory."""
         # This test would require auth setup with unauthorized user
         # Skipping for now as it requires full auth context
-        pass
 
 
 @pytest.mark.asyncio

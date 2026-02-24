@@ -23,7 +23,6 @@ class ProjectSandboxRepository(ABC):
         Args:
             association: The ProjectSandbox entity to save
         """
-        pass
 
     @abstractmethod
     async def find_by_id(self, association_id: str) -> ProjectSandbox | None:
@@ -35,7 +34,6 @@ class ProjectSandboxRepository(ABC):
         Returns:
             ProjectSandbox entity if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def find_by_project(self, project_id: str) -> ProjectSandbox | None:
@@ -49,7 +47,6 @@ class ProjectSandboxRepository(ABC):
         Returns:
             ProjectSandbox entity if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def find_by_sandbox(self, sandbox_id: str) -> ProjectSandbox | None:
@@ -61,7 +58,6 @@ class ProjectSandboxRepository(ABC):
         Returns:
             ProjectSandbox entity if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def find_by_tenant(
@@ -82,7 +78,6 @@ class ProjectSandboxRepository(ABC):
         Returns:
             List of ProjectSandbox entities
         """
-        pass
 
     @abstractmethod
     async def find_by_status(
@@ -103,7 +98,6 @@ class ProjectSandboxRepository(ABC):
         Returns:
             List of ProjectSandbox entities
         """
-        pass
 
     @abstractmethod
     async def find_stale(
@@ -122,7 +116,6 @@ class ProjectSandboxRepository(ABC):
         Returns:
             List of stale ProjectSandbox entities
         """
-        pass
 
     @abstractmethod
     async def delete(self, association_id: str) -> bool:
@@ -134,7 +127,6 @@ class ProjectSandboxRepository(ABC):
         Returns:
             True if deleted, False if not found
         """
-        pass
 
     @abstractmethod
     async def delete_by_project(self, project_id: str) -> bool:
@@ -146,7 +138,6 @@ class ProjectSandboxRepository(ABC):
         Returns:
             True if deleted, False if not found
         """
-        pass
 
     @abstractmethod
     async def exists_for_project(self, project_id: str) -> bool:
@@ -158,7 +149,6 @@ class ProjectSandboxRepository(ABC):
         Returns:
             True if an association exists
         """
-        pass
 
     @abstractmethod
     async def count_by_tenant(
@@ -175,7 +165,6 @@ class ProjectSandboxRepository(ABC):
         Returns:
             Number of matching associations
         """
-        pass
 
     @abstractmethod
     async def acquire_project_lock(
@@ -201,7 +190,6 @@ class ProjectSandboxRepository(ABC):
         Returns:
             True if lock acquired, False if another process holds the lock
         """
-        pass
 
     @abstractmethod
     async def release_project_lock(self, project_id: str) -> None:
@@ -213,7 +201,6 @@ class ProjectSandboxRepository(ABC):
         Args:
             project_id: The project ID to unlock
         """
-        pass
 
     @abstractmethod
     async def find_and_lock_by_project(
@@ -230,4 +217,3 @@ class ProjectSandboxRepository(ABC):
         Returns:
             ProjectSandbox entity if found (with row locked), None otherwise
         """
-        pass

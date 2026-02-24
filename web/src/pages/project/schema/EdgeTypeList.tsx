@@ -234,7 +234,7 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
       }));
       setEdges(edgeTypes);
       if (edgeTypes.length > 0 && !selectedEdgeId) {
-        setSelectedEdgeId(edgeTypes[0].id);
+        setSelectedEdgeId(edgeTypes[0]?.id ?? null);
       }
     } catch (error) {
       console.error('Failed to load edge types:', error);
@@ -334,7 +334,10 @@ const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) =
   const updateAttribute = useCallback(
     (index: number, field: string, value: any) => {
       const newAttrs = [...attributes];
-      newAttrs[index] = { ...newAttrs[index], [field]: value };
+      const existing = newAttrs[index];
+      if (existing) {
+        newAttrs[index] = { ...existing, [field]: value };
+      }
       setAttributes(newAttrs);
     },
     [attributes]
@@ -847,7 +850,10 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
     const updateAttribute = useCallback(
       (index: number, field: string, value: any) => {
         const newAttrs = [...attributes];
-        newAttrs[index] = { ...newAttrs[index], [field]: value };
+        const existing = newAttrs[index];
+        if (existing) {
+          newAttrs[index] = { ...existing, [field]: value };
+        }
         setAttributes(newAttrs);
       },
       [attributes]

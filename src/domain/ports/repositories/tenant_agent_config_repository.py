@@ -31,7 +31,6 @@ class TenantAgentConfigRepositoryPort(ABC):
         Returns:
             Configuration if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def save(self, config: TenantAgentConfig) -> TenantAgentConfig:
@@ -44,7 +43,6 @@ class TenantAgentConfigRepositoryPort(ABC):
         Returns:
             Saved configuration
         """
-        pass
 
     @abstractmethod
     async def delete(self, tenant_id: str) -> None:
@@ -59,7 +57,6 @@ class TenantAgentConfigRepositoryPort(ABC):
         Raises:
             ValueError: If configuration not found
         """
-        pass
 
     @abstractmethod
     async def exists(self, tenant_id: str) -> bool:
@@ -72,4 +69,3 @@ class TenantAgentConfigRepositoryPort(ABC):
         Returns:
             True if custom config exists, False otherwise
         """
-        pass

@@ -35,7 +35,6 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         Raises:
             ValueError: If env_var data is invalid or already exists
         """
-        pass
 
     @abstractmethod
     async def get_by_id(self, env_var_id: str) -> ToolEnvironmentVariable | None:
@@ -48,7 +47,6 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         Returns:
             Environment variable if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def get(
@@ -74,7 +72,6 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         Returns:
             Environment variable if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def get_for_tool(
@@ -97,7 +94,6 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         Returns:
             List of environment variables for the tool
         """
-        pass
 
     @abstractmethod
     async def list_by_tenant(
@@ -115,7 +111,6 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         Returns:
             List of environment variables
         """
-        pass
 
     @abstractmethod
     async def list_by_project(
@@ -133,7 +128,6 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         Returns:
             List of project-level environment variables
         """
-        pass
 
     @abstractmethod
     async def update(self, env_var: ToolEnvironmentVariable) -> ToolEnvironmentVariable:
@@ -149,7 +143,6 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         Raises:
             ValueError: If env_var not found or data is invalid
         """
-        pass
 
     @abstractmethod
     async def delete(self, env_var_id: str) -> None:
@@ -162,7 +155,6 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         Raises:
             ValueError: If env_var not found
         """
-        pass
 
     @abstractmethod
     async def delete_by_tool(
@@ -182,7 +174,6 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         Returns:
             Number of deleted variables
         """
-        pass
 
     @abstractmethod
     async def upsert(self, env_var: ToolEnvironmentVariable) -> ToolEnvironmentVariable:
@@ -198,7 +189,6 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         Returns:
             Created or updated environment variable
         """
-        pass
 
     @abstractmethod
     async def batch_upsert(
@@ -214,4 +204,3 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         Returns:
             List of created or updated environment variables
         """
-        pass

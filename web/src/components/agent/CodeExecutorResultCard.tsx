@@ -70,14 +70,14 @@ export function parseCodeExecutorResult(resultStr: string): CodeExecutorResult |
     // Extract exit code
     const exitMatch = resultStr.match(/exit_code[:\s]+(\d+)/i);
     if (exitMatch) {
-      result.exit_code = parseInt(exitMatch[1], 10);
+      result.exit_code = parseInt(exitMatch[1] ?? '0', 10);
       result.success = result.exit_code === 0;
     }
 
     // Extract execution time
     const timeMatch = resultStr.match(/execution_time[_ms]*[:\s]+(\d+)/i);
     if (timeMatch) {
-      result.execution_time_ms = parseInt(timeMatch[1], 10);
+      result.execution_time_ms = parseInt(timeMatch[1] ?? '0', 10);
     }
 
     // Extract output files (URLs)

@@ -35,7 +35,6 @@ class WorkflowPatternRepositoryPort(ABC):
         Raises:
             ValueError: If pattern data is invalid
         """
-        pass
 
     @abstractmethod
     async def get_by_id(self, pattern_id: str) -> WorkflowPattern | None:
@@ -48,7 +47,6 @@ class WorkflowPatternRepositoryPort(ABC):
         Returns:
             Pattern if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def update(self, pattern: WorkflowPattern) -> WorkflowPattern:
@@ -64,7 +62,6 @@ class WorkflowPatternRepositoryPort(ABC):
         Raises:
             ValueError: If pattern not found or data is invalid
         """
-        pass
 
     @abstractmethod
     async def delete(self, pattern_id: str) -> None:
@@ -77,7 +74,6 @@ class WorkflowPatternRepositoryPort(ABC):
         Raises:
             ValueError: If pattern not found
         """
-        pass
 
     @abstractmethod
     async def list_by_tenant(
@@ -96,7 +92,6 @@ class WorkflowPatternRepositoryPort(ABC):
         Returns:
             List of all patterns for the tenant
         """
-        pass
 
     @abstractmethod
     async def find_by_name(
@@ -114,7 +109,6 @@ class WorkflowPatternRepositoryPort(ABC):
         Returns:
             Pattern if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def increment_usage_count(
@@ -135,4 +129,3 @@ class WorkflowPatternRepositoryPort(ABC):
         Raises:
             ValueError: If pattern not found
         """
-        pass

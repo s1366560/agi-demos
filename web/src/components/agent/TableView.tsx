@@ -56,7 +56,7 @@ export const TableView: React.FC<TableViewProps> = ({
     if (propColumns) return propColumns;
     if (!data || data.length === 0) return [];
 
-    const keys = Object.keys(data[0]);
+    const keys = Object.keys(data[0]!);
     return keys.map((key) => ({
       title: key.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
       dataIndex: key,

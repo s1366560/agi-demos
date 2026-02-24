@@ -103,7 +103,7 @@ const formatSequenceNumber = (num: number): string => {
     '⑲',
     '⑳',
   ];
-  return num <= 20 ? circledNumbers[num - 1] : `${num}.`;
+  return num <= 20 ? (circledNumbers[num - 1] ?? `${num}.`) : `${num}.`;
 };
 
 /**

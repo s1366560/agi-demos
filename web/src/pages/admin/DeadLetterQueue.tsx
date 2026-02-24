@@ -211,7 +211,7 @@ const DeadLetterQueue: React.FC = () => {
 
     try {
       if (messagesForDiscard.length === 1) {
-        await dlqService.discardMessage(messagesForDiscard[0], discardReason);
+        await dlqService.discardMessage(messagesForDiscard[0] ?? '', discardReason);
         message.success('Message discarded');
       } else {
         const result = await dlqService.discardMessages(messagesForDiscard, discardReason);

@@ -39,7 +39,6 @@ class ValueObject(ABC):
     Equality is based on all attributes.
     """
 
-    pass
 
 
 @dataclass(frozen=True)
@@ -57,4 +56,3 @@ class DomainEvent(ABC):
 class DomainException(Exception):
     """Base exception for all domain errors."""
 
-    pass

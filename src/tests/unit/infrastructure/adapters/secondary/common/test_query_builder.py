@@ -15,7 +15,6 @@ from sqlalchemy.sql import Select
 class Base(DeclarativeBase):
     """Test base for SQLAlchemy models."""
 
-    pass
 
 
 class TestModel(Base):

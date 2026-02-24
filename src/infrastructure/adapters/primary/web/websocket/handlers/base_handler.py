@@ -36,7 +36,6 @@ class WebSocketMessageHandler(ABC):
         Returns:
             The message type string (e.g., 'send_message', 'subscribe')
         """
-        pass
 
     @abstractmethod
     async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
@@ -50,4 +49,3 @@ class WebSocketMessageHandler(ABC):
         Raises:
             Any exception will be caught by the router and sent as an error to the client.
         """
-        pass

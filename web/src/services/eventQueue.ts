@@ -134,7 +134,9 @@ export class EventQueue {
 
       // Find the position to insert (maintain priority order)
       for (let i = 0; i < this.queue.length; i++) {
-        const eventPriority = this.getEventPriority(this.queue[i].type);
+        const queueItem = this.queue[i];
+        if (!queueItem) continue;
+        const eventPriority = this.getEventPriority(queueItem.type);
         if (priority < eventPriority) {
           // Insert before events with lower priority (higher number)
           insertIndex = i;

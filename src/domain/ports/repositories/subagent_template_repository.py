@@ -13,29 +13,24 @@ class SubAgentTemplateRepositoryPort(ABC):
     @abstractmethod
     async def create(self, template: dict) -> dict:
         """Create a new template. Returns the created template as dict."""
-        pass
 
     @abstractmethod
     async def get_by_id(self, template_id: str) -> dict | None:
         """Get a template by ID."""
-        pass
 
     @abstractmethod
     async def get_by_name(
         self, tenant_id: str, name: str, version: str | None = None
     ) -> dict | None:
         """Get a template by name within a tenant, optionally by version."""
-        pass
 
     @abstractmethod
     async def update(self, template_id: str, data: dict) -> dict | None:
         """Update a template. Returns updated template or None."""
-        pass
 
     @abstractmethod
     async def delete(self, template_id: str) -> bool:
         """Delete a template. Returns True if deleted."""
-        pass
 
     @abstractmethod
     async def list_templates(
@@ -49,7 +44,6 @@ class SubAgentTemplateRepositoryPort(ABC):
         offset: int = 0,
     ) -> list[dict]:
         """List templates with filtering."""
-        pass
 
     @abstractmethod
     async def count_templates(
@@ -59,14 +53,11 @@ class SubAgentTemplateRepositoryPort(ABC):
         published_only: bool = True,
     ) -> int:
         """Count templates matching filters."""
-        pass
 
     @abstractmethod
     async def list_categories(self, tenant_id: str) -> list[str]:
         """List distinct categories for a tenant."""
-        pass
 
     @abstractmethod
     async def increment_install_count(self, template_id: str) -> None:
         """Increment the install count for a template."""
-        pass

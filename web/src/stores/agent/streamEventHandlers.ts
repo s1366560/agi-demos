@@ -1224,10 +1224,10 @@ export function createStreamEventHandlers(
             const storeUri = app?.ui_metadata?.resourceUri as string | undefined;
             if (storeUri) {
               openMCPAppTab(storeUri, {
-                title: (app.ui_metadata?.title as string) || toolName || 'MCP App',
-                toolName: app.tool_name || toolName || undefined,
-                serverName: app.server_name || serverName || undefined,
-                uiMetadata: (app.ui_metadata as unknown as Record<string, unknown>) || uiMetadata,
+                title: (app?.ui_metadata?.title as string) || toolName || 'MCP App',
+                toolName: app?.tool_name || toolName || undefined,
+                serverName: app?.server_name || serverName || undefined,
+                uiMetadata: (app?.ui_metadata as unknown as Record<string, unknown>) || uiMetadata,
               });
               return;
             }

@@ -408,7 +408,7 @@ export const InputBar = memo<InputBarProps>(
         const textBefore = value.slice(0, cursorPos);
         const mentionMatch = textBefore.match(/@([^\s@]*)$/);
         if (mentionMatch) {
-          setMentionQuery(mentionMatch[1]);
+          setMentionQuery(mentionMatch[1] ?? '');
           setMentionVisible(true);
           setMentionSelectedIndex(0);
         } else if (mentionVisible) {

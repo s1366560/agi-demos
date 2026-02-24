@@ -69,7 +69,6 @@ class AlertServicePort(ABC):
         Returns:
             True if alert was sent successfully, False otherwise
         """
-        pass
 
     @abstractmethod
     async def send_alert_with_retry(
@@ -85,7 +84,6 @@ class AlertServicePort(ABC):
         Returns:
             True if alert was sent successfully, False otherwise
         """
-        pass
 
     @abstractmethod
     async def health_check(self) -> bool:
@@ -94,7 +92,6 @@ class AlertServicePort(ABC):
         Returns:
             True if service is healthy, False otherwise
         """
-        pass
 
 
 class CompositeAlertServicePort(AlertServicePort):

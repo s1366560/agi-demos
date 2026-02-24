@@ -57,7 +57,6 @@ class StorageServicePort(ABC):
         Returns:
             UploadResult with the object key and metadata
         """
-        pass
 
     @abstractmethod
     async def generate_presigned_url(
@@ -77,7 +76,6 @@ class StorageServicePort(ABC):
         Returns:
             A presigned URL string
         """
-        pass
 
     @abstractmethod
     async def delete_file(self, object_key: str) -> bool:
@@ -90,7 +88,6 @@ class StorageServicePort(ABC):
         Returns:
             True if deleted successfully, False if file didn't exist
         """
-        pass
 
     @abstractmethod
     async def file_exists(self, object_key: str) -> bool:
@@ -103,7 +100,6 @@ class StorageServicePort(ABC):
         Returns:
             True if file exists, False otherwise
         """
-        pass
 
     @abstractmethod
     async def get_file(self, object_key: str) -> bytes | None:
@@ -116,7 +112,6 @@ class StorageServicePort(ABC):
         Returns:
             File content as bytes, or None if not found
         """
-        pass
 
     @abstractmethod
     async def list_files(
@@ -134,7 +129,6 @@ class StorageServicePort(ABC):
         Returns:
             List of object keys matching the prefix
         """
-        pass
 
     # ==================== Multipart Upload Methods ====================
 
@@ -156,7 +150,6 @@ class StorageServicePort(ABC):
         Returns:
             MultipartUploadResult with upload_id and object_key
         """
-        pass
 
     @abstractmethod
     async def upload_part(
@@ -178,7 +171,6 @@ class StorageServicePort(ABC):
         Returns:
             PartUploadResult with part_number and etag
         """
-        pass
 
     @abstractmethod
     async def complete_multipart_upload(
@@ -198,7 +190,6 @@ class StorageServicePort(ABC):
         Returns:
             UploadResult with the final file information
         """
-        pass
 
     @abstractmethod
     async def abort_multipart_upload(
@@ -216,7 +207,6 @@ class StorageServicePort(ABC):
         Returns:
             True if aborted successfully
         """
-        pass
 
     @abstractmethod
     async def generate_presigned_upload_url(
@@ -236,4 +226,3 @@ class StorageServicePort(ABC):
         Returns:
             A presigned URL string for PUT operation
         """
-        pass

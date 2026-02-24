@@ -176,7 +176,6 @@ class UnifiedEventBusPort(ABC):
         Raises:
             EventPublishError: If publishing fails
         """
-        pass
 
     @abstractmethod
     async def publish_batch(
@@ -194,7 +193,6 @@ class UnifiedEventBusPort(ABC):
         Raises:
             EventPublishError: If publishing fails
         """
-        pass
 
     @abstractmethod
     async def subscribe(
@@ -220,7 +218,6 @@ class UnifiedEventBusPort(ABC):
             async for event in bus.subscribe("agent.*"):
                 print(f"Got event: {event.envelope.event_type}")
         """
-        pass
 
     @abstractmethod
     async def get_events(
@@ -241,7 +238,6 @@ class UnifiedEventBusPort(ABC):
         Returns:
             List of events with metadata
         """
-        pass
 
     @abstractmethod
     async def get_latest_event(
@@ -256,7 +252,6 @@ class UnifiedEventBusPort(ABC):
         Returns:
             Latest event or None if stream is empty
         """
-        pass
 
     @abstractmethod
     async def acknowledge(
@@ -275,7 +270,6 @@ class UnifiedEventBusPort(ABC):
         Returns:
             Number of events acknowledged
         """
-        pass
 
     @abstractmethod
     async def stream_exists(self, routing_key: str | RoutingKey) -> bool:
@@ -287,7 +281,6 @@ class UnifiedEventBusPort(ABC):
         Returns:
             True if stream exists
         """
-        pass
 
     @abstractmethod
     async def get_stream_length(self, routing_key: str | RoutingKey) -> int:
@@ -299,7 +292,6 @@ class UnifiedEventBusPort(ABC):
         Returns:
             Number of events in the stream
         """
-        pass
 
     @abstractmethod
     async def trim_stream(
@@ -318,7 +310,6 @@ class UnifiedEventBusPort(ABC):
         Returns:
             Number of events removed
         """
-        pass
 
     @abstractmethod
     async def delete_stream(self, routing_key: str | RoutingKey) -> bool:
@@ -330,7 +321,6 @@ class UnifiedEventBusPort(ABC):
         Returns:
             True if stream was deleted
         """
-        pass
 
     @abstractmethod
     async def create_consumer_group(
@@ -349,7 +339,6 @@ class UnifiedEventBusPort(ABC):
         Returns:
             True if group was created
         """
-        pass
 
 
 class EventPublishError(Exception):

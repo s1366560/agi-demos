@@ -818,8 +818,8 @@ const PermissionContent: React.FC<HITLContentProps> = ({
           <Text>{data?.action}</Text>
         </Descriptions.Item>
         <Descriptions.Item label="风险等级">
-          <Tag color={riskConfig.color} icon={riskConfig.icon}>
-            {riskConfig.label}
+          <Tag color={riskConfig?.color} icon={riskConfig?.icon}>
+            {riskConfig?.label}
           </Tag>
         </Descriptions.Item>
       </Descriptions>

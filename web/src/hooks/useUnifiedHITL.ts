@@ -188,7 +188,7 @@ export function useUnifiedHITL(conversationId: string | null): UseUnifiedHITLRet
 
   return {
     pendingRequests,
-    currentRequest,
+    currentRequest: currentRequest ?? null,
     pendingCount: pendingRequests.length,
     hasPending: pendingRequests.length > 0,
     getByType,

@@ -226,7 +226,7 @@ async def test_create_adapter_prefers_plugin_factory() -> None:
     manager = ChannelConnectionManager()
     plugin_adapter = object()
     plugin_registry = SimpleNamespace(
-        list_channel_type_metadata=lambda: {},
+        list_channel_type_metadata=dict,
         build_channel_adapter=AsyncMock(return_value=(plugin_adapter, [])),
     )
     config = SimpleNamespace(
@@ -308,7 +308,7 @@ async def test_create_adapter_raises_when_plugin_adapter_missing() -> None:
     """Manager should fail fast when no plugin provides requested channel adapter."""
     manager = ChannelConnectionManager()
     plugin_registry = SimpleNamespace(
-        list_channel_type_metadata=lambda: {},
+        list_channel_type_metadata=dict,
         build_channel_adapter=AsyncMock(return_value=(None, [])),
     )
     config = SimpleNamespace(

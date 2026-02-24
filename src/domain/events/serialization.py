@@ -29,19 +29,16 @@ logger = logging.getLogger(__name__)
 class SerializationError(Exception):
     """Error during event serialization."""
 
-    pass
 
 
 class DeserializationError(Exception):
     """Error during event deserialization."""
 
-    pass
 
 
 class VersionMismatchError(Exception):
     """Schema version mismatch error."""
 
-    pass
 
 
 @dataclass

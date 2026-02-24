@@ -237,7 +237,7 @@ export function parseSandboxConnection(sandbox: {
 
   // Priority 2: Build from ports (direct access)
   if (sandbox.desktop_port) {
-    const host = getApiHost().split(':')[0]; // Remove port if present
+    const host = getApiHost().split(':')[0] ?? getApiHost(); // Remove port if present
     return {
       desktopUrl: buildDirectDesktopUrl(host, sandbox.desktop_port),
       terminalWsUrl: sandbox.terminal_port ? buildWebSocketUrl('terminal', sandbox.id) : null,

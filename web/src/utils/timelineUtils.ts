@@ -91,6 +91,11 @@ export function isTimelineSorted(timeline: TimelineEvent[]): boolean {
     const prev = timeline[i - 1];
     const curr = timeline[i];
 
+    // Type guard: both items must exist (they should from array access)
+    if (!prev || !curr) {
+      continue;
+    }
+
     const prevTime = prev.eventTimeUs;
     const currTime = curr.eventTimeUs;
 

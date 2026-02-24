@@ -56,7 +56,7 @@ export const UserMenu = React.memo(function UserMenu({
       .slice(0, 2);
   };
 
-  const displayName = user.name || user.email.split('@')[0];
+  const displayName = user.name || (user.email.split('@')[0] ?? '');
   const initials = getInitials(displayName);
   const avatarUrl = user.profile?.avatar_url;
 

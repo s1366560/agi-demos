@@ -34,7 +34,6 @@ class ConversationRepository(ABC):
         Args:
             conversation: The conversation to save
         """
-        pass
 
     @abstractmethod
     async def find_by_id(self, conversation_id: str) -> Conversation | None:
@@ -47,7 +46,6 @@ class ConversationRepository(ABC):
         Returns:
             The conversation if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def list_by_project(
@@ -69,7 +67,6 @@ class ConversationRepository(ABC):
         Returns:
             List of conversations
         """
-        pass
 
     @abstractmethod
     async def list_by_user(
@@ -91,7 +88,6 @@ class ConversationRepository(ABC):
         Returns:
             List of conversations
         """
-        pass
 
     @abstractmethod
     async def delete(self, conversation_id: str) -> None:
@@ -101,7 +97,6 @@ class ConversationRepository(ABC):
         Args:
             conversation_id: The conversation ID to delete
         """
-        pass
 
     @abstractmethod
     async def count_by_project(
@@ -117,7 +112,6 @@ class ConversationRepository(ABC):
         Returns:
             Number of conversations
         """
-        pass
 
 
 class MessageRepository(ABC):
@@ -135,7 +129,6 @@ class MessageRepository(ABC):
         Args:
             message: The message to save
         """
-        pass
 
     @abstractmethod
     async def find_by_id(self, message_id: str) -> Message | None:
@@ -148,7 +141,6 @@ class MessageRepository(ABC):
         Returns:
             The message if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def list_by_conversation(
@@ -168,7 +160,6 @@ class MessageRepository(ABC):
         Returns:
             List of messages in chronological order
         """
-        pass
 
     @abstractmethod
     async def list_recent_by_project(
@@ -186,7 +177,6 @@ class MessageRepository(ABC):
         Returns:
             List of recent messages
         """
-        pass
 
     @abstractmethod
     async def count_by_conversation(self, conversation_id: str) -> int:
@@ -199,7 +189,6 @@ class MessageRepository(ABC):
         Returns:
             Number of messages
         """
-        pass
 
     @abstractmethod
     async def delete_by_conversation(self, conversation_id: str) -> None:
@@ -209,7 +198,6 @@ class MessageRepository(ABC):
         Args:
             conversation_id: The conversation ID
         """
-        pass
 
 
 class AgentExecutionRepository(ABC):
@@ -227,7 +215,6 @@ class AgentExecutionRepository(ABC):
         Args:
             execution: The execution to save
         """
-        pass
 
     @abstractmethod
     async def find_by_id(self, execution_id: str) -> AgentExecution | None:
@@ -240,7 +227,6 @@ class AgentExecutionRepository(ABC):
         Returns:
             The execution if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def list_by_message(self, message_id: str) -> list[AgentExecution]:
@@ -253,7 +239,6 @@ class AgentExecutionRepository(ABC):
         Returns:
             List of executions in chronological order
         """
-        pass
 
     @abstractmethod
     async def list_by_conversation(
@@ -271,7 +256,6 @@ class AgentExecutionRepository(ABC):
         Returns:
             List of executions in chronological order
         """
-        pass
 
     @abstractmethod
     async def delete_by_conversation(self, conversation_id: str) -> None:
@@ -281,7 +265,6 @@ class AgentExecutionRepository(ABC):
         Args:
             conversation_id: The conversation ID
         """
-        pass
 
 
 class ToolExecutionRecordRepository(ABC):
@@ -299,7 +282,6 @@ class ToolExecutionRecordRepository(ABC):
         Args:
             record: The tool execution record to save
         """
-        pass
 
     @abstractmethod
     async def save_and_commit(self, record: ToolExecutionRecord) -> None:
@@ -309,7 +291,6 @@ class ToolExecutionRecordRepository(ABC):
         Args:
             record: The tool execution record to save
         """
-        pass
 
     @abstractmethod
     async def find_by_id(self, record_id: str) -> ToolExecutionRecord | None:
@@ -322,7 +303,6 @@ class ToolExecutionRecordRepository(ABC):
         Returns:
             The record if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def find_by_call_id(self, call_id: str) -> ToolExecutionRecord | None:
@@ -335,7 +315,6 @@ class ToolExecutionRecordRepository(ABC):
         Returns:
             The record if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def list_by_message(
@@ -353,7 +332,6 @@ class ToolExecutionRecordRepository(ABC):
         Returns:
             List of tool executions in sequence order
         """
-        pass
 
     @abstractmethod
     async def list_by_conversation(
@@ -371,7 +349,6 @@ class ToolExecutionRecordRepository(ABC):
         Returns:
             List of tool executions in chronological order
         """
-        pass
 
     @abstractmethod
     async def delete_by_conversation(self, conversation_id: str) -> None:
@@ -381,7 +358,6 @@ class ToolExecutionRecordRepository(ABC):
         Args:
             conversation_id: The conversation ID
         """
-        pass
 
     @abstractmethod
     async def update_status(
@@ -402,7 +378,6 @@ class ToolExecutionRecordRepository(ABC):
             error: Error message (if failed)
             duration_ms: Execution duration in milliseconds
         """
-        pass
 
 
 class AgentExecutionEventRepository(ABC):
@@ -420,7 +395,6 @@ class AgentExecutionEventRepository(ABC):
         Args:
             event: The event to save
         """
-        pass
 
     @abstractmethod
     async def save_and_commit(self, event: AgentExecutionEvent) -> None:
@@ -430,7 +404,6 @@ class AgentExecutionEventRepository(ABC):
         Args:
             event: The event to save
         """
-        pass
 
     @abstractmethod
     async def save_batch(self, events: list[AgentExecutionEvent]) -> None:
@@ -440,7 +413,6 @@ class AgentExecutionEventRepository(ABC):
         Args:
             events: List of events to save
         """
-        pass
 
     @abstractmethod
     async def get_events(
@@ -472,7 +444,6 @@ class AgentExecutionEventRepository(ABC):
             - If before_time_us is None: returns events from (from_time_us, from_counter) onwards
             - If before_time_us is set: returns events before (before_time_us, before_counter)
         """
-        pass
 
     @abstractmethod
     async def get_last_event_time(self, conversation_id: str) -> tuple[int, int]:
@@ -485,7 +456,6 @@ class AgentExecutionEventRepository(ABC):
         Returns:
             Tuple of (event_time_us, event_counter), or (0, 0) if no events exist
         """
-        pass
 
     @abstractmethod
     async def get_events_by_message(
@@ -501,7 +471,6 @@ class AgentExecutionEventRepository(ABC):
         Returns:
             List of events in chronological order
         """
-        pass
 
     @abstractmethod
     async def delete_by_conversation(self, conversation_id: str) -> None:
@@ -511,7 +480,6 @@ class AgentExecutionEventRepository(ABC):
         Args:
             conversation_id: The conversation ID
         """
-        pass
 
     @abstractmethod
     async def list_by_conversation(
@@ -531,7 +499,6 @@ class AgentExecutionEventRepository(ABC):
         Returns:
             List of events in chronological order
         """
-        pass
 
     @abstractmethod
     async def get_message_events(
@@ -552,7 +519,6 @@ class AgentExecutionEventRepository(ABC):
         Returns:
             List of message events in sequence order (oldest first)
         """
-        pass
 
     @abstractmethod
     async def get_message_events_after(
@@ -575,7 +541,6 @@ class AgentExecutionEventRepository(ABC):
         Returns:
             List of message events in sequence order (oldest first)
         """
-        pass
 
     @abstractmethod
     async def count_messages(self, conversation_id: str) -> int:
@@ -590,7 +555,6 @@ class AgentExecutionEventRepository(ABC):
         Returns:
             Number of message events
         """
-        pass
 
 
 class ExecutionCheckpointRepository(ABC):
@@ -609,7 +573,6 @@ class ExecutionCheckpointRepository(ABC):
         Args:
             checkpoint: The checkpoint to save
         """
-        pass
 
     @abstractmethod
     async def save_and_commit(self, checkpoint: ExecutionCheckpoint) -> None:
@@ -619,7 +582,6 @@ class ExecutionCheckpointRepository(ABC):
         Args:
             checkpoint: The checkpoint to save
         """
-        pass
 
     @abstractmethod
     async def get_latest(
@@ -637,7 +599,6 @@ class ExecutionCheckpointRepository(ABC):
         Returns:
             The latest checkpoint if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def get_by_type(
@@ -657,7 +618,6 @@ class ExecutionCheckpointRepository(ABC):
         Returns:
             List of checkpoints in descending order (newest first)
         """
-        pass
 
     @abstractmethod
     async def delete_by_conversation(self, conversation_id: str) -> None:
@@ -667,4 +627,3 @@ class ExecutionCheckpointRepository(ABC):
         Args:
             conversation_id: The conversation ID
         """
-        pass

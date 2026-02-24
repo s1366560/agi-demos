@@ -54,18 +54,22 @@ export const ProjectLayout: React.FC = memo(() => {
             const tenants = useTenantStore.getState().tenants;
             if (tenants.length > 0) {
               const firstTenant = tenants[0];
-              setCurrentTenant(firstTenant);
-              getProject(firstTenant.id, projectId!)
-                .then((p) => setCurrentProject(p))
-                .catch(console.error);
+              if (firstTenant) {
+                setCurrentTenant(firstTenant);
+                getProject(firstTenant.id, projectId!)
+                  .then((p) => setCurrentProject(p))
+                  .catch(console.error);
+              }
             }
           });
         } else {
           const firstTenant = tenants[0];
-          setCurrentTenant(firstTenant);
-          getProject(firstTenant.id, projectId!)
-            .then((p) => setCurrentProject(p))
-            .catch(console.error);
+          if (firstTenant) {
+            setCurrentTenant(firstTenant);
+            getProject(firstTenant.id, projectId!)
+              .then((p) => setCurrentProject(p))
+              .catch(console.error);
+          }
         }
       }
     }

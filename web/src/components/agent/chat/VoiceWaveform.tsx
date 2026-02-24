@@ -74,7 +74,8 @@ export const VoiceWaveform = memo<VoiceWaveformProps>(
             const step = Math.floor(bufferLength / barCount);
 
             for (let i = 0; i < barCount; i++) {
-              const value = dataArray[i * step] / 255;
+              const rawValue = dataArray[i * step];
+              const value = (rawValue ?? 0) / 255;
               const barHeight = Math.max(4, value * h * 0.9);
               const x = i * barWidth + gap / 2;
               const y = (h - barHeight) / 2;

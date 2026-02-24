@@ -77,7 +77,7 @@ export const TenantLayout: React.FC = memo(() => {
     await listTenants();
     const tenants = useTenantStore.getState().tenants;
     if (tenants.length > 0) {
-      setCurrentTenant(tenants[tenants.length - 1]);
+      setCurrentTenant(tenants[tenants.length - 1] ?? null);
       setNoTenants(false);
     }
   }, [listTenants, setCurrentTenant]);
@@ -101,8 +101,10 @@ export const TenantLayout: React.FC = memo(() => {
 
           if (tenants.length > 0) {
             const firstAccessibleTenant = tenants[0];
-            setCurrentTenant(firstAccessibleTenant);
-            navigate(`/tenant/${firstAccessibleTenant.id}`, { replace: true });
+            if (firstAccessibleTenant) {
+              setCurrentTenant(firstAccessibleTenant);
+              navigate(`/tenant/${firstAccessibleTenant.id}`, { replace: true });
+            }
           } else {
             setNoTenants(true);
           }
@@ -129,13 +131,13 @@ export const TenantLayout: React.FC = memo(() => {
     } else if (!tenantId && !currentTenant) {
       const tenants = useTenantStore.getState().tenants;
       if (tenants.length > 0) {
-        setCurrentTenant(tenants[0]);
+        setCurrentTenant(tenants[0] ?? null);
       } else {
         try {
           await listTenants();
           const updatedTenants = useTenantStore.getState().tenants;
           if (updatedTenants.length > 0) {
-            setCurrentTenant(updatedTenants[0]);
+            setCurrentTenant(updatedTenants[0] ?? null);
           } else {
             // Auto-create default tenant
             const defaultName = user?.name ? `${user.name}'s Workspace` : 'My Workspace';
@@ -146,7 +148,7 @@ export const TenantLayout: React.FC = memo(() => {
               });
               const newTenants = useTenantStore.getState().tenants;
               if (newTenants.length > 0) {
-                setCurrentTenant(newTenants[newTenants.length - 1]);
+                setCurrentTenant(newTenants[newTenants.length - 1] ?? null);
               } else {
                 setNoTenants(true);
               }
@@ -259,7 +261,7 @@ export const TenantLayout: React.FC = memo(() => {
   const isAgentWorkspacePath =
     pathSegments.length === 0 ||
     pathSegments[0] === 'agent-workspace' ||
-    !NON_AGENT_SUBPATHS.includes(pathSegments[0]);
+    !NON_AGENT_SUBPATHS.includes(pathSegments[0] ?? '');
 
   return (
     <>

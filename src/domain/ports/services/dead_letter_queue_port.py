@@ -211,7 +211,6 @@ class DeadLetterQueuePort(ABC):
         Returns:
             DLQ message ID
         """
-        pass
 
     @abstractmethod
     async def get_message(self, message_id: str) -> DeadLetterMessage | None:
@@ -223,7 +222,6 @@ class DeadLetterQueuePort(ABC):
         Returns:
             DeadLetterMessage or None if not found
         """
-        pass
 
     @abstractmethod
     async def get_messages(
@@ -249,7 +247,6 @@ class DeadLetterQueuePort(ABC):
         Returns:
             List of DeadLetterMessage
         """
-        pass
 
     @abstractmethod
     async def retry_message(self, message_id: str) -> bool:
@@ -268,7 +265,6 @@ class DeadLetterQueuePort(ABC):
         Returns:
             True if retry was initiated
         """
-        pass
 
     @abstractmethod
     async def retry_batch(
@@ -283,7 +279,6 @@ class DeadLetterQueuePort(ABC):
         Returns:
             Dict mapping message_id to retry success
         """
-        pass
 
     @abstractmethod
     async def discard_message(
@@ -300,7 +295,6 @@ class DeadLetterQueuePort(ABC):
         Returns:
             True if message was discarded
         """
-        pass
 
     @abstractmethod
     async def discard_batch(
@@ -317,7 +311,6 @@ class DeadLetterQueuePort(ABC):
         Returns:
             Dict mapping message_id to discard success
         """
-        pass
 
     @abstractmethod
     async def get_stats(self) -> DLQStats:
@@ -326,7 +319,6 @@ class DeadLetterQueuePort(ABC):
         Returns:
             DLQStats with queue statistics
         """
-        pass
 
     @abstractmethod
     async def cleanup_expired(
@@ -341,7 +333,6 @@ class DeadLetterQueuePort(ABC):
         Returns:
             Number of messages cleaned up
         """
-        pass
 
     @abstractmethod
     async def cleanup_resolved(
@@ -356,13 +347,11 @@ class DeadLetterQueuePort(ABC):
         Returns:
             Number of messages cleaned up
         """
-        pass
 
 
 class DLQError(Exception):
     """Base exception for DLQ operations."""
 
-    pass
 
 
 class DLQMessageNotFoundError(DLQError):

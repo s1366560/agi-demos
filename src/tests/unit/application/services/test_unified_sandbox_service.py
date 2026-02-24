@@ -625,7 +625,6 @@ class TestConcurrencySafety:
         """Concurrent calls should use distributed lock."""
         # This would require more complex setup with actual lock behavior
         # For now, we just verify the lock interface is used
-        pass
 
 
 class TestErrorHandling:

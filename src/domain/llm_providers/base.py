@@ -29,7 +29,6 @@ class BaseEmbedder(ABC):
         Returns:
             Embedding dimension
         """
-        pass
 
     @abstractmethod
     async def create(
@@ -49,7 +48,6 @@ class BaseEmbedder(ABC):
             ValueError: If input is invalid
             Exception: For API errors
         """
-        pass
 
     @abstractmethod
     async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
@@ -66,7 +64,6 @@ class BaseEmbedder(ABC):
             ValueError: If input list is empty
             Exception: For API errors
         """
-        pass
 
 
 class BaseReranker(ABC):
@@ -100,7 +97,6 @@ class BaseReranker(ABC):
             ValueError: If input is invalid
             Exception: For API errors
         """
-        pass
 
     @abstractmethod
     async def score(self, query: str, passage: str) -> float:
@@ -118,7 +114,6 @@ class BaseReranker(ABC):
             ValueError: If input is invalid
             Exception: For API errors
         """
-        pass
 
 
 class ProviderHealthCheck(ABC):
@@ -136,7 +131,6 @@ class ProviderHealthCheck(ABC):
         Returns:
             True if provider is healthy, False otherwise
         """
-        pass
 
     @abstractmethod
     async def get_model_info(self, model: str) -> dict[str, Any]:
@@ -149,4 +143,3 @@ class ProviderHealthCheck(ABC):
         Returns:
             Dictionary with model information (e.g., max_tokens, context_length)
         """
-        pass

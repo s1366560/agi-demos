@@ -132,7 +132,7 @@ function groupTimelineEvents(timeline: TimelineEvent[]): GroupedItem[] {
   };
 
   for (let i = 0; i < timeline.length; i++) {
-    const event = timeline[i];
+    const event = timeline[i]!;
 
     // SubAgent event grouping
     if (SUBAGENT_EVENT_TYPES.has(event.type)) {
@@ -213,11 +213,11 @@ function buildSubAgentGroup(
 
   // Collect consecutive SubAgent events
   for (let i = startIdx; i < timeline.length; i++) {
-    if (SUBAGENT_EVENT_TYPES.has(timeline[i].type)) {
-      events.push(timeline[i]);
+    if (SUBAGENT_EVENT_TYPES.has(timeline[i]!.type)) {
+      events.push(timeline[i]!);
       endIndex = i;
       // Stop after terminal events
-      const t = timeline[i].type;
+      const t = timeline[i]!.type;
       if (
         t === 'subagent_completed' ||
         t === 'subagent_failed' ||
@@ -1059,7 +1059,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
 
     // Virtualizer setup
     const estimateSize = useCallback(
-      (index: number) => estimateGroupedItemHeight(groupedItems[index]),
+      (index: number) => estimateGroupedItemHeight(groupedItems[index]!),
       [groupedItems]
     );
 
@@ -1163,7 +1163,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
             currentPos = currentPos > 0 ? currentPos - 1 : 0;
           }
 
-          const nextIndex = indices[currentPos];
+          const nextIndex = indices[currentPos] ?? 0;
           setFocusedMsgIndex(nextIndex);
 
           // Scroll to the focused message
@@ -1299,6 +1299,7 @@ const MessageAreaInner: React.FC<_MessageAreaRootProps> = memo(
               >
                 {virtualizer.getVirtualItems().map((virtualRow) => {
                   const item = groupedItems[virtualRow.index];
+                  if (!item) return null;
                   if (item.kind === 'timeline') {
                     return (
                       <div

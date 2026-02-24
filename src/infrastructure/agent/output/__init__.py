@@ -28,7 +28,6 @@ class OutputFormatter(ABC):
         Returns:
             Formatted string
         """
-        pass
 
     @abstractmethod
     def get_content_type(self) -> str:
@@ -38,7 +37,6 @@ class OutputFormatter(ABC):
         Returns:
             MIME type string
         """
-        pass
 
     @abstractmethod
     def get_extension(self) -> str:
@@ -48,7 +46,6 @@ class OutputFormatter(ABC):
         Returns:
             File extension (with leading dot)
         """
-        pass
 
 
 __all__ = [

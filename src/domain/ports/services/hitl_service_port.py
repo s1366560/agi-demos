@@ -59,7 +59,6 @@ class HITLServicePort(ABC):
         Raises:
             HITLServiceError: If request creation fails
         """
-        pass
 
     # =========================================================================
     # Response Handling
@@ -89,7 +88,6 @@ class HITLServicePort(ABC):
             HITLRequestExpiredError: If request has expired
             HITLServiceError: If response submission fails
         """
-        pass
 
     @abstractmethod
     async def wait_for_response(
@@ -117,7 +115,6 @@ class HITLServicePort(ABC):
             HITLCancelledError: If request is cancelled
             HITLRequestNotFoundError: If request doesn't exist
         """
-        pass
 
     # =========================================================================
     # Request Management
@@ -139,7 +136,6 @@ class HITLServicePort(ABC):
         Returns:
             List of pending requests
         """
-        pass
 
     @abstractmethod
     async def get_request(
@@ -155,7 +151,6 @@ class HITLServicePort(ABC):
         Returns:
             The request, or None if not found
         """
-        pass
 
     @abstractmethod
     async def cancel_request(
@@ -173,7 +168,6 @@ class HITLServicePort(ABC):
         Returns:
             True if request was cancelled
         """
-        pass
 
     # =========================================================================
     # Convenience Methods (with default implementations)
@@ -218,7 +212,6 @@ class HITLServicePort(ABC):
 class HITLServiceError(Exception):
     """Base exception for HITL service errors."""
 
-    pass
 
 
 class HITLRequestNotFoundError(HITLServiceError):

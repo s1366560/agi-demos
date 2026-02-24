@@ -163,7 +163,7 @@ export const PluginHub: React.FC = () => {
       if (prev && projects.some((project) => project.id === prev)) {
         return prev;
       }
-      return projects[0].id;
+      return projects[0]?.id ?? prev;
     });
   }, [projectIdFromQuery, projects]);
 

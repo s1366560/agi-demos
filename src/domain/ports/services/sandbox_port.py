@@ -121,7 +121,6 @@ class SandboxPort(ABC):
         Returns:
             SandboxInstance with connection details
         """
-        pass
 
     @abstractmethod
     async def get_sandbox(self, sandbox_id: str) -> SandboxInstance | None:
@@ -134,7 +133,6 @@ class SandboxPort(ABC):
         Returns:
             SandboxInstance if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def terminate_sandbox(self, sandbox_id: str) -> bool:
@@ -147,7 +145,6 @@ class SandboxPort(ABC):
         Returns:
             True if terminated successfully
         """
-        pass
 
     @abstractmethod
     async def execute_code(
@@ -163,7 +160,6 @@ class SandboxPort(ABC):
         Returns:
             CodeExecutionResult with stdout, stderr, and output files
         """
-        pass
 
     @abstractmethod
     async def stream_execute(
@@ -179,7 +175,6 @@ class SandboxPort(ABC):
         Yields:
             Dict with 'type' (stdout/stderr/status) and 'data'
         """
-        pass
 
     @abstractmethod
     async def list_sandboxes(
@@ -195,7 +190,6 @@ class SandboxPort(ABC):
         Returns:
             List of sandbox instances
         """
-        pass
 
     @abstractmethod
     async def get_output_files(
@@ -213,7 +207,6 @@ class SandboxPort(ABC):
         Returns:
             Dict mapping filename to file content
         """
-        pass
 
     @abstractmethod
     async def cleanup_expired(
@@ -229,7 +222,6 @@ class SandboxPort(ABC):
         Returns:
             Number of sandboxes cleaned up
         """
-        pass
 
 
 # Domain Errors
@@ -255,28 +247,23 @@ class SandboxError(Exception):
 class SandboxTimeoutError(SandboxError):
     """Sandbox execution timed out."""
 
-    pass
 
 
 class SandboxResourceError(SandboxError):
     """Sandbox resource limits exceeded."""
 
-    pass
 
 
 class SandboxSecurityError(SandboxError):
     """Security violation in sandbox."""
 
-    pass
 
 
 class SandboxConnectionError(SandboxError):
     """Failed to connect to sandbox."""
 
-    pass
 
 
 class SandboxNotFoundError(SandboxError):
     """Sandbox instance not found."""
 
-    pass

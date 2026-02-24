@@ -28,12 +28,10 @@ class MCPTransport(ABC):
     @abstractmethod
     async def connect(self) -> None:
         """Establish connection to MCP server."""
-        pass
 
     @abstractmethod
     async def disconnect(self) -> None:
         """Close connection to MCP server."""
-        pass
 
     @abstractmethod
     async def send_request(self, method: str, params: dict | None = None) -> dict:
@@ -47,12 +45,10 @@ class MCPTransport(ABC):
         Returns:
             Response data from server
         """
-        pass
 
     @abstractmethod
     async def list_tools(self) -> list[dict]:
         """List all available tools from the MCP server."""
-        pass
 
     @abstractmethod
     async def call_tool(self, tool_name: str, arguments: dict) -> dict:
@@ -66,7 +62,6 @@ class MCPTransport(ABC):
         Returns:
             Tool execution result
         """
-        pass
 
     @abstractmethod
     async def ping(self) -> bool:
@@ -76,7 +71,6 @@ class MCPTransport(ABC):
         Returns:
             True if ping successful, False otherwise
         """
-        pass
 
     @abstractmethod
     async def set_logging_level(self, level: str) -> bool:
@@ -89,7 +83,6 @@ class MCPTransport(ABC):
         Returns:
             True if successful, False otherwise
         """
-        pass
 
     async def list_prompts(self) -> list[dict]:
         """

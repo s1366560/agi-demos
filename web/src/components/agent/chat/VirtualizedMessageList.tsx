@@ -228,6 +228,7 @@ export const VirtualizedMessageList: React.FC<VirtualizedMessageListProps> = ({
       >
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const message = messages[virtualRow.index];
+          if (!message) return null;
           const isLatest = virtualRow.index === messages.length - 1;
 
           return (

@@ -55,13 +55,11 @@ class ProjectResourceAllocation:
 class ResourceAllocationError(Exception):
     """资源分配错误."""
 
-    pass
 
 
 class QuotaExceededError(ResourceAllocationError):
     """配额超限错误."""
 
-    pass
 
 
 class ResourceManager:

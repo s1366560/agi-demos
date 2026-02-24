@@ -397,7 +397,7 @@ class SandboxServiceImpl implements SandboxService {
     // Build direct URL if we have port info
     let desktopUrl = response.url;
     if (response.port && !desktopUrl) {
-      const host = getApiHost().split(':')[0];
+      const host = getApiHost().split(':')[0] ?? getApiHost();
       desktopUrl = buildDirectDesktopUrl(host, response.port);
     }
 

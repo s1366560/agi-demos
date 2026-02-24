@@ -211,7 +211,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
         if (models && models.chat.length > 0) {
           setFormData((prev) => ({
             ...prev,
-            llm_model: models.chat[0],
+            llm_model: models.chat[0] ?? '',
             llm_small_model:
               models.chat.find(
                 (m) =>
@@ -1261,7 +1261,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
                 currentStep === 'provider'
                   ? onClose
                   : () =>
-                      setCurrentStep(steps[steps.findIndex((s) => s.key === currentStep) - 1].key)
+                      setCurrentStep(steps[steps.findIndex((s) => s.key === currentStep) - 1]?.key ?? 'provider')
               }
               className="px-4 py-2 text-slate-700 dark:text-slate-300 font-medium hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors"
             >
@@ -1287,7 +1287,7 @@ export const ProviderConfigModal: React.FC<ProviderConfigModalProps> = ({
               ) : (
                 <button
                   onClick={() =>
-                    setCurrentStep(steps[steps.findIndex((s) => s.key === currentStep) + 1].key)
+                    setCurrentStep(steps[steps.findIndex((s) => s.key === currentStep) + 1]?.key ?? 'review')
                   }
                   disabled={!canProceed()}
                   className="px-6 py-2.5 bg-gradient-to-r from-primary to-primary-dark text-white font-medium rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"

@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 class FeishuMediaDownloadError(Exception):
     """Exception raised when media download fails."""
 
-    pass
 
 
 class FeishuMediaDownloader:

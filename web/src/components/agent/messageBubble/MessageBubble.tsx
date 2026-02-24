@@ -213,7 +213,7 @@ const findMatchingObserve = (
   if (actIndex === -1) return undefined;
 
   for (let i = actIndex + 1; i < events.length; i++) {
-    const event = events[i];
+    const event = events[i]!;
     if (event.type === 'observe') {
       const observeEvent = event as unknown as ObserveEvent;
       if (actEvent.execution_id && observeEvent.execution_id) {

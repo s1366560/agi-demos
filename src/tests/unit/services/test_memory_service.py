@@ -292,10 +292,8 @@ class TestMemoryServicePermissions:
         """Test that user with edit share can update memory."""
         # This would require mock share repository setup
         # For now, we'll test the basic logic
-        pass
 
     async def test_user_without_permission_cannot_update(self):
         """Test that user without permission cannot update memory."""
         # This would require full mock setup of shares and permissions
         # For now, we'll test the basic logic
-        pass

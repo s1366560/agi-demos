@@ -498,4 +498,3 @@ class TestMCPAppServerIDAssignment:
         # and stored correctly in the MCPApp entity.
         # For now, this is a placeholder that will be implemented
         # along with the code changes.
-        pass

@@ -166,12 +166,14 @@ function evictStaleConversationStates(
   // Walk LRU list from oldest (front) to newest
   for (let i = 0; i < conversationAccessOrder.length && evicted < evictCount; i++) {
     const id = conversationAccessOrder[i];
-    if (id === activeId) continue;
+    if (!id || id === activeId) continue;
     const convState = newStates.get(id);
     if (convState?.isStreaming) continue;
 
     // Persist to IndexedDB before eviction
-    saveConversationState(id, convState!).catch(console.error);
+    if (convState) {
+      saveConversationState(id, convState).catch(console.error);
+    }
     newStates.delete(id);
     conversationAccessOrder.splice(i, 1);
     i--;

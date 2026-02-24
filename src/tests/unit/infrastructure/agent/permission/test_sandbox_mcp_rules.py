@@ -195,4 +195,3 @@ class TestSandboxMCPToolClassification:
 class TestSandboxMCPDisabledTools:
     """Test sandbox MCP tool disabling in different modes."""
 
-    pass

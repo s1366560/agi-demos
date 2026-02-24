@@ -164,7 +164,7 @@ export const AgentLayout: React.FC = () => {
               <LazyTooltip title="View execution history">
                 <button
                   className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-400"
-                  onClick={() => handleTabClick(TOP_TABS[1])}
+                  onClick={() => { const tab = TOP_TABS[1]; if (tab) handleTabClick(tab); }}
                 >
                   <History className="w-5 h-5" />
                 </button>
@@ -172,7 +172,7 @@ export const AgentLayout: React.FC = () => {
               <LazyTooltip title="View workflow patterns">
                 <button
                   className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors text-slate-600 dark:text-slate-400"
-                  onClick={() => handleTabClick(TOP_TABS[2])}
+                  onClick={() => { const tab = TOP_TABS[2]; if (tab) handleTabClick(tab); }}
                 >
                   <GitBranch className="w-5 h-5" />
                 </button>

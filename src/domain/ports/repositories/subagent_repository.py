@@ -33,7 +33,6 @@ class SubAgentRepositoryPort(ABC):
         Raises:
             ValueError: If subagent data is invalid or name already exists
         """
-        pass
 
     @abstractmethod
     async def get_by_id(self, subagent_id: str) -> SubAgent | None:
@@ -46,7 +45,6 @@ class SubAgentRepositoryPort(ABC):
         Returns:
             SubAgent if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def get_by_name(
@@ -64,7 +62,6 @@ class SubAgentRepositoryPort(ABC):
         Returns:
             SubAgent if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def update(self, subagent: SubAgent) -> SubAgent:
@@ -80,7 +77,6 @@ class SubAgentRepositoryPort(ABC):
         Raises:
             ValueError: If subagent not found or data is invalid
         """
-        pass
 
     @abstractmethod
     async def delete(self, subagent_id: str) -> None:
@@ -93,7 +89,6 @@ class SubAgentRepositoryPort(ABC):
         Raises:
             ValueError: If subagent not found
         """
-        pass
 
     @abstractmethod
     async def list_by_tenant(
@@ -115,7 +110,6 @@ class SubAgentRepositoryPort(ABC):
         Returns:
             List of subagents for the tenant
         """
-        pass
 
     @abstractmethod
     async def list_by_project(
@@ -135,7 +129,6 @@ class SubAgentRepositoryPort(ABC):
         Returns:
             List of subagents for the project
         """
-        pass
 
     @abstractmethod
     async def set_enabled(
@@ -156,7 +149,6 @@ class SubAgentRepositoryPort(ABC):
         Raises:
             ValueError: If subagent not found
         """
-        pass
 
     @abstractmethod
     async def update_statistics(
@@ -179,7 +171,6 @@ class SubAgentRepositoryPort(ABC):
         Raises:
             ValueError: If subagent not found
         """
-        pass
 
     @abstractmethod
     async def count_by_tenant(
@@ -197,7 +188,6 @@ class SubAgentRepositoryPort(ABC):
         Returns:
             Number of subagents
         """
-        pass
 
     @abstractmethod
     async def find_by_keywords(
@@ -219,4 +209,3 @@ class SubAgentRepositoryPort(ABC):
         Returns:
             List of matching subagents
         """
-        pass

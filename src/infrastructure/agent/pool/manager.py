@@ -535,12 +535,10 @@ class AgentPoolManager:
             elif action == RecoveryAction.DEGRADE:
                 logger.info(f"[AgentPoolManager] Degrading instance: id={instance.id}")
                 # 降级模式 - 禁用部分功能
-                pass
 
             elif action == RecoveryAction.MIGRATE:
                 logger.info(f"[AgentPoolManager] Migrating instance: id={instance.id}")
                 # TODO: 实现迁移逻辑
-                pass
 
             elif action == RecoveryAction.ALERT:
                 logger.warning(f"[AgentPoolManager] Alert: Instance unhealthy: id={instance.id}")

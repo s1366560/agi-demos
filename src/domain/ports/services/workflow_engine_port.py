@@ -66,7 +66,6 @@ class WorkflowEnginePort(ABC):
         Returns:
             WorkflowExecution with workflow_id and run_id
         """
-        pass
 
     @abstractmethod
     async def get_workflow_status(self, workflow_id: str) -> WorkflowExecution:
@@ -78,7 +77,6 @@ class WorkflowEnginePort(ABC):
         Returns:
             WorkflowExecution with current status
         """
-        pass
 
     @abstractmethod
     async def get_workflow_result(
@@ -93,7 +91,6 @@ class WorkflowEnginePort(ABC):
         Returns:
             The workflow result data
         """
-        pass
 
     @abstractmethod
     async def cancel_workflow(self, workflow_id: str, reason: str | None = None) -> bool:
@@ -106,7 +103,6 @@ class WorkflowEnginePort(ABC):
         Returns:
             True if cancellation was successful
         """
-        pass
 
     @abstractmethod
     async def terminate_workflow(self, workflow_id: str, reason: str | None = None) -> bool:
@@ -122,7 +118,6 @@ class WorkflowEnginePort(ABC):
         Returns:
             True if termination was successful
         """
-        pass
 
     @abstractmethod
     async def signal_workflow(
@@ -141,7 +136,6 @@ class WorkflowEnginePort(ABC):
         Returns:
             True if signal was sent successfully
         """
-        pass
 
     @abstractmethod
     async def list_workflows(
@@ -160,4 +154,3 @@ class WorkflowEnginePort(ABC):
         Returns:
             List of workflow executions
         """
-        pass

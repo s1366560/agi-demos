@@ -9,29 +9,23 @@ class TaskRepository(ABC):
     @abstractmethod
     async def save(self, task: TaskLog) -> None:
         """Save a task log (create or update)"""
-        pass
 
     @abstractmethod
     async def find_by_id(self, task_id: str) -> TaskLog | None:
         """Find a task by ID"""
-        pass
 
     @abstractmethod
     async def find_by_group(self, group_id: str, limit: int = 50, offset: int = 0) -> list[TaskLog]:
         """List all tasks in a group"""
-        pass
 
     @abstractmethod
     async def list_recent(self, limit: int = 100) -> list[TaskLog]:
         """List recent tasks across all groups"""
-        pass
 
     @abstractmethod
     async def list_by_status(self, status: str, limit: int = 50, offset: int = 0) -> list[TaskLog]:
         """List tasks by status"""
-        pass
 
     @abstractmethod
     async def delete(self, task_id: str) -> None:
         """Delete a task"""
-        pass

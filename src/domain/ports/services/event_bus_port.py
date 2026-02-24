@@ -18,7 +18,6 @@ class EventBusPort(ABC):
         Returns:
             Number of subscribers that received the message
         """
-        pass
 
     @abstractmethod
     async def subscribe(self, channel: str) -> AsyncIterator[dict[str, Any]]:
@@ -31,7 +30,6 @@ class EventBusPort(ABC):
         Returns:
             Async iterator yielding messages
         """
-        pass
 
     # =========================================================================
     # Redis Stream methods for reliable message delivery
@@ -55,7 +53,6 @@ class EventBusPort(ABC):
         Returns:
             Message ID assigned by Redis
         """
-        pass
 
     @abstractmethod
     async def stream_read(
@@ -77,7 +74,6 @@ class EventBusPort(ABC):
         Yields:
             Message dictionaries with 'id' and 'data' fields
         """
-        pass
 
     @abstractmethod
     async def stream_read_group(
@@ -108,7 +104,6 @@ class EventBusPort(ABC):
         Yields:
             Message dictionaries with 'id' and 'data' fields
         """
-        pass
 
     @abstractmethod
     async def stream_ack(
@@ -128,7 +123,6 @@ class EventBusPort(ABC):
         Returns:
             Number of messages acknowledged
         """
-        pass
 
     @abstractmethod
     async def stream_create_group(
@@ -150,7 +144,6 @@ class EventBusPort(ABC):
         Returns:
             True if created successfully
         """
-        pass
 
     @abstractmethod
     async def stream_pending(
@@ -170,7 +163,6 @@ class EventBusPort(ABC):
         Returns:
             List of pending message info
         """
-        pass
 
     @abstractmethod
     async def stream_claim(
@@ -194,7 +186,6 @@ class EventBusPort(ABC):
         Returns:
             List of claimed messages
         """
-        pass
 
     @abstractmethod
     async def stream_len(self, stream_key: str) -> int:
@@ -207,7 +198,6 @@ class EventBusPort(ABC):
         Returns:
             Number of messages in the stream
         """
-        pass
 
     @abstractmethod
     async def stream_trim(
@@ -227,4 +217,3 @@ class EventBusPort(ABC):
         Returns:
             Number of messages removed
         """
-        pass

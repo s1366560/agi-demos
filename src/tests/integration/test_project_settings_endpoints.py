@@ -117,7 +117,6 @@ class TestUpdateProjectEndpoint:
         # This test would require creating a user without admin rights
         # For now, we document the expected behavior
         # Current implementation: only owner or admin can update
-        pass
 
     async def test_update_project_with_memory_rules(
         self, authenticated_async_client: AsyncClient, test_project_db, test_db
@@ -238,7 +237,6 @@ class TestDeleteProjectEndpoint:
         """Test that only owner can delete project."""
         # This would require authenticating as a non-owner user
         # Current implementation: only owner can delete
-        pass
 
     async def test_delete_project_with_memories(
         self,

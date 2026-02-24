@@ -68,8 +68,8 @@ export const McpAppCardV2: React.FC<McpAppCardV2Props> = ({
   deleting,
   retrying,
 }) => {
-  const statusCfg = APP_STATUS_STYLES[app.status] || APP_STATUS_STYLES.disabled;
-  const sourceCfg = SOURCE_STYLES[app.source] || SOURCE_STYLES.user_added;
+  const statusCfg = APP_STATUS_STYLES[app.status] ?? APP_STATUS_STYLES.disabled!;
+  const sourceCfg = SOURCE_STYLES[app.source] ?? SOURCE_STYLES.user_added!;
   const isAgentDeveloped = app.source === 'agent_developed';
   const title = app.ui_metadata?.title || app.tool_name;
   const refreshStatus = getLifecycleText(app, 'last_resource_refresh_status');

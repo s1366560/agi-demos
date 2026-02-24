@@ -24,8 +24,7 @@
         "noImplicitReturns": true,
         "noImplicitOverride": true,
         "forceConsistentCasingInFileNames": true,
-        /* Note: exactOptionalPropertyTypes and noUncheckedIndexedAccess disabled due to existing code */
-        /* These can be enabled incrementally as code is refactored */
+        "noUncheckedIndexedAccess": true,
         /* Path mapping */
         "baseUrl": ".",
         "paths": {

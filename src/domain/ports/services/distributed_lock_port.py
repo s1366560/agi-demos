@@ -80,7 +80,6 @@ class DistributedLockPort(ABC):
         Raises:
             LockError: If there's an infrastructure error
         """
-        pass
 
     @abstractmethod
     async def release(self, handle: LockHandle) -> bool:
@@ -95,7 +94,6 @@ class DistributedLockPort(ABC):
         Returns:
             True if released, False if not held or already released
         """
-        pass
 
     @abstractmethod
     async def extend(self, handle: LockHandle, additional_ttl: int | None = None) -> bool:
@@ -111,7 +109,6 @@ class DistributedLockPort(ABC):
         Returns:
             True if extended, False if not held
         """
-        pass
 
     @abstractmethod
     async def is_locked(self, key: str) -> bool:
@@ -124,7 +121,6 @@ class DistributedLockPort(ABC):
         Returns:
             True if locked, False if available
         """
-        pass
 
     @abstractmethod
     async def get_lock_info(self, key: str) -> LockInfo:
@@ -137,7 +133,6 @@ class DistributedLockPort(ABC):
         Returns:
             LockInfo with current lock state
         """
-        pass
 
     @asynccontextmanager
     async def acquire_lock(
@@ -225,16 +220,13 @@ class AcquiredLock:
 class LockError(Exception):
     """Base exception for lock-related errors."""
 
-    pass
 
 
 class LockAcquisitionError(LockError):
     """Raised when lock acquisition fails due to an error (not timeout)."""
 
-    pass
 
 
 class LockReleaseError(LockError):
     """Raised when lock release fails."""
 
-    pass

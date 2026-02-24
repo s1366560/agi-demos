@@ -9,31 +9,25 @@ class ProjectRepository(ABC):
     @abstractmethod
     async def save(self, project: Project) -> Project:
         """Save a project (create or update). Returns the saved project."""
-        pass
 
     @abstractmethod
     async def find_by_id(self, project_id: str) -> Project | None:
         """Find a project by ID"""
-        pass
 
     @abstractmethod
     async def find_by_tenant(
         self, tenant_id: str, limit: int = 50, offset: int = 0
     ) -> list[Project]:
         """List all projects in a tenant"""
-        pass
 
     @abstractmethod
     async def find_by_owner(self, owner_id: str, limit: int = 50, offset: int = 0) -> list[Project]:
         """List all projects owned by a user"""
-        pass
 
     @abstractmethod
     async def find_public_projects(self, limit: int = 50, offset: int = 0) -> list[Project]:
         """List all public projects"""
-        pass
 
     @abstractmethod
     async def delete(self, project_id: str) -> bool:
         """Delete a project. Returns True if deleted, False if not found."""
-        pass

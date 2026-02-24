@@ -67,8 +67,8 @@ export const McpServerCardV2: React.FC<McpServerCardV2Props> = React.memo(
     readyAppCount = 0,
   }) => {
     const status = getRuntimeStatus(server);
-    const runtimeStyle = RUNTIME_STATUS_STYLES[status];
-    const typeStyle = SERVER_TYPE_STYLES[server.server_type];
+    const runtimeStyle = RUNTIME_STATUS_STYLES[status] ?? RUNTIME_STATUS_STYLES.stopped!;
+    const typeStyle = SERVER_TYPE_STYLES[server.server_type] ?? SERVER_TYPE_STYLES.stdio!;
     const toolCount = server.discovered_tools?.length || 0;
 
     const hasError = status === 'error' || server.sync_error;

@@ -28,7 +28,6 @@ class AgentExecutionRepositoryPort(ABC):
         Returns:
             The created execution with any generated fields
         """
-        pass
 
     @abstractmethod
     async def get_by_id(self, execution_id: str) -> AgentExecution | None:
@@ -41,7 +40,6 @@ class AgentExecutionRepositoryPort(ABC):
         Returns:
             The execution if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def get_by_message_id(
@@ -59,7 +57,6 @@ class AgentExecutionRepositoryPort(ABC):
         Returns:
             The execution if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def get_running_by_conversation(
@@ -77,7 +74,6 @@ class AgentExecutionRepositoryPort(ABC):
         Returns:
             The running execution if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def update_status(
@@ -97,7 +93,6 @@ class AgentExecutionRepositoryPort(ABC):
         Returns:
             The updated execution if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def update_sequence(
@@ -115,7 +110,6 @@ class AgentExecutionRepositoryPort(ABC):
         Returns:
             The updated execution if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def delete(self, execution_id: str) -> bool:
@@ -128,4 +122,3 @@ class AgentExecutionRepositoryPort(ABC):
         Returns:
             True if deleted, False if not found
         """
-        pass

@@ -469,13 +469,16 @@ const VirtualListInternal: React.FC<VirtualListProps> = memo(
             style={{ position: 'relative', height: `${totalSize}px` }}
           >
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {virtualizer.getVirtualItems().map((virtualRow) => (
-                <MemoryList.MemoryRow
-                  key={virtualRow.key}
-                  memory={filteredMemories[virtualRow.index]}
-                  index={virtualRow.index}
-                />
-              ))}
+              {virtualizer.getVirtualItems().map((virtualRow) => {
+                const memory = filteredMemories[virtualRow.index];
+                return memory ? (
+                  <MemoryList.MemoryRow
+                    key={virtualRow.key}
+                    memory={memory}
+                    index={virtualRow.index}
+                  />
+                ) : null;
+              })}
             </tbody>
           </table>
         </div>

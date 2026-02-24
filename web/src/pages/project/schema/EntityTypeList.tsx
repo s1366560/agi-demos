@@ -369,12 +369,18 @@ const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' 
       const newAttrs = [...attributes];
       if (field.startsWith('validation.')) {
         const validationField = field.split('.')[1];
-        newAttrs[index] = {
-          ...newAttrs[index],
-          validation: { ...newAttrs[index].validation, [validationField]: value },
-        };
+        const existing = newAttrs[index];
+        if (existing && validationField) {
+          newAttrs[index] = {
+            ...existing,
+            validation: { ...existing.validation, [validationField]: value },
+          };
+        }
       } else {
-        newAttrs[index] = { ...newAttrs[index], [field]: value };
+        const existing = newAttrs[index];
+        if (existing) {
+          newAttrs[index] = { ...existing, [field]: value };
+        }
       }
       setAttributes(newAttrs);
     },
@@ -886,12 +892,18 @@ const ModalInternal: React.FC<ModalProps> = React.memo(
         const newAttrs = [...attributes];
         if (field.startsWith('validation.')) {
           const validationField = field.split('.')[1];
-          newAttrs[index] = {
-            ...newAttrs[index],
-            validation: { ...newAttrs[index].validation, [validationField]: value },
-          };
+          const existing = newAttrs[index];
+          if (existing && validationField) {
+            newAttrs[index] = {
+              ...existing,
+              validation: { ...existing.validation, [validationField]: value },
+            };
+          }
         } else {
-          newAttrs[index] = { ...newAttrs[index], [field]: value };
+          const existing = newAttrs[index];
+          if (existing) {
+            newAttrs[index] = { ...existing, [field]: value };
+          }
         }
         setAttributes(newAttrs);
       },

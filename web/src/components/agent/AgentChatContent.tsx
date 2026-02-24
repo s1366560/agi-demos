@@ -156,6 +156,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     const lastConversation = useMemo(() => {
       if (conversations.length > 0 && !activeConversationId) {
         const conv = conversations[0];
+        if (!conv) return undefined;
         return { id: conv.id, title: conv.title, updated_at: conv.updated_at };
       }
       return undefined;

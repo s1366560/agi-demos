@@ -23,7 +23,7 @@ export const TenantOverview: React.FC = () => {
 
   useEffect(() => {
     if (!currentTenant && tenants.length > 0) {
-      setCurrentTenant(tenants[0]);
+      setCurrentTenant(tenants[0] ?? null);
     }
   }, [currentTenant, tenants, setCurrentTenant]);
 

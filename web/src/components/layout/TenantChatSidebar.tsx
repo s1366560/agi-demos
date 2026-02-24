@@ -283,6 +283,7 @@ export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({
   useEffect(() => {
     if (!selectedProjectId && projects.length > 0) {
       const project = currentProject || projects[0];
+      if (!project) return;
       setSelectedProjectId(project.id);
       setCurrentProject(project);
       localStorage.setItem('agent:lastProjectId', project.id);

@@ -32,7 +32,6 @@ class TenantSkillConfigRepositoryPort(ABC):
         Raises:
             ValueError: If config already exists for this tenant/skill combo
         """
-        pass
 
     @abstractmethod
     async def get_by_id(self, config_id: str) -> TenantSkillConfig | None:
@@ -45,7 +44,6 @@ class TenantSkillConfigRepositoryPort(ABC):
         Returns:
             Config if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def get_by_tenant_and_skill(
@@ -63,7 +61,6 @@ class TenantSkillConfigRepositoryPort(ABC):
         Returns:
             Config if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def update(self, config: TenantSkillConfig) -> TenantSkillConfig:
@@ -79,7 +76,6 @@ class TenantSkillConfigRepositoryPort(ABC):
         Raises:
             ValueError: If config not found
         """
-        pass
 
     @abstractmethod
     async def delete(self, config_id: str) -> None:
@@ -92,7 +88,6 @@ class TenantSkillConfigRepositoryPort(ABC):
         Raises:
             ValueError: If config not found
         """
-        pass
 
     @abstractmethod
     async def delete_by_tenant_and_skill(
@@ -107,7 +102,6 @@ class TenantSkillConfigRepositoryPort(ABC):
             tenant_id: Tenant ID
             system_skill_name: Name of the system skill
         """
-        pass
 
     @abstractmethod
     async def list_by_tenant(
@@ -123,7 +117,6 @@ class TenantSkillConfigRepositoryPort(ABC):
         Returns:
             List of configs for the tenant
         """
-        pass
 
     @abstractmethod
     async def get_configs_map(
@@ -141,7 +134,6 @@ class TenantSkillConfigRepositoryPort(ABC):
         Returns:
             Dict mapping system_skill_name to TenantSkillConfig
         """
-        pass
 
     @abstractmethod
     async def count_by_tenant(
@@ -157,4 +149,3 @@ class TenantSkillConfigRepositoryPort(ABC):
         Returns:
             Number of configs
         """
-        pass

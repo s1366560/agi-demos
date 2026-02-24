@@ -35,12 +35,10 @@ class HITLTypeStrategy(ABC):
     @abstractmethod
     def hitl_type(self) -> HITLType:
         """Get the HITL type this strategy handles."""
-        pass
 
     @abstractmethod
     def generate_request_id(self) -> str:
         """Generate a unique request ID."""
-        pass
 
     @abstractmethod
     def create_request(
@@ -50,7 +48,6 @@ class HITLTypeStrategy(ABC):
         **kwargs: Any,
     ) -> HITLRequest:
         """Create an HITL request from raw data."""
-        pass
 
     @abstractmethod
     def extract_response_value(
@@ -58,7 +55,6 @@ class HITLTypeStrategy(ABC):
         response_data: dict[str, Any],
     ) -> Any:
         """Extract the usable response value from response data."""
-        pass
 
     @abstractmethod
     def get_default_response(
@@ -66,7 +62,6 @@ class HITLTypeStrategy(ABC):
         request: HITLRequest,
     ) -> Any:
         """Get a default response for timeout scenarios."""
-        pass
 
 
 class ClarificationStrategy(HITLTypeStrategy):

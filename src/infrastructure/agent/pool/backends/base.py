@@ -36,17 +36,14 @@ class Backend(ABC):
     @abstractmethod
     def backend_type(self) -> BackendType:
         """后端类型."""
-        pass
 
     @abstractmethod
     async def start(self) -> None:
         """启动后端."""
-        pass
 
     @abstractmethod
     async def stop(self) -> None:
         """停止后端."""
-        pass
 
     @abstractmethod
     async def create_instance(
@@ -61,7 +58,6 @@ class Backend(ABC):
         Returns:
             Agent实例
         """
-        pass
 
     @abstractmethod
     async def destroy_instance(
@@ -78,7 +74,6 @@ class Backend(ABC):
         Returns:
             是否成功
         """
-        pass
 
     @abstractmethod
     async def get_instance(
@@ -93,7 +88,6 @@ class Backend(ABC):
         Returns:
             实例或None
         """
-        pass
 
     @abstractmethod
     async def list_instances(self) -> list[AgentInstance]:
@@ -102,7 +96,6 @@ class Backend(ABC):
         Returns:
             实例列表
         """
-        pass
 
     @abstractmethod
     async def execute(
@@ -119,7 +112,6 @@ class Backend(ABC):
         Yields:
             Agent事件
         """
-        pass
 
     @abstractmethod
     async def health_check(
@@ -134,7 +126,6 @@ class Backend(ABC):
         Returns:
             健康检查结果
         """
-        pass
 
     @abstractmethod
     def get_stats(self) -> dict[str, Any]:
@@ -143,4 +134,3 @@ class Backend(ABC):
         Returns:
             统计信息
         """
-        pass

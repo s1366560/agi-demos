@@ -33,49 +33,40 @@ class ProviderRepository(ABC):
     @abstractmethod
     async def create(self, config: ProviderConfigCreate) -> ProviderConfig:
         """Create a new provider configuration."""
-        pass
 
     @abstractmethod
     async def get_by_id(self, provider_id: UUID) -> ProviderConfig | None:
         """Get provider by ID."""
-        pass
 
     @abstractmethod
     async def get_by_name(self, name: str) -> ProviderConfig | None:
         """Get provider by name."""
-        pass
 
     @abstractmethod
     async def list_all(self, include_inactive: bool = False) -> list[ProviderConfig]:
         """List all providers, optionally including inactive ones."""
-        pass
 
     @abstractmethod
     async def list_active(self) -> list[ProviderConfig]:
         """List all active providers."""
-        pass
 
     @abstractmethod
     async def update(
         self, provider_id: UUID, config: ProviderConfigUpdate
     ) -> ProviderConfig | None:
         """Update provider configuration."""
-        pass
 
     @abstractmethod
     async def delete(self, provider_id: UUID) -> bool:
         """Delete provider (soft delete by setting is_active=False)."""
-        pass
 
     @abstractmethod
     async def find_default_provider(self) -> ProviderConfig | None:
         """Find the default provider."""
-        pass
 
     @abstractmethod
     async def find_first_active_provider(self) -> ProviderConfig | None:
         """Find the first active provider as fallback."""
-        pass
 
     @abstractmethod
     async def find_tenant_provider(
@@ -84,7 +75,6 @@ class ProviderRepository(ABC):
         operation_type: OperationType = OperationType.LLM,
     ) -> ProviderConfig | None:
         """Find provider assigned to specific tenant."""
-        pass
 
     @abstractmethod
     async def resolve_provider(
@@ -103,22 +93,18 @@ class ProviderRepository(ABC):
         Raises:
             NoActiveProviderError: If no active provider found
         """
-        pass
 
     @abstractmethod
     async def create_health_check(self, health: ProviderHealth) -> ProviderHealth:
         """Create a health check entry."""
-        pass
 
     @abstractmethod
     async def get_latest_health(self, provider_id: UUID) -> ProviderHealth | None:
         """Get latest health check for provider."""
-        pass
 
     @abstractmethod
     async def create_usage_log(self, usage_log: LLMUsageLogCreate) -> LLMUsageLog:
         """Create a usage log entry."""
-        pass
 
     @abstractmethod
     async def get_usage_statistics(
@@ -130,7 +116,6 @@ class ProviderRepository(ABC):
         end_date: datetime | None = None,
     ) -> list[UsageStatistics]:
         """Get aggregated usage statistics."""
-        pass
 
     @abstractmethod
     async def assign_provider_to_tenant(
@@ -141,7 +126,6 @@ class ProviderRepository(ABC):
         operation_type: OperationType = OperationType.LLM,
     ) -> TenantProviderMapping:
         """Assign provider to tenant."""
-        pass
 
     @abstractmethod
     async def unassign_provider_from_tenant(
@@ -151,7 +135,6 @@ class ProviderRepository(ABC):
         operation_type: OperationType = OperationType.LLM,
     ) -> bool:
         """Unassign provider from tenant."""
-        pass
 
     @abstractmethod
     async def get_tenant_providers(
@@ -160,4 +143,3 @@ class ProviderRepository(ABC):
         operation_type: OperationType | None = None,
     ) -> list[TenantProviderMapping]:
         """Get all providers assigned to tenant."""
-        pass

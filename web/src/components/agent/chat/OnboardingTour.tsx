@@ -112,10 +112,11 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({ onComplete }) =>
 
   // Measure target element position on step change and window resize
   const measure = useCallback(() => {
+    if (!currentStep) return;
     const rect = getTargetRect(currentStep.targetSelector);
     setTargetRect(rect);
     setCardPos(computeCardPosition(rect));
-  }, [currentStep.targetSelector]);
+  }, [currentStep]);
 
   useEffect(() => {
     // Use rAF for initial measurement to avoid synchronous setState in effect
@@ -171,6 +172,8 @@ export const OnboardingTour: React.FC<OnboardingTourProps> = ({ onComplete }) =>
       zIndex: 101,
     };
   }, [targetRect, transition]);
+
+  if (!currentStep) return null;
 
   const ofLabel = t('agent.onboarding.stepOf', 'of');
 

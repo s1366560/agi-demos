@@ -53,7 +53,6 @@ class AgentServicePort(ABC):
             - {"type": "complete", "data": {"message_id": "...", "content": "..."}}
             - {"type": "error", "data": {"message": "..."}}
         """
-        pass
 
     @abstractmethod
     async def get_available_tools(self, project_id: str, tenant_id: str) -> list[dict[str, Any]]:
@@ -67,7 +66,6 @@ class AgentServicePort(ABC):
         Returns:
             List of tool definitions with name and description
         """
-        pass
 
     @abstractmethod
     async def get_conversation_context(
@@ -85,7 +83,6 @@ class AgentServicePort(ABC):
         Returns:
             List of message dictionaries for LLM context
         """
-        pass
 
     @abstractmethod
     async def create_conversation(
@@ -109,4 +106,3 @@ class AgentServicePort(ABC):
         Returns:
             The created conversation
         """
-        pass

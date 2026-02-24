@@ -317,7 +317,7 @@ function HeaderUserMenu({ tenantId }: { tenantId: string }) {
 
   if (!user) return null;
 
-  const displayName = user.name || user.email.split('@')[0];
+  const displayName = user.name || (user.email.split('@')[0] ?? '');
   const initials = displayName
     .split(' ')
     .map((n: string) => n[0])
@@ -335,7 +335,7 @@ function HeaderUserMenu({ tenantId }: { tenantId: string }) {
   const cycleTheme = () => {
     const themes: Array<'light' | 'dark' | 'system'> = ['light', 'dark', 'system'];
     const idx = themes.indexOf(theme as 'light' | 'dark' | 'system');
-    setTheme(themes[(idx + 1) % themes.length]);
+    setTheme(themes[(idx + 1) % themes.length] ?? 'light');
   };
 
   const toggleLanguage = () => {

@@ -17,7 +17,6 @@ from sqlalchemy.orm import DeclarativeBase
 class Base(DeclarativeBase):
     """Test base for SQLAlchemy models."""
 
-    pass
 
 
 class TestModel(Base):

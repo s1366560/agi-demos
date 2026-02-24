@@ -595,14 +595,17 @@ class SessionProcessor:
                 yield suggestions_event
             trace_url = None
             if self._langfuse_context:
-                    from src.configuration.config import get_settings
+                from src.configuration.config import get_settings
+
+                settings = get_settings()
                 if settings.langfuse_enabled and settings.langfuse_host:
                     trace_id = self._langfuse_context.get("conversation_id", session_id)
                     trace_url = f"{settings.langfuse_host}/trace/{trace_id}"
             yield AgentCompleteEvent(trace_url=trace_url)
             self._state = ProcessorState.COMPLETED
         elif result == ProcessorResult.COMPACT:
-                yield AgentStatusEvent(status="compact_needed")
+            yield AgentStatusEvent(status="compact_needed")
+    async def process(
         self,
         session_id: str,
         messages: list[dict[str, Any]],
@@ -611,10 +614,13 @@ class SessionProcessor:
     ) -> AsyncIterator[ProcessorEvent]:
         """
         Process a conversation turn.
+
+        Runs the ReAct loop:
         1. Call LLM with messages
         2. Process response (text, reasoning, tool calls)
         3. Execute tool calls if any
         4. Continue until complete or blocked
+
         Args:
             session_id: Session identifier
             messages: Conversation messages in OpenAI format
@@ -625,6 +631,8 @@ class SessionProcessor:
                 - tenant_id: Tenant identifier for multi-tenant isolation
                 - project_id: Project identifier
                 - extra: Additional metadata dict
+
+        Yields:
             AgentDomainEvent objects and dict passthrough events for real-time streaming
         """
         self._abort_event = abort_signal or asyncio.Event()
@@ -678,7 +686,8 @@ class SessionProcessor:
                     self._append_tool_results_to_messages(messages)
 
             async for event in self._build_completion_events(result, session_id, messages):
-                    yield event
+                yield event
+        except Exception as e:
             logger.error(f"Processor error: {e}", exc_info=True)
             yield AgentErrorEvent(message=str(e), code=type(e).__name__)
             self._state = ProcessorState.ERROR

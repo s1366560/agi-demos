@@ -85,7 +85,6 @@ class MetricsExporter(ABC):
     @abstractmethod
     def export(self, metrics: list[Metric]) -> str:
         """Export metrics to a specific format."""
-        pass
 
 
 class PrometheusExporter(MetricsExporter):

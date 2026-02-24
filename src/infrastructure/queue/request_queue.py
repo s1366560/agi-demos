@@ -210,7 +210,6 @@ class RequestQueue:
 class QueueFullError(Exception):
     """Raised when the request queue is at capacity."""
 
-    pass
 
 
 # Global request queue instance

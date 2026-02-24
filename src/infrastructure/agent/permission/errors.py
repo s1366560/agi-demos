@@ -4,7 +4,6 @@
 class PermissionError(Exception):
     """Base class for permission errors."""
 
-    pass
 
 
 class PermissionDeniedError(PermissionError):

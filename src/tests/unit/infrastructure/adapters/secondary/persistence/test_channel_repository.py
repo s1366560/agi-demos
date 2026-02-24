@@ -33,7 +33,7 @@ class TestChannelConfigRepositoryInheritance:
         """ChannelConfigRepository should inherit from BaseRepository."""
         # Note: Currently it does NOT inherit from BaseRepository
         # This test will FAIL until we refactor it
-        pass  # Will implement after refactoring
+        # Will implement after refactoring
 
     def test_has_session_attribute(self):
         """ChannelConfigRepository should have _session attribute."""

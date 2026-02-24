@@ -214,7 +214,6 @@ class BaseRepository[T, M](ABC):
         Returns:
             Domain entity instance or None
         """
-        pass
 
     def _to_db(self, domain_entity: T) -> M:
         """

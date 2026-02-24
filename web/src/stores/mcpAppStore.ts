@@ -154,7 +154,7 @@ export const useMCPAppStore = create<MCPAppState>()(
           const keys = Object.keys(nextHtmlByUri);
           if (keys.length > MAX_HTML_CACHE_ENTRIES) {
             keys
-              .sort((a, b) => nextHtmlByUri[a].cachedAt - nextHtmlByUri[b].cachedAt)
+              .sort((a, b) => (nextHtmlByUri[a]?.cachedAt ?? 0) - (nextHtmlByUri[b]?.cachedAt ?? 0))
               .slice(0, keys.length - MAX_HTML_CACHE_ENTRIES)
               .forEach((key) => {
                 delete nextHtmlByUri[key];

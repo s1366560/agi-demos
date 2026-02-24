@@ -27,12 +27,12 @@ async def test_list_runtime_plugins_enriches_channel_types() -> None:
     )
     registry = SimpleNamespace(
         list_channel_adapter_factories=lambda: {"feishu": ("plugin-a", object())},
-        list_channel_type_metadata=lambda: {},
-        list_tool_factories=lambda: {},
-        list_hooks=lambda: {},
-        list_commands=lambda: {},
-        list_services=lambda: {},
-        list_providers=lambda: {},
+        list_channel_type_metadata=dict,
+        list_tool_factories=dict,
+        list_hooks=dict,
+        list_commands=dict,
+        list_services=dict,
+        list_providers=dict,
     )
     service = PluginControlPlaneService(runtime_manager=runtime_manager, registry=registry)
 
@@ -88,12 +88,12 @@ async def test_install_plugin_returns_failure_result_without_raise() -> None:
         install_plugin=AsyncMock(return_value={"success": False, "error": "invalid requirement"}),
     )
     registry = SimpleNamespace(
-        list_channel_type_metadata=lambda: {},
-        list_tool_factories=lambda: {},
-        list_hooks=lambda: {},
-        list_commands=lambda: {},
-        list_services=lambda: {},
-        list_providers=lambda: {},
+        list_channel_type_metadata=dict,
+        list_tool_factories=dict,
+        list_hooks=dict,
+        list_commands=dict,
+        list_services=dict,
+        list_providers=dict,
     )
     service = PluginControlPlaneService(runtime_manager=runtime_manager, registry=registry)
 

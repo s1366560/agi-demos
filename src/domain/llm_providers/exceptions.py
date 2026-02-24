@@ -81,7 +81,6 @@ class AuthenticationError(ProviderError):
     - Missing authentication
     """
 
-    pass
 
 
 class RateLimitError(ProviderError):
@@ -136,7 +135,6 @@ class ProviderUnavailableError(ProviderError):
     - Timeout exceeded
     """
 
-    pass
 
 
 class ModelError(LLMError):
@@ -171,7 +169,6 @@ class InvalidResponseError(ModelError):
     - Unexpected response structure
     """
 
-    pass
 
 
 class JSONParseError(ModelError):
@@ -206,7 +203,6 @@ class ContentPolicyViolationError(ModelError):
     - Blocked content detected
     """
 
-    pass
 
 
 class ContextLengthExceededError(ModelError):
@@ -241,7 +237,6 @@ class ConfigurationError(LLMError):
     - Incompatible options
     """
 
-    pass
 
 
 class EmbeddingError(LLMError):
@@ -254,7 +249,6 @@ class EmbeddingError(LLMError):
     - Invalid input for embedding
     """
 
-    pass
 
 
 class RerankError(LLMError):
@@ -267,7 +261,6 @@ class RerankError(LLMError):
     - Score computation errors
     """
 
-    pass
 
 
 class StreamError(LLMError):
@@ -280,4 +273,3 @@ class StreamError(LLMError):
     - Stream parsing errors
     """
 
-    pass

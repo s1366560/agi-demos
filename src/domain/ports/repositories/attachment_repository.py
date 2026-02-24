@@ -24,7 +24,6 @@ class AttachmentRepositoryPort(ABC):
         Args:
             attachment: The attachment entity to save
         """
-        pass
 
     @abstractmethod
     async def get(self, attachment_id: str) -> Attachment | None:
@@ -37,7 +36,6 @@ class AttachmentRepositoryPort(ABC):
         Returns:
             The attachment if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def get_by_conversation(
@@ -55,7 +53,6 @@ class AttachmentRepositoryPort(ABC):
         Returns:
             List of attachments for the conversation
         """
-        pass
 
     @abstractmethod
     async def get_by_ids(self, attachment_ids: list[str]) -> list[Attachment]:
@@ -68,7 +65,6 @@ class AttachmentRepositoryPort(ABC):
         Returns:
             List of found attachments (may be fewer than requested if some not found)
         """
-        pass
 
     @abstractmethod
     async def delete(self, attachment_id: str) -> bool:
@@ -81,7 +77,6 @@ class AttachmentRepositoryPort(ABC):
         Returns:
             True if deleted, False if not found
         """
-        pass
 
     @abstractmethod
     async def delete_expired(self) -> int:
@@ -91,7 +86,6 @@ class AttachmentRepositoryPort(ABC):
         Returns:
             Number of attachments deleted
         """
-        pass
 
     @abstractmethod
     async def update_status(
@@ -111,7 +105,6 @@ class AttachmentRepositoryPort(ABC):
         Returns:
             True if updated, False if not found
         """
-        pass
 
     @abstractmethod
     async def update_upload_progress(
@@ -129,7 +122,6 @@ class AttachmentRepositoryPort(ABC):
         Returns:
             True if updated, False if not found
         """
-        pass
 
     @abstractmethod
     async def update_sandbox_path(
@@ -147,4 +139,3 @@ class AttachmentRepositoryPort(ABC):
         Returns:
             True if updated, False if not found
         """
-        pass

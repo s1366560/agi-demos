@@ -33,7 +33,6 @@ class HITLRequestRepositoryPort(ABC):
         Raises:
             ValueError: If request data is invalid
         """
-        pass
 
     @abstractmethod
     async def get_by_id(self, request_id: str) -> HITLRequest | None:
@@ -46,7 +45,6 @@ class HITLRequestRepositoryPort(ABC):
         Returns:
             HITL request if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def get_by_conversation(
@@ -62,7 +60,6 @@ class HITLRequestRepositoryPort(ABC):
         Returns:
             List of HITL requests
         """
-        pass
 
     @abstractmethod
     async def get_pending_by_conversation(
@@ -82,7 +79,6 @@ class HITLRequestRepositoryPort(ABC):
         Returns:
             List of pending HITL requests
         """
-        pass
 
     @abstractmethod
     async def get_pending_by_project(
@@ -102,7 +98,6 @@ class HITLRequestRepositoryPort(ABC):
         Returns:
             List of pending HITL requests
         """
-        pass
 
     @abstractmethod
     async def update_response(
@@ -122,7 +117,6 @@ class HITLRequestRepositoryPort(ABC):
         Returns:
             Updated request if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def mark_timeout(
@@ -140,7 +134,6 @@ class HITLRequestRepositoryPort(ABC):
         Returns:
             Updated request if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def mark_cancelled(self, request_id: str) -> HITLRequest | None:
@@ -153,7 +146,6 @@ class HITLRequestRepositoryPort(ABC):
         Returns:
             Updated request if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def mark_expired_requests(self, before: datetime) -> int:
@@ -168,7 +160,6 @@ class HITLRequestRepositoryPort(ABC):
         Returns:
             Number of requests marked as expired
         """
-        pass
 
     @abstractmethod
     async def delete(self, request_id: str) -> bool:
@@ -181,4 +172,3 @@ class HITLRequestRepositoryPort(ABC):
         Returns:
             True if deleted, False if not found
         """
-        pass

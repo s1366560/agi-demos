@@ -266,7 +266,7 @@ export function SandboxOutputViewer({
       <div className="h-full overflow-auto p-2" style={{ maxHeight }}>
         <Collapse
           items={items}
-          defaultActiveKey={[executions[executions.length - 1]?.id]}
+          defaultActiveKey={[executions[executions.length - 1]?.id ?? '']}
           size="small"
         />
       </div>

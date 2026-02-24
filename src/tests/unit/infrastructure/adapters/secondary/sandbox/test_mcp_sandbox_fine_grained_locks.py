@@ -160,7 +160,6 @@ class TestFineGrainedLocks:
                     # Note: asyncio.Lock does NOT support re-entrancy
                     # So we use threading.RLock wrapped for async use
                     # or we test the actual re-entrancy support
-                    pass
                 return True
 
             result = await asyncio.wait_for(reentrant_acquire(), timeout=1.0)

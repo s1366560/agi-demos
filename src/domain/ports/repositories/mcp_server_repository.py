@@ -48,7 +48,6 @@ class MCPServerRepositoryPort(ABC):
         Returns:
             Created server ID
         """
-        pass
 
     @abstractmethod
     async def get_by_id(self, server_id: str) -> Optional["MCPServer"]:
@@ -61,7 +60,6 @@ class MCPServerRepositoryPort(ABC):
         Returns:
             MCPServer entity if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def get_by_name(self, project_id: str, name: str) -> Optional["MCPServer"]:
@@ -75,7 +73,6 @@ class MCPServerRepositoryPort(ABC):
         Returns:
             MCPServer entity if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def list_by_project(
@@ -93,7 +90,6 @@ class MCPServerRepositoryPort(ABC):
         Returns:
             List of MCPServer entities
         """
-        pass
 
     @abstractmethod
     async def list_by_tenant(
@@ -111,7 +107,6 @@ class MCPServerRepositoryPort(ABC):
         Returns:
             List of MCPServer entities
         """
-        pass
 
     @abstractmethod
     async def update(
@@ -137,7 +132,6 @@ class MCPServerRepositoryPort(ABC):
         Returns:
             True if updated successfully, False if server not found
         """
-        pass
 
     @abstractmethod
     async def update_discovered_tools(
@@ -159,7 +153,6 @@ class MCPServerRepositoryPort(ABC):
         Returns:
             True if updated successfully, False if server not found
         """
-        pass
 
     @abstractmethod
     async def delete(self, server_id: str) -> bool:
@@ -172,7 +165,6 @@ class MCPServerRepositoryPort(ABC):
         Returns:
             True if deleted successfully, False if server not found
         """
-        pass
 
     @abstractmethod
     async def get_enabled_servers(
@@ -190,4 +182,3 @@ class MCPServerRepositoryPort(ABC):
         Returns:
             List of enabled MCPServer entities
         """
-        pass

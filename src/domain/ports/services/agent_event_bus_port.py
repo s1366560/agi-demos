@@ -124,7 +124,6 @@ class AgentEventBusPort(ABC):
         Returns:
             Event ID assigned by the bus
         """
-        pass
 
     @abstractmethod
     async def subscribe_events(
@@ -152,7 +151,6 @@ class AgentEventBusPort(ABC):
         Yields:
             AgentEvent objects as they arrive
         """
-        pass
 
     @abstractmethod
     async def get_events(
@@ -182,7 +180,6 @@ class AgentEventBusPort(ABC):
         Returns:
             List of events in the range
         """
-        pass
 
     @abstractmethod
     async def get_last_event_time(
@@ -202,7 +199,6 @@ class AgentEventBusPort(ABC):
         Returns:
             Tuple of (event_time_us, event_counter), or (0, 0) if no events
         """
-        pass
 
     @abstractmethod
     async def mark_complete(
@@ -221,7 +217,6 @@ class AgentEventBusPort(ABC):
             message_id: Message ID
             ttl_seconds: Time to keep the stream for recovery (default 5 minutes)
         """
-        pass
 
     @abstractmethod
     async def stream_exists(
@@ -239,7 +234,6 @@ class AgentEventBusPort(ABC):
         Returns:
             True if stream exists
         """
-        pass
 
     @abstractmethod
     async def cleanup_stream(
@@ -254,7 +248,6 @@ class AgentEventBusPort(ABC):
             conversation_id: Conversation ID
             message_id: Message ID
         """
-        pass
 
     # =========================================================================
     # Convenience methods with default implementations

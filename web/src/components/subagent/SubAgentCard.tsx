@@ -44,7 +44,7 @@ const MODEL_BADGE_STYLES: Record<string, string> = {
 };
 
 const getModelBadgeStyle = (model: string): string =>
-  MODEL_BADGE_STYLES[model] || MODEL_BADGE_STYLES.inherit;
+  MODEL_BADGE_STYLES[model] ?? MODEL_BADGE_STYLES['inherit'] ?? 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300';
 
 const formatTimeAgo = (dateStr: string | null | undefined): string => {
   if (!dateStr) return '-';

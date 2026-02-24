@@ -282,7 +282,7 @@ class UnifiedEventServiceImpl {
     this.subscriptions.get(topic)!.add(handler);
 
     // Send subscribe message to server
-    const [topicType] = topic.split(':');
+    const topicType = topic.split(':')[0] ?? '';
     this.sendSubscribeMessage(topicType, topic);
 
     logger.debug(`[UnifiedWS] Subscribed to ${topic}`);
@@ -301,7 +301,7 @@ class UnifiedEventServiceImpl {
       if (handlers.size === 0) {
         this.subscriptions.delete(topic);
         // Send unsubscribe message to server
-        const [topicType] = topic.split(':');
+        const topicType = topic.split(':')[0] ?? '';
         this.sendUnsubscribeMessage(topicType, topic);
       }
     }
@@ -543,7 +543,7 @@ class UnifiedEventServiceImpl {
 
   private resubscribeAll(): void {
     this.subscriptions.forEach((_, topic) => {
-      const [topicType] = topic.split(':');
+      const topicType = topic.split(':')[0] ?? '';
       this.sendSubscribeMessage(topicType, topic);
     });
   }
@@ -612,8 +612,9 @@ class UnifiedEventServiceImpl {
 
     this.subscriptions.forEach((_, topic) => {
       const [type] = topic.split(':');
-      if (type in topicsByType) {
-        topicsByType[type]++;
+      if (type && type in topicsByType) {
+        const key = type as keyof typeof topicsByType;
+        topicsByType[key] = (topicsByType[key] ?? 0) + 1;
       }
     });
 

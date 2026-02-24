@@ -11,12 +11,10 @@ class PromptTemplateRepository(ABC):
     @abstractmethod
     async def save(self, template: PromptTemplate) -> PromptTemplate:
         """Save a template (create or update)."""
-        pass
 
     @abstractmethod
     async def find_by_id(self, template_id: str) -> PromptTemplate | None:
         """Find a template by ID."""
-        pass
 
     @abstractmethod
     async def list_by_tenant(
@@ -27,7 +25,6 @@ class PromptTemplateRepository(ABC):
         offset: int = 0,
     ) -> list[PromptTemplate]:
         """List templates for a tenant, optionally filtered by category."""
-        pass
 
     @abstractmethod
     async def list_by_project(
@@ -37,14 +34,11 @@ class PromptTemplateRepository(ABC):
         offset: int = 0,
     ) -> list[PromptTemplate]:
         """List templates for a specific project."""
-        pass
 
     @abstractmethod
     async def delete(self, template_id: str) -> bool:
         """Delete a template. Returns True if deleted."""
-        pass
 
     @abstractmethod
     async def increment_usage(self, template_id: str) -> None:
         """Increment usage count for a template."""
-        pass

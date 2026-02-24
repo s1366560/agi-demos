@@ -86,7 +86,6 @@ class LLMConfig:
 class RateLimitError(Exception):
     """Exception raised when LLM rate limit is exceeded."""
 
-    pass
 
 
 class LLMClient(ABC):
@@ -129,7 +128,6 @@ class LLMClient(ABC):
         Returns:
             Dictionary containing the response
         """
-        pass
 
     async def generate_response(
         self,
@@ -228,7 +226,6 @@ class EmbedderClient(ABC):
         Returns:
             List of embedding vectors
         """
-        pass
 
 
 # Cross-encoder/Reranker types
@@ -259,4 +256,3 @@ class CrossEncoderClient(ABC):
         Returns:
             List of (index, score) tuples sorted by relevance
         """
-        pass

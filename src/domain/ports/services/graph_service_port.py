@@ -38,4 +38,3 @@ class GraphServicePort(ABC):
         Returns:
             True if removal was successful
         """
-        pass

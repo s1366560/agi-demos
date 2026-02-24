@@ -113,7 +113,7 @@ function findMatchingObserve(
   const actIndex = events.indexOf(actEvent);
 
   for (let i = actIndex + 1; i < events.length; i++) {
-    const event = events[i];
+    const event = events[i]!;
     if (event.type !== 'observe') continue;
 
     // Priority 1: Match by execution_id

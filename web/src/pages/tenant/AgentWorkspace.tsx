@@ -88,7 +88,7 @@ export const AgentWorkspace: React.FC = () => {
       } else if (currentProject) {
         setSelectedProjectId(currentProject.id);
       } else if (projects.length > 0) {
-        setSelectedProjectId(projects[0].id);
+        setSelectedProjectId(projects[0]?.id ?? null);
       }
 
       setInitializing(false);
@@ -141,7 +141,7 @@ export const AgentWorkspace: React.FC = () => {
     );
   }
 
-  const effectiveProjectId = selectedProjectId || (projects.length > 0 ? projects[0].id : null);
+  const effectiveProjectId = selectedProjectId || (projects.length > 0 ? (projects[0]?.id ?? null) : null);
 
   return (
     <div className="w-full h-full">

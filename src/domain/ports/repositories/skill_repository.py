@@ -37,7 +37,6 @@ class SkillRepositoryPort(ABC):
         Raises:
             ValueError: If skill data is invalid
         """
-        pass
 
     @abstractmethod
     async def get_by_id(self, skill_id: str) -> Skill | None:
@@ -50,7 +49,6 @@ class SkillRepositoryPort(ABC):
         Returns:
             Skill if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def get_by_name(
@@ -70,7 +68,6 @@ class SkillRepositoryPort(ABC):
         Returns:
             Skill if found, None otherwise
         """
-        pass
 
     @abstractmethod
     async def update(self, skill: Skill) -> Skill:
@@ -86,7 +83,6 @@ class SkillRepositoryPort(ABC):
         Raises:
             ValueError: If skill not found or data is invalid
         """
-        pass
 
     @abstractmethod
     async def delete(self, skill_id: str) -> None:
@@ -99,7 +95,6 @@ class SkillRepositoryPort(ABC):
         Raises:
             ValueError: If skill not found
         """
-        pass
 
     @abstractmethod
     async def list_by_tenant(
@@ -123,7 +118,6 @@ class SkillRepositoryPort(ABC):
         Returns:
             List of skills for the tenant
         """
-        pass
 
     @abstractmethod
     async def list_by_project(
@@ -143,7 +137,6 @@ class SkillRepositoryPort(ABC):
         Returns:
             List of skills for the project
         """
-        pass
 
     @abstractmethod
     async def find_matching_skills(
@@ -167,7 +160,6 @@ class SkillRepositoryPort(ABC):
         Returns:
             List of matching skills, sorted by match score
         """
-        pass
 
     @abstractmethod
     async def increment_usage(
@@ -188,7 +180,6 @@ class SkillRepositoryPort(ABC):
         Raises:
             ValueError: If skill not found
         """
-        pass
 
     @abstractmethod
     async def count_by_tenant(
@@ -208,4 +199,3 @@ class SkillRepositoryPort(ABC):
         Returns:
             Number of skills
         """
-        pass

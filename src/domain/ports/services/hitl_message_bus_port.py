@@ -122,7 +122,6 @@ class HITLMessageBusPort(ABC):
         Returns:
             Message ID assigned by the bus
         """
-        pass
 
     @abstractmethod
     async def subscribe_for_response(
@@ -147,7 +146,6 @@ class HITLMessageBusPort(ABC):
         Yields:
             HITLMessage objects as they arrive
         """
-        pass
 
     @abstractmethod
     async def acknowledge(
@@ -169,7 +167,6 @@ class HITLMessageBusPort(ABC):
         Returns:
             Number of messages acknowledged
         """
-        pass
 
     @abstractmethod
     async def create_consumer_group(
@@ -192,7 +189,6 @@ class HITLMessageBusPort(ABC):
         Returns:
             True if created successfully (or already exists)
         """
-        pass
 
     @abstractmethod
     async def get_pending_messages(
@@ -214,7 +210,6 @@ class HITLMessageBusPort(ABC):
         Returns:
             List of pending messages
         """
-        pass
 
     @abstractmethod
     async def claim_pending_messages(
@@ -241,7 +236,6 @@ class HITLMessageBusPort(ABC):
         Returns:
             List of claimed messages
         """
-        pass
 
     @abstractmethod
     async def cleanup_stream(
@@ -259,7 +253,6 @@ class HITLMessageBusPort(ABC):
         Returns:
             Number of messages removed (or 0 if deleted)
         """
-        pass
 
     @abstractmethod
     async def stream_exists(self, request_id: str) -> bool:
@@ -272,7 +265,6 @@ class HITLMessageBusPort(ABC):
         Returns:
             True if stream exists
         """
-        pass
 
     # =========================================================================
     # Convenience methods with default implementations

@@ -48,7 +48,7 @@ export function parseBase64Image(result: string): { data: string; format: string
   try {
     // Try to parse as JSON first (e.g., {'data': 'base64...'})
     const jsonMatch = result.match(/\{[\s\S]*['"]data['"]:\s*['"]([A-Za-z0-9+/=]+)['"][\s\S]*\}/);
-    if (jsonMatch) {
+    if (jsonMatch && jsonMatch[1]) {
       const base64Data = jsonMatch[1];
       // Detect image format from base64 header
       if (base64Data.startsWith('iVBORw0KGgo')) return { data: base64Data, format: 'png' };
