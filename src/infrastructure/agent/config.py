@@ -336,7 +336,7 @@ class ConfigManager:
         # Notify listeners of configuration change
         self._notify_change(tenant_id)
 
-    def update_default(self, **kwargs) -> None:
+    def update_default(self, **kwargs: Any) -> None:
         """Update default configuration with new values.
 
         Args:

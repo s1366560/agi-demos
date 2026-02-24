@@ -6,7 +6,7 @@ transport type and configuration.
 """
 
 import logging
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from src.domain.model.mcp.transport import TransportType
 from src.infrastructure.mcp.tools.base import (
@@ -33,7 +33,7 @@ class MCPToolFactory:
         cls,
         server_name: str,
         transport_type: TransportType,
-        **config,
+        **config: Any,
     ) -> BaseMCPToolAdapter:
         """
         Create a tool adapter for the given transport type.
@@ -75,7 +75,7 @@ class MCPToolFactory:
             raise ValueError(f"Unsupported transport type: {transport}")
 
     @classmethod
-    def _create_local_adapter(cls, server_name: str, **config) -> LocalToolAdapter:
+    def _create_local_adapter(cls, server_name: str, **config: Any) -> LocalToolAdapter:
         """Create local (stdio) adapter."""
         command = config.get("command")
         if not command:
@@ -89,7 +89,7 @@ class MCPToolFactory:
         )
 
     @classmethod
-    def _create_websocket_adapter(cls, server_name: str, **config) -> WebSocketToolAdapter:
+    def _create_websocket_adapter(cls, server_name: str, **config: Any) -> WebSocketToolAdapter:
         """Create WebSocket adapter."""
         websocket_url = config.get("websocket_url")
         if not websocket_url:
@@ -105,7 +105,7 @@ class MCPToolFactory:
         cls,
         server_name: str,
         transport_type: TransportType,
-        **config,
+        **config: Any,
     ) -> BaseMCPToolAdapter:
         """
         Get existing adapter or create new one.

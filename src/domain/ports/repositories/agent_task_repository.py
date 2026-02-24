@@ -1,6 +1,7 @@
 """Repository interface for AgentTask persistence."""
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 from src.domain.model.agent.task import AgentTask
 
@@ -35,7 +36,7 @@ class AgentTaskRepository(ABC):
         ...
 
     @abstractmethod
-    async def update(self, task_id: str, **fields) -> AgentTask | None:
+    async def update(self, task_id: str, **fields: Any) -> AgentTask | None:
         """Update specific fields on a task. Returns updated task or None."""
         ...
 

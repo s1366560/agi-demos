@@ -61,7 +61,7 @@ def convert_tools(tools: dict[str, Any]) -> list[ToolDefinition]:
 
         # Create execute wrapper with captured variables
         def make_execute_wrapper(tool_instance, tool_name):
-            async def execute_wrapper(**kwargs):
+            async def execute_wrapper(**kwargs: Any):
                 """Wrapper to execute tool."""
                 try:
                     # Try different execute method names

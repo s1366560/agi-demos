@@ -7,7 +7,7 @@ for transient sandbox operations.
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from src.domain.model.sandbox.exceptions import (
     SandboxConnectionError,
@@ -56,27 +56,19 @@ class RetryPolicy:
         """
         # Validate max_attempts
         if not 1 <= max_attempts <= 10:
-            raise ValueError(
-                f"max_attempts must be between 1 and 10, got {max_attempts}"
-            )
+            raise ValueError(f"max_attempts must be between 1 and 10, got {max_attempts}")
 
         # Validate base_delay
         if not 0.1 <= base_delay <= 60:
-            raise ValueError(
-                f"base_delay must be between 0.1 and 60, got {base_delay}"
-            )
+            raise ValueError(f"base_delay must be between 0.1 and 60, got {base_delay}")
 
         # Validate max_delay
         if not 1.0 <= max_delay <= 300:
-            raise ValueError(
-                f"max_delay must be between 1 and 300, got {max_delay}"
-            )
+            raise ValueError(f"max_delay must be between 1 and 300, got {max_delay}")
 
         # Validate backoff_factor
         if not 1.1 <= backoff_factor <= 10:
-            raise ValueError(
-                f"backoff_factor must be between 1.1 and 10, got {backoff_factor}"
-            )
+            raise ValueError(f"backoff_factor must be between 1.1 and 10, got {backoff_factor}")
 
         self.max_attempts = max_attempts
         self.base_delay = base_delay
@@ -96,7 +88,7 @@ class RetryPolicy:
         if attempt == 0:
             return self.base_delay
 
-        delay = self.base_delay * (self.backoff_factor ** attempt)
+        delay = self.base_delay * (self.backoff_factor**attempt)
         return min(delay, self.max_delay)
 
     async def execute(
@@ -131,9 +123,7 @@ class RetryPolicy:
                 should_retry = not is_last_attempt and self._should_retry(error)
 
                 if not should_retry:
-                    logger.debug(
-                        f"Operation failed with non-retryable error: {error}"
-                    )
+                    logger.debug(f"Operation failed with non-retryable error: {error}")
                     raise
 
                 if on_retry:
@@ -141,9 +131,7 @@ class RetryPolicy:
                     try:
                         on_retry(error, attempt + 1, delay)
                     except Exception as callback_error:
-                        logger.warning(
-                            f"on_retry callback failed: {callback_error}"
-                        )
+                        logger.warning(f"on_retry callback failed: {callback_error}")
 
                 if not is_last_attempt:
                     delay = self._calculate_delay(attempt)
@@ -188,10 +176,7 @@ def max_retries_exceeded(
         A SandboxConnectionError with retry information
     """
     return SandboxConnectionError(
-        message=(
-            f"Operation '{operation_name}' failed after "
-            f"{policy.max_attempts} attempts"
-        ),
+        message=(f"Operation '{operation_name}' failed after {policy.max_attempts} attempts"),
         retryable=False,  # Don't retry a retry policy failure
         operation=operation_name,
     )
@@ -233,9 +218,10 @@ def RetryableError(
             should_retry=should_retry,
         )
 
-        async def wrapper(*args, **kwargs) -> T:
+        async def wrapper(*args: Any, **kwargs: Any) -> T:
             async def bound_operation():
                 return await func(*args, **kwargs)
+
             return await policy.execute(bound_operation)
 
         return wrapper

@@ -2,6 +2,7 @@
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,9 +38,7 @@ class SqlAgentTaskRepository(AgentTaskRepository):
         """Replace all tasks for a conversation (atomic)."""
         # Delete existing
         await self._session.execute(
-            delete(AgentTaskModel).where(
-                AgentTaskModel.conversation_id == conversation_id
-            )
+            delete(AgentTaskModel).where(AgentTaskModel.conversation_id == conversation_id)
         )
         # Insert new
         for task in tasks:
@@ -68,7 +67,7 @@ class SqlAgentTaskRepository(AgentTaskRepository):
         model = await self._session.get(AgentTaskModel, task_id)
         return self._to_domain(model) if model else None
 
-    async def update(self, task_id: str, **fields) -> AgentTask | None:
+    async def update(self, task_id: str, **fields: Any) -> AgentTask | None:
         """Update specific fields on a task."""
         model = await self._session.get(AgentTaskModel, task_id)
         if not model:
@@ -84,9 +83,7 @@ class SqlAgentTaskRepository(AgentTaskRepository):
     async def delete_by_conversation(self, conversation_id: str) -> None:
         """Delete all tasks for a conversation."""
         await self._session.execute(
-            delete(AgentTaskModel).where(
-                AgentTaskModel.conversation_id == conversation_id
-            )
+            delete(AgentTaskModel).where(AgentTaskModel.conversation_id == conversation_id)
         )
         await self._session.flush()
 

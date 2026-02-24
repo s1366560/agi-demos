@@ -178,7 +178,7 @@ class AgentMessageEvent(AgentDomainEvent):
     file_metadata: list[dict[str, Any]] | None = None
     forced_skill_name: str | None = None
 
-    def __init__(self, **data) -> None:
+    def __init__(self, **data: Any) -> None:
         # Set event_type based on role
         if "event_type" not in data:
             role = data.get("role", "")

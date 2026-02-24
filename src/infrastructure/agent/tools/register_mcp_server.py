@@ -117,7 +117,7 @@ class RegisterMCPServerTool(AgentTool):
             "required": ["server_name", "server_type"],
         }
 
-    def validate_args(self, **kwargs) -> bool:
+    def validate_args(self, **kwargs: Any) -> bool:
         server_name = kwargs.get("server_name", "")
         server_type = kwargs.get("server_type", "")
         if not server_name or not server_type:
@@ -126,7 +126,7 @@ class RegisterMCPServerTool(AgentTool):
             return False
         return not (server_type in ("sse", "http", "websocket") and not kwargs.get("url"))
 
-    async def execute(self, **kwargs) -> str:
+    async def execute(self, **kwargs: Any) -> str:
         """Register, start, and discover tools from an MCP server."""
         server_name = kwargs.get("server_name", "")
         server_type = kwargs.get("server_type", "stdio")
@@ -284,8 +284,7 @@ class RegisterMCPServerTool(AgentTool):
             )
             if app_tools:
                 result += (
-                    f"\n\nDetected {len(app_tools)} MCP App(s) with UI: "
-                    f"{', '.join(app_tools)}"
+                    f"\n\nDetected {len(app_tools)} MCP App(s) with UI: {', '.join(app_tools)}"
                 )
             return result
 
@@ -293,9 +292,7 @@ class RegisterMCPServerTool(AgentTool):
             logger.error("Failed to register MCP server '%s': %s", server_name, e)
             return f"Error: Failed to register MCP server '{server_name}':\n{e}"
 
-    async def _detect_and_persist_apps(
-        self, server_name: str, tools: list[dict]
-    ) -> list[str]:
+    async def _detect_and_persist_apps(self, server_name: str, tools: list[dict]) -> list[str]:
         """Detect tools with UI metadata and persist as MCP Apps."""
         app_tools = []
         for t in tools:
@@ -366,9 +363,7 @@ class RegisterMCPServerTool(AgentTool):
                     )
                     if server_entity:
                         server_id = server_entity.id
-                        logger.debug(
-                            f"Found MCPServer entity for {server_name}: id={server_id}"
-                        )
+                        logger.debug(f"Found MCPServer entity for {server_name}: id={server_id}")
             except Exception as e:
                 logger.warning(f"Failed to look up MCPServer entity: {e}")
 

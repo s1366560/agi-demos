@@ -55,7 +55,7 @@ def handle_db_errors(entity_type: str = "Entity") -> Callable:
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any):
             try:
                 return await func(*args, **kwargs)
             except IntegrityError as e:
@@ -114,7 +114,7 @@ def transactional(func: Callable) -> Callable:
     """
 
     @wraps(func)
-    async def wrapper(self, *args, **kwargs):
+    async def wrapper(self, *args: Any, **kwargs: Any):
         session = getattr(self, "_session", None)
         if session is None:
             raise RepositoryError("No session available for transaction")

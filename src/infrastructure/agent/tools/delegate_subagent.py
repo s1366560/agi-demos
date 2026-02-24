@@ -121,7 +121,7 @@ class DelegateSubAgentTool(AgentTool):
             "required": ["subagent_name", "task"],
         }
 
-    async def execute(self, subagent_name: str = "", task: str = "", **kwargs) -> str:
+    async def execute(self, subagent_name: str = "", task: str = "", **kwargs: Any) -> str:
         """Execute delegation to a SubAgent.
 
         Args:
@@ -298,7 +298,7 @@ class ParallelDelegateSubAgentTool(AgentTool):
             "required": ["tasks"],
         }
 
-    async def execute(self, tasks: Any = None, **kwargs) -> str:
+    async def execute(self, tasks: Any = None, **kwargs: Any) -> str:
         """Execute parallel delegation to multiple SubAgents.
 
         Args:

@@ -941,7 +941,7 @@ def create_stream(
     temperature: float = 0.0,
     max_tokens: int = 4096,
     tools: list[dict[str, Any]] | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> LLMStream:
     """
     Factory function to create LLM stream.

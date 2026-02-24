@@ -1524,7 +1524,8 @@ class ReActAgent:
             budget_exceeded_stages = [
                 stage["stage"]
                 for stage in trace_data
-                if isinstance(stage.get("explain"), dict) and stage["explain"].get("budget_exceeded")
+                if isinstance(stage.get("explain"), dict)
+                and stage["explain"].get("budget_exceeded")
             ]
             yield {
                 "type": "selection_trace",
@@ -3217,7 +3218,7 @@ def create_react_agent(
     base_url: str | None = None,
     skills: list[Skill] | None = None,
     subagents: list[SubAgent] | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> ReActAgent:
     """
     Factory function to create ReAct Agent.

@@ -511,7 +511,7 @@ class LiteLLMClient(LLMClient):
         max_tokens: int = 4096,
         model_size: ModelSize = ModelSize.medium,
         langfuse_context: dict[str, Any] | None = None,
-        **kwargs,
+        **kwargs: Any,
     ):
         """
         Generate streaming response using LiteLLM.

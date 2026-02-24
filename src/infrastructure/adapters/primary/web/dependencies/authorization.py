@@ -8,6 +8,7 @@ on FastAPI endpoints using the RBAC system.
 import functools
 import logging
 from collections.abc import Callable
+from typing import Any
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +38,7 @@ def require_permission(permission: str):
 
     def decorator(func: Callable):
         @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any):
             # Extract current_user from kwargs (injected by FastAPI Depends)
             current_user: User | None = kwargs.get("current_user")
             if not current_user:
@@ -115,7 +116,7 @@ def require_any_permission(*permissions: str):
 
     def decorator(func: Callable):
         @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any):
             current_user: User | None = kwargs.get("current_user")
             if not current_user:
                 raise HTTPException(
@@ -183,7 +184,7 @@ def require_all_permissions(*permissions: str):
 
     def decorator(func: Callable):
         @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any):
             current_user: User | None = kwargs.get("current_user")
             if not current_user:
                 raise HTTPException(
@@ -251,7 +252,7 @@ def require_role(role: str):
 
     def decorator(func: Callable):
         @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
+        async def wrapper(*args: Any, **kwargs: Any):
             current_user: User | None = kwargs.get("current_user")
             if not current_user:
                 raise HTTPException(

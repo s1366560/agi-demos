@@ -43,7 +43,7 @@ class ToolResult:
     artifacts: list[dict[str, Any]] = field(default_factory=list)
 
     @staticmethod
-    def ok(output: str, **metadata) -> "ToolResult":
+    def ok(output: str, **metadata: Any) -> "ToolResult":
         """Create a success result."""
         return ToolResult(output=output, success=True, metadata=metadata)
 
@@ -160,7 +160,7 @@ class ToolPort(Protocol):
         """Permission required to use this tool."""
         ...
 
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs: Any) -> ToolResult:
         """
         Execute the tool with given arguments.
 
@@ -256,6 +256,6 @@ class BaseTool:
             },
         }
 
-    async def execute(self, **kwargs) -> ToolResult:
+    async def execute(self, **kwargs: Any) -> ToolResult:
         """Execute the tool. Override in subclasses."""
         raise NotImplementedError("Subclasses must implement execute()")

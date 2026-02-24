@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 class ToolStatus(Enum):
     """Status of a tool in the registry."""
+
     REGISTERED = "registered"
     ACTIVE = "active"
     DISABLED = "disabled"
@@ -78,7 +79,7 @@ class Tool(ABC):
         ...
 
     @abstractmethod
-    async def execute(self, **kwargs) -> Any:
+    async def execute(self, **kwargs: Any) -> Any:
         """Execute the tool.
 
         Args:

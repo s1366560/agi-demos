@@ -25,7 +25,9 @@ class TaskStatus(str, Enum):
 
 
 class BackgroundTask:
-    def __init__(self, task_id: str, task_type: str, func: Callable, *args, **kwargs) -> None:
+    def __init__(
+        self, task_id: str, task_type: str, func: Callable, *args: Any, **kwargs: Any
+    ) -> None:
         self.task_id = task_id
         self.task_type = task_type
         self.func = func
@@ -118,14 +120,16 @@ class TaskManager:
 
         self._cleanup_task = asyncio.create_task(cleanup_old_tasks())
 
-    def create_task(self, task_type: str, func: Callable, *args, **kwargs) -> BackgroundTask:
+    def create_task(
+        self, task_type: str, func: Callable, *args: Any, **kwargs: Any
+    ) -> BackgroundTask:
         """Create a new background task."""
         task_id = str(uuid4())
         task = BackgroundTask(task_id, task_type, func, *args, **kwargs)
         self.tasks[task_id] = task
         return task
 
-    async def submit_task(self, task_type: str, func: Callable, *args, **kwargs) -> str:
+    async def submit_task(self, task_type: str, func: Callable, *args: Any, **kwargs: Any) -> str:
         """Submit a task for background execution."""
         task = self.create_task(task_type, func, *args, **kwargs)
         task._task = asyncio.create_task(task.run())

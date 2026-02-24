@@ -13,6 +13,7 @@ import contextlib
 import json
 import logging
 from abc import ABC, abstractmethod
+from types import TracebackType
 from typing import Any
 
 import aiohttp
@@ -1116,6 +1117,11 @@ class MCPClient:
         await self.connect()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ):
         """Async context manager exit."""
         await self.disconnect()

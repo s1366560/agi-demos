@@ -27,7 +27,7 @@ class PydanticType[T: BaseModel](TypeDecorator):
     impl = JSON
     cache_ok = True
 
-    def __init__(self, pydantic_type: type[T], *args, **kwargs) -> None:
+    def __init__(self, pydantic_type: type[T], *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.pydantic_type = pydantic_type
 
@@ -62,13 +62,11 @@ class PydanticListType[T: BaseModel](TypeDecorator):
     impl = JSON
     cache_ok = True
 
-    def __init__(self, pydantic_type: type[T], *args, **kwargs) -> None:
+    def __init__(self, pydantic_type: type[T], *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.pydantic_type = pydantic_type
 
-    def process_bind_param(
-        self, value: list[T] | None, dialect: Dialect
-    ) -> list[dict] | None:
+    def process_bind_param(self, value: list[T] | None, dialect: Dialect) -> list[dict] | None:
         """Convert list of Pydantic models to list of dicts for storage."""
         if value is None:
             return None
@@ -85,9 +83,7 @@ class PydanticListType[T: BaseModel](TypeDecorator):
                 )
         return result
 
-    def process_result_value(
-        self, value: list[dict] | None, dialect: Dialect
-    ) -> list[T] | None:
+    def process_result_value(self, value: list[dict] | None, dialect: Dialect) -> list[T] | None:
         """Convert stored list of dicts back to list of Pydantic models."""
         if value is None:
             return None
@@ -109,7 +105,9 @@ class ValidatedJSON(TypeDecorator):
     impl = JSON
     cache_ok = True
 
-    def __init__(self, pydantic_type: type[BaseModel] | None = None, *args, **kwargs) -> None:
+    def __init__(
+        self, pydantic_type: type[BaseModel] | None = None, *args: Any, **kwargs: Any
+    ) -> None:
         super().__init__(*args, **kwargs)
         self.pydantic_type = pydantic_type
 

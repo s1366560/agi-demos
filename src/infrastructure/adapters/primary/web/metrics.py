@@ -36,6 +36,7 @@ def _get_otel_function(name: str) -> Callable | None:
                 increment_counter,
                 record_histogram_value,
             )
+
             _otel_functions = {
                 "create_counter": create_counter,
                 "create_histogram": create_histogram,
@@ -104,7 +105,12 @@ class AgentMetrics:
             increment_counter_fn = _get_otel_function("increment_counter")
             if increment_counter_fn:
                 metric_name = name.replace(".", "_")
-                increment_counter_fn(f"agent_{metric_name}", f"Agent {metric_name}", amount=value, attributes=labels or {})
+                increment_counter_fn(
+                    f"agent_{metric_name}",
+                    f"Agent {metric_name}",
+                    amount=value,
+                    attributes=labels or {},
+                )
 
     def set_gauge(self, name: str, value: float, labels: dict[str, str] | None = None) -> None:
         """
@@ -137,7 +143,9 @@ class AgentMetrics:
             record_histogram_fn = _get_otel_function("record_histogram_value")
             if record_histogram_fn:
                 metric_name = name.replace(".", "_")
-                record_histogram_fn(f"agent_{metric_name}", f"Agent {metric_name}", value, attributes=labels or {})
+                record_histogram_fn(
+                    f"agent_{metric_name}", f"Agent {metric_name}", value, attributes=labels or {}
+                )
 
     def get_counter(self, name: str, labels: dict[str, str] | None = None) -> int:
         """Get counter value."""
@@ -215,7 +223,7 @@ def track_execution(operation_name: str):
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        async def async_wrapper(*args, **kwargs):
+        async def async_wrapper(*args: Any, **kwargs: Any):
             start_time = time.time()
             success = True
 
@@ -239,7 +247,7 @@ def track_execution(operation_name: str):
                     agent_metrics.increment(f"{operation_name}_failure")
 
         @wraps(func)
-        def sync_wrapper(*args, **kwargs):
+        def sync_wrapper(*args: Any, **kwargs: Any):
             start_time = time.time()
             success = True
 

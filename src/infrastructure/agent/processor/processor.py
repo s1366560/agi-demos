@@ -2581,7 +2581,7 @@ def create_processor(
     tools: list[ToolDefinition],
     api_key: str | None = None,
     base_url: str | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> SessionProcessor:
     """
     Factory function to create session processor.

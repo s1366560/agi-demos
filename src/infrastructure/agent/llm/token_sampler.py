@@ -151,7 +151,7 @@ class BatchLogBuffer:
             elif level == "error":
                 logger.error(message)
 
-    def add(self, level: str, message: str, **kwargs) -> None:
+    def add(self, level: str, message: str, **kwargs: Any) -> None:
         """
         Add a log entry to the buffer.
 

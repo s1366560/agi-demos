@@ -21,6 +21,7 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
+from types import TracebackType
 
 from src.domain.llm_providers.models import ProviderType
 
@@ -338,7 +339,12 @@ class RateLimitContext:
     async def __aenter__(self) -> "RateLimitContext":
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         if not self._released:
             self._semaphore.release()
             self._released = True

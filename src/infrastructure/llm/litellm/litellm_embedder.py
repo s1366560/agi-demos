@@ -372,7 +372,7 @@ class LiteLLMEmbedder(BaseEmbedder):
 
         if not hasattr(litellm, "aembedding"):
 
-            async def _noop_aembedding(**kwargs):
+            async def _noop_aembedding(**kwargs: Any):
                 return type(
                     "Resp",
                     (),
@@ -480,7 +480,7 @@ class LiteLLMEmbedder(BaseEmbedder):
 
         if not hasattr(litellm, "aembedding"):
 
-            async def _noop_aembedding(**kwargs):
+            async def _noop_aembedding(**kwargs: Any):
                 return type(
                     "Resp",
                     (),

@@ -13,6 +13,7 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import Enum
+from types import TracebackType
 from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
@@ -372,7 +373,12 @@ class CircuitBreaker:
         """Async context manager entry."""
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """Async context manager exit."""
         if exc_type is not None:
             await self._on_failure(exc_val)

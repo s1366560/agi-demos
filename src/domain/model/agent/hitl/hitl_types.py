@@ -518,7 +518,7 @@ def create_clarification_request(
     clarification_type: ClarificationType = ClarificationType.CUSTOM,
     allow_custom: bool = True,
     timeout_seconds: float = 300.0,
-    **kwargs,
+    **kwargs: Any,
 ) -> HITLRequest:
     """Factory function to create a clarification request."""
     return HITLRequest(
@@ -546,7 +546,7 @@ def create_decision_request(
     decision_type: DecisionType = DecisionType.SINGLE_CHOICE,
     allow_custom: bool = False,
     timeout_seconds: float = 300.0,
-    **kwargs,
+    **kwargs: Any,
 ) -> HITLRequest:
     """Factory function to create a decision request."""
     return HITLRequest(
@@ -578,7 +578,7 @@ def create_env_var_request(
     fields: list[EnvVarField],
     message: str | None = None,
     timeout_seconds: float = 300.0,
-    **kwargs,
+    **kwargs: Any,
 ) -> HITLRequest:
     """Factory function to create an environment variable request."""
     return HITLRequest(
@@ -604,7 +604,7 @@ def create_permission_request(
     action: str,
     risk_level: RiskLevel = RiskLevel.MEDIUM,
     timeout_seconds: float = 60.0,
-    **kwargs,
+    **kwargs: Any,
 ) -> HITLRequest:
     """Factory function to create a permission request."""
     return HITLRequest(

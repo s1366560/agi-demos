@@ -262,7 +262,7 @@ class GenericMetadata(BaseModel):
     class Config:
         extra = "allow"
 
-    def __init__(self, **data) -> None:
+    def __init__(self, **data: Any) -> None:
         super().__init__(**data)
 
 

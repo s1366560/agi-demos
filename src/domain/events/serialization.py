@@ -149,9 +149,7 @@ class EventSerializer:
         # Validate expected type
         event_type = data.get("event_type")
         if expected_type and event_type != expected_type:
-            raise DeserializationError(
-                f"Expected event type '{expected_type}', got '{event_type}'"
-            )
+            raise DeserializationError(f"Expected event type '{expected_type}', got '{event_type}'")
 
         # Get schema version
         original_version = data.get("schema_version", "1.0")
@@ -178,9 +176,7 @@ class EventSerializer:
                 data["payload"] = migrated_payload
                 data["schema_version"] = target_version
                 migrated = True
-                logger.debug(
-                    f"Migrated {event_type} from v{original_version} to v{target_version}"
-                )
+                logger.debug(f"Migrated {event_type} from v{original_version} to v{target_version}")
             except ValueError:
                 # No migration path, keep original version
                 if self.strict_mode:
@@ -266,20 +262,20 @@ class EventSerializer:
 _default_serializer = EventSerializer()
 
 
-def serialize_event(envelope: EventEnvelope, **kwargs) -> str:
+def serialize_event(envelope: EventEnvelope, **kwargs: Any) -> str:
     """Serialize an event envelope to JSON using the default serializer."""
     return _default_serializer.serialize(envelope, **kwargs)
 
 
 def deserialize_event(
     json_str: str,
-    **kwargs,
+    **kwargs: Any,
 ) -> DeserializationResult:
     """Deserialize JSON to an event envelope using the default serializer."""
     return _default_serializer.deserialize(json_str, **kwargs)
 
 
-def create_serializer(**kwargs) -> EventSerializer:
+def create_serializer(**kwargs: Any) -> EventSerializer:
     """Create a custom event serializer.
 
     Args:

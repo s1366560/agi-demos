@@ -47,7 +47,7 @@ class HITLTypeStrategy(ABC):
         self,
         conversation_id: str,
         request_data: dict[str, Any],
-        **kwargs,
+        **kwargs: Any,
     ) -> HITLRequest:
         """Create an HITL request from raw data."""
         pass
@@ -83,7 +83,7 @@ class ClarificationStrategy(HITLTypeStrategy):
         self,
         conversation_id: str,
         request_data: dict[str, Any],
-        **kwargs,
+        **kwargs: Any,
     ) -> HITLRequest:
         question = request_data.get("question", "")
         options_data = request_data.get("options", [])
@@ -152,7 +152,7 @@ class DecisionStrategy(HITLTypeStrategy):
         self,
         conversation_id: str,
         request_data: dict[str, Any],
-        **kwargs,
+        **kwargs: Any,
     ) -> HITLRequest:
         question = request_data.get("question", "")
         options_data = request_data.get("options", [])
@@ -231,7 +231,7 @@ class EnvVarStrategy(HITLTypeStrategy):
         self,
         conversation_id: str,
         request_data: dict[str, Any],
-        **kwargs,
+        **kwargs: Any,
     ) -> HITLRequest:
         from src.domain.model.agent.hitl_types import EnvVarInputType
 
@@ -297,7 +297,7 @@ class PermissionStrategy(HITLTypeStrategy):
         self,
         conversation_id: str,
         request_data: dict[str, Any],
-        **kwargs,
+        **kwargs: Any,
     ) -> HITLRequest:
         tool_name = request_data.get("tool_name", "unknown")
         action = request_data.get("action", "execute")
