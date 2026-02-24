@@ -11,6 +11,8 @@ from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
+from src.domain.events.event_dicts import SSEEventDict
+
 # Import AgentEventType from the unified types module (Single Source of Truth)
 from src.domain.events.types import AgentEventType, get_frontend_event_types
 
@@ -39,7 +41,7 @@ class AgentDomainEvent(BaseModel):
     class Config:
         frozen = True  # Immutable events
 
-    def to_event_dict(self) -> Dict[str, Any]:
+    def to_event_dict(self) -> SSEEventDict:
         """
         Convert to SSE/event dictionary format for streaming.
 

@@ -10,6 +10,7 @@ import logging
 import uuid
 from typing import Any, Callable, Dict, List, Optional
 
+from src.domain.events.event_dicts import TodoPendingEvent
 from src.domain.model.agent.task import AgentTask, TaskPriority, TaskStatus
 from src.infrastructure.agent.tools.base import AgentTool
 
@@ -107,7 +108,7 @@ class TodoWriteTool(AgentTool):
             ),
         )
         self._session_factory = session_factory
-        self._pending_events: List[Dict[str, Any]] = []
+        self._pending_events: List[TodoPendingEvent] = []
 
     def get_parameters_schema(self) -> Dict[str, Any]:
         return {
@@ -150,7 +151,7 @@ class TodoWriteTool(AgentTool):
             return False
         return True
 
-    def consume_pending_events(self) -> List[Dict[str, Any]]:
+    def consume_pending_events(self) -> List[TodoPendingEvent]:
         """Consume and return any pending SSE events from the last execute()."""
         events = list(self._pending_events)
         self._pending_events.clear()

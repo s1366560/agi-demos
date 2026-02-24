@@ -7,6 +7,14 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
+from src.domain.events.event_dicts import (
+    LLMMessageDict,
+    MessageDict,
+    ReasoningPartDict,
+    TextPartDict,
+    ToolPartDict,
+)
+
 
 class MessageRole(str, Enum):
     """Message role types."""
@@ -49,7 +57,7 @@ class ToolPart:
             return int((self.end_time - self.start_time) * 1000)
         return None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> ToolPartDict:
         """Convert to dictionary."""
         return {
             "type": "tool",
@@ -74,7 +82,7 @@ class TextPart:
     end_time: Optional[float] = None
     synthetic: bool = False  # Generated vs from LLM
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> TextPartDict:
         """Convert to dictionary."""
         return {
             "type": "text",
@@ -92,7 +100,7 @@ class ReasoningPart:
     end_time: Optional[float] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> ReasoningPartDict:
         """Convert to dictionary."""
         return {
             "type": "reasoning",
@@ -180,7 +188,7 @@ class Message:
         texts = [p.text for p in self.get_text_parts()]
         return "\n".join(texts)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> MessageDict:
         """Convert to dictionary."""
         return {
             "id": self.id,
@@ -198,7 +206,7 @@ class Message:
             "completed_at": self.completed_at,
         }
 
-    def to_llm_format(self) -> Dict[str, Any]:
+    def to_llm_format(self) -> LLMMessageDict:
         """
         Convert to format suitable for LLM API.
 

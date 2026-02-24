@@ -28,6 +28,7 @@ from src.domain.events.agent_events import (
     AgentTaskStartEvent,
     AgentThoughtEvent,
 )
+from src.domain.events.event_dicts import SSEEventDict
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ class EventConverter:
         """
         self._debug_logging = debug_logging
 
-    def convert(self, domain_event: AgentDomainEvent) -> Optional[Dict[str, Any]]:
+    def convert(self, domain_event: AgentDomainEvent) -> Optional[SSEEventDict]:
         """
         Convert AgentDomainEvent to SSE event dictionary format.
 
@@ -101,8 +102,8 @@ class EventConverter:
         self,
         event_type: AgentEventType,
         domain_event: AgentDomainEvent,
-        event_dict: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        event_dict: SSEEventDict,
+    ) -> Optional[SSEEventDict]:
         """
         Apply backward compatibility transformations to event dict.
 
@@ -207,7 +208,7 @@ class EventConverter:
         domain_event: AgentDomainEvent,
         skill: SkillLike,
         current_step: int,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[SSEEventDict]:
         """
         Convert SkillExecutor domain event to SSE event format.
 
@@ -245,7 +246,7 @@ class EventConverter:
         domain_event: AgentDomainEvent,
         skill: SkillLike,
         timestamp: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[SSEEventDict]:
         """Convert skill thought event."""
         if not isinstance(domain_event, AgentThoughtEvent):
             return None
@@ -282,7 +283,7 @@ class EventConverter:
         skill: SkillLike,
         current_step: int,
         timestamp: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[SSEEventDict]:
         """Convert skill act event."""
         if not isinstance(domain_event, AgentActEvent):
             return None
@@ -307,7 +308,7 @@ class EventConverter:
         skill: SkillLike,
         current_step: int,
         timestamp: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[SSEEventDict]:
         """Convert skill observe event."""
         if not isinstance(domain_event, AgentObserveEvent):
             return None
@@ -328,7 +329,7 @@ class EventConverter:
             "timestamp": timestamp,
         }
 
-    def convert_plan_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
+    def convert_plan_event(self, event: Dict[str, Any]) -> SSEEventDict:
         """
         Convert internal Plan Mode event to SSE event format.
 
