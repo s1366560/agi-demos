@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 @router.get("/conversations/{conversation_id}/messages")
-async def get_conversation_messages(
+async def get_conversation_messages(  # noqa: PLR0913
     conversation_id: str,
     project_id: str = Query(..., description="Project ID for authorization"),
     limit: int = Query(50, ge=1, le=500, description="Maximum events to return"),

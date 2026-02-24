@@ -118,7 +118,7 @@ def _build_lifecycle_metadata(
 class SessionsSpawnTool(AgentTool):
     """Spawn a SubAgent run as a non-blocking session."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         subagent_names: list[str],
         subagent_descriptions: dict[str, str],
@@ -1139,7 +1139,7 @@ class SessionsAckTool(AgentTool):
 class SessionsSendTool(AgentTool):
     """Send follow-up work to the same SubAgent lineage as an existing run."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         run_registry: SubAgentRunRegistry,
         conversation_id: str,
@@ -1429,7 +1429,7 @@ class SubAgentsControlTool(AgentTool):
 
     _ACTIVE_STATUSES: ClassVar[set] = {SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING}
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         run_registry: SubAgentRunRegistry,
         conversation_id: str,

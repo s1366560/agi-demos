@@ -2226,7 +2226,7 @@ class SessionProcessor:
                     f"size={len(file_content)}, project_id={project_id}"
                 )
 
-                def _sync_upload(
+                def _sync_upload(  # noqa: PLR0913
                     content: bytes,
                     fname: str,
                     pid: str,
@@ -2302,7 +2302,7 @@ class SessionProcessor:
                         "size_bytes": len(content),
                     }
 
-                async def _threaded_upload(
+                async def _threaded_upload(  # noqa: PLR0913
                     content: bytes,
                     fname: str,
                     pid: str,

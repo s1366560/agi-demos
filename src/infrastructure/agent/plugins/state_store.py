@@ -72,7 +72,7 @@ class PluginStateStore:
         """Persist plugin enabled status."""
         return self.update_plugin(plugin_name, enabled=enabled, tenant_id=tenant_id)
 
-    def update_plugin(
+    def update_plugin(  # noqa: PLR0913
         self,
         plugin_name: str,
         *,

@@ -165,7 +165,7 @@ convention = "google"
 max-complexity = 12  # Default 10, relaxed slightly
 
 [tool.ruff.lint.pylint]
-max-args = 8  # Default 5, FastAPI dependency injection requires more params
+max-args = 10  # Default 5, raised for DI constructors and FastAPI endpoints
 
 [tool.mypy]
 python_version = "3.12"

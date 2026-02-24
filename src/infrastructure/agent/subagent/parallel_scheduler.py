@@ -75,7 +75,7 @@ class ParallelScheduler:
         """
         self._config = config or ParallelSchedulerConfig()
 
-    async def execute(
+    async def execute(  # noqa: PLR0913
         self,
         subtasks: list[SubTask],
         subagent_map: dict[str, SubAgent],

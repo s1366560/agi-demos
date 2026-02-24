@@ -473,7 +473,7 @@ class Skill:
         )
 
     @classmethod
-    def create(
+    def create(  # noqa: PLR0913
         cls,
         tenant_id: str,
         name: str,

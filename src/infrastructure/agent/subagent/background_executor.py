@@ -61,7 +61,7 @@ class BackgroundExecutor:
         """Access the state tracker."""
         return self._tracker
 
-    def launch(
+    def launch(  # noqa: PLR0913
         self,
         subagent: SubAgent,
         user_message: str,
@@ -165,7 +165,7 @@ class BackgroundExecutor:
         """
         return [s.to_dict() for s in self._tracker.get_active(conversation_id)]
 
-    async def _run(
+    async def _run(  # noqa: PLR0913
         self,
         execution_id: str,
         subagent: SubAgent,

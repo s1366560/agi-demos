@@ -71,7 +71,7 @@ class AgentService(AgentServicePort):
     - Real-time SSE events for step_start, step_end
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         conversation_repository: ConversationRepository,
         execution_repository: AgentExecutionRepository,

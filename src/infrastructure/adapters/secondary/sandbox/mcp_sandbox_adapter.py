@@ -106,7 +106,7 @@ class MCPSandboxAdapter(SandboxPort):
         await adapter.terminate_sandbox(sandbox.id)
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         mcp_image: str = DEFAULT_SANDBOX_IMAGE,
         default_timeout: int = 60,

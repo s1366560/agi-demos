@@ -119,7 +119,7 @@ class ReActAgent:
         ("data", ("memory", "entity", "graph", "sql", "database", "query", "episode")),
     )
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         model: str,
         tools: dict[str, Any] | None = None,  # Tool name -> Tool instance (static)
@@ -885,7 +885,7 @@ class ReActAgent:
         except Exception as e:
             logger.debug(f"[ReActAgent] Background conversation indexing failed: {e}")
 
-    async def _build_system_prompt(
+    async def _build_system_prompt(  # noqa: PLR0913
         self,
         user_query: str,
         conversation_context: list[dict[str, str]],
@@ -999,7 +999,7 @@ class ReActAgent:
             subagent=subagent,
         )
 
-    async def stream(
+    async def stream(  # noqa: PLR0913
         self,
         conversation_id: str,
         user_message: str,
@@ -2623,7 +2623,7 @@ class ReActAgent:
         """Return subagent lifecycle observability counters for overview tools."""
         return {"hook_failures": int(self._subagent_lifecycle_hook_failures)}
 
-    async def _launch_subagent_session(
+    async def _launch_subagent_session(  # noqa: PLR0913
         self,
         run_id: str,
         subagent: SubAgent,
@@ -2946,7 +2946,7 @@ class ReActAgent:
             "completed_at": run.ended_at.isoformat() if run.ended_at else None,
         }
 
-    async def _persist_subagent_completion_announce(
+    async def _persist_subagent_completion_announce(  # noqa: PLR0913
         self,
         *,
         conversation_id: str,

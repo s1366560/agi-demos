@@ -693,7 +693,7 @@ class ProjectReActAgent:
             )
             return False
 
-    async def execute_chat(
+    async def execute_chat(  # noqa: PLR0913
         self,
         conversation_id: str,
         user_message: str,
