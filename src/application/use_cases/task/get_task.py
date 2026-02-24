@@ -2,18 +2,27 @@
 Use case for getting a task log by ID.
 """
 
-from dataclasses import dataclass
 from typing import Optional
+
+from pydantic import BaseModel, field_validator
 
 from src.domain.model.task.task_log import TaskLog
 from src.domain.ports.repositories.task_repository import TaskRepository
 
 
-@dataclass
-class GetTaskQuery:
+class GetTaskQuery(BaseModel):
     """Query to get a task by ID"""
 
+    model_config = {"frozen": True}
+
     task_id: str
+
+    @field_validator("task_id")
+    @classmethod
+    def must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("must not be empty")
+        return v
 
 
 class GetTaskUseCase:

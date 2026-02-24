@@ -2,21 +2,23 @@
 Use case for listing task logs.
 """
 
-from dataclasses import dataclass
 from typing import List, Optional
+
+from pydantic import BaseModel, Field
 
 from src.domain.model.task.task_log import TaskLog
 from src.domain.ports.repositories.task_repository import TaskRepository
 
 
-@dataclass
-class ListTasksQuery:
+class ListTasksQuery(BaseModel):
     """Query to list tasks"""
+
+    model_config = {"frozen": True}
 
     group_id: Optional[str] = None
     status: Optional[str] = None
-    limit: int = 100
-    offset: int = 0
+    limit: int = Field(default=100, ge=1, le=10000)
+    offset: int = Field(default=0, ge=0)
 
 
 class ListTasksUseCase:

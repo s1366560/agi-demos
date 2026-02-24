@@ -2,17 +2,25 @@
 Use case for deleting API keys.
 """
 
-from dataclasses import dataclass
+from pydantic import BaseModel, field_validator
 
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
 
 
-@dataclass
-class DeleteAPIKeyCommand:
+class DeleteAPIKeyCommand(BaseModel):
     """Command to delete an API key"""
+
+    model_config = {"frozen": True}
 
     key_id: str
     user_id: str  # For authorization
+
+    @field_validator("key_id", "user_id")
+    @classmethod
+    def must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("must not be empty")
+        return v
 
 
 class DeleteAPIKeyUseCase:

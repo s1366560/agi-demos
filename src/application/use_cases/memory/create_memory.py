@@ -1,5 +1,6 @@
-from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field, field_validator
 
 from src.domain.model.memory.episode import Episode, SourceType
 from src.domain.model.memory.memory import Memory
@@ -7,20 +8,30 @@ from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.domain.ports.services.graph_service_port import GraphServicePort
 
 
-@dataclass
-class CreateMemoryCommand:
+class CreateMemoryCommand(BaseModel):
+    """Command to create a new memory"""
+
+    model_config = {"frozen": True}
+
     project_id: str
     title: str
     content: str
     author_id: str
     tenant_id: str
     content_type: str = "text"
-    tags: List[str] = None
-    entities: List[Dict[str, Any]] = None
-    relationships: List[Dict[str, Any]] = None
-    collaborators: List[str] = None
+    tags: Optional[List[str]] = Field(default=None)
+    entities: Optional[List[Dict[str, Any]]] = Field(default=None)
+    relationships: Optional[List[Dict[str, Any]]] = Field(default=None)
+    collaborators: Optional[List[str]] = Field(default=None)
     is_public: bool = False
-    metadata: Dict[str, Any] = None
+    metadata: Optional[Dict[str, Any]] = Field(default=None)
+
+    @field_validator("project_id", "title", "content", "author_id", "tenant_id")
+    @classmethod
+    def must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("must not be empty")
+        return v
 
 
 class CreateMemoryUseCase:

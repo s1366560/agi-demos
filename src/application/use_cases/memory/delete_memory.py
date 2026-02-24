@@ -1,14 +1,25 @@
-from dataclasses import dataclass
 from typing import Optional
+
+from pydantic import BaseModel, field_validator
 
 from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.domain.ports.services.graph_service_port import GraphServicePort
 
 
-@dataclass
-class DeleteMemoryCommand:
+class DeleteMemoryCommand(BaseModel):
+    """Command to delete a memory"""
+
+    model_config = {"frozen": True}
+
     memory_id: str
     project_id: Optional[str] = None  # For validation if needed
+
+    @field_validator("memory_id")
+    @classmethod
+    def must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("must not be empty")
+        return v
 
 
 class DeleteMemoryUseCase:

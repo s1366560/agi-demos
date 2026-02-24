@@ -2,17 +2,19 @@
 Use case for updating a task log.
 """
 
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
+
+from pydantic import BaseModel, field_validator
 
 from src.domain.model.task.task_log import TaskLog
 from src.domain.ports.repositories.task_repository import TaskRepository
 
 
-@dataclass
-class UpdateTaskCommand:
+class UpdateTaskCommand(BaseModel):
     """Command to update a task"""
+
+    model_config = {"frozen": True}
 
     task_id: str
     status: Optional[str] = None
@@ -21,6 +23,13 @@ class UpdateTaskCommand:
     completed_at: Optional[datetime] = None
     stopped_at: Optional[datetime] = None
     worker_id: Optional[str] = None
+
+    @field_validator("task_id")
+    @classmethod
+    def must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("must not be empty")
+        return v
 
 
 class UpdateTaskUseCase:

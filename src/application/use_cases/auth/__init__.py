@@ -2,22 +2,38 @@
 Use case for creating API keys.
 """
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
+
+from pydantic import BaseModel, field_validator
 
 from src.domain.model.auth.api_key import APIKey
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
 
 
-@dataclass
-class CreateAPIKeyCommand:
+class CreateAPIKeyCommand(BaseModel):
     """Command to create an API key"""
+
+    model_config = {"frozen": True}
 
     user_id: str
     name: str
     permissions: List[str]
     expires_in_days: Optional[int] = None
+
+    @field_validator("user_id", "name")
+    @classmethod
+    def must_not_be_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("must not be empty")
+        return v
+
+    @field_validator("expires_in_days")
+    @classmethod
+    def must_be_positive(cls, v: Optional[int]) -> Optional[int]:
+        if v is not None and v <= 0:
+            raise ValueError("must be positive")
+        return v
 
 
 class CreateAPIKeyUseCase:
