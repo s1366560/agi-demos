@@ -172,7 +172,9 @@ warn_return_any = false
 warn_unused_configs = true
 disallow_untyped_defs = false
 exclude = ["sdk/"]
-ignore_errors = true
+# NOTE: 1606 pre-existing type errors remain (arg-type, union-attr, attr-defined, etc.)
+# These were masked by ignore_errors=true. Fixing them is a separate effort.
+# Run: uv run mypy src/ --ignore-missing-imports  to see current state.
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
