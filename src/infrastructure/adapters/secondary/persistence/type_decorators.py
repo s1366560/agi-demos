@@ -31,7 +31,7 @@ class PydanticType[T: BaseModel](TypeDecorator[Any]):
         super().__init__(*args, **kwargs)
         self.pydantic_type = pydantic_type
 
-    def process_bind_param(self, value: T | None, dialect: Dialect) -> dict[str, Any] | None:
+    def process_bind_param(self, value: T | dict[str, Any] | None, dialect: Dialect) -> dict[str, Any] | None:
         """Convert Pydantic model to dict for storage."""
         if value is None:
             return None
@@ -66,7 +66,7 @@ class PydanticListType[T: BaseModel](TypeDecorator[Any]):
         super().__init__(*args, **kwargs)
         self.pydantic_type = pydantic_type
 
-    def process_bind_param(self, value: list[T] | None, dialect: Dialect) -> list[dict[str, Any]] | None:
+    def process_bind_param(self, value: list[T] | list[dict[str, Any]] | None, dialect: Dialect) -> list[dict[str, Any]] | None:
         """Convert list of Pydantic models to list of dicts for storage."""
         if value is None:
             return None

@@ -30,7 +30,7 @@ def get_current_span() -> Span:
         span = _get_current_span()
         if span is None:
             # Return a non-recording span if there's no current span
-            return NonRecordingSpan(SpanContext())
+            return NonRecordingSpan(SpanContext())  # type: ignore[unreachable]
         return span
     except Exception:
         # Return a non-recording span if there's an error

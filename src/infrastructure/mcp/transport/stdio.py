@@ -58,7 +58,7 @@ class StdioTransport(BaseTransport):
 
         try:
             # Prepare command
-            command = config.command
+            command: str | list[str] = config.command
             if isinstance(command, str):
                 command = [command]
 

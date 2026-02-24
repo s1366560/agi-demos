@@ -30,7 +30,7 @@ class PluginStateStore:
         state = self._read_state()
         plugins = self._get_scope_plugins(state, tenant_id=tenant_id)
         if not isinstance(plugins, dict):
-            return {}
+            return {}  # type: ignore[unreachable]
         return {
             str(name): dict(payload)
             for name, payload in plugins.items()
@@ -41,7 +41,7 @@ class PluginStateStore:
         """Get persisted state for one plugin."""
         global_state = self.list_plugins().get(plugin_name, {})
         if not isinstance(global_state, dict):
-            global_state = {}
+            global_state = {}  # type: ignore[unreachable]
 
         if not tenant_id:
             return dict(global_state)

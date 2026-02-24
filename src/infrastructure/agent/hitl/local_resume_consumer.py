@@ -216,7 +216,7 @@ class LocalHITLResumeConsumer:
                 exc_info=True,
             )
 
-    async def _ack(self, stream_key: str, msg_id: str) -> None:
+    async def _ack(self, stream_key: str | bytes, msg_id: str | bytes) -> None:
         try:
             if isinstance(stream_key, bytes):
                 stream_key = stream_key.decode("utf-8")
@@ -230,7 +230,7 @@ class LocalHITLResumeConsumer:
         return self.STREAM_KEY_PATTERN.format(tenant_id=tenant_id, project_id=project_id)
 
     @staticmethod
-    def _parse_stream_key(stream_key: str) -> tuple[str, str]:
+    def _parse_stream_key(stream_key: str | bytes) -> tuple[str, str]:
         if isinstance(stream_key, bytes):
             stream_key = stream_key.decode("utf-8")
         parts = stream_key.split(":")

@@ -224,8 +224,8 @@ class HITLResponseListener:
 
     async def _handle_message(
         self,
-        stream_key: str,
-        msg_id: str,
+        stream_key: str | bytes,
+        msg_id: str | bytes,
         fields: dict[bytes, bytes],
     ) -> None:
         """

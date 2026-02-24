@@ -1704,7 +1704,7 @@ class ChannelMessageRouter:
             rate_limit = routing.get("rate_limit_per_minute", 0)
         return self._rate_limiter.is_allowed(key, limit=rate_limit)
 
-    async def _load_channel_config(self, message: Message) -> None:
+    async def _load_channel_config(self, message: Message) -> Any:
         """Load the ChannelConfigModel for this message."""
         config_id = self._extract_channel_config_id(message)
         if not config_id:

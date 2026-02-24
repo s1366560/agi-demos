@@ -160,7 +160,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         result = await self._session.execute(query)
         db_subagents = result.scalars().all()
 
-        return [self._to_domain(s) for s in db_subagents]
+        return [d for s in db_subagents if (d := self._to_domain(s)) is not None]
 
     async def list_by_project(
         self,
@@ -194,7 +194,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         result = await self._session.execute(query)
         db_subagents = result.scalars().all()
 
-        return [self._to_domain(s) for s in db_subagents]
+        return [d for s in db_subagents if (d := self._to_domain(s)) is not None]
 
     async def set_enabled(
         self,

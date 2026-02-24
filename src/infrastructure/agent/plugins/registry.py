@@ -366,7 +366,7 @@ class AgentPluginRegistry:
                 if inspect.isawaitable(produced):
                     produced = await produced
                 if not isinstance(produced, dict):
-                    diagnostics.append(
+                    diagnostics.append(  # type: ignore[unreachable]
                         PluginDiagnostic(
                             plugin_name=plugin_name,
                             code="invalid_tool_factory_result",

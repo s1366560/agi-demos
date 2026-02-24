@@ -431,7 +431,7 @@ class ArtifactExtractor:
 
         for item in content:
             if not isinstance(item, dict):
-                continue
+                continue  # type: ignore[unreachable]
 
             item_type = item.get("type", "")
 

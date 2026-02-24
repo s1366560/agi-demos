@@ -41,7 +41,7 @@ class SqlTenantRepository(BaseRepository[Tenant, DBTenant], TenantRepository):
         query = select(DBTenant).where(DBTenant.owner_id == owner_id).offset(offset).limit(limit)
         result = await self._session.execute(query)
         db_tenants = result.scalars().all()
-        return [self._to_domain(t) for t in db_tenants]
+        return [d for t in db_tenants if (d := self._to_domain(t)) is not None]
 
     async def find_by_name(self, name: str) -> Tenant | None:
         """Find a tenant by name."""

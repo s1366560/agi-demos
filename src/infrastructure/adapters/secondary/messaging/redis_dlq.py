@@ -13,8 +13,9 @@ Storage Structure:
 import json
 import logging
 import traceback
+from collections.abc import Awaitable
 from datetime import UTC, datetime
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import redis.asyncio as redis
 
@@ -163,7 +164,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
         """Get a specific DLQ message."""
         try:
             message_key = self._message_key(message_id)
-            data = await self._redis.hget(message_key, "data")
+            data = await cast(Awaitable[Any], self._redis.hget(message_key, "data"))
 
             if not data:
                 return None
@@ -358,7 +359,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
     async def get_stats(self) -> DLQStats:
         """Get DLQ statistics."""
         try:
-            stats_data = await self._redis.hgetall(self.STATS_KEY)
+            stats_data = await cast(Awaitable[dict[Any, Any]], self._redis.hgetall(self.STATS_KEY))
 
             # Decode and parse stats
             decoded = {}
@@ -431,8 +432,8 @@ class RedisDLQAdapter(DeadLetterQueuePort):
 
             # Update stats
             if count > 0:
-                await self._redis.hincrby(self.STATS_KEY, "pending_count", -count)
-                await self._redis.hincrby(self.STATS_KEY, "expired_count", count)
+                await cast(Awaitable[int], self._redis.hincrby(self.STATS_KEY, "pending_count", -count))
+                await cast(Awaitable[int], self._redis.hincrby(self.STATS_KEY, "expired_count", count))
 
             logger.info(f"[DLQ] Cleaned up {count} expired messages")
             return count
@@ -453,7 +454,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
     async def _update_message(self, message: DeadLetterMessage) -> None:
         """Update a message in Redis."""
         message_key = self._message_key(message.id)
-        await self._redis.hset(message_key, "data", json.dumps(message.to_dict()))
+        await cast(Awaitable[int], self._redis.hset(message_key, "data", json.dumps(message.to_dict())))
 
     async def _remove_from_indexes(self, message: DeadLetterMessage) -> None:
         """Remove a message from all indexes."""

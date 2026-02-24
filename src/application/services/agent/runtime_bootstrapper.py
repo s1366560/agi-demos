@@ -20,7 +20,7 @@ _background_tasks: set[asyncio.Task[Any]] = set()
 class AgentRuntimeBootstrapper:
     """Handles Ray/Local runtime initialization for agent execution."""
 
-    _local_bootstrapped = False
+    _local_bootstrapped: ClassVar[bool] = False
     _local_bootstrap_lock = asyncio.Lock()
     _local_chat_lock = asyncio.Lock()
     _local_chat_tasks: ClassVar[dict[str, asyncio.Task[Any]]] = {}
@@ -339,7 +339,7 @@ class AgentRuntimeBootstrapper:
 
         async with AgentRuntimeBootstrapper._local_bootstrap_lock:
             if AgentRuntimeBootstrapper._local_bootstrapped:
-                return
+                return  # type: ignore[unreachable]
 
             from src.configuration.factories import create_native_graph_adapter
             from src.infrastructure.agent.state.agent_worker_state import (

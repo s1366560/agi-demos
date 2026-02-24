@@ -150,7 +150,7 @@ class SqlTenantSkillConfigRepository(
         result = await self._session.execute(query)
         db_configs = result.scalars().all()
 
-        return [self._to_domain(c) for c in db_configs]
+        return [d for c in db_configs if (d := self._to_domain(c)) is not None]
 
     async def get_configs_map(
         self,

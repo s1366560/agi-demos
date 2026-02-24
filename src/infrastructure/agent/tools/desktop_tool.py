@@ -358,6 +358,7 @@ class DesktopTool(AgentTool):
             parts.append(f"Resolution: {data['resolution']}")
         return " | ".join(parts) if parts else "Desktop status retrieved"
 
+    @staticmethod
     def _format_success_data(data: dict[str, Any], success_message: str) -> str:
         """Format success response data."""
         parts = [success_message]
@@ -371,6 +372,7 @@ class DesktopTool(AgentTool):
             parts.append(f"Resolution: {data['resolution']}")
         return " | ".join(parts)
 
+    @staticmethod
     def _handle_json_parse_fallback(text_content: str, success_message: str) -> str:
         """Handle non-JSON text content from legacy MCP result."""
         if text_content and text_content not in ("success", "ok"):

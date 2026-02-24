@@ -191,7 +191,7 @@ class LocalToolAdapter(BaseMCPToolAdapter):
         self._command = command
         self._args = args or []
         self._env = env or {}
-        self._client = None
+        self._client: Any = None
 
     async def _initialize_internal(self) -> None:
         """Initialize subprocess client."""
@@ -264,7 +264,7 @@ class WebSocketToolAdapter(BaseMCPToolAdapter):
         """
         super().__init__(server_name)
         self._websocket_url = websocket_url
-        self._client = None
+        self._client: Any = None
 
     async def _initialize_internal(self) -> None:
         """Initialize WebSocket client."""

@@ -14,7 +14,7 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from types import TracebackType
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 import aiohttp
 import httpx
@@ -375,12 +375,12 @@ class SSETransport(MCPTransport):
         self.config = config
         self.url = config.get("url")
         self.headers = config.get("headers", {})
-        self._session = None
-        self._read_stream = None
-        self._write_stream = None
+        self._session: Any | None = None
+        self._read_stream: Any | None = None
+        self._write_stream: Any | None = None
         self._request_id = 0
         self._pending_requests: dict[int, asyncio.Future[Any]] = {}
-        self._reader_task = None
+        self._reader_task: asyncio.Task[None] | None = None
 
     async def connect(self) -> None:
         """Initialize streamable HTTP client using MCP SDK."""
@@ -936,9 +936,9 @@ class MCPClient:
         self.transport_config = transport_config
         self.transport: MCPTransport | None = None
         self._connected = False
-        self._progress_callback: callable | None = None
+        self._progress_callback: Callable[..., Any] | None = None
 
-    def register_progress_callback(self, callback: callable) -> None:
+    def register_progress_callback(self, callback: Callable[..., Any]) -> None:
         """
         Register a callback for progress notifications.
 

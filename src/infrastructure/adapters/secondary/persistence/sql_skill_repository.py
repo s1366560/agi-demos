@@ -168,7 +168,7 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
         result = await self._session.execute(query)
         db_skills = result.scalars().all()
 
-        return [self._to_domain(s) for s in db_skills]
+        return [d for s in db_skills if (d := self._to_domain(s)) is not None]
 
     async def list_by_project(
         self,
@@ -190,7 +190,7 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
         result = await self._session.execute(query)
         db_skills = result.scalars().all()
 
-        return [self._to_domain(s) for s in db_skills]
+        return [d for s in db_skills if (d := self._to_domain(s)) is not None]
 
     async def find_matching_skills(
         self,

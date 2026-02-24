@@ -188,7 +188,7 @@ class SqlToolEnvironmentVariableRepository(
         )
 
         result = await self._session.execute(query)
-        return [self._to_domain(r) for r in result.scalars().all()]
+        return [d for r in result.scalars().all() if (d := self._to_domain(r)) is not None]
 
     async def list_by_project(
         self,
@@ -213,7 +213,7 @@ class SqlToolEnvironmentVariableRepository(
         )
 
         result = await self._session.execute(query)
-        return [self._to_domain(r) for r in result.scalars().all()]
+        return [d for r in result.scalars().all() if (d := self._to_domain(r)) is not None]
 
     async def update(self, env_var: ToolEnvironmentVariable) -> ToolEnvironmentVariable:
         """Update an existing environment variable."""

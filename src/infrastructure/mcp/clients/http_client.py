@@ -95,8 +95,8 @@ class MCPHttpClient:
         # SSE transport state (using MCP SDK)
         self._exit_stack: AsyncExitStack | None = None
         self._http_client: httpx.AsyncClient | None = None
-        self._read_stream = None
-        self._write_stream = None
+        self._read_stream: Any = None
+        self._write_stream: Any = None
         self._reader_task: asyncio.Task[None] | None = None
         self._pending_requests: dict[int, asyncio.Future[Any]] = {}
 

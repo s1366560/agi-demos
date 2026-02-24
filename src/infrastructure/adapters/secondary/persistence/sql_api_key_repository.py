@@ -25,6 +25,10 @@ class SqlAPIKeyRepository(BaseRepository[APIKey, DBAPIKey], APIKeyRepository):
         """Initialize the repository."""
         super().__init__(session)
 
+    async def save(self, api_key: APIKey) -> APIKey:
+        """Save an API key (create or update). Returns saved entity."""
+        return await super().save(api_key)
+
     # === Interface implementation ===
 
     async def find_by_hash(self, key_hash: str) -> APIKey | None:
@@ -39,7 +43,7 @@ class SqlAPIKeyRepository(BaseRepository[APIKey, DBAPIKey], APIKeyRepository):
         query = select(DBAPIKey).where(DBAPIKey.user_id == user_id).offset(offset).limit(limit)
         result = await self._session.execute(query)
         db_keys = result.scalars().all()
-        return [self._to_domain(k) for k in db_keys]
+        return [d for k in db_keys if (d := self._to_domain(k)) is not None]
 
     async def delete(self, key_id: str) -> None:
         """Delete an API key."""

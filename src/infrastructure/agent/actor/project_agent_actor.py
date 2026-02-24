@@ -286,7 +286,7 @@ class ProjectAgentActor:
 
         async with self._bootstrap_lock:
             if self._bootstrapped:
-                return
+                return  # type: ignore[unreachable]
 
             settings = get_settings()
 

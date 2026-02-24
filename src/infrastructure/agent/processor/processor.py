@@ -419,7 +419,7 @@ class SessionProcessor:
         try:
             new_tools = self._tool_provider()
             if new_tools is None:
-                logger.warning("[Processor] tool_provider returned None, skipping refresh")
+                logger.warning("[Processor] tool_provider returned None, skipping refresh")  # type: ignore[unreachable]
                 return None
 
             # Update tools dict with new tool definitions

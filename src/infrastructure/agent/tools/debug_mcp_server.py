@@ -160,7 +160,7 @@ class DebugMCPServerTool(AgentTool):
             )
             list_data = self._parse_response(list_result)
             if list_data:
-                servers = list_data if isinstance(list_data, list) else list_data.get("servers", [])
+                servers = list_data if isinstance(list_data, list) else list_data.get("servers", [])  # type: ignore[unreachable]
                 for server in servers:
                     if isinstance(server, dict) and server.get("name") == server_name:
                         result["registered"] = True

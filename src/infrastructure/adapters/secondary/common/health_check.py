@@ -17,9 +17,10 @@ Each health checker returns a HealthStatus with:
 import asyncio
 import logging
 import time
+from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from neo4j import AsyncDriver
 from redis.asyncio import Redis
@@ -192,7 +193,7 @@ class RedisHealthChecker:
         try:
             async with asyncio.timeout(self._timeout):
                 # Use PING command
-                pong = await self._redis.ping()
+                pong = await cast(Awaitable[bool], self._redis.ping())
 
             if not pong:
                 latency_ms = (time.time() - start_time) * 1000
@@ -290,9 +291,11 @@ class Neo4jHealthChecker:
             execute_fn = self._driver.execute_query
             if asyncio.iscoroutinefunction(execute_fn):
                 async with asyncio.timeout(self._timeout):
-                    result, summary = await execute_fn(self._query)
+                    result, summary, _keys = await execute_fn(self._query)
             else:
-                result, summary = execute_fn(self._query)
+                # Sync driver fallback (driver typed as AsyncDriver but may be sync)
+                sync_result = cast(Any, execute_fn)(self._query)
+                result, summary, _keys = sync_result
 
             latency_ms = (time.time() - start_time) * 1000
 

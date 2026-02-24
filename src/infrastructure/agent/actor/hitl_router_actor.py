@@ -190,7 +190,7 @@ class HITLStreamRouterActor:
         return self.STREAM_KEY_PATTERN.format(tenant_id=tenant_id, project_id=project_id)
 
     @staticmethod
-    def _parse_stream_key(stream_key: str) -> tuple[str, str]:
+    def _parse_stream_key(stream_key: str | bytes) -> tuple[str, str]:
         if isinstance(stream_key, bytes):
             stream_key = stream_key.decode("utf-8")
         parts = stream_key.split(":")

@@ -1,6 +1,8 @@
 import json
 import logging
 import time
+from collections.abc import Awaitable
+from typing import cast
 from uuid import uuid4
 
 import redis.asyncio as redis
@@ -64,9 +66,9 @@ class RedisQueueAdapter(QueuePort):
             # A full implementation would inject a TaskRepository here to log the task.
 
             # Add to Redis
-            await self._redis.sadd("queue:active_groups", group_id)
+            await cast(Awaitable[int], self._redis.sadd("queue:active_groups", group_id))
             queue_key = f"queue:group:{group_id}"
-            await self._redis.rpush(queue_key, json.dumps(payload))
+            await cast(Awaitable[int], self._redis.rpush(queue_key, json.dumps(payload)))
 
             logger.info(f"Task {task_id} added to queue {queue_key}")
 

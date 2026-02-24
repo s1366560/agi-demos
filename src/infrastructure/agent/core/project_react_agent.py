@@ -1413,7 +1413,7 @@ class ProjectAgentManager:
                 await asyncio.sleep(300)  # Run every 5 minutes
 
                 if not self._is_running:
-                    break
+                    break  # type: ignore[unreachable]
 
                 await self._cleanup_idle_agents()
 

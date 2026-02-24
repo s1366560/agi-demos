@@ -94,7 +94,7 @@ class SqlExecutionCheckpointRepository(
             .limit(limit)
         )
         db_checkpoints = result.scalars().all()
-        return [self._to_domain(c) for c in db_checkpoints]
+        return [d for c in db_checkpoints if (d := self._to_domain(c)) is not None]
 
     async def delete_by_conversation(self, conversation_id: str) -> None:
         """Delete all checkpoints for a conversation."""

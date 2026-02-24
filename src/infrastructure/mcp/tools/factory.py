@@ -52,7 +52,7 @@ class MCPToolFactory:
         # Normalize transport type
         if isinstance(transport_type, str):
             transport = TransportType.normalize(transport_type)
-        elif isinstance(transport_type, TransportType):
+        elif isinstance(transport_type, TransportType):  # type: ignore[unreachable]
             # Handle stdio -> local normalization
             transport = TransportType.normalize(transport_type.value)
         else:

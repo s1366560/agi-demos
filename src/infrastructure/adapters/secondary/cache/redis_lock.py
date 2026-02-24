@@ -34,7 +34,7 @@ import asyncio
 import logging
 import secrets
 import time
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from types import TracebackType
@@ -222,7 +222,7 @@ class RedisDistributedLock:
         """
 
         try:
-            result = await self._redis.eval(lua_script, 1, self._key, self._owner)
+            result = await cast(Awaitable[str], self._redis.eval(lua_script, 1, self._key, self._owner))
             if result:
                 self._acquired = False
                 self._acquired_at = None
@@ -273,7 +273,7 @@ class RedisDistributedLock:
         """
 
         try:
-            result = await self._redis.eval(lua_script, 1, self._key, self._owner, ttl)
+            result = await cast(Awaitable[str], self._redis.eval(lua_script, 1, self._key, self._owner, ttl))
             if result:
                 RedisDistributedLock._stats.extensions += 1
                 logger.debug(f"Lock extended: {self._key} (new ttl={ttl}s)")

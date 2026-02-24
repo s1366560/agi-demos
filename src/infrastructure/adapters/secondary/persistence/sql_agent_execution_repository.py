@@ -95,7 +95,7 @@ class SqlAgentExecutionRepository(
             .order_by(DBAgentExecution.started_at.asc())
         )
         db_executions = result.scalars().all()
-        return [self._to_domain(e) for e in db_executions]
+        return [d for e in db_executions if (d := self._to_domain(e)) is not None]
 
     async def list_by_conversation(
         self,
@@ -110,7 +110,7 @@ class SqlAgentExecutionRepository(
             .limit(limit)
         )
         db_executions = result.scalars().all()
-        return [self._to_domain(e) for e in db_executions]
+        return [d for e in db_executions if (d := self._to_domain(e)) is not None]
 
     async def delete_by_conversation(self, conversation_id: str) -> None:
         """Delete all executions in a conversation."""

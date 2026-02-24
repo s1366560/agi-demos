@@ -159,7 +159,7 @@ class SqlAgentExecutionEventRepository(
             result = await self._session.execute(query)
             db_events = result.scalars().all()
 
-        return [self._to_domain(e) for e in db_events]
+        return [d for e in db_events if (d := self._to_domain(e)) is not None]
 
     async def get_last_event_time(self, conversation_id: str) -> tuple[int, int]:
         """Get the last (event_time_us, event_counter) for a conversation."""
@@ -194,7 +194,7 @@ class SqlAgentExecutionEventRepository(
             )
         )
         db_events = result.scalars().all()
-        return [self._to_domain(e) for e in db_events]
+        return [d for e in db_events if (d := self._to_domain(e)) is not None]
 
     async def delete_by_conversation(self, conversation_id: str) -> None:
         """Delete all events for a conversation."""
@@ -236,7 +236,7 @@ class SqlAgentExecutionEventRepository(
             .limit(limit)
         )
         db_events = list(reversed(result.scalars().all()))
-        return [self._to_domain(e) for e in db_events]
+        return [d for e in db_events if (d := self._to_domain(e)) is not None]
 
     async def get_message_events_after(
         self,
@@ -259,7 +259,7 @@ class SqlAgentExecutionEventRepository(
             .limit(limit)
         )
         db_events = result.scalars().all()
-        return [self._to_domain(e) for e in db_events]
+        return [d for e in db_events if (d := self._to_domain(e)) is not None]
 
     async def count_messages(self, conversation_id: str) -> int:
         """Count message events in a conversation."""

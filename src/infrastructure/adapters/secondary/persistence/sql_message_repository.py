@@ -123,7 +123,7 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
             .limit(limit)
         )
         db_messages = result.scalars().all()
-        return [self._to_domain(m) for m in db_messages]
+        return [d for m in db_messages if (d := self._to_domain(m)) is not None]
 
     async def list_recent_by_project(
         self,
@@ -139,7 +139,7 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
             .limit(limit)
         )
         db_messages = result.scalars().all()
-        return [self._to_domain(m) for m in db_messages]
+        return [d for m in db_messages if (d := self._to_domain(m)) is not None]
 
     async def count_by_conversation(self, conversation_id: str) -> int:
         """Count messages in a conversation."""

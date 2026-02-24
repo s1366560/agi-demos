@@ -68,7 +68,7 @@ class SqlProjectRepository(BaseRepository[Project, DBProject], ProjectRepository
 
         result = await self._session.execute(query)
         db_projects = result.scalars().all()
-        return [self._to_domain(p) for p in db_projects]
+        return [d for p in db_projects if (d := self._to_domain(p)) is not None]
 
     # === Conversion methods ===
 

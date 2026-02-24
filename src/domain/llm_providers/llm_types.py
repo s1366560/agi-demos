@@ -180,7 +180,7 @@ class LLMClient(ABC):
         if isinstance(response, dict):
             content = response.get("content", "")
         else:
-            content = str(response)
+            content = str(response)  # type: ignore[unreachable]
 
         return ChatResponse(content=content)
 

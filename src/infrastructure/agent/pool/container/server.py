@@ -25,7 +25,7 @@ from collections.abc import AsyncIterator
 from concurrent import futures
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Callable, cast
 
 from aiohttp import web
 
@@ -500,7 +500,7 @@ async def main() -> None:
         _shutdown_task = asyncio.create_task(server.stop(graceful=True))
 
     for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, lambda s=sig: handle_signal(s))
+        loop.add_signal_handler(sig, cast(Callable[[], None], lambda s=sig: handle_signal(s)))
 
     try:
         await server.start()

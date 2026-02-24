@@ -142,6 +142,7 @@ class SkillSyncTool(AgentTool):
                 SqlSkillVersionRepository,
             )
 
+            assert self._session_factory is not None
             async with self._session_factory() as db_session:
                 skill_repo = SqlSkillRepository(db_session)
                 version_repo = SqlSkillVersionRepository(db_session)

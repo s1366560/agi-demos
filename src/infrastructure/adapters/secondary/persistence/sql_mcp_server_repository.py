@@ -101,7 +101,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         result = await self._session.execute(query.order_by(DBMCPServer.created_at.desc()))
         db_servers = result.scalars().all()
 
-        return [self._to_domain(server) for server in db_servers]
+        return [d for server in db_servers if (d := self._to_domain(server)) is not None]
 
     async def list_by_tenant(
         self,
@@ -117,7 +117,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         result = await self._session.execute(query.order_by(DBMCPServer.created_at.desc()))
         db_servers = result.scalars().all()
 
-        return [self._to_domain(server) for server in db_servers]
+        return [d for server in db_servers if (d := self._to_domain(server)) is not None]
 
     async def update(
         self,

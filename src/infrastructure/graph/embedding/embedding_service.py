@@ -13,7 +13,7 @@ The service wraps existing embedder implementations and provides:
 import asyncio
 import logging
 import math
-from typing import Protocol, cast
+from typing import Any, Protocol, cast
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +94,7 @@ class EmbeddingService:
             return [0.0] * self.embedding_dim
 
         try:
-            result = await self._embedder.create(input_data=text)
+            result: Any = await self._embedder.create(input_data=text)
 
             # Handle different return formats
             if isinstance(result, list) and len(result) > 0:

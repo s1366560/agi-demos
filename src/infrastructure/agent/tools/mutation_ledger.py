@@ -9,12 +9,15 @@ from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from threading import RLock
+from types import ModuleType
 from typing import Any
 
+_fcntl_mod: ModuleType | None
 try:
-    import fcntl
+    import fcntl as _fcntl_mod
 except ImportError:  # pragma: no cover - non-Unix fallback
-    fcntl = None
+    _fcntl_mod = None
+fcntl = _fcntl_mod
 
 
 class MutationLedger:

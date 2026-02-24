@@ -112,19 +112,19 @@ class PoolMetricsAnalyzer:
 
         # Analyze individual trends
         cpu_trend = self._analyze_single_metric(
-            [(m.timestamp, m.cpu_percent) for m in metrics_history],
+            [(m.timestamp.timestamp(), m.cpu_percent) for m in metrics_history],
             "cpu_percent",
         )
         memory_trend = self._analyze_single_metric(
-            [(m.timestamp, m.memory_mb) for m in metrics_history],
+            [(m.timestamp.timestamp(), m.memory_mb) for m in metrics_history],
             "memory_mb",
         )
         request_trend = self._analyze_single_metric(
-            [(m.timestamp, float(m.request_count)) for m in metrics_history],
+            [(m.timestamp.timestamp(), float(m.request_count)) for m in metrics_history],
             "request_count",
         )
         latency_trend = self._analyze_single_metric(
-            [(m.timestamp, m.average_latency_ms) for m in metrics_history],
+            [(m.timestamp.timestamp(), m.average_latency_ms) for m in metrics_history],
             "average_latency_ms",
         )
         error_rate_trend = self._analyze_error_rate(metrics_history)

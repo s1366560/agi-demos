@@ -147,7 +147,7 @@ class SqlWorkflowPatternRepository(
 
         db_patterns = result.scalars().all()
 
-        return [self._to_domain(p) for p in db_patterns]
+        return [d for p in db_patterns if (d := self._to_domain(p)) is not None]
 
     async def find_by_name(
         self,

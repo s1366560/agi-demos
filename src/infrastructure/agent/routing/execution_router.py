@@ -31,7 +31,7 @@ class RoutingDecision:
     confidence: float  # 0.0 to 1.0
     reason: str
     target: str | None = None  # Skill/subagent name if applicable
-    metadata: dict[str, Any] = None
+    metadata: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if self.metadata is None:

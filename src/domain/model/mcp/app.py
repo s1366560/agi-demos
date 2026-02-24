@@ -90,7 +90,7 @@ class MCPAppUIMetadata:
                 "clipboard-write": "clipboardWrite",
                 "clipboardWrite": "clipboardWrite",
             }
-            return {mapping.get(p, p): {} for p in raw if p}
+            return {k: {} for p in raw if p and (k := mapping.get(p, p)) is not None}
         return {}
 
     @classmethod

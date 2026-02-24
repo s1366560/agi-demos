@@ -41,7 +41,7 @@ class SandboxInfo:
     last_accessed_at: datetime | None = None
     is_healthy: bool = False
     error_message: str | None = None
-    available_tools: list[str] = None
+    available_tools: list[str] | None = None
 
     def __post_init__(self) -> None:
         if self.available_tools is None:

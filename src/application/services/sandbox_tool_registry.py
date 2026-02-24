@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -253,14 +254,14 @@ class SandboxToolRegistry:
             )
 
             # Add to tracking index
-            await self._redis.sadd(
+            await cast(Awaitable[int], self._redis.sadd(
                 self._tracking_key,
                 registration.sandbox_id,
-            )
+            ))
 
             # Update project index
             project_key = f"{self._key_prefix}project:{registration.project_id}"
-            await self._redis.sadd(project_key, registration.sandbox_id)
+            await cast(Awaitable[int], self._redis.sadd(project_key, registration.sandbox_id))
 
         except Exception as e:
             logger.warning(f"[SandboxToolRegistry] Failed to save to Redis: {e}")
@@ -277,11 +278,11 @@ class SandboxToolRegistry:
             await self._redis.delete(reg_key)
 
             # Remove from tracking index
-            await self._redis.srem(self._tracking_key, sandbox_id)
+            await cast(Awaitable[int], self._redis.srem(self._tracking_key, sandbox_id))
 
             # Remove from project index
             project_key = f"{self._key_prefix}project:{project_id}"
-            await self._redis.srem(project_key, sandbox_id)
+            await cast(Awaitable[int], self._redis.srem(project_key, sandbox_id))
 
         except Exception as e:
             logger.warning(f"[SandboxToolRegistry] Failed to clear from Redis: {e}")
@@ -349,7 +350,7 @@ class SandboxToolRegistry:
 
         try:
             # Get all sandbox IDs from tracking index
-            sandbox_ids = await self._redis.smembers(self._tracking_key)
+            sandbox_ids = await cast(Awaitable[set[Any]], self._redis.smembers(self._tracking_key))
 
             restored_count = 0
             for sandbox_id in sandbox_ids:

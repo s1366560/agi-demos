@@ -7,7 +7,7 @@ tenant-level overrides and dynamic configuration updates.
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -307,7 +307,7 @@ class ConfigManager:
         """
         self._default = default_config or AgentConfig()
         self._tenant_configs: dict[str, AgentConfig] = {}
-        self._change_callbacks: set[callable] = set()
+        self._change_callbacks: set[Callable[..., Any]] = set()
 
     def get_config(self, tenant_id: str | None = None) -> AgentConfig:
         """Get configuration for a tenant.
@@ -349,7 +349,7 @@ class ConfigManager:
 
         self._notify_change(None)
 
-    def register_change_callback(self, callback: callable) -> None:
+    def register_change_callback(self, callback: Callable[..., Any]) -> None:
         """Register a callback to be called on configuration changes.
 
         Args:
@@ -357,7 +357,7 @@ class ConfigManager:
         """
         self._change_callbacks.add(callback)
 
-    def unregister_change_callback(self, callback: callable) -> None:
+    def unregister_change_callback(self, callback: Callable[..., Any]) -> None:
         """Unregister a change callback.
 
         Args:

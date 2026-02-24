@@ -555,7 +555,7 @@ class LLMInvoker:
 
         # Validate call_id if provided
         if call_id and not isinstance(call_id, str):
-            return f"Invalid call_id type: {type(call_id).__name__}"
+            return f"Invalid call_id type: {type(call_id).__name__}"  # type: ignore[unreachable]
 
         return None
 

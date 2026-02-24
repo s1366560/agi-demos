@@ -556,8 +556,8 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                 )
             return message
 
-            # Update remaining time
-            elapsed_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)
+            # Update remaining time  # type: ignore[unreachable]
+            elapsed_ms = int((asyncio.get_event_loop().time() - start_time) * 1000)  # type: ignore[unreachable]
             remaining_ms = timeout_ms - elapsed_ms
             if remaining_ms <= 0:
                 break

@@ -647,7 +647,7 @@ class ProviderService:
 _provider_service: ProviderService | None = None
 
 
-def get_provider_service(session: "AsyncSession" = None) -> ProviderService:
+def get_provider_service(session: "AsyncSession | None" = None) -> ProviderService:
     """
     Get provider service instance.
 

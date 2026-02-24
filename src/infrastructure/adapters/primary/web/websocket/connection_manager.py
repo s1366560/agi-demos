@@ -56,7 +56,7 @@ class ConnectionManager:
         # tenant_id -> project_id -> set of session_ids (lifecycle state subscriptions)
         self.project_subscriptions: dict[str, dict[str, set[str]]] = {}
         # session_id -> set of subscribed project_ids for lifecycle state
-        self.session_project_subscriptions: dict[str, set[str]] = {}
+        self.session_project_subscriptions: dict[str, set[tuple[str, str]]] = {}
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
         # Event dispatcher manager for async event delivery

@@ -136,7 +136,7 @@ class PooledAgentSessionAdapter:
 
         async with self._lock:
             if self._running:
-                return
+                return  # type: ignore[unreachable]
 
             logger.info("[PooledAgentSessionAdapter] Starting...")
 
@@ -159,7 +159,7 @@ class PooledAgentSessionAdapter:
 
         async with self._lock:
             if not self._running:
-                return
+                return  # type: ignore[unreachable]
 
             logger.info("[PooledAgentSessionAdapter] Stopping...")
 

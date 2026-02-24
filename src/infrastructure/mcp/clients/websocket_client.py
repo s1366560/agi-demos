@@ -18,7 +18,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from types import TracebackType
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 import aiohttp
 
@@ -121,17 +121,17 @@ class MCPWebSocketClient:
         self._connected = False
 
         # Notification handlers for server-initiated messages
-        self.on_resource_updated: callable | None = None
-        self.on_resource_list_changed: callable | None = None
-        self.on_progress: callable | None = None
-        self.on_cancelled: callable | None = None
-        self.on_prompts_list_changed: callable | None = None
+        self.on_resource_updated: Callable[..., Any] | None = None
+        self.on_resource_list_changed: Callable[..., Any] | None = None
+        self.on_progress: Callable[..., Any] | None = None
+        self.on_cancelled: Callable[..., Any] | None = None
+        self.on_prompts_list_changed: Callable[..., Any] | None = None
 
         # Request handlers for server-initiated requests (Phase 2)
-        self.on_sampling_request: callable | None = None
-        self.on_elicitation_request: callable | None = None
-        self.on_roots_list: callable | None = None
-        self.on_roots_list_changed: callable | None = None
+        self.on_sampling_request: Callable[..., Any] | None = None
+        self.on_elicitation_request: Callable[..., Any] | None = None
+        self.on_roots_list: Callable[..., Any] | None = None
+        self.on_roots_list_changed: Callable[..., Any] | None = None
 
         # Client state
         self._roots: list[dict[str, Any]] = []

@@ -54,14 +54,14 @@ class SqlTaskRepository(BaseRepository[TaskLog, DBTaskLog], TaskRepository):
         query = query.offset(offset).limit(limit)
         result = await self._session.execute(query)
         db_tasks = result.scalars().all()
-        return [self._to_domain(t) for t in db_tasks]
+        return [d for t in db_tasks if (d := self._to_domain(t)) is not None]
 
     async def list_recent(self, limit: int = 100) -> list[TaskLog]:
         """List recent tasks across all groups."""
         query = select(DBTaskLog).order_by(DBTaskLog.created_at.desc()).limit(limit)
         result = await self._session.execute(query)
         db_tasks = result.scalars().all()
-        return [self._to_domain(t) for t in db_tasks]
+        return [d for t in db_tasks if (d := self._to_domain(t)) is not None]
 
     async def list_by_status(self, status: str, limit: int = 50, offset: int = 0) -> list[TaskLog]:
         """List tasks by status."""
@@ -69,7 +69,7 @@ class SqlTaskRepository(BaseRepository[TaskLog, DBTaskLog], TaskRepository):
         query = query.offset(offset).limit(limit)
         result = await self._session.execute(query)
         db_tasks = result.scalars().all()
-        return [self._to_domain(t) for t in db_tasks]
+        return [d for t in db_tasks if (d := self._to_domain(t)) is not None]
 
     async def delete(self, task_id: str) -> None:
         """Delete a task."""

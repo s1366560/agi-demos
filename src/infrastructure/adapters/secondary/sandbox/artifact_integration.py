@@ -86,7 +86,7 @@ class SandboxArtifactIntegration:
         self,
         sandbox_id: str,
         list_files_fn: Callable[[str], list[str]],
-        read_file_fn: Callable[[str], bytes],
+        read_file_fn: Callable[[str], bytes | None],
         project_id: str,
         tenant_id: str,
         tool_execution_id: str | None = None,

@@ -13,7 +13,7 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Callable, cast
 
 import docker
 from docker.errors import ImageNotFound, NotFound
@@ -63,7 +63,7 @@ class MCPSandboxInstance(SandboxInstance):
     desktop_url: str | None = None
     terminal_url: str | None = None
     # Labels for identification
-    labels: dict[str, str] = None
+    labels: dict[str, str] | None = None
 
     def __post_init__(self):
         if self.labels is None:
@@ -444,14 +444,15 @@ class MCPSandboxAdapter(SandboxPort):
                 try:
                     await asyncio.wait_for(
                         loop.run_in_executor(
-                            None, lambda c=container: c.stop(timeout=stop_timeout)
+                            None,
+                            cast(Callable[[], None], lambda c=container: c.stop(timeout=stop_timeout)),
                         ),
                         timeout=overall_timeout,
                     )
                 except TimeoutError:
                     logger.warning(f"Stop timed out for container {container_name}, forcing kill")
                     await loop.run_in_executor(None, container.kill)
-            await loop.run_in_executor(None, lambda c=container: c.remove(force=True))
+            await loop.run_in_executor(None, cast(Callable[[], None], lambda c=container: c.remove(force=True)))
             return True
         except Exception as e:
             logger.warning(f"Failed to stop/remove container {container_name}: {e}")
@@ -1426,7 +1427,7 @@ class MCPSandboxAdapter(SandboxPort):
             f"(no project_id label, status={container.status})"
         )
         try:
-            await loop.run_in_executor(None, lambda c=container: c.remove(force=True))
+            await loop.run_in_executor(None, cast(Callable[[], None], lambda c=container: c.remove(force=True)))
             return True
         except Exception as e:
             logger.warning(f"Failed to cleanup orphan container {container.name}: {e}")
@@ -1745,7 +1746,7 @@ class MCPSandboxAdapter(SandboxPort):
                 if container.name not in self._active_sandboxes:
                     logger.warning(f"Found orphaned sandbox container: {container.name}")
                     try:
-                        await loop.run_in_executor(None, lambda c=container: c.stop(timeout=5))
+                        await loop.run_in_executor(None, cast(Callable[[], None], lambda c=container: c.stop(timeout=5)))
                         await loop.run_in_executor(None, container.remove)
                         count += 1
                     except Exception as e:
@@ -2613,7 +2614,7 @@ class MCPSandboxAdapter(SandboxPort):
             container_name = container.name or container.id[:12]
             try:
                 if container.status == "running":
-                    await loop.run_in_executor(None, lambda c=container: c.stop(timeout=5))
+                    await loop.run_in_executor(None, cast(Callable[[], None], lambda c=container: c.stop(timeout=5)))
                 await loop.run_in_executor(None, container.remove)
                 count += 1
                 logger.info(f"Cleaned up orphan container: {container_name}")

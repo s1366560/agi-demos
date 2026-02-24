@@ -179,7 +179,7 @@ class ReActAgent:
         # When provided, tools are fetched at each stream() call instead of
         # being fixed at initialization time.
         # ====================================================================
-        tool_provider: callable | None = None,
+        tool_provider: Callable[..., Any] | None = None,
         # ====================================================================
         # Agent Session Pool: Pre-cached components for performance optimization
         # These are internal parameters set by execute_react_agent_activity
@@ -1583,11 +1583,11 @@ class ReActAgent:
             if memory_context and self._memory_recall.last_results:
                 from src.domain.events.agent_events import AgentMemoryRecalledEvent
 
-                yield AgentMemoryRecalledEvent(
+                yield cast(dict[str, Any], AgentMemoryRecalledEvent(
                     memories=self._memory_recall.last_results,
                     count=len(self._memory_recall.last_results),
                     search_ms=self._memory_recall.last_search_ms,
-                ).to_event_dict()
+                ).to_event_dict())
         except Exception as e:
             logger.warning(f"[ReActAgent] Memory recall failed: {e}")
 
@@ -1673,10 +1673,10 @@ class ReActAgent:
                     if flushed > 0:
                         from src.domain.events.agent_events import AgentMemoryCapturedEvent
 
-                        yield AgentMemoryCapturedEvent(
+                        yield cast(dict[str, Any], AgentMemoryCapturedEvent(
                             captured_count=flushed,
                             categories=["flush"],
-                        ).to_event_dict()
+                        ).to_event_dict())
                 except Exception as e:
                     logger.warning(f"[ReActAgent] Pre-compaction flush failed: {e}")
 
@@ -2193,10 +2193,10 @@ class ReActAgent:
                 if captured > 0:
                     from src.domain.events.agent_events import AgentMemoryCapturedEvent
 
-                    yield AgentMemoryCapturedEvent(
+                    yield cast(dict[str, Any], AgentMemoryCapturedEvent(
                         captured_count=captured,
                         categories=self._memory_capture.last_categories,
-                    ).to_event_dict()
+                    ).to_event_dict())
             except Exception as e:
                 logger.warning(f"[ReActAgent] Memory capture failed: {e}")
 

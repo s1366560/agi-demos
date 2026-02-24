@@ -580,8 +580,8 @@ async def get_tenant_analytics(
     memory_growth = await _get_memory_growth_by_day(db, [p.id for p in projects], days)
 
     # Summary stats
-    total_memories = sum(p.get("memory_count", 0) for p in project_storage)
-    total_storage = sum(p.get("storage_bytes", 0) for p in project_storage)
+    total_memories = sum(int(p.get("memory_count", 0)) for p in project_storage)
+    total_storage = sum(int(p.get("storage_bytes", 0)) for p in project_storage)
 
     return {
         "memoryGrowth": memory_growth,

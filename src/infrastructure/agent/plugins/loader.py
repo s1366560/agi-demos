@@ -15,7 +15,7 @@ class AgentPlugin(Protocol):
 
     name: str
 
-    def setup(self, api: PluginRuntimeApi) -> None:
+    def setup(self, api: PluginRuntimeApi) -> object:
         """Register plugin extensions into the runtime."""
 
 

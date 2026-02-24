@@ -166,7 +166,7 @@ class SqlConversationRepository(
 
         result = await self._session.execute(query)
         db_conversations = result.scalars().all()
-        return [self._to_domain(c) for c in db_conversations]
+        return [d for c in db_conversations if (d := self._to_domain(c)) is not None]
 
     async def list_by_user(
         self,
@@ -202,7 +202,7 @@ class SqlConversationRepository(
 
         result = await self._session.execute(query)
         db_conversations = result.scalars().all()
-        return [self._to_domain(c) for c in db_conversations]
+        return [d for c in db_conversations if (d := self._to_domain(c)) is not None]
 
     async def delete(self, conversation_id: str) -> None:
         """

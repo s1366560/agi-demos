@@ -66,8 +66,8 @@ class MemoryCapturePostprocessor:
     def __init__(
         self,
         llm_client: LLMClient,
-        chunk_repo: SqlChunkRepository = None,
-        embedding_service: EmbeddingService = None,
+        chunk_repo: SqlChunkRepository | None = None,
+        embedding_service: EmbeddingService | None = None,
         session_factory: Any = None,
     ) -> None:
         self._llm_client = llm_client

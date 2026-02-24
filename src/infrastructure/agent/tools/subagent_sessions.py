@@ -951,6 +951,7 @@ class SessionsOverviewTool(AgentTool):
         ):
             error_counts[run.error] = error_counts.get(run.error, 0) + 1
 
+    @staticmethod
     def _collect_announce_stats(run: SubAgentRun) -> dict[str, int]:
         """Collect announce event counts from a run."""
         retry = 0
@@ -1830,7 +1831,7 @@ class SubAgentsControlTool(AgentTool):
         )
         if resolved_index > len(active_runs):
             return [], f"Error: target index #{resolved_index} out of range"
-            return [active_runs[resolved_index - 1]], None
+        return [active_runs[resolved_index - 1]], None
 
     def _resolve_by_label(
         self, label: str, include_terminal: bool

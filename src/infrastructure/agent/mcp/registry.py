@@ -9,7 +9,7 @@ import asyncio
 import contextlib
 import logging
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 from src.infrastructure.agent.mcp.client import MCPClient
 
@@ -65,7 +65,7 @@ class MCPServerRegistry:
         self._roots: list[dict[str, str]] = []
 
         # Elicitation handler: async callback for elicitation requests
-        self._elicitation_handler: callable | None = None
+        self._elicitation_handler: Callable[..., Any] | None = None
 
         # Background tasks
         self._health_check_task: asyncio.Task[None] | None = None
@@ -433,7 +433,7 @@ class MCPServerRegistry:
     # Elicitation Support (Priority 3 - MCP -> HITL integration)
     # =========================================================================
 
-    def set_elicitation_handler(self, handler: callable) -> None:
+    def set_elicitation_handler(self, handler: Callable[..., Any]) -> None:
         """
         Set the elicitation request handler.
 

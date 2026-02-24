@@ -172,7 +172,7 @@ class MCPToolResult:
                 else:
                     texts.append(str(item))
             else:
-                texts.append(str(item))
+                texts.append(str(item))  # type: ignore[unreachable]
         return "\n".join(texts)
 
 

@@ -420,6 +420,8 @@ class RegisterMCPServerTool(AgentTool):
             status=MCPAppStatus.DISCOVERED,
         )
 
+        if self._session_factory is None:
+            raise RuntimeError("session_factory is required to persist MCP apps")
         async with self._session_factory() as session:
             repo = SqlMCPAppRepository(session)
             await repo.save(app)

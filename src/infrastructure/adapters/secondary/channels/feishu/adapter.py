@@ -735,8 +735,9 @@ class FeishuAdapter:
         code_text = element.get("text", "")
         if lang:
             return f"\n```{lang}\n{code_text}\n```\n", None
-            return f"`{code_text}`", None
+        return f"`{code_text}`", None
 
+    @staticmethod
     def _render_post_element(element: dict[str, Any]) -> tuple[str, str | None]:
         """Render a single post element to text. Returns (text, image_key_or_none)."""
         _simple_renderers: dict[str, Any] = {

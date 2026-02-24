@@ -475,7 +475,7 @@ Use these tools in order: {tools}"""
             return await self._load_file("reminders/plan_mode.txt")
         if mode == PromptMode.BUILD:
             return await self._load_file("reminders/build_mode.txt")
-        return None
+        return None  # type: ignore[unreachable]
 
     async def _load_custom_rules(self) -> str:
         """

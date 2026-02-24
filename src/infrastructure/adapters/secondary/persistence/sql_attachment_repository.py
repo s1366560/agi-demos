@@ -111,7 +111,7 @@ class SqlAttachmentRepository(
 
         result = await self._session.execute(query)
         models = result.scalars().all()
-        return [self._to_domain(m) for m in models]
+        return [d for m in models if (d := self._to_domain(m)) is not None]
 
     async def get_by_ids(self, attachment_ids: list[str]) -> list[Attachment]:
         """Get multiple attachments by their IDs."""
@@ -122,7 +122,7 @@ class SqlAttachmentRepository(
             select(AttachmentModel).where(AttachmentModel.id.in_(attachment_ids))
         )
         models = result.scalars().all()
-        return [self._to_domain(m) for m in models]
+        return [d for m in models if (d := self._to_domain(m)) is not None]
 
     async def delete(self, attachment_id: str) -> bool:
         """Delete an attachment."""

@@ -314,7 +314,7 @@ class BaseRepository[T, M](ABC):
             query = query.options(option)
         result = await self._session.execute(query)
         db_models = result.scalars().all()
-        return [self._to_domain(m) for m in db_models if m is not None]
+        return [d for m in db_models if m is not None if (d := self._to_domain(m)) is not None]
 
     async def find_one(self, **filters: Any) -> T | None:
         """
@@ -459,7 +459,7 @@ class BaseRepository[T, M](ABC):
 
         result = await self._session.execute(query)
         db_models = result.scalars().all()
-        return [self._to_domain(m) for m in db_models if m is not None]
+        return [d for m in db_models if m is not None if (d := self._to_domain(m)) is not None]
 
     async def count(self, **filters: Any) -> int:
         """

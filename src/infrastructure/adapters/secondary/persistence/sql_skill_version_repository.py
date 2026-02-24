@@ -65,7 +65,7 @@ class SqlSkillVersionRepository(SkillVersionRepositoryPort):
         )
         result = await self._session.execute(query)
         db_versions = result.scalars().all()
-        return [self._to_domain(v) for v in db_versions]
+        return [d for v in db_versions if (d := self._to_domain(v)) is not None]
 
     async def get_latest(self, skill_id: str) -> SkillVersion | None:
         """Get the latest version of a skill."""
