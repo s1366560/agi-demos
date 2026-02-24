@@ -163,7 +163,7 @@ class SqlToolEnvironmentVariableRepository(
             for r in project_result.scalars().all():
                 tenant_vars[r.variable_name] = self._to_domain(r)
 
-        return list(tenant_vars.values())
+        return [v for v in tenant_vars.values() if v is not None]
 
     async def list_by_tenant(
         self,

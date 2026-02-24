@@ -57,6 +57,7 @@ async def list_patterns(
         if user_tenant_id != tenant_id and not getattr(current_user, "is_admin", False):
             raise HTTPException(status_code=403, detail="Access denied to tenant patterns")
 
+        assert request is not None
         container = get_container_with_db(request, db)
         pattern_repo = container.workflow_pattern_repository()
 
@@ -128,6 +129,7 @@ async def get_pattern(
         if user_tenant_id != tenant_id and not getattr(current_user, "is_admin", False):
             raise HTTPException(status_code=403, detail="Access denied to tenant patterns")
 
+        assert request is not None
         container = get_container_with_db(request, db)
         pattern_repo = container.workflow_pattern_repository()
 
@@ -185,6 +187,7 @@ async def delete_pattern(
         if not getattr(current_user, "is_admin", False):
             raise HTTPException(status_code=403, detail="Admin access required")
 
+        assert request is not None
         container = get_container_with_db(request, db)
         pattern_repo = container.workflow_pattern_repository()
 
@@ -220,6 +223,7 @@ async def reset_patterns(
         if not getattr(current_user, "is_admin", False):
             raise HTTPException(status_code=403, detail="Admin access required")
 
+        assert request is not None
         container = get_container_with_db(request, db)
         pattern_repo = container.workflow_pattern_repository()
 

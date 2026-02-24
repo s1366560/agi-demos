@@ -718,7 +718,7 @@ class MCPSandboxAdapter(SandboxPort):
 
         # Create MCP client (heartbeat=None to avoid PONG timeout killing long tool calls)
         client = MCPWebSocketClient(
-            url=instance.websocket_url,
+            url=instance.websocket_url or "",
             timeout=timeout,
             heartbeat_interval=None,
         )
@@ -1857,7 +1857,7 @@ class MCPSandboxAdapter(SandboxPort):
 
             try:
                 await self.create_sandbox(
-                    project_path=project_path,
+                    project_path=str(project_path or ""),
                     config=config,
                     project_id=project_id,
                     tenant_id=tenant_id,
@@ -2837,7 +2837,7 @@ class MCPSandboxAdapter(SandboxPort):
             list_result = await instance.mcp_client.call_tool("mcp_server_list", {})
 
             # Parse response
-            servers = self._parse_mcp_server_list(list_result)
+            servers = self._parse_mcp_server_list(vars(list_result))
 
             for server_info in servers:
                 server_name = server_info.get("name", "")

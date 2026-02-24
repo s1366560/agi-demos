@@ -415,8 +415,10 @@ class ParallelDelegateSubAgentTool(AgentTool):
                         "error": str(r),
                     }
                 )
-            else:
+            elif isinstance(r, dict):
                 processed.append(r)
+            else:
+                processed.append({"error": str(r), "success": False})
         return processed
 
     async def _execute_single_task(

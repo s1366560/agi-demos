@@ -8,6 +8,7 @@ from src.domain.model.channels.message import (
     ChannelAdapter,
     Message,
     MessageContent,
+    MessageType,
     SenderInfo,
 )
 
@@ -122,7 +123,7 @@ class ChannelService:
         self, channel_id: str, to: str, text: str, reply_to: str | None = None
     ) -> str | None:
         """Send a text message (convenience method)."""
-        content = MessageContent(type="text", text=text)
+        content = MessageContent(type=MessageType.TEXT, text=text)
         return await self.send_message(channel_id, to, content, reply_to)
 
     async def broadcast(

@@ -45,6 +45,11 @@ class SendMessageHandler(WebSocketMessageHandler):
             )
             return
 
+        # Type narrowing: after the guard above, these are guaranteed to be non-None strings
+        assert isinstance(conversation_id, str)
+        assert isinstance(user_message, str)
+        assert isinstance(project_id, str)
+
         try:
             container = context.get_scoped_container()
 

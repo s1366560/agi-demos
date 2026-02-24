@@ -129,6 +129,8 @@ class GetEnvVarTool(AgentTool):
                 }
             )
 
+        assert self._tenant_id is not None, "tenant_id is required"
+        tenant_id: str = self._tenant_id
         try:
             # If we have a session_factory, create a new session for this operation
             if self._session_factory:
@@ -139,14 +141,14 @@ class GetEnvVarTool(AgentTool):
                 async with self._session_factory() as db_session:
                     repository = SqlToolEnvironmentVariableRepository(db_session)
                     env_var = await repository.get(
-                        tenant_id=self._tenant_id,
+                        tenant_id=tenant_id,
                         tool_name=tool_name,
                         variable_name=variable_name,
                         project_id=self._project_id,
                     )
             else:
                 env_var = await self._repository.get(
-                    tenant_id=self._tenant_id,
+                    tenant_id=tenant_id,
                     tool_name=tool_name,
                     variable_name=variable_name,
                     project_id=self._project_id,
@@ -581,6 +583,7 @@ class RequestEnvVarTool(AgentTool):
         saved_vars: list[str],
     ) -> None:
         """Encrypt and upsert each env var value to the given repository."""
+        assert self._tenant_id is not None, "tenant_id is required"
         for var_name, var_value in values.items():
             if not var_value:
                 continue
@@ -707,6 +710,8 @@ class CheckEnvVarsTool(AgentTool):
                 }
             )
 
+        assert self._tenant_id is not None
+        tenant_id: str = self._tenant_id
         try:
             # If we have a session_factory, create a new session for this operation
             # This is needed when running in worker context where sessions aren't managed externally
@@ -718,14 +723,14 @@ class CheckEnvVarsTool(AgentTool):
                 async with self._session_factory() as db_session:
                     repository = SqlToolEnvironmentVariableRepository(db_session)
                     env_vars = await repository.get_for_tool(
-                        tenant_id=self._tenant_id,
+                        tenant_id=tenant_id,
                         tool_name=tool_name,
                         project_id=self._project_id,
                     )
             else:
                 # Use injected repository (for API context with managed sessions)
                 env_vars = await self._repository.get_for_tool(
-                    tenant_id=self._tenant_id,
+                    tenant_id=tenant_id,
                     tool_name=tool_name,
                     project_id=self._project_id,
                 )

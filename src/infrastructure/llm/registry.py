@@ -130,7 +130,7 @@ class ProviderAdapterRegistry:
         try:
             adapter = adapter_class(
                 config=llm_config,
-                provider_config=provider_config,
+                provider_config=provider_config,  # type: ignore[call-arg]
                 **kwargs,
             )
             logger.debug(f"Created {adapter_class.__name__} adapter for {provider_type.value}")

@@ -64,8 +64,8 @@ async def _ensure_default_project(db: AsyncSession, user: DBUser) -> None:
         return
 
     # Get tenant details
-    result = await db.execute(select(Tenant).where(Tenant.id == user_tenant.tenant_id))
-    tenant = result.scalar_one_or_none()
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == user_tenant.tenant_id))
+    tenant = tenant_result.scalar_one_or_none()
 
     if not tenant:
         logger.warning(f"Tenant {user_tenant.tenant_id} not found for user {user.id}")
@@ -248,7 +248,7 @@ async def read_users_me(
     return UserSchema(
         user_id=current_user.id,
         email=current_user.email,
-        name=current_user.full_name,
+        name=current_user.full_name or "",
         roles=role_names,
         is_active=current_user.is_active,
         created_at=current_user.created_at,
@@ -282,7 +282,7 @@ async def update_user_me(
     return UserSchema(
         user_id=current_user.id,
         email=current_user.email,
-        name=current_user.full_name,
+        name=current_user.full_name or "",
         roles=[r.role.name for r in current_user.roles],
         is_active=current_user.is_active,
         created_at=current_user.created_at,

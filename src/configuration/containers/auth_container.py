@@ -27,12 +27,15 @@ class AuthContainer:
 
     def user_repository(self) -> UserRepository:
         """Get UserRepository for user persistence."""
+        assert self._db is not None
         return SqlUserRepository(self._db)
 
     def api_key_repository(self) -> APIKeyRepository:
         """Get APIKeyRepository for API key persistence."""
+        assert self._db is not None
         return SqlAPIKeyRepository(self._db)
 
     def tenant_repository(self) -> TenantRepository:
         """Get TenantRepository for tenant persistence."""
+        assert self._db is not None
         return SqlTenantRepository(self._db)

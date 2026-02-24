@@ -311,11 +311,14 @@ class ParallelScheduler:
         )
         execution.process = process
 
-        async for event in asyncio.wait_for(
-            self._collect_events(process, task_id),
+        async def _run_with_timeout() -> None:
+            async for event in self._collect_events(process, task_id):
+                await ctx.event_queue.put(event)
+
+        await asyncio.wait_for(
+            _run_with_timeout(),
             timeout=ctx.subtask_timeout,
-        ):
-            await ctx.event_queue.put(event)
+        )
 
         execution.result = process.result
         execution.completed = True

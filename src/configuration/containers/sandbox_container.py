@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.model.sandbox.profiles import SandboxProfileType
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
 from src.configuration.config import Settings
 from src.domain.ports.services.sandbox_resource_port import SandboxResourcePort
@@ -41,6 +42,7 @@ class SandboxContainer:
 
     def project_sandbox_repository(self) -> SqlProjectSandboxRepository:
         """Get SqlProjectSandboxRepository for sandbox persistence."""
+        assert self._db is not None
         return SqlProjectSandboxRepository(self._db)
 
     def sandbox_orchestrator(self) -> SandboxOrchestrator:
@@ -51,6 +53,7 @@ class SandboxContainer:
             if self._sandbox_event_publisher_factory
             else None
         )
+        assert sandbox_adapter is not None
         return SandboxOrchestrator(
             sandbox_adapter=sandbox_adapter,
             event_publisher=event_publisher,
@@ -75,11 +78,12 @@ class SandboxContainer:
         distributed_lock = (
             self._distributed_lock_factory() if self._distributed_lock_factory else None
         )
+        assert sandbox_adapter is not None
         return UnifiedSandboxService(
             repository=self.project_sandbox_repository(),
             sandbox_adapter=sandbox_adapter,
             distributed_lock=distributed_lock,
-            default_profile=self._settings.sandbox_profile_type if self._settings else "basic",
+            default_profile=SandboxProfileType(self._settings.sandbox_profile_type) if self._settings else SandboxProfileType.STANDARD,
             health_check_interval_seconds=60,
             auto_recover=True,
             memory_limit_override=self._settings.sandbox_memory_limit if self._settings else None,
@@ -96,11 +100,12 @@ class SandboxContainer:
         distributed_lock = (
             self._distributed_lock_factory() if self._distributed_lock_factory else None
         )
+        assert sandbox_adapter is not None
         return ProjectSandboxLifecycleService(
             repository=self.project_sandbox_repository(),
             sandbox_adapter=sandbox_adapter,
             distributed_lock=distributed_lock,
-            default_profile=self._settings.sandbox_profile_type if self._settings else "basic",
+            default_profile=SandboxProfileType(self._settings.sandbox_profile_type) if self._settings else SandboxProfileType.STANDARD,
             health_check_interval_seconds=60,
             auto_recover=True,
             memory_limit_override=self._settings.sandbox_memory_limit if self._settings else None,
@@ -126,6 +131,7 @@ class SandboxContainer:
         )
         from src.infrastructure.mcp.resource_resolver import MCPAppResourceResolver
 
+        assert self._db is not None
         app_repo = SqlMCPAppRepository(self._db)
         # Use factory callable to break circular dependency:
         # MCPAppService -> ResourceResolver -> SandboxMCPServerManager -> MCPAppService

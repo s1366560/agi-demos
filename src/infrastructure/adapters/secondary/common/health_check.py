@@ -398,7 +398,7 @@ class SystemHealthChecker:
                         latency_ms=0,
                     )
                 else:
-                    checks[name] = result  # type: ignore[assignment]
+                    checks[name] = result
 
         # Determine overall health
         all_healthy = all(status.healthy for status in checks.values())

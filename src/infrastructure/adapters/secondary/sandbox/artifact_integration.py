@@ -85,8 +85,8 @@ class SandboxArtifactIntegration:
     async def scan_for_new_artifacts(
         self,
         sandbox_id: str,
-        list_files_fn: Callable[[str], list[str]],
-        read_file_fn: Callable[[str], bytes | None],
+        list_files_fn: Callable[..., Any],
+        read_file_fn: Callable[..., Any],
         project_id: str,
         tenant_id: str,
         tool_execution_id: str | None = None,

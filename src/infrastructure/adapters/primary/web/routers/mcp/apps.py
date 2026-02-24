@@ -198,6 +198,7 @@ async def proxy_tool_call_direct(
             content=result.content,
             is_error=result.is_error,
             error_message=result.error_message,
+            error_code=None,
         )
     except Exception as e:
         logger.error(
@@ -318,6 +319,7 @@ async def proxy_tool_call(
             content=result.content,
             is_error=result.is_error,
             error_message=result.error_message,
+            error_code=None,
         )
     except Exception as e:
         logger.error("Tool call proxy failed: app=%s, tool=%s, err=%s", app_id, body.tool_name, e)

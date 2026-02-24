@@ -200,7 +200,7 @@ async def upgrade_plan(
 
     # Update plan (in a real implementation, this would integrate with payment processor)
     new_plan = plan_data.get("plan", "pro")
-    tenant.plan = new_plan  # type: ignore
+    tenant.plan = new_plan  # type: ignore[assignment]
 
     # Set limits based on plan
     if new_plan == "free":

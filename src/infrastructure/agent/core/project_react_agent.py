@@ -40,7 +40,7 @@ import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
@@ -434,7 +434,7 @@ class ProjectReActAgent:
 
             if embedding_service and redis_client:
                 cached_embedding = CachedEmbeddingService(embedding_service, redis_client)
-                chunk_search = ChunkHybridSearch(cached_embedding, session_factory)
+                chunk_search = ChunkHybridSearch(cast("EmbeddingService", cached_embedding), session_factory)
                 memory_recall = MemoryRecallPreprocessor(
                     chunk_search=chunk_search,
                     graph_search=graph_service,
@@ -450,7 +450,7 @@ class ProjectReActAgent:
                 memory_capture = MemoryCapturePostprocessor(
                     llm_client=llm_client,
                     session_factory=session_factory,
-                    embedding_service=cached_emb,
+                    embedding_service=cast("EmbeddingService | None", cached_emb),
                 )
                 logger.info(f"ProjectReActAgent[{self.project_key}]: Memory capture enabled")
 
@@ -458,7 +458,7 @@ class ProjectReActAgent:
 
                 memory_flush = MemoryFlushService(
                     llm_client=llm_client,
-                    embedding_service=cached_emb,
+                    embedding_service=cast("EmbeddingService | None", cached_emb),
                     session_factory=session_factory,
                 )
         except Exception as e:
@@ -517,7 +517,7 @@ class ProjectReActAgent:
             tenant_id=self.config.tenant_id,
             project_id=self.config.project_id,
             agent_mode=self.config.agent_mode,
-            tools=self._tools,
+            tools=self._tools or {},
             skills=self._skills,
             subagents=self._subagents,
             processor_config=processor_config,
@@ -622,7 +622,7 @@ class ProjectReActAgent:
         self._initialized = True
         self._status.is_initialized = True
         self._status.is_active = True
-        self._status.tool_count = len(self._tools)
+        self._status.tool_count = len(self._tools or {})
         self._status.skill_count = loaded_skill_count
         self._status.subagent_count = len(self._subagents) if self._subagents else 0
 

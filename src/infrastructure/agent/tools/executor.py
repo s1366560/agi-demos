@@ -695,12 +695,12 @@ class ToolExecutor:
                 yield AgentArtifactCreatedEvent(
                     artifact_id=upload_result.get("artifact_id", ""),
                     filename=artifact.filename,
-                    content_type=artifact.content_type,
+                    mime_type=artifact.content_type,
+                    category=artifact.category,
+                    size_bytes=artifact.size_bytes if hasattr(artifact, "size_bytes") else 0,
                     url=upload_result.get("url", ""),
-                    metadata={
-                        "tool_name": tool_name,
-                        "category": artifact.category,
-                    },
+                    source_tool=tool_name,
+                    tool_execution_id=tool_execution_id,
                 )
 
             except Exception as e:

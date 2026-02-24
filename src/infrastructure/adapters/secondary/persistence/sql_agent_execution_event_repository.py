@@ -120,7 +120,7 @@ class SqlAgentExecutionEventRepository(
         before_counter: int | None = None,
     ) -> list[AgentExecutionEvent]:
         """Get events for a conversation with bidirectional pagination support."""
-        from sqlalchemy import tuple_
+        from sqlalchemy import literal, tuple_
 
         # Base query - always filter by conversation_id
         query = select(DBAgentExecutionEvent).where(
@@ -134,7 +134,7 @@ class SqlAgentExecutionEventRepository(
             # Backward pagination
             before_counter_val = before_counter if before_counter is not None else 0
             query = query.where(
-                tuple_(time_col, counter_col) < tuple_(before_time_us, before_counter_val)
+                tuple_(literal(before_time_us), literal(before_counter_val))
             )
 
             if event_types:
@@ -148,7 +148,7 @@ class SqlAgentExecutionEventRepository(
             # Forward pagination
             if from_time_us > 0 or from_counter > 0:
                 query = query.where(
-                    tuple_(time_col, counter_col) >= tuple_(from_time_us, from_counter)
+                    tuple_(literal(from_time_us), literal(from_counter))
                 )
 
             if event_types:
@@ -283,7 +283,7 @@ class SqlAgentExecutionEventRepository(
         return AgentExecutionEvent(
             id=db_event.id,
             conversation_id=db_event.conversation_id,
-            message_id=db_event.message_id,
+            message_id=db_event.message_id or "",
             event_type=db_event.event_type,
             event_data=db_event.event_data or {},
             event_time_us=db_event.event_time_us,

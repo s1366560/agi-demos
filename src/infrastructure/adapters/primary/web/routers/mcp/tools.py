@@ -114,6 +114,9 @@ async def call_mcp_tool(
         # Connect to MCP server and call tool
         start_time = time.time()
 
+        assert server.server_type is not None
+        assert server.transport_config is not None
+
         async with MCPClient(
             server_type=server.server_type,
             transport_config=server.transport_config,

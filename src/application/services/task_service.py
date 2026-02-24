@@ -49,9 +49,12 @@ class TaskService:
         Returns:
             List of task logs
         """
-        return await self._task_repo.find_by_group(
-            group_id, status=status, limit=limit, offset=offset
+        tasks = await self._task_repo.find_by_group(
+            group_id, limit=limit, offset=offset
         )
+        if status:
+            tasks = [t for t in tasks if t.status == status]
+        return tasks
 
     async def list_user_tasks(
         self, user_id: str, status: str | None = None, limit: int = 50, offset: int = 0

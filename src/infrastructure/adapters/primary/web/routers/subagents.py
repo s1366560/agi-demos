@@ -663,6 +663,7 @@ async def update_template(
     await db.commit()
 
     logger.info(f"Template updated: {template_id}")
+    assert updated is not None
     return TemplateResponse(**updated)
 
 
@@ -990,6 +991,7 @@ async def toggle_subagent_enabled(
     await db.commit()
 
     logger.info(f"SubAgent {'enabled' if enabled else 'disabled'}: {subagent_id}")
+    assert result is not None
     return subagent_to_response(result)
 
 

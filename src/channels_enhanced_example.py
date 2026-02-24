@@ -281,7 +281,7 @@ async def channel_service_example() -> None:
         if message.content.text and "hello" in message.content.text.lower():
             await feishu.send_text(message.chat_id, "Hello! 👋")
 
-    service.on_message(on_message)
+    service.on_message(on_message)  # type: ignore[arg-type]
 
     # Connect
     await service.connect_all()

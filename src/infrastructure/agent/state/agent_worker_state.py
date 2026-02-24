@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
+    from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
 
 import redis.asyncio as redis
@@ -701,12 +702,13 @@ def _add_memory_tools(
         )
         from src.infrastructure.agent.tools.memory_tools import MemoryGetTool, MemorySearchTool
         from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
+        from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
         from src.infrastructure.memory.chunk_search import ChunkHybridSearch
 
         embedding_service = getattr(graph_service, "embedder", None)
         if embedding_service and redis_client:
             cached_emb = CachedEmbeddingService(embedding_service, redis_client)
-            chunk_search = ChunkHybridSearch(cached_emb, mem_session_factory)
+            chunk_search = ChunkHybridSearch(cast(EmbeddingService, cached_emb), mem_session_factory)
             tools["memory_search"] = MemorySearchTool(
                 chunk_search=chunk_search,
                 graph_service=graph_service,
@@ -1003,11 +1005,13 @@ def _wrap_sandbox_tools(
         if tool_name in _MCP_MANAGEMENT_TOOLS:
             continue
 
+        assert _mcp_sandbox_adapter is not None
+        adapter: SandboxPort = _mcp_sandbox_adapter
         wrapper = SandboxMCPToolWrapper(
             sandbox_id=project_sandbox_id,
             tool_name=tool_name,
             tool_schema=tool_info,
-            sandbox_adapter=_mcp_sandbox_adapter,
+            sandbox_adapter=adapter,
         )
 
         # Use namespaced name as the key
@@ -1023,8 +1027,10 @@ async def _load_and_merge_user_mcp_tools(
     redis_client: redis.Redis | None,
 ) -> None:
     """Load user MCP server tools and resolve MCPApp IDs."""
+    assert _mcp_sandbox_adapter is not None
+    adapter: SandboxPort = _mcp_sandbox_adapter
     user_mcp_tools = await _load_user_mcp_server_tools(
-        sandbox_adapter=_mcp_sandbox_adapter,
+        sandbox_adapter=adapter,
         sandbox_id=project_sandbox_id,
         project_id=project_id,
         redis_client=redis_client,
@@ -1298,7 +1304,7 @@ async def _load_user_mcp_server_tools(
                 server_name = running_servers[i]["name"]
                 for tool_info in discovered_tools:
                     adapter = SandboxMCPServerToolAdapter(
-                        sandbox_adapter=sandbox_adapter,
+                        sandbox_adapter=cast("MCPSandboxAdapter", sandbox_adapter),
                         sandbox_id=sandbox_id,
                         server_name=server_name,
                         tool_info=tool_info,

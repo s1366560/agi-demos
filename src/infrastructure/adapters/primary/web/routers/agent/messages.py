@@ -526,6 +526,7 @@ async def get_conversation_messages(
     Returns timeline of all events in the conversation, ordered by sequence number.
     """
     try:
+        assert request is not None
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
@@ -626,6 +627,7 @@ async def get_conversation_execution(
 ) -> dict[str, Any]:
     """Get the agent execution history for a conversation."""
     try:
+        assert request is not None
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
@@ -670,6 +672,7 @@ async def get_conversation_tool_executions(
 ) -> dict[str, Any]:
     """Get the tool execution history for a conversation."""
     try:
+        assert request is not None
         container = get_container_with_db(request, db)
 
         conversation_repo = container.conversation_repository()
@@ -719,6 +722,7 @@ async def get_conversation_execution_status(
 ) -> dict[str, Any]:
     """Get the current execution status of a conversation with optional recovery info."""
     try:
+        assert request is not None
         container = get_container_with_db(request, db)
 
         conversation_repo = container.conversation_repository()
@@ -902,8 +906,9 @@ async def get_execution_stats(
 ) -> ExecutionStatsResponse:
     """Get execution statistics for a conversation."""
     try:
+        assert request is not None
         container = get_container_with_db(request, db)
-        llm = create_llm_client(tenant_id)
+        llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
 
         executions = await agent_service.get_execution_history(

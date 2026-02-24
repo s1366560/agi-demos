@@ -16,6 +16,7 @@ from enum import Enum
 from typing import Any
 
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+from src.domain.ports.services.sandbox_port import SandboxStatus
 
 logger = logging.getLogger(__name__)
 
@@ -149,7 +150,7 @@ class SandboxHealthService:
                 errors=["Sandbox not found"],
             )
 
-        container_running = sandbox.status == "running"
+        container_running = sandbox.status == SandboxStatus.RUNNING
         details["container_running"] = container_running
         details["container_status"] = sandbox.status
 
@@ -222,8 +223,8 @@ class SandboxHealthService:
                 return ComponentHealth(container_status="not_found")
 
             return ComponentHealth(
-                container=sandbox.status == "running",
-                container_status=sandbox.status,
+                container=sandbox.status.value == "running",
+                container_status=sandbox.status.value,
                 mcp_port=getattr(sandbox, "mcp_port", None),
                 desktop_port=getattr(sandbox, "desktop_port", None),
                 terminal_port=getattr(sandbox, "terminal_port", None),

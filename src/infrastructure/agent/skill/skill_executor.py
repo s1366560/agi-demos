@@ -301,6 +301,7 @@ class SkillExecutor:
             "Consider upgrading to SkillResourcePort."
         )
 
+        assert self._sandbox_adapter is not None
         await self._resource_injector.inject_skill(
             self._sandbox_adapter,
             sandbox_id=sandbox_id,

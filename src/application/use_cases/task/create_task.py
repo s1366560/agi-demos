@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from src.domain.model.task.task_log import TaskLog
+from src.domain.model.task.task_log import TaskLog, TaskLogStatus
 from src.domain.ports.repositories.task_repository import TaskRepository
 
 
@@ -58,7 +58,7 @@ class CreateTaskUseCase:
             entity_id=command.entity_id,
             entity_type=command.entity_type,
             parent_task_id=command.parent_task_id,
-            status="PENDING",
+            status=TaskLogStatus.PENDING,
         )
 
         await self._task_repo.save(task)

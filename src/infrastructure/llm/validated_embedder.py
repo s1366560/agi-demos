@@ -83,7 +83,9 @@ class ValidatedEmbedder(EmbedderClient):
         Returns:
             Embedding vector with guaranteed correct dimension
         """
-        raw_embedding = await self._base_embedder.create(input_data)
+        # Convert single string to list for embedder
+        input_list = [input_data] if isinstance(input_data, str) else input_data
+        raw_embedding = await self._base_embedder.create(input_list)  # type: ignore[arg-type]
 
         # Validate and fix dimension
         embedding = self._validate_and_fix_dimension(raw_embedding, input_data)  # type: ignore[arg-type]

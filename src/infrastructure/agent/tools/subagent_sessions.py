@@ -1964,7 +1964,7 @@ class SubAgentsControlTool(AgentTool):
         ):
             return f"Run {target_token} is already terminal ({matched_roots[0].status.value})"
         candidate_roots = self._collect_kill_candidates(matched_roots)
-        is_direct = target_token == run_id and run_id and not target
+        is_direct = bool(target_token == run_id and run_id and not target)
         if not candidate_roots:
             if is_direct:
                 return (

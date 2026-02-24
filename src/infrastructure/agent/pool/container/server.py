@@ -279,13 +279,15 @@ class AgentContainerServer:
         """Initialize the agent."""
         try:
             from src.infrastructure.agent.core import ProjectReActAgent
+            from src.infrastructure.agent.core.project_react_agent import ProjectAgentConfig
 
             # Create agent instance
-            self._agent = ProjectReActAgent(
+            agent_config = ProjectAgentConfig(
                 tenant_id=self.config.tenant_id,
                 project_id=self.config.project_id,
                 agent_mode=self.config.agent_mode,
             )
+            self._agent = ProjectReActAgent(config=agent_config)
 
             # Initialize agent
             await self._agent.initialize()

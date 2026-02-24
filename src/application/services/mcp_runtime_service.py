@@ -269,7 +269,7 @@ class MCPRuntimeService:
                 project_id=server.project_id,
                 tenant_id=tenant_id,
                 server_name=server.name,
-                server_type=server.server_type,
+                server_type=server.server_type or "",
                 transport_config=server.transport_config or {},
             )
             await self._server_repo.update_discovered_tools(
@@ -355,7 +355,7 @@ class MCPRuntimeService:
             project_id=server.project_id,
             tenant_id=tenant_id,
             server_name=server.name,
-            server_type=server.server_type,
+            server_type=server.server_type or "",
             transport_config=server.transport_config or {},
         )
         test_status = "success" if result.status != "failed" else "failed"
@@ -646,7 +646,7 @@ class MCPRuntimeService:
             project_id=server.project_id,
             tenant_id=tenant_id,
             server_name=server.name,
-            server_type=server.server_type,
+            server_type=server.server_type or "",
             transport_config=server.transport_config or {},
         )
         if start_status.status == "failed":
@@ -669,7 +669,7 @@ class MCPRuntimeService:
             project_id=server.project_id,
             tenant_id=tenant_id,
             server_name=server.name,
-            server_type=server.server_type,
+            server_type=server.server_type or "",
             transport_config=server.transport_config or {},
             ensure_running=False,
         )

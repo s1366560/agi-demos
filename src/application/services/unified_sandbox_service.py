@@ -19,7 +19,7 @@ import contextlib
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.exc import IntegrityError
 
@@ -814,7 +814,7 @@ class UnifiedSandboxService(SandboxResourcePort):
             cpu_limit=cpu_limit,
             timeout_seconds=sandbox_profile.timeout_seconds,
             desktop_enabled=sandbox_profile.desktop_enabled,
-            environment=config_override.get("environment") if config_override else {},
+            environment=cast(dict[str, str], config_override.get("environment", {})) if config_override else {},
         )
 
         if config_override:

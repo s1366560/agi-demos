@@ -96,7 +96,7 @@ def _find_json_boundaries(content: str) -> str:
 
     # Find matching end bracket
     open_char, close_char = _get_bracket_pair(content)
-    if open_char is not None:
+    if open_char is not None and close_char is not None:
         content = _find_matching_bracket(content, open_char, close_char)
 
     return content
@@ -413,10 +413,9 @@ class StructuredOutputValidator:
         )
 
         response = await llm_client.generate_response(
-            messages=working_messages,
+            messages=[m for m in working_messages if isinstance(m, Message)],
             max_tokens=self.config.max_tokens,
-            temperature=temperature,
-            **{k: v for k, v in kwargs.items() if k not in ("temperature", "max_tokens")},
+            model_size=ModelSize.medium,
         )
 
         content = response.get("content", "")

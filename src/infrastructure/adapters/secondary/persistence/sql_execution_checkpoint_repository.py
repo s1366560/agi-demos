@@ -123,7 +123,7 @@ class SqlExecutionCheckpointRepository(
         return ExecutionCheckpoint(
             id=db_checkpoint.id,
             conversation_id=db_checkpoint.conversation_id,
-            message_id=db_checkpoint.message_id,
+            message_id=db_checkpoint.message_id or "",
             checkpoint_type=db_checkpoint.checkpoint_type,
             execution_state=db_checkpoint.execution_state or {},
             step_number=db_checkpoint.step_number,

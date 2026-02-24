@@ -891,4 +891,5 @@ async def rollback_skill(
 
     # Return updated skill
     updated_skill = await skill_repo.get_by_id(skill_id)
+    assert updated_skill is not None
     return skill_to_response(updated_skill)

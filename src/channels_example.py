@@ -88,7 +88,7 @@ async def multi_channel_example() -> None:
     await service.connect_all()
 
     # Broadcast to all channels
-    await service.broadcast("oc_xxx", "这是一条广播消息")
+    await service.broadcast("oc_xxx", "这是一条广播消息")  # type: ignore[arg-type]
 
     await asyncio.sleep(60)
     await service.disconnect_all()

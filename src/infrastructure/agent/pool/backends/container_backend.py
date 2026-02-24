@@ -23,6 +23,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, cast
 
+import aiohttp
+
 from ..config import AgentInstanceConfig
 from ..instance import AgentInstance, ChatRequest
 from ..types import (
@@ -198,12 +200,8 @@ class ContainerBackend(Backend):
 
                 # Create AgentInstance wrapper
                 instance = AgentInstance(
-                    instance_key=instance_key,
-                    tenant_id=config.tenant_id,
-                    project_id=config.project_id,
-                    agent_mode=config.agent_mode,
-                    tier=ProjectTier.HOT,
                     config=config,
+                    instance_id=instance_key,
                 )
                 instance._status = AgentInstanceStatus.READY
                 instance._is_initialized = True
@@ -277,11 +275,13 @@ class ContainerBackend(Backend):
 
         # Create AgentInstance representation
         instance = AgentInstance(
-            instance_key=instance_id,
-            tenant_id=container_info.tenant_id,
-            project_id=container_info.project_id,
-            agent_mode=container_info.agent_mode,
-            tier=ProjectTier.HOT,
+            config=AgentInstanceConfig(
+                tenant_id=container_info.tenant_id,
+                project_id=container_info.project_id,
+                agent_mode=container_info.agent_mode,
+                tier=ProjectTier.HOT,
+            ),
+            instance_id=instance_id,
         )
 
         # Map container status to instance status
@@ -339,7 +339,7 @@ class ContainerBackend(Backend):
         if instance_id not in self._containers:
             return HealthCheckResult(
                 status=HealthStatus.UNHEALTHY,
-                message="Instance not found",
+                error_message="Instance not found",
             )
 
         container_info = self._containers[instance_id]
@@ -350,7 +350,7 @@ class ContainerBackend(Backend):
             if container_status != "running":
                 return HealthCheckResult(
                     status=HealthStatus.UNHEALTHY,
-                    message=f"Container not running: {container_status}",
+                    error_message=f"Container not running: {container_status}",
                 )
 
             # Check agent health via HTTP
@@ -358,25 +358,25 @@ class ContainerBackend(Backend):
 
             async with aiohttp.ClientSession() as session:
                 url = f"http://{container_info.health_endpoint}/health"
-                async with session.get(url, timeout=5) as response:
+                async with session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response:
                     if response.status == 200:
                         data = await response.json()
                         if data.get("status") == "healthy":
                             return HealthCheckResult(
                                 status=HealthStatus.HEALTHY,
-                                message="OK",
+                                error_message="OK",
                                 latency_ms=(time.time() - time.time()) * 1000,
                             )
 
             return HealthCheckResult(
                 status=HealthStatus.DEGRADED,
-                message="Health check failed",
+                error_message="Health check failed",
             )
 
         except Exception as e:
             return HealthCheckResult(
                 status=HealthStatus.UNHEALTHY,
-                message=str(e),
+                error_message=str(e),
             )
 
     def get_stats(self) -> dict[str, Any]:
@@ -513,7 +513,7 @@ class ContainerBackend(Backend):
             try:
                 async with (
                     aiohttp.ClientSession() as session,
-                    session.get(url, timeout=5) as response,
+                    session.get(url, timeout=aiohttp.ClientTimeout(total=5)) as response,
                 ):
                     if response.status == 200:
                         data = await response.json()
@@ -550,11 +550,11 @@ class ContainerBackend(Backend):
                 for instance_id in list(self._containers.keys()):
                     result = await self.health_check(instance_id)
                     if result.status == HealthStatus.UNHEALTHY:
-                        logger.warning(f"Container unhealthy: {instance_id}, {result.message}")
+                        logger.warning(f"Container unhealthy: {instance_id}, {result.error_message}")
                         # Update container status
                         if instance_id in self._containers:
                             self._containers[instance_id].status = "error"
-                            self._containers[instance_id].error_message = result.message
+                            self._containers[instance_id].error_message = result.error_message
 
             except Exception as e:
                 logger.error(f"Health monitor error: {e}")

@@ -163,7 +163,7 @@ class ChannelConnectionManager:
         if session_factory:
             self._session_factory = session_factory
 
-        if not self._session_factory:
+        if self._session_factory is None:
             logger.error("[ChannelManager] No session factory provided")
             return 0
 
@@ -191,7 +191,7 @@ class ChannelConnectionManager:
         self._health_check_task = asyncio.create_task(self._health_check_loop())
 
         # Start outbox retry worker
-        if self._session_factory:
+        if self._session_factory is not None:
             self._outbox_worker = OutboxRetryWorker(
                 session_factory=self._session_factory,
                 get_connection_fn=lambda cid: self._connections.get(cid),
@@ -555,7 +555,7 @@ class ChannelConnectionManager:
 
         coro = self._safe_route_message(message)
         try:
-            future = asyncio.run_coroutine_threadsafe(coro, self._main_loop)
+            future = asyncio.run_coroutine_threadsafe(coro, self._main_loop)  # type: ignore[arg-type]
         except Exception as e:
             coro.close()
             logger.error(f"[ChannelManager] Failed to schedule message routing: {e}")
@@ -577,7 +577,7 @@ class ChannelConnectionManager:
         error: str | None = None,
     ) -> None:
         """Update connection status in database."""
-        if not self._session_factory:
+        if self._session_factory is None:
             return
 
         try:
@@ -635,7 +635,7 @@ class ChannelConnectionManager:
         logger.info(f"[ChannelManager] Restarting connection {config_id}")
 
         # Get fresh config from DB
-        if not self._session_factory:
+        if self._session_factory is None:
             logger.error("[ChannelManager] No session factory for restart")
             return False
 

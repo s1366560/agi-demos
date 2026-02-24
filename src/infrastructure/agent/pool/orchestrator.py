@@ -301,8 +301,14 @@ class PoolOrchestrator:
         if self._health_monitor:
             await self._health_monitor.unregister_instance(instance_key)
 
+        parts = instance_key.split(":")
+        tenant_id_part = parts[0] if len(parts) > 0 else ""
+        project_id_part = parts[1] if len(parts) > 1 else ""
+        agent_mode_part = parts[2] if len(parts) > 2 else "default"
         return await self._pool_manager.terminate_instance(
-            instance_key=instance_key,
+            tenant_id=tenant_id_part,
+            project_id=project_id_part,
+            agent_mode=agent_mode_part,
             graceful=graceful,
         )
 

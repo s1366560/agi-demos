@@ -176,6 +176,7 @@ class MemoryFlushService:
         if embedding is False:
             return False
 
+        assert not isinstance(embedding, bool)
         return await self._store_chunk(
             chunk_repo, content, category, embedding, project_id, conversation_id
         )

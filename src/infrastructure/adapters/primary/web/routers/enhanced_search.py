@@ -308,7 +308,7 @@ async def search_temporal(
 
         # Build temporal filter
         conditions = []
-        params = {"query": query, "limit": limit}
+        params: dict[str, Any] = {"query": query, "limit": limit}
 
         if parsed_since:
             conditions.append("e.created_at >= datetime($since)")

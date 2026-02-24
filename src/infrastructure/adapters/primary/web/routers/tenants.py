@@ -120,7 +120,7 @@ async def list_tenants(
 
     return TenantListResponse(
         tenants=[TenantResponse.from_orm(tenant) for tenant in tenants],
-        total=total,
+        total=total or 0,
         page=page,
         page_size=page_size,
     )

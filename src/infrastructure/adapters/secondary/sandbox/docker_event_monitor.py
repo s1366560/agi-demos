@@ -167,7 +167,7 @@ class DockerEventMonitor:
         if self._on_status_change and project_id and self._loop:
             try:
                 asyncio.run_coroutine_threadsafe(
-                    self._on_status_change(project_id, sandbox_id, new_status, action), self._loop
+                    self._on_status_change(project_id, sandbox_id, new_status, action), self._loop  # type: ignore[arg-type]
                 )
             except Exception as e:
                 logger.error(f"[DockerEventMonitor] Callback error: {e}")

@@ -119,6 +119,7 @@ async def get_conversation_events(
     between conversations.
     """
     try:
+        assert request is not None
         container = get_container_with_db(request, db)
         event_repo = container.agent_execution_event_repository()
 
@@ -172,6 +173,7 @@ async def get_execution_status(
     - missed_events_count: Events missed since from_time_us
     """
     try:
+        assert request is not None
         container = get_container_with_db(request, db)
         event_repo = container.agent_execution_event_repository()
         redis_client = container.redis()

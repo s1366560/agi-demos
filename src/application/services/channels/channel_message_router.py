@@ -218,7 +218,7 @@ class ChannelMessageRouter:
 
                 sandbox_path = await self._media_import_service.import_media_to_workspace(
                     message=message,
-                    project_id=message.project_id,
+                    project_id=message.project_id or "",
                     tenant_id=message.raw_data.get("tenant_id", "") if message.raw_data else "",
                     conversation_id=conversation_id,
                     mcp_adapter=mcp_adapter,
@@ -942,7 +942,7 @@ class ChannelMessageRouter:
                 CardKitStreamingManager,
             )
 
-            cardkit_mgr = CardKitStreamingManager(streaming_adapter)
+            cardkit_mgr = CardKitStreamingManager(cast(Any, streaming_adapter))
             cardkit_state = await cardkit_mgr.start_streaming(message.chat_id, reply_to=reply_to)
         except Exception as e:
             logger.warning(f"[MessageRouter] CardKit start failed: {e}")
@@ -1119,6 +1119,9 @@ class ChannelMessageRouter:
     ) -> None:
         """Record a push message in the outbox for observability."""
         try:
+            from src.infrastructure.adapters.secondary.persistence.channel_models import (
+                ChannelOutboxModel,
+            )
             from src.infrastructure.adapters.secondary.persistence.channel_repository import (
                 ChannelOutboxRepository,
             )
@@ -1129,12 +1132,14 @@ class ChannelMessageRouter:
             async with async_session_factory() as session:
                 repo = ChannelOutboxRepository(session)
                 await repo.create(
-                    channel_config_id=channel_config_id,
-                    conversation_id=conversation_id,
-                    chat_id=chat_id,
-                    message_type=content_type,
-                    content=content[:500],
-                    status="sent",
+                    ChannelOutboxModel(
+                        channel_config_id=channel_config_id,
+                        conversation_id=conversation_id,
+                        chat_id=chat_id,
+                        project_id="",
+                        content_text=content[:500],
+                        status="sent",
+                    )
                 )
                 await session.commit()
         except Exception as e:

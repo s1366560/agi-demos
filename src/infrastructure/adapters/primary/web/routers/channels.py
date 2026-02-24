@@ -444,8 +444,9 @@ def _build_plugin_settings_payload(
     settings: dict[str, Any] = {}
     if existing_config is not None:
         settings.update(_collect_settings_from_config(existing_config, secret_paths=secret_paths))
-    if apply_defaults and isinstance(getattr(metadata, "defaults", None), dict):
-        settings.update(metadata.defaults)
+    defaults = metadata.defaults if metadata else None
+    if isinstance(defaults, dict):
+        settings.update(defaults)
 
     incoming_extra = payload.get("extra_settings")
     if isinstance(incoming_extra, dict):

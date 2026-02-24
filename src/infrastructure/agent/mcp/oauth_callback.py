@@ -245,8 +245,8 @@ class MCPOAuthCallbackServer:
 
         # Store pending auth
         self._pending_auths[oauth_state] = PendingAuth(
-            resolve=lambda code: loop.call_soon_threadsafe(future.set_result, code),
-            reject=lambda exc: loop.call_soon_threadsafe(future.set_exception, exc),
+            resolve=lambda code: (loop.call_soon_threadsafe(future.set_result, code), None)[-1],
+            reject=lambda exc: (loop.call_soon_threadsafe(future.set_exception, exc), None)[-1],
             timeout_handle=timeout_handle,
         )
 

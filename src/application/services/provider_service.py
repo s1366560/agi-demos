@@ -7,7 +7,7 @@ Handles business logic and coordinates between domain and infrastructure layers.
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 if TYPE_CHECKING:
@@ -26,6 +26,7 @@ from src.domain.llm_providers.models import (
     ProviderConfigUpdate,
     ProviderHealth,
     ProviderType,
+    ProviderStatus,
     RateLimitStats,
     ResilienceStatus,
     TenantProviderMapping,
@@ -134,6 +135,7 @@ class ProviderService:
 
         return ProviderConfigResponse(
             id=provider.id,
+            tenant_id=provider.tenant_id,
             name=provider.name,
             provider_type=provider.provider_type,
             base_url=provider.base_url,
@@ -210,6 +212,7 @@ class ProviderService:
         try:
             decrypted_key = self.encryption_service.decrypt(provider.api_key_encrypted)
             api_key = from_decrypted_api_key(decrypted_key)
+            assert api_key is not None, "Decrypted API key is None"
             status, error_message = await self._check_provider_endpoint(provider, api_key)
             response_time_ms = int((time.time() - start_time) * 1000)
         except Exception as e:
@@ -220,7 +223,7 @@ class ProviderService:
 
         health = ProviderHealth(
             provider_id=provider_id,
-            status=status,
+            status=ProviderStatus(status),
             last_check=datetime.now(UTC),
             error_message=error_message,
             response_time_ms=response_time_ms,
@@ -542,7 +545,7 @@ class ProviderService:
         providers = await self.repository.list_all()
         for provider in providers:
             if provider.is_default:
-                await self.repository.update(provider.id, ProviderConfigUpdate(is_default=False))
+                await self.repository.update(provider.id, ProviderConfigUpdate(name=None, api_key=None, is_default=False))
 
     async def clear_all_providers(self) -> int:
         """
@@ -562,7 +565,7 @@ class ProviderService:
 
         for provider in providers:
             try:
-                await self.repository.delete(provider.id, hard_delete=True)
+                await cast(Any, self.repository).delete(provider.id, hard_delete=True)
             except Exception as e:
                 logger.warning(f"Failed to delete provider {provider.id}: {e}")
 
@@ -640,7 +643,7 @@ class ProviderService:
             )
         except Exception as e:
             logger.warning(f"Failed to get resilience status for {provider_type}: {e}")
-            return ResilienceStatus()
+            return ResilienceStatus(circuit_breaker_state=CircuitBreakerState.CLOSED, failure_count=0, success_count=0, can_execute=True)
 
 
 # Singleton instance for dependency injection

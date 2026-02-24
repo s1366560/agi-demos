@@ -574,14 +574,33 @@ async def get_task_status(task_id: str, db: AsyncSession = Depends(get_db)) -> A
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    return task_to_response(task)
+    return task_to_response(
+        TaskLog(
+            id=task.id,
+            group_id=task.group_id,
+            task_type=task.task_type,
+            status=TaskLogStatus(task.status),
+            payload=task.payload,
+            entity_id=task.entity_id,
+            entity_type=task.entity_type,
+            parent_task_id=task.parent_task_id,
+            worker_id=task.worker_id,
+            retry_count=task.retry_count,
+            error_message=task.error_message,
+            created_at=task.created_at,
+            started_at=task.started_at,
+            completed_at=task.completed_at,
+            stopped_at=task.stopped_at,
+        )
+    )
 
 
 @router.post("/{task_id}/cancel")
 async def cancel_task_endpoint(
     task_id: str,
+    db: AsyncSession = Depends(get_db),
     container: DIContainer = Depends(get_di_container),
 ) -> Any:
     """Cancel a task (alias for stop)."""
     # Reuse the stop logic
-    return await stop_task_endpoint(task_id, container)
+    return await stop_task_endpoint(task_id, db, container)

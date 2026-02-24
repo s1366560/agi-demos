@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.domain.ports.agent.agent_tool_port import AgentToolBase
 
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -111,30 +114,37 @@ class AgentContainer:
 
     def conversation_repository(self) -> SqlConversationRepository:
         """Get SqlConversationRepository for conversation persistence."""
+        assert self._db is not None
         return SqlConversationRepository(self._db)
 
     def agent_execution_repository(self) -> SqlAgentExecutionRepository:
         """Get SqlAgentExecutionRepository for agent execution persistence."""
+        assert self._db is not None
         return SqlAgentExecutionRepository(self._db)
 
     def tool_execution_record_repository(self) -> SqlToolExecutionRecordRepository:
         """Get SqlToolExecutionRecordRepository for tool execution record persistence."""
+        assert self._db is not None
         return SqlToolExecutionRecordRepository(self._db)
 
     def agent_execution_event_repository(self) -> SqlAgentExecutionEventRepository:
         """Get SqlAgentExecutionEventRepository for agent execution event persistence."""
+        assert self._db is not None
         return SqlAgentExecutionEventRepository(self._db)
 
     def execution_checkpoint_repository(self) -> SqlExecutionCheckpointRepository:
         """Get SqlExecutionCheckpointRepository for execution checkpoint persistence."""
+        assert self._db is not None
         return SqlExecutionCheckpointRepository(self._db)
 
     def workflow_pattern_repository(self) -> SqlWorkflowPatternRepository:
         """Get SqlWorkflowPatternRepository for workflow pattern persistence."""
+        assert self._db is not None
         return SqlWorkflowPatternRepository(self._db)
 
     def context_summary_adapter(self) -> SqlContextSummaryAdapter:
         """Get SqlContextSummaryAdapter for context summary persistence."""
+        assert self._db is not None
         return SqlContextSummaryAdapter(self._db)
 
     def context_loader(self) -> Any:
@@ -148,38 +158,47 @@ class AgentContainer:
 
     def tool_composition_repository(self) -> SqlToolCompositionRepository:
         """Get SqlToolCompositionRepository for tool composition persistence."""
+        assert self._db is not None
         return SqlToolCompositionRepository(self._db)
 
     def tool_environment_variable_repository(self) -> SqlToolEnvironmentVariableRepository:
         """Get SqlToolEnvironmentVariableRepository for tool env var persistence."""
+        assert self._db is not None
         return SqlToolEnvironmentVariableRepository(self._db)
 
     def hitl_request_repository(self) -> SqlHITLRequestRepository:
         """Get SqlHITLRequestRepository for HITL request persistence."""
+        assert self._db is not None
         return SqlHITLRequestRepository(self._db)
 
     def tenant_agent_config_repository(self) -> SqlTenantAgentConfigRepository:
         """Get SqlTenantAgentConfigRepository for tenant agent config persistence."""
+        assert self._db is not None
         return SqlTenantAgentConfigRepository(self._db)
 
     def skill_repository(self) -> SqlSkillRepository:
         """Get SqlSkillRepository for skill persistence."""
+        assert self._db is not None
         return SqlSkillRepository(self._db)
 
     def skill_version_repository(self) -> SqlSkillVersionRepository:
         """Get SqlSkillVersionRepository for skill version persistence."""
+        assert self._db is not None
         return SqlSkillVersionRepository(self._db)
 
     def tenant_skill_config_repository(self) -> SqlTenantSkillConfigRepository:
         """Get SqlTenantSkillConfigRepository for tenant skill config persistence."""
+        assert self._db is not None
         return SqlTenantSkillConfigRepository(self._db)
 
     def subagent_repository(self) -> SqlSubAgentRepository:
         """Get SqlSubAgentRepository for subagent persistence."""
+        assert self._db is not None
         return SqlSubAgentRepository(self._db)
 
     def subagent_template_repository(self) -> SqlSubAgentTemplateRepository:
         """Get SqlSubAgentTemplateRepository for template marketplace."""
+        assert self._db is not None
         return SqlSubAgentTemplateRepository(self._db)
 
     # === Attachment & Artifact ===
@@ -190,6 +209,7 @@ class AgentContainer:
             SqlAttachmentRepository,
         )
 
+        assert self._db is not None
         return SqlAttachmentRepository(self._db)
 
     def attachment_service(self) -> Any:
@@ -197,6 +217,7 @@ class AgentContainer:
         from src.application.services.attachment_service import AttachmentService
 
         storage_service = self._storage_service_factory() if self._storage_service_factory else None
+        assert storage_service is not None
         return AttachmentService(
             storage_service=storage_service,
             attachment_repository=self.attachment_repository(),
@@ -223,6 +244,7 @@ class AgentContainer:
         except Exception:
             pass
 
+        assert storage_service is not None
         return ArtifactService(
             storage_service=storage_service,
             event_publisher=event_publisher,
@@ -326,15 +348,15 @@ class AgentContainer:
 
     def llm_invoker(self, llm: LLMClient) -> Any:
         """Get LLMInvoker for LLM invocation with streaming."""
-        from src.infrastructure.agent.llm.invoker import LLMInvoker
+        from src.infrastructure.agent.llm.invoker import get_llm_invoker
 
-        return LLMInvoker(llm_client=llm)
+        return get_llm_invoker()
 
     def tool_executor(self, tools: dict[str, Any]) -> Any:
         """Get ToolExecutor for tool execution with permission checking."""
-        from src.infrastructure.agent.tools.executor import ToolExecutor
+        from src.infrastructure.agent.tools.executor import get_tool_executor
 
-        return ToolExecutor(tools=tools)
+        return get_tool_executor()
 
     def artifact_extractor(self) -> Any:
         """Get ArtifactExtractor for extracting artifacts from tool results."""
@@ -408,7 +430,7 @@ class AgentContainer:
             self._sandbox_orchestrator_factory() if self._sandbox_orchestrator_factory else None
         )
 
-        tools = {
+        tools: dict[str, AgentToolBase] = {
             "web_search": WebSearchTool(self._redis_client),
             "web_scrape": WebScrapeTool(),
             "desktop": DesktopTool(orchestrator=sandbox_orchestrator),
@@ -443,6 +465,6 @@ class AgentContainer:
     def compose_tools_use_case(self, llm: LLMClient) -> ComposeToolsUseCase:
         """Get ComposeToolsUseCase for tool composition."""
         return ComposeToolsUseCase(
-            tool_composition_repository=self.tool_composition_repository(),
-            llm=llm,
+            composition_repository=self.tool_composition_repository(),
+            available_tools={},
         )

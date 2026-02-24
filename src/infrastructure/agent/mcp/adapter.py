@@ -148,7 +148,7 @@ class MCPToolAdapter(AgentTool):
         if not python_type:
             return True  # Unknown type, allow
 
-        return isinstance(value, python_type)
+        return isinstance(value, python_type)  # type: ignore[arg-type]
 
     def get_input_schema(self) -> dict[str, Any]:
         """Get the MCP tool input schema."""

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.authorization_service import AuthorizationService
 from src.domain.model.auth.user import User
+from src.infrastructure.adapters.secondary.persistence.database import get_db
 
 logger = logging.getLogger(__name__)
 
@@ -290,7 +291,7 @@ def require_role(role: str) -> Callable[..., Any]:
 
 
 # Convenience functions that can be used as FastAPI dependencies
-async def get_authorization_service(session: AsyncSession = Depends(...)) -> AuthorizationService:
+async def get_authorization_service(session: AsyncSession = Depends(get_db)) -> AuthorizationService:
     """
     FastAPI dependency to get AuthorizationService instance.
 

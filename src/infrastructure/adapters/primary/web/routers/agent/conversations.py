@@ -50,6 +50,7 @@ async def create_conversation(
 ) -> ConversationResponse:
     """Create a new conversation."""
     try:
+        assert request is not None
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         use_case = container.create_conversation_use_case(llm)
@@ -115,6 +116,7 @@ async def list_conversations(
             f"overflow={pool.overflow()}, queue_size={pool.size() - pool.checkedout()}"
         )
 
+        assert request is not None
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         use_case = container.list_conversations_use_case(llm)
@@ -161,6 +163,7 @@ async def get_conversation(
 ) -> ConversationResponse:
     """Get a conversation by ID."""
     try:
+        assert request is not None
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         use_case = container.get_conversation_use_case(llm)
@@ -199,6 +202,7 @@ async def get_context_status(
     refresh or conversation switch.
     """
     try:
+        assert request is not None
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         use_case = container.get_conversation_use_case(llm)
@@ -260,6 +264,7 @@ async def delete_conversation(
 ) -> None:
     """Delete a conversation and all its messages."""
     try:
+        assert request is not None
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
@@ -298,6 +303,7 @@ async def update_conversation_title(
 ) -> ConversationResponse:
     """Update conversation title."""
     try:
+        assert request is not None
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
@@ -362,6 +368,7 @@ async def generate_conversation_title(
         Title generation is now handled automatically by the backend.
     """
     try:
+        assert request is not None
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)
@@ -448,6 +455,7 @@ async def generate_summary(
 ) -> ConversationResponse:
     """Generate an AI summary of the conversation."""
     try:
+        assert request is not None
         container = get_container_with_db(request, db)
         llm = await create_llm_client(tenant_id)
         agent_service = container.agent_service(llm)

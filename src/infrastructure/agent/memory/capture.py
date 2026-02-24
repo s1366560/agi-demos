@@ -201,6 +201,7 @@ class MemoryCapturePostprocessor:
         if embedding is False:
             return None
 
+        assert not isinstance(embedding, bool)
         stored = await self._store_chunk(
             chunk_repo, content, category, embedding, project_id, conversation_id
         )

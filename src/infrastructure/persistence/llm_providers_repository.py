@@ -25,6 +25,21 @@ from src.domain.llm_providers.models import (
     ProviderConfigUpdate,
     ProviderHealth,
     ProviderHealthCreate,
+    ProviderStatus,
+    ProviderType,
+    ResolvedProvider,
+    TenantProviderMapping,
+    UsageStatistics,
+    EmbeddingConfig,
+    LLMUsageLog,
+    LLMUsageLogCreate,
+    NoActiveProviderError,
+    OperationType,
+    ProviderConfig,
+    ProviderConfigCreate,
+    ProviderConfigUpdate,
+    ProviderHealth,
+    ProviderHealthCreate,
     ProviderType,
     ResolvedProvider,
     TenantProviderMapping,
@@ -112,7 +127,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         return ProviderConfig(
             id=orm.id,
             name=orm.name,
-            provider_type=orm.provider_type,
+            provider_type=ProviderType(orm.provider_type),
             tenant_id=tenant_id,
             api_key_encrypted=orm.api_key_encrypted,
             base_url=orm.base_url,
@@ -502,7 +517,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return ProviderHealth(
             provider_id=orm.provider_id,
-            status=orm.status,
+            status=ProviderStatus(orm.status),
             last_check=orm.last_check,
             error_message=orm.error_message,
             response_time_ms=orm.response_time_ms,
@@ -525,7 +540,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return ProviderHealth(
             provider_id=orm.provider_id,
-            status=orm.status,
+            status=ProviderStatus(orm.status),
             last_check=orm.last_check,
             error_message=orm.error_message,
             response_time_ms=orm.response_time_ms,
@@ -553,9 +568,9 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return LLMUsageLog(
             id=orm.id,
-            provider_id=orm.provider_id,
+            provider_id=orm.provider_id,  # type: ignore[arg-type]
             tenant_id=orm.tenant_id,
-            operation_type=orm.operation_type,
+            operation_type=OperationType(orm.operation_type),
             model_name=orm.model_name,
             prompt_tokens=orm.prompt_tokens,
             completion_tokens=orm.completion_tokens,

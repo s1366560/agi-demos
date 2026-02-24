@@ -10,7 +10,7 @@ This module provides:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import BaseModel, Field
 
@@ -157,7 +157,7 @@ class CommunityUpdater:
                     logger.warning(f"Failed to generate community summary: {e}")
 
             # Save community
-            member_uuids = [e.get("uuid") for e in member_entities]
+            member_uuids = cast(list[str], [e.get("uuid") for e in member_entities if e.get("uuid") is not None])
             await self._louvain_detector.save_community(community, member_uuids)
 
             updated_communities.append(community)

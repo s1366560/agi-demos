@@ -408,7 +408,7 @@ class ContextCompressionEngine:
             else PRUNE_PROTECTED_TOOLS
         )
         prune_candidates, prunable_tokens = self._scan_prune_candidates(
-            messages, protect_tokens, protected_tools
+            messages, protect_tokens, frozenset(protected_tools)
         )
         # Only prune if worthwhile
         if prunable_tokens < min_tokens:

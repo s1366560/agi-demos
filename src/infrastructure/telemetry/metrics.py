@@ -108,7 +108,7 @@ def create_gauge(
     return meter.create_observable_gauge(
         name=name,
         description=description,
-        callbacks=callbacks,
+        callbacks=callbacks,  # type: ignore[arg-type]
         unit=unit,
     )
 

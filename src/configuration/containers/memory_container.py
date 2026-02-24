@@ -39,6 +39,7 @@ class MemoryContainer:
 
     def memory_repository(self) -> MemoryRepository:
         """Get MemoryRepository for memory persistence."""
+        assert self._db is not None
         return SqlMemoryRepository(self._db)
 
     def memory_service(self) -> MemoryService:

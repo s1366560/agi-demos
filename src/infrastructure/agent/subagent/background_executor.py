@@ -258,7 +258,7 @@ class BackgroundExecutor:
                 )
             else:
                 error = result.error if result else "No result produced"
-                self._tracker.fail(execution_id, conversation_id, error=error)
+                self._tracker.fail(execution_id, conversation_id, error=error or "Unknown error")
 
                 await self._emit(
                     {

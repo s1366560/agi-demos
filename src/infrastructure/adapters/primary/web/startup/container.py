@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
@@ -24,7 +24,7 @@ def get_app_container() -> DIContainer | None:
 
 def initialize_container(
     graph_service: GraphServicePort,
-    redis_client: object | None,
+    redis_client: Any,
     workflow_engine: WorkflowEnginePort | None,
 ) -> DIContainer:
     """

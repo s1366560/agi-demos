@@ -888,7 +888,7 @@ async def _publish_event_to_stream(
 
     try:
         stream_key = f"agent:events:{conversation_id}"
-        await redis_client.xadd(stream_key, redis_message, maxlen=1000)
+        await redis_client.xadd(stream_key, redis_message, maxlen=1000)  # type: ignore[arg-type]
         if event_type in ("task_list_updated", "task_updated"):
             task_count = len(event_data.get("tasks", []))
             logger.info(

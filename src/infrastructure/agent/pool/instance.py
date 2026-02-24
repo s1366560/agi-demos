@@ -235,6 +235,9 @@ class AgentInstance:
                 async for event in self._agent.stream(
                     conversation_id=request.conversation_id,
                     user_message=request.user_message,
+                    project_id=self.config.project_id,
+                    user_id=request.user_id,
+                    tenant_id=self.config.tenant_id,
                     conversation_context=request.conversation_context,
                 ):
                     event_count += 1

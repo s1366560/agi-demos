@@ -274,7 +274,7 @@ class SqlWorkflowPatternRepository(
             success_rate=db_pattern.success_rate,
             usage_count=db_pattern.usage_count,
             created_at=db_pattern.created_at,
-            updated_at=db_pattern.updated_at,
+            updated_at=db_pattern.updated_at or db_pattern.created_at,
             metadata=db_pattern.metadata_json,
         )
 

@@ -404,11 +404,11 @@ class MediaImportService:
                 filename=filename,
                 project_id=project_id,
                 tenant_id=tenant_id,
-                mime_type=metadata.get("mime_type"),
-                sandbox_path=sandbox_path,
+                source_path=sandbox_path,
                 conversation_id=conversation_id,
                 metadata={
                     "source": "feishu",
+                    "mime_type": metadata.get("mime_type"),
                     "size_bytes": metadata.get("size_bytes"),
                     "original_mime_type": metadata.get("mime_type"),
                 },

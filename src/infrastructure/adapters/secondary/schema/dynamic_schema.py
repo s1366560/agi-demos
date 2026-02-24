@@ -140,9 +140,9 @@ async def _fetch_edge_types(session: Any, project_id: str) -> dict[str, Any]:
     return edge_types
 
 
-async def _fetch_edge_maps(session: Any, project_id: str) -> dict[str, Any]:
+async def _fetch_edge_maps(session: Any, project_id: str) -> dict[tuple[str, str], list[str]]:
     """Fetch edge type maps from the database."""
-    edge_type_map: dict[str, Any] = {}
+    edge_type_map: dict[tuple[str, str], list[str]] = {}
     result = await session.execute(select(EdgeTypeMap).where(EdgeTypeMap.project_id == project_id))
     for em in result.scalars().all():
         key = (em.source_type, em.target_type)

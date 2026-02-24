@@ -93,8 +93,8 @@ class LLMProvider(Base):
             name="llm_providers_valid_type",
         ),
         Index("idx_llm_providers_type", "provider_type"),
-        Index("idx_llm_providers_active", "is_active", postgresql_where=is_active),  # type: ignore
-        Index("idx_llm_providers_default", "is_default", postgresql_where=is_default),  # type: ignore
+        Index("idx_llm_providers_active", "is_active", postgresql_where=is_active),
+        Index("idx_llm_providers_default", "is_default", postgresql_where=is_default),
     )
 
     def __repr__(self) -> str:

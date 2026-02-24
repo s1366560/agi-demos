@@ -110,7 +110,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
 
             message_id = await self._redis.xadd(
                 stream_key,
-                payload,
+                payload,  # type: ignore[arg-type]  # Redis type stubs overly strict
                 maxlen=self._default_max_len,
                 approximate=True,
             )
@@ -424,7 +424,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                 consumer_group,
                 consumer_name,
                 min_idle_time=min_idle_ms,
-                message_ids=message_ids,
+                message_ids=message_ids,  # type: ignore[arg-type]  # Redis type stubs overly strict
             )
 
             for msg_id, fields in claimed:

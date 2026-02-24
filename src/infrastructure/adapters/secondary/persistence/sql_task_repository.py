@@ -7,7 +7,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.domain.model.task.task_log import TaskLog
+from src.domain.model.task.task_log import TaskLog, TaskLogStatus
 from src.domain.ports.repositories.task_repository import TaskRepository
 from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 from src.infrastructure.adapters.secondary.persistence.models import TaskLog as DBTaskLog
@@ -84,7 +84,7 @@ class SqlTaskRepository(BaseRepository[TaskLog, DBTaskLog], TaskRepository):
             id=db_task.id,
             group_id=db_task.group_id,
             task_type=db_task.task_type,
-            status=db_task.status,
+            status=TaskLogStatus(db_task.status),
             payload=db_task.payload,
             entity_id=db_task.entity_id,
             entity_type=db_task.entity_type,

@@ -101,7 +101,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
             # Add to stream with auto-generated ID
             event_id = await self._redis.xadd(
                 stream_key,
-                event_data,
+                event_data,  # type: ignore[arg-type]  # Redis type stubs overly strict
                 maxlen=self._default_max_len,
                 approximate=True,
             )

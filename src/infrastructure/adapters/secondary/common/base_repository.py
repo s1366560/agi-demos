@@ -173,6 +173,12 @@ class BaseRepository[T, M](ABC):
         return self._session
 
     @property
+    def _model(self) -> type[M]:
+        """Get the model class, asserting it is not None."""
+        assert self._model_class is not None, f"{type(self).__name__}._model_class must be set"
+        return self._model_class
+
+    @property
     def entity_name(self) -> str:
         """Get the entity name for error messages."""
         if self._entity_name:
@@ -228,7 +234,7 @@ class BaseRepository[T, M](ABC):
         Returns:
             Database model instance
         """
-        return self._model_class(**domain_entity.__dict__)
+        return self._model(**domain_entity.__dict__)
 
     def _update_fields(self, db_model: M, domain_entity: T) -> None:
         """
@@ -284,7 +290,7 @@ class BaseRepository[T, M](ABC):
         if not entity_id:
             raise ValueError("ID cannot be empty")
 
-        query = select(self._model_class).where(self._model_class.id == entity_id)
+        query = select(self._model).where(self._model.id == entity_id)
         # Apply eager loading options
         for option in self._eager_load_options():
             query = query.options(option)
@@ -308,7 +314,7 @@ class BaseRepository[T, M](ABC):
         if not entity_ids:
             return []
 
-        query = select(self._model_class).where(self._model_class.id.in_(entity_ids))
+        query = select(self._model).where(self._model.id.in_(entity_ids))
         # Apply eager loading options
         for option in self._eager_load_options():
             query = query.options(option)
@@ -329,7 +335,7 @@ class BaseRepository[T, M](ABC):
         Raises:
             RepositoryError: If database operation fails
         """
-        query = select(self._model_class)
+        query = select(self._model)
         query = self._apply_filters(query, **filters)
         # Apply eager loading options
         for option in self._eager_load_options():
@@ -354,8 +360,8 @@ class BaseRepository[T, M](ABC):
 
         query = (
             select(func.count())
-            .select_from(self._model_class)
-            .where(self._model_class.id == entity_id)
+            .select_from(self._model)
+            .where(self._model.id == entity_id)
         )
         result = await self._session.execute(query)
         count = result.scalar()
@@ -390,7 +396,7 @@ class BaseRepository[T, M](ABC):
 
     async def _find_db_model_by_id(self, entity_id: str) -> M | None:
         """Find database model by ID (internal helper)."""
-        query = select(self._model_class).where(self._model_class.id == entity_id)
+        query = select(self._model).where(self._model.id == entity_id)
         result = await self._session.execute(query)
         return result.scalar_one_or_none()
 
@@ -471,7 +477,7 @@ class BaseRepository[T, M](ABC):
         Returns:
             Number of matching entities
         """
-        query = select(func.count()).select_from(self._model_class)
+        query = select(func.count()).select_from(self._model)
         query = self._apply_filters(query, **filters)
         result = await self._session.execute(query)
         return result.scalar() or 0
@@ -507,7 +513,7 @@ class BaseRepository[T, M](ABC):
         if not entity_ids:
             return 0
 
-        query = delete(self._model_class).where(self._model_class.id.in_(entity_ids))
+        query = delete(self._model).where(self._model.id.in_(entity_ids))
         result = await self._session.execute(query)
         await self._session.flush()
         return cast(int, result.rowcount)
@@ -531,13 +537,13 @@ class BaseRepository[T, M](ABC):
         Returns:
             SQLAlchemy Select query
         """
-        query = select(self._model_class)
+        query = select(self._model)
 
         if filters:
             query = self._apply_filters(query, **filters)
 
-        if order_by and hasattr(self._model_class, order_by):
-            order_column = getattr(self._model_class, order_by)
+        if order_by and hasattr(self._model, order_by):
+            order_column = getattr(self._model, order_by)
             query = query.order_by(order_column.desc() if order_desc else order_column)
 
         return query

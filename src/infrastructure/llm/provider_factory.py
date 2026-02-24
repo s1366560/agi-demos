@@ -132,7 +132,7 @@ class AIServiceFactory:
         from src.infrastructure.llm.litellm.litellm_embedder import LiteLLMEmbedder
 
         embedder = LiteLLMEmbedder(config=provider_config, embedding_dim=embedding_dim)
-        return EmbeddingService(embedder=embedder)
+        return EmbeddingService(embedder=embedder)  # type: ignore[arg-type]
 
     # ------------------------------------------------------------------
     # Reranker

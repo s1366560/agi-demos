@@ -445,7 +445,7 @@ class ToolSelector:
         if isinstance(scores, Mapping):
             raw = scores.get(tool_name)
             try:
-                score = float(raw)
+                score = float(raw) if raw is not None else 0.0
             except (TypeError, ValueError):
                 score = None
             if score is not None:

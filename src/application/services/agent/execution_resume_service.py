@@ -167,7 +167,7 @@ class ExecutionResumeService:
         """
         resume_checkpoint = ExecutionCheckpoint(
             conversation_id=conversation_id,
-            message_id=None,
+            message_id="",
             checkpoint_type="resumed",
             execution_state={
                 "resumed_from_checkpoint": checkpoint_id,

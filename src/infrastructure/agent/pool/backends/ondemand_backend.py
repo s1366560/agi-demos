@@ -206,6 +206,7 @@ class OnDemandBackend(Backend):
                 logger.warning(f"[OnDemandBackend] Destroy error: {e}")
 
             # 移除实例
+            assert target_key is not None  # guaranteed by the loop above
             del self._instances[target_key]
 
             logger.info(f"[OnDemandBackend] Destroyed instance: id={instance_id}")

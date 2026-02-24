@@ -46,7 +46,7 @@ def _reset_providers() -> None:
 
     # Also clear global meter provider
     with contextlib.suppress(Exception):
-        metrics.set_meter_provider(None)
+                metrics.set_meter_provider(None)  # type: ignore[arg-type]
 
 
 def _create_resource(settings_override: dict[str, Any] | None = None) -> Resource:
@@ -190,7 +190,7 @@ def configure_meter_provider(
         # Clear global meter provider when telemetry is disabled
         if force_reset:
             with contextlib.suppress(Exception):
-                metrics.set_meter_provider(None)
+                metrics.set_meter_provider(None)  # type: ignore[arg-type]
         _TELEMETRY_ENABLED = False
         return None
 

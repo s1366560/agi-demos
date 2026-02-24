@@ -365,7 +365,7 @@ class MCPWebSocketClient:
             logger.debug(f"Received server request: {method} (id={request_id})")
 
             # Handle server-initiated requests
-            await self._handle_server_request(request_id, method, params)
+            await self._handle_server_request(request_id or 0, method or "", params)
 
         elif "method" in data and "id" not in data:
             # This is a notification from server (no response expected)

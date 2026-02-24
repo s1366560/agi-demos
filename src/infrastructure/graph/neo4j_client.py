@@ -301,7 +301,7 @@ class Neo4jClient:
         if properties:
             params.update(properties)
 
-        await self.execute_query(query, **params)
+        await self.execute_query(query, **params)  # type: ignore[arg-type]
 
     async def delete_node(self, uuid: str) -> bool:
         """
@@ -582,7 +582,7 @@ class Neo4jClient:
         if project_id:
             params["project_id"] = project_id
 
-        result = await self.execute_query(query, **params)
+        result = await self.execute_query(query, **params)  # type: ignore[arg-type]
 
         return [
             {"node": dict(record["node"]), "score": record["score"]} for record in result.records
@@ -628,7 +628,7 @@ class Neo4jClient:
         if project_id:
             params["project_id"] = project_id
 
-        result = await self.execute_query(query_str, **params)
+        result = await self.execute_query(query_str, **params)  # type: ignore[arg-type]
 
         return [
             {"node": dict(record["node"]), "score": record["score"]} for record in result.records

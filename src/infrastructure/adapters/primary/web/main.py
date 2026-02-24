@@ -132,7 +132,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
     redis_client = await initialize_redis_client()
     # Wire Redis into graph service for cached embedding support
     if redis_client and graph_service and hasattr(graph_service, "set_redis_client"):
-        graph_service.set_redis_client(redis_client)
+        graph_service.set_redis_client(redis_client)  # type: ignore[arg-type]  # runtime type is Redis
 
     # Initialize DI Container
     container = initialize_container(
@@ -294,7 +294,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
 
     # Configure rate limiting
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]  # Starlette handler type limitation
 
     # Configure domain exception handlers
     configure_exception_handlers(app)

@@ -34,7 +34,7 @@ def get_current_span() -> Span:
         return span
     except Exception:
         # Return a non-recording span if there's an error
-        return NonRecordingSpan(SpanContext())
+        return NonRecordingSpan(SpanContext(0, 0, is_remote=False))
 
 
 def get_trace_id() -> str | None:

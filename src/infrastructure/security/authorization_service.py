@@ -8,7 +8,7 @@ decisions using SQLAlchemy ORM models directly.
 import logging
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.auth.permissions import PermissionCode
@@ -160,7 +160,7 @@ class AuthorizationService(AuthorizationPort):
             select(UserRole).where(
                 UserRole.user_id == user_id,
                 UserRole.role_id == role_obj.id,
-                UserRole.tenant_id == tenant_id if tenant_id else True,  # Handle None case
+                UserRole.tenant_id == tenant_id if tenant_id else literal(True),
             )
         )
         if existing.scalar_one_or_none():

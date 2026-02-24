@@ -93,8 +93,8 @@ class TransportFactory:
             headers=config_dict.get("headers"),
             environment=config_dict.get("env"),
             timeout=config_dict.get("timeout", 30000),
-            heartbeat_interval=config_dict.get("heartbeat_interval"),
-            reconnect_attempts=config_dict.get("reconnect_attempts"),
+            heartbeat_interval=config_dict.get("heartbeat_interval") or 0,
+            reconnect_attempts=config_dict.get("reconnect_attempts") or 3,
         )
 
         return cls.create(config)

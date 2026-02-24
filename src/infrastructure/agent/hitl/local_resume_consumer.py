@@ -74,7 +74,7 @@ class LocalHITLResumeConsumer:
                 streams = await self._redis.xreadgroup(
                     groupname=self.CONSUMER_GROUP,
                     consumername=self._worker_id,
-                    streams=stream_keys,
+                    streams=stream_keys,  # type: ignore[arg-type]  # Redis type stubs overly strict
                     count=self.DEFAULT_BATCH_SIZE,
                     block=self.DEFAULT_BLOCK_MS,
                 )

@@ -352,8 +352,10 @@ def _build_provider_config(
         llm_model=env.get("llm_model") or f"{provider_name}-default",
         llm_small_model=env.get("llm_small_model"),
         embedding_model=env.get("embedding_model"),
+        embedding_config=None,
         reranker_model=env.get("reranker_model"),
         is_active=True,
         is_default=True,
+        tenant_id="default",
         config={},  # Additional provider-specific config can be added here
     )

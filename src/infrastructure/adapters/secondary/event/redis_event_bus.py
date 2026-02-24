@@ -106,10 +106,10 @@ class RedisEventBusAdapter(EventBusPort):
             # XADD with optional maxlen for automatic trimming
             if maxlen:
                 message_id = await self._redis.xadd(
-                    stream_key, payload, maxlen=maxlen, approximate=True
+                    stream_key, payload, maxlen=maxlen, approximate=True  # type: ignore[arg-type]  # Redis type stubs overly strict
                 )
             else:
-                message_id = await self._redis.xadd(stream_key, payload)
+                message_id = await self._redis.xadd(stream_key, payload)  # type: ignore[arg-type]  # Redis type stubs overly strict
 
             # Redis returns bytes, decode to string
             if isinstance(message_id, bytes):
@@ -383,7 +383,7 @@ class RedisEventBusAdapter(EventBusPort):
         try:
             # XCLAIM returns the claimed messages
             result = await self._redis.xclaim(
-                stream_key, group_name, consumer_name, min_idle_ms, message_ids
+                stream_key, group_name, consumer_name, min_idle_ms, message_ids  # type: ignore[arg-type]  # Redis type stubs overly strict
             )
 
             claimed = []

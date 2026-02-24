@@ -71,7 +71,7 @@ async def initialize_channel_manager(
             message_router = route_channel_message
 
         _channel_manager = ChannelConnectionManager(
-            message_router=message_router,
+            message_router=message_router,  # type: ignore[arg-type]  # async callback handled at runtime
             session_factory=async_session_factory,
         )
 

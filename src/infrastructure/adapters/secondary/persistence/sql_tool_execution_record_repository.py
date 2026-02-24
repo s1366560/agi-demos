@@ -9,6 +9,8 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.model.agent import ToolExecutionRecord
+from src.domain.ports.agent.tool_executor_port import ToolExecutionStatus
+
 from src.domain.ports.repositories.agent_repository import ToolExecutionRecordRepository
 from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 from src.infrastructure.adapters.secondary.persistence.models import (
@@ -162,7 +164,7 @@ class SqlToolExecutionRecordRepository(
             tool_name=db_record.tool_name,
             tool_input=db_record.tool_input or {},
             tool_output=db_record.tool_output,
-            status=db_record.status,
+            status=ToolExecutionStatus(db_record.status),
             error=db_record.error,
             step_number=db_record.step_number,
             sequence_number=db_record.sequence_number,

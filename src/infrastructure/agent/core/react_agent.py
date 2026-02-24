@@ -454,7 +454,7 @@ class ReActAgent:
         self.skill_direct_execute_threshold = skill_direct_execute_threshold
         self.skill_fallback_on_error = skill_fallback_on_error
         self.skill_execution_timeout = skill_execution_timeout
-        self.skill_executor = SkillExecutor(tools) if skills else None
+        self.skill_executor = SkillExecutor(tools or {}) if skills else None
 
     def _init_subagent_system(
         self,
@@ -588,8 +588,8 @@ class ReActAgent:
         self._event_converter = EventConverter(debug_logging=False)
 
         self._skill_orchestrator = SkillOrchestrator(
-            skills=skills,
-            skill_executor=self.skill_executor,
+            skills=cast("list[SkillProtocol] | None", skills),
+            skill_executor=cast("SkillExecutorProtocol | None", self.skill_executor),
             tools=tools,
             config=SkillExecutionConfig(
                 match_threshold=skill_match_threshold,
@@ -967,7 +967,7 @@ class ReActAgent:
             )
             # Convert to legacy SubAgentMatch for backward compatibility
             return SubAgentMatch(
-                subagent=result.subagent,
+                subagent=cast("SubAgent | None", result.subagent),
                 confidence=result.confidence,
                 match_reason=result.match_reason,
             )
@@ -1011,7 +1011,7 @@ class ReActAgent:
                 f"with confidence {result.confidence:.2f} ({result.match_reason})"
             )
             return SubAgentMatch(
-                subagent=result.subagent,
+                subagent=cast("SubAgent | None", result.subagent),
                 confidence=result.confidence,
                 match_reason=result.match_reason,
             )
@@ -2441,9 +2441,9 @@ class ReActAgent:
         for event in self._stream_match_skill(processed_user_message, forced_skill_name):
             yield event
         skill_state = self._stream_skill_state
-        matched_skill = skill_state["matched_skill"]
-        is_forced = skill_state["is_forced"]
-        should_inject_prompt = skill_state["should_inject_prompt"]
+        matched_skill: Skill | None = cast("Skill | None", skill_state["matched_skill"])
+        is_forced: bool = cast(bool, skill_state["is_forced"])
+        should_inject_prompt: bool = cast(bool, skill_state["should_inject_prompt"])
 
         # Phase 5b: Sync skill resources
         if should_inject_prompt and matched_skill:
@@ -4013,7 +4013,7 @@ class ReActAgent:
             query=query,
         )
 
-        async for event in self._skill_orchestrator.execute_directly(skill, context):
+        async for event in self._skill_orchestrator.execute_directly(cast("SkillProtocol", skill), context):
             yield event
 
     def _extract_sandbox_id_from_tools(self) -> str | None:

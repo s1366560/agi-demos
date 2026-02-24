@@ -264,7 +264,7 @@ class PoolMetricsAnalyzer:
         for m in metrics:
             if m.request_count > 0:
                 rate = m.error_count / m.request_count
-                error_rates.append((m.timestamp, rate))
+                error_rates.append((m.timestamp.timestamp(), rate))
 
         if not error_rates:
             return TrendAnalysis(

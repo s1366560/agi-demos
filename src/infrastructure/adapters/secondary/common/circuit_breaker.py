@@ -246,7 +246,7 @@ class CircuitBreaker:
             # Check if we should use fallback for this exception
             if fallback_on_exception and isinstance(e, fallback_on_exception):
                 if fallback:
-                    return await fallback(e)
+                    return await fallback()
 
             await self._on_failure(e)
             raise
@@ -373,7 +373,7 @@ class CircuitBreaker:
         exc_tb: TracebackType | None,
     ) -> None:
         """Async context manager exit."""
-        if exc_type is not None:
+        if exc_val is not None and isinstance(exc_val, Exception):
             await self._on_failure(exc_val)
         else:
             await self._on_success()

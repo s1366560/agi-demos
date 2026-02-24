@@ -520,7 +520,7 @@ class NativeGraphAdapter(GraphServicePort):
             extractor = self._get_entity_extractor()
             entities = await extractor.extract(
                 content=content,
-                entity_types_context=entity_types_context,
+                entity_types_context=entity_types_context,  # type: ignore[arg-type]
                 entity_type_id_to_name=entity_type_id_to_name,
                 project_id=project_id,
                 tenant_id=tenant_id,
@@ -532,8 +532,8 @@ class NativeGraphAdapter(GraphServicePort):
                 reflexion_checker = self._get_reflexion_checker()
                 missed_entities = await reflexion_checker.check_missed_entities(
                     content=content,
-                    extracted_entities=entities,
-                    entity_types_context=entity_types_context,
+                    extracted_entities=[e.model_dump() for e in entities],
+                    entity_types_context=entity_types_context,  # type: ignore[arg-type]
                     entity_type_id_to_name=entity_type_id_to_name,
                     project_id=project_id,
                     tenant_id=tenant_id,
@@ -559,7 +559,7 @@ class NativeGraphAdapter(GraphServicePort):
             unique_entities, _dedup_map = await extractor.extract_with_dedup(
                 content=content,
                 existing_entities=await self._get_existing_entities(project_id),
-                entity_types_context=entity_types_context,
+                entity_types_context=entity_types_context,  # type: ignore[arg-type]
                 entity_type_id_to_name=entity_type_id_to_name,
                 project_id=project_id,
                 tenant_id=tenant_id,
@@ -617,7 +617,7 @@ class NativeGraphAdapter(GraphServicePort):
                 await self._save_discovered_types(
                     project_id=project_id,
                     entities=final_entities,
-                    relationships=relationships,
+                    relationships=relationships,  # type: ignore[arg-type]
                     existing_entity_types={ctx["entity_type_name"] for ctx in entity_types_context},
                 )
 

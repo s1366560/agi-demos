@@ -175,7 +175,7 @@ def build_reflexion_prompt(
     """
 
     # Handle both EntityNode objects and dictionaries
-    def get_entity_info(e: Exception) -> str:
+    def get_entity_info(e: Any) -> str:
         if hasattr(e, "name"):
             # EntityNode object
             return f"- {e.name} ({e.entity_type or 'Unknown'}): {e.summary or ''}"

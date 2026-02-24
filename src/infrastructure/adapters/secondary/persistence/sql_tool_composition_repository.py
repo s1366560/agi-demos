@@ -151,7 +151,7 @@ class SqlToolCompositionRepository(
             id=db_composition.id,
             tenant_id="global",  # Tool compositions are global/shared
             name=db_composition.name,
-            description=db_composition.description,
+            description=db_composition.description or "",
             tools=db_composition.tools if db_composition.tools else ["dummy"],  # Ensure non-empty
             execution_template=db_composition.execution_template
             if db_composition.execution_template
@@ -160,5 +160,5 @@ class SqlToolCompositionRepository(
             failure_count=db_composition.failure_count,
             usage_count=db_composition.usage_count,
             created_at=db_composition.created_at,
-            updated_at=db_composition.updated_at,
+            updated_at=db_composition.updated_at or db_composition.created_at,
         )

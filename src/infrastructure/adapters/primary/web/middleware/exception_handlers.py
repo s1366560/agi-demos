@@ -534,32 +534,32 @@ def configure_exception_handlers(app: FastAPI) -> None:
         configure_exception_handlers(app)
     """
     # Repository exceptions (order matters - specific before generic)
-    app.add_exception_handler(EntityNotFoundError, entity_not_found_handler)
-    app.add_exception_handler(DuplicateEntityError, duplicate_entity_handler)
-    app.add_exception_handler(OptimisticLockError, optimistic_lock_handler)
-    app.add_exception_handler(TransactionError, transaction_error_handler)
-    app.add_exception_handler(RepositoryConnectionError, repository_connection_handler)
-    app.add_exception_handler(RepositoryError, repository_error_handler)
+    app.add_exception_handler(EntityNotFoundError, entity_not_found_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(DuplicateEntityError, duplicate_entity_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(OptimisticLockError, optimistic_lock_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(TransactionError, transaction_error_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(RepositoryConnectionError, repository_connection_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(RepositoryError, repository_error_handler)  # type: ignore[arg-type]
 
     # Sandbox exceptions (specific before generic)
-    app.add_exception_handler(SandboxConnectionError, sandbox_connection_handler)
-    app.add_exception_handler(SandboxTimeoutError, sandbox_timeout_handler)
-    app.add_exception_handler(SandboxResourceError, sandbox_resource_handler)
-    app.add_exception_handler(SandboxValidationError, sandbox_validation_handler)
-    app.add_exception_handler(SandboxStateTransitionError, sandbox_state_transition_handler)
-    app.add_exception_handler(SandboxHealthCheckError, sandbox_health_check_handler)
-    app.add_exception_handler(SandboxError, sandbox_error_handler)
+    app.add_exception_handler(SandboxConnectionError, sandbox_connection_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(SandboxTimeoutError, sandbox_timeout_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(SandboxResourceError, sandbox_resource_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(SandboxValidationError, sandbox_validation_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(SandboxStateTransitionError, sandbox_state_transition_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(SandboxHealthCheckError, sandbox_health_check_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(SandboxError, sandbox_error_handler)  # type: ignore[arg-type]
 
     # LLM/Provider exceptions
-    app.add_exception_handler(LLMRateLimitError, llm_rate_limit_handler)
-    app.add_exception_handler(NoActiveProviderError, no_active_provider_handler)
+    app.add_exception_handler(LLMRateLimitError, llm_rate_limit_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(NoActiveProviderError, no_active_provider_handler)  # type: ignore[arg-type]
 
     # Lock exceptions
-    app.add_exception_handler(LockAcquisitionError, lock_acquisition_handler)
-    app.add_exception_handler(LockReleaseError, lock_release_handler)
-    app.add_exception_handler(LockError, lock_error_handler)
+    app.add_exception_handler(LockAcquisitionError, lock_acquisition_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(LockReleaseError, lock_release_handler)  # type: ignore[arg-type]
+    app.add_exception_handler(LockError, lock_error_handler)  # type: ignore[arg-type]
 
     # Generic domain exception (catch-all for domain errors)
-    app.add_exception_handler(DomainException, domain_exception_handler)
+    app.add_exception_handler(DomainException, domain_exception_handler)  # type: ignore[arg-type]
 
     logger.info("Configured %d exception handlers", 21)

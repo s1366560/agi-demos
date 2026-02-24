@@ -243,7 +243,7 @@ async def get_entity_types(
     """
     try:
         conditions = []
-        params = {}
+        params: dict[str, Any] = {}
 
         if project_id:
             conditions.append(
@@ -363,7 +363,7 @@ async def get_entity_relationships(
     try:
         # Build relationship type filter
         rel_filter = ""
-        params = {"uuid": entity_id, "limit": limit}
+        params: dict[str, Any] = {"uuid": entity_id, "limit": limit}
 
         if relationship_type:
             rel_filter = "AND type(r) = $relationship_type"

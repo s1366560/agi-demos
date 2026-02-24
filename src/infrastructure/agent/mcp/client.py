@@ -132,6 +132,7 @@ class StdioTransport(MCPTransport):
         """Start subprocess and establish stdio connection."""
         try:
             logger.info(f"Starting MCP server: {self.command} {self.args}")
+            assert self.command is not None
             self.process = await asyncio.create_subprocess_exec(
                 self.command,
                 *self.args,
@@ -293,6 +294,7 @@ class HTTPTransport(MCPTransport):
 
     async def connect(self) -> None:
         """Initialize HTTP client."""
+        assert self.base_url is not None
         self.client = httpx.AsyncClient(
             base_url=self.base_url, headers=self.headers, timeout=self.timeout
         )
@@ -396,6 +398,7 @@ class SSETransport(MCPTransport):
             self._http_client = await self._exit_stack.enter_async_context(http_client)
 
             # Use MCP SDK's streamable_http_client
+            assert self.url is not None
             streams = await self._exit_stack.enter_async_context(
                 streamable_http_client(self.url, http_client=self._http_client)
             )
@@ -423,6 +426,7 @@ class SSETransport(MCPTransport):
             JSONRPCMessage,
             JSONRPCNotification,
             JSONRPCRequest,
+            RootsCapability,
         )
 
         # Send initialize request
@@ -431,8 +435,8 @@ class SSETransport(MCPTransport):
             params=InitializeRequestParams(
                 protocolVersion="2024-11-05",
                 capabilities=ClientCapabilities(
-                    roots={"listChanged": True},
-                    sampling={},
+                    roots=RootsCapability(listChanged=True),
+                    sampling=None,
                 ),
                 clientInfo=Implementation(name="MemStack", version="0.2.0"),
             ),
@@ -663,6 +667,7 @@ class WebSocketTransport(MCPTransport):
             self._session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=self.timeout))
 
             # Connect WebSocket
+            assert self.url is not None
             self._ws = await self._session.ws_connect(
                 self.url,
                 headers=self.headers,

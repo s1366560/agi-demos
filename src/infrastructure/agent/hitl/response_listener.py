@@ -195,7 +195,7 @@ class HITLResponseListener:
                 streams = await self._redis.xreadgroup(
                     groupname=self.CONSUMER_GROUP,
                     consumername=self._worker_id,
-                    streams=stream_keys,
+                    streams=stream_keys,  # type: ignore[arg-type]  # Redis type stubs overly strict
                     count=self.DEFAULT_BATCH_SIZE,
                     block=self.DEFAULT_BLOCK_MS,
                 )
@@ -296,12 +296,12 @@ class HITLResponseListener:
 
             # Always acknowledge the message
             # Even if not delivered locally, stream replay or actor routing can handle it
-            await self._ack_message(stream_key, msg_id)
+            await self._ack_message(str(stream_key), str(msg_id))
 
         except json.JSONDecodeError as e:
             logger.error(f"[HITLListener] Invalid JSON in message {msg_id}: {e}")
             self._errors += 1
-            await self._ack_message(stream_key, msg_id)
+            await self._ack_message(str(stream_key), str(msg_id))
         except Exception as e:
             logger.error(
                 f"[HITLListener] Error handling message {msg_id}: {e}",

@@ -34,11 +34,13 @@ class ProjectContainer:
 
     def project_repository(self) -> ProjectRepository:
         """Get ProjectRepository for project persistence."""
+        assert self._db is not None
         return SqlProjectRepository(self._db)
 
     def project_service(self) -> ProjectService:
         """Get ProjectService for project operations."""
         user_repo = self._user_repository_factory() if self._user_repository_factory else None
+        assert user_repo is not None
         return ProjectService(
             project_repo=self.project_repository(),
             user_repo=user_repo,
@@ -48,4 +50,6 @@ class ProjectContainer:
         """Get TenantService for tenant operations."""
         tenant_repo = self._tenant_repository_factory() if self._tenant_repository_factory else None
         user_repo = self._user_repository_factory() if self._user_repository_factory else None
+        assert tenant_repo is not None
+        assert user_repo is not None
         return TenantService(tenant_repo=tenant_repo, user_repo=user_repo)

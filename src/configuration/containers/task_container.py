@@ -27,6 +27,7 @@ class TaskContainer:
 
     def task_repository(self) -> TaskRepository:
         """Get TaskRepository for task persistence."""
+        assert self._db is not None
         return SqlTaskRepository(self._db)
 
     def task_service(self) -> TaskService:

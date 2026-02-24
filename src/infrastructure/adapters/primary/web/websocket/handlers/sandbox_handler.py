@@ -73,7 +73,7 @@ class SubscribeSandboxHandler(WebSocketMessageHandler):
 
         except Exception as e:
             logger.error(f"[WS] Error subscribing to sandbox: {e}", exc_info=True)
-            await context.send_error(str(e), project_id=project_id)
+            await context.send_error(str(e), extra={"project_id": project_id})
 
     async def _start_sandbox_bridge(self, context: MessageContext, project_id: str) -> None:
         """Start background task to bridge Redis sandbox events to WebSocket."""
@@ -198,4 +198,4 @@ class UnsubscribeSandboxHandler(WebSocketMessageHandler):
 
         except Exception as e:
             logger.error(f"[WS] Error unsubscribing from sandbox: {e}", exc_info=True)
-            await context.send_error(str(e), project_id=project_id)
+            await context.send_error(str(e), extra={"project_id": project_id})

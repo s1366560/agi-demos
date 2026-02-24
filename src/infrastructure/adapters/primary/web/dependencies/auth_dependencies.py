@@ -195,7 +195,7 @@ async def verify_api_key_from_header_or_query(
         domain_api_key = await auth_service.verify_api_key(api_key)
 
         # Convert to DB model for backward compatibility
-        result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))
+        result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))  # type: ignore[arg-type]  # SQLAlchemy Column comparison
         db_key = result.scalar_one_or_none()
 
         return db_key
@@ -218,7 +218,7 @@ async def verify_api_key_from_header_query_or_cookie(
     )
     try:
         domain_api_key = await auth_service.verify_api_key(api_key)
-        result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))
+        result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))  # type: ignore[arg-type]  # SQLAlchemy Column comparison
         return result.scalar_one_or_none()
     except ValueError as e:
         raise HTTPException(
@@ -313,7 +313,7 @@ async def verify_api_key_dependency(
         # Convert to DB model for backward compatibility
         # Note: We only need to read the key, not update it.
         # last_used_at updates are disabled to prevent row-level lock contention.
-        result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))
+        result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))  # type: ignore[arg-type]  # SQLAlchemy Column comparison
         db_key = result.scalar_one_or_none()
 
         return db_key

@@ -195,8 +195,8 @@ async def initiate_multipart_upload(
 
         return InitiateUploadResponse(
             attachment_id=attachment.id,
-            upload_id=attachment.upload_id,
-            total_parts=attachment.total_parts,
+            upload_id=attachment.upload_id or "",
+            total_parts=attachment.total_parts or 0,
             part_size=DEFAULT_PART_SIZE,
         )
 

@@ -246,7 +246,7 @@ class EnvVarStrategy(HITLTypeStrategy):
                 fields.append(
                     EnvVarField(
                         name=f.get("name", ""),
-                        label=f.get("label", f.get("name", "")),
+                        label=str(f.get("label", f.get("name", "")) or ""),
                         description=f.get("description"),
                         required=f.get("required", True),
                         secret=f.get("secret", False),

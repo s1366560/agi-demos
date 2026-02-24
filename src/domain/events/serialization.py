@@ -17,7 +17,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from src.domain.events.envelope import EventEnvelope
 from src.domain.events.registry import EventSchemaRegistry
@@ -153,7 +153,7 @@ class EventSerializer:
 
         # Determine target version
         if self.target_version == "latest":
-            target_version = EventSchemaRegistry.get_latest_version(event_type)
+            target_version = EventSchemaRegistry.get_latest_version(cast(str, event_type))
             if not target_version:
                 target_version = original_version
         else:
@@ -166,7 +166,7 @@ class EventSerializer:
                 payload = data.get("payload", {})
                 migrated_payload = EventSchemaRegistry.migrate(
                     payload,
-                    event_type,
+                    cast(str, event_type),
                     original_version,
                     target_version,
                 )

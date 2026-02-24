@@ -497,6 +497,8 @@ async def get_project_sandbox_stats(
             network_rx_bytes=stats.get("network_rx_bytes"),
             network_tx_bytes=stats.get("network_tx_bytes"),
             disk_usage=stats.get("disk_read_bytes"),  # Use disk read as usage proxy
+            disk_limit=None,
+            disk_percent=None,
             pids=stats.get("pids", 0),
             uptime_seconds=uptime_seconds,
             created_at=info.created_at.isoformat() if info.created_at else None,
@@ -536,6 +538,7 @@ async def execute_tool_in_project_sandbox(
             success=not result.get("is_error", False),
             content=result.get("content", []),
             is_error=result.get("is_error", False),
+            execution_time_ms=None,
         )
 
     except Exception as e:
@@ -657,6 +660,7 @@ async def terminate_project_sandbox(
         return SandboxActionResponse(
             success=True,
             message="Sandbox terminated successfully",
+            sandbox=None,
         )
 
     except HTTPException:

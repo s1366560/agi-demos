@@ -290,7 +290,7 @@ class EventRouter:
                 result.handlers_invoked += 1
             except Exception as e:
                 logger.error(f"[EventRouter] Handler '{registration.name}' failed: {e}")
-                result.errors.append((registration.name, e))
+                result.errors.append((registration.name or "unknown", e))
                 if not self._continue_on_error:
                     break
 
@@ -316,7 +316,7 @@ class EventRouter:
                 result.handlers_invoked += 1
             except Exception as e:
                 logger.error(f"[EventRouter] Handler '{registration.name}' failed: {e}")
-                result.errors.append((registration.name, e))
+                result.errors.append((registration.name or "unknown", e))
 
     async def _safe_invoke(
         self,

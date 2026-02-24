@@ -143,6 +143,7 @@ class ComposeToolsUseCase:
 
         # Create composition
         composition = ToolComposition.create(
+            tenant_id="",
             name=name,
             description=f"Composition of {', '.join(tool_names)}",
             tools=tool_names,

@@ -152,6 +152,8 @@ class SkillSyncTool(AgentTool):
                     host_project_path=Path.cwd(),
                 )
 
+                assert self._sandbox_adapter is not None, "sandbox_adapter is required"
+                assert self._sandbox_id is not None, "sandbox_id is required"
                 result = await reverse_sync.sync_from_sandbox(
                     skill_name=skill_name,
                     tenant_id=self._tenant_id,

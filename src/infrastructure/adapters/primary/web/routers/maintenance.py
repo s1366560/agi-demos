@@ -602,6 +602,7 @@ async def optimize_graph(
     - invalidate_edges: Remove stale edges
     - rebuild_communities: Rebuild community structure
     """
+    assert neo4j_client is not None
     try:
         results = {
             "operations_run": [],
@@ -1055,6 +1056,7 @@ async def migrate_embeddings(
         project_id: Optional project ID to limit scope
         dry_run: If True, only report without executing
     """
+    assert neo4j_client is not None
     try:
         target_dim = _resolve_target_dimension(target_model)
         # Get existing embeddings info

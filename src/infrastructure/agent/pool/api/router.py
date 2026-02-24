@@ -18,7 +18,7 @@ Pool Status API Router.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -464,7 +464,7 @@ def create_pool_router(
 
     router = APIRouter(
         prefix=prefix,
-        tags=tags or ["Agent Pool Admin"],
+        tags=cast("list[str | Enum]", tags or ["Agent Pool Admin"]),
     )
 
     # Status
@@ -489,6 +489,6 @@ def create_pool_router(
 
     # Metrics
     router.get("/metrics", response_model=MetricsResponse)(_get_metrics_json)
-    router.get("/metrics/prometheus", response_class=None)(_get_metrics_prometheus)
+    router.get("/metrics/prometheus", response_class=PlainTextResponse)(_get_metrics_prometheus)
 
     return router

@@ -27,7 +27,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, cast
 
 from src.domain.events.agent_events import (
     AgentActDeltaEvent,
@@ -673,7 +673,7 @@ class SessionProcessor:
         """Append current message and tool results to the message list."""
         if not self._current_message:
             return
-        messages.append(self._current_message.to_llm_format())
+        messages.append(cast(dict[str, Any], self._current_message.to_llm_format()))
         for part in self._current_message.get_tool_parts():
             if part.status == ToolState.COMPLETED:
                 messages.append(
@@ -2412,9 +2412,9 @@ class SessionProcessor:
                             tname=tname,
                             art_id=art_id,
                             bucket=settings.s3_bucket_name,
-                            endpoint=settings.s3_endpoint_url,
-                            access_key=settings.aws_access_key_id,
-                            secret_key=settings.aws_secret_access_key,
+                            endpoint=settings.s3_endpoint_url or "",
+                            access_key=settings.aws_access_key_id or "",
+                            secret_key=settings.aws_secret_access_key or "",
                             region=settings.aws_region,
                             mime=mime,
                             no_proxy=settings.s3_no_proxy,
@@ -2438,7 +2438,7 @@ class SessionProcessor:
                         ready_time_us = int(_time.time() * 1_000_000)
                         await _publish_event_to_stream(
                             conversation_id=conv_id,
-                            event=ready_event_dict,
+                            event=cast(dict[str, Any], ready_event_dict),
                             message_id=msg_id,
                             event_time_us=ready_time_us,
                             event_counter=0,
@@ -2470,7 +2470,7 @@ class SessionProcessor:
                         try:
                             await _publish_event_to_stream(
                                 conversation_id=conv_id,
-                                event=error_event_dict,
+                                event=cast(dict[str, Any], error_event_dict),
                                 message_id=msg_id,
                                 event_time_us=error_time_us,
                                 event_counter=0,
@@ -2499,7 +2499,7 @@ class SessionProcessor:
                         fname=filename,
                         pid=project_id,
                         tid=tenant_id,
-                        texec_id=tool_execution_id,
+                        texec_id=tool_execution_id or "",
                         conv_id=conversation_id or "",
                         msg_id=message_id or "",
                         tname=tool_name,

@@ -19,6 +19,7 @@ from src.application.schemas.project import (
     ProjectResponse,
     ProjectStats,
     ProjectUpdate,
+    SystemStatus,
 )
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
@@ -203,7 +204,9 @@ async def list_projects(
             .where(UserProject.project_id.in_(project_ids_in_page))
             .group_by(UserProject.project_id)
         )
-        member_stats = {row.project_id: row.count for row in member_stats_result.fetchall()}
+        member_stats: dict[str, int] = {
+            row.project_id: int(row.count) for row in member_stats_result.fetchall()
+        }
 
         # Graph stats for active nodes
         node_stats = {}
@@ -233,14 +236,14 @@ async def list_projects(
                 memory_count=m_stats["count"],
                 storage_used=m_stats["size"],
                 node_count=node_count,
-                member_count=member_count,
+                member_count=int(member_count),
                 last_active=last_active,
             )
             project_responses.append(p_resp)
 
     return ProjectListResponse(
         projects=project_responses,
-        total=total,
+        total=total or 0,
         page=page,
         page_size=page_size,
     )
@@ -714,17 +717,17 @@ async def get_project_stats(
             conversation_count=conversation_count,
             storage_used=storage_used,
             storage_limit=storage_limit,
-            member_count=member_count,
+            member_count=member_count or 0,
             node_count=active_nodes,
             active_nodes=active_nodes,  # Add active_nodes field for frontend
-            collaborators=member_count,
+            collaborators=member_count or 0,
             recent_activity=activities,
             last_active=datetime.now(UTC),  # Add logic for last_active if needed
-            system_status={
-                "status": "operational",
-                "indexing_active": True,
-                "indexing_progress": 100,
-            },
+            system_status=SystemStatus(
+                status="operational",
+                indexing_active=True,
+                indexing_progress=100,
+            ),
         )
     except HTTPException:
         raise

@@ -124,7 +124,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
             # Add to stream
             sequence_id = await self._redis.xadd(
                 stream_key,
-                stream_data,
+                stream_data,  # type: ignore[arg-type]  # Redis type stubs overly strict
                 maxlen=self._max_len,
                 approximate=True,
             )
@@ -182,7 +182,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                 if event.causation_id:
                     stream_data["causation_id"] = event.causation_id
 
-                pipe.xadd(stream_key, stream_data, maxlen=self._max_len, approximate=True)
+                pipe.xadd(stream_key, stream_data, maxlen=self._max_len, approximate=True)  # type: ignore[arg-type]  # Redis type stubs overly strict
 
             try:
                 sequence_ids = await pipe.execute()
@@ -259,7 +259,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
         while self._active_subscriptions.get(subscription_id, False):
             try:
                 streams = await self._redis.xread(
-                    last_ids,
+                    last_ids,  # type: ignore[arg-type]
                     count=opts.batch_size,
                     block=opts.block_ms,
                 )
@@ -272,7 +272,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                     continue
 
                 for stream_name, msg_id, fields in self._iter_decoded_messages(streams):
-                    event = self._parse_message(msg_id, fields, stream_name)
+                    event = self._parse_message(msg_id, fields, stream_name)  # type: ignore[arg-type]  # Redis type stubs overly strict
                     if event:
                         yield event
                     last_ids[stream_name] = msg_id
@@ -295,6 +295,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
         consumer_name = opts.consumer_name or f"consumer-{id(self)}"
 
         stream_keys = await self._get_matching_streams(pattern)
+        assert consumer_group is not None, "consumer_group is required"
         for key in stream_keys:
             await self._ensure_consumer_group(key, consumer_group)
 
@@ -305,7 +306,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                 streams = await self._redis.xreadgroup(
                     groupname=consumer_group,
                     consumername=consumer_name,
-                    streams=stream_dict,
+                    streams=stream_dict,  # type: ignore[arg-type]  # Redis type stubs overly strict
                     count=opts.batch_size,
                     block=opts.block_ms,
                 )
@@ -314,7 +315,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                     continue
 
                 for stream_name, msg_id, fields in self._iter_decoded_messages(streams):
-                    event = self._parse_message(msg_id, fields, stream_name)
+                    event = self._parse_message(msg_id, fields, stream_name)  # type: ignore[arg-type]  # Redis type stubs overly strict
                     if event:
                         yield event
                         if opts.ack_immediately:

@@ -516,9 +516,10 @@ class FeishuAdapter:
 
     def _parse_message(self, message_data: dict[str, Any], sender_data: dict[str, Any]) -> Message:
         """Parse Feishu message to unified format."""
-        content = self._parse_content(
+        parsed_content = self._parse_content(
             message_data.get("content", ""), message_data.get("message_type", "text")
         )
+        content: MessageContent = parsed_content if parsed_content is not None else MessageContent(type=MessageType.TEXT, text="")
 
         sender_id = self._extract_sender_open_id(sender_data.get("sender_id"))
         sender_type_raw = sender_data.get("sender_type", "user")

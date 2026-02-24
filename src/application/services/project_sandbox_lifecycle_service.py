@@ -36,6 +36,7 @@ from src.domain.ports.services.sandbox_port import (
     SandboxNotFoundError,
     SandboxStatus,
 )
+from src.domain.ports.services.sandbox_resource_port import SandboxResourcePort
 from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
 
 logger = logging.getLogger(__name__)
@@ -684,7 +685,7 @@ class ProjectSandboxLifecycleService:
         tasks = [self._get_sandbox_info(a) for a in associations]
         gathered = await asyncio.gather(*tasks, return_exceptions=True)
         for association, result in zip(associations, gathered, strict=False):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.warning(f"Failed to get info for sandbox {association.sandbox_id}: {result}")
             else:
                 results.append(result)
@@ -972,7 +973,7 @@ class ProjectSandboxLifecycleService:
                     resource_resolver=resource_resolver,
                 )
                 manager = SandboxMCPServerManager(
-                    sandbox_resource=self,
+                    sandbox_resource=cast(SandboxResourcePort, self),
                     app_service=app_service,
                 )
                 runtime = MCPRuntimeService(
@@ -1195,7 +1196,7 @@ class ProjectSandboxLifecycleService:
             cpu_limit=cpu_limit,
             timeout_seconds=sandbox_profile.timeout_seconds,
             desktop_enabled=sandbox_profile.desktop_enabled,
-            environment=config_override.get("environment") if config_override else {},
+            environment=cast(dict[str, str], config_override.get("environment", {})) if config_override else {},
         )
 
         # Apply overrides

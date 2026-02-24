@@ -85,7 +85,7 @@ async def get_pending_hitl_requests(
                 id=r.id,
                 request_type=r.request_type.value,
                 conversation_id=r.conversation_id,
-                message_id=r.message_id,
+                message_id=r.message_id or "",
                 question=r.question,
                 options=r.options,
                 context=r.context,
@@ -137,7 +137,7 @@ async def get_project_pending_hitl_requests(
                 id=r.id,
                 request_type=r.request_type.value,
                 conversation_id=r.conversation_id,
-                message_id=r.message_id,
+                message_id=r.message_id or "",
                 question=r.question,
                 options=r.options,
                 context=r.context,
@@ -266,7 +266,7 @@ async def respond_to_hitl(
             or str(request.response_data.get("values", {}))
             or request.response_data.get("action")
         )
-        await repo.update_response(request.request_id, response_str)
+        await repo.update_response(request.request_id, response_str or "")
         await repo.mark_completed(request.request_id)
         await db.commit()
 
@@ -325,7 +325,7 @@ async def cancel_hitl_request(
         await delete_hitl_snapshot(request.request_id)
 
         # Update database
-        await repo.mark_cancelled(request.request_id, request.reason)
+        await repo.mark_cancelled(request.request_id)
         await db.commit()
 
         logger.info(f"User {current_user.id} cancelled HITL {request.request_id}: {request.reason}")

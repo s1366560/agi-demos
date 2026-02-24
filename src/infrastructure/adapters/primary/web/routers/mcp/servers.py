@@ -6,7 +6,7 @@ MCP servers are project-scoped and run inside project sandbox containers.
 
 import logging
 import time
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -419,7 +419,7 @@ async def reconcile_mcp_project(
 def _compute_server_health(server: MCPServer) -> MCPServerHealthStatus:
     """Compute health status for a single server from its stored state."""
     if not server.enabled:
-        health_status = "disabled"
+        health_status: Literal["healthy", "degraded", "error", "disabled", "unknown"] = "disabled"
     elif server.sync_error:
         health_status = "error"
     elif not server.last_sync_at:

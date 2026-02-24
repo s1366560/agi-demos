@@ -217,10 +217,10 @@ class MemoryAccessor:
             if isinstance(r, dict):
                 items.append(
                     MemoryItem(
-                        content=r.get("content", r.get("summary", "")),
+                        content=str(r.get("content", r.get("summary", "")) or ""),
                         item_type=r.get("type", "episode"),
                         score=float(r.get("score", 0.0)),
-                        source_id=r.get("uuid", r.get("id", "")),
+                        source_id=str(r.get("uuid", r.get("id", "")) or ""),
                         metadata=r.get("metadata", {}),
                     )
                 )

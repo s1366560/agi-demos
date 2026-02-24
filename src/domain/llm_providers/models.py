@@ -246,6 +246,8 @@ def get_default_model_metadata(model_name: str) -> ModelMetadata:
         name=model_name,
         context_length=128000,  # Conservative default
         max_output_tokens=4096,  # Conservative default
+        input_cost_per_1m=None,  # Conservative default
+        output_cost_per_1m=None,  # Conservative default
         capabilities=[ModelCapability.CHAT],
     )
 
@@ -424,7 +426,14 @@ class ResilienceStatus(BaseModel):
     failure_count: int = Field(0, description="Current failure count")
     success_count: int = Field(0, description="Success count in half-open state")
     rate_limit: RateLimitStats = Field(
-        default_factory=RateLimitStats, description="Rate limit statistics"
+        default_factory=lambda: RateLimitStats(
+            current_concurrent=0,
+            max_concurrent=50,
+            total_requests=0,
+            requests_per_minute=0,
+            max_rpm=None,
+        ),
+        description="Rate limit statistics",
     )
     can_execute: bool = Field(True, description="Whether requests can be executed")
 
