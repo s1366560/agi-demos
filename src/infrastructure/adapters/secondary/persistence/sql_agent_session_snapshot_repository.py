@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import CursorResult
 
 from src.infrastructure.adapters.secondary.persistence.models import AgentSessionSnapshot
 
@@ -30,4 +32,4 @@ class SqlAgentSessionSnapshotRepository:
     async def delete_by_request_id(self, request_id: str) -> int:
         stmt = delete(AgentSessionSnapshot).where(AgentSessionSnapshot.request_id == request_id)
         result = await self._session.execute(stmt)
-        return result.rowcount or 0
+        return cast(CursorResult[Any], result).rowcount or 0

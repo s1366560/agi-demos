@@ -385,7 +385,7 @@ class AgentContainerServer:
         try:
             async with self._semaphore:
                 # Execute via agent
-                async for event in self._agent.stream(
+                async for event in self._agent.stream(  # type: ignore[union-attr]
                     conversation_id=conversation_id,
                     message=message,
                     context=context or {},

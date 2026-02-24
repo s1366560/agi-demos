@@ -10,7 +10,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid
+from uuid import uuid4
 
 from src.configuration.config import get_settings
 
@@ -150,7 +150,7 @@ class RequestQueue:
         if len(self._queue) >= self._max_queue_size:
             raise QueueFullError(f"Request queue is full ({self._max_queue_size} requests)")
 
-        request_id = str(uuid.uuid4())
+        request_id = str(uuid4())
         request = QueuedRequest(request_id, func, args, kwargs, priority)
         self._queue.append(request)
 

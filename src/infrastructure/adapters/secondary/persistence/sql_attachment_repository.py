@@ -18,6 +18,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from sqlalchemy.engine import CursorResult
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -130,10 +131,10 @@ class SqlAttachmentRepository(
             delete(AttachmentModel).where(AttachmentModel.id == attachment_id)
         )
         await self._session.commit()
-        deleted = result.rowcount > 0
+        deleted = cast(CursorResult[Any], result).rowcount > 0
         if deleted:
             logger.debug(f"Deleted attachment: {attachment_id}")
-        return cast(bool, deleted)
+        return deleted
 
     async def delete_expired(self) -> int:
         """Delete all expired attachments."""
@@ -145,10 +146,10 @@ class SqlAttachmentRepository(
             )
         )
         await self._session.commit()
-        count = result.rowcount
+        count = cast(CursorResult[Any], result).rowcount
         if count > 0:
             logger.info(f"Deleted {count} expired attachments")
-        return cast(int, count)
+        return count or 0
 
     async def update_status(
         self,
@@ -167,7 +168,7 @@ class SqlAttachmentRepository(
             .values(**update_values)
         )
         await self._session.commit()
-        return cast(bool, result.rowcount > 0)
+        return cast(CursorResult[Any], result).rowcount > 0
 
     async def update_upload_progress(
         self,
@@ -181,7 +182,7 @@ class SqlAttachmentRepository(
             .values(uploaded_parts=uploaded_parts)
         )
         await self._session.commit()
-        return cast(bool, result.rowcount > 0)
+        return cast(CursorResult[Any], result).rowcount > 0
 
     async def update_sandbox_path(
         self,
@@ -195,7 +196,7 @@ class SqlAttachmentRepository(
             .values(sandbox_path=sandbox_path, status=AttachmentStatus.READY.value)
         )
         await self._session.commit()
-        return cast(bool, result.rowcount > 0)
+        return cast(CursorResult[Any], result).rowcount > 0
 
     # === Conversion methods ===
 

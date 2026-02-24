@@ -107,10 +107,10 @@ class SqlPromptTemplateRepository(PromptTemplateRepository):
         for v in db_model.variables or []:
             variables.append(
                 TemplateVariable(
-                    name=v.get("name", ""),
-                    description=v.get("description", ""),
-                    default_value=v.get("default_value", ""),
-                    required=v.get("required", False),
+                    name=v.get("name", ""),  # type: ignore[attr-defined]
+                    description=v.get("description", ""),  # type: ignore[attr-defined]
+                    default_value=v.get("default_value", ""),  # type: ignore[attr-defined]
+                    required=v.get("required", False),  # type: ignore[attr-defined]
                 )
             )
         return PromptTemplate(

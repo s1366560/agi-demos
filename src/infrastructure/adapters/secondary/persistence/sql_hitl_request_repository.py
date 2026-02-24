@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import CursorResult
 
 from src.domain.model.agent.hitl_request import (
     HITLRequest,
@@ -339,11 +340,11 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
             .values(status=HITLRequestStatus.TIMEOUT.value)
         )
 
-        count = result.rowcount
+        count = cast(CursorResult[Any], result).rowcount
         if count > 0:
             logger.info(f"Marked {count} HITL requests as expired")
 
-        return cast(int, count)
+        return count or 0
 
     async def delete(self, request_id: str) -> bool:
         """Delete an HITL request."""

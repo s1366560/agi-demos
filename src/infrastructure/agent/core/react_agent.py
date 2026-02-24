@@ -25,7 +25,7 @@ import logging
 import os
 import re
 import time
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Coroutine, Iterator, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -69,6 +69,7 @@ if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
     from src.domain.llm_providers.llm_types import LLMClient
     from src.domain.ports.services.graph_service_port import GraphServicePort
+    from src.infrastructure.agent.skill.orchestrator import SkillExecutorProtocol
 
 logger = logging.getLogger(__name__)
 _react_bg_tasks: set[asyncio.Task[Any]] = set()
@@ -937,7 +938,7 @@ class ReActAgent:
 
         if result.matched:
             logger.info(
-                f"[ReActAgent] Matched skill: {result.skill.name} "
+                f"[ReActAgent] Matched skill: {result.skill.name} "  # type: ignore[union-attr]
                 f"with score {result.score:.2f} (mode={result.mode.value})"
             )
             return result.skill, result.score
@@ -962,7 +963,7 @@ class ReActAgent:
 
         if result.matched:
             logger.info(
-                f"[ReActAgent] Matched subagent: {result.subagent.name} "
+                f"[ReActAgent] Matched subagent: {result.subagent.name} "  # type: ignore[union-attr]
                 f"with confidence {result.confidence:.2f} ({result.match_reason})"
             )
             # Convert to legacy SubAgentMatch for backward compatibility
@@ -1007,7 +1008,7 @@ class ReActAgent:
 
         if result.matched:
             logger.info(
-                f"[ReActAgent] Matched subagent (async): {result.subagent.name} "
+                f"[ReActAgent] Matched subagent (async): {result.subagent.name} "  # type: ignore[union-attr]
                 f"with confidence {result.confidence:.2f} ({result.match_reason})"
             )
             return SubAgentMatch(
@@ -1734,7 +1735,7 @@ class ReActAgent:
                 None,
             )
             tool_budget_value = (
-                semantic_stage.get("explain", {}).get("max_tools") if semantic_stage else None
+                semantic_stage.get("explain", {}).get("max_tools") if semantic_stage else None  # type: ignore[attr-defined]
             )
             tool_budget = (
                 int(tool_budget_value)
@@ -1745,7 +1746,7 @@ class ReActAgent:
                 stage["stage"]
                 for stage in trace_data
                 if isinstance(stage.get("explain"), dict)
-                and stage["explain"].get("budget_exceeded")
+                and stage["explain"].get("budget_exceeded")  # type: ignore[attr-defined]
             ]
             yield {
                 "type": "selection_trace",

@@ -70,17 +70,17 @@ async def rate_limit_middleware(request: Request, call_next: Callable[..., Any])
         # Apply different rate limits based on endpoint type
         if "/agent/" in request.url.path and "/chat" in request.url.path:
             # Agent chat is the most expensive operation
-            limiter.check("agent-chat-limit")
+            limiter.check("agent-chat-limit")  # type: ignore[attr-defined]
         elif "/agent/" in request.url.path:
-            limiter.check("agent-general-limit")
+            limiter.check("agent-general-limit")  # type: ignore[attr-defined]
         elif "/search" in request.url.path:
-            limiter.check("search-limit")
+            limiter.check("search-limit")  # type: ignore[attr-defined]
         else:
             # Default rate limit for other endpoints
-            limiter.check("default-limit")
+            limiter.check("default-limit")  # type: ignore[attr-defined]
 
     except RateLimitExceeded:
-        logger.warning(f"Rate limit exceeded for {request.client.host} on {request.url.path}")
+        logger.warning(f"Rate limit exceeded for {request.client.host} on {request.url.path}")  # type: ignore[union-attr]
         return Response(
             content='{"error": "Rate limit exceeded. Please slow down."}',
             status_code=429,

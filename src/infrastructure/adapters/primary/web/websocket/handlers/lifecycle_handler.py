@@ -214,6 +214,7 @@ class StartAgentHandler(WebSocketMessageHandler):
                 agent_mode=agent_mode,
                 config=config,
             )
+            assert actor is not None
             await await_ray(actor.status.remote())
 
             actor_id = ProjectAgentActor.actor_id(context.tenant_id, project_id, agent_mode)
@@ -404,6 +405,7 @@ class RestartAgentHandler(WebSocketMessageHandler):
                 agent_mode=agent_mode,
                 config=config,
             )
+            assert actor is not None
             await await_ray(actor.initialize.remote(config, True))
 
             logger.info(f"[WS] Restarted Project Agent Actor: {actor_id}")

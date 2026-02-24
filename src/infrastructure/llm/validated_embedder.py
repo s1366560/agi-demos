@@ -102,7 +102,7 @@ class ValidatedEmbedder(EmbedderClient):
         Returns:
             List of embedding vectors with guaranteed correct dimension
         """
-        embeddings = await self._base_embedder.create_batch(input_data_list)
+        embeddings = await self._base_embedder.create_batch(input_data_list)  # type: ignore[attr-defined]
 
         # Validate and fix each embedding
         validated_embeddings = []

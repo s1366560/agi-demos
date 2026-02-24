@@ -246,7 +246,7 @@ class HITLResponseListener:
                 stream_key = stream_key.decode("utf-8")
 
             # Parse message data
-            raw_data = fields.get(b"data") or fields.get("data")
+            raw_data = fields.get(b"data") or fields.get("data")  # type: ignore[call-overload]
             if isinstance(raw_data, bytes):
                 raw_data = raw_data.decode("utf-8")
 
@@ -299,12 +299,12 @@ class HITLResponseListener:
             await self._ack_message(str(stream_key), str(msg_id))
 
         except json.JSONDecodeError as e:
-            logger.error(f"[HITLListener] Invalid JSON in message {msg_id}: {e}")
+            logger.error(f"[HITLListener] Invalid JSON in message {msg_id!r}: {e}")
             self._errors += 1
             await self._ack_message(str(stream_key), str(msg_id))
         except Exception as e:
             logger.error(
-                f"[HITLListener] Error handling message {msg_id}: {e}",
+                f"[HITLListener] Error handling message {msg_id!r}: {e}",
                 exc_info=True,
             )
             self._errors += 1

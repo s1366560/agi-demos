@@ -263,6 +263,7 @@ class ComposeToolsUseCase:
                     }
                     success = False
 
+                assert isinstance(step_result, dict)
                 steps.append(step_result)
                 results[tool.name] = (
                     step_result.get("output") if step_result.get("success") else None

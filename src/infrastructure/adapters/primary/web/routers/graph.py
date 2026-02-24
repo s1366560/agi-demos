@@ -94,6 +94,8 @@ async def list_communities(
     If project_id is provided, filters by that project. Otherwise, returns all communities.
     """
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         conditions = ["coalesce(c.member_count, 0) >= 0"]  # Always include base condition
         params: dict[str, Any] = {"limit": limit, "offset": offset}
 
@@ -166,6 +168,8 @@ async def list_entities(
 ) -> dict[str, Any]:
     """List entities in the knowledge graph with filtering and pagination."""
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         conditions = []
         params: dict[str, Any] = {"limit": limit, "offset": offset}
 
@@ -242,6 +246,8 @@ async def get_entity_types(
     Useful for populating filter dropdowns with dynamic entity types.
     """
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         conditions = []
         params: dict[str, Any] = {}
 
@@ -291,6 +297,8 @@ async def get_entity(
         Entity details with properties
     """
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         query = """
         MATCH (e:Entity {uuid: $uuid})
         RETURN properties(e) as props, labels(e) as labels
@@ -361,6 +369,8 @@ async def get_entity_relationships(
         List of relationships with source and target entities
     """
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         # Build relationship type filter
         rel_filter = ""
         params: dict[str, Any] = {"uuid": entity_id, "limit": limit}
@@ -438,6 +448,8 @@ async def get_graph(
 ) -> dict[str, Any]:
     """Get graph data for visualization."""
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         query = """
         MATCH (n)
         WHERE ('Entity' IN labels(n) OR 'Episodic' IN labels(n) OR 'Community' IN labels(n))
@@ -521,6 +533,8 @@ async def get_subgraph(
 ) -> dict[str, Any]:
     """Get subgraph for specific nodes."""
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         project_id = params.project_id
 
         query = """
@@ -634,6 +648,8 @@ async def get_community(
         Community details with properties
     """
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         query = """
         MATCH (c:Community {uuid: $uuid})
         RETURN properties(c) as props
@@ -682,6 +698,8 @@ async def get_community_members(
         List of community members with their details
     """
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         # Note: Entity-[:BELONGS_TO]->Community (not Community-[:HAS_MEMBER]->Entity)
         query = """
         MATCH (e:Entity)-[:BELONGS_TO]->(c:Community {uuid: $uuid})
@@ -805,6 +823,8 @@ async def rebuild_communities(
             raise HTTPException(status_code=500, detail="Graph service not initialized")
 
         try:
+            if neo4j_client is None:
+                raise HTTPException(status_code=503, detail="Neo4j not available")
             # Remove existing communities
             await neo4j_client.execute_query(
                 """

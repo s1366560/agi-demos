@@ -84,7 +84,7 @@ class DebugMCPServerTool(AgentTool):
     def get_parameters_schema(self) -> dict[str, Any]:
         return self.parameters
 
-    async def execute(
+    async def execute(  # type: ignore[override]
         self,
         server_name: str,
         include_logs: bool = True,

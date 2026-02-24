@@ -23,8 +23,10 @@ Key Features:
 
 import logging
 
+from typing import Any, cast
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import CursorResult
 
 from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus, TriggerPattern, TriggerType
 from src.domain.model.agent.skill_source import SkillSource
@@ -143,7 +145,7 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
         """Delete a skill by ID."""
         result = await self._session.execute(delete(DBSkill).where(DBSkill.id == skill_id))
 
-        if result.rowcount == 0:
+        if cast(CursorResult[Any], result).rowcount == 0:
             raise ValueError(f"Skill not found: {skill_id}")
 
     async def list_by_tenant(

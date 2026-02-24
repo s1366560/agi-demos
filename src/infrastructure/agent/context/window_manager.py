@@ -89,7 +89,7 @@ class ContextWindowConfig:
     truncate_tool: int = 200
     truncate_system: int = 1000
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate configuration."""
         total = (
             self.system_budget_pct
@@ -450,7 +450,7 @@ class ContextWindowManager:
             return [], []
 
         # Start from the end, collect recent messages within budget
-        recent_messages = []
+        recent_messages: list[dict[str, Any]] = []
         recent_tokens = 0
 
         for msg in reversed(messages):
@@ -503,7 +503,7 @@ Conversation:
 Summary:"""
 
         # Call LLM for summary
-        response = await llm_client.chat_completion(
+        response = await llm_client.generate(
             messages=[
                 {
                     "role": "system",
@@ -521,7 +521,7 @@ Summary:"""
         elif isinstance(response, dict):
             return cast(str, response.get("choices", [{}])[0].get("message", {}).get("content", "").strip())
 
-        return ""
+        return ""  # type: ignore[unreachable]
 
     def _format_messages_for_summary(
         self,

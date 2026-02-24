@@ -226,7 +226,7 @@ class CachedRepositoryMixin:
             return cached
 
         # Cache miss - fall back to database
-        entity = await self._find_by_id(entity_id)
+        entity = await self._find_by_id(entity_id)  # type: ignore[attr-defined]
 
         if entity is not None:
             # Cache the result

@@ -7,7 +7,7 @@ to interact with the knowledge graph and memory systems.
 from src.infrastructure.agent.tools.base import AgentTool
 from src.infrastructure.agent.tools.clarification import ClarificationTool
 from src.infrastructure.agent.tools.decision import DecisionTool
-from src.infrastructure.agent.tools.desktop_tool import DesktopStatus, DesktopTool
+from src.infrastructure.agent.tools.desktop_tool import DesktopStatus, DesktopTool  # type: ignore[attr-defined]
 from src.infrastructure.agent.tools.env_var_tools import (
     CheckEnvVarsTool,
     GetEnvVarTool,
@@ -24,7 +24,7 @@ from src.infrastructure.agent.tools.subagent_sessions import (
     SessionsSpawnTool,
     SubAgentsControlTool,
 )
-from src.infrastructure.agent.tools.terminal_tool import TerminalStatus, TerminalTool
+from src.infrastructure.agent.tools.terminal_tool import TerminalStatus, TerminalTool  # type: ignore[attr-defined]
 from src.infrastructure.agent.tools.todo_tools import (
     TodoReadTool,
     TodoWriteTool,

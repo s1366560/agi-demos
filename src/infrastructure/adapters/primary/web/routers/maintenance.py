@@ -134,6 +134,8 @@ async def deduplicate_entities(
     from src.infrastructure.adapters.secondary.persistence.models import TaskLog
 
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         group_id = getattr(current_user, "project_id", None) or "neo4j"
         project_id = getattr(current_user, "project_id", None)
 
@@ -238,6 +240,8 @@ async def invalidate_stale_edges(
     Set dry_run=false to actually delete stale edges.
     """
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         cutoff_date = datetime.now(UTC) - timedelta(days=days_since_update)
 
         # Find stale edges (relationships with created_at timestamp)
@@ -303,6 +307,8 @@ async def get_maintenance_status(
     Returns current graph metrics and maintenance recommendations.
     """
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         # Get basic graph stats
         entity_query = "MATCH (e:Entity) RETURN count(e) as count"
         entity_result = await neo4j_client.execute_query(entity_query)
@@ -618,20 +624,20 @@ async def optimize_graph(
                 op_result = await _run_incremental_refresh(
                     group_id, tenant_id, project_id, user_id, workflow_engine
                 )
-                results["operations_run"].append(op_result)
+                results["operations_run"].append(op_result)  # type: ignore[attr-defined]
             elif operation == "deduplicate":
                 op_result = await _run_deduplicate(
                     dry_run, group_id, project_id, neo4j_client, workflow_engine
                 )
-                results["operations_run"].append(op_result)
+                results["operations_run"].append(op_result)  # type: ignore[attr-defined]
             elif operation == "invalidate_edges":
                 op_result = await _run_invalidate_edges(dry_run, neo4j_client)
-                results["operations_run"].append(op_result)
+                results["operations_run"].append(op_result)  # type: ignore[attr-defined]
             elif operation == "rebuild_communities":
                 op_result = await _run_rebuild_communities(
                     dry_run, group_id, project_id, workflow_engine
                 )
-                results["operations_run"].append(op_result)
+                results["operations_run"].append(op_result)  # type: ignore[attr-defined]
             else:
                 logger.warning(f"Unknown operation: {operation}")
         return results
@@ -669,7 +675,7 @@ async def get_embedding_status(
         factory = get_ai_service_factory()
         try:
             provider_config = await factory.resolve_provider(tenant_id)
-            provider = provider_config.provider
+            provider = provider_config.provider  # type: ignore[attr-defined]
         except Exception:
             provider = "unknown"
 
@@ -842,6 +848,8 @@ async def get_native_embedding_status(
         - Vector index information
     """
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         from src.configuration.config import get_settings
         from src.infrastructure.llm.provider_factory import get_ai_service_factory
 
@@ -853,7 +861,7 @@ async def get_native_embedding_status(
 
         try:
             provider_config = await factory.resolve_provider(tenant_id)
-            provider = provider_config.provider
+            provider = provider_config.provider  # type: ignore[attr-defined]
         except Exception:
             provider = "unknown"
 

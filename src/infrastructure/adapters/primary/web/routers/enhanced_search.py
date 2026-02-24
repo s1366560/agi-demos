@@ -287,6 +287,8 @@ async def search_temporal(
     Useful for finding memories from specific periods.
     """
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         parsed_since = None
         parsed_until = None
 
@@ -383,6 +385,8 @@ async def search_with_facets(
     for UI filtering controls.
     """
     try:
+        if neo4j_client is None:
+            raise HTTPException(status_code=503, detail="Neo4j not available")
         parsed_since = None
         if since:
             try:
@@ -452,11 +456,12 @@ async def search_with_facets(
             )
 
         # Compute facets
-        facets = {"entity_types": {}, "total": len(items)}
+        entity_type_counts: dict[str, int] = {}
+        facets: dict[str, Any] = {"entity_types": entity_type_counts, "total": len(items)}
 
         for item in items:
             et = item.get("entity_type", "Entity")
-            facets["entity_types"][et] = facets["entity_types"].get(et, 0) + 1
+            entity_type_counts[et] = entity_type_counts.get(et, 0) + 1
 
         return {
             "results": items,

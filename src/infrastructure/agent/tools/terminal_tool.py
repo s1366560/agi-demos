@@ -293,7 +293,7 @@ class TerminalTool(AgentTool):
         content_list = result.get("content", [])
         if not content_list:
             return success_message
-        return self._parse_legacy_text(text_content, success_message)
+        return self._parse_legacy_text(content_list, success_message)
 
     @staticmethod
     def _extract_error_content(result: dict[str, Any], fallback: str) -> str:

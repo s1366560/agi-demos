@@ -62,6 +62,7 @@ class InfraContainer:
             S3StorageAdapter,
         )
 
+        assert self._settings is not None
         return S3StorageAdapter(
             bucket_name=self._settings.s3_bucket_name,
             region=self._settings.aws_region,

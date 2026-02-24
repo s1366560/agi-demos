@@ -215,8 +215,8 @@ class RegisterMCPServerTool(AgentTool):
         config_json: str,
     ) -> str | None:
         """Install and start the MCP server. Returns error string or None."""
-        install_result = await self._sandbox_adapter.call_tool(
-            sandbox_id=self._sandbox_id,
+        install_result = await self._sandbox_adapter.call_tool(  # type: ignore[union-attr]
+            sandbox_id=self._sandbox_id,  # type: ignore[arg-type]
             tool_name="mcp_server_install",
             arguments={
                 "name": server_name,
@@ -230,8 +230,8 @@ class RegisterMCPServerTool(AgentTool):
             error = install_data.get("error", "Installation failed")
             return f"Error: Failed to install MCP server '{server_name}':\n{error}"
 
-        start_result = await self._sandbox_adapter.call_tool(
-            sandbox_id=self._sandbox_id,
+        start_result = await self._sandbox_adapter.call_tool(  # type: ignore[union-attr]
+            sandbox_id=self._sandbox_id,  # type: ignore[arg-type]
             tool_name="mcp_server_start",
             arguments={
                 "name": server_name,
@@ -249,8 +249,8 @@ class RegisterMCPServerTool(AgentTool):
 
     async def _discover_tools(self, server_name: str) -> tuple[list[dict[str, Any]], str | None]:
         """Discover tools from the server. Returns (tools, error_string_or_None)."""
-        discover_result = await self._sandbox_adapter.call_tool(
-            sandbox_id=self._sandbox_id,
+        discover_result = await self._sandbox_adapter.call_tool(  # type: ignore[union-attr]
+            sandbox_id=self._sandbox_id,  # type: ignore[arg-type]
             tool_name="mcp_server_discover_tools",
             arguments={"name": server_name},
             timeout=20.0,

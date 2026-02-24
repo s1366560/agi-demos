@@ -303,6 +303,7 @@ class ProjectSandboxLifecycleService:
         lock_handle = None
         if use_redis_lock:
             # Use Redis distributed lock (preferred)
+            assert self._distributed_lock is not None
             lock_handle = await self._distributed_lock.acquire(
                 key=lock_key,
                 ttl=120,  # 2 minutes for container creation
@@ -327,6 +328,7 @@ class ProjectSandboxLifecycleService:
     ) -> None:
         """Release distributed lock after container creation completes."""
         if use_redis_lock and lock_handle:
+            assert self._distributed_lock is not None
             released = await self._distributed_lock.release(lock_handle)
             if released:
                 logger.debug(f"Redis lock released for project {project_id}")

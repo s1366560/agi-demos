@@ -222,14 +222,14 @@ class StdioTransport(MCPTransport):
         except TimeoutError:
             # Check if process is still running
             if self.process.returncode is not None:
-                stderr = await self.process.stderr.read()
+                stderr = await self.process.stderr.read()  # type: ignore[union-attr]
                 logger.error(
                     f"MCP process exited with code {self.process.returncode}, stderr: {stderr.decode()[:500]}"
                 )
             raise RuntimeError(f"Timeout waiting for response to {method}") from None
 
         if not response_line:
-            stderr = await self.process.stderr.read()
+            stderr = await self.process.stderr.read()  # type: ignore[union-attr]
             logger.error(f"MCP server closed connection, stderr: {stderr.decode()[:500]}")
             raise RuntimeError("MCP server closed connection")
 
@@ -464,7 +464,7 @@ class SSETransport(MCPTransport):
             method=init_request.method,
             params=params_dict,
         )
-        await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=jsonrpc_request)))
+        await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=jsonrpc_request)))  # type: ignore[union-attr]
 
         # Wait for response
         try:
@@ -480,12 +480,12 @@ class SSETransport(MCPTransport):
             method="notifications/initialized",
             params={},
         )
-        await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=notification)))
+        await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=notification)))  # type: ignore[union-attr]
 
     async def _read_messages(self) -> None:
         """Background task to read incoming messages."""
         try:
-            async for message in self._read_stream:
+            async for message in self._read_stream:  # type: ignore[union-attr]
                 if isinstance(message, Exception):
                     logger.error(f"Received exception from MCP server: {message}")
                     # Fail all pending requests
@@ -728,7 +728,7 @@ class WebSocketTransport(MCPTransport):
     async def _receive_loop(self) -> None:
         """Background task to receive and dispatch WebSocket messages."""
         try:
-            async for msg in self._ws:
+            async for msg in self._ws:  # type: ignore[union-attr]
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     try:
                         data = json.loads(msg.data)
@@ -737,7 +737,7 @@ class WebSocketTransport(MCPTransport):
                         logger.error(f"Invalid JSON from WebSocket: {e}")
 
                 elif msg.type == aiohttp.WSMsgType.ERROR:
-                    logger.error(f"WebSocket error: {self._ws.exception()}")
+                    logger.error(f"WebSocket error: {self._ws.exception()}")  # type: ignore[union-attr]
                     break
 
                 elif msg.type == aiohttp.WSMsgType.CLOSED:
@@ -1108,7 +1108,7 @@ class MCPClient:
 
         return await self.transport.get_prompt(prompt_name, arguments or {})
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "MCPClient":
         """Async context manager entry."""
         await self.connect()
         return self
@@ -1118,6 +1118,6 @@ class MCPClient:
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
-    ):
+    ) -> None:
         """Async context manager exit."""
         await self.disconnect()

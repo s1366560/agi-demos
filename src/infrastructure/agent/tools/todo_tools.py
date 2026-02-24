@@ -56,7 +56,7 @@ class TodoReadTool(AgentTool):
         valid = {"pending", "in_progress", "completed", "failed", "cancelled"}
         return not (status and status not in valid)
 
-    async def execute(
+    async def execute(  # type: ignore[override]
         self,
         session_id: str,
         status: str | None = None,
@@ -154,7 +154,7 @@ class TodoWriteTool(AgentTool):
         self._pending_events.clear()
         return events
 
-    async def execute(
+    async def execute(  # type: ignore[override]
         self,
         session_id: str,
         action: str,

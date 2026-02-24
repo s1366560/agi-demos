@@ -314,7 +314,7 @@ class TransactionManager:
 
         # Check error code if available
         if hasattr(error, "orig") and hasattr(error.orig, "pgcode"):
-            return error.orig.pgcode in transient_codes
+            return error.orig.pgcode in transient_codes  # type: ignore[union-attr]
 
         # Check error message
         error_str = str(error).lower()

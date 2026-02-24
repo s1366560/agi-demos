@@ -6,6 +6,7 @@ import logging
 from typing import Any, cast
 from sqlalchemy import bindparam, delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import CursorResult
 
 from src.infrastructure.adapters.secondary.persistence.models import MemoryChunk
 
@@ -74,7 +75,7 @@ class SqlChunkRepository:
             MemoryChunk.project_id == project_id,
         )
         result = await self._session.execute(stmt)
-        return cast(int, result.rowcount)
+        return cast(CursorResult[Any], result).rowcount or 0
 
     async def vector_search(
         self,

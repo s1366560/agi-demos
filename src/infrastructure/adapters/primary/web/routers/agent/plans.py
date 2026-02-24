@@ -6,12 +6,13 @@ Task list endpoint for agent-managed task checklists per conversation.
 
 import logging
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import CursorResult
 
 from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import (
@@ -70,7 +71,7 @@ async def switch_mode(
         result = await db.execute(stmt)
         await db.commit()
 
-        if result.rowcount == 0:
+        if cast(CursorResult[Any], result).rowcount == 0:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
         logger.info(

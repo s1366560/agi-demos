@@ -7,6 +7,7 @@ from typing import Any, cast
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import CursorResult
 
 from src.domain.model.agent.tool_environment_variable import (
     EnvVarScope,
@@ -258,7 +259,7 @@ class SqlToolEnvironmentVariableRepository(
             )
         )
 
-        if result.rowcount == 0:
+        if cast(CursorResult[Any], result).rowcount == 0:
             raise ValueError(f"Environment variable not found: {env_var_id}")
 
         logger.info(f"Deleted env var: {env_var_id}")
@@ -289,10 +290,10 @@ class SqlToolEnvironmentVariableRepository(
         )
 
         logger.info(
-            f"Deleted {result.rowcount} env vars for tool={tool_name}, "
+            f"Deleted {cast(CursorResult[Any], result).rowcount} env vars for tool={tool_name}, "
             f"tenant={tenant_id}, project={project_id}"
         )
-        return cast(int, result.rowcount)
+        return cast(CursorResult[Any], result).rowcount or 0
 
     async def upsert(self, env_var: ToolEnvironmentVariable) -> ToolEnvironmentVariable:
         """Create or update an environment variable."""

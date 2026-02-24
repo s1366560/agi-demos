@@ -14,7 +14,7 @@ import docker
 from docker.errors import ImageNotFound, NotFound
 from docker.models.containers import Container
 
-from src.infrastructure.adapters.secondary.sandbox.constants import (
+from src.infrastructure.adapters.secondary.sandbox.constants import (  # type: ignore[attr-defined]
     DEFAULT_SANDBOX_IMAGE,
     DESKTOP_PORT,
     MCP_WEBSOCKET_PORT,

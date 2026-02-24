@@ -297,7 +297,7 @@ class DistributedTransactionCoordinator:
                 # Replay Neo4j operation
                 if compensating.neo4j_query and self._neo4j_client:
                     try:
-                        await self._neo4j_client.execute_write(
+                        await self._neo4j_client.execute_write(  # type: ignore[attr-defined]
                             compensating.neo4j_query,
                             compensating.neo4j_params or {},
                         )

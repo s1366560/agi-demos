@@ -394,4 +394,4 @@ class SandboxMCPToolWrapper(AgentTool):
             kwargs,
             **call_kwargs,
         )
-        return cast(dict[str, Any], result)
+        return result

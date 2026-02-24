@@ -292,7 +292,7 @@ class AgentRuntimeBootstrapper:
 
             # Inject plan repository for Plan Mode awareness
             try:
-                from src.configuration.di_container import get_container
+                from src.configuration.di_container import get_container  # type: ignore[attr-defined]
 
                 container = get_container()
                 agent._plan_repo = container._agent.plan_repository()

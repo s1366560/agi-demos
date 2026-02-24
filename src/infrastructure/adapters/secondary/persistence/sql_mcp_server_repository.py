@@ -5,10 +5,11 @@ V2 SQLAlchemy implementation of MCPServerRepository using BaseRepository.
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import CursorResult
 
 from src.domain.model.mcp.server import MCPServer
 from src.domain.ports.repositories.mcp_server_repository import MCPServerRepositoryPort
@@ -205,7 +206,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         """Delete an MCP server."""
         result = await self._session.execute(delete(DBMCPServer).where(DBMCPServer.id == server_id))
 
-        if result.rowcount == 0:
+        if cast(CursorResult[Any], result).rowcount == 0:
             logger.warning(f"MCP server not found: {server_id}")
             return False
 

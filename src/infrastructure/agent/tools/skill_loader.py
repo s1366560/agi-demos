@@ -239,7 +239,7 @@ class SkillLoaderTool(AgentTool):
         skill_name = kwargs.get("skill_name")
         return not (not isinstance(skill_name, str) or not skill_name.strip())
 
-    async def execute(self, **kwargs: Any) -> str | dict[str, Any]:
+    async def execute(self, **kwargs: Any) -> str | dict[str, Any]:  # type: ignore[override]
         """
         Execute skill loading.
 

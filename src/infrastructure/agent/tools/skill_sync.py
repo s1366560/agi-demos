@@ -118,7 +118,7 @@ class SkillSyncTool(AgentTool):
             return "Database session factory not available."
         return None
 
-    async def execute(self, **kwargs: Any) -> str | dict[str, Any]:
+    async def execute(self, **kwargs: Any) -> str | dict[str, Any]:  # type: ignore[override]
         """Execute the skill sync operation."""
         skill_name = kwargs.get("skill_name", "").strip()
         if not skill_name:

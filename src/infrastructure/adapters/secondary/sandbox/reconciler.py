@@ -244,6 +244,7 @@ class SandboxReconciler:
     async def _get_tracked_sandbox_ids(self) -> set[str]:
         """Get set of sandbox IDs currently tracked in memory."""
         # Access the adapter's internal tracking
+        assert self._adapter is not None
         if hasattr(self._adapter, "_active_sandboxes"):
             async with self._adapter._lock:
                 return set(self._adapter._active_sandboxes.keys())
@@ -297,6 +298,7 @@ class SandboxReconciler:
             True if adoption was successful
         """
         try:
+            assert self._adapter is not None
             # Only adopt running containers
             if orphan.status != "running":
                 logger.info(f"Skipping adoption of non-running orphan: {orphan.sandbox_id}")

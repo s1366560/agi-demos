@@ -193,9 +193,11 @@ async def verify_api_key_from_header_or_query(
     try:
         # Verify using application service
         domain_api_key = await auth_service.verify_api_key(api_key)
+        if domain_api_key is None:
+            raise ValueError("Invalid API key")
 
         # Convert to DB model for backward compatibility
-        result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))  # type: ignore[arg-type]  # SQLAlchemy Column comparison
+        result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))
         db_key = result.scalar_one_or_none()
 
         return db_key
@@ -218,7 +220,9 @@ async def verify_api_key_from_header_query_or_cookie(
     )
     try:
         domain_api_key = await auth_service.verify_api_key(api_key)
-        result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))  # type: ignore[arg-type]  # SQLAlchemy Column comparison
+        if domain_api_key is None:
+            raise ValueError("Invalid API key")
+        result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))
         return result.scalar_one_or_none()
     except ValueError as e:
         raise HTTPException(
@@ -309,11 +313,13 @@ async def verify_api_key_dependency(
     try:
         # Verify using application service
         domain_api_key = await auth_service.verify_api_key(api_key)
+        if domain_api_key is None:
+            raise ValueError("Invalid API key")
 
         # Convert to DB model for backward compatibility
         # Note: We only need to read the key, not update it.
         # last_used_at updates are disabled to prevent row-level lock contention.
-        result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))  # type: ignore[arg-type]  # SQLAlchemy Column comparison
+        result = await db.execute(select(DBAPIKey).where(DBAPIKey.id == domain_api_key.id))
         db_key = result.scalar_one_or_none()
 
         return db_key
@@ -605,6 +611,7 @@ async def _init_admin_user(
         user = await create_user(
             db, email="admin@memstack.ai", name="Default Admin", password="adminpassword"
         )
+        assert user is not None
         db.add(UserRole(id=str(uuid4()), user_id=user.id, role_id=admin_role.id))
         plain_key, _ = await create_api_key(
             db, user_id=user.id, name="Default API Key", permissions=["read", "write", "admin"]
@@ -644,6 +651,7 @@ async def _init_normal_user(
         normal_user = await create_user(
             db, email="user@memstack.ai", name="Default User", password="userpassword"
         )
+        assert normal_user is not None
         db.add(UserRole(id=str(uuid4()), user_id=normal_user.id, role_id=user_role.id))
         plain_user_key, _ = await create_api_key(
             db,

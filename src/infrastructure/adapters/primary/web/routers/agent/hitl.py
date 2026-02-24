@@ -127,7 +127,7 @@ async def get_project_pending_hitl_requests(
     try:
         repo = SqlHITLRequestRepository(db)
         pending = await repo.get_pending_by_project(
-            tenant_id=current_user.tenant_id,
+            tenant_id=current_user.tenant_id,  # type: ignore[attr-defined]
             project_id=project_id,
             limit=limit,
         )

@@ -499,8 +499,8 @@ class LLMStream:
 
         try:
             # Use client's generate_stream (has circuit breaker + rate limiter)
-            async for chunk in self._llm_client.generate_stream(
-                messages=messages,
+            async for chunk in self._llm_client.generate_stream(  # type: ignore[union-attr]
+                messages=messages,  # type: ignore[arg-type]
                 max_tokens=self.config.max_tokens,
                 langfuse_context=client_langfuse_context,
                 **extra_kwargs,
@@ -580,7 +580,7 @@ class LLMStream:
         try:
             # Acquire rate limit slot before calling LLM
             # This blocks if we've exceeded the provider's concurrent request limit
-            async with rate_limiter.acquire(provider_type):
+            async with rate_limiter.acquire(provider_type):  # type: ignore[attr-defined]
                 # Call LiteLLM streaming (now that we have a slot)
                 response = await litellm.acompletion(**kwargs)
 

@@ -260,10 +260,10 @@ class MCPWebSocketClient:
         try:
             logger.info("Disconnecting MCP WebSocket client")
             self._connected = False
-            await self._cleanup_receive_task()
+            await self._cleanup_receive_task()  # type: ignore[attr-defined]
             await self._cleanup_websocket()
-            await self._cleanup_session()
-            self._fail_pending_requests()
+            await self._cleanup_session()  # type: ignore[attr-defined]
+            self._fail_pending_requests()  # type: ignore[attr-defined]
             self._tools = []
             self.server_info = None
         finally:
@@ -309,6 +309,7 @@ class MCPWebSocketClient:
     async def _receive_loop(self) -> None:
         """Background task to receive and dispatch WebSocket messages."""
         try:
+            assert self._ws is not None
             async for msg in self._ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     try:

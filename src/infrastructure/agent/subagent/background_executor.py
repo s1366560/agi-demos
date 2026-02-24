@@ -229,7 +229,7 @@ class BackgroundExecutor:
                         execution_id,
                         conversation_id,
                         min(
-                            95, self._tracker.get_state(execution_id, conversation_id).progress + 10
+                            95, self._tracker.get_state(execution_id, conversation_id).progress + 10  # type: ignore[union-attr]
                         ),
                     )
 

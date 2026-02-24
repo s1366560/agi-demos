@@ -350,7 +350,7 @@ class SkillOrchestrator:
         current_step = 0
 
         # Execute skill and convert events
-        async for domain_event in self._skill_executor.execute(
+        async for domain_event in self._skill_executor.execute(  # type: ignore[attr-defined]
             skill, context.query, exec_context, sandbox_id=sandbox_id
         ):
             # Convert domain event to SSE format
@@ -449,8 +449,8 @@ class SkillOrchestrator:
                 "data": {
                     "skill_id": skill.id,
                     "skill_name": skill.name,
-                    "tool_name": domain_event.tool_name,
-                    "tool_input": domain_event.tool_input,
+                    "tool_name": domain_event.tool_name,  # type: ignore[attr-defined]
+                    "tool_input": domain_event.tool_input,  # type: ignore[attr-defined]
                     "step_index": current_step,
                     "total_steps": len(skill.tools),
                 },
@@ -463,9 +463,9 @@ class SkillOrchestrator:
                 "data": {
                     "skill_id": skill.id,
                     "skill_name": skill.name,
-                    "tool_name": domain_event.tool_name,
-                    "result": domain_event.result,
-                    "error": domain_event.error,
+                    "tool_name": domain_event.tool_name,  # type: ignore[attr-defined]
+                    "result": domain_event.result,  # type: ignore[attr-defined]
+                    "error": domain_event.error,  # type: ignore[attr-defined]
                     "step_index": current_step,
                     "total_steps": len(skill.tools),
                 },

@@ -190,6 +190,7 @@ class Neo4jClient:
         if not self._initialized:
             await self.initialize()
 
+        assert self._driver is not None
         try:
             result = await asyncio.wait_for(
                 self._driver.execute_query(
@@ -217,6 +218,7 @@ class Neo4jClient:
         if not self._initialized:
             await self.initialize()
 
+        assert self._driver is not None
         async with self._driver.session(database=self.database) as session:
             yield session
 

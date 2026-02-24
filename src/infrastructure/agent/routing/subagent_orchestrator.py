@@ -368,8 +368,8 @@ class SubAgentOrchestrator:
         return {
             "type": "subagent_routed",
             "data": {
-                "subagent_id": result.subagent.id,
-                "subagent_name": result.subagent.display_name,
+                "subagent_id": result.subagent.id,  # type: ignore[union-attr]
+                "subagent_name": result.subagent.display_name,  # type: ignore[union-attr]
                 "confidence": result.confidence,
                 "reason": result.match_reason,
             },

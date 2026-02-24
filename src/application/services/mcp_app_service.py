@@ -49,7 +49,7 @@ class MCPAppService:
             tenant_id=tenant_id,
             server_name=server_name,
             tools=tools,
-            source=MCPAppSource.TOOL_DISCOVERY,
+            source=MCPAppSource.TOOL_DISCOVERY,  # type: ignore[attr-defined]
         )
 
     async def detect_apps_from_tools(
@@ -217,7 +217,7 @@ class MCPAppService:
         include_disabled: bool = False,
     ) -> list[MCPApp]:
         """List all MCP Apps for a tenant (across all projects)."""
-        return cast(list[MCPApp], await self._app_repo.find_by_tenant(tenant_id, include_disabled))
+        return cast(list[MCPApp], await self._app_repo.find_by_tenant(tenant_id, include_disabled))  # type: ignore[attr-defined]
 
     async def list_ready_apps(self, project_id: str) -> list[MCPApp]:
         """List all ready-to-render MCP Apps for a project."""

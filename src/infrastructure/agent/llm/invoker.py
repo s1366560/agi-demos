@@ -345,10 +345,10 @@ class LLMInvoker:
                     raise
 
         # Update message metadata
-        current_message.tokens = result.tokens.to_dict()
-        current_message.cost = result.cost
-        current_message.finish_reason = result.finish_reason
-        current_message.completed_at = time.time()
+        current_message.tokens = result.tokens.to_dict()  # type: ignore[attr-defined]
+        current_message.cost = result.cost  # type: ignore[attr-defined]
+        current_message.finish_reason = result.finish_reason  # type: ignore[attr-defined]
+        current_message.completed_at = time.time()  # type: ignore[attr-defined]
 
         # Build trace URL if Langfuse context is available
         _trace_url = self._build_trace_url(context)

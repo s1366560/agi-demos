@@ -84,7 +84,7 @@ class ClarificationStrategy(HITLTypeStrategy):
         options_data = request_data.get("options", [])
         clarification_type = ClarificationType(request_data.get("clarification_type", "custom"))
 
-        options = []
+        options: list[ClarificationOption] = []
         for opt in options_data:
             if isinstance(opt, dict):
                 options.append(
@@ -153,7 +153,7 @@ class DecisionStrategy(HITLTypeStrategy):
         options_data = request_data.get("options", [])
         decision_type = DecisionType(request_data.get("decision_type", "single_choice"))
 
-        options = []
+        options: list[DecisionOption] = []
         for opt in options_data:
             if isinstance(opt, dict):
                 risk_level = None

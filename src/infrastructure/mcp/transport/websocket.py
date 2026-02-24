@@ -164,6 +164,7 @@ class WebSocketTransport(BaseTransport):
     async def _receive_loop(self) -> None:
         """Background task to receive and dispatch WebSocket messages."""
         try:
+            assert self._ws is not None
             async for msg in self._ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
                     try:

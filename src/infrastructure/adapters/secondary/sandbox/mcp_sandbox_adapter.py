@@ -34,7 +34,7 @@ from src.domain.ports.services.sandbox_port import (
     SandboxResourceError,
     SandboxStatus,
 )
-from src.infrastructure.adapters.secondary.sandbox.constants import (
+from src.infrastructure.adapters.secondary.sandbox.constants import (  # type: ignore[attr-defined]
     DEFAULT_SANDBOX_IMAGE,
     DESKTOP_PORT,
     MCP_WEBSOCKET_PORT,
@@ -814,6 +814,7 @@ class MCPSandboxAdapter(SandboxPort):
             return None
 
         try:
+            assert instance.mcp_client is not None
             result = await instance.mcp_client.read_resource(uri)
             if not result:
                 return None
@@ -2453,6 +2454,7 @@ class MCPSandboxAdapter(SandboxPort):
                             operation="call_tool",
                         )
 
+                assert instance.mcp_client is not None
                 result = await instance.mcp_client.call_tool(
                     tool_name,
                     arguments,
@@ -2900,7 +2902,7 @@ class MCPSandboxAdapter(SandboxPort):
             )
 
             # Check result
-            if start_result.get("isError"):
+            if start_result.get("isError"):  # type: ignore[attr-defined]
                 logger.warning(f"Failed to restart MCP server {server_name}: {start_result}")
                 return False
 

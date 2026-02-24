@@ -95,7 +95,7 @@ async def export_data(
             result = await graphiti_client.driver.execute_query(episode_query, tenant_id=tenant_id)
 
             for r in _records(result):
-                data["episodes"].append(r["props"])
+                data["episodes"].append(r["props"])  # type: ignore[union-attr]
 
         if include_entities:
             entity_query = f"""
@@ -108,7 +108,7 @@ async def export_data(
             for r in _records(result):
                 props = r["props"]
                 props["labels"] = r["labels"]
-                data["entities"].append(props)
+                data["entities"].append(props)  # type: ignore[union-attr]
 
         if include_relationships:
             rel_query = """
@@ -127,7 +127,7 @@ async def export_data(
             result = await graphiti_client.driver.execute_query(rel_query, tenant_id=tenant_id)
 
             for r in _records(result):
-                data["relationships"].append(
+                data["relationships"].append(  # type: ignore[union-attr]
                     {"edge_id": r["edge_id"], "type": r["rel_type"], "properties": r["props"]}
                 )
 
@@ -143,7 +143,7 @@ async def export_data(
             )
 
             for r in _records(result):
-                data["communities"].append(r["props"])
+                data["communities"].append(r["props"])  # type: ignore[union-attr]
 
         return data
 

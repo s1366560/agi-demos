@@ -71,7 +71,7 @@ class TaskService:
         Returns:
             List of task logs
         """
-        return cast(list[TaskLog], await self._task_repo.find_by_user(
+        return cast(list[TaskLog], await self._task_repo.find_by_user(  # type: ignore[attr-defined]
             user_id, status=status, limit=limit, offset=offset
         ))
 

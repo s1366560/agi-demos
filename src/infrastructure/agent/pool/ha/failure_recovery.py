@@ -261,8 +261,8 @@ class FailureRecoveryService:
             # Attempt recovery
             if auto_recover:
                 _recover_task = asyncio.create_task(self._attempt_recovery(event))
-                self._background_tasks.add(_recover_task)
-                _recover_task.add_done_callback(self._background_tasks.discard)
+                self._background_tasks.add(_recover_task)  # type: ignore[attr-defined]
+                _recover_task.add_done_callback(self._background_tasks.discard)  # type: ignore[attr-defined]
 
         return event
 
@@ -404,8 +404,8 @@ class FailureRecoveryService:
             # Retry if possible
             if self._recovery_attempts[instance_key] < action.max_retries:
                 _retry_task = asyncio.create_task(self._attempt_recovery(event))
-                self._background_tasks.add(_retry_task)
-                _retry_task.add_done_callback(self._background_tasks.discard)
+                self._background_tasks.add(_retry_task)  # type: ignore[attr-defined]
+                _retry_task.add_done_callback(self._background_tasks.discard)  # type: ignore[attr-defined]
             else:
                 await self._escalate(instance_key, event, str(e))
 

@@ -322,10 +322,10 @@ def extract_post_text(content: str | dict[str, Any]) -> str | dict[str, Any]:
         content = parsed
 
     # Handle both zh_cn and en_us
-    post_data = content.get("zh_cn", content.get("en_us", content))
+    post_data = content.get("zh_cn", content.get("en_us", content))  # type: ignore[union-attr]
 
-    title = post_data.get("title", "")
-    paragraphs = post_data.get("content", [])
+    title = post_data.get("title", "")  # type: ignore[union-attr]
+    paragraphs = post_data.get("content", [])  # type: ignore[union-attr]
 
     text_parts = []
     if title:

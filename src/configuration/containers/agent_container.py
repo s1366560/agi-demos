@@ -218,6 +218,7 @@ class AgentContainer:
 
         storage_service = self._storage_service_factory() if self._storage_service_factory else None
         assert storage_service is not None
+        assert self._settings is not None
         return AttachmentService(
             storage_service=storage_service,
             attachment_repository=self.attachment_repository(),

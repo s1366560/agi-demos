@@ -3,10 +3,11 @@ V2 SQLAlchemy implementation of TenantSkillConfigRepository using BaseRepository
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import CursorResult
 
 from src.domain.model.agent.tenant_skill_config import (
     TenantSkillAction,
@@ -113,7 +114,7 @@ class SqlTenantSkillConfigRepository(
 
         result = await self._session.execute(delete(DBConfig).where(DBConfig.id == config_id))
 
-        if result.rowcount == 0:
+        if cast(CursorResult[Any], result).rowcount == 0:
             raise ValueError(f"TenantSkillConfig not found: {config_id}")
 
     async def delete_by_tenant_and_skill(

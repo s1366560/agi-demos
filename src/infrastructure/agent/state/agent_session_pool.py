@@ -861,7 +861,7 @@ async def clear_session_cache(
             # If use_count is high, keep it alive longer
             if grace_period_seconds > 0 and session.use_count > 1:
                 # Soft delete: mark with deletion timestamp but keep in pool
-                session._marked_for_deletion_at = time.time() + grace_period_seconds
+                session._marked_for_deletion_at = time.time() + grace_period_seconds  # type: ignore[attr-defined]
                 logger.info(
                     f"Agent Session Pool: Session {session_key} marked for deletion "
                     f"in {grace_period_seconds}s (use_count={session.use_count})"

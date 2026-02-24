@@ -123,7 +123,7 @@ class StateRecoveryService:
             try:
                 import redis.asyncio as redis
 
-                self._redis_client = redis.from_url(self._redis_url)
+                self._redis_client = redis.from_url(self._redis_url)  # type: ignore[no-untyped-call]
                 await self._redis_client.ping()
                 logger.info("Redis connection established for state recovery")
             except ImportError:

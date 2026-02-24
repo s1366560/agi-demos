@@ -248,6 +248,7 @@ class SandboxToolRegistry:
                 "tool_names": registration.tool_names,
                 "registered_at": registration.registered_at.isoformat(),
             }
+            assert self._redis is not None
             await self._redis.set(
                 reg_key,
                 str(reg_data),
@@ -276,6 +277,7 @@ class SandboxToolRegistry:
         try:
             # Remove registration record
             reg_key = f"{self._key_prefix}{sandbox_id}"
+            assert self._redis is not None
             await self._redis.delete(reg_key)
 
             # Remove from tracking index

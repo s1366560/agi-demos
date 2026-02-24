@@ -553,6 +553,7 @@ class UnifiedSandboxService(SandboxResourcePort):
 
             try:
                 if use_redis_lock:
+                    assert self._distributed_lock is not None
                     lock_handle = await self._distributed_lock.acquire(
                         key=lock_key,
                         ttl=60,
@@ -605,6 +606,7 @@ class UnifiedSandboxService(SandboxResourcePort):
                 )
             finally:
                 if use_redis_lock and lock_handle:
+                    assert self._distributed_lock is not None
                     await self._distributed_lock.release(lock_handle)
                 elif not use_redis_lock:
                     await self._repository.release_project_lock(project_id)

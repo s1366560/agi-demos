@@ -51,7 +51,7 @@ async def sandbox_event_stream(
     logger.info(f"[SandboxSSE] Starting stream for {stream_key} from {last_id}")
 
     try:
-        async for message in event_bus.stream_read(
+        async for message in await event_bus.stream_read(
             stream_key=stream_key,
             last_id=last_id,
             count=100,

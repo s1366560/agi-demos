@@ -223,7 +223,7 @@ class MemoryCapturePostprocessor:
         if not self._embedding:
             return None
         try:
-            embedding = await self._embedding.embed_text_safe(content)
+            embedding = await self._embedding.embed_text(content)
             if embedding and chunk_repo:
                 if await self._is_duplicate(chunk_repo, embedding, project_id):
                     logger.debug(f"Skipping duplicate memory: {content[:50]}")

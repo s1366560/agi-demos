@@ -106,7 +106,7 @@ def get_sandbox_token_service() -> SandboxTokenService:
             settings = get_settings()
             # Use JWT secret as the token signing key
             _sandbox_token_service = SandboxTokenService(
-                secret_key=settings.jwt_secret,
+                secret_key=settings.jwt_secret,  # type: ignore[attr-defined]
                 token_ttl=300,  # 5 minutes default
             )
         return _sandbox_token_service

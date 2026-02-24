@@ -164,7 +164,7 @@ class RoleDefinition:
         if role_name not in cls.ROLES:
             raise ValueError(f"Role '{role_name}' does not exist")
 
-        return [permission.value for permission in cls.ROLES[role_name]]
+        return [permission.value for permission in cls.ROLES[role_name]]  # type: ignore[attr-defined]
 
     @classmethod
     def role_exists(cls, role_name: str) -> bool:
@@ -224,5 +224,5 @@ class RoleDefinition:
         if role_name not in cls.ROLES:
             return False
 
-        role_permissions = [p.value for p in cls.ROLES[role_name]]
+        role_permissions = [p.value for p in cls.ROLES[role_name]]  # type: ignore[attr-defined]
         return permission in role_permissions

@@ -186,7 +186,7 @@ class EmbeddingService:
             embeddings: Mutable list to populate with results
         """
         try:
-            batch_results = await self._embedder.create_batch(texts)
+            batch_results = await self._embedder.create_batch(texts)  # type: ignore[attr-defined]
             for idx, embedding in zip(indices, batch_results, strict=False):
                 if self._validate_dimensions and len(embedding) != self.embedding_dim:
                     embedding = self._fix_dimension(embedding)

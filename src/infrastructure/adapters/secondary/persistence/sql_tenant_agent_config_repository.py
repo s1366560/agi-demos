@@ -3,10 +3,11 @@ V2 SQLAlchemy implementation of TenantAgentConfigRepository using BaseRepository
 """
 
 import logging
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import CursorResult
 
 from src.domain.model.agent.tenant_agent_config import ConfigType, TenantAgentConfig
 from src.domain.ports.repositories.tenant_agent_config_repository import (
@@ -107,7 +108,7 @@ class SqlTenantAgentConfigRepository(
             delete(DBConfig).where(DBConfig.tenant_id == tenant_id)
         )
 
-        if result.rowcount == 0:
+        if cast(CursorResult[Any], result).rowcount == 0:
             raise ValueError(f"Configuration not found for tenant: {tenant_id}")
 
     async def exists(self, tenant_id: str) -> bool:

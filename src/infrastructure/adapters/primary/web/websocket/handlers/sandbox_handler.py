@@ -123,6 +123,7 @@ class SubscribeSandboxHandler(WebSocketMessageHandler):
                     break
 
                 # Read from Redis Stream
+                assert event_bus is not None
                 async for message in event_bus.stream_read(
                     stream_key=stream_key,
                     last_id=last_id,

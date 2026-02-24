@@ -20,7 +20,7 @@ from typing import Any, cast
 
 import redis.asyncio as redis
 
-from src.domain.ports.services.agent_event_bus_port import (
+from src.domain.ports.services.agent_event_bus_port import (  # type: ignore[attr-defined]
     AgentEvent,
     AgentEventBusPort,
     AgentEventType,

@@ -4,10 +4,11 @@ V2 SQLAlchemy implementation of SubAgentRepository using BaseRepository.
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import CursorResult
 
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
 from src.domain.ports.repositories.subagent_repository import SubAgentRepositoryPort
@@ -137,7 +138,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
 
         result = await self._session.execute(delete(DBSubAgent).where(DBSubAgent.id == subagent_id))
 
-        if result.rowcount == 0:
+        if cast(CursorResult[Any], result).rowcount == 0:
             raise ValueError(f"SubAgent not found: {subagent_id}")
 
     async def list_by_tenant(

@@ -395,7 +395,7 @@ async def list_tenant_assignments(
     """
     # Check permissions: admin or user belongs to tenant
     is_admin = any(r.role.name == "admin" for r in current_user.roles)
-    if not is_admin and current_user.tenant_id != tenant_id:
+    if not is_admin and current_user.tenant_id != tenant_id:  # type: ignore[attr-defined]
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied to tenant assignments",
@@ -516,7 +516,7 @@ async def get_provider_usage(
     Admins can see all usage.
     """
     is_admin = any(r.role.name == "admin" for r in current_user.roles)
-    tenant_id = None if is_admin else current_user.tenant_id
+    tenant_id = None if is_admin else current_user.tenant_id  # type: ignore[attr-defined]
 
     stats = await service.get_usage_statistics(
         provider_id=provider_id,
@@ -572,7 +572,7 @@ async def get_system_resilience_status(
             },
             "rate_limiter": rate_stats.get("stats", {}),
             "health": {
-                "status": health_checker._current_status.get(provider_type, "unknown").value
+                "status": health_checker._current_status.get(provider_type, "unknown").value  # type: ignore[attr-defined]
                 if hasattr(health_checker._current_status.get(provider_type, "unknown"), "value")
                 else "unknown",
             },

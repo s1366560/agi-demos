@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+from collections.abc import AsyncGenerator
 
 from pydantic import BaseModel
 
@@ -147,6 +148,57 @@ class LLMClient(ABC):
             max_tokens=max_tokens,
             model_size=model_size,
         )
+
+    @abstractmethod
+    async def generate(
+        self,
+        messages: list[Message] | list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        temperature: float | None = None,
+        max_tokens: int = 4096,
+        model_size: ModelSize = ModelSize.medium,
+        langfuse_context: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        """
+        Generate a non-streaming response with optional tool calling support.
+
+        Args:
+            messages: List of messages (dicts or Message objects)
+            tools: Optional tool definitions for function calling
+            temperature: Sampling temperature (defaults to client temperature)
+            max_tokens: Maximum tokens to generate
+            model_size: Which model size to use
+            langfuse_context: Optional context for Langfuse tracing
+            **kwargs: Additional parameters
+
+        Returns:
+            Dictionary containing the response
+        """
+
+    @abstractmethod
+    async def generate_stream(
+        self,
+        messages: list[Message],
+        max_tokens: int = 4096,
+        model_size: ModelSize = ModelSize.medium,
+        langfuse_context: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> AsyncGenerator[Any, None]:
+        """
+        Generate streaming response.
+
+        Args:
+            messages: List of messages
+            max_tokens: Maximum tokens in response
+            model_size: Which model size to use
+            langfuse_context: Optional context for Langfuse tracing
+            **kwargs: Additional arguments
+
+        Yields:
+            Response chunks
+        """
+        yield  # pragma: no cover
 
     async def ainvoke(
         self,

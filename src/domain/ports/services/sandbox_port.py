@@ -223,6 +223,29 @@ class SandboxPort(ABC):
             Number of sandboxes cleaned up
         """
 
+    @abstractmethod
+    async def call_tool(
+        self,
+        sandbox_id: str,
+        tool_name: str,
+        arguments: dict[str, Any],
+        timeout: float = 60.0,
+        max_retries: int = 2,
+    ) -> dict[str, Any]:
+        """
+        Call an MCP tool on the sandbox.
+
+        Args:
+            sandbox_id: Sandbox identifier
+            tool_name: Name of the tool
+            arguments: Tool arguments
+            timeout: Execution timeout
+            max_retries: Maximum retry attempts
+
+        Returns:
+            Tool execution result
+        """
+
 
 # Domain Errors
 

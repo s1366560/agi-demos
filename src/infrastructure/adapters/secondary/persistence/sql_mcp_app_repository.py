@@ -8,6 +8,7 @@ from typing import Any, cast
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.engine import CursorResult
 
 from src.domain.model.mcp.app import (
     MCPApp,
@@ -110,7 +111,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
     async def delete(self, app_id: str) -> bool:
         """Delete an MCP App."""
         result = await self._session.execute(delete(MCPAppModel).where(MCPAppModel.id == app_id))
-        if result.rowcount == 0:
+        if cast(CursorResult[Any], result).rowcount == 0:
             return False
         logger.info("Deleted MCP App: %s", app_id)
         return True
@@ -120,10 +121,10 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
         result = await self._session.execute(
             delete(MCPAppModel).where(MCPAppModel.server_id == server_id)
         )
-        count = result.rowcount
+        count = cast(CursorResult[Any], result).rowcount
         if count > 0:
             logger.info("Deleted %d MCP Apps for server %s", count, server_id)
-        return cast(int, count)
+        return count or 0
 
     async def disable_by_server(self, server_id: str) -> int:
         """Disable all MCP Apps for a server."""
@@ -140,10 +141,10 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
                 updated_at=datetime.now(UTC),
             )
         )
-        count = result.rowcount
+        count = cast(CursorResult[Any], result).rowcount
         if count > 0:
             logger.info("Disabled %d MCP Apps for server %s", count, server_id)
-        return cast(int, count)
+        return count or 0
 
     async def update_lifecycle_metadata(self, app_id: str, metadata: dict[str, Any]) -> bool:
         """Merge lifecycle metadata into existing app metadata."""

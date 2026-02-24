@@ -312,7 +312,7 @@ class ReActLoop:
                 step_loop_result = LoopResult.COMPACT
                 break
             elif classification == "thought":
-                last_thought = event.content
+                last_thought = event.content  # type: ignore[attr-defined]
 
         # Determine final step result
         if step_loop_result == LoopResult.CONTINUE and had_tool_calls:
@@ -656,7 +656,7 @@ class ReActLoop:
                 [{"type": "function", "function": t} for t in tools.values()] if tools else []
             )
 
-            async for event in self._llm_invoker.invoke(
+            async for event in self._llm_invoker.invoke(  # type: ignore[attr-defined]
                 messages, tools_list, {"step": self._step_count}
             ):
                 yield event
@@ -687,7 +687,7 @@ class ReActLoop:
 
                 # Execute tool
                 if self._tool_executor:
-                    async for event in self._tool_executor.execute(
+                    async for event in self._tool_executor.execute(  # type: ignore[attr-defined]
                         tool_call["name"],
                         tool_call["args"],
                         tool_call["call_id"],

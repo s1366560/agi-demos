@@ -870,6 +870,6 @@ def get_event_type_docstring() -> str:
         AgentMemoryRecalledEvent,
         AgentMemoryCapturedEvent,
     ]:
-        docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")
+        docs.append(f"{event_class.event_type.value}: {event_class.__doc__}")  # type: ignore[attr-defined]
 
     return "\n".join(docs)

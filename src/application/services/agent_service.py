@@ -215,6 +215,7 @@ class AgentService(AgentServicePort):
             return load_result.messages, load_result.summary
 
         # Fallback: direct message loading (no summary caching)
+        assert self._agent_execution_event_repo is not None
         message_events = await self._agent_execution_event_repo.get_message_events(
             conversation_id=conversation.id, limit=50
         )
@@ -320,7 +321,7 @@ class AgentService(AgentServicePort):
             )
 
             # Set correlation_id on the event
-            user_msg_event.correlation_id = correlation_id
+            user_msg_event.correlation_id = correlation_id  # type: ignore[attr-defined]
 
             # Ensure ID is set (from_domain_event might not set it or might set None)
             if not user_msg_event.id:
@@ -330,6 +331,7 @@ class AgentService(AgentServicePort):
             if not user_msg_event.event_data.get("message_id"):
                 user_msg_event.event_data["message_id"] = user_msg_id
 
+            assert self._agent_execution_event_repo is not None
             await self._agent_execution_event_repo.save_and_commit(user_msg_event)
 
             # Yield user message event
@@ -477,6 +479,7 @@ class AgentService(AgentServicePort):
         Returns:
             Tuple of (events_to_yield, last_event_time_us, last_event_counter, saw_complete).
         """
+        assert self._agent_execution_event_repo is not None
         if message_id:
             events = await self._agent_execution_event_repo.get_events_by_message(
                 message_id=message_id
@@ -574,6 +577,7 @@ class AgentService(AgentServicePort):
         if not message_id:
             return ""
         try:
+            assert self._agent_execution_event_repo is not None
             msg_events = await self._agent_execution_event_repo.get_events_by_message(
                 message_id=message_id
             )
@@ -615,6 +619,7 @@ class AgentService(AgentServicePort):
         delayed_start = time_module.time()
         result: list[dict[str, Any]] = []
         try:
+            assert self._event_bus is not None
             async for delayed_message in self._event_bus.stream_read(
                 stream_key, last_id="0", count=100, block_ms=200
             ):
@@ -1043,7 +1048,7 @@ class AgentService(AgentServicePort):
 
             # Update the conversation title in DB
             conversation.update_title(title)
-            await self._conversation_repo.save_and_commit(conversation)
+            await self._conversation_repo.save_and_commit(conversation)  # type: ignore[attr-defined]
 
             # Invalidate conversation list cache
             await self._invalidate_conv_cache(project_id)

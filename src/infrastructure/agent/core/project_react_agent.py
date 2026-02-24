@@ -434,7 +434,7 @@ class ProjectReActAgent:
 
             if embedding_service and redis_client:
                 cached_embedding = CachedEmbeddingService(embedding_service, redis_client)
-                chunk_search = ChunkHybridSearch(cast("EmbeddingService", cached_embedding), session_factory)
+                chunk_search = ChunkHybridSearch(cast("EmbeddingService", cached_embedding), session_factory)  # type: ignore[name-defined]
                 memory_recall = MemoryRecallPreprocessor(
                     chunk_search=chunk_search,
                     graph_search=graph_service,
@@ -450,7 +450,7 @@ class ProjectReActAgent:
                 memory_capture = MemoryCapturePostprocessor(
                     llm_client=llm_client,
                     session_factory=session_factory,
-                    embedding_service=cast("EmbeddingService | None", cached_emb),
+                    embedding_service=cast("EmbeddingService | None", cached_emb),  # type: ignore[name-defined]
                 )
                 logger.info(f"ProjectReActAgent[{self.project_key}]: Memory capture enabled")
 
@@ -458,7 +458,7 @@ class ProjectReActAgent:
 
                 memory_flush = MemoryFlushService(
                     llm_client=llm_client,
-                    embedding_service=cast("EmbeddingService | None", cached_emb),
+                    embedding_service=cast("EmbeddingService | None", cached_emb),  # type: ignore[name-defined]
                     session_factory=session_factory,
                 )
         except Exception as e:
@@ -610,7 +610,7 @@ class ProjectReActAgent:
         """Finalize initialization: compute stats, update status, notify."""
         builtin_tool_count = 0
         mcp_tool_count = 0
-        for tool_name in self._tools.keys():
+        for tool_name in (self._tools or {}).keys():
             if tool_name.startswith(("mcp_", "sandbox_")) or "_mcp_" in tool_name:
                 mcp_tool_count += 1
             else:
@@ -897,7 +897,7 @@ class ProjectReActAgent:
                 f"conversation={conversation_id}, user={user_id}"
             )
 
-            async for event in self._react_agent.stream(
+            async for event in self._react_agent.stream(  # type: ignore[union-attr]
                 conversation_id=conversation_id,
                 user_message=user_message,
                 project_id=self.config.project_id,

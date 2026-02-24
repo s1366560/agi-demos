@@ -164,7 +164,7 @@ class ConversationManager:
         logger.info(f"[update_conversation_title] Calling conversation.update_title('{title}')")
         conversation.update_title(title)
         logger.info("[update_conversation_title] Title updated in domain model, now saving...")
-        await self._conversation_repo.save_and_commit(conversation)
+        await self._conversation_repo.save_and_commit(conversation)  # type: ignore[attr-defined]
 
         logger.info(f"Updated title for conversation {conversation_id} to: {title}")
         return conversation
@@ -259,6 +259,7 @@ Title:"""
             )
             return []
 
+        assert self._agent_execution_event_repo is not None
         return await self._agent_execution_event_repo.get_message_events(
             conversation_id=conversation_id, limit=limit
         )
@@ -311,6 +312,7 @@ Title:"""
         self, conversation_id: str, max_messages: int = 50
     ) -> list[dict[str, Any]]:
         """Get conversation context for agent processing."""
+        assert self._agent_execution_event_repo is not None
         message_events = await self._agent_execution_event_repo.get_message_events(
             conversation_id=conversation_id, limit=max_messages
         )

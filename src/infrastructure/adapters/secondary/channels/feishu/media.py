@@ -45,7 +45,7 @@ class FeishuMediaManager:
         else:
             image_data = image
 
-        response = self._client.im.image.create(
+        response = self._client.im.image.create(  # type: ignore[attr-defined]
             data={
                 "image_type": image_type,
                 "image": image_data,
@@ -101,7 +101,7 @@ class FeishuMediaManager:
         if duration is not None:
             data["duration"] = duration
 
-        response = self._client.im.file.create(data=data)
+        response = self._client.im.file.create(data=data)  # type: ignore[attr-defined]
 
         if response.get("code") != 0:
             raise RuntimeError(f"File upload failed: {response.get('msg')}")
@@ -117,7 +117,7 @@ class FeishuMediaManager:
         Returns:
             Image bytes
         """
-        response = self._client.im.image.get(path={"image_key": image_key})
+        response = self._client.im.image.get(path={"image_key": image_key})  # type: ignore[attr-defined]
 
         # Handle different response formats
         if isinstance(response, bytes):
@@ -138,7 +138,7 @@ class FeishuMediaManager:
         Returns:
             File bytes
         """
-        response = self._client.im.messageResource.get(
+        response = self._client.im.messageResource.get(  # type: ignore[attr-defined]
             path={"message_id": message_id, "file_key": file_key}, params={"type": file_type}
         )
 

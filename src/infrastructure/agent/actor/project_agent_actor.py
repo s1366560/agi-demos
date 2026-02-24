@@ -37,7 +37,7 @@ from src.infrastructure.llm.initializer import initialize_default_llm_providers
 logger = logging.getLogger(__name__)
 
 
-@ray.remote(max_restarts=5, max_task_retries=3, max_concurrency=10)
+@ray.remote(max_restarts=5, max_task_retries=3, max_concurrency=10)  # type: ignore[call-overload]
 class ProjectAgentActor:
     """Ray Actor that runs a project-level agent instance."""
 
@@ -96,7 +96,7 @@ class ProjectAgentActor:
 
             # Inject plan repository for Plan Mode awareness
             try:
-                from src.configuration.di_container import get_container
+                from src.configuration.di_container import get_container  # type: ignore[attr-defined]
 
                 container = get_container()
                 self._agent._plan_repo = container._agent.plan_repository()

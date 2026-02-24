@@ -27,6 +27,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.sql import Select
 
 from src.domain.exceptions import (
@@ -290,7 +291,7 @@ class BaseRepository[T, M](ABC):
         if not entity_id:
             raise ValueError("ID cannot be empty")
 
-        query = select(self._model).where(self._model.id == entity_id)
+        query = select(self._model).where(self._model.id == entity_id)  # type: ignore[attr-defined]
         # Apply eager loading options
         for option in self._eager_load_options():
             query = query.options(option)
@@ -314,7 +315,7 @@ class BaseRepository[T, M](ABC):
         if not entity_ids:
             return []
 
-        query = select(self._model).where(self._model.id.in_(entity_ids))
+        query = select(self._model).where(self._model.id.in_(entity_ids))  # type: ignore[attr-defined]
         # Apply eager loading options
         for option in self._eager_load_options():
             query = query.options(option)
@@ -361,7 +362,7 @@ class BaseRepository[T, M](ABC):
         query = (
             select(func.count())
             .select_from(self._model)
-            .where(self._model.id == entity_id)
+            .where(self._model.id == entity_id)  # type: ignore[attr-defined]
         )
         result = await self._session.execute(query)
         count = result.scalar()
@@ -396,7 +397,7 @@ class BaseRepository[T, M](ABC):
 
     async def _find_db_model_by_id(self, entity_id: str) -> M | None:
         """Find database model by ID (internal helper)."""
-        query = select(self._model).where(self._model.id == entity_id)
+        query = select(self._model).where(self._model.id == entity_id)  # type: ignore[attr-defined]
         result = await self._session.execute(query)
         return result.scalar_one_or_none()
 
@@ -513,10 +514,10 @@ class BaseRepository[T, M](ABC):
         if not entity_ids:
             return 0
 
-        query = delete(self._model).where(self._model.id.in_(entity_ids))
+        query = delete(self._model).where(self._model.id.in_(entity_ids))  # type: ignore[attr-defined]
         result = await self._session.execute(query)
         await self._session.flush()
-        return cast(int, result.rowcount)
+        return cast(CursorResult[Any], result).rowcount or 0
 
     # === Query building ===
 

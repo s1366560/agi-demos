@@ -536,7 +536,7 @@ class ContextCompressionEngine:
             )
 
             try:
-                response = await llm_client.chat_completion(
+                response = await llm_client.generate(
                     messages=[
                         {
                             "role": "system",
@@ -596,7 +596,7 @@ class ContextCompressionEngine:
         compact_max_tokens = max(self._summary_max_tokens // 2, 200)
 
         try:
-            response = await llm_client.chat_completion(
+            response = await llm_client.generate(
                 messages=[
                     {
                         "role": "system",

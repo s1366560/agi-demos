@@ -382,7 +382,7 @@ async def create_memory(
             #
             # Mark memory as failed so user knows processing didn't start
             memory.processing_status = "FAILED"
-            memory.processing_error = f"Failed to queue for processing: {e!s}"
+            memory.processing_error = f"Failed to queue for processing: {e!s}"  # type: ignore[attr-defined]  # ORM field exists at runtime
 
         await db.commit()
         await db.refresh(memory)
@@ -531,6 +531,8 @@ async def delete_memory(
     # This ensures proper cleanup of orphaned entities and edges
     graph_cleanup_failed = False
     try:
+        if graph_service is None:
+            raise HTTPException(status_code=503, detail="Graph service not available")
         await graph_service.remove_episode(memory_id)
         logger.info(f"Deleted episode {memory_id} from graph with proper cleanup")
     except Exception as e:
@@ -589,7 +591,7 @@ async def reprocess_memory(
             select(MemoryShare).where(
                 MemoryShare.memory_id == memory_id,
                 MemoryShare.shared_with_user_id == current_user.id,
-                MemoryShare.permission_level == "edit",
+                MemoryShare.permission_level == "edit",  # type: ignore[attr-defined]  # ORM column
             )
         )
         if not share_result.scalar_one_or_none():
@@ -607,7 +609,7 @@ async def reprocess_memory(
     # 3. Clean up old episode data before reprocessing
     try:
         logger.info(f"Cleaning up old episode data for memory {memory_id} before reprocessing")
-        await graph_service.remove_episode_by_memory_id(memory_id)
+        await graph_service.remove_episode_by_memory_id(memory_id)  # type: ignore[union-attr]  # method exists at runtime
     except Exception as e:
         logger.warning(f"Failed to clean up old episode data for memory {memory_id}: {e}")
         # Continue with reprocessing even if cleanup fails
@@ -698,7 +700,7 @@ async def _check_memory_edit_permission(memory: Any, current_user: User, db: Asy
         select(MemoryShare).where(
             MemoryShare.memory_id == memory.id,
             MemoryShare.shared_with_user_id == current_user.id,
-            MemoryShare.permission_level == "edit",
+            MemoryShare.permission_level == "edit",  # type: ignore[attr-defined]  # ORM column
         )
     )
     has_edit_share = share_result.scalar_one_or_none()
@@ -961,7 +963,7 @@ async def delete_memory_share(
         raise HTTPException(status_code=404, detail="Share not found")
 
     # 3. Verify share belongs to this memory
-    if share.memory_id != memory_id:
+    if share.memory_id != memory_id:  # type: ignore[attr-defined]  # ORM field exists at runtime
         raise HTTPException(status_code=400, detail="Share does not belong to this memory")
 
     # 4. Delete share

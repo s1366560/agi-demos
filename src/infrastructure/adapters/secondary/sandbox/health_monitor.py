@@ -336,6 +336,7 @@ class EnhancedHealthMonitor:
         # Get list of active sandboxes
         sandboxes = []
 
+        assert self._adapter is not None
         if hasattr(self._adapter, "_active_sandboxes"):
             async with self._adapter._lock:
                 sandboxes = list(self._adapter._active_sandboxes.keys())
@@ -362,6 +363,7 @@ class EnhancedHealthMonitor:
 
     async def _check_container_running(self, sandbox_id: str) -> bool:
         """Check if sandbox container is running."""
+        assert self._adapter is not None
         if not hasattr(self._adapter, "get_sandbox"):
             return False
         instance = await self._adapter.get_sandbox(sandbox_id)
@@ -374,6 +376,7 @@ class EnhancedHealthMonitor:
     async def _check_mcp_connection(self, sandbox_id: str) -> bool:
         """Check MCP WebSocket connection, attempting reconnect if needed."""
         mcp_connected = False
+        assert self._adapter is not None
         if hasattr(self._adapter, "_active_sandboxes"):
             async with self._adapter._lock:
                 instance = self._adapter._active_sandboxes.get(sandbox_id)
@@ -386,6 +389,7 @@ class EnhancedHealthMonitor:
     async def _check_full_services(self, sandbox_id: str) -> bool:
         """Run a full service check by executing a simple command."""
         try:
+            assert self._adapter is not None
             await self._adapter.call_tool(
                 sandbox_id,
                 "bash",
@@ -477,6 +481,7 @@ class EnhancedHealthMonitor:
             self._recovering.add(sandbox_id)
 
         try:
+            assert self._adapter is not None
             # Check recovery attempts count
             attempts = await self._recovery_attempts.get(sandbox_id) or 0
             if attempts >= self._max_recovery_attempts:
@@ -551,6 +556,7 @@ class EnhancedHealthMonitor:
 
     async def _send_heartbeats(self) -> None:
         """Send heartbeats to all connected MCP clients."""
+        assert self._adapter is not None
         if not hasattr(self._adapter, "_active_sandboxes"):
             return
 

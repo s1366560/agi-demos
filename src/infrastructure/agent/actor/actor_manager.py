@@ -37,7 +37,7 @@ async def ensure_router_actor() -> Any | None:
         return ray.get_actor(ROUTER_ACTOR_NAME, namespace=settings.ray_namespace)
     except ValueError:
         try:
-            actor = HITLStreamRouterActor.options(
+            actor = HITLStreamRouterActor.options(  # type: ignore[attr-defined]
                 name=ROUTER_ACTOR_NAME,
                 namespace=settings.ray_namespace,
                 lifetime="detached",
@@ -74,7 +74,7 @@ async def get_or_create_actor(
         try:
             actor = ray.get_actor(actor_id, namespace=settings.ray_namespace)
         except ValueError:
-            actor = ProjectAgentActor.options(
+            actor = ProjectAgentActor.options(  # type: ignore[attr-defined]
                 name=actor_id,
                 namespace=settings.ray_namespace,
                 lifetime="detached",

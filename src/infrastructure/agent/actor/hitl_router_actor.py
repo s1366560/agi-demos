@@ -21,7 +21,7 @@ from src.infrastructure.agent.actor.types import ProjectAgentActorConfig
 logger = logging.getLogger(__name__)
 
 
-@ray.remote(max_restarts=5, max_task_retries=3, max_concurrency=10)
+@ray.remote(max_restarts=5, max_task_retries=3, max_concurrency=10)  # type: ignore[call-overload]
 class HITLStreamRouterActor:
     """Routes HITL responses from Redis to ProjectAgentActor instances."""
 
@@ -59,7 +59,7 @@ class HITLStreamRouterActor:
         stream_key = self._stream_key(tenant_id, project_id)
 
         try:
-            await self._redis.xgroup_create(
+            await self._redis.xgroup_create(  # type: ignore[union-attr]
                 stream_key,
                 self.CONSUMER_GROUP,
                 id="0",
@@ -85,7 +85,7 @@ class HITLStreamRouterActor:
                     continue
 
                 stream_keys = {self._stream_key(tid, pid): ">" for tid, pid in self._projects}
-                streams = await self._redis.xreadgroup(
+                streams = await self._redis.xreadgroup(  # type: ignore[union-attr]
                     groupname=self.CONSUMER_GROUP,
                     consumername=self._worker_id,
                     streams=stream_keys,  # type: ignore[arg-type]
@@ -111,9 +111,9 @@ class HITLStreamRouterActor:
 
     async def _handle_message(self, stream_key: str, msg_id: str, fields: dict[str, Any]) -> None:
         try:
-            raw = fields.get("data") or fields.get(b"data")
+            raw = fields.get("data") or fields.get(b"data")  # type: ignore[call-overload]
             if not raw:
-                await self._redis.xack(stream_key, self.CONSUMER_GROUP, msg_id)
+                await self._redis.xack(stream_key, self.CONSUMER_GROUP, msg_id)  # type: ignore[union-attr]
                 return
 
             if isinstance(raw, bytes):
@@ -138,7 +138,7 @@ class HITLStreamRouterActor:
             actor = await self._get_or_create_actor(tenant_id, project_id, agent_mode)
 
             await await_ray(actor.continue_chat.remote(request_id, response_data, conversation_id))
-            await self._redis.xack(stream_key, self.CONSUMER_GROUP, msg_id)
+            await self._redis.xack(stream_key, self.CONSUMER_GROUP, msg_id)  # type: ignore[union-attr]
 
         except Exception as e:
             logger.error(f"[HITLRouter] Failed to handle message {msg_id}: {e}", exc_info=True)
@@ -172,7 +172,7 @@ class HITLStreamRouterActor:
                 enable_skills=True,
                 enable_subagents=True,
             )
-            actor = ProjectAgentActor.options(
+            actor = ProjectAgentActor.options(  # type: ignore[attr-defined]
                 name=actor_id,
                 namespace=ray_settings.ray_namespace,
                 lifetime="detached",
@@ -184,7 +184,7 @@ class HITLStreamRouterActor:
         if self._redis is not None:
             return
         settings = get_settings()
-        self._redis = aioredis.from_url(settings.redis_url)
+        self._redis = aioredis.from_url(settings.redis_url)  # type: ignore[no-untyped-call]
 
     def _stream_key(self, tenant_id: str, project_id: str) -> str:
         return self.STREAM_KEY_PATTERN.format(tenant_id=tenant_id, project_id=project_id)

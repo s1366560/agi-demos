@@ -106,7 +106,7 @@ class GetEnvVarTool(AgentTool):
             return False
         return True
 
-    async def execute(
+    async def execute(  # type: ignore[override]
         self,
         tool_name: str,
         variable_name: str,
@@ -147,7 +147,7 @@ class GetEnvVarTool(AgentTool):
                         project_id=self._project_id,
                     )
             else:
-                env_var = await self._repository.get(
+                env_var = await self._repository.get(  # type: ignore[union-attr]
                     tenant_id=tenant_id,
                     tool_name=tool_name,
                     variable_name=variable_name,
@@ -217,7 +217,7 @@ class GetEnvVarTool(AgentTool):
                     project_id=self._project_id,
                 )
         else:
-            env_vars = await self._repository.get_for_tool(
+            env_vars = await self._repository.get_for_tool(  # type: ignore[union-attr]
                 tenant_id=self._tenant_id,
                 tool_name=tool_name,
                 project_id=self._project_id,
@@ -416,7 +416,7 @@ class RequestEnvVarTool(AgentTool):
             return False
         return True
 
-    async def execute(
+    async def execute(  # type: ignore[override]
         self,
         tool_name: str,
         fields: list[dict[str, Any]],
@@ -687,7 +687,7 @@ class CheckEnvVarsTool(AgentTool):
             return False
         return True
 
-    async def execute(
+    async def execute(  # type: ignore[override]
         self,
         tool_name: str,
         required_vars: list[str],
@@ -729,7 +729,7 @@ class CheckEnvVarsTool(AgentTool):
                     )
             else:
                 # Use injected repository (for API context with managed sessions)
-                env_vars = await self._repository.get_for_tool(
+                env_vars = await self._repository.get_for_tool(  # type: ignore[union-attr]
                     tenant_id=tenant_id,
                     tool_name=tool_name,
                     project_id=self._project_id,

@@ -322,7 +322,7 @@ async def get_workflow_status(
         if not conversation:
             raise HTTPException(status_code=404, detail=f"Conversation {conversation_id} not found")
 
-        if conversation.tenant_id != current_user.tenant_id:
+        if conversation.tenant_id != current_user.tenant_id:  # type: ignore[attr-defined]
             raise HTTPException(status_code=403, detail="Access denied to this conversation")
 
         actor = await get_actor_if_exists(

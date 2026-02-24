@@ -338,7 +338,7 @@ def list_available_templates() -> list[dict[str, str]]:
     Returns:
         List of template info dicts with name and description
     """
-    return [{"name": t["name"], "description": t["description"]} for t in TEMPLATES.values()]
+    return [{"name": t["name"], "description": t["description"]} for t in TEMPLATES.values()]  # type: ignore[dict-item]
 
 
 def get_template_by_name(name: str) -> dict[str, Any] | None:
@@ -444,7 +444,7 @@ class CreateMCPServerFromTemplateTool(AgentTool):
     def get_parameters_schema(self) -> dict[str, Any]:
         return self.parameters
 
-    async def execute(
+    async def execute(  # type: ignore[override]
         self,
         template: str,
         server_name: str,

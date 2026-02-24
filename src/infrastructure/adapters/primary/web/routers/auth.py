@@ -64,11 +64,11 @@ async def _ensure_default_project(db: AsyncSession, user: DBUser) -> None:
         return
 
     # Get tenant details
-    tenant_result = await db.execute(select(Tenant).where(Tenant.id == user_tenant.tenant_id))
+    tenant_result = await db.execute(select(Tenant).where(Tenant.id == user_tenant.tenant_id))  # type: ignore[attr-defined]
     tenant = tenant_result.scalar_one_or_none()
 
     if not tenant:
-        logger.warning(f"Tenant {user_tenant.tenant_id} not found for user {user.id}")
+        logger.warning(f"Tenant {user_tenant.tenant_id} not found for user {user.id}")  # type: ignore[attr-defined]
         return
 
     # Create default project
@@ -177,6 +177,7 @@ async def create_new_api_key(
         expires_in_days=key_data.expires_in_days,
     )
 
+    assert api_key is not None
     return APIKeyResponse(
         key_id=api_key.id,
         key=plain_key,  # Show only once

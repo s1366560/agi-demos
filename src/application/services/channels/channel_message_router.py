@@ -216,6 +216,7 @@ class ChannelMessageRouter:
                     f"type={message.content.type.value}, message_id={message.id}"
                 )
 
+                assert self._media_import_service is not None
                 sandbox_path = await self._media_import_service.import_media_to_workspace(
                     message=message,
                     project_id=message.project_id or "",
@@ -962,12 +963,14 @@ class ChannelMessageRouter:
             await asyncio.sleep(0.5)
             display = self._compute_display_text(stream_state)
             if display != last_snapshot and display.strip():
+                assert cardkit_mgr is not None
                 ok = await cardkit_mgr.update_text(cardkit_state, display)
                 if ok:
                     last_snapshot = display
 
         final_display = stream_state.final_content or stream_state.accumulated_text
         finish_text = final_display if final_display.strip() else last_snapshot
+        assert cardkit_mgr is not None
         await cardkit_mgr.finish_streaming(cardkit_state, finish_text)
         self._unregister_card_state(conversation_id)
 
@@ -1353,7 +1356,7 @@ class ChannelMessageRouter:
         """Send the initial 'Thinking...' card and return its message_id."""
         try:
             reply_to = self._extract_channel_message_id(message)
-            msg_id = await adapter.send_streaming_card(
+            msg_id = await adapter.send_streaming_card(  # type: ignore[attr-defined]
                 message.chat_id,
                 initial_text="",
                 reply_to=reply_to,
@@ -1375,7 +1378,7 @@ class ChannelMessageRouter:
     ) -> bool:
         """Patch the streaming card with accumulated text. Returns True on success."""
         try:
-            card_json = adapter._build_streaming_card(text, loading=loading)
+            card_json = adapter._build_streaming_card(text, loading=loading)  # type: ignore[attr-defined]
             return await adapter.patch_card(message_id, card_json)
         except Exception as e:
             logger.debug(f"[MessageRouter] Streaming card patch failed: {e}")

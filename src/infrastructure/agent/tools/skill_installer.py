@@ -370,7 +370,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
             }
 
         # Try to fetch additional files (references, scripts)
-        base_path = used_path.rsplit("/", 1)[0] if "/" in used_path else ""
+        base_path = used_path.rsplit("/", 1)[0] if "/" in used_path else ""  # type: ignore[union-attr, operator]
         additional_files: list[str] = []
 
         # Note: Additional directories (references, scripts, assets, rules) would
@@ -541,7 +541,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
             },
         }
 
-    async def execute(self, **kwargs: Any) -> str | dict[str, Any]:
+    async def execute(self, **kwargs: Any) -> str | dict[str, Any]:  # type: ignore[override]
         """
         Execute skill installation.
 

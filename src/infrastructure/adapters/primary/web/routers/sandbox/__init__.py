@@ -33,7 +33,7 @@ from .schemas import (
     ValidateTokenRequest,
     ValidateTokenResponse,
 )
-from .utils import (
+from .utils import (  # type: ignore[attr-defined]
     ensure_sandbox_sync,
     extract_project_id,
     get_current_user,

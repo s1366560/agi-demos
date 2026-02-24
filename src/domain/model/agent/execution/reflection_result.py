@@ -59,7 +59,7 @@ class StepAdjustment:
             "reason": self.reason,
             "new_tool_input": self.new_tool_input,
             "new_tool_name": self.new_tool_name,
-            "new_step": self.new_step.to_dict()
+            "new_step": self.new_step.to_dict()  # type: ignore[union-attr]
             if hasattr(self.new_step, "to_dict")
             else self.new_step,
         }

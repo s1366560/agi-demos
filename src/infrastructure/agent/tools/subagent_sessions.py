@@ -1326,7 +1326,7 @@ class SessionsSendTool(AgentTool):
         parent_run = self._run_registry.get_run(self._conversation_id, run_id)
         if not parent_run:
             return f"Error: run_id '{run_id}' not found"
-        capacity_error = self._check_send_capacity(lineage_root_run_id)
+        capacity_error = self._check_send_capacity(lineage_root_run_id)  # type: ignore[name-defined]
         if capacity_error:
             return capacity_error
         try:
@@ -1360,7 +1360,7 @@ class SessionsSendTool(AgentTool):
                 session_mode="send",
                 requester_session_key=self._requester_session_key,
                 parent_run_id=run_id,
-                lineage_root_run_id=lineage_root_run_id,
+                lineage_root_run_id=lineage_root_run_id,  # type: ignore[name-defined]
                 delegation_depth=self._delegation_depth,
                 extra={
                     **follow_up_options,
@@ -1369,7 +1369,7 @@ class SessionsSendTool(AgentTool):
             ),
             requester_session_key=self._requester_session_key,
             parent_run_id=run_id,
-            lineage_root_run_id=lineage_root_run_id,
+            lineage_root_run_id=lineage_root_run_id,  # type: ignore[name-defined]
         )
         running = self._run_registry.mark_running(self._conversation_id, child_run.run_id)
         if running:

@@ -106,7 +106,7 @@ class PluginManagerTool(AgentTool):
             "required": [],
         }
 
-    async def execute(self, **kwargs: Any) -> dict[str, Any]:
+    async def execute(self, **kwargs: Any) -> dict[str, Any]:  # type: ignore[override]
         """Execute plugin management operation."""
         action = str(kwargs.get("action", "list")).strip().lower() or "list"
         dry_run = self._as_bool(kwargs.get("dry_run", False))

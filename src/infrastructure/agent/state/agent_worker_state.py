@@ -897,17 +897,17 @@ async def _verify_sandbox_container(project_sandbox_id: str) -> bool:
     Returns True if container is available, False otherwise.
     """
     # Sync from Docker to ensure adapter has the container in its cache
-    if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
+    if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:  # type: ignore[union-attr]
         logger.info(
             f"[AgentWorker] Syncing sandbox {project_sandbox_id} from Docker "
             f"to adapter's internal state"
         )
-        await _mcp_sandbox_adapter.sync_from_docker()
+        await _mcp_sandbox_adapter.sync_from_docker()  # type: ignore[union-attr]
 
     # Verify container actually exists after sync
-    if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
+    if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:  # type: ignore[union-attr]
         # Container might have been deleted - check if it's running in Docker
-        container_exists = await _mcp_sandbox_adapter.container_exists(project_sandbox_id)
+        container_exists = await _mcp_sandbox_adapter.container_exists(project_sandbox_id)  # type: ignore[union-attr]
         if not container_exists:
             logger.warning(
                 f"[AgentWorker] Sandbox {project_sandbox_id} in DB but container "
@@ -931,7 +931,7 @@ async def _discover_sandbox_from_docker(project_id: str) -> str | None:
     # List all containers with memstack.sandbox label
     containers = await loop.run_in_executor(
         None,
-        lambda: _mcp_sandbox_adapter._docker.containers.list(
+        lambda: _mcp_sandbox_adapter._docker.containers.list(  # type: ignore[union-attr]
             all=True,
             filters={"label": "memstack.sandbox=true"},
         ),
@@ -941,8 +941,8 @@ async def _discover_sandbox_from_docker(project_id: str) -> str | None:
 
     if project_sandbox_id:
         # Sync to adapter if found in Docker
-        if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
-            await _mcp_sandbox_adapter.sync_from_docker()
+        if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:  # type: ignore[union-attr]
+            await _mcp_sandbox_adapter.sync_from_docker()  # type: ignore[union-attr]
 
     return project_sandbox_id
 
@@ -2130,15 +2130,15 @@ async def get_or_create_skill_loader_tool(
         async def get_by_id(self, skill_id: str) -> Skill | None:
             return None
 
-        async def get_by_name(self, tenant_id: str, name: str) -> Skill | None:
+        async def get_by_name(self, tenant_id: str, name: str) -> Skill | None:  # type: ignore[override]
             return None
 
-        async def list_by_tenant(
+        async def list_by_tenant(  # type: ignore[override]
             self, tenant_id: str, status: SkillStatus | None = None
         ) -> list[Skill]:
             return []
 
-        async def list_by_project(
+        async def list_by_project(  # type: ignore[override]
             self, project_id: str, status: SkillStatus | None = None
         ) -> list[Skill]:
             return []
@@ -2158,10 +2158,10 @@ async def get_or_create_skill_loader_tool(
         ) -> list[Skill]:
             return []
 
-        async def increment_usage(self, skill_id: str, success: bool = True) -> None:
+        async def increment_usage(self, skill_id: str, success: bool = True) -> None:  # type: ignore[override]
             pass
 
-        async def count_by_tenant(self, tenant_id: str, status: SkillStatus | None = None) -> int:
+        async def count_by_tenant(self, tenant_id: str, status: SkillStatus | None = None) -> int:  # type: ignore[override]
             return 0
 
     cache_key = f"{tenant_id}:{project_id or 'global'}:{agent_mode}"

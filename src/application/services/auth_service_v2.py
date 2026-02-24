@@ -169,6 +169,7 @@ class AuthService:
         """
         try:
             api_key = await self.verify_api_key(api_key_str)
+            assert api_key is not None
             user = await self._user_repo.find_by_id(api_key.user_id)
 
             if not user:

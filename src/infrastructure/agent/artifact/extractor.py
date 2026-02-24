@@ -79,7 +79,7 @@ class ArtifactData:
     source_path: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Calculate size if not provided."""
         if self.size_bytes == 0 and self.content:
             self.size_bytes = len(self.content)
@@ -278,14 +278,14 @@ class ArtifactExtractor:
                 if artifact:
                     logger.info(
                         f"[ArtifactExtractor] Created artifact {artifact.id}: "
-                        f"{artifact.filename} ({artifact.category.value}, {artifact.size_bytes} bytes)"
+                        f"{artifact.filename} ({artifact.category.value}, {artifact.size_bytes} bytes)"  # type: ignore[attr-defined]
                     )
 
                     yield AgentArtifactCreatedEvent(
                         artifact_id=artifact.id,
                         filename=artifact.filename,
                         mime_type=artifact.mime_type,
-                        category=artifact.category.value,
+                        category=artifact.category.value,  # type: ignore[attr-defined]
                         size_bytes=artifact.size_bytes,
                         url=artifact.url,
                         preview_url=artifact.preview_url,

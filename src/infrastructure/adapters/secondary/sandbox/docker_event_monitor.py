@@ -186,7 +186,7 @@ class DockerEventMonitor:
         try:
             containers = await asyncio.get_event_loop().run_in_executor(
                 None,
-                lambda: self._docker.containers.list(
+                lambda: self._docker.containers.list(  # type: ignore[union-attr]
                     all=True, filters={"label": SANDBOX_LABEL_KEY}
                 ),
             )

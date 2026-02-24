@@ -229,7 +229,7 @@ class MCPHttpClient:
                 },
             )
 
-            from mcp.shared.session import SessionMessage
+            from mcp.shared.session import SessionMessage  # type: ignore[attr-defined]
 
             future = asyncio.get_event_loop().create_future()
             self._pending_requests[self._request_id] = future
@@ -301,7 +301,7 @@ class MCPHttpClient:
 
     async def _list_tools_sse(self, timeout: float) -> list[MCPToolSchema]:
         """List tools via SSE transport."""
-        from mcp.shared.session import SessionMessage
+        from mcp.shared.session import SessionMessage  # type: ignore[attr-defined]
         from mcp.types import JSONRPCMessage, JSONRPCRequest
 
         self._request_id += 1
@@ -403,7 +403,7 @@ class MCPHttpClient:
         Raises:
             TimeoutError: If the request times out.
         """
-        from mcp.shared.session import SessionMessage
+        from mcp.shared.session import SessionMessage  # type: ignore[attr-defined]
         from mcp.types import JSONRPCMessage, JSONRPCRequest
 
         self._request_id += 1

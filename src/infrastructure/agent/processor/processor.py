@@ -581,7 +581,7 @@ class SessionProcessor:
 
     def _check_abort_and_limits(self) -> AgentErrorEvent | None:
         """Check abort signal and step limits. Returns error event or None."""
-        if self._abort_event.is_set():
+        if self._abort_event.is_set():  # type: ignore[union-attr]
             return AgentErrorEvent(message="Processing aborted", code="ABORTED")
         self._step_count += 1
         if self._step_count > self.config.max_steps:
@@ -861,7 +861,7 @@ class SessionProcessor:
     async def _call_goal_check_llm(self, context_summary: str) -> str | None:
         """Call LLM for goal check and return content string, or None on failure."""
         try:
-            response = await self._llm_client.generate(
+            response = await self._llm_client.generate(  # type: ignore[union-attr]
                 messages=[
                     {
                         "role": "system",
@@ -2253,7 +2253,7 @@ class SessionProcessor:
                         return
 
                 # Detect MIME type for the artifact_created event
-                from src.application.services.artifact_service import (
+                from src.application.services.artifact_service import (  # type: ignore[attr-defined]
                     detect_mime_type,
                     get_category_from_mime,
                 )

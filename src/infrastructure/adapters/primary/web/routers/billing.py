@@ -204,11 +204,11 @@ async def upgrade_plan(
 
     # Set limits based on plan
     if new_plan == "free":
-        tenant.storage_limit = 10 * 1024 * 1024 * 1024  # 10GB
+        tenant.storage_limit = 10 * 1024 * 1024 * 1024  # type: ignore[attr-defined]  # 10GB
     elif new_plan == "pro":
-        tenant.storage_limit = 100 * 1024 * 1024 * 1024  # 100GB
+        tenant.storage_limit = 100 * 1024 * 1024 * 1024  # type: ignore[attr-defined]  # 100GB
     elif new_plan == "enterprise":
-        tenant.storage_limit = 1024 * 1024 * 1024 * 1024  # 1TB
+        tenant.storage_limit = 1024 * 1024 * 1024 * 1024  # type: ignore[attr-defined]  # 1TB
 
     await db.commit()
     await db.refresh(tenant)

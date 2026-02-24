@@ -97,7 +97,7 @@ class LocalHITLResumeConsumer:
 
     async def _handle_message(self, stream_key: str, msg_id: str, fields: dict[str, Any]) -> None:
         try:
-            raw = fields.get("data") or fields.get(b"data")
+            raw = fields.get("data") or fields.get(b"data")  # type: ignore[call-overload]
             if not raw:
                 await self._ack(stream_key, msg_id)
                 return
@@ -224,7 +224,7 @@ class LocalHITLResumeConsumer:
                 msg_id = msg_id.decode("utf-8")
             await self._redis.xack(stream_key, self.CONSUMER_GROUP, msg_id)
         except Exception as e:
-            logger.warning(f"[LocalHITL] Failed to ack {msg_id}: {e}")
+            logger.warning(f"[LocalHITL] Failed to ack {msg_id!r}: {e}")
 
     def _stream_key(self, tenant_id: str, project_id: str) -> str:
         return self.STREAM_KEY_PATTERN.format(tenant_id=tenant_id, project_id=project_id)

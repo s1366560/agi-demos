@@ -228,7 +228,7 @@ class LocalSandboxAdapter(SandboxPort):
             )
 
             # Initialize MCP session
-            await client.initialize()
+            await client.initialize()  # type: ignore[attr-defined]
 
             connection.client = client
             connection.status = SandboxStatus.RUNNING
@@ -501,17 +501,17 @@ class LocalSandboxAdapter(SandboxPort):
             conn.last_activity_at = datetime.now(UTC)
 
             # Parse result
-            content = result.get("content", [])
+            content = result.get("content", [])  # type: ignore[attr-defined]
             text_content = ""
             for item in content:
                 if item.get("type") == "text":
                     text_content += item.get("text", "")
 
             return CodeExecutionResult(
-                success=not result.get("isError", False),
+                success=not result.get("isError", False),  # type: ignore[attr-defined]
                 stdout=text_content,
                 stderr="",
-                exit_code=0 if not result.get("isError") else 1,
+                exit_code=0 if not result.get("isError") else 1,  # type: ignore[attr-defined]
                 execution_time_ms=execution_time,
             )
 
@@ -580,7 +580,7 @@ class LocalSandboxAdapter(SandboxPort):
                 },
             )
 
-            content = result.get("content", [])
+            content = result.get("content", [])  # type: ignore[attr-defined]
             files = []
             for item in content:
                 if item.get("type") == "text":
@@ -612,7 +612,7 @@ class LocalSandboxAdapter(SandboxPort):
                 {"file_path": file_path},
             )
 
-            content = result.get("content", [])
+            content = result.get("content", [])  # type: ignore[attr-defined]
             for item in content:
                 if item.get("type") == "text":
                     return cast(str | None, item.get("text", ""))
@@ -689,7 +689,7 @@ class LocalSandboxAdapter(SandboxPort):
                 client.connect(),
                 timeout=self._connection_timeout,
             )
-            await client.initialize()
+            await client.initialize()  # type: ignore[attr-defined]
 
             conn.client = client
             conn.status = SandboxStatus.RUNNING

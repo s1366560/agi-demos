@@ -350,7 +350,7 @@ class SharedPoolBackend(Backend):
         """
         return [slot.instance for slot in self._slots if slot.instance]
 
-    async def execute(
+    async def execute(  # type: ignore[override]
         self,
         instance_id: str,
         request: ChatRequest,

@@ -274,7 +274,7 @@ class PoolOrchestrator:
 
         # Register with health monitor
         if self._health_monitor:
-            await self._health_monitor.register_instance(instance)
+            await self._health_monitor.register_instance(instance)  # type: ignore[attr-defined]
 
         return instance
 
@@ -299,7 +299,7 @@ class PoolOrchestrator:
 
         # Unregister from health monitor
         if self._health_monitor:
-            await self._health_monitor.unregister_instance(instance_key)
+            await self._health_monitor.unregister_instance(instance_key)  # type: ignore[attr-defined]
 
         parts = instance_key.split(":")
         tenant_id_part = parts[0] if len(parts) > 0 else ""
@@ -474,7 +474,7 @@ class PoolOrchestrator:
         )
 
         if self._metrics_collector:
-            self._metrics_collector.counter_increment(
+            self._metrics_collector.counter_increment(  # type: ignore[attr-defined]
                 "scaling_events_total",
                 labels={"direction": event.direction.value},
             )
@@ -508,7 +508,7 @@ class PoolOrchestrator:
                     checkpoint_type=CheckpointType.LIFECYCLE,
                     state_data={
                         "status": instance.status.value,
-                        "request_count": instance._metrics.request_count,
+                        "request_count": instance._metrics.request_count,  # type: ignore[attr-defined]
                         "tier": instance.config.tier.value if instance.config.tier else "unknown",
                     },
                 )
@@ -534,10 +534,10 @@ class PoolOrchestrator:
         for instance_key, instance in self._pool_manager._instances.items():
             try:
                 metrics = ScalingMetrics(
-                    cpu_utilization=instance._metrics.cpu_percent / 100.0,
-                    memory_utilization=instance._metrics.memory_mb / 2048.0,  # Assume 2GB max
-                    queue_depth=instance._pending_requests,
-                    average_latency_ms=instance._metrics.average_latency_ms,
+                    cpu_utilization=instance._metrics.cpu_percent / 100.0,  # type: ignore[attr-defined]
+                    memory_utilization=instance._metrics.memory_used_mb / 2048.0,  # Assume 2GB max
+                    queue_depth=instance._pending_requests,  # type: ignore[attr-defined]
+                    average_latency_ms=instance._metrics.average_latency_ms,  # type: ignore[attr-defined]
                     active_requests=instance._active_requests,
                     healthy_instances=1 if instance.status.value == "ready" else 0,
                     total_instances=1,

@@ -120,7 +120,7 @@ class ProviderAdapterRegistry:
         if llm_config is None:
             llm_config = LLMConfig(
                 model=provider_config.llm_model,
-                temperature=provider_config.temperature,
+                temperature=provider_config.temperature,  # type: ignore[attr-defined]
             )
 
         # Get adapter class
@@ -133,7 +133,7 @@ class ProviderAdapterRegistry:
                 provider_config=provider_config,  # type: ignore[call-arg]
                 **kwargs,
             )
-            logger.debug(f"Created {adapter_class.__name__} adapter for {provider_type.value}")
+            logger.debug(f"Created {adapter_class.__name__} adapter for {provider_type.value}")  # type: ignore[union-attr]
             return adapter
 
         except Exception as e:

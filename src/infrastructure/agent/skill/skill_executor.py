@@ -302,14 +302,14 @@ class SkillExecutor:
         )
 
         assert self._sandbox_adapter is not None
-        await self._resource_injector.inject_skill(
+        await self._resource_injector.inject_skill(  # type: ignore[union-attr]
             self._sandbox_adapter,
             sandbox_id=sandbox_id,
             skill_name=skill.name,
             skill_content=skill.prompt_template,
         )
 
-        await self._resource_injector.setup_skill_environment(
+        await self._resource_injector.setup_skill_environment(  # type: ignore[union-attr]
             self._sandbox_adapter,
             sandbox_id=sandbox_id,
             skill_name=skill.name,

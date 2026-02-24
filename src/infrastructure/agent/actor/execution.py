@@ -827,7 +827,7 @@ async def _publish_error_event(
     correlation_id: str | None = None,
 ) -> None:
     settings = get_settings()
-    redis_client = aioredis.from_url(settings.redis_url)
+    redis_client = aioredis.from_url(settings.redis_url)  # type: ignore[no-untyped-call]
     stream_key = f"agent:events:{conversation_id}"
 
     now = datetime.now(UTC)

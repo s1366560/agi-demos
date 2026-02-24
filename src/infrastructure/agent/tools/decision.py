@@ -188,7 +188,7 @@ class DecisionTool(AgentTool):
 
         return True
 
-    async def execute(
+    async def execute(  # type: ignore[override]
         self,
         question: str,
         decision_type: str,

@@ -398,7 +398,7 @@ def _iter_entry_points(group: str) -> Sequence[Any]:
     entry_points = importlib_metadata.entry_points()
     if hasattr(entry_points, "select"):
         return list(entry_points.select(group=group))
-    return list(entry_points.get(group, []))
+    return list(entry_points.get(group, []))  # type: ignore[attr-defined]
 
 
 def _coerce_plugin_instance(candidate: Any) -> Any:

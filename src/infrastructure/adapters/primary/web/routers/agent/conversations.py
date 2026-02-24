@@ -110,10 +110,10 @@ async def list_conversations(
     """List conversations for a project with pagination."""
     try:
         engine = db.get_bind()
-        pool = engine.pool
+        pool = engine.pool  # type: ignore[union-attr]
         logger.debug(
-            f"[Connection Pool] size={pool.size()}, checked_out={pool.checkedout()}, "
-            f"overflow={pool.overflow()}, queue_size={pool.size() - pool.checkedout()}"
+            f"[Connection Pool] size={pool.size()}, checked_out={pool.checkedout()}, "  # type: ignore[union-attr]
+            f"overflow={pool.overflow()}, queue_size={pool.size() - pool.checkedout()}"  # type: ignore[union-attr]
         )
 
         assert request is not None
@@ -324,6 +324,7 @@ async def update_conversation_title(
             title=data.title,
         )
 
+        assert updated_conversation is not None
         return ConversationResponse(
             id=updated_conversation.id,
             project_id=updated_conversation.project_id,
@@ -512,7 +513,7 @@ async def generate_summary(
         from datetime import datetime
 
         conversation.updated_at = datetime.now(UTC)
-        await agent_service._conversation_repo.save_and_commit(conversation)
+        await agent_service._conversation_repo.save_and_commit(conversation)  # type: ignore[attr-defined]
 
         return ConversationResponse.from_domain(conversation)
 

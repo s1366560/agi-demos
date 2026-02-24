@@ -162,7 +162,7 @@ class ClarificationTool(AgentTool):
 
         return True
 
-    async def execute(
+    async def execute(  # type: ignore[override]
         self,
         question: str,
         clarification_type: str,

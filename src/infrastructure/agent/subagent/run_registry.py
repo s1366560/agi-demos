@@ -507,7 +507,7 @@ class SubAgentRunRegistry:
     def _load_from_repository(self) -> None:
         """Load runs from the repository adapter."""
         try:
-            self._runs_by_conversation = self._repository.load_runs()
+            self._runs_by_conversation = self._repository.load_runs()  # type: ignore[union-attr]
         except Exception as exc:
             logger.warning(f"[SubAgentRunRegistry] Failed to load repository runs: {exc}")
             self._runs_by_conversation = {}

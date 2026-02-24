@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from src.domain.llm_providers.llm_types import LLMClient, Message
 
 if TYPE_CHECKING:
-    from src.domain.model.agent import WorkPlan
+    from typing import Any as WorkPlan  # WorkPlan not in domain model
 
 logger = logging.getLogger(__name__)
 

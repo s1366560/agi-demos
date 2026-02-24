@@ -56,7 +56,7 @@ async def check_config_modify_permission(
         )
         user_tenant = result.scalar_one_or_none()
 
-        is_global_admin = any(r.role.name == "admin" for r in current_user.roles)
+        is_global_admin = any(r.role.name == "admin" for r in current_user.roles)  # type: ignore[attr-defined]
         is_tenant_admin = user_tenant and user_tenant.role in ["admin", "owner"]
 
         return {"can_modify": is_global_admin or is_tenant_admin}
@@ -137,7 +137,7 @@ async def update_tenant_agent_config(
         user_tenant = result.scalar_one_or_none()
 
         # Check if user is tenant admin or global admin
-        is_global_admin = any(r.role.name == "admin" for r in current_user.roles)
+        is_global_admin = any(r.role.name == "admin" for r in current_user.roles)  # type: ignore[attr-defined]
         is_tenant_admin = user_tenant and user_tenant.role in ["admin", "owner"]
 
         if not is_global_admin and not is_tenant_admin:

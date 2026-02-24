@@ -203,8 +203,8 @@ class ContainerBackend(Backend):
                     config=config,
                     instance_id=instance_key,
                 )
-                instance._status = AgentInstanceStatus.READY
-                instance._is_initialized = True
+                instance._status = AgentInstanceStatus.READY  # type: ignore[attr-defined]
+                instance._is_initialized = True  # type: ignore[attr-defined]
 
                 logger.info(
                     f"Created container instance: {instance_key}, "
@@ -286,14 +286,14 @@ class ContainerBackend(Backend):
 
         # Map container status to instance status
         if status == "running":
-            instance._status = AgentInstanceStatus.READY
-            instance._is_initialized = True
+            instance._status = AgentInstanceStatus.READY  # type: ignore[attr-defined]
+            instance._is_initialized = True  # type: ignore[attr-defined]
         elif status == "paused":
-            instance._status = AgentInstanceStatus.PAUSED
+            instance._status = AgentInstanceStatus.PAUSED  # type: ignore[attr-defined]
         elif status == "error":
-            instance._status = AgentInstanceStatus.UNHEALTHY
+            instance._status = AgentInstanceStatus.UNHEALTHY  # type: ignore[attr-defined]
         else:
-            instance._status = AgentInstanceStatus.CREATED
+            instance._status = AgentInstanceStatus.CREATED  # type: ignore[attr-defined]
 
         return instance
 
@@ -306,7 +306,7 @@ class ContainerBackend(Backend):
                 instances.append(instance)
         return instances
 
-    async def execute(
+    async def execute(  # type: ignore[override]
         self,
         instance_id: str,
         request: ChatRequest,
@@ -322,8 +322,8 @@ class ContainerBackend(Backend):
             # Execute via gRPC
             async for event in client.Execute(
                 conversation_id=request.conversation_id,
-                message=request.message,
-                context=request.context,
+                message=request.message,  # type: ignore[attr-defined]
+                context=request.context,  # type: ignore[attr-defined]
             ):
                 yield event
 
@@ -419,8 +419,8 @@ class ContainerBackend(Backend):
         container_name = f"agent-hot-{config.tenant_id}-{config.project_id}"[:63]
 
         # Resource limits
-        memory_limit = config.resource_quota.memory_mb if config.resource_quota else 2048
-        cpu_limit = config.resource_quota.cpu_cores if config.resource_quota else 2.0
+        memory_limit = config.resource_quota.memory_mb if config.resource_quota else 2048  # type: ignore[attr-defined]
+        cpu_limit = config.resource_quota.cpu_cores if config.resource_quota else 2.0  # type: ignore[attr-defined]
 
         environment = {
             "AGENT_INSTANCE_ID": instance_key,
@@ -430,14 +430,14 @@ class ContainerBackend(Backend):
             "GRPC_PORT": str(grpc_port),
             "HEALTH_PORT": str(health_port),
             "MAX_CONCURRENT_REQUESTS": str(
-                config.resource_quota.max_concurrent if config.resource_quota else 50
+                config.resource_quota.max_concurrent if config.resource_quota else 50  # type: ignore[attr-defined]
             ),
             "MEMORY_LIMIT_MB": str(memory_limit),
             "LOG_LEVEL": "INFO",
         }
 
         # Create container (not started)
-        container = self._docker_client.containers.create(
+        container = self._docker_client.containers.create(  # type: ignore[union-attr]
             image=self._config.image_name,
             name=container_name,
             environment=environment,
@@ -474,7 +474,7 @@ class ContainerBackend(Backend):
 
     async def _start_container(self, container_info: ContainerInfo) -> None:
         """Start a container."""
-        container = self._docker_client.containers.get(container_info.container_id)
+        container = self._docker_client.containers.get(container_info.container_id)  # type: ignore[union-attr]
         container.start()
         container_info.status = "running"
         container_info.started_at = datetime.now(UTC)
@@ -483,7 +483,7 @@ class ContainerBackend(Backend):
     async def _remove_container(self, container_info: ContainerInfo) -> None:
         """Remove a container."""
         try:
-            container = self._docker_client.containers.get(container_info.container_id)
+            container = self._docker_client.containers.get(container_info.container_id)  # type: ignore[union-attr]
             container.stop(timeout=self._config.stop_timeout_seconds)
             container.remove()
             logger.info(f"Removed container: {container_info.container_id[:12]}")
@@ -493,7 +493,7 @@ class ContainerBackend(Backend):
     async def _get_container_status(self, container_info: ContainerInfo) -> str:
         """Get container status."""
         try:
-            container = self._docker_client.containers.get(container_info.container_id)
+            container = self._docker_client.containers.get(container_info.container_id)  # type: ignore[union-attr]
             return cast(str, container.status)
         except Exception:
             return "error"

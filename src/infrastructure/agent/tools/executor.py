@@ -679,9 +679,9 @@ class ToolExecutor:
             try:
                 # Upload artifact
                 upload_result = await self._artifact_service.upload_artifact(
-                    content=artifact.content,
+                    content=artifact.content,  # type: ignore[attr-defined]
                     filename=artifact.filename or f"artifact_{uuid.uuid4().hex[:8]}",
-                    content_type=artifact.content_type,
+                    content_type=artifact.content_type,  # type: ignore[attr-defined]
                     project_id=context.project_id,
                     tenant_id=context.tenant_id,
                     metadata={
@@ -695,7 +695,7 @@ class ToolExecutor:
                 yield AgentArtifactCreatedEvent(
                     artifact_id=upload_result.get("artifact_id", ""),
                     filename=artifact.filename,
-                    mime_type=artifact.content_type,
+                    mime_type=artifact.content_type,  # type: ignore[attr-defined]
                     category=artifact.category,
                     size_bytes=artifact.size_bytes if hasattr(artifact, "size_bytes") else 0,
                     url=upload_result.get("url", ""),

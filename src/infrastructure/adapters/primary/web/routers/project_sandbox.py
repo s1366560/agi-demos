@@ -580,7 +580,7 @@ async def restart_project_sandbox(
             manager = get_connection_manager()
             # Get tenant_id from current user context
             await manager.broadcast_sandbox_state(
-                tenant_id=current_user.current_tenant_id or "",
+                tenant_id=current_user.current_tenant_id or "",  # type: ignore[attr-defined]
                 project_id=project_id,
                 state={
                     "event_type": "restarted",
@@ -645,7 +645,7 @@ async def terminate_project_sandbox(
 
             manager = get_connection_manager()
             await manager.broadcast_sandbox_state(
-                tenant_id=current_user.current_tenant_id or "",
+                tenant_id=current_user.current_tenant_id or "",  # type: ignore[attr-defined]
                 project_id=project_id,
                 state={
                     "event_type": "terminated",
