@@ -14,10 +14,12 @@ while using the MemStack platform for orchestration.
 """
 
 import asyncio
+import contextlib
 import logging
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from src.domain.model.sandbox.project_sandbox import (
@@ -49,11 +51,11 @@ class LocalSandboxConnection:
     tunnel_url: str
     workspace_path: str
     status: SandboxStatus = SandboxStatus.CREATING
-    client: Optional[WebSocketMCPClient] = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    last_activity_at: Optional[datetime] = None
-    error_message: Optional[str] = None
-    auth_token: Optional[str] = None
+    client: WebSocketMCPClient | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    last_activity_at: datetime | None = None
+    error_message: str | None = None
+    auth_token: str | None = None
 
 
 class LocalSandboxAdapter(SandboxPort):
@@ -88,7 +90,7 @@ class LocalSandboxAdapter(SandboxPort):
         max_reconnect_attempts: int = 5,
         reconnect_backoff_base: float = 2.0,
         reconnect_backoff_max: float = 60.0,
-    ):
+    ) -> None:
         """
         Initialize the local sandbox adapter.
 
@@ -107,16 +109,16 @@ class LocalSandboxAdapter(SandboxPort):
         self._reconnect_backoff_base = reconnect_backoff_base
         self._reconnect_backoff_max = reconnect_backoff_max
 
-        self._connections: Dict[str, LocalSandboxConnection] = {}
-        self._health_task: Optional[asyncio.Task] = None
-        self._heartbeat_task: Optional[asyncio.Task] = None
-        self._reconnect_tasks: Dict[str, asyncio.Task] = {}
-        self._reconnect_attempts: Dict[str, int] = {}
+        self._connections: dict[str, LocalSandboxConnection] = {}
+        self._health_task: asyncio.Task | None = None
+        self._heartbeat_task: asyncio.Task | None = None
+        self._reconnect_tasks: dict[str, asyncio.Task] = {}
+        self._reconnect_attempts: dict[str, int] = {}
         self._running = False
 
         # Callbacks for connection state changes
-        self._on_disconnect_callbacks: List[Callable] = []
-        self._on_reconnect_callbacks: List[Callable] = []
+        self._on_disconnect_callbacks: list[Callable] = []
+        self._on_reconnect_callbacks: list[Callable] = []
 
     async def start(self) -> None:
         """Start the adapter and health monitoring."""
@@ -138,25 +140,19 @@ class LocalSandboxAdapter(SandboxPort):
         # Cancel health and heartbeat tasks
         if self._health_task:
             self._health_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._health_task
-            except asyncio.CancelledError:
-                pass
 
         if self._heartbeat_task:
             self._heartbeat_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._heartbeat_task
-            except asyncio.CancelledError:
-                pass
 
         # Cancel all reconnect tasks
         for task in self._reconnect_tasks.values():
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
         self._reconnect_tasks.clear()
         self._reconnect_attempts.clear()
 
@@ -182,7 +178,7 @@ class LocalSandboxAdapter(SandboxPort):
         project_id: str,
         tenant_id: str,
         local_config: LocalSandboxConfig,
-        auth_token: Optional[str] = None,
+        auth_token: str | None = None,
     ) -> LocalSandboxConnection:
         """
         Connect to a local sandbox via tunnel URL.
@@ -236,14 +232,14 @@ class LocalSandboxAdapter(SandboxPort):
 
             connection.client = client
             connection.status = SandboxStatus.RUNNING
-            connection.last_activity_at = datetime.now(timezone.utc)
+            connection.last_activity_at = datetime.now(UTC)
 
             self._connections[sandbox_id] = connection
             logger.info(f"Connected to local sandbox {sandbox_id}")
 
             return connection
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             connection.status = SandboxStatus.ERROR
             connection.error_message = "Connection timeout"
             raise ConnectionError(f"Timeout connecting to local sandbox: {ws_url}")
@@ -282,7 +278,7 @@ class LocalSandboxAdapter(SandboxPort):
                                 conn.client.call_tool("ping", {}),
                                 timeout=5,
                             )
-                            conn.last_activity_at = datetime.now(timezone.utc)
+                            conn.last_activity_at = datetime.now(UTC)
                     except Exception as e:
                         logger.warning(f"Health check failed for {sandbox_id}: {e}")
                         await self._handle_connection_lost(sandbox_id, f"Health check failed: {e}")
@@ -418,10 +414,10 @@ class LocalSandboxAdapter(SandboxPort):
     async def create_sandbox(
         self,
         project_path: str,
-        config: Optional[SandboxConfig] = None,
-        project_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        sandbox_id: Optional[str] = None,
+        config: SandboxConfig | None = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        sandbox_id: str | None = None,
     ) -> SandboxInstance:
         """
         Create a sandbox connection (for local sandboxes, this means connect).
@@ -436,7 +432,7 @@ class LocalSandboxAdapter(SandboxPort):
             "Use connect_to_local_sandbox() to connect to an existing local sandbox."
         )
 
-    async def get_sandbox(self, sandbox_id: str) -> Optional[SandboxInstance]:
+    async def get_sandbox(self, sandbox_id: str) -> SandboxInstance | None:
         """Get the status of a local sandbox connection."""
         conn = self._connections.get(sandbox_id)
         if not conn:
@@ -489,7 +485,7 @@ class LocalSandboxAdapter(SandboxPort):
             )
 
         try:
-            start_time = datetime.now(timezone.utc)
+            start_time = datetime.now(UTC)
 
             # Use bash tool to execute code
             result = await conn.client.call_tool(
@@ -501,8 +497,8 @@ class LocalSandboxAdapter(SandboxPort):
                 },
             )
 
-            execution_time = int((datetime.now(timezone.utc) - start_time).total_seconds() * 1000)
-            conn.last_activity_at = datetime.now(timezone.utc)
+            execution_time = int((datetime.now(UTC) - start_time).total_seconds() * 1000)
+            conn.last_activity_at = datetime.now(UTC)
 
             # Parse result
             content = result.get("content", [])
@@ -533,7 +529,7 @@ class LocalSandboxAdapter(SandboxPort):
     async def stream_execute(
         self,
         request: CodeExecutionRequest,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Execute code with streaming output."""
         # For simplicity, use non-streaming execution
         result = await self.execute_code(request)
@@ -551,8 +547,8 @@ class LocalSandboxAdapter(SandboxPort):
 
     async def list_sandboxes(
         self,
-        status: Optional[SandboxStatus] = None,
-    ) -> List[SandboxInstance]:
+        status: SandboxStatus | None = None,
+    ) -> list[SandboxInstance]:
         """List all local sandbox connections."""
         instances = []
         for conn in self._connections.values():
@@ -569,7 +565,7 @@ class LocalSandboxAdapter(SandboxPort):
         self,
         sandbox_id: str,
         pattern: str = "*",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get output files from local sandbox."""
         conn = self._connections.get(sandbox_id)
         if not conn or not conn.client:
@@ -604,7 +600,7 @@ class LocalSandboxAdapter(SandboxPort):
         self,
         sandbox_id: str,
         file_path: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Read a file from local sandbox."""
         conn = self._connections.get(sandbox_id)
         if not conn or not conn.client:
@@ -646,7 +642,7 @@ class LocalSandboxAdapter(SandboxPort):
                     "content": content,
                 },
             )
-            conn.last_activity_at = datetime.now(timezone.utc)
+            conn.last_activity_at = datetime.now(UTC)
             return True
 
         except Exception as e:
@@ -655,11 +651,11 @@ class LocalSandboxAdapter(SandboxPort):
 
     # --- Local Sandbox Specific Methods ---
 
-    def get_connection(self, sandbox_id: str) -> Optional[LocalSandboxConnection]:
+    def get_connection(self, sandbox_id: str) -> LocalSandboxConnection | None:
         """Get a local sandbox connection by ID."""
         return self._connections.get(sandbox_id)
 
-    def get_connection_by_project(self, project_id: str) -> Optional[LocalSandboxConnection]:
+    def get_connection_by_project(self, project_id: str) -> LocalSandboxConnection | None:
         """Get a local sandbox connection by project ID."""
         for conn in self._connections.values():
             if conn.project_id == project_id:
@@ -683,10 +679,8 @@ class LocalSandboxAdapter(SandboxPort):
         try:
             # Disconnect old client to avoid resource leak
             if conn.client:
-                try:
+                with contextlib.suppress(Exception):
                     await conn.client.disconnect()
-                except Exception:
-                    pass
                 conn.client = None
 
             # Create new client
@@ -700,7 +694,7 @@ class LocalSandboxAdapter(SandboxPort):
             conn.client = client
             conn.status = SandboxStatus.RUNNING
             conn.error_message = None
-            conn.last_activity_at = datetime.now(timezone.utc)
+            conn.last_activity_at = datetime.now(UTC)
 
             logger.info(f"Reconnected to local sandbox {sandbox_id}")
             return True

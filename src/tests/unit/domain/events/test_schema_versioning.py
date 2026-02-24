@@ -4,7 +4,7 @@ Tests the envelope, registry, and serialization modules.
 """
 
 import json
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -190,7 +190,7 @@ class TestEventSchemaRegistry:
             pass
 
         @EventSchemaRegistry.register_migration("test_event", "1.0", "2.0")
-        def migrate_v1_to_v2(data: Dict[str, Any]) -> Dict[str, Any]:
+        def migrate_v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
             return {**data, "new_field": "default_value"}
 
         # Test migration

@@ -6,7 +6,6 @@ Provides file loading with caching and optional template variable substitution.
 
 import logging
 from pathlib import Path
-from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +20,7 @@ class PromptLoader:
     - Graceful error handling
     """
 
-    def __init__(self, base_dir: Path):
+    def __init__(self, base_dir: Path) -> None:
         """
         Initialize the PromptLoader.
 
@@ -29,12 +28,12 @@ class PromptLoader:
             base_dir: Base directory for prompt files.
         """
         self.base_dir = base_dir
-        self._cache: Dict[str, str] = {}
+        self._cache: dict[str, str] = {}
 
     async def load(
         self,
         path: str,
-        variables: Optional[Dict[str, str]] = None,
+        variables: dict[str, str] | None = None,
         use_cache: bool = True,
     ) -> str:
         """
@@ -78,7 +77,7 @@ class PromptLoader:
     def load_sync(
         self,
         path: str,
-        variables: Optional[Dict[str, str]] = None,
+        variables: dict[str, str] | None = None,
         use_cache: bool = True,
     ) -> str:
         """

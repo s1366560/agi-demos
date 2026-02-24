@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
-from typing import Any, Awaitable, Callable, Dict, List, Tuple
+from typing import Any
 
 from src.infrastructure.agent.context.window_manager import (
     ContextWindowConfig,
@@ -28,8 +29,8 @@ class OverflowRecoveryConfig:
 class OverflowRecoveryResult:
     """Result for a staged overflow recovery execution."""
 
-    messages: List[Dict[str, Any]]
-    metadata: Dict[str, Any]
+    messages: list[dict[str, Any]]
+    metadata: dict[str, Any]
 
 
 class OverflowRecoveryCoordinator:
@@ -66,17 +67,17 @@ class OverflowRecoveryCoordinator:
 
     @staticmethod
     def truncate_messages(
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         *,
         max_tool_chars: int = 400,
         max_assistant_chars: int = 1600,
-    ) -> Tuple[List[Dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """Apply deterministic content truncation."""
         if not messages:
             return messages, 0
 
         truncated_count = 0
-        updated: List[Dict[str, Any]] = []
+        updated: list[dict[str, Any]] = []
         for msg in messages:
             role = str(msg.get("role", ""))
             content = msg.get("content")
@@ -114,7 +115,7 @@ class OverflowRecoveryCoordinator:
 
         return updated, truncated_count
 
-    def _tail_trim_messages(self, messages: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
+    def _tail_trim_messages(self, messages: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
         """Keep system prefix + recent tail for final fallback stage."""
         if not messages:
             return messages, 0
@@ -131,15 +132,15 @@ class OverflowRecoveryCoordinator:
     async def recover(
         self,
         *,
-        context_request: Any,  # noqa: ANN401
-        current_messages: List[Dict[str, Any]],
+        context_request: Any,
+        current_messages: list[dict[str, Any]],
         base_manager: ContextWindowManager,
         build_context: Callable[[Any, ContextWindowManager], Awaitable[Any]],
-        estimate_messages_tokens: Callable[[List[Dict[str, Any]]], int],
+        estimate_messages_tokens: Callable[[list[dict[str, Any]]], int],
     ) -> OverflowRecoveryResult:
         """Run staged overflow recovery: force_compact -> truncate -> tail_trim."""
-        stages: List[Dict[str, Any]] = []
-        metadata: Dict[str, Any] = {
+        stages: list[dict[str, Any]] = []
+        metadata: dict[str, Any] = {
             "strategy": "force_compaction_then_truncate_then_tail_trim",
             "forced_compaction": False,
             "truncated_messages": 0,

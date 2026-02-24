@@ -10,7 +10,7 @@ Provides a registry for managing and discovering skills:
 import logging
 from dataclasses import dataclass
 from threading import Lock
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from memstack_agent.skill.types import (
     Skill,
@@ -73,15 +73,15 @@ class SkillRegistry:
         # Returns: [SkillMatch(skill=skill, score=1.0, mode=INJECT)]
     """
 
-    def __init__(self, config: Optional[SkillRegistryConfig] = None) -> None:
+    def __init__(self, config: SkillRegistryConfig | None = None) -> None:
         """Initialize skill registry.
 
         Args:
             config: Registry configuration
         """
         self._config = config or SkillRegistryConfig()
-        self._skills: Dict[str, SkillDefinition] = {}
-        self._instances: Dict[str, Skill] = {}
+        self._skills: dict[str, SkillDefinition] = {}
+        self._instances: dict[str, Skill] = {}
         self._lock = Lock()
 
     @property
@@ -133,7 +133,7 @@ class SkillRegistry:
                 removed = True
             return removed
 
-    def get(self, skill_id: str) -> Optional[SkillDefinition]:
+    def get(self, skill_id: str) -> SkillDefinition | None:
         """Get a skill by ID.
 
         Args:
@@ -144,7 +144,7 @@ class SkillRegistry:
         """
         return self._skills.get(skill_id)
 
-    def get_instance(self, skill_id: str) -> Optional[Skill]:
+    def get_instance(self, skill_id: str) -> Skill | None:
         """Get a skill instance by ID.
 
         Args:
@@ -155,7 +155,7 @@ class SkillRegistry:
         """
         return self._instances.get(skill_id)
 
-    def get_by_name(self, name: str) -> Optional[SkillDefinition]:
+    def get_by_name(self, name: str) -> SkillDefinition | None:
         """Get a skill by name (case-insensitive).
 
         Args:
@@ -170,7 +170,7 @@ class SkillRegistry:
                 return skill
         return None
 
-    def list_all(self, include_disabled: bool = False) -> List[SkillDefinition]:
+    def list_all(self, include_disabled: bool = False) -> list[SkillDefinition]:
         """List all registered skills.
 
         Args:
@@ -184,7 +184,7 @@ class SkillRegistry:
             skills = [s for s in skills if s.is_active()]
         return sorted(skills, key=lambda s: s.metadata.priority, reverse=True)
 
-    def match(self, query: str) -> List[SkillMatch]:
+    def match(self, query: str) -> list[SkillMatch]:
         """Match a query against registered skills.
 
         Args:
@@ -193,7 +193,7 @@ class SkillRegistry:
         Returns:
             List of skill matches, sorted by score (highest first)
         """
-        matches: List[SkillMatch] = []
+        matches: list[SkillMatch] = []
 
         for skill in self._skills.values():
             # Skip inactive skills
@@ -226,7 +226,7 @@ class SkillRegistry:
         # Limit results
         return matches[: self._config.max_matches]
 
-    def match_best(self, query: str) -> Optional[SkillMatch]:
+    def match_best(self, query: str) -> SkillMatch | None:
         """Get the best matching skill for a query.
 
         Args:
@@ -261,7 +261,7 @@ class SkillRegistry:
         # Default to skill's preferred mode
         return skill.execution_mode
 
-    def filter_by_tags(self, tags: List[str]) -> List[SkillDefinition]:
+    def filter_by_tags(self, tags: list[str]) -> list[SkillDefinition]:
         """Filter skills by tags.
 
         Args:
@@ -276,7 +276,7 @@ class SkillRegistry:
             if any(tag in skill.metadata.tags for tag in tags)
         ]
 
-    def filter_by_tools(self, tools: List[str]) -> List[SkillDefinition]:
+    def filter_by_tools(self, tools: list[str]) -> list[SkillDefinition]:
         """Filter skills by required tools.
 
         Args:
@@ -300,7 +300,7 @@ class SkillRegistry:
 
 
 # Global registry instance
-_global_registry: Optional[SkillRegistry] = None
+_global_registry: SkillRegistry | None = None
 
 
 def get_skill_registry() -> SkillRegistry:
@@ -321,11 +321,11 @@ def create_skill(
     id: str,
     name: str,
     description: str,
-    tools: List[str],
-    trigger_patterns: Optional[List[str]] = None,
+    tools: list[str],
+    trigger_patterns: list[str] | None = None,
     trigger_type: TriggerType = TriggerType.KEYWORD,
-    steps: Optional[List[Dict[str, Any]]] = None,
-    **kwargs: Any,  # noqa: ANN401
+    steps: list[dict[str, Any]] | None = None,
+    **kwargs: Any,
 ) -> SkillDefinition:
     """Factory function to create a skill definition.
 
@@ -396,8 +396,8 @@ def create_skill(
 
 
 __all__ = [
-    "SkillRegistryConfig",
     "SkillRegistry",
-    "get_skill_registry",
+    "SkillRegistryConfig",
     "create_skill",
+    "get_skill_registry",
 ]

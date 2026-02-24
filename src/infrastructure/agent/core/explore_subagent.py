@@ -7,8 +7,7 @@ the codebase before implementation.
 """
 
 import uuid
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
 
@@ -76,9 +75,9 @@ EXPLORE_AGENT_ALLOWED_TOOLS = [
 
 def create_explore_subagent(
     tenant_id: str,
-    project_id: Optional[str] = None,
+    project_id: str | None = None,
     model: AgentModel = AgentModel.INHERIT,
-    additional_tools: Optional[List[str]] = None,
+    additional_tools: list[str] | None = None,
 ) -> SubAgent:
     """
     Create an explore SubAgent for Plan Mode.
@@ -116,8 +115,8 @@ def create_explore_subagent(
         total_invocations=0,
         avg_execution_time_ms=0.0,
         success_rate=1.0,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 

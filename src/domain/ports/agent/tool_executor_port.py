@@ -5,9 +5,10 @@ Defines the contract for executing agent tools with permission
 checking and result handling.
 """
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class ToolExecutionStatus(str, Enum):
@@ -38,14 +39,14 @@ class ToolExecutionRequest:
     """
 
     tool_name: str
-    arguments: Dict[str, Any]
+    arguments: dict[str, Any]
     tool_call_id: str
     project_id: str
-    user_id: Optional[str] = None
-    session_id: Optional[str] = None
-    sandbox_id: Optional[str] = None
-    timeout: Optional[float] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    user_id: str | None = None
+    session_id: str | None = None
+    sandbox_id: str | None = None
+    timeout: float | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -67,10 +68,10 @@ class ToolExecutionResult:
     tool_name: str
     status: ToolExecutionStatus
     output: str = ""
-    error: Optional[str] = None
-    duration_ms: Optional[float] = None
-    artifacts: List[Dict[str, Any]] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    duration_ms: float | None = None
+    artifacts: list[dict[str, Any]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def success(self) -> bool:
@@ -124,8 +125,8 @@ class ToolExecutorPort(Protocol):
         ...
 
     async def execute_batch(
-        self, requests: List[ToolExecutionRequest]
-    ) -> List[ToolExecutionResult]:
+        self, requests: list[ToolExecutionRequest]
+    ) -> list[ToolExecutionResult]:
         """
         Execute multiple tools (potentially in parallel).
 
@@ -139,7 +140,7 @@ class ToolExecutorPort(Protocol):
 
     async def execute_stream(
         self, request: ToolExecutionRequest
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute a tool with streaming output.
 
@@ -154,7 +155,7 @@ class ToolExecutorPort(Protocol):
         """
         ...
 
-    def get_available_tools(self, project_id: str) -> List[Dict[str, Any]]:
+    def get_available_tools(self, project_id: str) -> list[dict[str, Any]]:
         """
         Get list of available tools for a project.
 

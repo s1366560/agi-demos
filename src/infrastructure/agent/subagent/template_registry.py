@@ -15,8 +15,8 @@ Usage:
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -60,19 +60,19 @@ class SubAgentTemplate:
     temperature: float = 0.7
     max_iterations: int = 15
     max_tokens: int = 4096
-    trigger_keywords: List[str] = field(default_factory=list)
+    trigger_keywords: list[str] = field(default_factory=list)
     trigger_description: str = ""
-    trigger_examples: List[str] = field(default_factory=list)
-    tool_filter_tags: List[str] = field(default_factory=list)
-    tags: List[str] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    trigger_examples: list[str] = field(default_factory=list)
+    tool_filter_tags: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     usage_count: int = 0
 
     @classmethod
     def from_subagent(
         cls,
-        subagent: Any,  # noqa: ANN401
+        subagent: Any,
         author: str = "",
         category: str = "general",
         version: str = "1.0.0",
@@ -116,7 +116,7 @@ class SubAgentTemplate:
             version=version,
         )
 
-    def to_subagent(self, project_id: str = "", tenant_id: str = "") -> Any:  # noqa: ANN401
+    def to_subagent(self, project_id: str = "", tenant_id: str = "") -> Any:
         """Instantiate a SubAgent from this template.
 
         Args:
@@ -151,7 +151,7 @@ class SubAgentTemplate:
             project_id=project_id or None,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize template to dict for storage/transport."""
         return {
             "template_id": self.template_id,
@@ -178,13 +178,13 @@ class SubAgentTemplate:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SubAgentTemplate":
+    def from_dict(cls, data: dict[str, Any]) -> "SubAgentTemplate":
         """Deserialize template from dict."""
         created_at = data.get("created_at")
         if isinstance(created_at, str):
             created_at = datetime.fromisoformat(created_at)
         elif not isinstance(created_at, datetime):
-            created_at = datetime.now(timezone.utc)
+            created_at = datetime.now(UTC)
 
         return cls(
             template_id=data.get("template_id", str(uuid.uuid4())),
@@ -217,9 +217,9 @@ class TemplateRegistry:
     """
 
     def __init__(self) -> None:
-        self._templates: Dict[str, SubAgentTemplate] = {}
+        self._templates: dict[str, SubAgentTemplate] = {}
         # name -> list of template_ids (for version history)
-        self._name_index: Dict[str, List[str]] = {}
+        self._name_index: dict[str, list[str]] = {}
 
     def register(self, template: SubAgentTemplate) -> str:
         """Register a new template.
@@ -249,11 +249,11 @@ class TemplateRegistry:
         )
         return template.template_id
 
-    def get(self, template_id: str) -> Optional[SubAgentTemplate]:
+    def get(self, template_id: str) -> SubAgentTemplate | None:
         """Get a template by ID."""
         return self._templates.get(template_id)
 
-    def get_by_name(self, name: str) -> Optional[SubAgentTemplate]:
+    def get_by_name(self, name: str) -> SubAgentTemplate | None:
         """Get the latest version of a template by name."""
         name_key = name.lower()
         ids = self._name_index.get(name_key, [])
@@ -280,8 +280,8 @@ class TemplateRegistry:
         self,
         query: str = "",
         category: str = "",
-        tags: Optional[List[str]] = None,
-    ) -> List[SubAgentTemplate]:
+        tags: list[str] | None = None,
+    ) -> list[SubAgentTemplate]:
         """Search templates by query text, category, and/or tags.
 
         Args:
@@ -292,7 +292,7 @@ class TemplateRegistry:
         Returns:
             Matching templates sorted by usage_count descending.
         """
-        results: List[SubAgentTemplate] = []
+        results: list[SubAgentTemplate] = []
         query_lower = query.lower()
 
         for template in self._templates.values():
@@ -320,15 +320,15 @@ class TemplateRegistry:
         results.sort(key=lambda t: t.usage_count, reverse=True)
         return results
 
-    def list_all(self) -> List[SubAgentTemplate]:
+    def list_all(self) -> list[SubAgentTemplate]:
         """List all registered templates."""
         return list(self._templates.values())
 
-    def list_categories(self) -> List[str]:
+    def list_categories(self) -> list[str]:
         """List distinct categories."""
         return sorted({t.category for t in self._templates.values()})
 
-    def get_versions(self, name: str) -> List[SubAgentTemplate]:
+    def get_versions(self, name: str) -> list[SubAgentTemplate]:
         """Get all versions of a template by name."""
         name_key = name.lower()
         ids = self._name_index.get(name_key, [])

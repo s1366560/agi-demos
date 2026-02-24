@@ -5,9 +5,10 @@ Provides bidirectional communication with MCP servers via WebSocket.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import aiohttp
 
@@ -32,13 +33,13 @@ class WebSocketTransport(BaseTransport):
     - Real-time streaming for long-running operations
     """
 
-    def __init__(self, config: Optional[TransportConfig] = None):
+    def __init__(self, config: TransportConfig | None = None) -> None:
         """Initialize WebSocket transport."""
         super().__init__(config)
-        self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
-        self._session: Optional[aiohttp.ClientSession] = None
-        self._pending_requests: Dict[int, asyncio.Future] = {}
-        self._receive_task: Optional[asyncio.Task] = None
+        self._ws: aiohttp.ClientWebSocketResponse | None = None
+        self._session: aiohttp.ClientSession | None = None
+        self._pending_requests: dict[int, asyncio.Future] = {}
+        self._receive_task: asyncio.Task | None = None
         self._initialized = False
         self._closed = False
 
@@ -114,7 +115,7 @@ class WebSocketTransport(BaseTransport):
 
         self._initialized = True
 
-    async def _send_notification(self, method: str, params: Dict[str, Any]) -> None:
+    async def _send_notification(self, method: str, params: dict[str, Any]) -> None:
         """Send a JSON-RPC notification (no response expected)."""
         if not self._ws or self._ws.closed:
             raise MCPTransportClosedError("WebSocket not connected")
@@ -125,9 +126,9 @@ class WebSocketTransport(BaseTransport):
     async def _send_request(
         self,
         method: str,
-        params: Optional[Dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
         timeout: float = 30.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Send a JSON-RPC request and wait for response."""
         if not self._ws or self._ws.closed:
             raise MCPTransportClosedError("WebSocket not connected")
@@ -152,7 +153,7 @@ class WebSocketTransport(BaseTransport):
             result = await asyncio.wait_for(future, timeout=timeout)
             return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._pending_requests.pop(request_id, None)
             raise MCPTransportError(f"Timeout waiting for response to {method}")
 
@@ -190,7 +191,7 @@ class WebSocketTransport(BaseTransport):
                     future.set_exception(MCPTransportClosedError("WebSocket closed"))
             self._pending_requests.clear()
 
-    async def _handle_message(self, data: Dict[str, Any]) -> None:
+    async def _handle_message(self, data: dict[str, Any]) -> None:
         """Handle incoming JSON-RPC message."""
         request_id = data.get("id")
 
@@ -231,10 +232,8 @@ class WebSocketTransport(BaseTransport):
         # Cancel receive task
         if self._receive_task and not self._receive_task.done():
             self._receive_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._receive_task
-            except asyncio.CancelledError:
-                pass
             self._receive_task = None
 
         # Close WebSocket
@@ -255,8 +254,8 @@ class WebSocketTransport(BaseTransport):
 
     async def send(
         self,
-        message: Dict[str, Any],
-        timeout: Optional[float] = None,
+        message: dict[str, Any],
+        timeout: float | None = None,
     ) -> None:
         """
         Send a message over WebSocket.
@@ -272,8 +271,8 @@ class WebSocketTransport(BaseTransport):
 
     async def receive(
         self,
-        timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         """
         Receive is handled by background task.
 
@@ -285,12 +284,12 @@ class WebSocketTransport(BaseTransport):
 
     # High-level API methods
 
-    async def list_tools(self) -> List[Dict[str, Any]]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools from the MCP server."""
         result = await self._send_request("tools/list")
         return result.get("tools", [])
 
-    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the MCP server."""
         params = {"name": tool_name, "arguments": arguments}
         return await self._send_request("tools/call", params)

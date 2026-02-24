@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Optional
-
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,7 +17,7 @@ class SqlAgentSessionSnapshotRepository:
     async def save_snapshot(self, snapshot: AgentSessionSnapshot) -> None:
         self._session.add(snapshot)
 
-    async def get_latest_by_request_id(self, request_id: str) -> Optional[AgentSessionSnapshot]:
+    async def get_latest_by_request_id(self, request_id: str) -> AgentSessionSnapshot | None:
         stmt = (
             select(AgentSessionSnapshot)
             .where(AgentSessionSnapshot.request_id == request_id)

@@ -2,7 +2,7 @@
 Tests for V2 SqlTenantRepository using BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -46,8 +46,8 @@ class TestSqlTenantRepositorySave:
             name="Test Tenant",
             owner_id="user-owner-1",
             description="A test tenant",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         await v2_tenant_repo.save(tenant)
@@ -67,8 +67,8 @@ class TestSqlTenantRepositorySave:
             name="Original Name",
             owner_id="user-owner-1",
             description="Original description",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_tenant_repo.save(tenant)
 
@@ -79,7 +79,7 @@ class TestSqlTenantRepositorySave:
             owner_id="user-owner-1",
             description="Updated description",
             created_at=tenant.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
         await v2_tenant_repo.save(updated_tenant)
 
@@ -100,8 +100,8 @@ class TestSqlTenantRepositoryFind:
             name="Find Me",
             owner_id="user-owner-1",
             description="Find test",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_tenant_repo.save(tenant)
 
@@ -123,8 +123,8 @@ class TestSqlTenantRepositoryFind:
             name="Unique Tenant Name",
             owner_id="user-owner-1",
             description="Name test",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_tenant_repo.save(tenant)
 
@@ -152,8 +152,8 @@ class TestSqlTenantRepositoryList:
                 name=f"Tenant {i}",
                 owner_id="user-owner-1",
                 description=f"Description {i}",
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_tenant_repo.save(tenant)
 
@@ -171,8 +171,8 @@ class TestSqlTenantRepositoryList:
                 name=f"Page Tenant {i}",
                 owner_id="user-owner-1",
                 description=f"Page {i}",
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_tenant_repo.save(tenant)
 
@@ -194,8 +194,8 @@ class TestSqlTenantRepositoryList:
                 name=f"Owner Tenant {i}",
                 owner_id="user-owner-1",
                 description=f"Owned {i}",
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_tenant_repo.save(tenant)
 
@@ -215,8 +215,8 @@ class TestSqlTenantRepositoryDelete:
             name="Delete Me",
             owner_id="user-owner-1",
             description="Delete test",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_tenant_repo.save(tenant)
 
@@ -245,8 +245,8 @@ class TestSqlTenantRepositoryToDomain:
             name="Domain Test",
             owner_id="user-owner-1",
             description="Domain conversion test",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_tenant_repo.save(tenant)
 

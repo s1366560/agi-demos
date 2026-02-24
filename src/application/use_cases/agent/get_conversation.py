@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class GetConversationUseCase:
     """Use case for getting a conversation."""
 
-    def __init__(self, agent_service: "AgentService"):
+    def __init__(self, agent_service: "AgentService") -> None:
         """
         Initialize the use case.
 

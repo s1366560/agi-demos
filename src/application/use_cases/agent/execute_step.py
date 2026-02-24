@@ -24,7 +24,7 @@ class ExecuteStepUseCase:
         self,
         llm: LLMClient,
         tools: dict[str, AgentToolBase],
-    ):
+    ) -> None:
         """
         Initialize the use case.
 
@@ -37,7 +37,7 @@ class ExecuteStepUseCase:
 
     async def execute(
         self,
-        work_plan: Any,  # noqa: ANN401
+        work_plan: Any,
         conversation_context: list[dict],
     ) -> dict[str, Any]:
         """Execute a step (placeholder - plan system being refactored)."""

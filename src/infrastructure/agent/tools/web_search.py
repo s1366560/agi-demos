@@ -7,7 +7,7 @@ which is then cached in Redis for performance.
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
@@ -61,7 +61,7 @@ class WebSearchTool(AgentTool):
     # Maximum query length for cache key
     MAX_QUERY_LENGTH = 200
 
-    def __init__(self, redis_client):
+    def __init__(self, redis_client) -> None:
         """
         Initialize the web search tool.
 
@@ -178,7 +178,7 @@ class WebSearchTool(AgentTool):
         except Exception as e:
             logger.warning(f"Failed to cache results: {e}")
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         """Validate that query argument is provided."""
         query = kwargs.get("query")
         if not isinstance(query, str) or len(query.strip()) == 0:
@@ -191,10 +191,7 @@ class WebSearchTool(AgentTool):
 
         # Validate search_depth if provided
         search_depth = kwargs.get("search_depth", "basic")
-        if search_depth not in ("basic", "advanced"):
-            return False
-
-        return True
+        return search_depth in ("basic", "advanced")
 
     async def _call_tavily_api(
         self, query: str, max_results: int, search_depth: str
@@ -267,7 +264,7 @@ class WebSearchTool(AgentTool):
 
         return results
 
-    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str:
         """
         Execute web search.
 
@@ -305,7 +302,7 @@ class WebSearchTool(AgentTool):
                 results=search_results,
                 total_results=len(search_results),
                 cached=False,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
             )
 
             # Cache the results

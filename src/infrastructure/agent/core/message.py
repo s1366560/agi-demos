@@ -5,7 +5,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Union
 
 from src.domain.events.event_dicts import (
     LLMMessageDict,
@@ -41,17 +41,17 @@ class ToolPart:
     call_id: str
     tool: str
     status: ToolState
-    input: Dict[str, Any] = field(default_factory=dict)
-    output: Optional[str] = None
-    error: Optional[str] = None
-    title: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    start_time: Optional[float] = None
-    end_time: Optional[float] = None
-    tool_execution_id: Optional[str] = None  # Unique ID for act/observe matching
+    input: dict[str, Any] = field(default_factory=dict)
+    output: str | None = None
+    error: str | None = None
+    title: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    start_time: float | None = None
+    end_time: float | None = None
+    tool_execution_id: str | None = None  # Unique ID for act/observe matching
 
     @property
-    def duration_ms(self) -> Optional[int]:
+    def duration_ms(self) -> int | None:
         """Calculate duration in milliseconds."""
         if self.start_time and self.end_time:
             return int((self.end_time - self.start_time) * 1000)
@@ -78,8 +78,8 @@ class TextPart:
     """Text content part of a message."""
 
     text: str
-    start_time: Optional[float] = None
-    end_time: Optional[float] = None
+    start_time: float | None = None
+    end_time: float | None = None
     synthetic: bool = False  # Generated vs from LLM
 
     def to_dict(self) -> TextPartDict:
@@ -96,9 +96,9 @@ class ReasoningPart:
     """Reasoning/thinking part of a message."""
 
     text: str
-    start_time: Optional[float] = None
-    end_time: Optional[float] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    start_time: float | None = None
+    end_time: float | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> ReasoningPartDict:
         """Convert to dictionary."""
@@ -129,23 +129,23 @@ class Message:
     session_id: str = ""
     role: MessageRole = MessageRole.USER
     content: str = ""
-    parts: List[MessagePart] = field(default_factory=list)
+    parts: list[MessagePart] = field(default_factory=list)
 
     # For assistant messages
-    agent: Optional[str] = None
-    parent_id: Optional[str] = None
-    finish_reason: Optional[str] = None
+    agent: str | None = None
+    parent_id: str | None = None
+    finish_reason: str | None = None
 
     # Token usage
-    tokens: Dict[str, int] = field(default_factory=dict)
+    tokens: dict[str, int] = field(default_factory=dict)
     cost: float = 0.0
 
     # Error info
-    error: Optional[Dict[str, Any]] = None
+    error: dict[str, Any] | None = None
 
     # Timestamps
     created_at: float = field(default_factory=time.time)
-    completed_at: Optional[float] = None
+    completed_at: float | None = None
 
     def add_text(self, text: str, synthetic: bool = False) -> TextPart:
         """Add text part to message."""
@@ -157,7 +157,7 @@ class Message:
         self,
         call_id: str,
         tool: str,
-        input: Dict[str, Any],
+        input: dict[str, Any],
     ) -> ToolPart:
         """Add tool call part to message."""
         part = ToolPart(
@@ -175,11 +175,11 @@ class Message:
         self.parts.append(part)
         return part
 
-    def get_tool_parts(self) -> List[ToolPart]:
+    def get_tool_parts(self) -> list[ToolPart]:
         """Get all tool call parts."""
         return [p for p in self.parts if isinstance(p, ToolPart)]
 
-    def get_text_parts(self) -> List[TextPart]:
+    def get_text_parts(self) -> list[TextPart]:
         """Get all text parts."""
         return [p for p in self.parts if isinstance(p, TextPart)]
 

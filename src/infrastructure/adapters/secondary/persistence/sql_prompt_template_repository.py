@@ -1,7 +1,6 @@
 """SQL repository implementation for PromptTemplate."""
 
 import logging
-from typing import Optional
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,7 +49,7 @@ class SqlPromptTemplateRepository(PromptTemplateRepository):
         await self._session.flush()
         return template
 
-    async def find_by_id(self, template_id: str) -> Optional[PromptTemplate]:
+    async def find_by_id(self, template_id: str) -> PromptTemplate | None:
         result = await self._session.execute(
             select(PromptTemplateModel).where(PromptTemplateModel.id == template_id)
         )
@@ -60,7 +59,7 @@ class SqlPromptTemplateRepository(PromptTemplateRepository):
     async def list_by_tenant(
         self,
         tenant_id: str,
-        category: Optional[str] = None,
+        category: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[PromptTemplate]:

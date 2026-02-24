@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from sqlalchemy import bindparam, delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 class SqlChunkRepository:
     """Repository for memory chunk CRUD and search operations."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     async def save(self, chunk: MemoryChunk) -> MemoryChunk:
@@ -31,7 +30,7 @@ class SqlChunkRepository:
         await self._session.flush()
         return chunks
 
-    async def find_by_hash(self, content_hash: str, project_id: str) -> Optional[MemoryChunk]:
+    async def find_by_hash(self, content_hash: str, project_id: str) -> MemoryChunk | None:
         """Find a chunk by content hash within a project."""
         query = select(MemoryChunk).where(
             MemoryChunk.content_hash == content_hash,

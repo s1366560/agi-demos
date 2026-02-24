@@ -11,8 +11,8 @@ Usage:
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Protocol
+from datetime import UTC, datetime
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -27,15 +27,15 @@ class GraphSearchable(Protocol):
     async def search(
         self,
         query: str,
-        project_id: Optional[str] = None,
+        project_id: str | None = None,
         limit: int = 10,
-    ) -> List[Any]: ...
+    ) -> list[Any]: ...
 
 
 class GraphWritable(Protocol):
     """Protocol for graph write operations."""
 
-    async def add_episode(self, episode: Any) -> Any: ...  # noqa: ANN401
+    async def add_episode(self, episode: Any) -> Any: ...
 
 
 @dataclass(frozen=True)
@@ -54,7 +54,7 @@ class MemoryItem:
     item_type: str = "episode"
     score: float = 0.0
     source_id: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -69,7 +69,7 @@ class MemoryWriteResult:
 
     success: bool
     episode_id: str = ""
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class MemoryAccessor:
@@ -91,7 +91,7 @@ class MemoryAccessor:
 
     def __init__(
         self,
-        graph_service: Any,  # noqa: ANN401
+        graph_service: Any,
         project_id: str,
         writable: bool = False,
         max_results: int = DEFAULT_MAX_RESULTS,
@@ -107,7 +107,7 @@ class MemoryAccessor:
     def is_writable(self) -> bool:
         return self._writable
 
-    async def search(self, query: str, limit: Optional[int] = None) -> List[MemoryItem]:
+    async def search(self, query: str, limit: int | None = None) -> list[MemoryItem]:
         """Search the knowledge graph for relevant memories.
 
         Args:
@@ -158,7 +158,7 @@ class MemoryAccessor:
             episode = Episode(
                 content=content,
                 source_type=SourceType.CONVERSATION,
-                valid_at=datetime.now(timezone.utc),
+                valid_at=datetime.now(UTC),
                 project_id=self._project_id,
                 name=f"subagent:{source_description}",
                 metadata={"source": "subagent", "subagent": source_description},
@@ -176,7 +176,7 @@ class MemoryAccessor:
             logger.warning(f"[MemoryAccessor] Write failed: {e}")
             return MemoryWriteResult(success=False, error=str(e))
 
-    def format_for_context(self, items: List[MemoryItem]) -> str:
+    def format_for_context(self, items: list[MemoryItem]) -> str:
         """Format memory items as a text snippet for SubAgent context injection.
 
         Args:
@@ -188,7 +188,7 @@ class MemoryAccessor:
         if not items:
             return ""
 
-        parts: List[str] = ["[Relevant memories from knowledge graph]"]
+        parts: list[str] = ["[Relevant memories from knowledge graph]"]
         total_chars = 0
 
         for i, item in enumerate(items, 1):
@@ -205,7 +205,7 @@ class MemoryAccessor:
 
         return "\n".join(parts)
 
-    def _normalize_results(self, raw_results: Any) -> List[MemoryItem]:  # noqa: ANN401
+    def _normalize_results(self, raw_results: Any) -> list[MemoryItem]:
         """Normalize raw graph search results to MemoryItem list.
 
         Handles both list-of-dicts and SearchResultItem-like objects.
@@ -213,7 +213,7 @@ class MemoryAccessor:
         if not raw_results:
             return []
 
-        items: List[MemoryItem] = []
+        items: list[MemoryItem] = []
 
         for r in raw_results:
             if isinstance(r, dict):

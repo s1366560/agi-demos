@@ -14,7 +14,7 @@ from src.infrastructure.mcp.clients.subprocess_client import MCPSubprocessClient
 from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
 
 __all__ = [
-    "MCPSubprocessClient",
     "MCPHttpClient",
+    "MCPSubprocessClient",
     "MCPWebSocketClient",
 ]

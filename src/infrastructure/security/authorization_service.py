@@ -6,7 +6,6 @@ decisions using SQLAlchemy ORM models directly.
 """
 
 import logging
-from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,15 +27,15 @@ logger = logging.getLogger(__name__)
 class AuthorizationService(AuthorizationPort):
     """SQLAlchemy implementation of authorization and permissions."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     async def check_permission(
         self,
         user_id: str,
         permission: str,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
     ) -> bool:
         """
         Check if a user has a specific permission in the given context.
@@ -67,8 +66,8 @@ class AuthorizationService(AuthorizationPort):
             return False
 
     async def get_user_permissions(
-        self, user_id: str, tenant_id: Optional[str] = None, project_id: Optional[str] = None
-    ) -> List[str]:
+        self, user_id: str, tenant_id: str | None = None, project_id: str | None = None
+    ) -> list[str]:
         """
         Get all permissions for a user in a specific context.
 
@@ -119,8 +118,8 @@ class AuthorizationService(AuthorizationPort):
         self,
         user_id: str,
         role_name: str,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
     ) -> None:
         """
         Assign a role to a user in a specific context.
@@ -183,8 +182,8 @@ class AuthorizationService(AuthorizationPort):
         self,
         user_id: str,
         role_name: str,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
     ) -> None:
         """
         Remove a role from a user in a specific context.
@@ -224,7 +223,7 @@ class AuthorizationService(AuthorizationPort):
 
         logger.info(f"Removed role {role_name} from user {user_id}")
 
-    async def get_user_roles(self, user_id: str, tenant_id: Optional[str] = None) -> List[dict]:
+    async def get_user_roles(self, user_id: str, tenant_id: str | None = None) -> list[dict]:
         """
         Get all roles assigned to a user.
 

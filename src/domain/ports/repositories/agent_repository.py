@@ -7,7 +7,6 @@ This module defines the repository interfaces for agent domain entities:
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from src.domain.model.agent import (
     AgentExecution,
@@ -38,7 +37,7 @@ class ConversationRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(self, conversation_id: str) -> Optional[Conversation]:
+    async def find_by_id(self, conversation_id: str) -> Conversation | None:
         """
         Find a conversation by its ID.
 
@@ -57,7 +56,7 @@ class ConversationRepository(ABC):
         status: ConversationStatus | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[Conversation]:
+    ) -> list[Conversation]:
         """
         List conversations for a project.
 
@@ -79,7 +78,7 @@ class ConversationRepository(ABC):
         project_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[Conversation]:
+    ) -> list[Conversation]:
         """
         List conversations for a user.
 
@@ -139,7 +138,7 @@ class MessageRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(self, message_id: str) -> Optional[Message]:
+    async def find_by_id(self, message_id: str) -> Message | None:
         """
         Find a message by its ID.
 
@@ -157,7 +156,7 @@ class MessageRepository(ABC):
         conversation_id: str,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[Message]:
+    ) -> list[Message]:
         """
         List messages for a conversation.
 
@@ -176,7 +175,7 @@ class MessageRepository(ABC):
         self,
         project_id: str,
         limit: int = 10,
-    ) -> List[Message]:
+    ) -> list[Message]:
         """
         List recent messages across all conversations in a project.
 
@@ -231,7 +230,7 @@ class AgentExecutionRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(self, execution_id: str) -> Optional[AgentExecution]:
+    async def find_by_id(self, execution_id: str) -> AgentExecution | None:
         """
         Find an execution by its ID.
 
@@ -244,7 +243,7 @@ class AgentExecutionRepository(ABC):
         pass
 
     @abstractmethod
-    async def list_by_message(self, message_id: str) -> List[AgentExecution]:
+    async def list_by_message(self, message_id: str) -> list[AgentExecution]:
         """
         List executions for a message.
 
@@ -261,7 +260,7 @@ class AgentExecutionRepository(ABC):
         self,
         conversation_id: str,
         limit: int = 100,
-    ) -> List[AgentExecution]:
+    ) -> list[AgentExecution]:
         """
         List executions for a conversation.
 
@@ -313,7 +312,7 @@ class ToolExecutionRecordRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(self, record_id: str) -> Optional[ToolExecutionRecord]:
+    async def find_by_id(self, record_id: str) -> ToolExecutionRecord | None:
         """
         Find a tool execution record by its ID.
 
@@ -326,7 +325,7 @@ class ToolExecutionRecordRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_call_id(self, call_id: str) -> Optional[ToolExecutionRecord]:
+    async def find_by_call_id(self, call_id: str) -> ToolExecutionRecord | None:
         """
         Find a tool execution record by its call ID.
 
@@ -343,7 +342,7 @@ class ToolExecutionRecordRepository(ABC):
         self,
         message_id: str,
         limit: int = 100,
-    ) -> List[ToolExecutionRecord]:
+    ) -> list[ToolExecutionRecord]:
         """
         List tool executions for a message.
 
@@ -361,7 +360,7 @@ class ToolExecutionRecordRepository(ABC):
         self,
         conversation_id: str,
         limit: int = 100,
-    ) -> List[ToolExecutionRecord]:
+    ) -> list[ToolExecutionRecord]:
         """
         List tool executions for a conversation.
 
@@ -389,9 +388,9 @@ class ToolExecutionRecordRepository(ABC):
         self,
         call_id: str,
         status: str,
-        output: Optional[str] = None,
-        error: Optional[str] = None,
-        duration_ms: Optional[int] = None,
+        output: str | None = None,
+        error: str | None = None,
+        duration_ms: int | None = None,
     ) -> None:
         """
         Update the status of a tool execution record.
@@ -434,7 +433,7 @@ class AgentExecutionEventRepository(ABC):
         pass
 
     @abstractmethod
-    async def save_batch(self, events: List[AgentExecutionEvent]) -> None:
+    async def save_batch(self, events: list[AgentExecutionEvent]) -> None:
         """
         Save multiple events efficiently.
 
@@ -450,10 +449,10 @@ class AgentExecutionEventRepository(ABC):
         from_time_us: int = 0,
         from_counter: int = 0,
         limit: int = 1000,
-        event_types: Optional[set[str]] = None,
-        before_time_us: Optional[int] = None,
-        before_counter: Optional[int] = None,
-    ) -> List[AgentExecutionEvent]:
+        event_types: set[str] | None = None,
+        before_time_us: int | None = None,
+        before_counter: int | None = None,
+    ) -> list[AgentExecutionEvent]:
         """
         Get events for a conversation with bidirectional pagination support.
 
@@ -492,7 +491,7 @@ class AgentExecutionEventRepository(ABC):
     async def get_events_by_message(
         self,
         message_id: str,
-    ) -> List[AgentExecutionEvent]:
+    ) -> list[AgentExecutionEvent]:
         """
         Get all events for a specific message.
 
@@ -519,7 +518,7 @@ class AgentExecutionEventRepository(ABC):
         self,
         conversation_id: str,
         limit: int = 1000,
-    ) -> List[AgentExecutionEvent]:
+    ) -> list[AgentExecutionEvent]:
         """
         List all events for a conversation in chronological order.
 
@@ -539,7 +538,7 @@ class AgentExecutionEventRepository(ABC):
         self,
         conversation_id: str,
         limit: int = 50,
-    ) -> List[AgentExecutionEvent]:
+    ) -> list[AgentExecutionEvent]:
         """
         Get message events (user_message + assistant_message) for LLM context.
 
@@ -561,7 +560,7 @@ class AgentExecutionEventRepository(ABC):
         conversation_id: str,
         after_time_us: int,
         limit: int = 200,
-    ) -> List[AgentExecutionEvent]:
+    ) -> list[AgentExecutionEvent]:
         """
         Get message events after a given event_time_us cutoff.
 
@@ -626,8 +625,8 @@ class ExecutionCheckpointRepository(ABC):
     async def get_latest(
         self,
         conversation_id: str,
-        message_id: Optional[str] = None,
-    ) -> Optional[ExecutionCheckpoint]:
+        message_id: str | None = None,
+    ) -> ExecutionCheckpoint | None:
         """
         Get the latest checkpoint for a conversation.
 
@@ -646,7 +645,7 @@ class ExecutionCheckpointRepository(ABC):
         conversation_id: str,
         checkpoint_type: str,
         limit: int = 10,
-    ) -> List[ExecutionCheckpoint]:
+    ) -> list[ExecutionCheckpoint]:
         """
         Get checkpoints of a specific type for a conversation.
 

@@ -6,8 +6,7 @@
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Dict, Optional
+from datetime import UTC, datetime
 
 from ..config import ClassificationConfig
 from ..types import ProjectMetrics, ProjectTier, TierMigration
@@ -23,7 +22,7 @@ class ClassificationResult:
     tenant_id: str
     tier: ProjectTier
     score: int
-    breakdown: Dict[str, int]  # 各维度得分
+    breakdown: dict[str, int]  # 各维度得分
     reason: str
 
 
@@ -37,7 +36,7 @@ class ProjectClassifier:
     - 并发要求 (10%)
     """
 
-    def __init__(self, config: Optional[ClassificationConfig] = None):
+    def __init__(self, config: ClassificationConfig | None = None) -> None:
         """初始化分级器.
 
         Args:
@@ -163,7 +162,7 @@ class ProjectClassifier:
         self,
         current_tier: ProjectTier,
         metrics: ProjectMetrics,
-    ) -> Optional[ProjectTier]:
+    ) -> ProjectTier | None:
         """检查是否应该升级.
 
         Args:
@@ -192,7 +191,7 @@ class ProjectClassifier:
         current_tier: ProjectTier,
         metrics: ProjectMetrics,
         consecutive_days: int = 7,
-    ) -> Optional[ProjectTier]:
+    ) -> ProjectTier | None:
         """检查是否应该降级.
 
         降级需要更保守的策略，通常需要连续多天指标下降。
@@ -246,6 +245,6 @@ class ProjectClassifier:
             from_tier=from_tier,
             to_tier=to_tier,
             reason=reason,
-            scheduled_at=datetime.now(timezone.utc),
+            scheduled_at=datetime.now(UTC),
             status="pending",
         )

@@ -5,9 +5,8 @@ or project level for multi-tenant isolation.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Optional
 
 from src.domain.shared_kernel import Entity
 
@@ -45,13 +44,13 @@ class ToolEnvironmentVariable(Entity):
     tool_name: str
     variable_name: str
     encrypted_value: str
-    project_id: Optional[str] = None
-    description: Optional[str] = None
+    project_id: str | None = None
+    description: str | None = None
     is_required: bool = True
     is_secret: bool = True
     scope: EnvVarScope = EnvVarScope.TENANT
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: Optional[datetime] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime | None = None
 
     def __post_init__(self):
         """Validate the entity after initialization."""
@@ -71,12 +70,12 @@ class ToolEnvironmentVariable(Entity):
     def update_value(self, new_encrypted_value: str) -> None:
         """Update the encrypted value."""
         self.encrypted_value = new_encrypted_value
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
 
     def update_description(self, description: str) -> None:
         """Update the description."""
         self.description = description
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
 
     @property
     def scoped_key(self) -> str:

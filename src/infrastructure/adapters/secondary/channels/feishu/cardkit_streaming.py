@@ -15,7 +15,7 @@ import asyncio
 import logging
 import threading
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class CardKitSequence:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._sequences: Dict[str, int] = {}
+        self._sequences: dict[str, int] = {}
 
     def next(self, card_id: str) -> int:
         """Return the next sequence number for *card_id*."""
@@ -61,7 +61,7 @@ class CardStreamState:
     """Tracks the state of a CardKit streaming card for one conversation turn."""
 
     card_id: str
-    message_id: Optional[str] = None
+    message_id: str | None = None
     streaming_active: bool = False
     last_content: str = ""
     sequence: CardKitSequence = field(default_factory=CardKitSequence)
@@ -70,7 +70,7 @@ class CardStreamState:
         return self.sequence.next(self.card_id)
 
 
-def build_initial_card_data(title: str = "MemStack Agent") -> Dict[str, Any]:
+def build_initial_card_data(title: str = "MemStack Agent") -> dict[str, Any]:
     """Build a JSON 2.0 card entity with a single markdown element for streaming.
 
     The card has:
@@ -107,7 +107,7 @@ def build_initial_card_data(title: str = "MemStack Agent") -> Dict[str, Any]:
     }
 
 
-def build_streaming_settings(enabled: bool) -> Dict[str, Any]:
+def build_streaming_settings(enabled: bool) -> dict[str, Any]:
     """Build settings dict for enabling/disabling streaming mode.
 
     Args:
@@ -116,7 +116,7 @@ def build_streaming_settings(enabled: bool) -> Dict[str, Any]:
     Returns:
         Settings dict for ``update_card_settings()``.
     """
-    settings: Dict[str, Any] = {
+    settings: dict[str, Any] = {
         "config": {
             "streaming_mode": enabled,
         },
@@ -156,9 +156,9 @@ class CardKitStreamingManager:
         self,
         chat_id: str,
         *,
-        reply_to: Optional[str] = None,
+        reply_to: str | None = None,
         title: str = "MemStack Agent",
-    ) -> Optional[CardStreamState]:
+    ) -> CardStreamState | None:
         """Create card entity, enable streaming, and send the card.
 
         Returns a ``CardStreamState`` on success, ``None`` on failure.

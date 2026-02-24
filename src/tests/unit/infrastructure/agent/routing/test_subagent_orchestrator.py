@@ -11,7 +11,7 @@ Tests cover:
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -38,7 +38,7 @@ class MockAgentModel:
     GPT4 = "gpt-4"
     CLAUDE = "claude-3"
 
-    def __init__(self, value: str):
+    def __init__(self, value: str) -> None:
         self._value = value
 
     @property
@@ -55,7 +55,7 @@ class MockAgentModel:
 class MockSubAgentTrigger:
     """Mock SubAgent trigger."""
 
-    keywords: List[str]
+    keywords: list[str]
     description: str = "Test trigger"
 
 
@@ -72,9 +72,9 @@ class MockSubAgent:
     max_tokens: int = 4096
     max_iterations: int = 20
     system_prompt: str = "You are a helpful assistant."
-    allowed_tools: List[str] = None
-    allowed_skills: List[str] = None
-    allowed_mcp_servers: List[str] = None
+    allowed_tools: list[str] = None
+    allowed_skills: list[str] = None
+    allowed_mcp_servers: list[str] = None
     trigger: MockSubAgentTrigger = None
     _execution_count: int = 0
 
@@ -98,7 +98,7 @@ class MockSubAgent:
 class MockSubAgentMatch:
     """Mock SubAgent match result."""
 
-    subagent: Optional[MockSubAgent]
+    subagent: MockSubAgent | None
     confidence: float
     match_reason: str
 
@@ -106,7 +106,7 @@ class MockSubAgentMatch:
 class MockSubAgentRouter:
     """Mock SubAgentRouter for testing."""
 
-    def __init__(self, subagents: List[MockSubAgent] = None):
+    def __init__(self, subagents: list[MockSubAgent] | None = None) -> None:
         self._subagents = subagents or []
         self._match_result = None
 
@@ -116,7 +116,7 @@ class MockSubAgentRouter:
     def match(
         self,
         query: str,
-        confidence_threshold: Optional[float] = None,
+        confidence_threshold: float | None = None,
     ) -> MockSubAgentMatch:
         if self._match_result:
             return self._match_result
@@ -129,8 +129,8 @@ class MockSubAgentRouter:
     def filter_tools(
         self,
         subagent: MockSubAgent,
-        available_tools: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        available_tools: dict[str, Any],
+    ) -> dict[str, Any]:
         if "*" in subagent.allowed_tools:
             return available_tools
         return {
@@ -139,7 +139,7 @@ class MockSubAgentRouter:
             if name in subagent.allowed_tools
         }
 
-    def get_subagent_config(self, subagent: MockSubAgent) -> Dict[str, Any]:
+    def get_subagent_config(self, subagent: MockSubAgent) -> dict[str, Any]:
         return {
             "model": subagent.model.value if hasattr(subagent.model, "value") else None,
             "temperature": subagent.temperature,
@@ -147,7 +147,7 @@ class MockSubAgentRouter:
             "max_iterations": subagent.max_iterations,
         }
 
-    def list_subagents(self) -> List[MockSubAgent]:
+    def list_subagents(self) -> list[MockSubAgent]:
         return [s for s in self._subagents if s.enabled]
 
 

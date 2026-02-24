@@ -15,8 +15,7 @@ Migration Benefits:
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -94,15 +93,15 @@ class SqlAttachmentRepository(
             logger.error(f"Failed to save attachment {attachment.id}: {e}")
             raise
 
-    async def get(self, attachment_id: str) -> Optional[Attachment]:
+    async def get(self, attachment_id: str) -> Attachment | None:
         """Get an attachment by ID."""
         return await self.find_by_id(attachment_id)
 
     async def get_by_conversation(
         self,
         conversation_id: str,
-        status: Optional[AttachmentStatus] = None,
-    ) -> List[Attachment]:
+        status: AttachmentStatus | None = None,
+    ) -> list[Attachment]:
         """Get all attachments for a conversation."""
         query = select(AttachmentModel).where(AttachmentModel.conversation_id == conversation_id)
         if status:
@@ -113,7 +112,7 @@ class SqlAttachmentRepository(
         models = result.scalars().all()
         return [self._to_domain(m) for m in models]
 
-    async def get_by_ids(self, attachment_ids: List[str]) -> List[Attachment]:
+    async def get_by_ids(self, attachment_ids: list[str]) -> list[Attachment]:
         """Get multiple attachments by their IDs."""
         if not attachment_ids:
             return []
@@ -137,7 +136,7 @@ class SqlAttachmentRepository(
 
     async def delete_expired(self) -> int:
         """Delete all expired attachments."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = await self._session.execute(
             delete(AttachmentModel).where(
                 AttachmentModel.expires_at.isnot(None),
@@ -154,7 +153,7 @@ class SqlAttachmentRepository(
         self,
         attachment_id: str,
         status: AttachmentStatus,
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
     ) -> bool:
         """Update the status of an attachment."""
         update_values = {"status": status.value}
@@ -199,7 +198,7 @@ class SqlAttachmentRepository(
 
     # === Conversion methods ===
 
-    def _to_domain(self, model: Optional[AttachmentModel]) -> Optional[Attachment]:
+    def _to_domain(self, model: AttachmentModel | None) -> Attachment | None:
         """
         Convert database model to domain entity.
 

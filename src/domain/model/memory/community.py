@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from src.domain.shared_kernel import Entity
 
@@ -10,7 +9,7 @@ class Community(Entity):
     name: str
     summary: str
     member_count: int = 0
-    tenant_id: Optional[str] = None
-    project_id: Optional[str] = None
-    formed_at: Optional[datetime] = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    tenant_id: str | None = None
+    project_id: str | None = None
+    formed_at: datetime | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))

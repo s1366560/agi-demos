@@ -19,7 +19,7 @@ You are a senior software architect...
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
@@ -27,7 +27,7 @@ import yaml
 class SubAgentParseError(Exception):
     """Exception raised when agent .md parsing fails."""
 
-    def __init__(self, message: str, file_path: Optional[str] = None):
+    def __init__(self, message: str, file_path: str | None = None) -> None:
         self.file_path = file_path
         super().__init__(f"{message}" + (f" in {file_path}" if file_path else ""))
 
@@ -53,18 +53,18 @@ class SubAgentMarkdown:
         enabled: Whether the agent is enabled
     """
 
-    frontmatter: Dict[str, Any]
+    frontmatter: dict[str, Any]
     content: str
     name: str
     description: str
-    tools: List[str] = field(default_factory=list)
+    tools: list[str] = field(default_factory=list)
     model_raw: str = "inherit"
-    display_name: Optional[str] = None
-    keywords: List[str] = field(default_factory=list)
-    examples: List[str] = field(default_factory=list)
-    max_iterations: Optional[int] = None
-    temperature: Optional[float] = None
-    color: Optional[str] = None
+    display_name: str | None = None
+    keywords: list[str] = field(default_factory=list)
+    examples: list[str] = field(default_factory=list)
+    max_iterations: int | None = None
+    temperature: float | None = None
+    color: str | None = None
     enabled: bool = True
 
 
@@ -84,7 +84,7 @@ class SubAgentMarkdownParser:
     - Markdown content after the frontmatter (used as system_prompt)
     """
 
-    def parse(self, content: str, file_path: Optional[str] = None) -> SubAgentMarkdown:
+    def parse(self, content: str, file_path: str | None = None) -> SubAgentMarkdown:
         """
         Parse an agent .md file content.
 
@@ -205,7 +205,7 @@ class SubAgentMarkdownParser:
 
         return self.parse(content, file_path)
 
-    def _extract_list(self, data: Dict[str, Any], key: str) -> List[str]:
+    def _extract_list(self, data: dict[str, Any], key: str) -> list[str]:
         """Extract a list of strings from frontmatter."""
         value = data.get(key)
         if value is None:

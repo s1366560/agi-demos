@@ -16,8 +16,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.application.services.artifact_service import ArtifactService
@@ -55,14 +56,14 @@ class SubAgentProcess:
         self,
         subagent: SubAgent,
         context: SubAgentContext,
-        tools: List[Any],
+        tools: list[Any],
         base_model: str,
-        base_api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        llm_client: Optional[LLMClient] = None,
-        permission_manager: Optional[PermissionManager] = None,
-        artifact_service: Optional[ArtifactService] = None,
-        abort_signal: Optional[asyncio.Event] = None,
+        base_api_key: str | None = None,
+        base_url: str | None = None,
+        llm_client: LLMClient | None = None,
+        permission_manager: PermissionManager | None = None,
+        artifact_service: ArtifactService | None = None,
+        abort_signal: asyncio.Event | None = None,
     ) -> None:
         """Initialize a SubAgent process.
 
@@ -96,17 +97,17 @@ class SubAgentProcess:
         self._base_url = base_url
 
         # Execution state
-        self._result: Optional[SubAgentResult] = None
+        self._result: SubAgentResult | None = None
         self._final_content = ""
         self._tool_calls_count = 0
         self._tokens_used = 0
 
     @property
-    def result(self) -> Optional[SubAgentResult]:
+    def result(self) -> SubAgentResult | None:
         """Get the execution result (available after execute completes)."""
         return self._result
 
-    async def execute(self) -> AsyncIterator[Dict[str, Any]]:
+    async def execute(self) -> AsyncIterator[dict[str, Any]]:
         """Execute the SubAgent in an independent ReAct loop.
 
         Yields SSE events prefixed with subagent metadata.
@@ -120,7 +121,7 @@ class SubAgentProcess:
 
         start_time = time.time()
         success = True
-        error_msg: Optional[str] = None
+        error_msg: str | None = None
 
         # Build processor config from SubAgent settings
         config = ProcessorConfig(
@@ -224,7 +225,7 @@ class SubAgentProcess:
                 f"time={execution_time_ms}ms"
             )
 
-    def _relay_event(self, domain_event: Any) -> Optional[Dict[str, Any]]:  # noqa: ANN401
+    def _relay_event(self, domain_event: Any) -> dict[str, Any] | None:
         """Convert a domain event to a prefixed SSE event.
 
         Adds subagent metadata and prefixes the event type.
@@ -252,16 +253,16 @@ class SubAgentProcess:
                 "subagent_name": self._subagent.display_name,
             },
             "timestamp": event_dict.get(
-                "timestamp", datetime.now(timezone.utc).isoformat()
+                "timestamp", datetime.now(UTC).isoformat()
             ),
         }
 
-    def _make_event(self, event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    def _make_event(self, event_type: str, data: dict[str, Any]) -> dict[str, Any]:
         """Create an SSE event dict."""
         return {
             "type": event_type,
             "data": data,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     def _extract_summary(self, content: str, max_length: int = 500) -> str:

@@ -7,7 +7,7 @@ a user message, injecting relevant context into the system prompt.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from src.infrastructure.memory.prompt_safety import (
     looks_like_prompt_injection,
@@ -28,9 +28,9 @@ class MemoryRecallPreprocessor:
 
     def __init__(
         self,
-        chunk_search: Any = None,  # noqa: ANN401
-        graph_search: Any = None,  # noqa: ANN401
-    ):
+        chunk_search: Any = None,
+        graph_search: Any = None,
+    ) -> None:
         self._chunk_search = chunk_search
         self._graph_search = graph_search
         # Tracking for event emission
@@ -42,7 +42,7 @@ class MemoryRecallPreprocessor:
         query: str,
         project_id: str,
         max_results: int = 3,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Search memory and format results for system prompt injection.
 
         Args:

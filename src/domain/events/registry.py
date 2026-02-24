@@ -21,8 +21,9 @@ Usage:
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +38,9 @@ class SchemaInfo:
 
     event_type: str
     version: str
-    schema_class: Type[Any]
+    schema_class: type[Any]
     deprecated: bool = False
-    deprecation_message: Optional[str] = None
+    deprecation_message: str | None = None
 
 
 @dataclass
@@ -48,7 +49,7 @@ class MigrationInfo:
 
     from_version: str
     to_version: str
-    migrator: Callable[[Dict[str, Any]], Dict[str, Any]]
+    migrator: Callable[[dict[str, Any]], dict[str, Any]]
 
 
 class EventSchemaRegistry:
@@ -59,16 +60,16 @@ class EventSchemaRegistry:
     """
 
     # Schemas indexed by (event_type, version)
-    _schemas: Dict[Tuple[str, str], SchemaInfo] = {}
+    _schemas: dict[tuple[str, str], SchemaInfo] = {}
 
     # Migrations indexed by (event_type, from_version, to_version)
-    _migrations: Dict[Tuple[str, str, str], MigrationInfo] = {}
+    _migrations: dict[tuple[str, str, str], MigrationInfo] = {}
 
     # Default versions for each event type
-    _default_versions: Dict[str, str] = {}
+    _default_versions: dict[str, str] = {}
 
     # Latest versions for each event type
-    _latest_versions: Dict[str, str] = {}
+    _latest_versions: dict[str, str] = {}
 
     @classmethod
     def register(
@@ -77,8 +78,8 @@ class EventSchemaRegistry:
         version: str,
         *,
         deprecated: bool = False,
-        deprecation_message: Optional[str] = None,
-    ) -> Callable[[Type[T]], Type[T]]:
+        deprecation_message: str | None = None,
+    ) -> Callable[[type[T]], type[T]]:
         """Decorator to register an event schema.
 
         Args:
@@ -96,7 +97,7 @@ class EventSchemaRegistry:
                 content: str
         """
 
-        def decorator(schema_class: Type[T]) -> Type[T]:
+        def decorator(schema_class: type[T]) -> type[T]:
             key = (event_type, version)
             cls._schemas[key] = SchemaInfo(
                 event_type=event_type,
@@ -126,7 +127,7 @@ class EventSchemaRegistry:
         event_type: str,
         from_version: str,
         to_version: str,
-    ) -> Callable[[Callable[[Dict[str, Any]], Dict[str, Any]]], Callable[[Dict[str, Any]], Dict[str, Any]]]:
+    ) -> Callable[[Callable[[dict[str, Any]], dict[str, Any]]], Callable[[dict[str, Any]], dict[str, Any]]]:
         """Decorator to register a schema migration.
 
         Args:
@@ -144,8 +145,8 @@ class EventSchemaRegistry:
         """
 
         def decorator(
-            migrator: Callable[[Dict[str, Any]], Dict[str, Any]]
-        ) -> Callable[[Dict[str, Any]], Dict[str, Any]]:
+            migrator: Callable[[dict[str, Any]], dict[str, Any]]
+        ) -> Callable[[dict[str, Any]], dict[str, Any]]:
             key = (event_type, from_version, to_version)
             cls._migrations[key] = MigrationInfo(
                 from_version=from_version,
@@ -162,7 +163,7 @@ class EventSchemaRegistry:
         cls,
         event_type: str,
         version: str = "latest",
-    ) -> Optional[Type[Any]]:
+    ) -> type[Any] | None:
         """Get a schema class by type and version.
 
         Args:
@@ -193,7 +194,7 @@ class EventSchemaRegistry:
         cls,
         event_type: str,
         version: str,
-    ) -> Optional[SchemaInfo]:
+    ) -> SchemaInfo | None:
         """Get full schema information.
 
         Args:
@@ -209,11 +210,11 @@ class EventSchemaRegistry:
     @classmethod
     def migrate(
         cls,
-        event_data: Dict[str, Any],
+        event_data: dict[str, Any],
         event_type: str,
         from_version: str,
         to_version: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Migrate event data from one version to another.
 
         Args:
@@ -262,7 +263,7 @@ class EventSchemaRegistry:
         cls._default_versions[event_type] = version
 
     @classmethod
-    def get_default_version(cls, event_type: str) -> Optional[str]:
+    def get_default_version(cls, event_type: str) -> str | None:
         """Get the default version for an event type.
 
         Args:
@@ -274,7 +275,7 @@ class EventSchemaRegistry:
         return cls._default_versions.get(event_type)
 
     @classmethod
-    def get_latest_version(cls, event_type: str) -> Optional[str]:
+    def get_latest_version(cls, event_type: str) -> str | None:
         """Get the latest version for an event type.
 
         Args:
@@ -286,7 +287,7 @@ class EventSchemaRegistry:
         return cls._latest_versions.get(event_type)
 
     @classmethod
-    def list_schemas(cls, event_type: Optional[str] = None) -> List[SchemaInfo]:
+    def list_schemas(cls, event_type: str | None = None) -> list[SchemaInfo]:
         """List all registered schemas.
 
         Args:
@@ -301,7 +302,7 @@ class EventSchemaRegistry:
         return sorted(schemas, key=lambda s: (s.event_type, s.version))
 
     @classmethod
-    def list_event_types(cls) -> List[str]:
+    def list_event_types(cls) -> list[str]:
         """List all registered event types.
 
         Returns:
@@ -347,7 +348,7 @@ class EventSchemaRegistry:
         parts1 = [int(x) for x in v1.split(".")]
         parts2 = [int(x) for x in v2.split(".")]
 
-        for p1, p2 in zip(parts1, parts2):
+        for p1, p2 in zip(parts1, parts2, strict=False):
             if p1 < p2:
                 return -1
             if p1 > p2:
@@ -366,7 +367,7 @@ class EventSchemaRegistry:
         event_type: str,
         from_version: str,
         to_version: str,
-    ) -> Optional[List[Tuple[str, str]]]:
+    ) -> list[tuple[str, str]] | None:
         """Find a migration path between versions.
 
         Uses BFS to find the shortest path.
@@ -380,7 +381,7 @@ class EventSchemaRegistry:
             List of (from, to) version tuples or None if no path exists
         """
         # Build adjacency list
-        graph: Dict[str, List[str]] = {}
+        graph: dict[str, list[str]] = {}
         for key in cls._migrations:
             if key[0] == event_type:
                 src, dst = key[1], key[2]
@@ -403,22 +404,22 @@ class EventSchemaRegistry:
             for next_version in graph.get(current, []):
                 if next_version not in visited:
                     visited.add(next_version)
-                    queue.append((next_version, path + [(current, next_version)]))
+                    queue.append((next_version, [*path, (current, next_version)]))
 
         return None
 
 
 # Convenience functions
-def get_schema(event_type: str, version: str = "latest") -> Optional[Type[Any]]:
+def get_schema(event_type: str, version: str = "latest") -> type[Any] | None:
     """Get a schema class by type and version."""
     return EventSchemaRegistry.get_schema(event_type, version)
 
 
 def migrate_event(
-    event_data: Dict[str, Any],
+    event_data: dict[str, Any],
     event_type: str,
     from_version: str,
     to_version: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Migrate event data from one version to another."""
     return EventSchemaRegistry.migrate(event_data, event_type, from_version, to_version)

@@ -12,7 +12,6 @@ multi-tenant isolation.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from src.application.services.provider_resolution_service import (
     ProviderResolutionService,
@@ -37,13 +36,13 @@ class AIServiceFactory:
 
     def __init__(
         self,
-        resolution_service: Optional[ProviderResolutionService] = None,
+        resolution_service: ProviderResolutionService | None = None,
     ) -> None:
         self._resolution = resolution_service or get_provider_resolution_service()
 
     async def resolve_provider(
         self,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
         operation_type: OperationType = OperationType.LLM,
     ) -> ProviderConfig:
         """Resolve the active provider config from the database."""
@@ -51,14 +50,14 @@ class AIServiceFactory:
 
     async def resolve_embedding_provider(
         self,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
     ) -> ProviderConfig:
         """Resolve provider config for embedding operations."""
         return await self.resolve_provider(tenant_id, operation_type=OperationType.EMBEDDING)
 
     async def resolve_rerank_provider(
         self,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
     ) -> ProviderConfig:
         """Resolve provider config for rerank operations."""
         return await self.resolve_provider(tenant_id, operation_type=OperationType.RERANK)
@@ -70,7 +69,7 @@ class AIServiceFactory:
     @staticmethod
     def create_llm_client(
         provider_config: ProviderConfig,
-        cache: Optional[bool] = None,
+        cache: bool | None = None,
     ):
         """Create a ``LiteLLMClient`` from a resolved provider config.
 
@@ -104,7 +103,7 @@ class AIServiceFactory:
     @staticmethod
     def create_embedder(
         provider_config: ProviderConfig,
-        embedding_dim: Optional[int] = None,
+        embedding_dim: int | None = None,
     ):
         """Create a ``LiteLLMEmbedder`` from a resolved provider config.
 
@@ -122,7 +121,7 @@ class AIServiceFactory:
     @staticmethod
     def create_embedding_service(
         provider_config: ProviderConfig,
-        embedding_dim: Optional[int] = None,
+        embedding_dim: int | None = None,
     ):
         """Create an ``EmbeddingService`` wrapping a LiteLLM embedder.
 
@@ -155,7 +154,7 @@ class AIServiceFactory:
 
 # Module-level convenience ------------------------------------------------
 
-_factory: Optional[AIServiceFactory] = None
+_factory: AIServiceFactory | None = None
 
 
 def get_ai_service_factory() -> AIServiceFactory:

@@ -2,7 +2,6 @@
 Use case for getting a task log by ID.
 """
 
-from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -28,10 +27,10 @@ class GetTaskQuery(BaseModel):
 class GetTaskUseCase:
     """Use case for retrieving a single task"""
 
-    def __init__(self, task_repository: TaskRepository):
+    def __init__(self, task_repository: TaskRepository) -> None:
         self._task_repo = task_repository
 
-    async def execute(self, query: GetTaskQuery) -> Optional[TaskLog]:
+    async def execute(self, query: GetTaskQuery) -> TaskLog | None:
         """
         Get a task by ID.
 

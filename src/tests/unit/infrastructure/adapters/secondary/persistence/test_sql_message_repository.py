@@ -7,7 +7,7 @@ These tests verify that the migrated repository maintains 100% compatibility
 with the original implementation while leveraging the BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,7 +57,7 @@ class TestSqlMessageRepositorySave:
             role=MessageRole.USER,
             content="Hello, world!",
             message_type=MessageType.TEXT,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         await v2_message_repo.save(message)
@@ -82,7 +82,7 @@ class TestSqlMessageRepositorySave:
                 ToolCall(name="search", arguments={"query": "test"}, call_id="call-1"),
                 ToolCall(name="calculate", arguments={"x": 1, "y": 2}, call_id="call-2"),
             ],
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         await v2_message_repo.save(message)
@@ -121,7 +121,7 @@ class TestSqlMessageRepositorySave:
                     error_message="Invalid input",
                 ),
             ],
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         await v2_message_repo.save(message)
@@ -142,7 +142,7 @@ class TestSqlMessageRepositorySave:
             role=MessageRole.USER,
             content="Commit test",
             message_type=MessageType.TEXT,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         await v2_message_repo.save_and_commit(message)
@@ -164,7 +164,7 @@ class TestSqlMessageRepositoryFind:
             role=MessageRole.USER,
             content="Find me",
             message_type=MessageType.TEXT,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_message_repo.save(message)
 
@@ -194,7 +194,7 @@ class TestSqlMessageRepositoryList:
                 role=MessageRole.USER,
                 content=f"Message {i}",
                 message_type=MessageType.TEXT,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_message_repo.save(message)
 
@@ -214,7 +214,7 @@ class TestSqlMessageRepositoryList:
             role=MessageRole.USER,
             content="First",
             message_type=MessageType.TEXT,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_message_repo.save(msg1)
         time.sleep(0.01)
@@ -225,7 +225,7 @@ class TestSqlMessageRepositoryList:
             role=MessageRole.USER,
             content="Second",
             message_type=MessageType.TEXT,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_message_repo.save(msg2)
 
@@ -245,7 +245,7 @@ class TestSqlMessageRepositoryList:
                 role=MessageRole.USER,
                 content=f"Page {i}",
                 message_type=MessageType.TEXT,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_message_repo.save(message)
 
@@ -268,7 +268,7 @@ class TestSqlMessageRepositoryList:
                 role=MessageRole.USER,
                 content=f"Recent {i}",
                 message_type=MessageType.TEXT,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_message_repo.save(message)
 
@@ -295,7 +295,7 @@ class TestSqlMessageRepositoryCount:
                 role=MessageRole.USER,
                 content=f"Count {i}",
                 message_type=MessageType.TEXT,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_message_repo.save(message)
 
@@ -317,7 +317,7 @@ class TestSqlMessageRepositoryDelete:
                 role=MessageRole.USER,
                 content=f"Delete {i}",
                 message_type=MessageType.TEXT,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_message_repo.save(message)
 
@@ -348,7 +348,7 @@ class TestSqlMessageRepositoryToDomain:
                 ToolResult(tool_call_id="call-123", result="Success", is_error=False)
             ],
             metadata={"key": "value"},
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_message_repo.save(message)
 
@@ -382,7 +382,7 @@ class TestSqlMessageRepositoryTransaction:
                 role=MessageRole.USER,
                 content="TX 1",
                 message_type=MessageType.TEXT,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_message_repo.save(msg1)
 
@@ -392,7 +392,7 @@ class TestSqlMessageRepositoryTransaction:
                 role=MessageRole.USER,
                 content="TX 2",
                 message_type=MessageType.TEXT,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_message_repo.save(msg2)
 
@@ -413,7 +413,7 @@ class TestSqlMessageRepositoryTransaction:
                     role=MessageRole.USER,
                     content="Rollback",
                     message_type=MessageType.TEXT,
-                    created_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(UTC),
                 )
                 await v2_message_repo.save(msg1)
 

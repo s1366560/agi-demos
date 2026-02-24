@@ -7,7 +7,7 @@ based on project-specific entity and edge type definitions stored in the databas
 
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Tuple, TypedDict
+from typing import Optional, TypedDict
 
 from pydantic import BaseModel, Field, create_model
 from sqlalchemy import select
@@ -38,17 +38,17 @@ class EntityTypeContext(TypedDict):
 class SchemaContext(TypedDict):
     """Complete schema context for entity/relationship extraction."""
 
-    entity_types_context: List[EntityTypeContext]
-    edge_type_map: Dict[Tuple[str, str], List[str]]
-    entity_type_id_to_name: Dict[int, str]
-    entity_type_name_to_id: Dict[str, int]
+    entity_types_context: list[EntityTypeContext]
+    edge_type_map: dict[tuple[str, str], list[str]]
+    entity_type_id_to_name: dict[int, str]
+    entity_type_name_to_id: dict[str, int]
 
 
 # =============================================================================
 # Default Entity Types (matching Graphiti defaults)
 # =============================================================================
 
-DEFAULT_ENTITY_TYPES_CONTEXT: List[EntityTypeContext] = [
+DEFAULT_ENTITY_TYPES_CONTEXT: list[EntityTypeContext] = [
     {
         "entity_type_id": 0,
         "entity_type_name": "Entity",
@@ -87,7 +87,7 @@ DEFAULT_ENTITY_TYPES_CONTEXT: List[EntityTypeContext] = [
 ]
 
 
-async def get_project_schema(project_id: str) -> Tuple[Dict, Dict, Dict]:
+async def get_project_schema(project_id: str) -> tuple[dict, dict, dict]:
     """
     Get dynamic schema for a project.
     Returns: (entity_types, edge_types, edge_type_map)
@@ -139,9 +139,9 @@ async def get_project_schema(project_id: str) -> Tuple[Dict, Dict, Dict]:
                 elif type_str == "DateTime":
                     py_type = datetime
                 elif type_str == "List":
-                    py_type = List
+                    py_type = list
                 elif type_str == "Dict":
-                    py_type = Dict
+                    py_type = dict
 
                 fields[field_name] = (Optional[py_type], Field(None, description=desc))
 
@@ -194,11 +194,11 @@ async def get_project_schema(project_id: str) -> Tuple[Dict, Dict, Dict]:
 # =============================================================================
 
 # Simple in-memory cache for schema context
-_schema_context_cache: Dict[str, Tuple[SchemaContext, float]] = {}
+_schema_context_cache: dict[str, tuple[SchemaContext, float]] = {}
 _CACHE_TTL_SECONDS = 60.0  # Cache TTL in seconds
 
 
-def _get_cached_schema_context(project_id: str) -> Optional[SchemaContext]:
+def _get_cached_schema_context(project_id: str) -> SchemaContext | None:
     """Get cached schema context if not expired."""
     import time
 
@@ -216,7 +216,7 @@ def _set_cached_schema_context(project_id: str, context: SchemaContext) -> None:
     _schema_context_cache[project_id] = (context, time.time())
 
 
-def clear_schema_context_cache(project_id: Optional[str] = None) -> None:
+def clear_schema_context_cache(project_id: str | None = None) -> None:
     """
     Clear the schema context cache.
 
@@ -318,7 +318,7 @@ async def _ensure_default_types_initialized(project_id: str) -> None:
     _initialized_projects.add(project_id)
 
 
-async def get_project_schema_context(project_id: Optional[str] = None) -> SchemaContext:
+async def get_project_schema_context(project_id: str | None = None) -> SchemaContext:
     """
     Get schema context for a project in Graphiti-compatible format.
 
@@ -367,8 +367,8 @@ async def get_project_schema_context(project_id: Optional[str] = None) -> Schema
     await _ensure_default_types_initialized(project_id)
 
     # Start with empty context - will load all from database
-    entity_types_context: List[EntityTypeContext] = []
-    edge_type_map: Dict[Tuple[str, str], List[str]] = {}
+    entity_types_context: list[EntityTypeContext] = []
+    edge_type_map: dict[tuple[str, str], list[str]] = {}
 
     # Track existing type names to maintain ID assignment order
     type_id_counter = 0
@@ -433,7 +433,7 @@ async def get_project_schema_context(project_id: Optional[str] = None) -> Schema
     return context
 
 
-def format_entity_types_for_prompt(entity_types_context: List[EntityTypeContext]) -> str:
+def format_entity_types_for_prompt(entity_types_context: list[EntityTypeContext]) -> str:
     """
     Format entity types context as a string for LLM prompts.
 
@@ -462,7 +462,7 @@ def format_entity_types_for_prompt(entity_types_context: List[EntityTypeContext]
 # =============================================================================
 
 
-async def initialize_default_types_for_project(project_id: str) -> Dict[str, int]:
+async def initialize_default_types_for_project(project_id: str) -> dict[str, int]:
     """
     Initialize default entity types for a project in the database.
 
@@ -529,8 +529,8 @@ async def initialize_default_types_for_project(project_id: str) -> Dict[str, int
 async def save_discovered_entity_type(
     project_id: str,
     name: str,
-    description: Optional[str] = None,
-) -> Optional[str]:
+    description: str | None = None,
+) -> str | None:
     """
     Save a newly discovered entity type to the database.
 
@@ -582,8 +582,8 @@ async def save_discovered_entity_type(
 async def save_discovered_edge_type(
     project_id: str,
     name: str,
-    description: Optional[str] = None,
-) -> Optional[str]:
+    description: str | None = None,
+) -> str | None:
     """
     Save a newly discovered edge/relationship type to the database.
 
@@ -635,7 +635,7 @@ async def save_discovered_edge_type_map(
     source_type: str,
     target_type: str,
     edge_type: str,
-) -> Optional[str]:
+) -> str | None:
     """
     Save a newly discovered edge type mapping to the database.
 
@@ -693,10 +693,10 @@ async def save_discovered_edge_type_map(
 
 async def save_discovered_types_batch(
     project_id: str,
-    entity_types: List[Dict[str, str]],
-    edge_types: List[str],
-    edge_type_maps: List[Dict[str, str]],
-) -> Dict[str, int]:
+    entity_types: list[dict[str, str]],
+    edge_types: list[str],
+    edge_type_maps: list[dict[str, str]],
+) -> dict[str, int]:
     """
     Batch save discovered types to the database.
 

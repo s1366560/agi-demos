@@ -15,10 +15,11 @@ Implements: SandboxResourcePort
 
 import asyncio
 import base64
+import contextlib
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.exc import IntegrityError
 
@@ -86,13 +87,13 @@ class UnifiedSandboxService(SandboxResourcePort):
         self,
         repository: ProjectSandboxRepository,
         sandbox_adapter: "MCPSandboxAdapter",
-        distributed_lock: Optional[DistributedLockPort] = None,
+        distributed_lock: DistributedLockPort | None = None,
         default_profile: SandboxProfileType = SandboxProfileType.STANDARD,
         health_check_interval_seconds: int = 60,
         auto_recover: bool = True,
-        memory_limit_override: Optional[str] = None,
-        cpu_limit_override: Optional[str] = None,
-    ):
+        memory_limit_override: str | None = None,
+        cpu_limit_override: str | None = None,
+    ) -> None:
         """Initialize the unified sandbox service.
 
         Args:
@@ -115,11 +116,11 @@ class UnifiedSandboxService(SandboxResourcePort):
         self._cpu_limit_override = cpu_limit_override
 
         # Per-project locks for in-process concurrency control
-        self._project_locks: Dict[str, asyncio.Lock] = {}
+        self._project_locks: dict[str, asyncio.Lock] = {}
         self._locks_lock = asyncio.Lock()
         self._max_project_locks = 500  # Prevent unbounded growth
         # Debounce access time persistence (at most once per 60s per project)
-        self._last_access_save: Dict[str, datetime] = {}
+        self._last_access_save: dict[str, datetime] = {}
 
     async def _get_project_lock(self, project_id: str) -> asyncio.Lock:
         """Get or create a lock for a specific project."""
@@ -146,7 +147,7 @@ class UnifiedSandboxService(SandboxResourcePort):
 
     def _should_save_access(self, project_id: str) -> bool:
         """Check if access time should be persisted (debounce to once per 60s)."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         last = self._last_access_save.get(project_id)
         if last is None or (now - last).total_seconds() >= 60:
             self._last_access_save[project_id] = now
@@ -161,8 +162,8 @@ class UnifiedSandboxService(SandboxResourcePort):
         self,
         project_id: str,
         tenant_id: str,
-        profile: Optional[SandboxProfileType] = None,
-        config_override: Optional[Dict[str, Any]] = None,
+        profile: SandboxProfileType | None = None,
+        config_override: dict[str, Any] | None = None,
         max_retries: int = 3,
     ) -> SandboxInfo:
         """Get existing sandbox or create a new one for the project.
@@ -216,9 +217,9 @@ class UnifiedSandboxService(SandboxResourcePort):
         self,
         project_id: str,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         timeout: float = 30.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Execute a tool in the project's sandbox.
 
         Automatically ensures the sandbox is running before execution.
@@ -322,7 +323,7 @@ class UnifiedSandboxService(SandboxResourcePort):
             # Always clean up project lock, even on failure
             await self._cleanup_project_lock(project_id)
 
-    async def get_status(self, project_id: str) -> Optional[SandboxInfo]:
+    async def get_status(self, project_id: str) -> SandboxInfo | None:
         """Get sandbox status for a project.
 
         Args:
@@ -398,7 +399,7 @@ class UnifiedSandboxService(SandboxResourcePort):
         self,
         project_id: str,
         tenant_id: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Get the sandbox ID for a project without creating one.
 
         Args:
@@ -521,7 +522,7 @@ class UnifiedSandboxService(SandboxResourcePort):
     async def get_sandbox_info(
         self,
         project_id: str,
-    ) -> Optional[SandboxInfo]:
+    ) -> SandboxInfo | None:
         """Get information about the project's sandbox.
 
         Args:
@@ -544,8 +545,8 @@ class UnifiedSandboxService(SandboxResourcePort):
         self,
         project_id: str,
         tenant_id: str,
-        profile: Optional[SandboxProfileType] = None,
-        config_override: Optional[Dict[str, Any]] = None,
+        profile: SandboxProfileType | None = None,
+        config_override: dict[str, Any] | None = None,
     ) -> SandboxInfo:
         """Internal implementation with multi-layer locking."""
         project_lock = await self._get_project_lock(project_id)
@@ -620,8 +621,8 @@ class UnifiedSandboxService(SandboxResourcePort):
         self,
         project_id: str,
         tenant_id: str,
-        profile: Optional[SandboxProfileType] = None,
-        config_override: Optional[Dict[str, Any]] = None,
+        profile: SandboxProfileType | None = None,
+        config_override: dict[str, Any] | None = None,
     ) -> SandboxInfo:
         """Create a new sandbox for a project."""
         sandbox_id = f"proj-sb-{uuid.uuid4().hex[:12]}"
@@ -649,7 +650,7 @@ class UnifiedSandboxService(SandboxResourcePort):
 
             association.sandbox_id = instance.id
             association.status = ProjectSandboxStatus.RUNNING
-            association.started_at = datetime.now(timezone.utc)
+            association.started_at = datetime.now(UTC)
             association.mark_healthy()
             await self._repository.save(association)
 
@@ -664,10 +665,8 @@ class UnifiedSandboxService(SandboxResourcePort):
                 association.mark_error(f"MCP connection failed: {e}")
                 await self._repository.save(association)
                 # Attempt to clean up the container
-                try:
+                with contextlib.suppress(Exception):
                     await self._adapter.terminate_sandbox(instance.id)
-                except Exception:
-                    pass
                 raise RuntimeError(f"MCP connection failed for sandbox {instance.id}: {e}")
 
             logger.info(f"Created sandbox {instance.id} for project {project_id}")
@@ -694,10 +693,8 @@ class UnifiedSandboxService(SandboxResourcePort):
         original_sandbox_id = association.sandbox_id
 
         # Clean up existing containers
-        try:
+        with contextlib.suppress(Exception):
             await self._adapter.terminate_sandbox(original_sandbox_id)
-        except Exception:
-            pass
 
         try:
             await self._adapter.cleanup_project_containers(association.project_id)
@@ -720,7 +717,7 @@ class UnifiedSandboxService(SandboxResourcePort):
 
             association.sandbox_id = instance.id
             association.status = ProjectSandboxStatus.RUNNING
-            association.started_at = datetime.now(timezone.utc)
+            association.started_at = datetime.now(UTC)
             association.mark_healthy()
             await self._repository.save(association)
 
@@ -743,10 +740,8 @@ class UnifiedSandboxService(SandboxResourcePort):
 
     async def _cleanup_failed_sandbox(self, association: ProjectSandbox) -> None:
         """Clean up a failed sandbox before recreating."""
-        try:
+        with contextlib.suppress(Exception):
             await self._adapter.terminate_sandbox(association.sandbox_id)
-        except Exception:
-            pass
 
         try:
             await self._adapter.cleanup_project_containers(association.project_id)
@@ -779,7 +774,7 @@ class UnifiedSandboxService(SandboxResourcePort):
         )
 
         # Fetch available tools from sandbox (if healthy and MCP is connected)
-        available_tools: List[str] = []
+        available_tools: list[str] = []
         if is_healthy and hasattr(self._adapter, "list_tools"):
             try:
                 tool_list = await self._adapter.list_tools(association.sandbox_id)
@@ -813,8 +808,8 @@ class UnifiedSandboxService(SandboxResourcePort):
 
     def _resolve_config(
         self,
-        profile: Optional[SandboxProfileType],
-        config_override: Optional[Dict[str, Any]],
+        profile: SandboxProfileType | None,
+        config_override: dict[str, Any] | None,
     ) -> SandboxConfig:
         """Resolve sandbox configuration from profile and overrides."""
         profile_type = profile or self._default_profile

@@ -2,7 +2,7 @@
 Tests for V2 SqlToolExecutionRecordRepository using BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +37,7 @@ class TestSqlToolExecutionRecordRepositoryCreate:
             error=None,
             step_number=1,
             sequence_number=1,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             completed_at=None,
             duration_ms=None,
         )
@@ -64,7 +64,7 @@ class TestSqlToolExecutionRecordRepositoryCreate:
             error=None,
             step_number=1,
             sequence_number=1,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             completed_at=None,
             duration_ms=None,
         )
@@ -72,7 +72,7 @@ class TestSqlToolExecutionRecordRepositoryCreate:
 
         record.status = "completed"
         record.tool_output = "output"
-        record.completed_at = datetime.now(timezone.utc)
+        record.completed_at = datetime.now(UTC)
         record.duration_ms = 100
 
         await v2_tool_record_repo.save(record)
@@ -101,8 +101,8 @@ class TestSqlToolExecutionRecordRepositoryFind:
             error=None,
             step_number=1,
             sequence_number=1,
-            started_at=datetime.now(timezone.utc),
-            completed_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
             duration_ms=50,
         )
         await v2_tool_record_repo.save(record)
@@ -132,8 +132,8 @@ class TestSqlToolExecutionRecordRepositoryFind:
             error=None,
             step_number=1,
             sequence_number=1,
-            started_at=datetime.now(timezone.utc),
-            completed_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
             duration_ms=10,
         )
         await v2_tool_record_repo.save(record)
@@ -158,8 +158,8 @@ class TestSqlToolExecutionRecordRepositoryFind:
                 error=None,
                 step_number=1,
                 sequence_number=i,
-                started_at=datetime.now(timezone.utc),
-                completed_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
+                completed_at=datetime.now(UTC),
                 duration_ms=10,
             )
             await v2_tool_record_repo.save(record)
@@ -187,8 +187,8 @@ class TestSqlToolExecutionRecordRepositoryFind:
                 error=None,
                 step_number=1,
                 sequence_number=1,
-                started_at=datetime.now(timezone.utc),
-                completed_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
+                completed_at=datetime.now(UTC),
                 duration_ms=10,
             )
             await v2_tool_record_repo.save(record)
@@ -215,7 +215,7 @@ class TestSqlToolExecutionRecordRepositoryUpdate:
             error=None,
             step_number=1,
             sequence_number=1,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             completed_at=None,
             duration_ms=None,
         )
@@ -254,8 +254,8 @@ class TestSqlToolExecutionRecordRepositoryDelete:
                 error=None,
                 step_number=1,
                 sequence_number=1,
-                started_at=datetime.now(timezone.utc),
-                completed_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
+                completed_at=datetime.now(UTC),
                 duration_ms=10,
             )
             await v2_tool_record_repo.save(record)

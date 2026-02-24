@@ -6,7 +6,6 @@ based on the entity's core attributes (name, type, summary).
 
 import hashlib
 import logging
-from typing import Dict, List
 
 from src.infrastructure.graph.schemas import EntityNode
 
@@ -28,7 +27,7 @@ class HashDeduplicator:
 
     def __init__(self) -> None:
         """Initialize the hash deduplicator."""
-        self._hash_cache: Dict[str, str] = {}
+        self._hash_cache: dict[str, str] = {}
 
     def compute_hash(self, entity: EntityNode) -> str:
         """
@@ -60,7 +59,7 @@ class HashDeduplicator:
 
         return hash_value
 
-    def dedupe(self, entities: List[EntityNode]) -> List[EntityNode]:
+    def dedupe(self, entities: list[EntityNode]) -> list[EntityNode]:
         """
         Remove exact duplicates from a list of entities.
 
@@ -77,7 +76,7 @@ class HashDeduplicator:
             return []
 
         seen_hashes: set[str] = set()
-        unique_entities: List[EntityNode] = []
+        unique_entities: list[EntityNode] = []
 
         for entity in entities:
             entity_hash = self.compute_hash(entity)
@@ -102,9 +101,9 @@ class HashDeduplicator:
 
     def dedupe_against(
         self,
-        new_entities: List[EntityNode],
-        existing_entities: List[EntityNode],
-    ) -> tuple[List[EntityNode], Dict[str, str]]:
+        new_entities: list[EntityNode],
+        existing_entities: list[EntityNode],
+    ) -> tuple[list[EntityNode], dict[str, str]]:
         """
         Deduplicate new entities against existing entities.
 
@@ -127,14 +126,14 @@ class HashDeduplicator:
             return new_entities, {}
 
         # Compute hashes for existing entities
-        existing_hashes: Dict[str, str] = {}
+        existing_hashes: dict[str, str] = {}
         for entity in existing_entities:
             entity_hash = self.compute_hash(entity)
             existing_hashes[entity_hash] = entity.uuid
 
         # Find unique new entities
-        unique_entities: List[EntityNode] = []
-        duplicate_map: Dict[str, str] = {}
+        unique_entities: list[EntityNode] = []
+        duplicate_map: dict[str, str] = {}
 
         for entity in new_entities:
             entity_hash = self.compute_hash(entity)

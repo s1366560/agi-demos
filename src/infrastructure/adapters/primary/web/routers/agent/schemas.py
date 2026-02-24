@@ -4,7 +4,7 @@ All request/response models for the Agent API endpoints.
 """
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -17,8 +17,8 @@ class CreateConversationRequest(BaseModel):
     """Request to create a new conversation."""
 
     project_id: str
-    title: Optional[str] = "New Conversation"
-    agent_config: Optional[dict] = None
+    title: str | None = "New Conversation"
+    agent_config: dict | None = None
 
 
 class UpdateConversationTitleRequest(BaseModel):
@@ -38,8 +38,8 @@ class ConversationResponse(BaseModel):
     status: str
     message_count: int
     created_at: str
-    updated_at: Optional[str] = None
-    summary: Optional[str] = None
+    updated_at: str | None = None
+    summary: str | None = None
 
     @classmethod
     def from_domain(cls, conversation: Conversation) -> "ConversationResponse":
@@ -73,8 +73,8 @@ class ChatRequest(BaseModel):
 
     conversation_id: str
     message: str
-    reply_to_id: Optional[str] = None
-    app_model_context: Optional[Dict[str, Any]] = Field(
+    reply_to_id: str | None = None
+    app_model_context: dict[str, Any] | None = Field(
         None,
         description="Context injected by MCP Apps via ui/update-model-context (SEP-1865)",
     )
@@ -159,7 +159,7 @@ class PatternStepResponse(BaseModel):
     tool_name: str
     expected_output_format: str
     similarity_threshold: float
-    tool_parameters: Optional[dict] = None
+    tool_parameters: dict | None = None
 
 
 class WorkflowPatternResponse(BaseModel):
@@ -174,7 +174,7 @@ class WorkflowPatternResponse(BaseModel):
     usage_count: int
     created_at: str
     updated_at: str
-    metadata: Optional[dict] = None
+    metadata: dict | None = None
 
 
 class PatternsListResponse(BaseModel):
@@ -217,14 +217,14 @@ class TenantAgentConfigResponse(BaseModel):
 class UpdateTenantAgentConfigRequest(BaseModel):
     """Request model for updating tenant agent configuration."""
 
-    llm_model: Optional[str] = None
-    llm_temperature: Optional[float] = None
-    pattern_learning_enabled: Optional[bool] = None
-    multi_level_thinking_enabled: Optional[bool] = None
-    max_work_plan_steps: Optional[int] = None
-    tool_timeout_seconds: Optional[int] = None
-    enabled_tools: Optional[list[str]] = None
-    disabled_tools: Optional[list[str]] = None
+    llm_model: str | None = None
+    llm_temperature: float | None = None
+    pattern_learning_enabled: bool | None = None
+    multi_level_thinking_enabled: bool | None = None
+    max_work_plan_steps: int | None = None
+    tool_timeout_seconds: int | None = None
+    enabled_tools: list[str] | None = None
+    disabled_tools: list[str] | None = None
 
 
 # === Execution Stats Schemas ===
@@ -253,11 +253,11 @@ class HITLRequestResponse(BaseModel):
     message_id: str
     request_type: str
     question: str
-    options: Optional[list] = None
-    context: Optional[dict] = None
-    metadata: Optional[dict] = None
+    options: list | None = None
+    context: dict | None = None
+    metadata: dict | None = None
     created_at: str
-    expires_at: Optional[str] = None
+    expires_at: str | None = None
     status: str
 
 
@@ -327,7 +327,7 @@ class HITLCancelRequest(BaseModel):
     """Request to cancel a pending HITL request."""
 
     request_id: str
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 # === Plan Mode Schemas ===
@@ -338,7 +338,7 @@ class EnterPlanModeRequest(BaseModel):
 
     conversation_id: str
     title: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class ExitPlanModeRequest(BaseModel):
@@ -347,17 +347,17 @@ class ExitPlanModeRequest(BaseModel):
     conversation_id: str
     plan_id: str
     approve: bool = True
-    summary: Optional[str] = None
+    summary: str | None = None
 
 
 class UpdatePlanRequest(BaseModel):
     """Request to update a plan."""
 
-    content: Optional[str] = None
-    title: Optional[str] = None
-    explored_files: Optional[list[str]] = None
-    critical_files: Optional[list[dict]] = None
-    metadata: Optional[dict] = None
+    content: str | None = None
+    title: str | None = None
+    explored_files: list[str] | None = None
+    critical_files: list[dict] | None = None
+    metadata: dict | None = None
 
 
 class PlanResponse(BaseModel):
@@ -379,8 +379,8 @@ class PlanModeStatusResponse(BaseModel):
 
     is_in_plan_mode: bool
     current_mode: str
-    current_plan_id: Optional[str] = None
-    plan: Optional[PlanResponse] = None
+    current_plan_id: str | None = None
+    plan: PlanResponse | None = None
 
 
 # === Event Replay Schemas ===
@@ -408,19 +408,19 @@ class ExecutionStatusResponse(BaseModel):
     is_running: bool
     last_event_time_us: int
     last_event_counter: int
-    current_message_id: Optional[str] = None
+    current_message_id: str | None = None
     conversation_id: str
-    recovery: Optional[RecoveryInfo] = None
+    recovery: RecoveryInfo | None = None
 
 
 class WorkflowStatusResponse(BaseModel):
     """Response with Ray actor status."""
 
     workflow_id: str
-    run_id: Optional[str] = None
+    run_id: str | None = None
     status: str  # RUNNING, COMPLETED, FAILED, CANCELED, etc.
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    current_step: Optional[int] = None
-    total_steps: Optional[int] = None
-    error: Optional[str] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    current_step: int | None = None
+    total_steps: int | None = None
+    error: str | None = None

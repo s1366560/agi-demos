@@ -3,7 +3,6 @@ Authentication router.
 """
 
 import logging
-from typing import List
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -191,7 +190,7 @@ async def create_new_api_key(
     )
 
 
-@router.get("/auth/keys", response_model=List[APIKeyResponse])
+@router.get("/auth/keys", response_model=list[APIKeyResponse])
 async def list_api_keys(
     current_user: DBUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)
 ):
@@ -217,7 +216,7 @@ async def revoke_api_key(
     key_id: str,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     """Revoke (delete) an API key."""
     result = await db.execute(
         select(DBAPIKey).where(DBAPIKey.id == key_id, DBAPIKey.user_id == current_user.id)

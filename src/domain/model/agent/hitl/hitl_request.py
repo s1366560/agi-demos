@@ -5,9 +5,9 @@ enabling recovery after page refresh and audit trails.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.shared_kernel import Entity
 
@@ -77,17 +77,17 @@ class HITLRequest(Entity):
     tenant_id: str
     project_id: str
     question: str
-    message_id: Optional[str] = None
-    user_id: Optional[str] = None
-    options: Optional[List[Dict[str, Any]]] = None
-    context: Optional[Dict[str, Any]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    message_id: str | None = None
+    user_id: str | None = None
+    options: list[dict[str, Any]] | None = None
+    context: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
     status: HITLRequestStatus = HITLRequestStatus.PENDING
-    response: Optional[str] = None
-    response_metadata: Optional[Dict[str, Any]] = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    expires_at: Optional[datetime] = None
-    answered_at: Optional[datetime] = None
+    response: str | None = None
+    response_metadata: dict[str, Any] | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    expires_at: datetime | None = None
+    answered_at: datetime | None = None
 
     def __post_init__(self):
         """Validate the entity after initialization."""
@@ -122,12 +122,12 @@ class HITLRequest(Entity):
     @property
     def is_expired(self) -> bool:
         """Check if request has expired."""
-        return datetime.now(timezone.utc) > self.expires_at if self.expires_at else False
+        return datetime.now(UTC) > self.expires_at if self.expires_at else False
 
     def answer(
         self,
         response: str,
-        response_metadata: Optional[Dict[str, Any]] = None,
+        response_metadata: dict[str, Any] | None = None,
     ) -> None:
         """Mark request as answered with given response."""
         if not self.is_pending:
@@ -136,7 +136,7 @@ class HITLRequest(Entity):
         self.response = response
         self.response_metadata = response_metadata
         self.status = HITLRequestStatus.ANSWERED
-        self.answered_at = datetime.now(timezone.utc)
+        self.answered_at = datetime.now(UTC)
 
     def mark_processing(self) -> None:
         """Mark request as being processed by Agent."""
@@ -150,7 +150,7 @@ class HITLRequest(Entity):
             raise ValueError(f"Cannot mark completed for status: {self.status}")
         self.status = HITLRequestStatus.COMPLETED
 
-    def mark_timeout(self, default_response: Optional[str] = None) -> None:
+    def mark_timeout(self, default_response: str | None = None) -> None:
         """Mark request as timed out."""
         if not self.is_pending:
             raise ValueError(f"Cannot timeout request with status: {self.status}")
@@ -168,7 +168,7 @@ class HITLRequest(Entity):
         self.status = HITLRequestStatus.CANCELLED
 
     @property
-    def default_option(self) -> Optional[str]:
+    def default_option(self) -> str | None:
         """Get the default option if any (for decision type)."""
         if self.request_type != HITLRequestType.DECISION or not self.options:
             return None
@@ -179,7 +179,7 @@ class HITLRequest(Entity):
 
         return None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "id": self.id,

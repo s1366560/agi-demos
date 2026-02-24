@@ -20,7 +20,7 @@ from src.domain.ports.services.sandbox_resource_port import (
 class MockSandboxResourceWithTools(SandboxResourcePort):
     """Mock SandboxResourcePort that returns tool list."""
 
-    def __init__(self, available_tools=None):
+    def __init__(self, available_tools=None) -> None:
         self._available_tools = available_tools or []
         self._sandbox_id = "sb-test-123"
 

@@ -1,6 +1,6 @@
 """Unit tests for notifications API endpoints."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -82,7 +82,7 @@ class TestListNotifications:
             title="Expired",
             message="This is expired",
             is_read=False,
-            expires_at=datetime.now(timezone.utc) - timedelta(days=1),
+            expires_at=datetime.now(UTC) - timedelta(days=1),
         )
         notif_valid = Notification(
             id="notif_valid_1",
@@ -91,7 +91,7 @@ class TestListNotifications:
             title="Valid",
             message="This is valid",
             is_read=False,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+            expires_at=datetime.now(UTC) + timedelta(days=1),
         )
         test_db.add(notif_expired)
         test_db.add(notif_valid)
@@ -362,7 +362,7 @@ class TestCreateNotification:
             "user_id": test_user.id,
             "title": "Temporary",
             "message": "Expires soon",
-            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
         }
 
         response = client.post("/api/v1/notifications/create", json=notif_data)

@@ -9,8 +9,10 @@ channel adapter.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,7 +38,7 @@ class OutboxRetryWorker:
     ) -> None:
         self._session_factory = session_factory
         self._get_connection = get_connection_fn
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._running = False
 
     def start(self) -> None:
@@ -52,10 +54,8 @@ class OutboxRetryWorker:
         self._running = False
         if self._task and not self._task.done():
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
         logger.info("[OutboxWorker] Stopped")
 
     async def _poll_loop(self) -> None:

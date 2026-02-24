@@ -16,7 +16,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 from src.domain.llm_providers.base import BaseReranker
 from src.domain.llm_providers.llm_types import RateLimitError
@@ -53,9 +53,9 @@ class LiteLLMRerankerConfig:
     """Configuration for LiteLLM Reranker."""
 
     model: str
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    provider_type: Optional[ProviderType] = None
+    api_key: str | None = None
+    base_url: str | None = None
+    provider_type: ProviderType | None = None
 
 
 class LiteLLMReranker(BaseReranker):
@@ -74,7 +74,7 @@ class LiteLLMReranker(BaseReranker):
     def __init__(
         self,
         config: ProviderConfig | LiteLLMRerankerConfig,
-    ):
+    ) -> None:
         """
         Initialize LiteLLM reranker.
 
@@ -109,7 +109,7 @@ class LiteLLMReranker(BaseReranker):
         return DEFAULT_RERANK_MODELS.get(provider_type, "gpt-4o-mini")
 
     @staticmethod
-    def _resolve_api_base(provider_type: Optional[ProviderType], base_url: Optional[str]) -> Optional[str]:
+    def _resolve_api_base(provider_type: ProviderType | None, base_url: str | None) -> str | None:
         """Resolve api_base using configured value or local-provider defaults."""
         if base_url:
             return base_url
@@ -119,7 +119,7 @@ class LiteLLMReranker(BaseReranker):
             return "http://localhost:1234/v1"
         return None
 
-    def _configure_litellm(self):
+    def _configure_litellm(self) -> None:
         """No-op. Kept for backward compatibility.
 
         API key is now passed per-request via the ``api_key`` parameter
@@ -129,9 +129,9 @@ class LiteLLMReranker(BaseReranker):
     async def rank(
         self,
         query: str,
-        passages: List[str],
-        top_n: Optional[int] = None,
-    ) -> List[Tuple[str, float]]:
+        passages: list[str],
+        top_n: int | None = None,
+    ) -> list[tuple[str, float]]:
         """
         Rank passages by relevance to query.
 
@@ -167,9 +167,9 @@ class LiteLLMReranker(BaseReranker):
     async def _cohere_rerank(
         self,
         query: str,
-        passages: List[str],
+        passages: list[str],
         top_n: int,
-    ) -> List[Tuple[str, float]]:
+    ) -> list[tuple[str, float]]:
         """
         Rerank using Cohere's native rerank API.
 
@@ -218,9 +218,9 @@ class LiteLLMReranker(BaseReranker):
     async def _llm_rerank(
         self,
         query: str,
-        passages: List[str],
+        passages: list[str],
         top_n: int,
-    ) -> List[Tuple[str, float]]:
+    ) -> list[tuple[str, float]]:
         """
         Rerank using LLM-based relevance scoring.
 
@@ -326,7 +326,7 @@ class LiteLLMReranker(BaseReranker):
                     logger.debug(f"Rerank compact retry failed: {retry_error}")
 
             # Combine passages with scores and sort
-            passage_scores = list(zip(passages, scores))
+            passage_scores = list(zip(passages, scores, strict=False))
             passage_scores.sort(key=lambda x: x[1], reverse=True)
 
             # Limit to top_n
@@ -369,7 +369,7 @@ class LiteLLMReranker(BaseReranker):
 
         return model
 
-    def _build_rerank_prompt(self, query: str, passages: List[str]) -> str:
+    def _build_rerank_prompt(self, query: str, passages: list[str]) -> str:
         """
         Build prompt for LLM-based reranking.
 
@@ -407,7 +407,7 @@ Ensure:
 
     def _parse_rerank_response(
         self, response: str, expected_count: int
-    ) -> Tuple[List[float], bool]:
+    ) -> tuple[list[float], bool]:
         """
         Parse LLM response into scores.
 

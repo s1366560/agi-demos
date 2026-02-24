@@ -1,4 +1,3 @@
-from typing import List, Optional
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -32,7 +31,7 @@ async def verify_project_access(
     project_id: str,
     user: User,
     db: AsyncSession,
-    required_role: Optional[List[str]] = None,
+    required_role: list[str] | None = None,
 ):
     query = select(UserProject).where(
         and_(UserProject.user_id == user.id, UserProject.project_id == project_id)
@@ -53,7 +52,7 @@ async def verify_project_access(
 # --- Entity Types ---
 
 
-@router.get("/entities", response_model=List[EntityTypeResponse])
+@router.get("/entities", response_model=list[EntityTypeResponse])
 async def list_entity_types(
     project_id: str,
     current_user: User = Depends(get_current_user),
@@ -127,7 +126,7 @@ async def delete_entity_type(
     entity_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     await verify_project_access(project_id, current_user, db)
     entity_type = await db.get(EntityType, entity_id)
     if not entity_type or entity_type.project_id != project_id:
@@ -140,7 +139,7 @@ async def delete_entity_type(
 # --- Edge Types ---
 
 
-@router.get("/edges", response_model=List[EdgeTypeResponse])
+@router.get("/edges", response_model=list[EdgeTypeResponse])
 async def list_edge_types(
     project_id: str,
     current_user: User = Depends(get_current_user),
@@ -210,7 +209,7 @@ async def delete_edge_type(
     edge_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     await verify_project_access(project_id, current_user, db)
     edge_type = await db.get(EdgeType, edge_id)
     if not edge_type or edge_type.project_id != project_id:
@@ -223,7 +222,7 @@ async def delete_edge_type(
 # --- Edge Maps ---
 
 
-@router.get("/mappings", response_model=List[EdgeTypeMapResponse])
+@router.get("/mappings", response_model=list[EdgeTypeMapResponse])
 async def list_edge_maps(
     project_id: str,
     current_user: User = Depends(get_current_user),
@@ -276,7 +275,7 @@ async def delete_edge_map(
     map_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     await verify_project_access(project_id, current_user, db)
     edge_map = await db.get(EdgeTypeMap, map_id)
     if not edge_map or edge_map.project_id != project_id:

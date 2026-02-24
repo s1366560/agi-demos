@@ -10,10 +10,11 @@ instead of a Ray actor.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any
 
 import redis.asyncio as aioredis
 
@@ -30,9 +31,9 @@ class LocalHITLResumeConsumer:
 
     def __init__(self, redis_client: aioredis.Redis) -> None:
         self._redis = redis_client
-        self._projects: Set[Tuple[str, str]] = set()
+        self._projects: set[tuple[str, str]] = set()
         self._running = False
-        self._listen_task: Optional[asyncio.Task] = None
+        self._listen_task: asyncio.Task | None = None
         self._worker_id = f"local-resume-{os.getpid()}"
 
     async def start(self) -> None:
@@ -46,10 +47,8 @@ class LocalHITLResumeConsumer:
         self._running = False
         if self._listen_task:
             self._listen_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._listen_task
-            except asyncio.CancelledError:
-                pass
             self._listen_task = None
         logger.info("[LocalHITL] Stopped local HITL resume consumer")
 
@@ -95,7 +94,7 @@ class LocalHITLResumeConsumer:
                 logger.error(f"[LocalHITL] Error in listen loop: {e}", exc_info=True)
                 await asyncio.sleep(1)
 
-    async def _handle_message(self, stream_key: str, msg_id: str, fields: Dict[str, Any]) -> None:
+    async def _handle_message(self, stream_key: str, msg_id: str, fields: dict[str, Any]) -> None:
         try:
             raw = fields.get("data") or fields.get(b"data")
             if not raw:
@@ -137,7 +136,7 @@ class LocalHITLResumeConsumer:
         tenant_id: str,
         project_id: str,
         request_id: str,
-        response_data: Dict[str, Any],
+        response_data: dict[str, Any],
     ) -> None:
         """Resolve the pending HITL Future via the coordinator registry."""
         from src.infrastructure.agent.hitl.coordinator import resolve_by_request_id
@@ -163,7 +162,7 @@ class LocalHITLResumeConsumer:
         tenant_id: str,
         project_id: str,
         request_id: str,
-        response_data: Dict[str, Any],
+        response_data: dict[str, Any],
     ) -> None:
         """Crash recovery fallback: create a fresh agent and replay."""
         from src.configuration.config import get_settings
@@ -228,7 +227,7 @@ class LocalHITLResumeConsumer:
         return self.STREAM_KEY_PATTERN.format(tenant_id=tenant_id, project_id=project_id)
 
     @staticmethod
-    def _parse_stream_key(stream_key: str) -> Tuple[str, str]:
+    def _parse_stream_key(stream_key: str) -> tuple[str, str]:
         if isinstance(stream_key, bytes):
             stream_key = stream_key.decode("utf-8")
         parts = stream_key.split(":")
@@ -238,7 +237,7 @@ class LocalHITLResumeConsumer:
 
 
 # Module-level singleton
-_local_consumer: Optional[LocalHITLResumeConsumer] = None
+_local_consumer: LocalHITLResumeConsumer | None = None
 
 
 async def get_or_create_local_consumer() -> LocalHITLResumeConsumer:

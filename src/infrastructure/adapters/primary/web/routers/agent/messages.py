@@ -4,7 +4,7 @@ Endpoints for conversation messages, execution history, and status.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
@@ -33,16 +33,16 @@ async def get_conversation_messages(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID for authorization"),
     limit: int = Query(50, ge=1, le=500, description="Maximum events to return"),
-    from_time_us: Optional[int] = Query(
+    from_time_us: int | None = Query(
         None, description="Starting event_time_us (inclusive) for forward pagination"
     ),
-    from_counter: Optional[int] = Query(
+    from_counter: int | None = Query(
         None, description="Starting event_counter (inclusive) for forward pagination"
     ),
-    before_time_us: Optional[int] = Query(
+    before_time_us: int | None = Query(
         None, description="For backward pagination, get events before this event_time_us"
     ),
-    before_counter: Optional[int] = Query(
+    before_counter: int | None = Query(
         None, description="For backward pagination, event_counter for the cursor"
     ),
     current_user: User = Depends(get_current_user),
@@ -200,7 +200,7 @@ async def get_conversation_messages(
                 item["content"] = data.get("content", "")
                 item["role"] = "user"
                 # Include file and skill metadata for UI rendering
-                metadata: Dict[str, Any] = {}
+                metadata: dict[str, Any] = {}
                 if data.get("file_metadata"):
                     metadata["fileMetadata"] = data["file_metadata"]
                 if data.get("forced_skill_name"):
@@ -444,8 +444,8 @@ async def get_conversation_execution(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID for authorization"),
     limit: int = Query(50, ge=1, le=100, description="Maximum executions to return"),
-    status_filter: Optional[str] = Query(None, description="Filter by execution status"),
-    tool_filter: Optional[str] = Query(None, description="Filter by tool name"),
+    status_filter: str | None = Query(None, description="Filter by execution status"),
+    tool_filter: str | None = Query(None, description="Filter by tool name"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
@@ -486,7 +486,7 @@ async def get_conversation_execution(
 async def get_conversation_tool_executions(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID for authorization"),
-    message_id: Optional[str] = Query(None, description="Filter by message ID"),
+    message_id: str | None = Query(None, description="Filter by message ID"),
     limit: int = Query(100, ge=1, le=500, description="Maximum executions to return"),
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
@@ -605,7 +605,7 @@ async def _get_recovery_info(
     container,
     redis_client,
     conversation_id: str,
-    message_id: Optional[str],
+    message_id: str | None,
     from_time_us: int,
 ) -> dict:
     """Get event stream recovery information."""

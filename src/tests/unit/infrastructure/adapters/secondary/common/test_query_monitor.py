@@ -7,7 +7,7 @@ Tests the query monitoring with:
 - Performance dashboard data aggregation
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -62,7 +62,7 @@ class TestQueryInfo:
             query_text="SELECT * FROM users",
             duration_ms=150,
             rows_affected=10,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
 
         assert query.query_hash == "abc123"
@@ -76,7 +76,7 @@ class TestQueryInfo:
             query_text="SELECT * FROM users",
             duration_ms=150,
             rows_affected=10,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
 
         assert query.is_slow(threshold_ms=100) is True
@@ -89,7 +89,7 @@ class TestQueryInfo:
             query_text="SELECT * FROM users",
             duration_ms=150,
             rows_affected=10,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
 
         result = query.to_dict()

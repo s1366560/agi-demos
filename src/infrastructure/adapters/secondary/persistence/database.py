@@ -88,7 +88,7 @@ async def get_read_db():
         await session.close()
 
 
-async def initialize_database():
+async def initialize_database() -> None:
     """
     Initialize database schema.
 
@@ -111,7 +111,7 @@ async def initialize_database():
     logger.info("✅ Database schema initialized")
 
 
-async def update_agent_events_schema():
+async def update_agent_events_schema() -> None:
     """
     Update agent_execution_events table with indexes and constraints.
 
@@ -164,7 +164,7 @@ async def update_agent_events_schema():
     logger.info("✅ agent_execution_events schema updated")
 
 
-async def migrate_messages_to_events():
+async def migrate_messages_to_events() -> None:
     """
     Migrate messages table data to agent_execution_events table.
 
@@ -291,7 +291,7 @@ async def check_messages_table_exists() -> bool:
         return result.scalar()
 
 
-async def migrate_skills_multi_tenant():
+async def migrate_skills_multi_tenant() -> None:
     """
     Migrate skills table to support three-level scoping (system/tenant/project).
 

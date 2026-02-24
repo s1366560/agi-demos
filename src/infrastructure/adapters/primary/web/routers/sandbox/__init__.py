@@ -65,14 +65,6 @@ async def list_sandboxes_root(
 
 
 __all__ = [
-    "router",
-    # Utilities
-    "ensure_sandbox_sync",
-    "extract_project_id",
-    "get_event_publisher",
-    "get_sandbox_adapter",
-    "get_sandbox_orchestrator",
-    "get_sandbox_token_service",
     # Schemas
     "CreateSandboxRequest",
     "DesktopStartRequest",
@@ -94,4 +86,12 @@ __all__ = [
     "ToolInfo",
     "ValidateTokenRequest",
     "ValidateTokenResponse",
+    # Utilities
+    "ensure_sandbox_sync",
+    "extract_project_id",
+    "get_event_publisher",
+    "get_sandbox_adapter",
+    "get_sandbox_orchestrator",
+    "get_sandbox_token_service",
+    "router",
 ]

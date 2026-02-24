@@ -18,8 +18,8 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from neo4j import AsyncDriver
 from redis.asyncio import Redis
@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 class HealthCheckError(Exception):
     """Exception raised when a critical health check fails."""
 
-    def __init__(self, message: str, service: Optional[str] = None):
+    def __init__(self, message: str, service: str | None = None) -> None:
         super().__init__(message)
         self.service = service
         self.message = message
@@ -55,10 +55,10 @@ class HealthStatus:
     healthy: bool
     message: str
     latency_ms: float
-    details: Dict[str, Any] = field(default_factory=dict)
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    details: dict[str, Any] = field(default_factory=dict)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert health status to dictionary."""
         return {
             "service": self.service,
@@ -83,7 +83,7 @@ class PostgresHealthChecker:
         engine: AsyncEngine,
         query: str = "SELECT 1",
         timeout: float = 5.0,
-    ):
+    ) -> None:
         """
         Initialize PostgreSQL health checker.
 
@@ -104,7 +104,7 @@ class PostgresHealthChecker:
             HealthStatus with check results
         """
         start_time = time.time()
-        details: Dict[str, Any] = {}
+        details: dict[str, Any] = {}
 
         try:
             async with asyncio.timeout(self._timeout):
@@ -136,7 +136,7 @@ class PostgresHealthChecker:
                 details=details,
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             latency_ms = (time.time() - start_time) * 1000
             return HealthStatus(
                 service="postgres",
@@ -168,7 +168,7 @@ class RedisHealthChecker:
         self,
         redis: Redis,
         timeout: float = 2.0,
-    ):
+    ) -> None:
         """
         Initialize Redis health checker.
 
@@ -187,7 +187,7 @@ class RedisHealthChecker:
             HealthStatus with check results
         """
         start_time = time.time()
-        details: Dict[str, Any] = {}
+        details: dict[str, Any] = {}
 
         try:
             async with asyncio.timeout(self._timeout):
@@ -222,7 +222,7 @@ class RedisHealthChecker:
                 details=details,
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             latency_ms = (time.time() - start_time) * 1000
             return HealthStatus(
                 service="redis",
@@ -254,7 +254,7 @@ class Neo4jHealthChecker:
         driver: AsyncDriver,
         query: str = "RETURN 1",
         timeout: float = 5.0,
-    ):
+    ) -> None:
         """
         Initialize Neo4j health checker.
 
@@ -275,7 +275,7 @@ class Neo4jHealthChecker:
             HealthStatus with check results
         """
         start_time = time.time()
-        details: Dict[str, Any] = {}
+        details: dict[str, Any] = {}
 
         try:
             # Verify connectivity (may be sync or async)
@@ -316,7 +316,7 @@ class Neo4jHealthChecker:
                 details=details,
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             latency_ms = (time.time() - start_time) * 1000
             return HealthStatus(
                 service="neo4j",
@@ -345,10 +345,10 @@ class SystemHealthChecker:
 
     def __init__(
         self,
-        postgres: Optional[PostgresHealthChecker] = None,
-        redis: Optional[RedisHealthChecker] = None,
-        neo4j: Optional[Neo4jHealthChecker] = None,
-    ):
+        postgres: PostgresHealthChecker | None = None,
+        redis: RedisHealthChecker | None = None,
+        neo4j: Neo4jHealthChecker | None = None,
+    ) -> None:
         """
         Initialize system health checker.
 
@@ -368,7 +368,7 @@ class SystemHealthChecker:
         Returns:
             HealthStatus with aggregated results
         """
-        checks: Dict[str, HealthStatus] = {}
+        checks: dict[str, HealthStatus] = {}
         tasks = []
 
         # Collect and run all configured health checks
@@ -386,7 +386,7 @@ class SystemHealthChecker:
                 return_exceptions=True,
             )
 
-            for (name, _), result in zip(tasks, results):
+            for (name, _), result in zip(tasks, results, strict=False):
                 if isinstance(result, Exception):
                     checks[name] = HealthStatus(
                         service=name,
@@ -439,7 +439,7 @@ class SystemHealthChecker:
 
         return await checker.check()
 
-    def to_dict(self, status: HealthStatus) -> Dict[str, Any]:
+    def to_dict(self, status: HealthStatus) -> dict[str, Any]:
         """
         Convert health status to dictionary (alias for to_dict).
 

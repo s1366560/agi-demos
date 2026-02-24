@@ -14,9 +14,9 @@ Type Generation:
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 # =============================================================================
 # HITL Request Types
@@ -70,10 +70,10 @@ class ClarificationOption:
 
     id: str
     label: str
-    description: Optional[str] = None
+    description: str | None = None
     recommended: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "label": self.label,
@@ -88,12 +88,12 @@ class ClarificationRequestData:
 
     question: str
     clarification_type: ClarificationType = ClarificationType.CUSTOM
-    options: List[ClarificationOption] = field(default_factory=list)
+    options: list[ClarificationOption] = field(default_factory=list)
     allow_custom: bool = True
-    context: Dict[str, Any] = field(default_factory=dict)
-    default_value: Optional[str] = None
+    context: dict[str, Any] = field(default_factory=dict)
+    default_value: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "question": self.question,
             "clarification_type": self.clarification_type.value,
@@ -136,14 +136,14 @@ class DecisionOption:
 
     id: str
     label: str
-    description: Optional[str] = None
+    description: str | None = None
     recommended: bool = False
-    risk_level: Optional[RiskLevel] = None
-    estimated_time: Optional[str] = None
-    estimated_cost: Optional[str] = None
-    risks: List[str] = field(default_factory=list)
+    risk_level: RiskLevel | None = None
+    estimated_time: str | None = None
+    estimated_cost: str | None = None
+    risks: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "label": self.label,
@@ -162,13 +162,13 @@ class DecisionRequestData:
 
     question: str
     decision_type: DecisionType = DecisionType.CUSTOM
-    options: List[DecisionOption] = field(default_factory=list)
+    options: list[DecisionOption] = field(default_factory=list)
     allow_custom: bool = False
-    default_option: Optional[str] = None
-    max_selections: Optional[int] = None
-    context: Dict[str, Any] = field(default_factory=dict)
+    default_option: str | None = None
+    max_selections: int | None = None
+    context: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "question": self.question,
             "decision_type": self.decision_type.value,
@@ -201,15 +201,15 @@ class EnvVarField:
 
     name: str  # Variable name (e.g., "OPENAI_API_KEY")
     label: str  # Display label
-    description: Optional[str] = None
+    description: str | None = None
     required: bool = True
     secret: bool = False  # Whether to mask input
     input_type: EnvVarInputType = EnvVarInputType.TEXT
-    default_value: Optional[str] = None
-    placeholder: Optional[str] = None
-    pattern: Optional[str] = None  # Validation regex
+    default_value: str | None = None
+    placeholder: str | None = None
+    pattern: str | None = None  # Validation regex
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
             "label": self.label,
@@ -228,12 +228,12 @@ class EnvVarRequestData:
     """Data for an environment variable request."""
 
     tool_name: str  # Tool that needs the env vars
-    fields: List[EnvVarField]
-    message: Optional[str] = None
+    fields: list[EnvVarField]
+    message: str | None = None
     allow_save: bool = True  # Whether to save for future sessions
-    context: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "tool_name": self.tool_name,
             "fields": [f.to_dict() for f in self.fields],
@@ -264,13 +264,13 @@ class PermissionRequestData:
     tool_name: str
     action: str  # Description of the action
     risk_level: RiskLevel = RiskLevel.MEDIUM
-    details: Dict[str, Any] = field(default_factory=dict)
-    description: Optional[str] = None
+    details: dict[str, Any] = field(default_factory=dict)
+    description: str | None = None
     allow_remember: bool = True
-    default_action: Optional[PermissionAction] = None
-    context: Dict[str, Any] = field(default_factory=dict)
+    default_action: PermissionAction | None = None
+    context: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "tool_name": self.tool_name,
             "action": self.action,
@@ -295,24 +295,24 @@ class HITLRequest:
     request_id: str
     hitl_type: HITLType
     conversation_id: str
-    message_id: Optional[str] = None
+    message_id: str | None = None
 
     # Type-specific data (only one will be set)
-    clarification_data: Optional[ClarificationRequestData] = None
-    decision_data: Optional[DecisionRequestData] = None
-    env_var_data: Optional[EnvVarRequestData] = None
-    permission_data: Optional[PermissionRequestData] = None
+    clarification_data: ClarificationRequestData | None = None
+    decision_data: DecisionRequestData | None = None
+    env_var_data: EnvVarRequestData | None = None
+    permission_data: PermissionRequestData | None = None
 
     # Common fields
     status: HITLStatus = HITLStatus.PENDING
     timeout_seconds: float = 300.0
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    expires_at: Optional[datetime] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    expires_at: datetime | None = None
 
     # Tenant context
-    tenant_id: Optional[str] = None
-    project_id: Optional[str] = None
-    user_id: Optional[str] = None
+    tenant_id: str | None = None
+    project_id: str | None = None
+    user_id: str | None = None
 
     def __post_init__(self):
         if self.expires_at is None:
@@ -340,7 +340,7 @@ class HITLRequest:
         return ""
 
     @property
-    def type_specific_data(self) -> Dict[str, Any]:
+    def type_specific_data(self) -> dict[str, Any]:
         """Get the type-specific data as a dictionary."""
         if self.clarification_data:
             return self.clarification_data.to_dict()
@@ -352,7 +352,7 @@ class HITLRequest:
             return self.permission_data.to_dict()
         return {}
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "request_id": self.request_id,
@@ -380,21 +380,21 @@ class HITLRequest:
 class ClarificationResponse:
     """Response to a clarification request."""
 
-    answer: Union[str, List[str]]  # Option ID(s) or custom text
+    answer: str | list[str]  # Option ID(s) or custom text
 
 
 @dataclass
 class DecisionResponse:
     """Response to a decision request."""
 
-    decision: Union[str, List[str]]  # Option ID(s)
+    decision: str | list[str]  # Option ID(s)
 
 
 @dataclass
 class EnvVarResponse:
     """Response to an environment variable request."""
 
-    values: Dict[str, str]  # Variable name → value
+    values: dict[str, str]  # Variable name → value
     save: bool = False  # Save for future sessions
 
 
@@ -414,17 +414,17 @@ class HITLResponse:
     hitl_type: HITLType
 
     # Type-specific response (only one will be set)
-    clarification_response: Optional[ClarificationResponse] = None
-    decision_response: Optional[DecisionResponse] = None
-    env_var_response: Optional[EnvVarResponse] = None
-    permission_response: Optional[PermissionResponse] = None
+    clarification_response: ClarificationResponse | None = None
+    decision_response: DecisionResponse | None = None
+    env_var_response: EnvVarResponse | None = None
+    permission_response: PermissionResponse | None = None
 
     # Response metadata
-    responded_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    user_id: Optional[str] = None
+    responded_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    user_id: str | None = None
 
     @property
-    def response_value(self) -> Union[str, List[str], Dict[str, str], None]:
+    def response_value(self) -> str | list[str] | dict[str, str] | None:
         """Get the response value for the Agent."""
         if self.clarification_response:
             return self.clarification_response.answer
@@ -436,7 +436,7 @@ class HITLResponse:
             return self.permission_response.action.value
         return None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         result = {
             "request_id": self.request_id,
@@ -473,11 +473,11 @@ class HITLSignalPayload:
 
     request_id: str
     hitl_type: HITLType
-    response_data: Dict[str, Any]  # Type-specific response data
-    user_id: Optional[str] = None
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    response_data: dict[str, Any]  # Type-specific response data
+    user_id: str | None = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "request_id": self.request_id,
             "hitl_type": self.hitl_type.value,
@@ -487,7 +487,7 @@ class HITLSignalPayload:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "HITLSignalPayload":
+    def from_dict(cls, data: dict[str, Any]) -> "HITLSignalPayload":
         return cls(
             request_id=data["request_id"],
             hitl_type=HITLType(data["hitl_type"]),
@@ -496,7 +496,7 @@ class HITLSignalPayload:
             timestamp=(
                 datetime.fromisoformat(data["timestamp"])
                 if data.get("timestamp")
-                else datetime.now(timezone.utc)
+                else datetime.now(UTC)
             ),
         )
 
@@ -514,7 +514,7 @@ def create_clarification_request(
     request_id: str,
     conversation_id: str,
     question: str,
-    options: List[ClarificationOption],
+    options: list[ClarificationOption],
     clarification_type: ClarificationType = ClarificationType.CUSTOM,
     allow_custom: bool = True,
     timeout_seconds: float = 300.0,
@@ -542,7 +542,7 @@ def create_decision_request(
     request_id: str,
     conversation_id: str,
     question: str,
-    options: List[DecisionOption],
+    options: list[DecisionOption],
     decision_type: DecisionType = DecisionType.SINGLE_CHOICE,
     allow_custom: bool = False,
     timeout_seconds: float = 300.0,
@@ -575,8 +575,8 @@ def create_env_var_request(
     request_id: str,
     conversation_id: str,
     tool_name: str,
-    fields: List[EnvVarField],
-    message: Optional[str] = None,
+    fields: list[EnvVarField],
+    message: str | None = None,
     timeout_seconds: float = 300.0,
     **kwargs,
 ) -> HITLRequest:
@@ -647,7 +647,7 @@ def is_request_expired(request: HITLRequest) -> bool:
     """
     if request.expires_at is None:
         return False
-    return datetime.now(timezone.utc) > request.expires_at
+    return datetime.now(UTC) > request.expires_at
 
 
 def get_remaining_time_seconds(request: HITLRequest) -> int | None:
@@ -662,7 +662,7 @@ def get_remaining_time_seconds(request: HITLRequest) -> int | None:
     """
     if request.expires_at is None:
         return None
-    delta = request.expires_at - datetime.now(timezone.utc)
+    delta = request.expires_at - datetime.now(UTC)
     return int(delta.total_seconds())
 
 
@@ -695,13 +695,13 @@ class HITLPendingException(Exception):
         self,
         request_id: str,
         hitl_type: HITLType,
-        request_data: Dict[str, Any],
+        request_data: dict[str, Any],
         conversation_id: str,
-        message_id: Optional[str] = None,
+        message_id: str | None = None,
         timeout_seconds: float = 300.0,
-        current_messages: Optional[List[Dict[str, Any]]] = None,
-        tool_call_id: Optional[str] = None,
-    ):
+        current_messages: list[dict[str, Any]] | None = None,
+        tool_call_id: str | None = None,
+    ) -> None:
         self.request_id = request_id
         self.hitl_type = hitl_type
         self.request_data = request_data
@@ -717,7 +717,7 @@ class HITLPendingException(Exception):
 
         super().__init__(f"HITL request pending: {hitl_type.value} ({request_id})")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         result = {
             "request_id": self.request_id,
@@ -736,7 +736,7 @@ class HITLPendingException(Exception):
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "HITLPendingException":
+    def from_dict(cls, data: dict[str, Any]) -> "HITLPendingException":
         """Create from dictionary."""
         return cls(
             request_id=data["request_id"],

@@ -4,8 +4,8 @@ This module handles the setup and configuration of OpenTelemetry
 for distributed tracing and metrics collection.
 """
 
+import contextlib
 import logging
-from typing import Optional
 
 from opentelemetry import metrics, trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
@@ -30,10 +30,10 @@ from src.configuration.config import get_settings
 logger = logging.getLogger(__name__)
 
 # Global providers (cached after initialization)
-_TRACER_PROVIDER: Optional[TracerProvider] = None
-_METER_PROVIDER: Optional[MeterProvider] = None
+_TRACER_PROVIDER: TracerProvider | None = None
+_METER_PROVIDER: MeterProvider | None = None
 # Flag to control telemetry globally (for testing)
-_TELEMETRY_ENABLED: Optional[bool] = None
+_TELEMETRY_ENABLED: bool | None = None
 
 
 def _reset_providers() -> None:
@@ -44,13 +44,11 @@ def _reset_providers() -> None:
     _TELEMETRY_ENABLED = None
 
     # Also clear global meter provider
-    try:
+    with contextlib.suppress(Exception):
         metrics.set_meter_provider(None)
-    except Exception:
-        pass
 
 
-def _create_resource(settings_override: Optional[dict] = None) -> Resource:
+def _create_resource(settings_override: dict | None = None) -> Resource:
     """Create OpenTelemetry Resource with service attributes."""
     settings = settings_override or get_settings().__dict__
 
@@ -71,7 +69,7 @@ def _create_resource(settings_override: Optional[dict] = None) -> Resource:
     return Resource.create(attributes)
 
 
-def _create_trace_exporter(settings_override: Optional[dict] = None):
+def _create_trace_exporter(settings_override: dict | None = None):
     """Create appropriate trace exporter based on configuration."""
     settings = settings_override or get_settings().__dict__
 
@@ -94,7 +92,7 @@ def _create_trace_exporter(settings_override: Optional[dict] = None):
         return ConsoleSpanExporter()
 
 
-def _get_sampler(settings_override: Optional[dict] = None):
+def _get_sampler(settings_override: dict | None = None):
     """Create sampler based on environment."""
     settings = settings_override or get_settings().__dict__
     environment = settings.get("environment", "development")
@@ -109,8 +107,8 @@ def _get_sampler(settings_override: Optional[dict] = None):
 
 
 def configure_tracer_provider(
-    settings_override: Optional[dict] = None, force_reset: bool = False
-) -> Optional[TracerProvider]:
+    settings_override: dict | None = None, force_reset: bool = False
+) -> TracerProvider | None:
     """Configure and return the tracer provider.
 
     Args:
@@ -167,8 +165,8 @@ def configure_tracer_provider(
 
 
 def configure_meter_provider(
-    settings_override: Optional[dict] = None, force_reset: bool = False
-) -> Optional[MeterProvider]:
+    settings_override: dict | None = None, force_reset: bool = False
+) -> MeterProvider | None:
     """Configure and return the meter provider.
 
     Args:
@@ -190,10 +188,8 @@ def configure_meter_provider(
     if not enable_telemetry:
         # Clear global meter provider when telemetry is disabled
         if force_reset:
-            try:
+            with contextlib.suppress(Exception):
                 metrics.set_meter_provider(None)
-            except Exception:
-                pass
         _TELEMETRY_ENABLED = False
         return None
 
@@ -223,7 +219,7 @@ def configure_meter_provider(
         return None
 
 
-def configure_telemetry(settings_override: Optional[dict] = None) -> None:
+def configure_telemetry(settings_override: dict | None = None) -> None:
     """Configure OpenTelemetry tracing and metrics.
 
     This function should be called during application startup.
@@ -235,7 +231,7 @@ def configure_telemetry(settings_override: Optional[dict] = None) -> None:
     configure_meter_provider(settings_override)
 
 
-def get_tracer(instrumentation_name: str = "memstack") -> Optional[trace.Tracer]:
+def get_tracer(instrumentation_name: str = "memstack") -> trace.Tracer | None:
     """Get a tracer for the given instrumentation name.
 
     Args:
@@ -251,7 +247,7 @@ def get_tracer(instrumentation_name: str = "memstack") -> Optional[trace.Tracer]
     return provider.get_tracer(instrumentation_name)
 
 
-def get_meter(instrumentation_name: str = "memstack-telemetry") -> Optional[metrics.Meter]:
+def get_meter(instrumentation_name: str = "memstack-telemetry") -> metrics.Meter | None:
     """Get a meter for the given instrumentation name.
 
     Args:
@@ -301,11 +297,11 @@ TRACER_PROVIDER = property(lambda self: _TRACER_PROVIDER)
 METER_PROVIDER = property(lambda self: _METER_PROVIDER)
 
 
-def _get_tracer_provider_global() -> Optional[TracerProvider]:
+def _get_tracer_provider_global() -> TracerProvider | None:
     """Get the global tracer provider (for testing)."""
     return _TRACER_PROVIDER
 
 
-def _get_meter_provider_global() -> Optional[MeterProvider]:
+def _get_meter_provider_global() -> MeterProvider | None:
     """Get the global meter provider (for testing)."""
     return _METER_PROVIDER

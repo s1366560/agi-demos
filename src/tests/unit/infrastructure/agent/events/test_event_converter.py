@@ -6,7 +6,6 @@ Tests the unified event conversion logic extracted from ReActAgent.
 
 import time
 from dataclasses import dataclass
-from typing import List
 from unittest.mock import MagicMock
 
 import pytest
@@ -50,7 +49,7 @@ class MockSkill:
 
     id: str = "test-skill-001"
     name: str = "TestSkill"
-    tools: List[str] = None
+    tools: list[str] = None
 
     def __post_init__(self):
         if self.tools is None:

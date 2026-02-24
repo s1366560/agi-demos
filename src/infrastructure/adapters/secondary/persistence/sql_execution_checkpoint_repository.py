@@ -9,7 +9,6 @@ This is a migrated version that:
 """
 
 import logging
-from typing import List, Optional
 
 from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,8 +61,8 @@ class SqlExecutionCheckpointRepository(
     async def get_latest(
         self,
         conversation_id: str,
-        message_id: Optional[str] = None,
-    ) -> Optional[ExecutionCheckpoint]:
+        message_id: str | None = None,
+    ) -> ExecutionCheckpoint | None:
         """Get the latest checkpoint for a conversation."""
         query = select(DBExecutionCheckpoint).where(
             DBExecutionCheckpoint.conversation_id == conversation_id
@@ -83,7 +82,7 @@ class SqlExecutionCheckpointRepository(
         conversation_id: str,
         checkpoint_type: str,
         limit: int = 10,
-    ) -> List[ExecutionCheckpoint]:
+    ) -> list[ExecutionCheckpoint]:
         """Get checkpoints of a specific type for a conversation."""
         result = await self._session.execute(
             select(DBExecutionCheckpoint)
@@ -109,8 +108,8 @@ class SqlExecutionCheckpointRepository(
     # === Conversion methods ===
 
     def _to_domain(
-        self, db_checkpoint: Optional[DBExecutionCheckpoint]
-    ) -> Optional[ExecutionCheckpoint]:
+        self, db_checkpoint: DBExecutionCheckpoint | None
+    ) -> ExecutionCheckpoint | None:
         """
         Convert database model to domain model.
 

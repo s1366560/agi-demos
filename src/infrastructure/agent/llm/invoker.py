@@ -14,9 +14,10 @@ import asyncio
 import logging
 import time
 import uuid
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Protocol
+from typing import Any, Protocol
 
 from src.domain.events.agent_events import (
     AgentActEvent,
@@ -60,12 +61,12 @@ class CostTrackerProtocol(Protocol):
     """Protocol for cost tracking."""
 
     def calculate(
-        self, usage: Dict[str, int], model_name: str
-    ) -> Any:  # Returns CostResult-like object  # noqa: ANN401
+        self, usage: dict[str, int], model_name: str
+    ) -> Any:  # Returns CostResult-like object
         """Calculate cost from usage."""
         ...
 
-    def needs_compaction(self, tokens: Any) -> bool:  # tokens is TokenUsage-like  # noqa: ANN401
+    def needs_compaction(self, tokens: Any) -> bool:  # tokens is TokenUsage-like
         """Check if context compaction is needed."""
         ...
 
@@ -73,7 +74,7 @@ class CostTrackerProtocol(Protocol):
 class ToolProtocol(Protocol):
     """Protocol for tool definitions."""
 
-    def to_openai_format(self) -> Dict[str, Any]:
+    def to_openai_format(self) -> dict[str, Any]:
         """Convert tool to OpenAI function format."""
         ...
 
@@ -90,7 +91,7 @@ class MessageProtocol(Protocol):
         ...
 
     def add_tool_call(
-        self, call_id: str, tool: str, input: Dict[str, Any]
+        self, call_id: str, tool: str, input: dict[str, Any]
     ) -> "ToolPartProtocol":
         """Add a tool call and return the tool part."""
         ...
@@ -99,7 +100,7 @@ class MessageProtocol(Protocol):
 class ToolPartProtocol(Protocol):
     """Protocol for tool call part."""
 
-    input: Dict[str, Any]
+    input: dict[str, Any]
     status: Any  # ToolState
     start_time: float
     tool_execution_id: str
@@ -130,7 +131,7 @@ class TokenUsage:
     cache_read: int = 0
     cache_write: int = 0
 
-    def to_dict(self) -> Dict[str, int]:
+    def to_dict(self) -> dict[str, int]:
         """Convert to dictionary."""
         return {
             "input": self.input,
@@ -147,11 +148,11 @@ class InvocationConfig:
 
     model: str
     api_key: str
-    base_url: Optional[str] = None
+    base_url: str | None = None
     temperature: float = 0.7
     max_tokens: int = 4096
     max_attempts: int = 3
-    llm_client: Optional[Any] = None  # Optional LiteLLMClient for unified resilience
+    llm_client: Any | None = None  # Optional LiteLLMClient for unified resilience
 
 
 @dataclass
@@ -159,8 +160,8 @@ class InvocationContext:
     """Context for LLM invocation tracking."""
 
     step_count: int
-    langfuse_context: Optional[Dict[str, Any]] = None
-    abort_event: Optional[asyncio.Event] = None
+    langfuse_context: dict[str, Any] | None = None
+    abort_event: asyncio.Event | None = None
 
 
 @dataclass
@@ -169,11 +170,11 @@ class InvocationResult:
 
     text: str = ""
     reasoning: str = ""
-    tool_calls_completed: List[str] = field(default_factory=list)
+    tool_calls_completed: list[str] = field(default_factory=list)
     tokens: TokenUsage = field(default_factory=TokenUsage)
     cost: float = 0.0
     finish_reason: str = "stop"
-    trace_url: Optional[str] = None
+    trace_url: str | None = None
 
 
 # ============================================================================
@@ -198,7 +199,7 @@ class LLMInvoker:
         retry_policy: RetryPolicyProtocol,
         cost_tracker: CostTrackerProtocol,
         debug_logging: bool = False,
-    ):
+    ) -> None:
         """
         Initialize LLM invoker.
 
@@ -220,15 +221,15 @@ class LLMInvoker:
     async def invoke(
         self,
         config: InvocationConfig,
-        messages: List[Dict[str, Any]],
-        tools: Dict[str, ToolProtocol],
+        messages: list[dict[str, Any]],
+        tools: dict[str, ToolProtocol],
         context: InvocationContext,
         current_message: MessageProtocol,
-        pending_tool_calls: Dict[str, ToolPartProtocol],
-        work_plan_steps: List[Dict[str, Any]],
-        tool_to_step_mapping: Dict[str, int],
+        pending_tool_calls: dict[str, ToolPartProtocol],
+        work_plan_steps: list[dict[str, Any]],
+        tool_to_step_mapping: dict[str, int],
         execute_tool_callback: Callable[
-            [str, str, str, Dict[str, Any]], AsyncIterator[AgentDomainEvent]
+            [str, str, str, dict[str, Any]], AsyncIterator[AgentDomainEvent]
         ],
     ) -> AsyncIterator[AgentDomainEvent]:
         """
@@ -277,7 +278,7 @@ class LLMInvoker:
 
         # Track state for this step
         result = InvocationResult()
-        current_plan_step: Optional[int] = None
+        current_plan_step: int | None = None
 
         # Process LLM stream with retry
         attempt = 0
@@ -361,16 +362,16 @@ class LLMInvoker:
 
     async def _process_stream_event(
         self,
-        event: Any,  # StreamEvent  # noqa: ANN401
+        event: Any,  # StreamEvent
         result: InvocationResult,
         config: InvocationConfig,
         context: InvocationContext,
         current_message: MessageProtocol,
-        pending_tool_calls: Dict[str, ToolPartProtocol],
-        work_plan_steps: List[Dict[str, Any]],
-        tool_to_step_mapping: Dict[str, int],
+        pending_tool_calls: dict[str, ToolPartProtocol],
+        work_plan_steps: list[dict[str, Any]],
+        tool_to_step_mapping: dict[str, int],
         execute_tool_callback: Callable,
-        current_plan_step_holder: List[Optional[int]],
+        current_plan_step_holder: list[int | None],
     ) -> AsyncIterator[AgentDomainEvent]:
         """
         Process a single stream event and yield domain events.
@@ -458,14 +459,14 @@ class LLMInvoker:
 
     async def _handle_tool_call_end(
         self,
-        event: Any,  # noqa: ANN401
+        event: Any,
         result: InvocationResult,
         context: InvocationContext,
-        pending_tool_calls: Dict[str, ToolPartProtocol],
-        work_plan_steps: List[Dict[str, Any]],
-        tool_to_step_mapping: Dict[str, int],
+        pending_tool_calls: dict[str, ToolPartProtocol],
+        work_plan_steps: list[dict[str, Any]],
+        tool_to_step_mapping: dict[str, int],
         execute_tool_callback: Callable,
-        current_plan_step_holder: List[Optional[int]],
+        current_plan_step_holder: list[int | None],
     ) -> AsyncIterator[AgentDomainEvent]:
         """Handle tool call end event."""
         call_id = event.data.get("call_id", "")
@@ -519,8 +520,8 @@ class LLMInvoker:
         self,
         call_id: str,
         tool_name: str,
-        arguments: Any,  # noqa: ANN401
-    ) -> Optional[str]:
+        arguments: Any,
+    ) -> str | None:
         """
         Validate tool call parameters.
 
@@ -543,7 +544,7 @@ class LLMInvoker:
 
     async def _handle_usage_event(
         self,
-        event: Any,  # noqa: ANN401
+        event: Any,
         result: InvocationResult,
         config: InvocationConfig,
     ) -> AsyncIterator[AgentDomainEvent]:
@@ -583,7 +584,7 @@ class LLMInvoker:
         if self._cost_tracker.needs_compaction(result.tokens):
             yield AgentCompactNeededEvent()
 
-    def _build_trace_url(self, context: InvocationContext) -> Optional[str]:
+    def _build_trace_url(self, context: InvocationContext) -> str | None:
         """Build Langfuse trace URL if available."""
         if not context.langfuse_context:
             return None
@@ -606,7 +607,7 @@ class LLMInvoker:
 # Singleton Management
 # ============================================================================
 
-_invoker: Optional[LLMInvoker] = None
+_invoker: LLMInvoker | None = None
 
 
 def get_llm_invoker() -> LLMInvoker:

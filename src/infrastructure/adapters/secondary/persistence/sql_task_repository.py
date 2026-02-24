@@ -3,7 +3,6 @@ V2 SQLAlchemy implementation of TaskRepository using BaseRepository.
 """
 
 import logging
-from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,11 +44,11 @@ class SqlTaskRepository(BaseRepository[TaskLog, DBTaskLog], TaskRepository):
 
         await self._session.flush()
 
-    async def find_by_id(self, task_id: str) -> Optional[TaskLog]:
+    async def find_by_id(self, task_id: str) -> TaskLog | None:
         """Find a task by ID."""
         return await super().find_by_id(task_id)
 
-    async def find_by_group(self, group_id: str, limit: int = 50, offset: int = 0) -> List[TaskLog]:
+    async def find_by_group(self, group_id: str, limit: int = 50, offset: int = 0) -> list[TaskLog]:
         """List all tasks in a group."""
         query = select(DBTaskLog).where(DBTaskLog.group_id == group_id)
         query = query.offset(offset).limit(limit)
@@ -57,14 +56,14 @@ class SqlTaskRepository(BaseRepository[TaskLog, DBTaskLog], TaskRepository):
         db_tasks = result.scalars().all()
         return [self._to_domain(t) for t in db_tasks]
 
-    async def list_recent(self, limit: int = 100) -> List[TaskLog]:
+    async def list_recent(self, limit: int = 100) -> list[TaskLog]:
         """List recent tasks across all groups."""
         query = select(DBTaskLog).order_by(DBTaskLog.created_at.desc()).limit(limit)
         result = await self._session.execute(query)
         db_tasks = result.scalars().all()
         return [self._to_domain(t) for t in db_tasks]
 
-    async def list_by_status(self, status: str, limit: int = 50, offset: int = 0) -> List[TaskLog]:
+    async def list_by_status(self, status: str, limit: int = 50, offset: int = 0) -> list[TaskLog]:
         """List tasks by status."""
         query = select(DBTaskLog).where(DBTaskLog.status == status)
         query = query.offset(offset).limit(limit)
@@ -76,7 +75,7 @@ class SqlTaskRepository(BaseRepository[TaskLog, DBTaskLog], TaskRepository):
         """Delete a task."""
         await super().delete(task_id)
 
-    def _to_domain(self, db_task: Optional[DBTaskLog]) -> Optional[TaskLog]:
+    def _to_domain(self, db_task: DBTaskLog | None) -> TaskLog | None:
         """Convert database model to domain model."""
         if db_task is None:
             return None

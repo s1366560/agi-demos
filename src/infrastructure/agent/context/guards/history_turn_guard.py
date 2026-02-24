@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 
 class HistoryTurnGuard:
@@ -15,10 +15,10 @@ class HistoryTurnGuard:
 
     def apply(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         *,
         estimate_message_tokens,
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         if len(messages) <= self._max_messages:
             return messages, {
                 "max_messages": self._max_messages,

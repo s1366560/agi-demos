@@ -14,11 +14,12 @@ Features:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class MCPServerHealth:
     name: str
     status: str  # "healthy", "unhealthy", "unknown"
     last_check: datetime
-    error_message: Optional[str] = None
+    error_message: str | None = None
     restart_count: int = 0
 
 
@@ -57,9 +58,9 @@ class MCPServerResourceUsage:
     """
 
     server_name: str
-    cpu_percent: Optional[float] = None
-    memory_mb: Optional[float] = None
-    uptime_seconds: Optional[float] = None
+    cpu_percent: float | None = None
+    memory_mb: float | None = None
+    uptime_seconds: float | None = None
 
 
 class MCPServerHealthMonitor:
@@ -95,7 +96,7 @@ class MCPServerHealthMonitor:
         sandbox_adapter: MCPSandboxAdapter,
         check_interval_seconds: float = 30.0,
         health_check_timeout: float = 10.0,
-    ):
+    ) -> None:
         """Initialize the health monitor.
 
         Args:
@@ -108,16 +109,16 @@ class MCPServerHealthMonitor:
         self._health_check_timeout = health_check_timeout
 
         # Active monitoring tasks
-        self._monitoring_tasks: Dict[str, asyncio.Task] = {}
+        self._monitoring_tasks: dict[str, asyncio.Task] = {}
 
         # Server configurations for restart (sandbox_id -> {server_name -> config})
-        self._server_configs: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        self._server_configs: dict[str, dict[str, dict[str, Any]]] = {}
 
         # Restart counts per server
-        self._restart_counts: Dict[str, int] = {}
+        self._restart_counts: dict[str, int] = {}
 
         # Running flag for monitoring loops
-        self._running: Dict[str, bool] = {}
+        self._running: dict[str, bool] = {}
 
     async def health_check(
         self,
@@ -200,7 +201,7 @@ class MCPServerHealthMonitor:
                     restart_count=self._restart_counts.get(server_name, 0),
                 )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return MCPServerHealth(
                 name=server_name,
                 status="unhealthy",
@@ -318,7 +319,7 @@ class MCPServerHealthMonitor:
         self,
         sandbox_id: str,
         server_name: str,
-    ) -> Optional[MCPServerResourceUsage]:
+    ) -> MCPServerResourceUsage | None:
         """Get resource usage for an MCP server.
 
         Args:
@@ -368,7 +369,7 @@ class MCPServerHealthMonitor:
 
         self._running[sandbox_id] = True
 
-        async def monitoring_loop():
+        async def monitoring_loop() -> None:
             while self._running.get(sandbox_id, False):
                 try:
                     # Get list of servers to monitor
@@ -410,10 +411,8 @@ class MCPServerHealthMonitor:
         task = self._monitoring_tasks.pop(sandbox_id, None)
         if task:
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
             logger.info(f"Stopped monitoring for sandbox {sandbox_id}")
 
     async def shutdown(self) -> None:
@@ -432,7 +431,7 @@ class MCPServerHealthMonitor:
         sandbox_id: str,
         server_name: str,
         server_type: str,
-        transport_config: Dict[str, Any],
+        transport_config: dict[str, Any],
     ) -> None:
         """Register a server for monitoring.
 
@@ -477,7 +476,7 @@ class MCPServerHealthMonitor:
         sandbox_id: str,
         server_name: str,
         server_type: str,
-        transport_config: Dict[str, Any],
+        transport_config: dict[str, Any],
     ) -> None:
         """Store server configuration for potential restart."""
         if sandbox_id not in self._server_configs:
@@ -488,13 +487,13 @@ class MCPServerHealthMonitor:
             "transport_config": transport_config,
         }
 
-    def _get_server_config(self, sandbox_id: str, server_name: str) -> Optional[Dict[str, Any]]:
+    def _get_server_config(self, sandbox_id: str, server_name: str) -> dict[str, Any] | None:
         """Get stored server configuration."""
         return self._server_configs.get(sandbox_id, {}).get(server_name)
 
     async def _get_monitored_servers(
         self, sandbox_id: str
-    ) -> List[Tuple[str, str, Dict[str, Any]]]:
+    ) -> list[tuple[str, str, dict[str, Any]]]:
         """Get list of servers to monitor for a sandbox.
 
         Returns:
@@ -541,7 +540,7 @@ class MCPServerHealthMonitor:
         return servers
 
     @staticmethod
-    def _parse_tool_result(result: Dict[str, Any]) -> Any:  # noqa: ANN401
+    def _parse_tool_result(result: dict[str, Any]) -> Any:
         """Parse tool result content, extracting JSON if present."""
         content = result.get("content", [])
         if not content:

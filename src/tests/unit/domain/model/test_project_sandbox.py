@@ -1,6 +1,6 @@
 """Tests for ProjectSandbox domain model."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -35,7 +35,7 @@ class TestProjectSandbox:
             project_id="proj-123",
             tenant_id="tenant-456",
             sandbox_id="sb-789",
-            last_accessed_at=datetime.now(timezone.utc) - timedelta(hours=1),
+            last_accessed_at=datetime.now(UTC) - timedelta(hours=1),
         )
 
         old_time = sandbox.last_accessed_at
@@ -205,7 +205,7 @@ class TestProjectSandbox:
             project_id="proj-123",
             tenant_id="tenant-456",
             sandbox_id="sb-789",
-            health_checked_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+            health_checked_at=datetime.now(UTC) - timedelta(minutes=5),
         )
 
         assert sandbox.needs_health_check(max_age_seconds=60) is True
@@ -217,14 +217,14 @@ class TestProjectSandbox:
             project_id="proj-123",
             tenant_id="tenant-456",
             sandbox_id="sb-789",
-            health_checked_at=datetime.now(timezone.utc) - timedelta(seconds=30),
+            health_checked_at=datetime.now(UTC) - timedelta(seconds=30),
         )
 
         assert sandbox.needs_health_check(max_age_seconds=60) is False
 
     def test_to_dict(self) -> None:
         """Should convert to dictionary."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         sandbox = ProjectSandbox(
             id="test-id",
             project_id="proj-123",

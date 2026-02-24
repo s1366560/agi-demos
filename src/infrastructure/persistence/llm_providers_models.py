@@ -6,7 +6,7 @@ These models map to the database tables created in the Alembic migration.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from sqlalchemy import (
     JSON,
@@ -49,13 +49,13 @@ class LLMProvider(Base):
     api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
 
     # API configuration
-    base_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    base_url: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Model configuration
     llm_model: Mapped[str] = mapped_column(String(100), nullable=False)
-    llm_small_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    embedding_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    reranker_model: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    llm_small_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    reranker_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Provider-specific configuration (JSONB for flexibility)
     config: Mapped[dict] = mapped_column(
@@ -75,13 +75,13 @@ class LLMProvider(Base):
     )
 
     # Relationships
-    tenant_mappings: Mapped[List["TenantProviderMapping"]] = relationship(
+    tenant_mappings: Mapped[list["TenantProviderMapping"]] = relationship(
         "TenantProviderMapping", back_populates="provider", cascade="all, delete-orphan"
     )
-    health_checks: Mapped[List["ProviderHealth"]] = relationship(
+    health_checks: Mapped[list["ProviderHealth"]] = relationship(
         "ProviderHealth", back_populates="provider", cascade="all, delete-orphan"
     )
-    usage_logs: Mapped[List["LLMUsageLog"]] = relationship(
+    usage_logs: Mapped[list["LLMUsageLog"]] = relationship(
         "LLMUsageLog", back_populates="provider", cascade="all, delete-orphan"
     )
 
@@ -178,8 +178,8 @@ class ProviderHealth(Base):
 
     # Health status
     status: Mapped[str] = mapped_column(String(20), nullable=False)
-    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    response_time_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    response_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Relationships
     provider: Mapped["LLMProvider"] = relationship("LLMProvider", back_populates="health_checks")
@@ -212,10 +212,10 @@ class LLMUsageLog(Base):
     )
 
     # Context
-    provider_id: Mapped[Optional[UUID]] = mapped_column(
+    provider_id: Mapped[UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True
     )
-    tenant_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # Operation details
     operation_type: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -226,7 +226,7 @@ class LLMUsageLog(Base):
     completion_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Cost tracking (optional, not all providers return this)
-    cost_usd: Mapped[Optional[float]] = mapped_column(nullable=True)  # Using Numeric in DB
+    cost_usd: Mapped[float | None] = mapped_column(nullable=True)  # Using Numeric in DB
 
     # Metadata
     created_at: Mapped[datetime] = mapped_column(

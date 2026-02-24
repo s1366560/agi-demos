@@ -15,7 +15,7 @@ Key features tested:
 - Count operations
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,7 +36,7 @@ async def v2_skill_repo(db_session: AsyncSession) -> SqlSkillRepository:
 def create_test_skill(
     skill_id: str,
     tenant_id: str = "tenant-1",
-    project_id: str = None,
+    project_id: str | None = None,
     name: str = "test-skill",
     status: SkillStatus = SkillStatus.ACTIVE,
     scope: SkillScope = SkillScope.TENANT,
@@ -60,8 +60,8 @@ def create_test_skill(
         status=status,
         success_count=10,
         failure_count=2,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
         metadata={"key": "value"},
         source=SkillSource.DATABASE,
         scope=scope,
@@ -175,7 +175,7 @@ class TestSqlSkillRepositoryUpdate:
             success_count=15,
             failure_count=3,
             created_at=skill.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
             metadata={"updated": True},
             source=SkillSource.DATABASE,
             scope=SkillScope.TENANT,

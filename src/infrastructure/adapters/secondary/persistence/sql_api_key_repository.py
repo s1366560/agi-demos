@@ -4,7 +4,6 @@ V2 SQLAlchemy implementation of APIKeyRepository using BaseRepository.
 
 import logging
 from datetime import datetime
-from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,14 +27,14 @@ class SqlAPIKeyRepository(BaseRepository[APIKey, DBAPIKey], APIKeyRepository):
 
     # === Interface implementation ===
 
-    async def find_by_hash(self, key_hash: str) -> Optional[APIKey]:
+    async def find_by_hash(self, key_hash: str) -> APIKey | None:
         """Find an API key by its hash."""
         query = select(DBAPIKey).where(DBAPIKey.key_hash == key_hash)
         result = await self._session.execute(query)
         db_key = result.scalar_one_or_none()
         return self._to_domain(db_key)
 
-    async def find_by_user(self, user_id: str, limit: int = 50, offset: int = 0) -> List[APIKey]:
+    async def find_by_user(self, user_id: str, limit: int = 50, offset: int = 0) -> list[APIKey]:
         """List all API keys for a user."""
         query = select(DBAPIKey).where(DBAPIKey.user_id == user_id).offset(offset).limit(limit)
         result = await self._session.execute(query)
@@ -58,7 +57,7 @@ class SqlAPIKeyRepository(BaseRepository[APIKey, DBAPIKey], APIKeyRepository):
 
     # === Conversion methods ===
 
-    def _to_domain(self, db_key: Optional[DBAPIKey]) -> Optional[APIKey]:
+    def _to_domain(self, db_key: DBAPIKey | None) -> APIKey | None:
         """Convert database model to domain model."""
         if db_key is None:
             return None

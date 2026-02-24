@@ -6,7 +6,7 @@ All types are immutable (frozen dataclass) and have zero external dependencies.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class ProcessorState(str, Enum):
@@ -161,9 +161,9 @@ class AgentContext:
     model: str
     max_tokens: int = 200000
     max_steps: int = 50
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def with_metadata(self, **kwargs: Any) -> "AgentContext":  # noqa: ANN401
+    def with_metadata(self, **kwargs: Any) -> "AgentContext":
         """Return a new context with updated metadata.
 
         This preserves immutability while allowing metadata extension.
@@ -193,8 +193,8 @@ class ProcessorConfig:
 
     # Model configuration
     model: str
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
+    api_key: str | None = None
+    base_url: str | None = None
     temperature: float = 0.0
     max_tokens: int = 4096
 
@@ -234,7 +234,7 @@ class ProcessorConfig:
 
 
 # Event category mapping
-_EVENT_CATEGORIES: Dict[EventType, EventCategory] = {
+_EVENT_CATEGORIES: dict[EventType, EventCategory] = {
     # Agent events
     EventType.STATUS: EventCategory.AGENT,
     EventType.START: EventCategory.AGENT,

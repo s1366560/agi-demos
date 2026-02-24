@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import ray
 
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 ROUTER_ACTOR_NAME = "hitl-router"
 
 
-async def ensure_router_actor() -> Optional[Any]:  # noqa: ANN401
+async def ensure_router_actor() -> Any | None:
     """Ensure the HITL stream router actor is running.
 
     Returns None if Ray is not available.
@@ -59,7 +59,7 @@ async def get_or_create_actor(
     project_id: str,
     agent_mode: str,
     config: ProjectAgentActorConfig,
-) -> Optional[Any]:  # noqa: ANN401
+) -> Any | None:
     """Get or create a project agent actor.
 
     Returns None if Ray is not available.
@@ -96,7 +96,7 @@ async def get_actor_if_exists(
     tenant_id: str,
     project_id: str,
     agent_mode: str,
-) -> Optional[Any]:  # noqa: ANN401
+) -> Any | None:
     """Get an existing project agent actor if available."""
     if not is_ray_available():
         return None

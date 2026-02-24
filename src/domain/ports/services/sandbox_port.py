@@ -1,10 +1,11 @@
 """Sandbox Port - Abstract interface for sandboxed code execution."""
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any
 
 
 class SandboxProvider(Enum):
@@ -41,11 +42,11 @@ class SandboxConfig:
     timeout_seconds: int = 60
     network_isolated: bool = True
     network_mode: str = "bridge"  # bridge, none, host, container:<name>
-    allowed_networks: List[str] = field(default_factory=list)  # CIDR ranges
-    blocked_ports: List[int] = field(default_factory=list)  # Ports to block
+    allowed_networks: list[str] = field(default_factory=list)  # CIDR ranges
+    blocked_ports: list[int] = field(default_factory=list)  # Ports to block
     security_profile: str = "standard"
-    environment: Dict[str, str] = field(default_factory=dict)
-    volumes: Dict[str, str] = field(default_factory=dict)
+    environment: dict[str, str] = field(default_factory=dict)
+    volumes: dict[str, str] = field(default_factory=dict)
     desktop_enabled: bool = True  # Whether to start desktop environment (VNC/noVNC)
 
 
@@ -57,12 +58,12 @@ class SandboxInstance:
     status: SandboxStatus
     config: SandboxConfig
     project_path: str
-    endpoint: Optional[str] = None
+    endpoint: str | None = None
     created_at: datetime = field(default_factory=datetime.now)
-    terminated_at: Optional[datetime] = None
-    error_message: Optional[str] = None
-    last_activity_at: Optional[datetime] = None  # Last tool execution/activity time
-    labels: Dict[str, str] = field(default_factory=dict)  # Container labels for identification
+    terminated_at: datetime | None = None
+    error_message: str | None = None
+    last_activity_at: datetime | None = None  # Last tool execution/activity time
+    labels: dict[str, str] = field(default_factory=dict)  # Container labels for identification
 
 
 @dataclass
@@ -72,9 +73,9 @@ class CodeExecutionRequest:
     sandbox_id: str
     code: str
     language: str = "python"
-    timeout_seconds: Optional[int] = None
+    timeout_seconds: int | None = None
     working_directory: str = "/workspace"
-    environment: Dict[str, str] = field(default_factory=dict)
+    environment: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -86,8 +87,8 @@ class CodeExecutionResult:
     stderr: str
     exit_code: int
     execution_time_ms: int
-    output_files: List[str] = field(default_factory=list)
-    error: Optional[str] = None
+    output_files: list[str] = field(default_factory=list)
+    error: str | None = None
 
 
 class SandboxPort(ABC):
@@ -102,10 +103,10 @@ class SandboxPort(ABC):
     async def create_sandbox(
         self,
         project_path: str,
-        config: Optional[SandboxConfig] = None,
-        project_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        sandbox_id: Optional[str] = None,
+        config: SandboxConfig | None = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        sandbox_id: str | None = None,
     ) -> SandboxInstance:
         """
         Create a new sandbox instance.
@@ -123,7 +124,7 @@ class SandboxPort(ABC):
         pass
 
     @abstractmethod
-    async def get_sandbox(self, sandbox_id: str) -> Optional[SandboxInstance]:
+    async def get_sandbox(self, sandbox_id: str) -> SandboxInstance | None:
         """
         Get the status of a sandbox instance.
 
@@ -168,7 +169,7 @@ class SandboxPort(ABC):
     async def stream_execute(
         self,
         request: CodeExecutionRequest,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute code with streaming output.
 
@@ -183,8 +184,8 @@ class SandboxPort(ABC):
     @abstractmethod
     async def list_sandboxes(
         self,
-        status: Optional[SandboxStatus] = None,
-    ) -> List[SandboxInstance]:
+        status: SandboxStatus | None = None,
+    ) -> list[SandboxInstance]:
         """
         List all sandbox instances.
 
@@ -201,7 +202,7 @@ class SandboxPort(ABC):
         self,
         sandbox_id: str,
         output_dir: str = "/output",
-    ) -> Dict[str, bytes]:
+    ) -> dict[str, bytes]:
         """
         Retrieve output files from a sandbox.
 
@@ -240,10 +241,10 @@ class SandboxError(Exception):
     def __init__(
         self,
         message: str,
-        sandbox_id: Optional[str] = None,
-        operation: Optional[str] = None,
-        project_id: Optional[str] = None,
-    ):
+        sandbox_id: str | None = None,
+        operation: str | None = None,
+        project_id: str | None = None,
+    ) -> None:
         self.message = message
         self.sandbox_id = sandbox_id
         self.operation = operation

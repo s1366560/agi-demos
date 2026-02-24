@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 
 class ToolResultGuard:
@@ -21,10 +21,10 @@ class ToolResultGuard:
 
     def apply(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         *,
         estimate_message_tokens,
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         if not messages:
             return messages, {
                 "tool_messages": 0,
@@ -36,7 +36,7 @@ class ToolResultGuard:
         total_tokens = sum(max(0, int(estimate_message_tokens(msg))) for msg in messages)
         max_tool_tokens = max(1, int(total_tokens * self._max_tool_output_ratio))
 
-        tool_entries: List[tuple[int, int]] = []
+        tool_entries: list[tuple[int, int]] = []
         for idx, msg in enumerate(messages):
             if msg.get("role") != "tool":
                 continue
@@ -59,7 +59,7 @@ class ToolResultGuard:
                 keep_indexes.add(idx)
                 running_tool_tokens += tool_tokens
 
-        updated: List[Dict[str, Any]] = list(messages)
+        updated: list[dict[str, Any]] = list(messages)
         char_compacted = 0
         ratio_compacted = 0
 

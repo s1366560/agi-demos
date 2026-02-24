@@ -14,7 +14,6 @@ pair, using the existing version cache in SandboxSkillResourceAdapter.
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Set
 
 from src.domain.ports.services.skill_resource_port import (
     ResourceEnvironment,
@@ -35,8 +34,8 @@ class SkillSyncStatus:
     """Status of skill resource synchronization."""
 
     synced: bool = False
-    resource_paths: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+    resource_paths: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
 
 class SkillResourceSyncService:
@@ -52,22 +51,22 @@ class SkillResourceSyncService:
     def __init__(
         self,
         skill_resource_port: SkillResourcePort,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-        project_path: Optional[Path] = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+        project_path: Path | None = None,
     ) -> None:
         self._resource_port = skill_resource_port
         self._tenant_id = tenant_id
         self._project_id = project_id
         self._project_path = project_path or Path("/workspace")
         # Track which skills have been synced in this session
-        self._synced_skills: Set[tuple[str, str]] = set()  # (sandbox_id, skill_name)
+        self._synced_skills: set[tuple[str, str]] = set()  # (sandbox_id, skill_name)
 
     async def sync_for_skill(
         self,
         skill_name: str,
-        sandbox_id: Optional[str] = None,
-        skill_content: Optional[str] = None,
+        sandbox_id: str | None = None,
+        skill_content: str | None = None,
     ) -> SkillSyncStatus:
         """Synchronize resources for a skill to the sandbox.
 
@@ -141,7 +140,7 @@ class SkillResourceSyncService:
     def build_resource_paths_hint(
         self,
         skill_name: str,
-        resource_paths: List[str],
+        resource_paths: list[str],
     ) -> str:
         """Generate a path hint block to append to SKILL.md content.
 

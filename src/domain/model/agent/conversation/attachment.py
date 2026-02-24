@@ -1,9 +1,9 @@
 """Attachment entity for conversation file uploads."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class AttachmentPurpose(str, Enum):
@@ -34,14 +34,14 @@ class AttachmentMetadata:
     duration for media, or page count for documents.
     """
 
-    width: Optional[int] = None  # Image width in pixels
-    height: Optional[int] = None  # Image height in pixels
-    duration: Optional[float] = None  # Audio/video duration in seconds
-    pages: Optional[int] = None  # Document page count
-    encoding: Optional[str] = None  # Text file encoding
-    extra: Optional[Dict[str, Any]] = None  # Additional metadata
+    width: int | None = None  # Image width in pixels
+    height: int | None = None  # Image height in pixels
+    duration: float | None = None  # Audio/video duration in seconds
+    pages: int | None = None  # Document page count
+    encoding: str | None = None  # Text file encoding
+    extra: dict[str, Any] | None = None  # Additional metadata
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary, excluding None values."""
         result = {}
         if self.width is not None:
@@ -59,7 +59,7 @@ class AttachmentMetadata:
         return result
 
     @classmethod
-    def from_dict(cls, data: Optional[Dict[str, Any]]) -> "AttachmentMetadata":
+    def from_dict(cls, data: dict[str, Any] | None) -> "AttachmentMetadata":
         """Create from dictionary."""
         if not data:
             return cls()
@@ -102,22 +102,22 @@ class Attachment:
     status: AttachmentStatus = AttachmentStatus.PENDING
 
     # Multipart upload tracking
-    upload_id: Optional[str] = None  # S3 multipart upload ID
-    total_parts: Optional[int] = None  # Total number of parts
+    upload_id: str | None = None  # S3 multipart upload ID
+    total_parts: int | None = None  # Total number of parts
     uploaded_parts: int = 0  # Number of parts uploaded so far
 
     # Sandbox integration
-    sandbox_path: Optional[str] = None  # Path after import to sandbox
+    sandbox_path: str | None = None  # Path after import to sandbox
 
     # Metadata
     metadata: AttachmentMetadata = field(default_factory=AttachmentMetadata)
 
     # Timestamps
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    expires_at: Optional[datetime] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    expires_at: datetime | None = None
 
     # Error tracking
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
     def __post_init__(self):
         """Validate attachment after initialization."""
@@ -185,7 +185,7 @@ class Attachment:
         """Mark the attachment as being processed."""
         self.status = AttachmentStatus.PROCESSING
 
-    def mark_ready(self, sandbox_path: Optional[str] = None) -> None:
+    def mark_ready(self, sandbox_path: str | None = None) -> None:
         """Mark the attachment as ready for use."""
         self.status = AttachmentStatus.READY
         if sandbox_path:
@@ -216,7 +216,7 @@ class Attachment:
             return self.filename.rsplit(".", 1)[-1].lower()
         return ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "id": self.id,

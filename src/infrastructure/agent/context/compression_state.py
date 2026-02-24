@@ -7,9 +7,9 @@ cached summaries for non-blocking compression.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -32,9 +32,9 @@ class SummaryChunk:
     message_end_index: int
     original_token_count: int
     summary_token_count: int
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "summary_text": self.summary_text,
             "message_range": [self.message_start_index, self.message_end_index],
@@ -56,22 +56,22 @@ class CompressionState:
     current_level: CompressionLevel = CompressionLevel.NONE
 
     # Cached summary chunks from incremental summarization (L2)
-    summary_chunks: List[SummaryChunk] = field(default_factory=list)
+    summary_chunks: list[SummaryChunk] = field(default_factory=list)
 
     # Global summary from deep compression (L3)
-    global_summary: Optional[str] = None
+    global_summary: str | None = None
     global_summary_tokens: int = 0
 
     # Tracking
-    last_compression_at: Optional[datetime] = None
+    last_compression_at: datetime | None = None
     messages_summarized_up_to: int = 0  # Index of last message included in summaries
     total_original_tokens_summarized: int = 0
 
     # Background compression
     pending_compression: bool = False
-    pending_level: Optional[CompressionLevel] = None
+    pending_level: CompressionLevel | None = None
 
-    def get_combined_summary(self) -> Optional[str]:
+    def get_combined_summary(self) -> str | None:
         """Get the combined summary from all chunks, or global summary if available."""
         if self.global_summary:
             return self.global_summary
@@ -94,7 +94,7 @@ class CompressionState:
         self.summary_chunks.append(chunk)
         self.messages_summarized_up_to = chunk.message_end_index
         self.total_original_tokens_summarized += chunk.original_token_count
-        self.last_compression_at = datetime.now(timezone.utc)
+        self.last_compression_at = datetime.now(UTC)
 
         logger.debug(
             f"Added summary chunk: messages [{chunk.message_start_index}:{chunk.message_end_index}], "
@@ -106,7 +106,7 @@ class CompressionState:
         """Set the global summary from deep compression (replaces chunks)."""
         self.global_summary = summary
         self.global_summary_tokens = token_count
-        self.last_compression_at = datetime.now(timezone.utc)
+        self.last_compression_at = datetime.now(UTC)
 
         logger.debug(
             f"Set global summary: {token_count} tokens (replaced {len(self.summary_chunks)} chunks)"
@@ -126,7 +126,7 @@ class CompressionState:
         """Check if there is a pre-computed summary available."""
         return self.global_summary is not None or len(self.summary_chunks) > 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "current_level": self.current_level.value,
             "summary_chunks_count": len(self.summary_chunks),

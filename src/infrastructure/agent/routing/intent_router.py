@@ -9,7 +9,7 @@ matching with semantic understanding.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -43,8 +43,8 @@ class IntentRouter:
     def __init__(
         self,
         llm_client: LLMClient,
-        candidates: Optional[List[RoutingCandidate]] = None,
-    ):
+        candidates: list[RoutingCandidate] | None = None,
+    ) -> None:
         """Initialize IntentRouter.
 
         Args:
@@ -53,14 +53,14 @@ class IntentRouter:
                 via update_candidates().
         """
         self._llm_client = llm_client
-        self._candidates: List[RoutingCandidate] = candidates or []
-        self._tool_schema: List[Dict[str, Any]] = []
+        self._candidates: list[RoutingCandidate] = candidates or []
+        self._tool_schema: list[dict[str, Any]] = []
         self._system_prompt: str = ""
 
         if self._candidates:
             self._rebuild_cache()
 
-    def update_candidates(self, candidates: List[RoutingCandidate]) -> None:
+    def update_candidates(self, candidates: list[RoutingCandidate]) -> None:
         """Update available routing candidates and rebuild caches.
 
         Args:
@@ -77,7 +77,7 @@ class IntentRouter:
     async def route(
         self,
         query: str,
-        conversation_context: Optional[str] = None,
+        conversation_context: str | None = None,
         temperature: float = 0.0,
         max_tokens: int = 256,
     ) -> LLMRoutingDecision:

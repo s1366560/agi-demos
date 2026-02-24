@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from src.domain.ports.services.sandbox_mcp_server_port import (
     SandboxMCPServerPort,
@@ -49,7 +49,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
     def __init__(
         self,
         sandbox_resource: SandboxResourcePort,
-        app_service: Optional[MCPAppService] = None,
+        app_service: MCPAppService | None = None,
     ) -> None:
         """Initialize the manager.
 
@@ -66,7 +66,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         tenant_id: str,
         server_name: str,
         server_type: str,
-        transport_config: Dict[str, Any],
+        transport_config: dict[str, Any],
     ) -> SandboxMCPServerStatus:
         """Install and start an MCP server in the project's sandbox."""
         # Ensure sandbox exists
@@ -156,9 +156,9 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         tenant_id: str,
         server_name: str,
         server_type: str,
-        transport_config: Dict[str, Any],
+        transport_config: dict[str, Any],
         ensure_running: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Discover tools from an MCP server in the sandbox."""
         if ensure_running:
             status = await self.install_and_start(
@@ -202,7 +202,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         project_id: str,
         server_name: str,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
     ) -> SandboxMCPToolCallResult:
         """Call a tool on an MCP server in the sandbox."""
         try:
@@ -299,7 +299,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         tenant_id: str,
         server_name: str,
         server_type: str,
-        transport_config: Dict[str, Any],
+        transport_config: dict[str, Any],
     ) -> SandboxMCPServerStatus:
         """Test MCP server connection by running it in sandbox."""
         # Install and start
@@ -346,7 +346,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
     async def list_servers(
         self,
         project_id: str,
-    ) -> List[SandboxMCPServerStatus]:
+    ) -> list[SandboxMCPServerStatus]:
         """List MCP servers running in a project's sandbox."""
         try:
             result = await self._sandbox_resource.execute_tool(
@@ -373,7 +373,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
             logger.warning(f"Failed to list MCP servers: {e}")
             return []
 
-    def _parse_tool_result(self, result: Dict[str, Any]) -> Any:  # noqa: ANN401
+    def _parse_tool_result(self, result: dict[str, Any]) -> Any:
         """Parse tool result content, extracting JSON if present."""
         content = result.get("content", [])
         if not content:

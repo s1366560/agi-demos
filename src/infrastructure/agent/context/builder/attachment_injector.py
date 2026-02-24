@@ -12,7 +12,7 @@ Extracted from react_agent.py to follow Single Responsibility Principle.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.ports.agent.context_manager_port import (
     AttachmentContent,
@@ -85,7 +85,7 @@ class AttachmentInjector(AttachmentInjectorPort):
         enhanced = injector.inject_into_message("Hello", attachments)
     """
 
-    def __init__(self, config: Optional[AttachmentInjectorConfig] = None):
+    def __init__(self, config: AttachmentInjectorConfig | None = None) -> None:
         """
         Initialize attachment injector.
 
@@ -96,7 +96,7 @@ class AttachmentInjector(AttachmentInjectorPort):
         self._debug = self.config.debug_logging
 
     def build_attachment_context(
-        self, metadata_list: List[AttachmentMetadata]
+        self, metadata_list: list[AttachmentMetadata]
     ) -> str:
         """
         Build attachment context prompt from metadata.
@@ -150,7 +150,7 @@ class AttachmentInjector(AttachmentInjectorPort):
     def inject_into_message(
         self,
         message: str,
-        metadata_list: List[AttachmentMetadata],
+        metadata_list: list[AttachmentMetadata],
     ) -> str:
         """
         Inject attachment context into user message.
@@ -179,8 +179,8 @@ class AttachmentInjector(AttachmentInjectorPort):
     def prepare_multimodal_content(
         self,
         text: str,
-        attachments: List[AttachmentContent],
-    ) -> List[Dict[str, Any]]:
+        attachments: list[AttachmentContent],
+    ) -> list[dict[str, Any]]:
         """
         Prepare multimodal content array for LLM.
 
@@ -193,7 +193,7 @@ class AttachmentInjector(AttachmentInjectorPort):
         Returns:
             Content array in OpenAI multimodal format
         """
-        content: List[Dict[str, Any]] = []
+        content: list[dict[str, Any]] = []
 
         # Add text first
         if text:
@@ -215,7 +215,7 @@ class AttachmentInjector(AttachmentInjectorPort):
 
     def _convert_attachment(
         self, attachment: AttachmentContent
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Convert an attachment to content part.
 
@@ -259,7 +259,7 @@ class AttachmentInjector(AttachmentInjectorPort):
         return None
 
     def parse_metadata_from_dict(
-        self, data: Dict[str, Any]
+        self, data: dict[str, Any]
     ) -> AttachmentMetadata:
         """
         Parse attachment metadata from raw dict.
@@ -285,8 +285,8 @@ class AttachmentInjector(AttachmentInjectorPort):
         )
 
     def parse_metadata_list(
-        self, data_list: Optional[List[Dict[str, Any]]]
-    ) -> List[AttachmentMetadata]:
+        self, data_list: list[dict[str, Any]] | None
+    ) -> list[AttachmentMetadata]:
         """
         Parse multiple attachment metadata from raw dicts.
 
@@ -300,7 +300,7 @@ class AttachmentInjector(AttachmentInjectorPort):
             return []
         return [self.parse_metadata_from_dict(d) for d in data_list]
 
-    def parse_content_from_dict(self, data: Dict[str, Any]) -> AttachmentContent:
+    def parse_content_from_dict(self, data: dict[str, Any]) -> AttachmentContent:
         """
         Parse attachment content from raw dict.
 
@@ -319,8 +319,8 @@ class AttachmentInjector(AttachmentInjectorPort):
         )
 
     def parse_content_list(
-        self, data_list: Optional[List[Dict[str, Any]]]
-    ) -> List[AttachmentContent]:
+        self, data_list: list[dict[str, Any]] | None
+    ) -> list[AttachmentContent]:
         """
         Parse multiple attachment contents from raw dicts.
 

@@ -4,7 +4,7 @@ Tests that tools can be added/removed dynamically at runtime
 without restarting the agent.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -14,14 +14,14 @@ from src.infrastructure.agent.core.react_agent import ReActAgent
 class MockTool:
     """Simple mock tool for testing."""
 
-    def __init__(self, name: str, description: str = "A mock tool"):
+    def __init__(self, name: str, description: str = "A mock tool") -> None:
         self.name = name
         self.description = description
 
     async def execute(self, **kwargs) -> str:
         return f"Executed {self.name}"
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {"type": "object", "properties": {}, "required": []}
 
 
@@ -49,7 +49,7 @@ class TestReActAgentHotPlug:
         """Should use tool_provider for dynamic tools."""
         call_count = 0
 
-        def provide_tools() -> Dict[str, Any]:
+        def provide_tools() -> dict[str, Any]:
             nonlocal call_count
             call_count += 1
             # Return different tools based on call count
@@ -69,12 +69,12 @@ class TestReActAgentHotPlug:
         assert agent._use_dynamic_tools
 
         # First call - should get 1 tool
-        raw_tools1, defs1 = agent._get_current_tools()
+        _raw_tools1, defs1 = agent._get_current_tools()
         assert len(defs1) == 1
         assert call_count == 1
 
         # Second call - should get 2 tools (hot-plugged)
-        raw_tools2, defs2 = agent._get_current_tools()
+        _raw_tools2, defs2 = agent._get_current_tools()
         assert len(defs2) == 2
         assert call_count == 2
 
@@ -82,7 +82,7 @@ class TestReActAgentHotPlug:
         """Should call tool_provider on each _get_current_tools() call."""
         call_count = 0
 
-        def counting_provider() -> Dict[str, Any]:
+        def counting_provider() -> dict[str, Any]:
             nonlocal call_count
             call_count += 1
             return {"tool1": MockTool("tool1")}
@@ -125,7 +125,7 @@ class TestReActAgentHotPlug:
         )
 
         assert not agent._use_dynamic_tools
-        raw_tools, defs = agent._get_current_tools()
+        _raw_tools, defs = agent._get_current_tools()
         assert len(defs) == 1
         assert defs[0].name == "cached_tool"
 
@@ -147,7 +147,7 @@ class TestReActAgentHotPlug:
 
     def test_empty_tool_provider_result(self):
         """Should handle empty tools from provider gracefully."""
-        def empty_provider() -> Dict[str, Any]:
+        def empty_provider() -> dict[str, Any]:
             return {}
 
         agent = ReActAgent(
@@ -165,11 +165,11 @@ class TestHotPlugScenarios:
 
     def test_add_tool_at_runtime(self):
         """Simulate adding a tool at runtime."""
-        registered_tools: Dict[str, Any] = {
+        registered_tools: dict[str, Any] = {
             "builtin_tool": MockTool("builtin_tool", "Always available"),
         }
 
-        def dynamic_provider() -> Dict[str, Any]:
+        def dynamic_provider() -> dict[str, Any]:
             return registered_tools.copy()
 
         agent = ReActAgent(
@@ -192,12 +192,12 @@ class TestHotPlugScenarios:
 
     def test_remove_tool_at_runtime(self):
         """Simulate removing a tool at runtime."""
-        registered_tools: Dict[str, Any] = {
+        registered_tools: dict[str, Any] = {
             "tool1": MockTool("tool1"),
             "tool2": MockTool("tool2"),
         }
 
-        def dynamic_provider() -> Dict[str, Any]:
+        def dynamic_provider() -> dict[str, Any]:
             return registered_tools.copy()
 
         agent = ReActAgent(
@@ -220,9 +220,9 @@ class TestHotPlugScenarios:
     def test_mcp_tool_integration_simulation(self):
         """Simulate MCP server tools being hot-plugged."""
         builtin_tools = {"builtin": MockTool("builtin")}
-        mcp_tools: Dict[str, Any] = {}
+        mcp_tools: dict[str, Any] = {}
 
-        def unified_provider() -> Dict[str, Any]:
+        def unified_provider() -> dict[str, Any]:
             # Simulate aggregating builtin + MCP tools
             all_tools = {}
             all_tools.update(builtin_tools)

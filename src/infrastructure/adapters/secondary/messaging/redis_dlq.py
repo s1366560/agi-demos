@@ -13,8 +13,8 @@ Storage Structure:
 import json
 import logging
 import traceback
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import redis.asyncio as redis
 
@@ -52,11 +52,11 @@ class RedisDLQAdapter(DeadLetterQueuePort):
     def __init__(
         self,
         redis_client: redis.Redis,
-        event_bus: Optional[UnifiedEventBusPort] = None,
+        event_bus: UnifiedEventBusPort | None = None,
         *,
         max_retries: int = 3,
         default_ttl_hours: int = 168,  # 1 week
-    ):
+    ) -> None:
         """Initialize the Redis DLQ adapter.
 
         Args:
@@ -91,18 +91,18 @@ class RedisDLQAdapter(DeadLetterQueuePort):
         error: str,
         error_type: str,
         *,
-        error_traceback: Optional[str] = None,
+        error_traceback: str | None = None,
         retry_count: int = 0,
         max_retries: int = 3,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Send a failed event to the DLQ."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Calculate next retry time
         next_retry_delay = self.RETRY_DELAYS[min(retry_count, len(self.RETRY_DELAYS) - 1)]
         next_retry_at = datetime.fromtimestamp(
-            now.timestamp() + next_retry_delay, tz=timezone.utc
+            now.timestamp() + next_retry_delay, tz=UTC
         )
 
         message = DeadLetterMessage(
@@ -158,7 +158,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
             logger.error(f"[DLQ] Failed to store message: {e}")
             raise DLQError(f"Failed to store DLQ message: {e}") from e
 
-    async def get_message(self, message_id: str) -> Optional[DeadLetterMessage]:
+    async def get_message(self, message_id: str) -> DeadLetterMessage | None:
         """Get a specific DLQ message."""
         try:
             message_key = self._message_key(message_id)
@@ -180,13 +180,13 @@ class RedisDLQAdapter(DeadLetterQueuePort):
     async def get_messages(
         self,
         *,
-        status: Optional[DLQMessageStatus] = None,
-        event_type: Optional[str] = None,
-        error_type: Optional[str] = None,
-        routing_key_pattern: Optional[str] = None,
+        status: DLQMessageStatus | None = None,
+        event_type: str | None = None,
+        error_type: str | None = None,
+        routing_key_pattern: str | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[DeadLetterMessage]:
+    ) -> list[DeadLetterMessage]:
         """Get DLQ messages with filtering."""
         try:
             # Determine which index to use
@@ -246,7 +246,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
             # Update status to retrying
             message.status = DLQMessageStatus.RETRYING
             message.retry_count += 1
-            message.last_failed_at = datetime.now(timezone.utc)
+            message.last_failed_at = datetime.now(UTC)
 
             await self._update_message(message)
 
@@ -277,8 +277,8 @@ class RedisDLQAdapter(DeadLetterQueuePort):
                             min(message.retry_count, len(self.RETRY_DELAYS) - 1)
                         ]
                         message.next_retry_at = datetime.fromtimestamp(
-                            datetime.now(timezone.utc).timestamp() + delay,
-                            tz=timezone.utc,
+                            datetime.now(UTC).timestamp() + delay,
+                            tz=UTC,
                         )
                     else:
                         message.next_retry_at = None
@@ -306,8 +306,8 @@ class RedisDLQAdapter(DeadLetterQueuePort):
 
     async def retry_batch(
         self,
-        message_ids: List[str],
-    ) -> Dict[str, bool]:
+        message_ids: list[str],
+    ) -> dict[str, bool]:
         """Retry multiple DLQ messages."""
         results = {}
         for msg_id in message_ids:
@@ -331,7 +331,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
         try:
             message.status = DLQMessageStatus.DISCARDED
             message.metadata["discard_reason"] = reason
-            message.metadata["discarded_at"] = datetime.now(timezone.utc).isoformat()
+            message.metadata["discarded_at"] = datetime.now(UTC).isoformat()
 
             await self._update_message(message)
             await self._update_stats_on_discard(message)
@@ -345,9 +345,9 @@ class RedisDLQAdapter(DeadLetterQueuePort):
 
     async def discard_batch(
         self,
-        message_ids: List[str],
+        message_ids: list[str],
         reason: str,
-    ) -> Dict[str, bool]:
+    ) -> dict[str, bool]:
         """Discard multiple DLQ messages."""
         results = {}
         for msg_id in message_ids:
@@ -385,7 +385,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
             oldest_age = 0.0
             if oldest_timestamp:
                 _, score = oldest_timestamp[0]
-                oldest_age = datetime.now(timezone.utc).timestamp() - score
+                oldest_age = datetime.now(UTC).timestamp() - score
 
             return DLQStats(
                 total_messages=decoded.get("total_messages", 0),
@@ -408,7 +408,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
         older_than_hours: int = 168,
     ) -> int:
         """Clean up expired DLQ messages."""
-        cutoff = datetime.now(timezone.utc).timestamp() - (older_than_hours * 3600)
+        cutoff = datetime.now(UTC).timestamp() - (older_than_hours * 3600)
 
         try:
             # Get expired message IDs

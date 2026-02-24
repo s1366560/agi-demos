@@ -65,7 +65,7 @@ class LiteLLMClient(LLMClient):
         config: LLMConfig,
         provider_config: ProviderConfig,
         cache: bool | None = None,
-    ):
+    ) -> None:
         """
         Initialize LiteLLM client.
 
@@ -110,7 +110,7 @@ class LiteLLMClient(LLMClient):
             return self.provider_config.base_url
         return None
 
-    def _configure_litellm(self):
+    def _configure_litellm(self) -> None:
         """Configure LiteLLM environment variables as fallback.
 
         NOTE: Per-request api_key is passed directly in completion_kwargs
@@ -148,7 +148,7 @@ class LiteLLMClient(LLMClient):
         max_tokens: int,
         temperature: float | None = None,
         langfuse_context: dict[str, Any] | None = None,
-        **extra: Any,  # noqa: ANN401
+        **extra: Any,
     ) -> dict[str, Any]:
         """Build common completion kwargs for LiteLLM calls.
 
@@ -385,7 +385,7 @@ class LiteLLMClient(LLMClient):
             raise
 
     @staticmethod
-    def _convert_message(m: Any) -> dict[str, Any]:  # noqa: ANN401
+    def _convert_message(m: Any) -> dict[str, Any]:
         """Convert a message to LiteLLM dict format, preserving tool-related fields.
 
         Handles both dict messages and Message objects. Preserves:
@@ -415,7 +415,7 @@ class LiteLLMClient(LLMClient):
         max_tokens: int = 4096,
         model_size: ModelSize = ModelSize.medium,
         langfuse_context: dict[str, Any] | None = None,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """
         Generate a non-streaming response with optional tool calling support.
@@ -434,7 +434,7 @@ class LiteLLMClient(LLMClient):
         """
         import litellm
 
-        def _get_attr(obj: Any, key: str, default: Any = None) -> Any:  # noqa: ANN401
+        def _get_attr(obj: Any, key: str, default: Any = None) -> Any:
             if isinstance(obj, dict):
                 return obj.get(key, default)
             return getattr(obj, key, default)

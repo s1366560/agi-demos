@@ -18,9 +18,10 @@ All concrete repositories should inherit from BaseRepository and implement:
 
 import logging
 from abc import ABC, abstractmethod
-from contextlib import asynccontextmanager
+from collections.abc import Callable
+from contextlib import asynccontextmanager, suppress
 from functools import wraps
-from typing import Any, Callable, Dict, Generic, List, Optional, TypeVar
+from typing import Any, TypeVar
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -65,10 +66,8 @@ def handle_db_errors(entity_type: str = "Entity") -> Callable:
                     field_name = "id"  # default
                     if "Key" in error_str and "=" in error_str:
                         # PostgreSQL format: Key (field)=(value) already exists
-                        try:
+                        with suppress(IndexError, AttributeError):
                             field_name = error_str.split("Key (")[1].split(")")[0]
-                        except (IndexError, AttributeError):
-                            pass
                     raise DuplicateEntityError(
                         entity_type=entity_type,
                         field_name=field_name,
@@ -140,7 +139,7 @@ def transactional(func: Callable) -> Callable:
     return wrapper
 
 
-class BaseRepository(ABC, Generic[T, M]):
+class BaseRepository[T, M](ABC):
     """
     Base repository class providing common database operations.
 
@@ -155,7 +154,7 @@ class BaseRepository(ABC, Generic[T, M]):
     # Subclasses must define their SQLAlchemy model class
     _model_class: type[M] = None
     # Optional: override for custom entity name in error messages
-    _entity_name: Optional[str] = None
+    _entity_name: str | None = None
 
     def __init__(self, session: AsyncSession) -> None:
         """
@@ -205,7 +204,7 @@ class BaseRepository(ABC, Generic[T, M]):
     # === Abstract methods (must be implemented by subclasses) ===
 
     @abstractmethod
-    def _to_domain(self, db_model: Optional[M]) -> Optional[T]:
+    def _to_domain(self, db_model: M | None) -> T | None:
         """
         Convert database model to domain entity.
 
@@ -247,7 +246,7 @@ class BaseRepository(ABC, Generic[T, M]):
             if hasattr(db_model, key) and not key.startswith("_"):
                 setattr(db_model, key, value)
 
-    def _apply_filters(self, query: Select, **filters: Any) -> Select:  # noqa: ANN401
+    def _apply_filters(self, query: Select, **filters: Any) -> Select:
         """
         Apply filters to a query.
 
@@ -269,7 +268,7 @@ class BaseRepository(ABC, Generic[T, M]):
 
     # === CRUD operations ===
 
-    async def find_by_id(self, entity_id: str) -> Optional[T]:
+    async def find_by_id(self, entity_id: str) -> T | None:
         """
         Find an entity by its ID.
 
@@ -294,7 +293,7 @@ class BaseRepository(ABC, Generic[T, M]):
         db_model = result.scalar_one_or_none()
         return self._to_domain(db_model)
 
-    async def find_by_ids(self, entity_ids: List[str]) -> List[T]:
+    async def find_by_ids(self, entity_ids: list[str]) -> list[T]:
         """
         Find multiple entities by their IDs.
 
@@ -318,7 +317,7 @@ class BaseRepository(ABC, Generic[T, M]):
         db_models = result.scalars().all()
         return [self._to_domain(m) for m in db_models if m is not None]
 
-    async def find_one(self, **filters: Any) -> Optional[T]:  # noqa: ANN401
+    async def find_one(self, **filters: Any) -> T | None:
         """
         Find a single entity matching the given filters.
 
@@ -390,7 +389,7 @@ class BaseRepository(ABC, Generic[T, M]):
         # Create new entity
         return await self._create(domain_entity)
 
-    async def _find_db_model_by_id(self, entity_id: str) -> Optional[M]:
+    async def _find_db_model_by_id(self, entity_id: str) -> M | None:
         """Find database model by ID (internal helper)."""
         query = select(self._model_class).where(self._model_class.id == entity_id)
         result = await self._session.execute(query)
@@ -430,8 +429,8 @@ class BaseRepository(ABC, Generic[T, M]):
         self,
         limit: int = 50,
         offset: int = 0,
-        **filters: Any,  # noqa: ANN401
-    ) -> List[T]:
+        **filters: Any,
+    ) -> list[T]:
         """
         List all entities with optional filtering and pagination.
 
@@ -463,7 +462,7 @@ class BaseRepository(ABC, Generic[T, M]):
         db_models = result.scalars().all()
         return [self._to_domain(m) for m in db_models if m is not None]
 
-    async def count(self, **filters: Any) -> int:  # noqa: ANN401
+    async def count(self, **filters: Any) -> int:
         """
         Count entities matching the given filters.
 
@@ -480,7 +479,7 @@ class BaseRepository(ABC, Generic[T, M]):
 
     # === Bulk operations ===
 
-    async def bulk_save(self, domain_entities: List[T]) -> None:
+    async def bulk_save(self, domain_entities: list[T]) -> None:
         """
         Save multiple entities efficiently using bulk operations.
 
@@ -496,7 +495,7 @@ class BaseRepository(ABC, Generic[T, M]):
             self._session.add(db_model)
         await self._session.flush()
 
-    async def bulk_delete(self, entity_ids: List[str]) -> int:
+    async def bulk_delete(self, entity_ids: list[str]) -> int:
         """
         Delete multiple entities efficiently.
 
@@ -518,8 +517,8 @@ class BaseRepository(ABC, Generic[T, M]):
 
     def _build_query(
         self,
-        filters: Optional[Dict[str, Any]] = None,
-        order_by: Optional[str] = None,
+        filters: dict[str, Any] | None = None,
+        order_by: str | None = None,
         order_desc: bool = False,
     ) -> Select:
         """

@@ -23,8 +23,8 @@ Event Format (wire format):
 import json
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional, TypeVar
+from datetime import UTC, datetime
+from typing import Any, TypeVar
 
 from src.domain.events.types import AgentEventType
 
@@ -49,18 +49,18 @@ class EventEnvelope:
     """
 
     event_type: str
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
     schema_version: str = "1.0"
     event_id: str = field(default_factory=lambda: f"evt_{uuid.uuid4().hex[:12]}")
     timestamp: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+        default_factory=lambda: datetime.now(UTC).isoformat()
     )
     source: str = "memstack"
-    correlation_id: Optional[str] = None
-    causation_id: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    correlation_id: str | None = None
+    causation_id: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization.
 
         Returns:
@@ -87,7 +87,7 @@ class EventEnvelope:
         return json.dumps(self.to_dict(), default=str)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "EventEnvelope":
+    def from_dict(cls, data: dict[str, Any]) -> "EventEnvelope":
         """Create envelope from dictionary.
 
         Args:
@@ -100,7 +100,7 @@ class EventEnvelope:
             schema_version=data.get("schema_version", "1.0"),
             event_id=data.get("event_id", f"evt_{uuid.uuid4().hex[:12]}"),
             event_type=data.get("event_type", ""),
-            timestamp=data.get("timestamp", datetime.now(timezone.utc).isoformat()),
+            timestamp=data.get("timestamp", datetime.now(UTC).isoformat()),
             source=data.get("source", "memstack"),
             correlation_id=data.get("correlation_id"),
             causation_id=data.get("causation_id"),
@@ -124,10 +124,10 @@ class EventEnvelope:
     def wrap(
         cls,
         event_type: AgentEventType,
-        payload: Dict[str, Any],
-        correlation_id: Optional[str] = None,
-        causation_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        payload: dict[str, Any],
+        correlation_id: str | None = None,
+        causation_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
         schema_version: str = "1.0",
     ) -> "EventEnvelope":
         """Create an envelope for a domain event.
@@ -154,7 +154,7 @@ class EventEnvelope:
             metadata=metadata or {},
         )
 
-    def with_metadata(self, **kwargs: Any) -> "EventEnvelope":  # noqa: ANN401
+    def with_metadata(self, **kwargs: Any) -> "EventEnvelope":
         """Create a new envelope with additional metadata.
 
         Args:
@@ -179,7 +179,7 @@ class EventEnvelope:
     def with_correlation(
         self,
         correlation_id: str,
-        causation_id: Optional[str] = None,
+        causation_id: str | None = None,
     ) -> "EventEnvelope":
         """Create a new envelope with correlation information.
 
@@ -210,8 +210,8 @@ E = TypeVar("E", bound=EventEnvelope)
 def create_child_envelope(
     parent: EventEnvelope,
     event_type: AgentEventType,
-    payload: Dict[str, Any],
-    **extra_metadata: Any,  # noqa: ANN401
+    payload: dict[str, Any],
+    **extra_metadata: Any,
 ) -> EventEnvelope:
     """Create a child envelope from a parent envelope.
 

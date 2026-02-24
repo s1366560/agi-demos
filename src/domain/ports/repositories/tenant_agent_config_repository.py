@@ -8,7 +8,6 @@ tenant-level agent configuration.
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from src.domain.model.agent.tenant_agent_config import TenantAgentConfig
 
@@ -22,7 +21,7 @@ class TenantAgentConfigRepositoryPort(ABC):
     """
 
     @abstractmethod
-    async def get_by_tenant(self, tenant_id: str) -> Optional[TenantAgentConfig]:
+    async def get_by_tenant(self, tenant_id: str) -> TenantAgentConfig | None:
         """
         Get configuration for a tenant.
 

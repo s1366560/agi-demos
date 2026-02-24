@@ -11,7 +11,8 @@ Three-level scoping for multi-tenant isolation:
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from datetime import UTC
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -48,7 +49,7 @@ class TriggerPatternCreate(BaseModel):
 
     pattern: str = Field(..., description="The trigger pattern")
     weight: float = Field(1.0, ge=0.0, le=1.0, description="Pattern weight (0-1)")
-    examples: List[str] = Field(default_factory=list, description="Example queries")
+    examples: list[str] = Field(default_factory=list, description="Example queries")
 
 
 class SkillCreate(BaseModel):
@@ -57,33 +58,33 @@ class SkillCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200, description="Skill name")
     description: str = Field(..., min_length=1, description="Skill description")
     trigger_type: str = Field("keyword", description="Trigger type: keyword, semantic, hybrid")
-    trigger_patterns: List[TriggerPatternCreate] = Field(
+    trigger_patterns: list[TriggerPatternCreate] = Field(
         default_factory=list, description="Trigger patterns"
     )
-    tools: List[str] = Field(..., min_items=1, description="List of tool names")
-    prompt_template: Optional[str] = Field(None, description="Optional prompt template")
-    full_content: Optional[str] = Field(None, description="Full SKILL.md content")
-    project_id: Optional[str] = Field(
+    tools: list[str] = Field(..., min_items=1, description="List of tool names")
+    prompt_template: str | None = Field(None, description="Optional prompt template")
+    full_content: str | None = Field(None, description="Full SKILL.md content")
+    project_id: str | None = Field(
         None, description="Optional project ID (required for PROJECT scope)"
     )
     scope: str = Field(
         "tenant", description="Skill scope: tenant or project (cannot create system)"
     )
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Optional metadata")
+    metadata: dict[str, Any] | None = Field(None, description="Optional metadata")
 
 
 class SkillUpdate(BaseModel):
     """Schema for updating a skill."""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
-    description: Optional[str] = Field(None, min_length=1)
-    trigger_type: Optional[str] = Field(None)
-    trigger_patterns: Optional[List[TriggerPatternCreate]] = Field(None)
-    tools: Optional[List[str]] = Field(None, min_items=1)
-    prompt_template: Optional[str] = Field(None)
-    full_content: Optional[str] = Field(None, description="Full SKILL.md content")
-    status: Optional[str] = Field(None)
-    metadata: Optional[Dict[str, Any]] = Field(None)
+    name: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = Field(None, min_length=1)
+    trigger_type: str | None = Field(None)
+    trigger_patterns: list[TriggerPatternCreate] | None = Field(None)
+    tools: list[str] | None = Field(None, min_items=1)
+    prompt_template: str | None = Field(None)
+    full_content: str | None = Field(None, description="Full SKILL.md content")
+    status: str | None = Field(None)
+    metadata: dict[str, Any] | None = Field(None)
 
 
 class SkillResponse(BaseModel):
@@ -91,14 +92,14 @@ class SkillResponse(BaseModel):
 
     id: str
     tenant_id: str
-    project_id: Optional[str]
+    project_id: str | None
     name: str
     description: str
     trigger_type: str
-    trigger_patterns: List[Dict[str, Any]]
-    tools: List[str]
-    prompt_template: Optional[str]
-    full_content: Optional[str] = None
+    trigger_patterns: list[dict[str, Any]]
+    tools: list[str]
+    prompt_template: str | None
+    full_content: str | None = None
     status: str
     scope: str
     is_system_skill: bool = False
@@ -108,9 +109,9 @@ class SkillResponse(BaseModel):
     usage_count: int
     created_at: str
     updated_at: str
-    metadata: Optional[Dict[str, Any]]
+    metadata: dict[str, Any] | None
     current_version: int = 0
-    version_label: Optional[str] = None
+    version_label: str | None = None
 
 
 class SkillMatchRequest(BaseModel):
@@ -124,7 +125,7 @@ class SkillMatchRequest(BaseModel):
 class SkillListResponse(BaseModel):
     """Schema for skill list response."""
 
-    skills: List[SkillResponse]
+    skills: list[SkillResponse]
     total: int
 
 
@@ -244,8 +245,8 @@ async def create_skill(
 @router.get("/", response_model=SkillListResponse)
 async def list_skills(
     request: Request,
-    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status"),
-    scope_filter: Optional[str] = Query(
+    status_filter: str | None = Query(None, alias="status", description="Filter by status"),
+    scope_filter: str | None = Query(
         None, alias="scope", description="Filter by scope: system, tenant, project"
     ),
     limit: int = Query(100, ge=1, le=500, description="Maximum results"),
@@ -352,7 +353,7 @@ async def update_skill(
         )
 
     # Update fields
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     trigger_patterns = skill.trigger_patterns
     if data.trigger_patterns is not None:
@@ -377,7 +378,7 @@ async def update_skill(
         success_count=skill.success_count,
         failure_count=skill.failure_count,
         created_at=skill.created_at,
-        updated_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(UTC),
         metadata=data.metadata if data.metadata is not None else skill.metadata,
     )
 
@@ -394,7 +395,7 @@ async def delete_skill(
     skill_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     """
     Delete a skill.
     """
@@ -421,7 +422,7 @@ async def delete_skill(
     logger.info(f"Skill deleted: {skill_id}")
 
 
-@router.post("/match", response_model=List[SkillResponse])
+@router.post("/match", response_model=list[SkillResponse])
 async def match_skills(
     request: Request,
     data: SkillMatchRequest,
@@ -481,7 +482,7 @@ async def update_skill_status(
             detail=f"Invalid status: {status_value}. Must be one of: active, disabled, deprecated",
         )
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     updated_skill = Skill(
         id=skill.id,
@@ -498,7 +499,7 @@ async def update_skill_status(
         success_count=skill.success_count,
         failure_count=skill.failure_count,
         created_at=skill.created_at,
-        updated_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(UTC),
         metadata=skill.metadata,
         scope=skill.scope,
         is_system_skill=skill.is_system_skill,
@@ -554,7 +555,7 @@ async def get_skill_stats(
 @router.get("/system/list", response_model=SkillListResponse)
 async def list_system_skills(
     request: Request,
-    status_filter: Optional[str] = Query(None, alias="status", description="Filter by status"),
+    status_filter: str | None = Query(None, alias="status", description="Filter by status"),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -600,7 +601,7 @@ class SkillContentResponse(BaseModel):
 
     skill_id: str
     name: str
-    full_content: Optional[str]
+    full_content: str | None
     scope: str
     is_system_skill: bool
 
@@ -687,7 +688,7 @@ async def update_skill_content(
             detail="Cannot modify system skills. Use tenant skill config to override instead.",
         )
 
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     # Update skill content
     updated_skill = Skill(
@@ -705,7 +706,7 @@ async def update_skill_content(
         success_count=skill.success_count,
         failure_count=skill.failure_count,
         created_at=skill.created_at,
-        updated_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(UTC),
         metadata=skill.metadata,
         scope=skill.scope,
         is_system_skill=skill.is_system_skill,
@@ -727,8 +728,8 @@ class SkillVersionResponse(BaseModel):
     id: str
     skill_id: str
     version_number: int
-    version_label: Optional[str]
-    change_summary: Optional[str]
+    version_label: str | None
+    change_summary: str | None
     created_by: str
     created_at: str
 
@@ -737,13 +738,13 @@ class SkillVersionDetailResponse(SkillVersionResponse):
     """Schema for skill version detail (includes content)."""
 
     skill_md_content: str
-    resource_files: Optional[Dict[str, Any]] = None
+    resource_files: dict[str, Any] | None = None
 
 
 class SkillVersionListResponse(BaseModel):
     """Schema for skill version list response."""
 
-    versions: List[SkillVersionResponse]
+    versions: list[SkillVersionResponse]
     total: int
 
 

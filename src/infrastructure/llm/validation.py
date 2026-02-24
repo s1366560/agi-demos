@@ -23,7 +23,7 @@ Example:
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Type, TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
@@ -74,7 +74,7 @@ class StructuredOutputValidator:
     with error feedback for improved success rates.
     """
 
-    def __init__(self, config: ValidationConfig | None = None):
+    def __init__(self, config: ValidationConfig | None = None) -> None:
         """
         Initialize the validator.
 
@@ -147,7 +147,7 @@ class StructuredOutputValidator:
 
         return content
 
-    def _build_schema_prompt(self, response_model: Type[BaseModel]) -> str:
+    def _build_schema_prompt(self, response_model: type[BaseModel]) -> str:
         """
         Build a prompt section describing the expected schema.
 
@@ -176,7 +176,7 @@ class StructuredOutputValidator:
         self,
         original_response: str,
         error: str,
-        response_model: Type[BaseModel],
+        response_model: type[BaseModel],
     ) -> str:
         """
         Build a retry prompt with error feedback.
@@ -201,7 +201,7 @@ class StructuredOutputValidator:
     def validate(
         self,
         content: str,
-        response_model: Type[T],
+        response_model: type[T],
     ) -> ValidationResult:
         """
         Validate a response against a Pydantic model.
@@ -261,8 +261,8 @@ class StructuredOutputValidator:
         self,
         llm_client: LLMClient,
         messages: list[Message] | list[dict[str, Any]],
-        response_model: Type[T],
-        **kwargs: Any,  # noqa: ANN401
+        response_model: type[T],
+        **kwargs: Any,
     ) -> ValidationResult:
         """
         Generate a response and validate it, with automatic retry.

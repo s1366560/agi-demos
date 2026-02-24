@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import base64
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict, List, Optional, Protocol
+from typing import Any, Protocol
 
 from src.domain.events.agent_events import AgentArtifactCreatedEvent
 
@@ -44,8 +45,8 @@ class ExtractionContext:
 
     project_id: str
     tenant_id: str
-    conversation_id: Optional[str] = None
-    sandbox_id: Optional[str] = None
+    conversation_id: str | None = None
+    sandbox_id: str | None = None
 
     @property
     def is_valid(self) -> bool:
@@ -75,8 +76,8 @@ class ArtifactData:
     category: str = "other"
     size_bytes: int = 0
     source_tool: str = ""
-    source_path: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    source_path: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self):
         """Calculate size if not provided."""
@@ -95,8 +96,8 @@ class ArtifactExtractionResult:
         has_artifacts: Whether any artifacts were extracted
     """
 
-    artifacts: List[ArtifactData] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+    artifacts: list[ArtifactData] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
     @property
     def has_artifacts(self) -> bool:
@@ -118,12 +119,12 @@ class ArtifactServiceLike(Protocol):
         filename: str,
         project_id: str,
         tenant_id: str,
-        sandbox_id: Optional[str] = None,
-        tool_execution_id: Optional[str] = None,
-        conversation_id: Optional[str] = None,
-        source_tool: Optional[str] = None,
-        source_path: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        sandbox_id: str | None = None,
+        tool_execution_id: str | None = None,
+        conversation_id: str | None = None,
+        source_tool: str | None = None,
+        source_path: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> ArtifactLike:
         """Create and store an artifact."""
         ...
@@ -153,11 +154,11 @@ class ArtifactLike(Protocol):
         ...
 
     @property
-    def url(self) -> Optional[str]:
+    def url(self) -> str | None:
         ...
 
     @property
-    def preview_url(self) -> Optional[str]:
+    def preview_url(self) -> str | None:
         ...
 
 
@@ -208,9 +209,9 @@ class ArtifactExtractor:
 
     def __init__(
         self,
-        artifact_service: Optional[ArtifactServiceLike] = None,
+        artifact_service: ArtifactServiceLike | None = None,
         debug_logging: bool = False,
-    ):
+    ) -> None:
         """
         Initialize the artifact extractor.
 
@@ -228,9 +229,9 @@ class ArtifactExtractor:
     async def process(
         self,
         tool_name: str,
-        result: Any,  # noqa: ANN401
+        result: Any,
         context: ExtractionContext,
-        tool_execution_id: Optional[str] = None,
+        tool_execution_id: str | None = None,
     ) -> AsyncIterator[AgentArtifactCreatedEvent]:
         """
         Process tool result and extract/upload any artifacts.
@@ -307,7 +308,7 @@ class ArtifactExtractor:
                 )
 
     def _extract_from_result(
-        self, result: Dict[str, Any], tool_name: str
+        self, result: dict[str, Any], tool_name: str
     ) -> ArtifactExtractionResult:
         """
         Extract artifact data from tool result.
@@ -352,10 +353,10 @@ class ArtifactExtractor:
 
     def _extract_from_export_artifact(
         self,
-        result: Dict[str, Any],
+        result: dict[str, Any],
         tool_name: str,
         extraction: ArtifactExtractionResult,
-    ) -> Optional[ArtifactData]:
+    ) -> ArtifactData | None:
         """
         Extract artifact from export_artifact tool format.
 
@@ -431,7 +432,7 @@ class ArtifactExtractor:
 
     def _extract_from_mcp_content(
         self,
-        content: List[Dict[str, Any]],
+        content: list[dict[str, Any]],
         tool_name: str,
         extraction: ArtifactExtractionResult,
     ) -> None:
@@ -465,10 +466,10 @@ class ArtifactExtractor:
 
     def _extract_image_content(
         self,
-        item: Dict[str, Any],
+        item: dict[str, Any],
         tool_name: str,
         counter: int,
-    ) -> Optional[ArtifactData]:
+    ) -> ArtifactData | None:
         """
         Extract artifact from MCP image content.
 
@@ -505,10 +506,10 @@ class ArtifactExtractor:
 
     def _extract_resource_content(
         self,
-        item: Dict[str, Any],
+        item: dict[str, Any],
         tool_name: str,
         counter: int,
-    ) -> Optional[ArtifactData]:
+    ) -> ArtifactData | None:
         """
         Extract artifact from MCP resource content.
 
@@ -579,8 +580,8 @@ class ArtifactExtractor:
         self,
         artifact_data: ArtifactData,
         context: ExtractionContext,
-        tool_execution_id: Optional[str],
-    ) -> Optional[ArtifactLike]:
+        tool_execution_id: str | None,
+    ) -> ArtifactLike | None:
         """
         Upload artifact to storage service.
 
@@ -609,7 +610,7 @@ class ArtifactExtractor:
         )
 
     def extract_only(
-        self, result: Any, tool_name: str  # noqa: ANN401
+        self, result: Any, tool_name: str
     ) -> ArtifactExtractionResult:
         """
         Extract artifacts without uploading (for testing or preview).
@@ -631,7 +632,7 @@ class ArtifactExtractor:
 # Module-level Singleton
 # ============================================================
 
-_default_extractor: Optional[ArtifactExtractor] = None
+_default_extractor: ArtifactExtractor | None = None
 
 
 def get_artifact_extractor() -> ArtifactExtractor:

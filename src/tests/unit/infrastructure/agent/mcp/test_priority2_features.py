@@ -11,7 +11,6 @@ Priority 2 Features:
 3. Cancel Handling Integration - processor on_cancelled notification
 """
 
-from typing import Optional
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -114,8 +113,8 @@ class TestProgressCallbackHandler:
             tool_name: str,
             progress_token: str,
             progress: float,
-            total: Optional[float],
-            message: Optional[str],
+            total: float | None,
+            message: str | None,
         ) -> None:
             pass
 
@@ -272,8 +271,8 @@ class TestMCPClientProgressSupport:
         async def progress_callback(
             progress_token: str,
             progress: float,
-            total: Optional[float],
-            message: Optional[str],
+            total: float | None,
+            message: str | None,
         ):
             callback_calls.append({
                 "token": progress_token,

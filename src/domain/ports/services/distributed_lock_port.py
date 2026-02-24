@@ -12,9 +12,9 @@ Implementations:
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import AsyncGenerator, Optional
 
 
 @dataclass(frozen=True)
@@ -22,7 +22,7 @@ class LockInfo:
     """Information about a lock."""
 
     key: str
-    owner: Optional[str] = None
+    owner: str | None = None
     ttl_remaining: int = -2  # -2 = not exists, -1 = no expiry, >= 0 = seconds
     is_locked: bool = False
 
@@ -63,8 +63,8 @@ class DistributedLockPort(ABC):
         key: str,
         ttl: int = 60,
         blocking: bool = True,
-        timeout: Optional[float] = None,
-    ) -> Optional[LockHandle]:
+        timeout: float | None = None,
+    ) -> LockHandle | None:
         """
         Acquire a distributed lock.
 
@@ -98,7 +98,7 @@ class DistributedLockPort(ABC):
         pass
 
     @abstractmethod
-    async def extend(self, handle: LockHandle, additional_ttl: Optional[int] = None) -> bool:
+    async def extend(self, handle: LockHandle, additional_ttl: int | None = None) -> bool:
         """
         Extend the lock TTL.
 
@@ -145,7 +145,7 @@ class DistributedLockPort(ABC):
         key: str,
         ttl: int = 60,
         blocking: bool = True,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> AsyncGenerator[AcquiredLock, None]:
         """
         Context manager for acquiring a lock.
@@ -214,7 +214,7 @@ class AcquiredLock:
     """
 
     acquired: bool
-    handle: Optional[LockHandle]
+    handle: LockHandle | None
     key: str
 
     def __bool__(self) -> bool:

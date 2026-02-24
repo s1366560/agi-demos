@@ -11,7 +11,6 @@ Tests cover:
 """
 
 from dataclasses import dataclass
-from typing import List, Optional
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -46,8 +45,8 @@ class MockSkill:
     id: str
     name: str
     description: str
-    tools: List[str]
-    prompt_template: Optional[str] = None
+    tools: list[str]
+    prompt_template: str | None = None
     status: MockSkillStatus = None
     _match_score: float = 0.0
     _accessible: bool = True

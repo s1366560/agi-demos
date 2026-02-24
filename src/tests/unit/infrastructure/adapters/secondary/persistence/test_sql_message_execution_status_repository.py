@@ -2,7 +2,7 @@
 Tests for V2 SqlMessageExecutionStatusRepository using BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,7 +32,7 @@ def make_agent_execution(
         message_id=message_id,
         status=status,
         last_event_sequence=0,
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         completed_at=None,
         error_message=None,
         tenant_id="tenant-1",

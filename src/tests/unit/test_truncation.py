@@ -295,7 +295,7 @@ class TestIntegrationWithAgentTool:
         from src.infrastructure.agent.tools.base import AgentTool
 
         class TestTool(AgentTool):
-            def __init__(self):
+            def __init__(self) -> None:
                 super().__init__("test", "Test tool", max_output_bytes=100)
 
             async def execute(self, **kwargs):
@@ -312,7 +312,7 @@ class TestIntegrationWithAgentTool:
         from src.infrastructure.agent.tools.base import AgentTool
 
         class TestTool(AgentTool):
-            def __init__(self):
+            def __init__(self) -> None:
                 super().__init__("test", "Test tool")
 
             async def execute(self, **kwargs):

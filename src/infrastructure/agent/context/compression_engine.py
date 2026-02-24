@@ -17,9 +17,10 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -116,13 +117,13 @@ class AdaptiveThresholds:
 class CompressionResult:
     """Result of a compression operation."""
 
-    messages: List[Dict[str, Any]]
+    messages: list[dict[str, Any]]
     level: CompressionLevel
     tokens_before: int
     tokens_after: int
     messages_before: int
     messages_after: int
-    summary: Optional[str] = None
+    summary: str | None = None
     pruned_tool_outputs: int = 0
     duration_ms: float = 0.0
 
@@ -136,7 +137,7 @@ class CompressionResult:
             return 0.0
         return self.tokens_after / self.tokens_before
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "level": self.level.value,
             "tokens_before": self.tokens_before,
@@ -152,13 +153,13 @@ class CompressionResult:
 
 # Type alias for token estimation function
 TokenEstimator = Callable[[str], int]
-MessageTokenEstimator = Callable[[Dict[str, Any]], int]
+MessageTokenEstimator = Callable[[dict[str, Any]], int]
 
 
 class AdaptiveStrategySelector:
     """Selects compression level based on context occupancy."""
 
-    def __init__(self, thresholds: Optional[AdaptiveThresholds] = None) -> None:
+    def __init__(self, thresholds: AdaptiveThresholds | None = None) -> None:
         self._thresholds = thresholds or AdaptiveThresholds()
         self._thresholds.validate()
 
@@ -166,7 +167,7 @@ class AdaptiveStrategySelector:
         self,
         current_tokens: int,
         model_limits: ModelLimits,
-        history: Optional[CompressionHistory] = None,
+        history: CompressionHistory | None = None,
     ) -> CompressionLevel:
         """Select the appropriate compression level.
 
@@ -219,14 +220,14 @@ class ContextCompressionEngine:
         self,
         estimate_tokens: TokenEstimator,
         estimate_message_tokens: MessageTokenEstimator,
-        thresholds: Optional[AdaptiveThresholds] = None,
+        thresholds: AdaptiveThresholds | None = None,
         chunk_size: int = DEFAULT_CHUNK_SIZE,
         summary_max_tokens: int = 500,
-        prune_min_tokens: Optional[int] = None,
-        prune_protect_tokens: Optional[int] = None,
-        prune_protected_tools: Optional[set] = None,
+        prune_min_tokens: int | None = None,
+        prune_protect_tokens: int | None = None,
+        prune_protected_tools: set | None = None,
         assistant_truncate_chars: int = 2000,
-        role_truncate_limits: Optional[Dict[str, int]] = None,
+        role_truncate_limits: dict[str, int] | None = None,
     ) -> None:
         self._estimate_tokens = estimate_tokens
         self._estimate_message_tokens = estimate_message_tokens
@@ -253,7 +254,7 @@ class ContextCompressionEngine:
 
     def select_level(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         model_limits: ModelLimits,
     ) -> CompressionLevel:
         """Select compression level for current context state."""
@@ -262,7 +263,7 @@ class ContextCompressionEngine:
 
     def get_occupancy(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         model_limits: ModelLimits,
     ) -> float:
         """Get current context occupancy ratio."""
@@ -272,10 +273,10 @@ class ContextCompressionEngine:
     async def compress(
         self,
         system_prompt: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         model_limits: ModelLimits,
-        llm_client: Optional[LLMClient] = None,
-        level: Optional[CompressionLevel] = None,
+        llm_client: LLMClient | None = None,
+        level: CompressionLevel | None = None,
     ) -> CompressionResult:
         """Compress context messages based on adaptive level selection.
 
@@ -339,12 +340,12 @@ class ContextCompressionEngine:
 
         # Update state
         self._state.current_level = level
-        self._state.last_compression_at = datetime.now(timezone.utc)
+        self._state.last_compression_at = datetime.now(UTC)
         self._state.clear_pending()
 
         # Record in history
         record = CompressionRecord(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             level=level.value,
             tokens_before=tokens_before,
             tokens_after=tokens_after,
@@ -380,8 +381,8 @@ class ContextCompressionEngine:
 
     def _prune_tool_outputs(
         self,
-        messages: List[Dict[str, Any]],
-    ) -> Tuple[List[Dict[str, Any]], int]:
+        messages: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], int]:
         """L1: Prune old tool outputs and long assistant messages.
 
         Replaces tool result content with placeholder for old tool calls,
@@ -413,7 +414,7 @@ class ContextCompressionEngine:
         pruned_count = 0
         total_tool_tokens = 0
         prunable_tokens = 0
-        prune_candidates: List[Tuple[int, Dict[str, Any], str]] = []
+        prune_candidates: list[tuple[int, dict[str, Any], str]] = []
 
         # Scan backwards for tool result messages and long assistant messages
         turns = 0
@@ -482,9 +483,9 @@ class ContextCompressionEngine:
 
     async def _incremental_summarize(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         llm_client: LLMClient,
-    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    ) -> tuple[list[dict[str, Any]], str | None]:
         """L2: Incrementally summarize old messages in chunks.
 
         Summarizes messages in groups of `chunk_size`, building a chain
@@ -568,9 +569,9 @@ class ContextCompressionEngine:
 
     async def _deep_compress(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         llm_client: LLMClient,
-    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    ) -> tuple[list[dict[str, Any]], str | None]:
         """L3: Deep compress all context into one ultra-compact summary.
 
         Distills existing summaries + recent messages into a single
@@ -627,10 +628,10 @@ class ContextCompressionEngine:
     def _build_with_system(
         self,
         system_prompt: str,
-        messages: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """Build message list with system prompt prepended."""
-        result: List[Dict[str, Any]] = []
+        result: list[dict[str, Any]] = []
         if system_prompt:
             result.append({"role": "system", "content": system_prompt})
         result.extend(messages)
@@ -639,11 +640,11 @@ class ContextCompressionEngine:
     def _build_compressed_output(
         self,
         system_prompt: str,
-        summary: Optional[str],
-        messages: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        summary: str | None,
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """Build final message list with summary injected into system prompt."""
-        result: List[Dict[str, Any]] = []
+        result: list[dict[str, Any]] = []
 
         system_content = system_prompt or ""
         if summary:
@@ -657,7 +658,7 @@ class ContextCompressionEngine:
 
     def _format_messages_for_summary(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
     ) -> str:
         """Format messages as text for LLM summarization.
 
@@ -689,15 +690,15 @@ class ContextCompressionEngine:
 
     def _partition_messages_by_role(
         self,
-        messages: List[Dict[str, Any]],
-    ) -> Tuple[str, str]:
+        messages: list[dict[str, Any]],
+    ) -> tuple[str, str]:
         """Partition messages into user text and assistant/tool text.
 
         Returns (user_text, assistant_text) with role-aware truncation.
         Used by L2 summarization to give the LLM structured input.
         """
-        user_lines: List[str] = []
-        assistant_lines: List[str] = []
+        user_lines: list[str] = []
+        assistant_lines: list[str] = []
 
         for msg in messages:
             role = msg.get("role", "unknown")
@@ -731,7 +732,7 @@ class ContextCompressionEngine:
         return "\n".join(user_lines), "\n".join(assistant_lines)
 
     @staticmethod
-    def _extract_response_text(response: Any) -> str:  # noqa: ANN401
+    def _extract_response_text(response: Any) -> str:
         """Extract text from LLM response (handles both object and dict formats)."""
         if hasattr(response, "choices") and response.choices:
             return response.choices[0].message.content.strip()
@@ -741,14 +742,14 @@ class ContextCompressionEngine:
 
     def get_token_distribution(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         system_prompt: str = "",
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """Calculate token distribution by message category.
 
         Returns breakdown: system, user, assistant, tool, summary.
         """
-        distribution: Dict[str, int] = {
+        distribution: dict[str, int] = {
             "system": self._estimate_tokens(system_prompt),
             "user": 0,
             "assistant": 0,

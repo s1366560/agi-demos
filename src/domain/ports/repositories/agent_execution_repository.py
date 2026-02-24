@@ -5,7 +5,6 @@ This port defines the contract for storing and retrieving agent execution status
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from src.domain.model.agent.execution_status import AgentExecution, AgentExecutionStatus
 
@@ -32,7 +31,7 @@ class AgentExecutionRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_by_id(self, execution_id: str) -> Optional[AgentExecution]:
+    async def get_by_id(self, execution_id: str) -> AgentExecution | None:
         """
         Get execution by ID.
 
@@ -48,8 +47,8 @@ class AgentExecutionRepositoryPort(ABC):
     async def get_by_message_id(
         self,
         message_id: str,
-        conversation_id: Optional[str] = None,
-    ) -> Optional[AgentExecution]:
+        conversation_id: str | None = None,
+    ) -> AgentExecution | None:
         """
         Get execution by message ID.
 
@@ -66,7 +65,7 @@ class AgentExecutionRepositoryPort(ABC):
     async def get_running_by_conversation(
         self,
         conversation_id: str,
-    ) -> Optional[AgentExecution]:
+    ) -> AgentExecution | None:
         """
         Get the currently running execution for a conversation.
 
@@ -85,8 +84,8 @@ class AgentExecutionRepositoryPort(ABC):
         self,
         execution_id: str,
         status: AgentExecutionStatus,
-        error_message: Optional[str] = None,
-    ) -> Optional[AgentExecution]:
+        error_message: str | None = None,
+    ) -> AgentExecution | None:
         """
         Update execution status.
 
@@ -105,7 +104,7 @@ class AgentExecutionRepositoryPort(ABC):
         self,
         execution_id: str,
         sequence: int,
-    ) -> Optional[AgentExecution]:
+    ) -> AgentExecution | None:
         """
         Update the last event sequence number.
 

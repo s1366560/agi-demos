@@ -13,9 +13,9 @@ protocol support.
 import asyncio
 import json
 import logging
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, suppress
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 import aiohttp
 
@@ -39,7 +39,7 @@ class MCPHttpClientConfig:
     """Configuration for MCP HTTP Client."""
 
     url: str
-    headers: Dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict)
     timeout: float = DEFAULT_TIMEOUT
     transport_type: str = "http"  # "http" or "sse"
 
@@ -69,10 +69,10 @@ class MCPHttpClient:
     def __init__(
         self,
         url: str,
-        headers: Optional[Dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
         timeout: float = DEFAULT_TIMEOUT,
         transport_type: str = "http",
-    ):
+    ) -> None:
         """
         Initialize the HTTP client.
 
@@ -86,19 +86,19 @@ class MCPHttpClient:
         self.headers = headers or {}
         self.timeout = timeout
         self.transport_type = transport_type
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
         self._request_id = 0
-        self.server_info: Optional[Dict[str, Any]] = None
-        self._tools: List[MCPToolSchema] = []
+        self.server_info: dict[str, Any] | None = None
+        self._tools: list[MCPToolSchema] = []
         self._connected = False
 
         # SSE transport state (using MCP SDK)
-        self._exit_stack: Optional[AsyncExitStack] = None
-        self._http_client: Optional[httpx.AsyncClient] = None
+        self._exit_stack: AsyncExitStack | None = None
+        self._http_client: httpx.AsyncClient | None = None
         self._read_stream = None
         self._write_stream = None
-        self._reader_task: Optional[asyncio.Task] = None
-        self._pending_requests: Dict[int, asyncio.Future] = {}
+        self._reader_task: asyncio.Task | None = None
+        self._pending_requests: dict[int, asyncio.Future] = {}
 
     @property
     def is_connected(self) -> bool:
@@ -107,7 +107,7 @@ class MCPHttpClient:
             return self._connected and self._write_stream is not None
         return self._connected and self._session is not None
 
-    async def connect(self, timeout: Optional[float] = None) -> bool:
+    async def connect(self, timeout: float | None = None) -> bool:
         """
         Connect to the remote MCP server.
 
@@ -176,7 +176,7 @@ class MCPHttpClient:
             await self.disconnect()
             return False
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"Remote MCP connection timeout after {timeout}s")
             await self.disconnect()
             return False
@@ -237,7 +237,7 @@ class MCPHttpClient:
 
             try:
                 result = await asyncio.wait_for(future, timeout=timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._pending_requests.pop(self._request_id, None)
                 raise
 
@@ -273,7 +273,7 @@ class MCPHttpClient:
             await self.disconnect()
             return False
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"SSE MCP connection timeout after {timeout}s")
             await self.disconnect()
             return False
@@ -299,7 +299,7 @@ class MCPHttpClient:
         except Exception as e:
             logger.error(f"Error reading SSE messages: {e}")
 
-    async def _list_tools_sse(self, timeout: float) -> List[MCPToolSchema]:
+    async def _list_tools_sse(self, timeout: float) -> list[MCPToolSchema]:
         """List tools via SSE transport."""
         from mcp.shared.session import SessionMessage
         from mcp.types import JSONRPCMessage, JSONRPCRequest
@@ -320,7 +320,7 @@ class MCPHttpClient:
 
         try:
             result = await asyncio.wait_for(future, timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._pending_requests.pop(self._request_id, None)
             logger.error(f"tools/list request timed out after {timeout}s")
             return []
@@ -364,7 +364,7 @@ class MCPHttpClient:
         return []
 
     async def _call_tool_sse(
-        self, name: str, arguments: Dict[str, Any], timeout: float
+        self, name: str, arguments: dict[str, Any], timeout: float
     ) -> MCPToolResult:
         """Call a tool via SSE transport."""
         from mcp.shared.session import SessionMessage
@@ -387,7 +387,7 @@ class MCPHttpClient:
 
                 try:
                     result = await asyncio.wait_for(future, timeout=timeout)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     self._pending_requests.pop(self._request_id, None)
 
                     # On first attempt timeout, try to reconnect and retry
@@ -473,10 +473,8 @@ class MCPHttpClient:
         # Cancel SSE reader task
         if self._reader_task:
             self._reader_task.cancel()
-            try:
+            with suppress(asyncio.CancelledError):
                 await self._reader_task
-            except asyncio.CancelledError:
-                pass
             self._reader_task = None
 
         # Cancel pending requests
@@ -507,7 +505,7 @@ class MCPHttpClient:
         self._tools = []
         self.server_info = None
 
-    async def list_tools(self, timeout: Optional[float] = None) -> List[MCPToolSchema]:
+    async def list_tools(self, timeout: float | None = None) -> list[MCPToolSchema]:
         """
         List available tools.
 
@@ -541,8 +539,8 @@ class MCPHttpClient:
     async def call_tool(
         self,
         name: str,
-        arguments: Dict[str, Any],
-        timeout: Optional[float] = None,
+        arguments: dict[str, Any],
+        timeout: float | None = None,
     ) -> MCPToolResult:
         """
         Call a tool.
@@ -589,16 +587,16 @@ class MCPHttpClient:
             isError=True,
         )
 
-    def get_cached_tools(self) -> List[MCPToolSchema]:
+    def get_cached_tools(self) -> list[MCPToolSchema]:
         """Get cached tools list (from connection time)."""
         return self._tools
 
     async def _send_request(
         self,
         method: str,
-        params: Dict[str, Any],
+        params: dict[str, Any],
         timeout: float = DEFAULT_TIMEOUT,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Send a JSON-RPC request via HTTP POST."""
         if not self._session:
             logger.error("HTTP session not initialized")
@@ -631,7 +629,7 @@ class MCPHttpClient:
                 logger.debug(f"Remote MCP response: {json.dumps(result)}")
                 return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"Remote MCP request '{method}' timed out after {timeout}s")
         except aiohttp.ClientError as e:
             logger.error(f"Remote MCP request error: {e}")
@@ -642,7 +640,7 @@ class MCPHttpClient:
 
         return None
 
-    async def _send_notification(self, method: str, params: Dict[str, Any]) -> None:
+    async def _send_notification(self, method: str, params: dict[str, Any]) -> None:
         """Send a JSON-RPC notification (no response expected)."""
         if not self._session:
             return

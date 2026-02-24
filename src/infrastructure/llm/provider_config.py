@@ -19,7 +19,7 @@ Usage:
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from src.domain.llm_providers.models import ProviderType
 
@@ -250,14 +250,14 @@ class UnifiedLLMConfig:
     
     # Provider configuration
     provider_type: ProviderType
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
+    api_key: str | None = None
+    base_url: str | None = None
     
     # Model configuration
     model: str = ""  # Primary model (medium/large)
-    small_model: Optional[str] = None  # Small/fast model
-    embedding_model: Optional[str] = None
-    reranker_model: Optional[str] = None
+    small_model: str | None = None  # Small/fast model
+    embedding_model: str | None = None
+    reranker_model: str | None = None
     
     # Generation parameters
     temperature: float = 0.0
@@ -305,7 +305,7 @@ class UnifiedLLMConfig:
         
         return provider_defaults.get(operation, "gpt-4o-mini")
     
-    def get_litellm_model_name(self, model: Optional[str] = None) -> str:
+    def get_litellm_model_name(self, model: str | None = None) -> str:
         """
         Get model name in LiteLLM format with provider prefix.
         
@@ -392,8 +392,8 @@ class ProviderHealthConfig:
     """
     
     provider_type: ProviderType
-    health_check_model: Optional[str] = None
-    health_check_endpoint: Optional[str] = None
+    health_check_model: str | None = None
+    health_check_endpoint: str | None = None
     
     # Circuit breaker settings
     failure_threshold: int = 5

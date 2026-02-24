@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from src.infrastructure.memory.mmr import mmr_rerank
 from src.infrastructure.memory.query_expansion import extract_keywords
@@ -50,9 +50,9 @@ class ChunkSearchResult:
     score: float
     metadata: dict = field(default_factory=dict)
     category: str = "other"
-    source_type: Optional[str] = None
-    source_id: Optional[str] = None
-    created_at: Optional[datetime] = None
+    source_type: str | None = None
+    source_id: str | None = None
+    created_at: datetime | None = None
 
 
 class ChunkHybridSearch:
@@ -66,14 +66,14 @@ class ChunkHybridSearch:
     def __init__(
         self,
         embedding_service: EmbeddingService,
-        session_factory: Optional[async_sessionmaker[AsyncSession]] = None,
-        config: Optional[ChunkSearchConfig] = None,
-    ):
+        session_factory: async_sessionmaker[AsyncSession] | None = None,
+        config: ChunkSearchConfig | None = None,
+    ) -> None:
         self._embedding = embedding_service
         self._session_factory = session_factory
         self._config = config or ChunkSearchConfig()
 
-    async def _get_chunk_repo(self) -> Optional[SqlChunkRepository]:
+    async def _get_chunk_repo(self) -> SqlChunkRepository | None:
         """Create a chunk repository with a fresh DB session."""
         if self._session_factory is None:
             return None
@@ -164,7 +164,7 @@ class ChunkHybridSearch:
 
         # 5. Temporal decay
         if self._config.enable_temporal_decay:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             for item in merged:
                 created_at = item.get("created_at")
                 if created_at:

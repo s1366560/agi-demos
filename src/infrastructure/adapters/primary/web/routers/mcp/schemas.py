@@ -4,7 +4,7 @@ Pydantic models for MCP server management and tool operations.
 """
 
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -17,11 +17,11 @@ class MCPServerCreate(BaseModel):
     """Schema for creating a new MCP server."""
 
     name: str = Field(..., min_length=1, max_length=200, description="Server name")
-    description: Optional[str] = Field(None, description="Server description")
+    description: str | None = Field(None, description="Server description")
     server_type: MCPServerTypeValues = Field(
         ..., description="Transport type: stdio, sse, http, websocket"
     )
-    transport_config: Dict[str, Any] = Field(..., description="Transport configuration")
+    transport_config: dict[str, Any] = Field(..., description="Transport configuration")
     enabled: bool = Field(True, description="Whether server is enabled")
     project_id: str = Field(..., description="Project ID this server belongs to")
 
@@ -41,11 +41,11 @@ class MCPServerCreate(BaseModel):
 class MCPServerUpdate(BaseModel):
     """Schema for updating an MCP server."""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
-    description: Optional[str] = Field(None)
-    server_type: Optional[MCPServerTypeValues] = Field(None)
-    transport_config: Optional[Dict[str, Any]] = Field(None)
-    enabled: Optional[bool] = Field(None)
+    name: str | None = Field(None, min_length=1, max_length=200)
+    description: str | None = Field(None)
+    server_type: MCPServerTypeValues | None = Field(None)
+    transport_config: dict[str, Any] | None = Field(None)
+    enabled: bool | None = Field(None)
 
     @model_validator(mode="after")
     def validate_transport_config(self) -> "MCPServerUpdate":
@@ -70,19 +70,19 @@ class MCPServerResponse(BaseModel):
 
     id: str
     tenant_id: str
-    project_id: Optional[str] = None
+    project_id: str | None = None
     name: str
-    description: Optional[str]
+    description: str | None
     server_type: str
-    transport_config: Dict[str, Any]
+    transport_config: dict[str, Any]
     enabled: bool
     runtime_status: str = "unknown"
-    runtime_metadata: Dict[str, Any] = Field(default_factory=dict)
-    discovered_tools: List[Dict[str, Any]]
-    sync_error: Optional[str] = None
-    last_sync_at: Optional[datetime]
+    runtime_metadata: dict[str, Any] = Field(default_factory=dict)
+    discovered_tools: list[dict[str, Any]]
+    sync_error: str | None = None
+    last_sync_at: datetime | None
     created_at: datetime
-    updated_at: Optional[datetime]
+    updated_at: datetime | None
 
 
 class MCPServerTestResult(BaseModel):
@@ -92,7 +92,7 @@ class MCPServerTestResult(BaseModel):
     message: str
     tools_discovered: int = 0
     connection_time_ms: float = 0.0
-    errors: List[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
 
 
 class MCPReconcileResultResponse(BaseModel):
@@ -112,10 +112,10 @@ class MCPToolResponse(BaseModel):
     """Schema for MCP tool response."""
 
     name: str
-    description: Optional[str]
+    description: str | None
     server_id: str
     server_name: str
-    input_schema: Dict[str, Any]
+    input_schema: dict[str, Any]
 
 
 class MCPToolCallRequest(BaseModel):
@@ -123,7 +123,7 @@ class MCPToolCallRequest(BaseModel):
 
     server_id: str = Field(..., description="MCP server ID")
     tool_name: str = Field(..., description="Tool name to call")
-    arguments: Dict[str, Any] = Field(default_factory=dict, description="Tool arguments")
+    arguments: dict[str, Any] = Field(default_factory=dict, description="Tool arguments")
 
 
 class MCPToolCallResponse(BaseModel):
@@ -131,7 +131,7 @@ class MCPToolCallResponse(BaseModel):
 
     result: Any
     is_error: bool = False
-    error_message: Optional[str] = None
+    error_message: str | None = None
     execution_time_ms: float
 
 
@@ -155,8 +155,8 @@ class MCPServerHealthStatus(BaseModel):
     name: str
     status: Literal["healthy", "degraded", "error", "disabled", "unknown"]
     enabled: bool
-    last_sync_at: Optional[datetime] = None
-    sync_error: Optional[str] = None
+    last_sync_at: datetime | None = None
+    sync_error: str | None = None
     tools_count: int = 0
 
 
@@ -168,4 +168,4 @@ class MCPHealthSummary(BaseModel):
     degraded: int
     error: int
     disabled: int
-    servers: List[MCPServerHealthStatus]
+    servers: list[MCPServerHealthStatus]

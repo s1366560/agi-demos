@@ -6,9 +6,9 @@ via TodoRead/TodoWrite tools. Tasks are persisted to DB for durability.
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict
+from typing import Any
 
 
 class TaskStatus(str, Enum):
@@ -50,10 +50,10 @@ class AgentTask:
     status: TaskStatus = TaskStatus.PENDING
     priority: TaskPriority = TaskPriority.MEDIUM
     order_index: int = 0
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "id": self.id,
@@ -67,7 +67,7 @@ class AgentTask:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AgentTask":
+    def from_dict(cls, data: dict[str, Any]) -> "AgentTask":
         """Create from dictionary."""
         status = data.get("status", "pending")
         if isinstance(status, str):
@@ -91,6 +91,4 @@ class AgentTask:
             return False
         if self.status not in TaskStatus:
             return False
-        if self.priority not in TaskPriority:
-            return False
-        return True
+        return self.priority in TaskPriority

@@ -9,7 +9,7 @@ Topic Format: sandbox:{project_id}
 
 import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from src.application.services.sandbox_event_service import SandboxEventPublisher
 from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
@@ -39,7 +39,7 @@ class SubscribeSandboxHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "subscribe_sandbox"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Handle sandbox subscription request."""
         project_id = message.get("project_id")
 
@@ -83,7 +83,7 @@ class SubscribeSandboxHandler(WebSocketMessageHandler):
 
         # Get event publisher (which has Redis event bus access)
         try:
-            event_publisher: Optional[SandboxEventPublisher] = container.sandbox_event_publisher()
+            event_publisher: SandboxEventPublisher | None = container.sandbox_event_publisher()
         except Exception:
             event_publisher = None
 
@@ -171,7 +171,7 @@ class UnsubscribeSandboxHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "unsubscribe_sandbox"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Handle sandbox unsubscription request."""
         project_id = message.get("project_id")
 

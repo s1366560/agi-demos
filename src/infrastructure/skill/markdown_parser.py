@@ -27,7 +27,7 @@ tools:
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
@@ -35,7 +35,7 @@ import yaml
 class MarkdownParseError(Exception):
     """Exception raised when SKILL.md parsing fails."""
 
-    def __init__(self, message: str, file_path: Optional[str] = None):
+    def __init__(self, message: str, file_path: str | None = None) -> None:
         self.file_path = file_path
         super().__init__(f"{message}" + (f" in {file_path}" if file_path else ""))
 
@@ -66,23 +66,23 @@ class SkillMarkdown:
         allowed_tools_raw: Raw allowed-tools string for fine-grained parsing
     """
 
-    frontmatter: Dict[str, Any]
+    frontmatter: dict[str, Any]
     content: str
     name: str
     description: str
-    trigger_patterns: List[str] = field(default_factory=list)
-    tools: List[str] = field(default_factory=list)
-    allowed_tools: List[str] = field(default_factory=list)
+    trigger_patterns: list[str] = field(default_factory=list)
+    tools: list[str] = field(default_factory=list)
+    allowed_tools: list[str] = field(default_factory=list)
     user_invocable: bool = True
     context: str = "shared"
-    agent: List[str] = field(default_factory=lambda: ["*"])
+    agent: list[str] = field(default_factory=lambda: ["*"])
     # AgentSkills.io spec fields
-    license: Optional[str] = None
-    compatibility: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    allowed_tools_raw: Optional[str] = None
+    license: str | None = None
+    compatibility: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    allowed_tools_raw: str | None = None
     # Version tracking
-    version: Optional[str] = None
+    version: str | None = None
 
     @property
     def full_content(self) -> str:
@@ -106,7 +106,7 @@ class MarkdownParser:
         re.DOTALL,
     )
 
-    def parse(self, content: str, file_path: Optional[str] = None) -> SkillMarkdown:
+    def parse(self, content: str, file_path: str | None = None) -> SkillMarkdown:
         """
         Parse a SKILL.md file content.
 
@@ -166,8 +166,8 @@ class MarkdownParser:
         # Parse allowed-tools (AgentSkills.io spec format: space-separated string)
         # Priority: allowed-tools > tools
         allowed_tools_raw = frontmatter.get("allowed-tools")
-        tools: List[str] = []
-        allowed_tools_list: List[str] = []
+        tools: list[str] = []
+        allowed_tools_list: list[str] = []
 
         if allowed_tools_raw is not None:
             if isinstance(allowed_tools_raw, str):
@@ -252,7 +252,7 @@ class MarkdownParser:
 
         return self.parse(content, file_path)
 
-    def _extract_list(self, data: Dict[str, Any], key: str) -> List[str]:
+    def _extract_list(self, data: dict[str, Any], key: str) -> list[str]:
         """
         Extract a list of strings from frontmatter.
 
@@ -271,7 +271,7 @@ class MarkdownParser:
 
         return []
 
-    def _extract_agent_modes(self, frontmatter: Dict[str, Any]) -> List[str]:
+    def _extract_agent_modes(self, frontmatter: dict[str, Any]) -> list[str]:
         """
         Extract agent modes from frontmatter.
 

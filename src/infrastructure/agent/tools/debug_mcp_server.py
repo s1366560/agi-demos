@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -36,7 +36,7 @@ class DebugMCPServerTool(AgentTool):
         self,
         sandbox_adapter: SandboxPort,
         sandbox_id: str,
-    ):
+    ) -> None:
         """Initialize the debug tool.
 
         Args:
@@ -59,7 +59,7 @@ class DebugMCPServerTool(AgentTool):
         )
 
     @property
-    def parameters(self) -> Dict[str, Any]:
+    def parameters(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -81,7 +81,7 @@ class DebugMCPServerTool(AgentTool):
             "required": ["server_name"],
         }
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return self.parameters
 
     async def execute(
@@ -89,7 +89,7 @@ class DebugMCPServerTool(AgentTool):
         server_name: str,
         include_logs: bool = True,
         log_lines: int = 50,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Execute the debug tool to collect server information.
 
         Args:
@@ -174,7 +174,7 @@ class DebugMCPServerTool(AgentTool):
 
         return result
 
-    def _parse_response(self, response: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _parse_response(self, response: dict[str, Any]) -> dict[str, Any] | None:
         """Parse MCP tool response to extract data."""
         if not response:
             return None

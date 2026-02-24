@@ -15,7 +15,8 @@ Architecture (LEGACY - Redis-based, deprecated):
 """
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from src.infrastructure.agent.hitl.ray_hitl_handler import RayHITLHandler
 from src.infrastructure.agent.tools.base import AgentTool
@@ -49,9 +50,9 @@ class ClarificationTool(AgentTool):
 
     def __init__(
         self,
-        hitl_handler: Optional[RayHITLHandler] = None,
-        emit_sse_callback: Optional[Callable] = None,
-    ):
+        hitl_handler: RayHITLHandler | None = None,
+        emit_sse_callback: Callable | None = None,
+    ) -> None:
         """
         Initialize the clarification tool.
 
@@ -74,7 +75,7 @@ class ClarificationTool(AgentTool):
         """Set the HITL handler (for late binding)."""
         self._hitl_handler = handler
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
         return {
             "type": "object",
@@ -133,7 +134,7 @@ class ClarificationTool(AgentTool):
             "required": ["question", "clarification_type", "options"],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         """Validate clarification arguments."""
         if "question" not in kwargs:
             logger.error("Missing required argument: question")
@@ -165,9 +166,9 @@ class ClarificationTool(AgentTool):
         self,
         question: str,
         clarification_type: str,
-        options: List[Dict[str, Any]],
+        options: list[dict[str, Any]],
         allow_custom: bool = True,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
         timeout: float = 300.0,
     ) -> str:
         """
@@ -211,6 +212,6 @@ class ClarificationTool(AgentTool):
         logger.info(f"Clarification answered: {answer}")
         return answer
 
-    def get_output_schema(self) -> Dict[str, Any]:
+    def get_output_schema(self) -> dict[str, Any]:
         """Get output schema for tool composition."""
         return {"type": "string", "description": "User's answer to the clarification question"}

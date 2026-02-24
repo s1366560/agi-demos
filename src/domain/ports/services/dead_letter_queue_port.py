@@ -20,9 +20,9 @@ Usage:
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class DLQMessageStatus(str, Enum):
@@ -64,14 +64,14 @@ class DeadLetterMessage:
     routing_key: str = ""
     error: str = ""
     error_type: str = ""
-    error_traceback: Optional[str] = None
+    error_traceback: str | None = None
     retry_count: int = 0
     max_retries: int = 3
-    first_failed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    last_failed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    next_retry_at: Optional[datetime] = None
+    first_failed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    last_failed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    next_retry_at: datetime | None = None
     status: DLQMessageStatus = DLQMessageStatus.PENDING
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def can_retry(self) -> bool:
@@ -84,9 +84,9 @@ class DeadLetterMessage:
     @property
     def age_seconds(self) -> float:
         """Get the age of this DLQ message in seconds."""
-        return (datetime.now(timezone.utc) - self.first_failed_at).total_seconds()
+        return (datetime.now(UTC) - self.first_failed_at).total_seconds()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "id": self.id,
@@ -107,7 +107,7 @@ class DeadLetterMessage:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "DeadLetterMessage":
+    def from_dict(cls, data: dict[str, Any]) -> "DeadLetterMessage":
         """Create from dictionary."""
         return cls(
             id=data.get("id", f"dlq_{uuid.uuid4().hex[:12]}"),
@@ -122,10 +122,10 @@ class DeadLetterMessage:
             max_retries=data.get("max_retries", 3),
             first_failed_at=datetime.fromisoformat(data["first_failed_at"])
             if data.get("first_failed_at")
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
             last_failed_at=datetime.fromisoformat(data["last_failed_at"])
             if data.get("last_failed_at")
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
             next_retry_at=datetime.fromisoformat(data["next_retry_at"])
             if data.get("next_retry_at")
             else None,
@@ -157,10 +157,10 @@ class DLQStats:
     expired_count: int = 0
     resolved_count: int = 0
     oldest_message_age: float = 0.0
-    error_type_counts: Dict[str, int] = field(default_factory=dict)
-    event_type_counts: Dict[str, int] = field(default_factory=dict)
+    error_type_counts: dict[str, int] = field(default_factory=dict)
+    event_type_counts: dict[str, int] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "total_messages": self.total_messages,
@@ -192,10 +192,10 @@ class DeadLetterQueuePort(ABC):
         error: str,
         error_type: str,
         *,
-        error_traceback: Optional[str] = None,
+        error_traceback: str | None = None,
         retry_count: int = 0,
         max_retries: int = 3,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Send a failed event to the dead letter queue.
 
@@ -217,7 +217,7 @@ class DeadLetterQueuePort(ABC):
         pass
 
     @abstractmethod
-    async def get_message(self, message_id: str) -> Optional[DeadLetterMessage]:
+    async def get_message(self, message_id: str) -> DeadLetterMessage | None:
         """Get a specific DLQ message.
 
         Args:
@@ -232,13 +232,13 @@ class DeadLetterQueuePort(ABC):
     async def get_messages(
         self,
         *,
-        status: Optional[DLQMessageStatus] = None,
-        event_type: Optional[str] = None,
-        error_type: Optional[str] = None,
-        routing_key_pattern: Optional[str] = None,
+        status: DLQMessageStatus | None = None,
+        event_type: str | None = None,
+        error_type: str | None = None,
+        routing_key_pattern: str | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[DeadLetterMessage]:
+    ) -> list[DeadLetterMessage]:
         """Get DLQ messages with filtering.
 
         Args:
@@ -276,8 +276,8 @@ class DeadLetterQueuePort(ABC):
     @abstractmethod
     async def retry_batch(
         self,
-        message_ids: List[str],
-    ) -> Dict[str, bool]:
+        message_ids: list[str],
+    ) -> dict[str, bool]:
         """Retry multiple DLQ messages.
 
         Args:
@@ -308,9 +308,9 @@ class DeadLetterQueuePort(ABC):
     @abstractmethod
     async def discard_batch(
         self,
-        message_ids: List[str],
+        message_ids: list[str],
         reason: str,
-    ) -> Dict[str, bool]:
+    ) -> dict[str, bool]:
         """Discard multiple DLQ messages.
 
         Args:
@@ -371,7 +371,7 @@ class DLQError(Exception):
 class DLQMessageNotFoundError(DLQError):
     """DLQ message not found."""
 
-    def __init__(self, message_id: str):
+    def __init__(self, message_id: str) -> None:
         super().__init__(f"DLQ message not found: {message_id}")
         self.message_id = message_id
 
@@ -379,7 +379,7 @@ class DLQMessageNotFoundError(DLQError):
 class DLQRetryError(DLQError):
     """Error during DLQ retry."""
 
-    def __init__(self, message_id: str, reason: str):
+    def __init__(self, message_id: str, reason: str) -> None:
         super().__init__(f"Failed to retry {message_id}: {reason}")
         self.message_id = message_id
         self.reason = reason

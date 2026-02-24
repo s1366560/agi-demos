@@ -40,7 +40,7 @@ class TestSkillReverseSync:
         return service, skill_repo, version_repo
 
     async def test_sync_from_sandbox_no_files(self):
-        service, skill_repo, version_repo = self._make_service()
+        service, _skill_repo, _version_repo = self._make_service()
         adapter = AsyncMock()
         # Return empty content list (no files)
         adapter.call_tool.return_value = {"content": []}
@@ -55,7 +55,7 @@ class TestSkillReverseSync:
         assert "error" in result
 
     async def test_sync_from_sandbox_no_skill_md(self):
-        service, skill_repo, version_repo = self._make_service()
+        service, _skill_repo, _version_repo = self._make_service()
         adapter = AsyncMock()
 
         # glob returns workspace-relative paths (no SKILL.md)
@@ -118,7 +118,7 @@ class TestSkillReverseSync:
         version_repo.create.assert_called_once()
 
     async def test_rollback_version_not_found(self):
-        service, skill_repo, version_repo = self._make_service()
+        service, _skill_repo, version_repo = self._make_service()
         version_repo.get_by_version.return_value = None
 
         result = await service.rollback_to_version(

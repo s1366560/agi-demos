@@ -15,7 +15,6 @@ Migration Benefits:
 """
 
 import logging
-from typing import List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,15 +50,15 @@ class SqlProjectRepository(BaseRepository[Project, DBProject], ProjectRepository
 
     async def find_by_tenant(
         self, tenant_id: str, limit: int = 50, offset: int = 0
-    ) -> List[Project]:
+    ) -> list[Project]:
         """List all projects in a tenant."""
         return await self.list_all(limit=limit, offset=offset, tenant_id=tenant_id)
 
-    async def find_by_owner(self, owner_id: str, limit: int = 50, offset: int = 0) -> List[Project]:
+    async def find_by_owner(self, owner_id: str, limit: int = 50, offset: int = 0) -> list[Project]:
         """List all projects owned by a user."""
         return await self.list_all(limit=limit, offset=offset, owner_id=owner_id)
 
-    async def find_public_projects(self, limit: int = 50, offset: int = 0) -> List[Project]:
+    async def find_public_projects(self, limit: int = 50, offset: int = 0) -> list[Project]:
         """List all public projects."""
         # Build query with is_public filter
         query = self._build_query(
@@ -73,7 +72,7 @@ class SqlProjectRepository(BaseRepository[Project, DBProject], ProjectRepository
 
     # === Conversion methods ===
 
-    def _to_domain(self, db_project: Optional[DBProject]) -> Optional[Project]:
+    def _to_domain(self, db_project: DBProject | None) -> Project | None:
         """
         Convert database model to domain model.
 

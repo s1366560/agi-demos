@@ -5,10 +5,12 @@
 """
 
 import asyncio
+import contextlib
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Set
+from datetime import UTC, datetime
+from typing import Any
 
 from ..instance import AgentInstance
 from ..types import (
@@ -56,9 +58,9 @@ class InstanceHealthState:
     consecutive_failures: int = 0
     consecutive_successes: int = 0
     recovery_attempts: int = 0
-    last_recovery_at: Optional[datetime] = None
-    last_check_result: Optional[HealthCheckResult] = None
-    history: List[HealthCheckResult] = field(default_factory=list)
+    last_recovery_at: datetime | None = None
+    last_check_result: HealthCheckResult | None = None
+    history: list[HealthCheckResult] = field(default_factory=list)
 
     def record_check(self, result: HealthCheckResult) -> None:
         """记录健康检查结果."""
@@ -80,7 +82,7 @@ class InstanceHealthState:
             return False
 
         if self.last_recovery_at:
-            elapsed = (datetime.now(timezone.utc) - self.last_recovery_at).total_seconds()
+            elapsed = (datetime.now(UTC) - self.last_recovery_at).total_seconds()
             if elapsed < config.recovery_cooldown_seconds:
                 return False
 
@@ -89,7 +91,7 @@ class InstanceHealthState:
     def record_recovery_attempt(self) -> None:
         """记录恢复尝试."""
         self.recovery_attempts += 1
-        self.last_recovery_at = datetime.now(timezone.utc)
+        self.last_recovery_at = datetime.now(UTC)
 
     def reset_recovery_state(self) -> None:
         """重置恢复状态 (成功恢复后)."""
@@ -109,10 +111,10 @@ class HealthMonitor:
 
     def __init__(
         self,
-        config: Optional[HealthMonitorConfig] = None,
-        on_unhealthy: Optional[Callable[[AgentInstance, HealthCheckResult], None]] = None,
-        on_recovered: Optional[Callable[[AgentInstance], None]] = None,
-    ):
+        config: HealthMonitorConfig | None = None,
+        on_unhealthy: Callable[[AgentInstance, HealthCheckResult], None] | None = None,
+        on_recovered: Callable[[AgentInstance], None] | None = None,
+    ) -> None:
         """初始化健康监控器.
 
         Args:
@@ -125,12 +127,12 @@ class HealthMonitor:
         self._on_recovered = on_recovered
 
         # 实例健康状态追踪
-        self._health_states: Dict[str, InstanceHealthState] = {}
+        self._health_states: dict[str, InstanceHealthState] = {}
         self._lock = asyncio.Lock()
 
         # 监控任务
-        self._monitoring_tasks: Dict[str, asyncio.Task] = {}
-        self._monitored_instances: Dict[str, AgentInstance] = {}
+        self._monitoring_tasks: dict[str, asyncio.Task] = {}
+        self._monitored_instances: dict[str, AgentInstance] = {}
 
         logger.info(
             f"[HealthMonitor] Initialized: "
@@ -185,11 +187,11 @@ class HealthMonitor:
 
             return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             result = HealthCheckResult(
                 status=HealthStatus.UNHEALTHY,
                 error_message="Health check timeout",
-                last_check_at=datetime.now(timezone.utc),
+                last_check_at=datetime.now(UTC),
             )
 
             async with self._lock:
@@ -204,7 +206,7 @@ class HealthMonitor:
             result = HealthCheckResult(
                 status=HealthStatus.UNKNOWN,
                 error_message=str(e),
-                last_check_at=datetime.now(timezone.utc),
+                last_check_at=datetime.now(UTC),
             )
 
             async with self._lock:
@@ -217,7 +219,7 @@ class HealthMonitor:
     async def start_monitoring(
         self,
         instance: AgentInstance,
-        interval_seconds: Optional[int] = None,
+        interval_seconds: int | None = None,
     ) -> None:
         """启动对实例的持续监控.
 
@@ -232,7 +234,7 @@ class HealthMonitor:
         interval = interval_seconds or self.config.check_interval_seconds
         self._monitored_instances[instance.id] = instance
 
-        async def _monitor_loop():
+        async def _monitor_loop() -> None:
             while True:
                 try:
                     # 检查实例是否仍在监控列表中
@@ -276,10 +278,8 @@ class HealthMonitor:
         if instance_id in self._monitoring_tasks:
             task = self._monitoring_tasks.pop(instance_id)
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
 
         self._monitored_instances.pop(instance_id, None)
         logger.info(f"[HealthMonitor] Stopped monitoring: instance={instance_id}")
@@ -361,7 +361,7 @@ class HealthMonitor:
 
         return action
 
-    def get_health_state(self, instance_id: str) -> Optional[InstanceHealthState]:
+    def get_health_state(self, instance_id: str) -> InstanceHealthState | None:
         """获取实例健康状态.
 
         Args:
@@ -372,7 +372,7 @@ class HealthMonitor:
         """
         return self._health_states.get(instance_id)
 
-    def get_all_health_states(self) -> Dict[str, InstanceHealthState]:
+    def get_all_health_states(self) -> dict[str, InstanceHealthState]:
         """获取所有实例的健康状态.
 
         Returns:
@@ -380,7 +380,7 @@ class HealthMonitor:
         """
         return self._health_states.copy()
 
-    def get_monitored_instances(self) -> Set[str]:
+    def get_monitored_instances(self) -> set[str]:
         """获取正在监控的实例ID集合.
 
         Returns:
@@ -388,7 +388,7 @@ class HealthMonitor:
         """
         return set(self._monitoring_tasks.keys())
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典."""
         return {
             "config": {

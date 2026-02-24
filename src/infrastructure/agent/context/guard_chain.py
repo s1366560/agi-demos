@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Protocol, Tuple
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +16,10 @@ class ContextGuard(Protocol):
 
     def apply(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         *,
         estimate_message_tokens,
-    ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Apply guard transformation."""
         ...
 
@@ -28,28 +28,28 @@ class ContextGuard(Protocol):
 class GuardChainResult:
     """Result of guard-chain execution."""
 
-    messages: List[Dict[str, Any]]
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    messages: list[dict[str, Any]]
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class ContextGuardChain:
     """Run context guards sequentially and aggregate diagnostics."""
 
-    def __init__(self, guards: List[ContextGuard] | None = None) -> None:
+    def __init__(self, guards: list[ContextGuard] | None = None) -> None:
         self._guards = guards or []
 
     @property
-    def guards(self) -> List[ContextGuard]:
+    def guards(self) -> list[ContextGuard]:
         return list(self._guards)
 
     def apply(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         *,
         estimate_message_tokens,
     ) -> GuardChainResult:
         current = list(messages)
-        metadata: Dict[str, Any] = {
+        metadata: dict[str, Any] = {
             "applied_guards": [],
             "modified_messages": 0,
             "details": {},

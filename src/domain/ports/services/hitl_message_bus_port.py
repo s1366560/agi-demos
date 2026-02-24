@@ -19,10 +19,11 @@ Key Features:
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any
 
 
 class HITLMessageType(str, Enum):
@@ -51,11 +52,11 @@ class HITLMessage:
     message_id: str
     request_id: str
     message_type: HITLMessageType
-    payload: Dict[str, Any]
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    metadata: Optional[Dict[str, Any]] = None
+    payload: dict[str, Any]
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    metadata: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "message_id": self.message_id,
@@ -67,7 +68,7 @@ class HITLMessage:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "HITLMessage":
+    def from_dict(cls, data: dict[str, Any]) -> "HITLMessage":
         """Create from dictionary."""
         return cls(
             message_id=data.get("message_id", ""),
@@ -77,7 +78,7 @@ class HITLMessage:
             timestamp=(
                 datetime.fromisoformat(data["timestamp"])
                 if isinstance(data.get("timestamp"), str)
-                else data.get("timestamp", datetime.now(timezone.utc))
+                else data.get("timestamp", datetime.now(UTC))
             ),
             metadata=data.get("metadata"),
         )
@@ -103,8 +104,8 @@ class HITLMessageBusPort(ABC):
         self,
         request_id: str,
         response_key: str,
-        response_value: Any,  # noqa: ANN401
-        metadata: Optional[Dict[str, Any]] = None,
+        response_value: Any,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """
         Publish a response to an HITL request.
@@ -129,7 +130,7 @@ class HITLMessageBusPort(ABC):
         request_id: str,
         consumer_group: str,
         consumer_name: str,
-        timeout_ms: Optional[int] = None,
+        timeout_ms: int | None = None,
     ) -> AsyncIterator[HITLMessage]:
         """
         Subscribe to receive responses for an HITL request.
@@ -153,7 +154,7 @@ class HITLMessageBusPort(ABC):
         self,
         request_id: str,
         consumer_group: str,
-        message_ids: List[str],
+        message_ids: list[str],
     ) -> int:
         """
         Acknowledge receipt of messages.
@@ -199,7 +200,7 @@ class HITLMessageBusPort(ABC):
         request_id: str,
         consumer_group: str,
         count: int = 10,
-    ) -> List[HITLMessage]:
+    ) -> list[HITLMessage]:
         """
         Get pending messages that haven't been acknowledged.
 
@@ -222,8 +223,8 @@ class HITLMessageBusPort(ABC):
         consumer_group: str,
         consumer_name: str,
         min_idle_ms: int,
-        message_ids: List[str],
-    ) -> List[HITLMessage]:
+        message_ids: list[str],
+    ) -> list[HITLMessage]:
         """
         Claim pending messages from another consumer.
 
@@ -246,7 +247,7 @@ class HITLMessageBusPort(ABC):
     async def cleanup_stream(
         self,
         request_id: str,
-        max_len: Optional[int] = None,
+        max_len: int | None = None,
     ) -> int:
         """
         Clean up a stream (trim old messages or delete entirely).
@@ -281,7 +282,7 @@ class HITLMessageBusPort(ABC):
         self,
         request_id: str,
         decision: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Convenience method for publishing decision responses."""
         return await self.publish_response(
@@ -295,7 +296,7 @@ class HITLMessageBusPort(ABC):
         self,
         request_id: str,
         answer: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Convenience method for publishing clarification responses."""
         return await self.publish_response(
@@ -308,8 +309,8 @@ class HITLMessageBusPort(ABC):
     async def publish_env_var_response(
         self,
         request_id: str,
-        values: Dict[str, str],
-        metadata: Optional[Dict[str, Any]] = None,
+        values: dict[str, str],
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Convenience method for publishing environment variable responses."""
         return await self.publish_response(
@@ -322,7 +323,7 @@ class HITLMessageBusPort(ABC):
     async def publish_timeout(
         self,
         request_id: str,
-        default_value: Optional[Any] = None,  # noqa: ANN401
+        default_value: Any | None = None,
     ) -> str:
         """Publish a timeout notification."""
         return await self.publish_response(
@@ -335,7 +336,7 @@ class HITLMessageBusPort(ABC):
     async def publish_cancel(
         self,
         request_id: str,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> str:
         """Publish a cancellation notification."""
         return await self.publish_response(

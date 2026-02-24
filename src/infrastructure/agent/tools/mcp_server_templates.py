@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -332,7 +332,7 @@ build-backend = "setuptools.build_meta"
 # =============================================================================
 
 
-def list_available_templates() -> List[Dict[str, str]]:
+def list_available_templates() -> list[dict[str, str]]:
     """List all available templates.
 
     Returns:
@@ -344,7 +344,7 @@ def list_available_templates() -> List[Dict[str, str]]:
     ]
 
 
-def get_template_by_name(name: str) -> Optional[Dict[str, Any]]:
+def get_template_by_name(name: str) -> dict[str, Any] | None:
     """Get template by name.
 
     Args:
@@ -356,7 +356,7 @@ def get_template_by_name(name: str) -> Optional[Dict[str, Any]]:
     return TEMPLATES.get(name)
 
 
-def render_template_content(content: str, variables: Dict[str, str]) -> str:
+def render_template_content(content: str, variables: dict[str, str]) -> str:
     """Render template content with variable substitution.
 
     Uses simple {{variable}} syntax for substitution.
@@ -397,7 +397,7 @@ class CreateMCPServerFromTemplateTool(AgentTool):
         sandbox_adapter: SandboxPort,
         sandbox_id: str,
         workspace_path: str = "/workspace",
-    ):
+    ) -> None:
         """Initialize the template tool.
 
         Args:
@@ -422,7 +422,7 @@ class CreateMCPServerFromTemplateTool(AgentTool):
         )
 
     @property
-    def parameters(self) -> Dict[str, Any]:
+    def parameters(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -444,7 +444,7 @@ class CreateMCPServerFromTemplateTool(AgentTool):
             "required": ["template", "server_name"],
         }
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return self.parameters
 
     async def execute(

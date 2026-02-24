@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.model.memory.episode import Episode
 
@@ -11,13 +11,13 @@ class GraphServicePort(ABC):
 
     @abstractmethod
     async def search(
-        self, query: str, project_id: Optional[str] = None, limit: int = 10
-    ) -> List[Any]:
+        self, query: str, project_id: str | None = None, limit: int = 10
+    ) -> list[Any]:
         # Returns list of MemoryItems (defined in DTOs usually, or domain items)
         pass
 
     @abstractmethod
-    async def get_graph_data(self, project_id: str, limit: int = 100) -> Dict[str, Any]:
+    async def get_graph_data(self, project_id: str, limit: int = 100) -> dict[str, Any]:
         pass
 
     @abstractmethod

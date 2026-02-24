@@ -4,8 +4,7 @@ V2 SQLAlchemy implementation of MCPServerRepository using BaseRepository.
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -36,7 +35,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         tenant_id: str,
         project_id: str,
         name: str,
-        description: Optional[str],
+        description: str | None,
         server_type: str,
         transport_config: dict,
         enabled: bool = True,
@@ -68,7 +67,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         )
         return server_id
 
-    async def get_by_id(self, server_id: str) -> Optional[MCPServer]:
+    async def get_by_id(self, server_id: str) -> MCPServer | None:
         """Get an MCP server by its ID."""
         query = select(DBMCPServer).where(DBMCPServer.id == server_id)
         result = await self._session.execute(query)
@@ -76,7 +75,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
 
         return self._to_domain(db_server) if db_server else None
 
-    async def get_by_name(self, project_id: str, name: str) -> Optional[MCPServer]:
+    async def get_by_name(self, project_id: str, name: str) -> MCPServer | None:
         """Get an MCP server by name within a project."""
         query = select(DBMCPServer).where(
             DBMCPServer.project_id == project_id,
@@ -91,7 +90,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         self,
         project_id: str,
         enabled_only: bool = False,
-    ) -> List[MCPServer]:
+    ) -> list[MCPServer]:
         """List all MCP servers for a project."""
         query = select(DBMCPServer).where(DBMCPServer.project_id == project_id)
 
@@ -107,7 +106,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         self,
         tenant_id: str,
         enabled_only: bool = False,
-    ) -> List[MCPServer]:
+    ) -> list[MCPServer]:
         """List all MCP servers for a tenant (across all projects)."""
         query = select(DBMCPServer).where(DBMCPServer.tenant_id == tenant_id)
 
@@ -122,11 +121,11 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
     async def update(
         self,
         server_id: str,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
-        server_type: Optional[str] = None,
-        transport_config: Optional[dict] = None,
-        enabled: Optional[bool] = None,
+        name: str | None = None,
+        description: str | None = None,
+        server_type: str | None = None,
+        transport_config: dict | None = None,
+        enabled: bool | None = None,
     ) -> bool:
         """Update an MCP server configuration."""
         result = await self._session.execute(select(DBMCPServer).where(DBMCPServer.id == server_id))
@@ -147,7 +146,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         if enabled is not None:
             db_server.enabled = enabled
 
-        db_server.updated_at = datetime.now(timezone.utc)
+        db_server.updated_at = datetime.now(UTC)
         await self._session.flush()
 
         logger.info(f"Updated MCP server: {server_id}")
@@ -156,9 +155,9 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
     async def update_discovered_tools(
         self,
         server_id: str,
-        tools: List[dict],
+        tools: list[dict],
         last_sync_at: datetime,
-        sync_error: Optional[str] = None,
+        sync_error: str | None = None,
     ) -> bool:
         """Update the discovered tools for an MCP server."""
         result = await self._session.execute(select(DBMCPServer).where(DBMCPServer.id == server_id))
@@ -171,7 +170,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         db_server.discovered_tools = tools
         db_server.sync_error = sync_error
         db_server.last_sync_at = last_sync_at
-        db_server.updated_at = datetime.now(timezone.utc)
+        db_server.updated_at = datetime.now(UTC)
 
         await self._session.flush()
 
@@ -181,8 +180,8 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
     async def update_runtime_metadata(
         self,
         server_id: str,
-        runtime_status: Optional[str] = None,
-        runtime_metadata: Optional[dict] = None,
+        runtime_status: str | None = None,
+        runtime_metadata: dict | None = None,
     ) -> bool:
         """Update runtime status/metadata for MCP server lifecycle tracking."""
         result = await self._session.execute(select(DBMCPServer).where(DBMCPServer.id == server_id))
@@ -197,7 +196,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         if runtime_metadata is not None:
             existing = db_server.runtime_metadata or {}
             db_server.runtime_metadata = {**existing, **runtime_metadata}
-        db_server.updated_at = datetime.now(timezone.utc)
+        db_server.updated_at = datetime.now(UTC)
         await self._session.flush()
         return True
 
@@ -215,8 +214,8 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
     async def get_enabled_servers(
         self,
         tenant_id: str,
-        project_id: Optional[str] = None,
-    ) -> List[MCPServer]:
+        project_id: str | None = None,
+    ) -> list[MCPServer]:
         """Get all enabled MCP servers, optionally filtered by project."""
         if project_id:
             return await self.list_by_project(project_id, enabled_only=True)
@@ -224,7 +223,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
 
     # === Conversion methods ===
 
-    def _to_domain(self, db_server: Optional[DBMCPServer]) -> Optional[MCPServer]:
+    def _to_domain(self, db_server: DBMCPServer | None) -> MCPServer | None:
         """Convert database model to MCPServer domain entity."""
         if db_server is None:
             return None

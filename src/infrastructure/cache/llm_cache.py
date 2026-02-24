@@ -17,8 +17,8 @@ This provides:
 import hashlib
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from src.configuration.config import get_settings
 
@@ -39,7 +39,7 @@ class LLMCache:
         l1_ttl: int = 300,  # 5 minutes
         l2_ttl: int = 3600,  # 1 hour
         enabled: bool = True,
-    ):
+    ) -> None:
         """
         Initialize the multi-level cache.
 
@@ -49,7 +49,7 @@ class LLMCache:
             l2_ttl: Time-to-live for L2 cache entries (seconds)
             enabled: Whether caching is enabled
         """
-        self._l1_cache: Dict[str, tuple[Any, datetime]] = {}
+        self._l1_cache: dict[str, tuple[Any, datetime]] = {}
         self._l1_size = l1_size
         self._l1_ttl = l1_ttl
         self._l2_ttl = l2_ttl
@@ -75,8 +75,8 @@ class LLMCache:
     def _generate_cache_key(
         self,
         model: str,
-        prompt: str | list[Dict[str, Any]],
-        **kwargs: Any,  # noqa: ANN401
+        prompt: str | list[dict[str, Any]],
+        **kwargs: Any,
     ) -> str:
         """
         Generate a consistent cache key for the request.
@@ -109,7 +109,7 @@ class LLMCache:
 
     def _is_expired(self, timestamp: datetime, ttl: int) -> bool:
         """Check if a cache entry has expired."""
-        return (datetime.now(timezone.utc) - timestamp).total_seconds() > ttl
+        return (datetime.now(UTC) - timestamp).total_seconds() > ttl
 
     def _evict_l1_if_needed(self) -> None:
         """Evict oldest entries from L1 cache if size limit reached."""
@@ -128,9 +128,9 @@ class LLMCache:
     async def get(
         self,
         model: str,
-        prompt: str | list[Dict[str, Any]],
-        **kwargs: Any,  # noqa: ANN401
-    ) -> Optional[str]:
+        prompt: str | list[dict[str, Any]],
+        **kwargs: Any,
+    ) -> str | None:
         """
         Get cached response for the given prompt.
 
@@ -164,7 +164,7 @@ class LLMCache:
                 if cached:
                     logger.debug(f"L2 cache hit: {cache_key}")
                     # Populate L1 cache
-                    self._l1_cache[cache_key] = (cached, datetime.now(timezone.utc))
+                    self._l1_cache[cache_key] = (cached, datetime.now(UTC))
                     self._evict_l1_if_needed()
                     return cached
             except Exception as e:
@@ -175,9 +175,9 @@ class LLMCache:
     async def set(
         self,
         model: str,
-        prompt: str | list[Dict[str, Any]],
+        prompt: str | list[dict[str, Any]],
         response: str,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> None:
         """
         Cache the response for the given prompt.
@@ -192,7 +192,7 @@ class LLMCache:
             return
 
         cache_key = self._generate_cache_key(model, prompt, **kwargs)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Store in L1 cache
         self._l1_cache[cache_key] = (response, now)
@@ -213,8 +213,8 @@ class LLMCache:
     async def delete(
         self,
         model: str,
-        prompt: str | list[Dict[str, Any]],
-        **kwargs: Any,  # noqa: ANN401
+        prompt: str | list[dict[str, Any]],
+        **kwargs: Any,
     ) -> None:
         """
         Remove cached response for the given prompt.

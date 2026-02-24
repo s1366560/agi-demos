@@ -6,7 +6,6 @@ in-progress MCP requests.
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -19,10 +18,10 @@ class CancelHandler:
     from the MCP server.
     """
 
-    _pending_requests: Dict[str, str] = field(default_factory=dict)
+    _pending_requests: dict[str, str] = field(default_factory=dict)
     """Maps request_id to server_id for tracking cancellable requests."""
 
-    _cancelled_requests: Set[str] = field(default_factory=set)
+    _cancelled_requests: set[str] = field(default_factory=set)
     """Set of request IDs that have been cancelled."""
 
     def register_request(self, request_id: str, server_id: str) -> None:
@@ -71,7 +70,7 @@ class CancelHandler:
         """
         return request_id in self._cancelled_requests
 
-    def get_pending_requests(self) -> List[Tuple[str, str]]:
+    def get_pending_requests(self) -> list[tuple[str, str]]:
         """
         Get all pending requests.
 
@@ -115,7 +114,7 @@ class CancelHandler:
             logger.error(f"Failed to cancel request {request_id}: {e}")
             return False
 
-    def cancel_all_for_server(self, server_id: str) -> List[str]:
+    def cancel_all_for_server(self, server_id: str) -> list[str]:
         """
         Cancel all pending requests for a server.
 

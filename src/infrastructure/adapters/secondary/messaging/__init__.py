@@ -37,20 +37,20 @@ from src.infrastructure.adapters.secondary.messaging.unified_adapter_wrapper imp
 )
 
 __all__ = [
-    # Unified Event Bus (recommended)
-    "RedisUnifiedEventBusAdapter",
     "EventRouter",
     "HandlerRegistration",
-    "RoutingResult",
-    "RouterMetrics",
-    # Dead Letter Queue
-    "RedisDLQAdapter",
-    # Legacy Adapter Wrapper
-    "UnifiedAgentEventBusAdapter",
-    # HITL Message Bus
-    "RedisHITLMessageBusAdapter",
-    "create_redis_hitl_message_bus",
     # Agent Event Bus (legacy)
     "RedisAgentEventBusAdapter",
+    # Dead Letter Queue
+    "RedisDLQAdapter",
+    # HITL Message Bus
+    "RedisHITLMessageBusAdapter",
+    # Unified Event Bus (recommended)
+    "RedisUnifiedEventBusAdapter",
+    "RouterMetrics",
+    "RoutingResult",
+    # Legacy Adapter Wrapper
+    "UnifiedAgentEventBusAdapter",
     "create_redis_agent_event_bus",
+    "create_redis_hitl_message_bus",
 ]

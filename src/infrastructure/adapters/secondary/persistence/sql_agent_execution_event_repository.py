@@ -15,7 +15,6 @@ Migration Benefits:
 """
 
 import logging
-from typing import List, Optional, Set
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -82,7 +81,7 @@ class SqlAgentExecutionEventRepository(
         await self.save(event)
         await self._session.commit()
 
-    async def save_batch(self, events: List[AgentExecutionEvent]) -> None:
+    async def save_batch(self, events: list[AgentExecutionEvent]) -> None:
         """Save multiple events efficiently with idempotency guarantee."""
         if not events:
             return
@@ -116,10 +115,10 @@ class SqlAgentExecutionEventRepository(
         from_time_us: int = 0,
         from_counter: int = 0,
         limit: int = 1000,
-        event_types: Optional[Set[str]] = None,
-        before_time_us: Optional[int] = None,
-        before_counter: Optional[int] = None,
-    ) -> List[AgentExecutionEvent]:
+        event_types: set[str] | None = None,
+        before_time_us: int | None = None,
+        before_counter: int | None = None,
+    ) -> list[AgentExecutionEvent]:
         """Get events for a conversation with bidirectional pagination support."""
         from sqlalchemy import tuple_
 
@@ -184,7 +183,7 @@ class SqlAgentExecutionEventRepository(
     async def get_events_by_message(
         self,
         message_id: str,
-    ) -> List[AgentExecutionEvent]:
+    ) -> list[AgentExecutionEvent]:
         """Get all events for a specific message."""
         result = await self._session.execute(
             select(DBAgentExecutionEvent)
@@ -210,7 +209,7 @@ class SqlAgentExecutionEventRepository(
         self,
         conversation_id: str,
         limit: int = 1000,
-    ) -> List[AgentExecutionEvent]:
+    ) -> list[AgentExecutionEvent]:
         """List all events for a conversation in chronological order."""
         return await self.get_events(
             conversation_id=conversation_id,
@@ -222,7 +221,7 @@ class SqlAgentExecutionEventRepository(
         self,
         conversation_id: str,
         limit: int = 50,
-    ) -> List[AgentExecutionEvent]:
+    ) -> list[AgentExecutionEvent]:
         """Get message events (user_message + assistant_message) for LLM context."""
         result = await self._session.execute(
             select(DBAgentExecutionEvent)
@@ -244,7 +243,7 @@ class SqlAgentExecutionEventRepository(
         conversation_id: str,
         after_time_us: int,
         limit: int = 200,
-    ) -> List[AgentExecutionEvent]:
+    ) -> list[AgentExecutionEvent]:
         """Get message events after a given event_time_us cutoff."""
         result = await self._session.execute(
             select(DBAgentExecutionEvent)
@@ -277,8 +276,8 @@ class SqlAgentExecutionEventRepository(
     # === Conversion methods ===
 
     def _to_domain(
-        self, db_event: Optional[DBAgentExecutionEvent]
-    ) -> Optional[AgentExecutionEvent]:
+        self, db_event: DBAgentExecutionEvent | None
+    ) -> AgentExecutionEvent | None:
         """Convert database model to domain model."""
         if db_event is None:
             return None

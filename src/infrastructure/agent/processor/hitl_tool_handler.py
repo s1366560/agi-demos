@@ -11,11 +11,11 @@ a Future that is resolved when the user responds, keeping the processor
 generator alive across consecutive HITL calls.
 """
 
-import asyncio
 import json
 import logging
 import time
-from typing import Any, AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from src.domain.events.agent_events import (
     AgentClarificationAnsweredEvent,
@@ -35,7 +35,7 @@ from ..hitl.coordinator import HITLCoordinator
 logger = logging.getLogger(__name__)
 
 
-def _ensure_dict(raw: Any) -> dict:  # noqa: ANN401
+def _ensure_dict(raw: Any) -> dict:
     """Ensure context argument is a dictionary."""
     if isinstance(raw, str):
         return {"description": raw} if raw else {}
@@ -48,7 +48,7 @@ async def handle_clarification_tool(
     coordinator: HITLCoordinator,
     call_id: str,
     tool_name: str,
-    arguments: Dict[str, Any],
+    arguments: dict[str, Any],
     tool_part: ToolPart,
 ) -> AsyncIterator[AgentDomainEvent]:
     """Handle clarification tool via HITLCoordinator (Future-based)."""
@@ -120,7 +120,7 @@ async def handle_clarification_tool(
             tool_execution_id=tool_part.tool_execution_id,
         )
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         tool_part.status = ToolState.ERROR
         tool_part.error = "Clarification request timed out"
         tool_part.end_time = time.time()
@@ -150,7 +150,7 @@ async def handle_decision_tool(
     coordinator: HITLCoordinator,
     call_id: str,
     tool_name: str,
-    arguments: Dict[str, Any],
+    arguments: dict[str, Any],
     tool_part: ToolPart,
 ) -> AsyncIterator[AgentDomainEvent]:
     """Handle decision tool via HITLCoordinator (Future-based)."""
@@ -226,7 +226,7 @@ async def handle_decision_tool(
             tool_execution_id=tool_part.tool_execution_id,
         )
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         tool_part.status = ToolState.ERROR
         tool_part.error = "Decision request timed out"
         tool_part.end_time = time.time()
@@ -256,9 +256,9 @@ async def handle_env_var_tool(
     coordinator: HITLCoordinator,
     call_id: str,
     tool_name: str,
-    arguments: Dict[str, Any],
+    arguments: dict[str, Any],
     tool_part: ToolPart,
-    langfuse_context: Optional[Dict[str, Any]] = None,
+    langfuse_context: dict[str, Any] | None = None,
 ) -> AsyncIterator[AgentDomainEvent]:
     """Handle environment variable request tool via HITLCoordinator."""
     try:
@@ -269,7 +269,7 @@ async def handle_env_var_tool(
         timeout = arguments.get("timeout", 300.0)
         save_to_project = arguments.get("save_to_project", False)
 
-        fields_for_sse: List[Dict[str, Any]] = []
+        fields_for_sse: list[dict[str, Any]] = []
         for field in fields_raw:
             var_name = field.get("variable_name", field.get("name", ""))
             display_name = field.get("display_name", field.get("label", var_name))
@@ -317,7 +317,7 @@ async def handle_env_var_tool(
         )
         end_time = time.time()
 
-        saved_variables: List[str] = []
+        saved_variables: list[str] = []
         ctx = langfuse_context or {}
         tenant_id = ctx.get("tenant_id")
         project_id = ctx.get("project_id")
@@ -362,7 +362,7 @@ async def handle_env_var_tool(
             tool_execution_id=tool_part.tool_execution_id,
         )
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         tool_part.status = ToolState.ERROR
         tool_part.error = "Environment variable request timed out"
         tool_part.end_time = time.time()
@@ -389,13 +389,13 @@ async def handle_env_var_tool(
 
 
 async def _save_env_vars(
-    values: Dict[str, str],
-    fields_for_sse: List[Dict[str, Any]],
+    values: dict[str, str],
+    fields_for_sse: list[dict[str, Any]],
     target_tool_name: str,
     tenant_id: str,
-    project_id: Optional[str],
+    project_id: str | None,
     save_to_project: bool,
-) -> List[str]:
+) -> list[str]:
     """Save environment variables to database with encryption."""
     from src.domain.model.agent.tool_environment_variable import (
         EnvVarScope,
@@ -414,7 +414,7 @@ async def _save_env_vars(
     encryption_service = get_encryption_service()
     scope = EnvVarScope.PROJECT if save_to_project and project_id else EnvVarScope.TENANT
     effective_project_id = project_id if save_to_project else None
-    saved_variables: List[str] = []
+    saved_variables: list[str] = []
 
     async with async_session_factory() as db_session:
         repository = SqlToolEnvironmentVariableRepository(db_session)

@@ -6,7 +6,8 @@ Provides common functionality and abstract interface for transport implementatio
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Dict, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from src.domain.model.mcp.transport import TransportConfig
 
@@ -21,7 +22,7 @@ class BaseTransport(ABC):
     logging, and the core interface that all transports must implement.
     """
 
-    def __init__(self, config: Optional[TransportConfig] = None):
+    def __init__(self, config: TransportConfig | None = None) -> None:
         """
         Initialize base transport.
 
@@ -38,7 +39,7 @@ class BaseTransport(ABC):
         return self._is_open
 
     @property
-    def config(self) -> Optional[TransportConfig]:
+    def config(self) -> TransportConfig | None:
         """Get transport configuration."""
         return self._config
 
@@ -72,8 +73,8 @@ class BaseTransport(ABC):
     @abstractmethod
     async def send(
         self,
-        message: Dict[str, Any],
-        timeout: Optional[float] = None,
+        message: dict[str, Any],
+        timeout: float | None = None,
     ) -> None:
         """
         Send a message over the transport.
@@ -90,8 +91,8 @@ class BaseTransport(ABC):
     @abstractmethod
     async def receive(
         self,
-        timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         """
         Receive a message from the transport.
 
@@ -107,7 +108,7 @@ class BaseTransport(ABC):
         """
         ...
 
-    async def receive_stream(self) -> AsyncIterator[Dict[str, Any]]:
+    async def receive_stream(self) -> AsyncIterator[dict[str, Any]]:
         """
         Receive messages as an async iterator.
 

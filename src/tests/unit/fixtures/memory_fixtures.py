@@ -5,8 +5,8 @@ Provides builder pattern for creating test Memory instances with sensible defaul
 and the ability to customize specific fields.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from src.domain.model.memory import Memory
@@ -21,7 +21,7 @@ class MemoryTestDataBuilder:
         title: str = "Test Memory",
         content: str = "Test memory content",
         author_id: str = "test-user-123",
-    ):
+    ) -> None:
         """Initialize builder with default values."""
         self._project_id = project_id
         self._title = title
@@ -63,7 +63,7 @@ class MemoryTestDataBuilder:
         self._content_type = content_type
         return self
 
-    def with_tags(self, tags: List[str]) -> "MemoryTestDataBuilder":
+    def with_tags(self, tags: list[str]) -> "MemoryTestDataBuilder":
         """Set custom tags."""
         self._tags = tags
         return self
@@ -73,17 +73,17 @@ class MemoryTestDataBuilder:
         self._tags.append(tag)
         return self
 
-    def with_entities(self, entities: List[Dict[str, Any]]) -> "MemoryTestDataBuilder":
+    def with_entities(self, entities: list[dict[str, Any]]) -> "MemoryTestDataBuilder":
         """Set custom entities."""
         self._entities = entities
         return self
 
-    def add_entity(self, entity: Dict[str, Any]) -> "MemoryTestDataBuilder":
+    def add_entity(self, entity: dict[str, Any]) -> "MemoryTestDataBuilder":
         """Add a single entity."""
         self._entities.append(entity)
         return self
 
-    def with_relationships(self, relationships: List[Dict[str, Any]]) -> "MemoryTestDataBuilder":
+    def with_relationships(self, relationships: list[dict[str, Any]]) -> "MemoryTestDataBuilder":
         """Set custom relationships."""
         self._relationships = relationships
         return self
@@ -93,7 +93,7 @@ class MemoryTestDataBuilder:
         self._version = version
         return self
 
-    def with_collaborators(self, collaborators: List[str]) -> "MemoryTestDataBuilder":
+    def with_collaborators(self, collaborators: list[str]) -> "MemoryTestDataBuilder":
         """Set custom collaborators."""
         self._collaborators = collaborators
         return self
@@ -118,12 +118,12 @@ class MemoryTestDataBuilder:
         self._processing_status = processing_status
         return self
 
-    def with_metadata(self, metadata: Dict[str, Any]) -> "MemoryTestDataBuilder":
+    def with_metadata(self, metadata: dict[str, Any]) -> "MemoryTestDataBuilder":
         """Set custom metadata."""
         self._metadata = metadata
         return self
 
-    def add_metadata(self, key: str, value: Any) -> "MemoryTestDataBuilder":  # noqa: ANN401
+    def add_metadata(self, key: str, value: Any) -> "MemoryTestDataBuilder":
         """Add a single metadata key-value pair."""
         self._metadata[key] = value
         return self
@@ -146,7 +146,7 @@ class MemoryTestDataBuilder:
             status=self._status,
             processing_status=self._processing_status,
             metadata=self._metadata.copy(),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             updated_at=None,
         )
 

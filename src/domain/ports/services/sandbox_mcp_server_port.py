@@ -7,7 +7,7 @@ running inside project sandbox containers.
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -17,19 +17,19 @@ class SandboxMCPServerStatus:
     name: str
     server_type: str
     status: str
-    pid: Optional[int] = None
-    port: Optional[int] = None
+    pid: int | None = None
+    port: int | None = None
     tool_count: int = 0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass
 class SandboxMCPToolCallResult:
     """Result of calling a tool on a sandbox-hosted MCP server."""
 
-    content: List[Dict[str, Any]]
+    content: list[dict[str, Any]]
     is_error: bool = False
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 class SandboxMCPServerPort(ABC):
@@ -46,7 +46,7 @@ class SandboxMCPServerPort(ABC):
         tenant_id: str,
         server_name: str,
         server_type: str,
-        transport_config: Dict[str, Any],
+        transport_config: dict[str, Any],
     ) -> SandboxMCPServerStatus:
         """Install and start an MCP server in the project's sandbox.
 
@@ -89,9 +89,9 @@ class SandboxMCPServerPort(ABC):
         tenant_id: str,
         server_name: str,
         server_type: str,
-        transport_config: Dict[str, Any],
+        transport_config: dict[str, Any],
         ensure_running: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Discover tools from an MCP server running in the sandbox.
 
         Installs and starts the server if not already running.
@@ -114,7 +114,7 @@ class SandboxMCPServerPort(ABC):
         project_id: str,
         server_name: str,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
     ) -> SandboxMCPToolCallResult:
         """Call a tool on an MCP server running in the sandbox.
 
@@ -135,7 +135,7 @@ class SandboxMCPServerPort(ABC):
         tenant_id: str,
         server_name: str,
         server_type: str,
-        transport_config: Dict[str, Any],
+        transport_config: dict[str, Any],
     ) -> SandboxMCPServerStatus:
         """Test connectivity to an MCP server by starting it in sandbox.
 
@@ -154,7 +154,7 @@ class SandboxMCPServerPort(ABC):
     async def list_servers(
         self,
         project_id: str,
-    ) -> List[SandboxMCPServerStatus]:
+    ) -> list[SandboxMCPServerStatus]:
         """List all MCP servers running in a project's sandbox.
 
         Args:

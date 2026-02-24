@@ -8,7 +8,6 @@ Combines directory scanning and markdown parsing to create SubAgent instances.
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
 from src.domain.model.agent.subagent_source import SubAgentSource
@@ -25,7 +24,7 @@ from src.infrastructure.agent.subagent.markdown_parser import (
 logger = logging.getLogger(__name__)
 
 # Model name mapping: external names → AgentModel enum
-MODEL_MAPPING: Dict[str, AgentModel] = {
+MODEL_MAPPING: dict[str, AgentModel] = {
     "inherit": AgentModel.INHERIT,
     "qwen-max": AgentModel.QWEN_MAX,
     "qwen-plus": AgentModel.QWEN_PLUS,
@@ -71,8 +70,8 @@ class SubAgentLoadResult:
         errors: Errors encountered during loading
     """
 
-    subagents: List[LoadedSubAgent]
-    errors: List[str]
+    subagents: list[LoadedSubAgent]
+    errors: list[str]
 
     @property
     def count(self) -> int:
@@ -100,10 +99,10 @@ class FileSystemSubAgentLoader:
         self,
         base_path: Path,
         tenant_id: str,
-        project_id: Optional[str] = None,
-        scanner: Optional[FileSystemSubAgentScanner] = None,
-        parser: Optional[SubAgentMarkdownParser] = None,
-    ):
+        project_id: str | None = None,
+        scanner: FileSystemSubAgentScanner | None = None,
+        parser: SubAgentMarkdownParser | None = None,
+    ) -> None:
         self.base_path = Path(base_path).resolve()
         self.tenant_id = tenant_id
         self.project_id = project_id
@@ -111,7 +110,7 @@ class FileSystemSubAgentLoader:
         self.parser = parser or SubAgentMarkdownParser()
 
         # Cache
-        self._cache: Dict[str, LoadedSubAgent] = {}
+        self._cache: dict[str, LoadedSubAgent] = {}
         self._cache_valid = False
 
     async def load_all(self, force_reload: bool = False) -> SubAgentLoadResult:
@@ -158,7 +157,7 @@ class FileSystemSubAgentLoader:
 
         return result
 
-    def _load_agent_file(self, file_info: SubAgentFileInfo) -> Optional[LoadedSubAgent]:
+    def _load_agent_file(self, file_info: SubAgentFileInfo) -> LoadedSubAgent | None:
         """Load a single SubAgent from a file."""
         markdown = self.parser.parse_file(str(file_info.file_path))
         subagent = self._create_subagent_from_markdown(markdown, file_info)

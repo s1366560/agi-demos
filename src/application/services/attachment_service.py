@@ -7,8 +7,8 @@ for LLM multimodal understanding and sandbox import.
 import base64
 import logging
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from src.domain.model.agent.attachment import (
     ALLOWED_MIME_TYPES,
@@ -45,7 +45,7 @@ class AttachmentService:
         default_expiration_hours: int = 24,
         upload_max_size_llm_mb: int = 100,
         upload_max_size_sandbox_mb: int = 100,
-    ):
+    ) -> None:
         """
         Initialize the attachment service.
 
@@ -77,7 +77,7 @@ class AttachmentService:
         # Extract extension
         ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
         unique_id = uuid.uuid4().hex[:12]
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+        timestamp = datetime.now(UTC).strftime("%Y%m%d")
 
         if ext:
             key = f"{self._bucket_prefix}/{tenant_id}/{project_id}/{conversation_id}/{timestamp}_{unique_id}.{ext}"
@@ -92,7 +92,7 @@ class AttachmentService:
         mime_type: str,
         size_bytes: int,
         purpose: AttachmentPurpose,
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Validate file against size and type restrictions.
 
@@ -134,19 +134,19 @@ class AttachmentService:
 
         return True, None
 
-    async def get(self, attachment_id: str) -> Optional[Attachment]:
+    async def get(self, attachment_id: str) -> Attachment | None:
         """Get an attachment by ID."""
         return await self._repo.get(attachment_id)
 
-    async def get_by_ids(self, attachment_ids: List[str]) -> List[Attachment]:
+    async def get_by_ids(self, attachment_ids: list[str]) -> list[Attachment]:
         """Get multiple attachments by their IDs."""
         return await self._repo.get_by_ids(attachment_ids)
 
     async def get_by_conversation(
         self,
         conversation_id: str,
-        status: Optional[AttachmentStatus] = None,
-    ) -> List[Attachment]:
+        status: AttachmentStatus | None = None,
+    ) -> list[Attachment]:
         """Get all attachments for a conversation."""
         return await self._repo.get_by_conversation(conversation_id, status)
 
@@ -161,7 +161,7 @@ class AttachmentService:
         mime_type: str,
         data: bytes,
         purpose: AttachmentPurpose,
-        metadata: Optional[AttachmentMetadata] = None,
+        metadata: AttachmentMetadata | None = None,
     ) -> Attachment:
         """
         Upload a small file directly (≤10MB recommended).
@@ -213,8 +213,8 @@ class AttachmentService:
             purpose=purpose,
             status=AttachmentStatus.UPLOADED,
             metadata=metadata or AttachmentMetadata(),
-            created_at=datetime.now(timezone.utc),
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=self._default_expiration_hours),
+            created_at=datetime.now(UTC),
+            expires_at=datetime.now(UTC) + timedelta(hours=self._default_expiration_hours),
         )
 
         await self._repo.save(attachment)
@@ -233,7 +233,7 @@ class AttachmentService:
         mime_type: str,
         size_bytes: int,
         purpose: AttachmentPurpose,
-        metadata: Optional[AttachmentMetadata] = None,
+        metadata: AttachmentMetadata | None = None,
     ) -> Attachment:
         """
         Initialize a multipart upload for large files.
@@ -288,8 +288,8 @@ class AttachmentService:
             total_parts=total_parts,
             uploaded_parts=0,
             metadata=metadata or AttachmentMetadata(),
-            created_at=datetime.now(timezone.utc),
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=self._default_expiration_hours),
+            created_at=datetime.now(UTC),
+            expires_at=datetime.now(UTC) + timedelta(hours=self._default_expiration_hours),
         )
 
         await self._repo.save(attachment)
@@ -348,7 +348,7 @@ class AttachmentService:
     async def complete_multipart_upload(
         self,
         attachment_id: str,
-        parts: List[PartUploadResult],
+        parts: list[PartUploadResult],
     ) -> Attachment:
         """
         Complete a multipart upload.
@@ -419,7 +419,7 @@ class AttachmentService:
     async def prepare_for_llm(
         self,
         attachment: Attachment,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Prepare attachment for LLM multimodal message.
 
@@ -502,8 +502,8 @@ class AttachmentService:
 
     async def prepare_for_llm_batch(
         self,
-        attachments: List[Attachment],
-    ) -> List[Dict[str, Any]]:
+        attachments: list[Attachment],
+    ) -> list[dict[str, Any]]:
         """
         Prepare multiple attachments for LLM.
 
@@ -528,7 +528,7 @@ class AttachmentService:
     async def prepare_for_sandbox(
         self,
         attachment: Attachment,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Prepare attachment for sandbox import.
 
@@ -576,8 +576,8 @@ class AttachmentService:
 
     async def prepare_for_sandbox_batch(
         self,
-        attachments: List[Attachment],
-    ) -> List[Dict[str, Any]]:
+        attachments: list[Attachment],
+    ) -> list[dict[str, Any]]:
         """
         Prepare multiple attachments for sandbox import.
 
@@ -675,7 +675,7 @@ class AttachmentService:
         self,
         attachment_id: str,
         expiration_seconds: int = 3600,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Get a presigned URL for downloading an attachment.
 

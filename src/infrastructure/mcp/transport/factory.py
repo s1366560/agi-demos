@@ -5,7 +5,6 @@ Creates appropriate transport instances based on configuration.
 """
 
 import logging
-from typing import Dict, Type
 
 from src.domain.model.mcp.transport import TransportConfig, TransportType
 from src.infrastructure.mcp.transport.base import BaseTransport, MCPTransportError
@@ -21,10 +20,10 @@ class TransportFactory:
     TransportConfig or transport type string.
     """
 
-    _transports: Dict[TransportType, Type[BaseTransport]] = {}
+    _transports: dict[TransportType, type[BaseTransport]] = {}
 
     @classmethod
-    def register(cls, transport_type: TransportType, transport_class: Type[BaseTransport]) -> None:
+    def register(cls, transport_type: TransportType, transport_class: type[BaseTransport]) -> None:
         """
         Register a transport implementation.
 
@@ -71,7 +70,7 @@ class TransportFactory:
     def create_from_type(
         cls,
         transport_type: str,
-        config_dict: Dict,
+        config_dict: dict,
     ) -> BaseTransport:
         """
         Create a transport from type string and config dict.

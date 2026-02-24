@@ -5,7 +5,6 @@ Agent Pool 配置定义.
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
 
 from .types import ProjectTier
 
@@ -33,7 +32,7 @@ class ResourceQuota:
     max_execution_time_seconds: int = 300  # 单次执行最大时间
     max_steps_per_request: int = 50  # 单次请求最大步数
 
-    def validate(self) -> List[str]:
+    def validate(self) -> list[str]:
         """验证配额设置.
 
         Returns:
@@ -69,9 +68,9 @@ class AgentInstanceConfig:
     quota: ResourceQuota = field(default_factory=ResourceQuota)
 
     # LLM配置
-    model: Optional[str] = None
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
+    model: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
     temperature: float = 0.7
     max_tokens: int = 4096
     max_steps: int = 20
@@ -203,7 +202,7 @@ class PoolConfig:
     """池管理器配置."""
 
     # 分级配置
-    tier_configs: Dict[ProjectTier, TierConfig] = field(
+    tier_configs: dict[ProjectTier, TierConfig] = field(
         default_factory=lambda: DEFAULT_TIER_CONFIGS.copy()
     )
 

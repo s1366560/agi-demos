@@ -5,9 +5,11 @@
 """
 
 import asyncio
+import contextlib
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any
 
 from ..config import AgentInstanceConfig
 from ..instance import AgentInstance, ChatRequest
@@ -43,7 +45,7 @@ class OnDemandBackend(Backend):
     - 可选预热池加速创建
     """
 
-    def __init__(self, config: Optional[OnDemandConfig] = None):
+    def __init__(self, config: OnDemandConfig | None = None) -> None:
         """初始化按需创建后端.
 
         Args:
@@ -52,7 +54,7 @@ class OnDemandBackend(Backend):
         self.config = config or OnDemandConfig()
 
         # 活跃实例
-        self._instances: Dict[str, AgentInstance] = {}
+        self._instances: dict[str, AgentInstance] = {}
 
         # 锁
         self._lock = asyncio.Lock()
@@ -61,7 +63,7 @@ class OnDemandBackend(Backend):
         self._running = False
 
         # 清理任务
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: asyncio.Task | None = None
 
         logger.info(
             f"[OnDemandBackend] Initialized: "
@@ -90,10 +92,8 @@ class OnDemandBackend(Backend):
         # 停止清理任务
         if self._cleanup_task:
             self._cleanup_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
 
         # 停止所有实例
         async with self._lock:
@@ -155,7 +155,7 @@ class OnDemandBackend(Backend):
                     instance.initialize(),
                     timeout=self.config.creation_timeout_seconds,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 raise RuntimeError(f"Instance creation timeout: project={config.project_id}")
 
             if not success:
@@ -212,7 +212,7 @@ class OnDemandBackend(Backend):
     async def get_instance(
         self,
         instance_id: str,
-    ) -> Optional[AgentInstance]:
+    ) -> AgentInstance | None:
         """获取实例.
 
         Args:
@@ -231,7 +231,7 @@ class OnDemandBackend(Backend):
         tenant_id: str,
         project_id: str,
         agent_mode: str = "default",
-    ) -> Optional[AgentInstance]:
+    ) -> AgentInstance | None:
         """按项目获取实例.
 
         Args:
@@ -245,7 +245,7 @@ class OnDemandBackend(Backend):
         project_key = f"{tenant_id}:{project_id}:{agent_mode}"
         return self._instances.get(project_key)
 
-    async def list_instances(self) -> List[AgentInstance]:
+    async def list_instances(self) -> list[AgentInstance]:
         """列出所有实例.
 
         Returns:
@@ -257,7 +257,7 @@ class OnDemandBackend(Backend):
         self,
         instance_id: str,
         request: ChatRequest,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """在实例上执行请求.
 
         Args:
@@ -335,7 +335,7 @@ class OnDemandBackend(Backend):
 
         return cleaned
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """获取后端统计信息.
 
         Returns:

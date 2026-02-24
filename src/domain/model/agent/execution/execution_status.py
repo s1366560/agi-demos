@@ -8,9 +8,8 @@ This model tracks the execution status of agent responses, enabling:
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Optional
 
 
 class AgentExecutionStatus(str, Enum):
@@ -51,11 +50,11 @@ class AgentExecution:
     message_id: str
     status: AgentExecutionStatus
     last_event_sequence: int = 0
-    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    completed_at: Optional[datetime] = None
-    error_message: Optional[str] = None
-    tenant_id: Optional[str] = None
-    project_id: Optional[str] = None
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    completed_at: datetime | None = None
+    error_message: str | None = None
+    tenant_id: str | None = None
+    project_id: str | None = None
 
     @property
     def is_running(self) -> bool:
@@ -74,23 +73,23 @@ class AgentExecution:
     def mark_running(self) -> None:
         """Mark execution as running."""
         self.status = AgentExecutionStatus.RUNNING
-        self.started_at = datetime.now(timezone.utc)
+        self.started_at = datetime.now(UTC)
 
     def mark_completed(self) -> None:
         """Mark execution as completed."""
         self.status = AgentExecutionStatus.COMPLETED
-        self.completed_at = datetime.now(timezone.utc)
+        self.completed_at = datetime.now(UTC)
 
     def mark_failed(self, error_message: str) -> None:
         """Mark execution as failed with error message."""
         self.status = AgentExecutionStatus.FAILED
-        self.completed_at = datetime.now(timezone.utc)
+        self.completed_at = datetime.now(UTC)
         self.error_message = error_message
 
     def mark_cancelled(self) -> None:
         """Mark execution as cancelled."""
         self.status = AgentExecutionStatus.CANCELLED
-        self.completed_at = datetime.now(timezone.utc)
+        self.completed_at = datetime.now(UTC)
 
     def update_sequence(self, sequence: int) -> None:
         """Update the last event sequence number."""
@@ -117,8 +116,8 @@ class AgentExecution:
         cls,
         conversation_id: str,
         message_id: str,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
     ) -> "AgentExecution":
         """Factory method to create a new execution in RUNNING status."""
         return cls(

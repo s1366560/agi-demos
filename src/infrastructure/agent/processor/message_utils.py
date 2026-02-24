@@ -4,10 +4,10 @@ Message utilities for SessionProcessor.
 Helper functions for working with conversation messages.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
-def extract_user_query(messages: List[Dict[str, Any]]) -> Optional[str]:
+def extract_user_query(messages: list[dict[str, Any]]) -> str | None:
     """
     Extract the latest user query from messages.
 
@@ -95,7 +95,7 @@ def classify_tool_by_description(tool_name: str, description: str) -> str:
     return "other"
 
 
-def build_tool_result_message(call_id: str, tool_name: str, result: str) -> Dict[str, Any]:
+def build_tool_result_message(call_id: str, tool_name: str, result: str) -> dict[str, Any]:
     """
     Build a tool result message in OpenAI format.
 
@@ -116,9 +116,9 @@ def build_tool_result_message(call_id: str, tool_name: str, result: str) -> Dict
 
 
 def build_assistant_message_with_tool_calls(
-    tool_calls: List[Dict[str, Any]],
-    content: Optional[str] = None,
-) -> Dict[str, Any]:
+    tool_calls: list[dict[str, Any]],
+    content: str | None = None,
+) -> dict[str, Any]:
     """
     Build an assistant message with tool calls.
 
@@ -129,7 +129,7 @@ def build_assistant_message_with_tool_calls(
     Returns:
         Message dict in OpenAI format
     """
-    msg: Dict[str, Any] = {
+    msg: dict[str, Any] = {
         "role": "assistant",
         "tool_calls": tool_calls,
     }

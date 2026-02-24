@@ -26,8 +26,8 @@ Usage:
 import asyncio
 import fnmatch
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Dict, List, Optional, Set
 
 from src.domain.ports.services.unified_event_bus_port import EventWithMetadata
 
@@ -52,9 +52,9 @@ class HandlerRegistration:
 
     pattern: str
     handler: EventHandler
-    name: Optional[str] = None
+    name: str | None = None
     priority: int = 0
-    filter_fn: Optional[Callable[[EventWithMetadata], bool]] = None
+    filter_fn: Callable[[EventWithMetadata], bool] | None = None
 
     def matches(self, routing_key: str) -> bool:
         """Check if the pattern matches a routing key."""
@@ -64,9 +64,7 @@ class HandlerRegistration:
         """Check if this handler should handle the event."""
         if not self.matches(event.routing_key):
             return False
-        if self.filter_fn and not self.filter_fn(event):
-            return False
-        return True
+        return not (self.filter_fn and not self.filter_fn(event))
 
 
 @dataclass
@@ -82,7 +80,7 @@ class RoutingResult:
 
     event: EventWithMetadata
     handlers_invoked: int = 0
-    errors: List[tuple[str, Exception]] = field(default_factory=list)
+    errors: list[tuple[str, Exception]] = field(default_factory=list)
 
     @property
     def handled(self) -> bool:
@@ -106,7 +104,7 @@ class EventRouter:
         parallel_execution: bool = False,
         continue_on_error: bool = True,
         max_handlers_per_event: int = 100,
-    ):
+    ) -> None:
         """Initialize the event router.
 
         Args:
@@ -114,7 +112,7 @@ class EventRouter:
             continue_on_error: Continue routing on handler errors
             max_handlers_per_event: Maximum handlers to invoke per event
         """
-        self._handlers: List[HandlerRegistration] = []
+        self._handlers: list[HandlerRegistration] = []
         self._parallel = parallel_execution
         self._continue_on_error = continue_on_error
         self._max_handlers = max_handlers_per_event
@@ -125,9 +123,9 @@ class EventRouter:
         pattern: str,
         handler: EventHandler,
         *,
-        name: Optional[str] = None,
+        name: str | None = None,
         priority: int = 0,
-        filter_fn: Optional[Callable[[EventWithMetadata], bool]] = None,
+        filter_fn: Callable[[EventWithMetadata], bool] | None = None,
     ) -> HandlerRegistration:
         """Register an event handler.
 
@@ -162,7 +160,7 @@ class EventRouter:
         self,
         pattern: str,
         *,
-        name: Optional[str] = None,
+        name: str | None = None,
         priority: int = 0,
     ) -> Callable[[EventHandler], EventHandler]:
         """Decorator to register an event handler.
@@ -266,8 +264,8 @@ class EventRouter:
 
     async def route_many(
         self,
-        events: List[EventWithMetadata],
-    ) -> List[RoutingResult]:
+        events: list[EventWithMetadata],
+    ) -> list[RoutingResult]:
         """Route multiple events.
 
         Args:
@@ -281,14 +279,14 @@ class EventRouter:
     def _get_matching_handlers(
         self,
         event: EventWithMetadata,
-    ) -> List[HandlerRegistration]:
+    ) -> list[HandlerRegistration]:
         """Get handlers matching an event."""
         return [h for h in self._handlers if h.should_handle(event)]
 
     async def _execute_sequential(
         self,
         event: EventWithMetadata,
-        handlers: List[HandlerRegistration],
+        handlers: list[HandlerRegistration],
         result: RoutingResult,
     ) -> None:
         """Execute handlers sequentially."""
@@ -307,7 +305,7 @@ class EventRouter:
     async def _execute_parallel(
         self,
         event: EventWithMetadata,
-        handlers: List[HandlerRegistration],
+        handlers: list[HandlerRegistration],
         result: RoutingResult,
     ) -> None:
         """Execute handlers in parallel."""
@@ -338,11 +336,11 @@ class EventRouter:
         """Safely invoke a handler."""
         await registration.handler(event)
 
-    def get_handlers_for_pattern(self, pattern: str) -> List[HandlerRegistration]:
+    def get_handlers_for_pattern(self, pattern: str) -> list[HandlerRegistration]:
         """Get all handlers registered for a specific pattern."""
         return [h for h in self._handlers if h.pattern == pattern]
 
-    def get_matching_patterns(self, routing_key: str) -> List[str]:
+    def get_matching_patterns(self, routing_key: str) -> list[str]:
         """Get all patterns that match a routing key."""
         return [h.pattern for h in self._handlers if h.matches(routing_key)]
 
@@ -352,7 +350,7 @@ class EventRouter:
         return len(self._handlers)
 
     @property
-    def patterns(self) -> Set[str]:
+    def patterns(self) -> set[str]:
         """Get all registered patterns."""
         return {h.pattern for h in self._handlers}
 
@@ -390,7 +388,7 @@ class RouterMetrics:
         self.errors = 0
         self.no_handler_count = 0
 
-    def to_dict(self) -> Dict[str, int]:
+    def to_dict(self) -> dict[str, int]:
         """Convert metrics to dictionary."""
         return {
             "events_routed": self.events_routed,

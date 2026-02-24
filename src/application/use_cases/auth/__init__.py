@@ -2,7 +2,7 @@
 Use case for creating API keys.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import List, Optional
 
 from pydantic import BaseModel, field_validator
@@ -18,8 +18,8 @@ class CreateAPIKeyCommand(BaseModel):
 
     user_id: str
     name: str
-    permissions: List[str]
-    expires_in_days: Optional[int] = None
+    permissions: list[str]
+    expires_in_days: int | None = None
 
     @field_validator("user_id", "name")
     @classmethod
@@ -30,7 +30,7 @@ class CreateAPIKeyCommand(BaseModel):
 
     @field_validator("expires_in_days")
     @classmethod
-    def must_be_positive(cls, v: Optional[int]) -> Optional[int]:
+    def must_be_positive(cls, v: int | None) -> int | None:
         if v is not None and v <= 0:
             raise ValueError("must be positive")
         return v
@@ -44,7 +44,7 @@ class CreateAPIKeyUseCase:
         api_key_repository: APIKeyRepository,
         generate_key_func,
         hash_key_func,
-    ):
+    ) -> None:
         self._api_key_repo = api_key_repository
         self._generate_key = generate_key_func
         self._hash_key = hash_key_func
@@ -56,7 +56,7 @@ class CreateAPIKeyUseCase:
 
         expires_at = None
         if command.expires_in_days:
-            expires_at = datetime.now(timezone.utc) + timedelta(days=command.expires_in_days)
+            expires_at = datetime.now(UTC) + timedelta(days=command.expires_in_days)
 
         api_key = APIKey(
             user_id=command.user_id,

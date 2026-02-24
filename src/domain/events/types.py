@@ -18,7 +18,6 @@ Future versions may use namespaced naming (e.g., "agent.thought", "agent.act").
 """
 
 from enum import Enum
-from typing import List, Set
 
 
 class EventCategory(str, Enum):
@@ -219,13 +218,13 @@ class AgentEventType(str, Enum):
 # =============================================================================
 
 # Internal events that should not be exposed to frontend
-INTERNAL_EVENT_TYPES: Set[AgentEventType] = {
+INTERNAL_EVENT_TYPES: set[AgentEventType] = {
     AgentEventType.COMPACT_NEEDED,  # Internal compression signal
     AgentEventType.RETRY,  # Internal retry logic
 }
 
 # Delta events that are not persisted to database (streaming fragments)
-DELTA_EVENT_TYPES: Set[AgentEventType] = {
+DELTA_EVENT_TYPES: set[AgentEventType] = {
     AgentEventType.THOUGHT_DELTA,
     AgentEventType.TEXT_DELTA,
     AgentEventType.TEXT_START,
@@ -234,14 +233,14 @@ DELTA_EVENT_TYPES: Set[AgentEventType] = {
 }
 
 # Terminal events that indicate stream completion
-TERMINAL_EVENT_TYPES: Set[AgentEventType] = {
+TERMINAL_EVENT_TYPES: set[AgentEventType] = {
     AgentEventType.COMPLETE,
     AgentEventType.ERROR,
     AgentEventType.CANCELLED,
 }
 
 # HITL events that require user response
-HITL_EVENT_TYPES: Set[AgentEventType] = {
+HITL_EVENT_TYPES: set[AgentEventType] = {
     AgentEventType.CLARIFICATION_ASKED,
     AgentEventType.DECISION_ASKED,
     AgentEventType.ENV_VAR_REQUESTED,
@@ -316,7 +315,7 @@ EVENT_CATEGORIES: dict[AgentEventType, EventCategory] = {
 }
 
 
-def get_frontend_event_types() -> List[str]:
+def get_frontend_event_types() -> list[str]:
     """Get all event type values for frontend TypeScript generation.
 
     Returns:

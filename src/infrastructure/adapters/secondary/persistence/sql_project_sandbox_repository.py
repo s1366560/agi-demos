@@ -4,9 +4,9 @@ V2 SQLAlchemy implementation of ProjectSandboxRepository using BaseRepository.
 
 import hashlib
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
-from typing import AsyncGenerator, List, Optional
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,7 +97,7 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
 
         await self._session.commit()
 
-    async def find_by_id(self, association_id: str) -> Optional[ProjectSandbox]:
+    async def find_by_id(self, association_id: str) -> ProjectSandbox | None:
         """Find a project-sandbox association by its ID."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             ProjectSandbox as ProjectSandboxORM,
@@ -109,7 +109,7 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
         orm = result.scalar_one_or_none()
         return self._to_domain(orm) if orm else None
 
-    async def find_by_project(self, project_id: str) -> Optional[ProjectSandbox]:
+    async def find_by_project(self, project_id: str) -> ProjectSandbox | None:
         """Find the sandbox association for a specific project."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             ProjectSandbox as ProjectSandboxORM,
@@ -121,7 +121,7 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
         orm = result.scalar_one_or_none()
         return self._to_domain(orm) if orm else None
 
-    async def find_by_sandbox(self, sandbox_id: str) -> Optional[ProjectSandbox]:
+    async def find_by_sandbox(self, sandbox_id: str) -> ProjectSandbox | None:
         """Find the project association for a specific sandbox."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             ProjectSandbox as ProjectSandboxORM,
@@ -136,10 +136,10 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
     async def find_by_tenant(
         self,
         tenant_id: str,
-        status: Optional[ProjectSandboxStatus] = None,
+        status: ProjectSandboxStatus | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[ProjectSandbox]:
+    ) -> list[ProjectSandbox]:
         """List all sandbox associations for a tenant."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             ProjectSandbox as ProjectSandboxORM,
@@ -162,7 +162,7 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
         status: ProjectSandboxStatus,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[ProjectSandbox]:
+    ) -> list[ProjectSandbox]:
         """Find all associations with a specific status."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             ProjectSandbox as ProjectSandboxORM,
@@ -184,13 +184,13 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
         self,
         max_idle_seconds: int,
         limit: int = 50,
-    ) -> List[ProjectSandbox]:
+    ) -> list[ProjectSandbox]:
         """Find associations that haven't been accessed recently."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             ProjectSandbox as ProjectSandboxORM,
         )
 
-        cutoff_time = datetime.now(timezone.utc) - timedelta(seconds=max_idle_seconds)
+        cutoff_time = datetime.now(UTC) - timedelta(seconds=max_idle_seconds)
 
         query = (
             select(ProjectSandboxORM)
@@ -247,7 +247,7 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
     async def count_by_tenant(
         self,
         tenant_id: str,
-        status: Optional[ProjectSandboxStatus] = None,
+        status: ProjectSandboxStatus | None = None,
     ) -> int:
         """Count sandbox associations for a tenant."""
         from sqlalchemy import func
@@ -379,7 +379,7 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
     async def find_and_lock_by_project(
         self,
         project_id: str,
-    ) -> Optional[ProjectSandbox]:
+    ) -> ProjectSandbox | None:
         """Find sandbox by project with row-level lock (SELECT FOR UPDATE).
 
         This prevents TOCTOU race conditions by locking the row while checking.

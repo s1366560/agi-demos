@@ -8,10 +8,11 @@ understanding (aligned with Moltbot's LLM-driven design).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.memory.prompt_safety import looks_like_prompt_injection
 
@@ -67,8 +68,8 @@ class MemoryCapturePostprocessor:
         llm_client: LLMClient,
         chunk_repo: SqlChunkRepository = None,
         embedding_service: EmbeddingService = None,
-        session_factory: Any = None,  # noqa: ANN401
-    ):
+        session_factory: Any = None,
+    ) -> None:
         self._llm_client = llm_client
         self._chunk_repo = chunk_repo
         self._embedding = embedding_service
@@ -82,7 +83,7 @@ class MemoryCapturePostprocessor:
             f"session_factory={'yes' if session_factory else 'no'})"
         )
 
-    async def _get_chunk_repo(self) -> Any:  # noqa: ANN401
+    async def _get_chunk_repo(self) -> Any:
         """Get or create a chunk repository with a fresh DB session."""
         if self._chunk_repo is not None:
             return self._chunk_repo
@@ -180,10 +181,8 @@ class MemoryCapturePostprocessor:
         except Exception as e:
             logger.warning(f"Memory capture storage error: {e}")
             if session_to_close:
-                try:
+                with contextlib.suppress(Exception):
                     await session_to_close.rollback()
-                except Exception:
-                    pass
         finally:
             if session_to_close:
                 await session_to_close.close()
@@ -254,10 +253,10 @@ class MemoryCapturePostprocessor:
 
     async def _store_chunk(
         self,
-        chunk_repo: Any,  # noqa: ANN401
+        chunk_repo: Any,
         content: str,
         category: str,
-        embedding: Optional[list[float]],
+        embedding: list[float] | None,
         project_id: str,
         conversation_id: str,
     ) -> bool:
@@ -289,7 +288,7 @@ class MemoryCapturePostprocessor:
 
     async def _is_duplicate(
         self,
-        chunk_repo: Any,  # noqa: ANN401
+        chunk_repo: Any,
         embedding: list[float],
         project_id: str,
         threshold: float = 0.95,

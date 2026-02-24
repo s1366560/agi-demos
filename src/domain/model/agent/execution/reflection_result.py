@@ -6,7 +6,7 @@ Defines the result of reflection analysis on plan execution.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict
+from typing import Any
 
 
 class AdjustmentType(str, Enum):
@@ -47,11 +47,11 @@ class StepAdjustment:
     step_id: str
     adjustment_type: AdjustmentType
     reason: str
-    new_tool_input: Dict[str, Any] | None = None
+    new_tool_input: dict[str, Any] | None = None
     new_tool_name: str | None = None
     new_step: Any | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "step_id": self.step_id,
@@ -91,7 +91,7 @@ class ReflectionResult:
     confidence: float | None = None
     final_summary: str | None = None
     error_type: str | None = None
-    reflection_metadata: Dict[str, Any] = field(default_factory=dict)
+    reflection_metadata: dict[str, Any] = field(default_factory=dict)
 
     def has_adjustments(self) -> bool:
         """Check if there are any adjustments to apply."""
@@ -106,7 +106,7 @@ class ReflectionResult:
         """Check if this reflection represents a terminal state."""
         return self.assessment in (ReflectionAssessment.COMPLETE, ReflectionAssessment.FAILED)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "assessment": self.assessment.value,

@@ -3,7 +3,8 @@
 import hashlib
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import HTTPException, Request
 
@@ -15,17 +16,17 @@ class FeishuWebhookHandler:
     
     def __init__(
         self,
-        verification_token: Optional[str] = None,
-        encrypt_key: Optional[str] = None
-    ):
+        verification_token: str | None = None,
+        encrypt_key: str | None = None
+    ) -> None:
         self._verification_token = verification_token
         self._encrypt_key = encrypt_key
-        self._handlers: Dict[str, Callable[[Dict[str, Any]], Any]] = {}
+        self._handlers: dict[str, Callable[[dict[str, Any]], Any]] = {}
     
     def register_handler(
         self,
         event_type: str,
-        handler: Callable[[Dict[str, Any]], Any]
+        handler: Callable[[dict[str, Any]], Any]
     ) -> None:
         """Register a handler for a specific event type.
         
@@ -36,7 +37,7 @@ class FeishuWebhookHandler:
         self._handlers[event_type] = handler
         logger.debug(f"Registered handler for event: {event_type}")
     
-    async def handle_request(self, request: Request) -> Dict[str, Any]:
+    async def handle_request(self, request: Request) -> dict[str, Any]:
         """Handle incoming webhook request.
         
         Args:
@@ -88,7 +89,7 @@ class FeishuWebhookHandler:
         
         return {"code": 0}
     
-    async def _handle_verification(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    async def _handle_verification(self, data: dict[str, Any]) -> dict[str, Any]:
         """Handle URL verification challenge.
         
         Feishu sends this when configuring the webhook URL.
@@ -134,15 +135,15 @@ class FeishuWebhookHandler:
 class FeishuEventDispatcher:
     """Dispatcher for Feishu events with filtering and middleware."""
     
-    def __init__(self):
-        self._handlers: Dict[str, List[Callable]] = {}
-        self._middleware: List[Callable] = []
-        self._filters: List[Callable[[Dict[str, Any]], bool]] = []
+    def __init__(self) -> None:
+        self._handlers: dict[str, list[Callable]] = {}
+        self._middleware: list[Callable] = []
+        self._filters: list[Callable[[dict[str, Any]], bool]] = []
     
     def on(
         self,
         event_type: str,
-        *filters: Callable[[Dict[str, Any]], bool]
+        *filters: Callable[[dict[str, Any]], bool]
     ) -> Callable:
         """Decorator to register an event handler.
         
@@ -175,14 +176,14 @@ class FeishuEventDispatcher:
         self._middleware.append(middleware)
         return middleware
     
-    def add_filter(self, filter_fn: Callable[[Dict[str, Any]], bool]) -> None:
+    def add_filter(self, filter_fn: Callable[[dict[str, Any]], bool]) -> None:
         """Add a global filter.
         
         Events must pass all global filters to be processed.
         """
         self._filters.append(filter_fn)
     
-    async def dispatch(self, event_type: str, event_data: Dict[str, Any]) -> None:
+    async def dispatch(self, event_type: str, event_data: dict[str, Any]) -> None:
         """Dispatch an event to handlers.
         
         Args:

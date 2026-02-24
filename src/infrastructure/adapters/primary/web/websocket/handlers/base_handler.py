@@ -5,7 +5,7 @@ Defines the abstract interface for WebSocket message handlers.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any
 
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
 
@@ -39,7 +39,7 @@ class WebSocketMessageHandler(ABC):
         pass
 
     @abstractmethod
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """
         Handle the message.
 

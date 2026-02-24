@@ -6,12 +6,12 @@ from src.application.use_cases.task.list_tasks import ListTasksQuery, ListTasksU
 from src.application.use_cases.task.update_task import UpdateTaskCommand, UpdateTaskUseCase
 
 __all__ = [
-    "CreateTaskUseCase",
     "CreateTaskCommand",
-    "GetTaskUseCase",
+    "CreateTaskUseCase",
     "GetTaskQuery",
-    "ListTasksUseCase",
+    "GetTaskUseCase",
     "ListTasksQuery",
-    "UpdateTaskUseCase",
+    "ListTasksUseCase",
     "UpdateTaskCommand",
+    "UpdateTaskUseCase",
 ]

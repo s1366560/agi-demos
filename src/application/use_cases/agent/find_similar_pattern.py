@@ -8,7 +8,7 @@ a learned workflow pattern, enabling the agent to reuse proven approaches.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.model.agent.workflow_pattern import WorkflowPattern
 from src.domain.ports.repositories.workflow_pattern_repository import WorkflowPatternRepositoryPort
@@ -22,7 +22,7 @@ class FindSimilarPatternRequest:
     query: str
     min_similarity: float = 0.7  # Minimum similarity threshold (0-1)
     limit: int = 10  # Maximum number of results to return
-    min_success_rate: Optional[float] = None  # Optional minimum success rate filter
+    min_success_rate: float | None = None  # Optional minimum success rate filter
 
 
 @dataclass
@@ -32,7 +32,7 @@ class SimilarPatternResult:
     pattern: WorkflowPattern
     similarity_score: float
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "pattern": self.pattern.to_dict(),
@@ -44,7 +44,7 @@ class SimilarPatternResult:
 class FindSimilarPatternResult:
     """Result of finding similar patterns."""
 
-    matches: List[SimilarPatternResult]
+    matches: list[SimilarPatternResult]
     total_candidates: int  # Total patterns considered
     query: str
     threshold_used: float
@@ -64,7 +64,7 @@ class FindSimilarPattern:
     3. Tool names used
     """
 
-    def __init__(self, repository: WorkflowPatternRepositoryPort):
+    def __init__(self, repository: WorkflowPatternRepositoryPort) -> None:
         self._repository = repository
 
     async def execute(self, request: FindSimilarPatternRequest) -> FindSimilarPatternResult:
@@ -126,7 +126,7 @@ class FindSimilarPattern:
         tenant_id: str,
         query: str,
         min_success_rate: float = 0.5,
-    ) -> Optional[WorkflowPattern]:
+    ) -> WorkflowPattern | None:
         """
         Convenience method to find the single best matching pattern.
 

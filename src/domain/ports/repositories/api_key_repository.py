@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import List, Optional
 
 from src.domain.model.auth.api_key import APIKey
 
@@ -14,17 +13,17 @@ class APIKeyRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(self, key_id: str) -> Optional[APIKey]:
+    async def find_by_id(self, key_id: str) -> APIKey | None:
         """Find an API key by ID"""
         pass
 
     @abstractmethod
-    async def find_by_hash(self, key_hash: str) -> Optional[APIKey]:
+    async def find_by_hash(self, key_hash: str) -> APIKey | None:
         """Find an API key by its hash"""
         pass
 
     @abstractmethod
-    async def find_by_user(self, user_id: str, limit: int = 50, offset: int = 0) -> List[APIKey]:
+    async def find_by_user(self, user_id: str, limit: int = 50, offset: int = 0) -> list[APIKey]:
         """List all API keys for a user"""
         pass
 

@@ -10,8 +10,8 @@ from .state_machine import (
 )
 
 __all__ = [
+    "VALID_TRANSITIONS",
+    "InvalidStateTransitionError",
     "LifecycleStateMachine",
     "StateTransition",
-    "InvalidStateTransitionError",
-    "VALID_TRANSITIONS",
 ]

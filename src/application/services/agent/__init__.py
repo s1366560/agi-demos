@@ -5,7 +5,7 @@ from src.application.services.agent.runtime_bootstrapper import AgentRuntimeBoot
 from src.application.services.agent.tool_discovery import ToolDiscoveryService
 
 __all__ = [
-    "ConversationManager",
     "AgentRuntimeBootstrapper",
+    "ConversationManager",
     "ToolDiscoveryService",
 ]

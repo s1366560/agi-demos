@@ -7,7 +7,8 @@ to be used interchangeably.
 """
 
 from abc import abstractmethod
-from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, runtime_checkable
+from collections.abc import AsyncIterator
+from typing import Any, Protocol, runtime_checkable
 
 from src.domain.model.mcp.connection import ConnectionInfo
 from src.domain.model.mcp.server import MCPServerConfig
@@ -27,7 +28,7 @@ class MCPClientPort(Protocol):
     async def connect(
         self,
         config: MCPServerConfig,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> ConnectionInfo:
         """
         Connect to an MCP server.
@@ -54,7 +55,7 @@ class MCPClientPort(Protocol):
         ...
 
     @abstractmethod
-    async def list_tools(self) -> List[MCPToolSchema]:
+    async def list_tools(self) -> list[MCPToolSchema]:
         """
         List available tools from the connected server.
 
@@ -70,7 +71,7 @@ class MCPClientPort(Protocol):
     async def call_tool(
         self,
         request: MCPToolCallRequest,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> MCPToolResult:
         """
         Execute a tool call on the connected server.
@@ -92,8 +93,8 @@ class MCPClientPort(Protocol):
     async def call_tool_streaming(
         self,
         request: MCPToolCallRequest,
-        timeout: Optional[float] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        timeout: float | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute a tool call with streaming output.
 
@@ -118,7 +119,7 @@ class MCPClientPort(Protocol):
 
     @property
     @abstractmethod
-    def connection_info(self) -> Optional[ConnectionInfo]:
+    def connection_info(self) -> ConnectionInfo | None:
         """Get current connection information."""
         ...
 

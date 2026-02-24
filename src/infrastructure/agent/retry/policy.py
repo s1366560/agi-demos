@@ -6,7 +6,6 @@ provider-specific retry-after header support.
 
 import re
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -14,7 +13,7 @@ class RetryableError:
     """Wrapper for retryable errors with optional retry timing."""
 
     message: str
-    retry_after_ms: Optional[int] = None
+    retry_after_ms: int | None = None
     attempt: int = 0
 
 
@@ -74,7 +73,7 @@ class RetryPolicy:
         backoff_factor: int = BACKOFF_FACTOR,
         max_delay_ms: int = MAX_DELAY_NO_HEADERS_MS,
         max_attempts: int = MAX_ATTEMPTS,
-    ):
+    ) -> None:
         """
         Initialize retry policy.
 
@@ -118,12 +117,9 @@ class RetryPolicy:
 
         # Check for specific error types
         error_type = type(error).__name__.lower()
-        if any(t in error_type for t in ["timeout", "connection", "temporary"]):
-            return True
+        return bool(any(t in error_type for t in ["timeout", "connection", "temporary"]))
 
-        return False
-
-    def calculate_delay(self, attempt: int, error: Optional[Exception] = None) -> int:
+    def calculate_delay(self, attempt: int, error: Exception | None = None) -> int:
         """
         Calculate retry delay in milliseconds.
 
@@ -164,7 +160,7 @@ class RetryPolicy:
             return False
         return self.is_retryable(error)
 
-    def _parse_retry_after_headers(self, error: Exception) -> Optional[int]:
+    def _parse_retry_after_headers(self, error: Exception) -> int | None:
         """
         Parse retry-after headers from error response.
 
@@ -213,7 +209,7 @@ class RetryPolicy:
 
         return None
 
-    def _get_headers(self, error: Exception) -> Optional[dict]:
+    def _get_headers(self, error: Exception) -> dict | None:
         """
         Extract response headers from an exception.
 
@@ -243,7 +239,7 @@ class RetryPolicy:
 
         return None
 
-    def _get_status_code(self, error: Exception) -> Optional[int]:
+    def _get_status_code(self, error: Exception) -> int | None:
         """
         Extract HTTP status code from an exception.
 

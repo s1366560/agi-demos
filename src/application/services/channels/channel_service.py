@@ -1,7 +1,8 @@
 """Channel application service - orchestrates channel operations."""
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from src.domain.model.channels.message import (
     ChannelAdapter,
@@ -41,9 +42,9 @@ class ChannelService:
     """
     
     def __init__(self) -> None:
-        self._adapters: Dict[str, ChannelAdapter] = {}
-        self._message_handlers: List[MessageHandler] = []
-        self._error_handlers: List[ErrorHandler] = []
+        self._adapters: dict[str, ChannelAdapter] = {}
+        self._message_handlers: list[MessageHandler] = []
+        self._error_handlers: list[ErrorHandler] = []
     
     def register_adapter(self, adapter: ChannelAdapter) -> None:
         """Register a channel adapter."""
@@ -64,11 +65,11 @@ class ChannelService:
             adapter = self._adapters.pop(adapter_id)
             logger.info(f"Unregistered channel adapter: {adapter.name}")
     
-    def get_adapter(self, adapter_id: str) -> Optional[ChannelAdapter]:
+    def get_adapter(self, adapter_id: str) -> ChannelAdapter | None:
         """Get a registered adapter by ID."""
         return self._adapters.get(adapter_id)
     
-    def list_adapters(self) -> List[ChannelAdapter]:
+    def list_adapters(self) -> list[ChannelAdapter]:
         """List all registered adapters."""
         return list(self._adapters.values())
     
@@ -96,8 +97,8 @@ class ChannelService:
         channel_id: str,
         to: str,
         content: MessageContent,
-        reply_to: Optional[str] = None
-    ) -> Optional[str]:
+        reply_to: str | None = None
+    ) -> str | None:
         """Send a message through a specific channel.
         
         Returns:
@@ -126,8 +127,8 @@ class ChannelService:
         channel_id: str,
         to: str,
         text: str,
-        reply_to: Optional[str] = None
-    ) -> Optional[str]:
+        reply_to: str | None = None
+    ) -> str | None:
         """Send a text message (convenience method)."""
         content = MessageContent(type="text", text=text)
         return await self.send_message(channel_id, to, content, reply_to)
@@ -136,8 +137,8 @@ class ChannelService:
         self,
         to: str,
         content: MessageContent,
-        channels: Optional[List[str]] = None
-    ) -> Dict[str, Optional[str]]:
+        channels: list[str] | None = None
+    ) -> dict[str, str | None]:
         """Broadcast a message to multiple channels.
         
         Args:
@@ -154,7 +155,7 @@ class ChannelService:
             else list(self._adapters.values())
         )
         
-        results: Dict[str, Optional[str]] = {}
+        results: dict[str, str | None] = {}
         for adapter in target_channels:
             if adapter.connected:
                 try:
@@ -175,7 +176,7 @@ class ChannelService:
         """
         self._message_handlers.append(handler)
         
-        def unregister():
+        def unregister() -> None:
             self._message_handlers.remove(handler)
         
         return unregister
@@ -184,7 +185,7 @@ class ChannelService:
         """Register an error handler."""
         self._error_handlers.append(handler)
         
-        def unregister():
+        def unregister() -> None:
             self._error_handlers.remove(handler)
         
         return unregister
@@ -213,7 +214,7 @@ class ChannelService:
         self,
         channel_id: str,
         chat_id: str
-    ) -> List[Any]:
+    ) -> list[Any]:
         """Get members of a chat group."""
         adapter = self._adapters.get(channel_id)
         if not adapter:
@@ -225,7 +226,7 @@ class ChannelService:
         self,
         channel_id: str,
         user_id: str
-    ) -> Optional[SenderInfo]:
+    ) -> SenderInfo | None:
         """Get user information."""
         adapter = self._adapters.get(channel_id)
         if not adapter:

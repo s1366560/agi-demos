@@ -11,12 +11,14 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
     from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
 
+
+import contextlib
 
 from src.infrastructure.memory.prompt_safety import looks_like_prompt_injection
 
@@ -65,8 +67,8 @@ class MemoryFlushService:
         self,
         llm_client: LLMClient,
         embedding_service: EmbeddingService = None,
-        session_factory: Any = None,  # noqa: ANN401
-    ):
+        session_factory: Any = None,
+    ) -> None:
         self._llm_client = llm_client
         self._embedding = embedding_service
         self._session_factory = session_factory
@@ -144,10 +146,8 @@ class MemoryFlushService:
         except Exception as e:
             logger.warning(f"Memory flush storage error: {e}")
             if session_to_close:
-                try:
+                with contextlib.suppress(Exception):
                     await session_to_close.rollback()
-                except Exception:
-                    pass
         finally:
             if session_to_close:
                 await session_to_close.close()
@@ -215,7 +215,7 @@ class MemoryFlushService:
             logger.debug(f"Memory flush extraction failed ({type(self._llm_client).__name__}): {e}")
             return []
 
-    async def _get_chunk_repo(self) -> Optional[Any]:  # noqa: ANN401
+    async def _get_chunk_repo(self) -> Any | None:
         """Create chunk repo with a fresh DB session."""
         if self._session_factory is None:
             return None
@@ -230,7 +230,7 @@ class MemoryFlushService:
             logger.debug(f"Failed to create chunk repo for flush: {e}")
             return None
 
-    async def _is_duplicate(self, chunk_repo: Any, embedding: list[float], project_id: str) -> bool:  # noqa: ANN401
+    async def _is_duplicate(self, chunk_repo: Any, embedding: list[float], project_id: str) -> bool:
         """Check if a memory already exists with high similarity."""
         try:
             similar = await chunk_repo.find_similar(embedding, project_id, threshold=0.95)
@@ -240,10 +240,10 @@ class MemoryFlushService:
 
     async def _store_chunk(
         self,
-        chunk_repo: Optional[Any],  # noqa: ANN401
+        chunk_repo: Any | None,
         content: str,
         category: str,
-        embedding: Optional[list[float]],
+        embedding: list[float] | None,
         project_id: str,
         conversation_id: str,
     ) -> bool:

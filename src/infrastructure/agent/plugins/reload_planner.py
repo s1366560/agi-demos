@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Sequence
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -13,13 +14,13 @@ class PluginReloadPlan:
     action: str
     dry_run: bool
     trigger_scope: str
-    plugin_name: Optional[str]
-    reason: Optional[str]
+    plugin_name: str | None
+    reason: str | None
     steps: tuple[str, ...]
-    inventory: Dict[str, int]
+    inventory: dict[str, int]
     diagnostics_count: int
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert plan to a JSON-friendly dictionary."""
         return {
             "action": self.action,
@@ -37,12 +38,12 @@ def build_plugin_reload_plan(
     *,
     action: str,
     dry_run: bool,
-    plugin_name: Optional[str],
-    tenant_id: Optional[str],
-    plugins: Sequence[Dict[str, Any]],
+    plugin_name: str | None,
+    tenant_id: str | None,
+    plugins: Sequence[dict[str, Any]],
     diagnostics: Sequence[Any],
-    reason: Optional[str] = None,
-) -> Dict[str, Any]:
+    reason: str | None = None,
+) -> dict[str, Any]:
     """Build a lightweight reload plan summary for plugin operations."""
     trigger_scope = "tenant" if tenant_id else "global"
     inventory = {
@@ -63,7 +64,7 @@ def build_plugin_reload_plan(
     return plan.to_dict()
 
 
-def _default_steps(action: str, *, plugin_name: Optional[str], dry_run: bool) -> tuple[str, ...]:
+def _default_steps(action: str, *, plugin_name: str | None, dry_run: bool) -> tuple[str, ...]:
     scope = plugin_name or "*"
     steps: list[str] = [f"validate-action:{action}"]
     if dry_run:

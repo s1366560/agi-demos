@@ -13,8 +13,8 @@ This module provides:
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
 from src.infrastructure.graph.neo4j_client import Neo4jClient
@@ -104,8 +104,8 @@ class HybridSearch:
         rrf_k: int = DEFAULT_RRF_K,
         vector_weight: float = DEFAULT_VECTOR_WEIGHT,
         keyword_weight: float = DEFAULT_KEYWORD_WEIGHT,
-        search_config: Optional[GraphSearchConfig] = None,
-    ):
+        search_config: GraphSearchConfig | None = None,
+    ) -> None:
         """
         Initialize hybrid search.
 
@@ -133,7 +133,7 @@ class HybridSearch:
     async def search(
         self,
         query: str,
-        project_id: Optional[str] = None,
+        project_id: str | None = None,
         limit: int = 10,
         include_episodes: bool = True,
         include_entities: bool = True,
@@ -178,9 +178,9 @@ class HybridSearch:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Collect results, handling any errors
-        vector_entity_results: List[SearchResultItem] = []
-        keyword_entity_results: List[SearchResultItem] = []
-        episode_results: List[SearchResultItem] = []
+        vector_entity_results: list[SearchResultItem] = []
+        keyword_entity_results: list[SearchResultItem] = []
+        episode_results: list[SearchResultItem] = []
 
         idx = 0
         if include_entities:
@@ -229,7 +229,7 @@ class HybridSearch:
             keyword_results_count=len(keyword_entity_results) + len(episode_results),
         )
 
-    def _apply_post_processing(self, items: List[SearchResultItem]) -> List[SearchResultItem]:
+    def _apply_post_processing(self, items: list[SearchResultItem]) -> list[SearchResultItem]:
         """Apply temporal decay and MMR re-ranking to search results.
 
         Pipeline order:
@@ -251,7 +251,7 @@ class HybridSearch:
 
         # 1. Temporal decay
         if self._search_config.enable_temporal_decay:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             for d in dicts:
                 created_at_str = d["metadata"].get("created_at")
                 if created_at_str:
@@ -284,9 +284,9 @@ class HybridSearch:
     async def vector_search(
         self,
         query: str,
-        project_id: Optional[str] = None,
+        project_id: str | None = None,
         limit: int = 10,
-    ) -> List[SearchResultItem]:
+    ) -> list[SearchResultItem]:
         """
         Perform vector-only search on entities.
 
@@ -303,11 +303,11 @@ class HybridSearch:
     async def keyword_search(
         self,
         query: str,
-        project_id: Optional[str] = None,
+        project_id: str | None = None,
         limit: int = 10,
         include_episodes: bool = True,
         include_entities: bool = True,
-    ) -> List[SearchResultItem]:
+    ) -> list[SearchResultItem]:
         """
         Perform keyword-only search.
 
@@ -349,9 +349,9 @@ class HybridSearch:
     async def _vector_search_entities(
         self,
         query: str,
-        project_id: Optional[str],
+        project_id: str | None,
         limit: int,
-    ) -> List[SearchResultItem]:
+    ) -> list[SearchResultItem]:
         """
         Vector search on entity nodes.
 
@@ -381,7 +381,7 @@ class HybridSearch:
         # Build query - request more results when filtering by project_id
         query_limit = limit * 2 if project_id else limit
         project_filter = ""
-        params: Dict[str, Any] = {
+        params: dict[str, Any] = {
             "limit": query_limit,
             "query_embedding": query_embedding,
         }
@@ -473,9 +473,9 @@ class HybridSearch:
     async def _keyword_search_entities(
         self,
         query: str,
-        project_id: Optional[str],
+        project_id: str | None,
         limit: int,
-    ) -> List[SearchResultItem]:
+    ) -> list[SearchResultItem]:
         """
         Keyword search on entity nodes using fulltext index.
 
@@ -491,7 +491,7 @@ class HybridSearch:
         escaped_query = self._escape_fulltext_query(query)
 
         project_filter = ""
-        params: Dict[str, Any] = {
+        params: dict[str, Any] = {
             "search_query": escaped_query,
             "limit": limit,
         }
@@ -543,9 +543,9 @@ class HybridSearch:
     async def _keyword_search_episodes(
         self,
         query: str,
-        project_id: Optional[str],
+        project_id: str | None,
         limit: int,
-    ) -> List[SearchResultItem]:
+    ) -> list[SearchResultItem]:
         """
         Keyword search on episode nodes using fulltext index.
 
@@ -560,7 +560,7 @@ class HybridSearch:
         escaped_query = self._escape_fulltext_query(query)
 
         project_filter = ""
-        params: Dict[str, Any] = {
+        params: dict[str, Any] = {
             "search_query": escaped_query,
             "limit": limit,
         }
@@ -609,11 +609,11 @@ class HybridSearch:
 
     def _rrf_fusion(
         self,
-        vector_results: List[SearchResultItem],
-        keyword_results: List[SearchResultItem],
+        vector_results: list[SearchResultItem],
+        keyword_results: list[SearchResultItem],
         vector_weight: float = DEFAULT_VECTOR_WEIGHT,
         keyword_weight: float = DEFAULT_KEYWORD_WEIGHT,
-    ) -> List[SearchResultItem]:
+    ) -> list[SearchResultItem]:
         """
         Combine results using Reciprocal Rank Fusion (RRF).
 
@@ -629,8 +629,8 @@ class HybridSearch:
             Combined and re-ranked results
         """
         # Build score maps
-        scores: Dict[str, float] = {}
-        items_map: Dict[str, SearchResultItem] = {}
+        scores: dict[str, float] = {}
+        items_map: dict[str, SearchResultItem] = {}
 
         # Process vector results
         for rank, item in enumerate(vector_results, start=1):
@@ -716,7 +716,7 @@ class EpisodeRetriever:
     Retriever for episodes with various filtering options.
     """
 
-    def __init__(self, neo4j_client: Neo4jClient):
+    def __init__(self, neo4j_client: Neo4jClient) -> None:
         """
         Initialize episode retriever.
 
@@ -728,7 +728,7 @@ class EpisodeRetriever:
     async def retrieve_by_uuid(
         self,
         uuid: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Retrieve a single episode by UUID.
 
@@ -753,7 +753,7 @@ class EpisodeRetriever:
         self,
         project_id: str,
         limit: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Retrieve recent episodes for a project.
 
@@ -778,7 +778,7 @@ class EpisodeRetriever:
     async def retrieve_by_memory_id(
         self,
         memory_id: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Retrieve episode by memory ID.
 
@@ -802,7 +802,7 @@ class EpisodeRetriever:
     async def retrieve_with_entities(
         self,
         uuid: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Retrieve episode with its mentioned entities.
 

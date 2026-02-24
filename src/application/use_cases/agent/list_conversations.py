@@ -4,7 +4,7 @@ This use case handles listing conversations for a project.
 """
 
 import logging
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.application.services.agent_service import AgentService
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class ListConversationsUseCase:
     """Use case for listing conversations."""
 
-    def __init__(self, agent_service: "AgentService"):
+    def __init__(self, agent_service: "AgentService") -> None:
         """
         Initialize the use case.
 
@@ -33,7 +33,7 @@ class ListConversationsUseCase:
         limit: int = 50,
         offset: int = 0,
         status: ConversationStatus | None = None,
-    ) -> List[Conversation]:
+    ) -> list[Conversation]:
         """
         Execute the use case.
 

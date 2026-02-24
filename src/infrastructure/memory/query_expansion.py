@@ -347,9 +347,7 @@ def _is_valid_keyword(token: str) -> bool:
         return False
     if token.isdigit():
         return False
-    if all(not c.isalnum() for c in token):
-        return False
-    return True
+    return not all(not c.isalnum() for c in token)
 
 
 def extract_keywords(query: str) -> list[str]:
@@ -397,5 +395,5 @@ def expand_query_for_fts(query: str) -> str:
     if not keywords:
         return query.strip()
 
-    parts = [query.strip()] + keywords
+    parts = [query.strip(), *keywords]
     return " | ".join(parts)

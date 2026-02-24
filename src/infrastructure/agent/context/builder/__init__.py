@@ -10,6 +10,6 @@ from src.infrastructure.agent.context.builder.attachment_injector import Attachm
 from src.infrastructure.agent.context.builder.message_builder import MessageBuilder
 
 __all__ = [
-    "MessageBuilder",
     "AttachmentInjector",
+    "MessageBuilder",
 ]

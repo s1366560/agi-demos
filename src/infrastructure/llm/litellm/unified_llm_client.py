@@ -9,7 +9,7 @@ abstraction layer.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from src.domain.llm_providers.llm_types import (
     DEFAULT_MAX_TOKENS,
@@ -54,8 +54,8 @@ class UnifiedLLMClient(LLMClient):
         self,
         litellm_client: LiteLLMClient,
         temperature: float = 0.7,
-        config: Optional[LLMConfig] = None,
-    ):
+        config: LLMConfig | None = None,
+    ) -> None:
         """
         Initialize the unified LLM client.
 
@@ -80,7 +80,7 @@ class UnifiedLLMClient(LLMClient):
     async def _generate_response(
         self,
         messages: list[Message],
-        response_model: Any = None,  # noqa: ANN401
+        response_model: Any = None,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         model_size: ModelSize = ModelSize.medium,
     ) -> dict[str, Any]:
@@ -111,7 +111,7 @@ class UnifiedLLMClient(LLMClient):
     async def ainvoke(
         self,
         messages: list[Message] | str,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> ChatResponse:
         """
         Async invoke method for chat completion.
@@ -148,7 +148,7 @@ class UnifiedLLMClient(LLMClient):
         self,
         system_prompt: str,
         user_message: str,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> ChatResponse:
         """
         Convenience method for simple system + user message chat.

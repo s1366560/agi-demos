@@ -3,8 +3,8 @@
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from src.domain.llm_providers.llm_types import LLMClient, Message as LLMMessage
 from src.domain.model.agent import (
@@ -33,9 +33,9 @@ class ConversationManager:
         self,
         conversation_repo: ConversationRepository,
         execution_repo: AgentExecutionRepository,
-        agent_execution_event_repo: Optional[AgentExecutionEventRepository] = None,
-        tool_execution_record_repo: Optional[ToolExecutionRecordRepository] = None,
-        execution_checkpoint_repo: Optional[ExecutionCheckpointRepository] = None,
+        agent_execution_event_repo: AgentExecutionEventRepository | None = None,
+        tool_execution_record_repo: ToolExecutionRecordRepository | None = None,
+        execution_checkpoint_repo: ExecutionCheckpointRepository | None = None,
     ) -> None:
         self._conversation_repo = conversation_repo
         self._execution_repo = execution_repo
@@ -49,7 +49,7 @@ class ConversationManager:
         user_id: str,
         tenant_id: str,
         title: str | None = None,
-        agent_config: Dict[str, Any] | None = None,
+        agent_config: dict[str, Any] | None = None,
     ) -> Conversation:
         """Create a new conversation."""
         conversation = Conversation(
@@ -60,9 +60,9 @@ class ConversationManager:
             title=title or "New Conversation",
             status=ConversationStatus.ACTIVE,
             agent_config=agent_config or {},
-            metadata={"created_at": datetime.now(timezone.utc).isoformat()},
+            metadata={"created_at": datetime.now(UTC).isoformat()},
             message_count=0,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         await self._conversation_repo.save(conversation)
@@ -271,7 +271,7 @@ Title:"""
         project_id: str,
         user_id: str,
         limit: int = 50,
-    ) -> list[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get the execution history for a conversation."""
         conversation = await self._conversation_repo.find_by_id(conversation_id)
         if not conversation:
@@ -311,7 +311,7 @@ Title:"""
 
     async def get_conversation_context(
         self, conversation_id: str, max_messages: int = 50
-    ) -> list[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get conversation context for agent processing."""
         message_events = await self._agent_execution_event_repo.get_message_events(
             conversation_id=conversation_id, limit=max_messages

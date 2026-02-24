@@ -337,7 +337,7 @@ class TestArgumentValidation:
     def test_truncated_arguments(self, executor):
         """Test truncated arguments return error."""
         args = {"_error": "truncated", "_message": "Content too large"}
-        validated, error = executor._validate_arguments("test_tool", args)
+        _validated, error = executor._validate_arguments("test_tool", args)
         assert "truncated" in error.lower() or "too large" in error.lower()
 
     def test_raw_arguments_valid_json(self, executor):
@@ -350,7 +350,7 @@ class TestArgumentValidation:
     def test_raw_arguments_invalid_json(self, executor):
         """Test _raw arguments with invalid JSON."""
         args = {"_raw": "not valid json"}
-        validated, error = executor._validate_arguments("test_tool", args)
+        _validated, error = executor._validate_arguments("test_tool", args)
         assert error is not None
         assert "Invalid JSON" in error
 

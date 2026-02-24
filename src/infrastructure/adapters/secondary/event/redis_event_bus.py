@@ -1,6 +1,7 @@
 import json
 import logging
-from typing import Any, AsyncIterator, Dict, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 import redis.asyncio as redis
 
@@ -23,14 +24,14 @@ class RedisEventBusAdapter(EventBusPort):
     - Message replay from any point
     """
 
-    def __init__(self, redis_client: redis.Redis):
+    def __init__(self, redis_client: redis.Redis) -> None:
         self._redis = redis_client
 
     # =========================================================================
     # Pub/Sub methods (legacy, kept for backward compatibility)
     # =========================================================================
 
-    async def publish(self, channel: str, message: Dict[str, Any]) -> int:
+    async def publish(self, channel: str, message: dict[str, Any]) -> int:
         """
         Publish a message to a Redis channel (Pub/Sub).
 
@@ -50,7 +51,7 @@ class RedisEventBusAdapter(EventBusPort):
             logger.error(f"Failed to publish to Redis channel {channel}: {e}")
             raise
 
-    async def subscribe(self, channel: str) -> AsyncIterator[Dict[str, Any]]:
+    async def subscribe(self, channel: str) -> AsyncIterator[dict[str, Any]]:
         """
         Subscribe to a Redis channel (Pub/Sub).
 
@@ -84,8 +85,8 @@ class RedisEventBusAdapter(EventBusPort):
     async def stream_add(
         self,
         stream_key: str,
-        message: Dict[str, Any],
-        maxlen: Optional[int] = None,
+        message: dict[str, Any],
+        maxlen: int | None = None,
     ) -> str:
         """
         Add a message to a Redis Stream.
@@ -124,9 +125,9 @@ class RedisEventBusAdapter(EventBusPort):
         self,
         stream_key: str,
         last_id: str = "0",
-        count: Optional[int] = None,
-        block_ms: Optional[int] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        count: int | None = None,
+        block_ms: int | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Read messages from a Redis Stream.
 
@@ -157,7 +158,7 @@ class RedisEventBusAdapter(EventBusPort):
                         return
                     continue
 
-                for stream_name, messages in streams:
+                for _stream_name, messages in streams:
                     for msg_id, fields in messages:
                         # Decode message ID
                         if isinstance(msg_id, bytes):
@@ -186,9 +187,9 @@ class RedisEventBusAdapter(EventBusPort):
         group_name: str,
         consumer_name: str,
         last_id: str = ">",
-        count: Optional[int] = None,
-        block_ms: Optional[int] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        count: int | None = None,
+        block_ms: int | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Read messages from a Redis Stream using consumer groups.
 
@@ -224,7 +225,7 @@ class RedisEventBusAdapter(EventBusPort):
                         return
                     continue
 
-                for stream_name, messages in streams:
+                for _stream_name, messages in streams:
                     for msg_id, fields in messages:
                         # Decode message ID
                         if isinstance(msg_id, bytes):
@@ -317,7 +318,7 @@ class RedisEventBusAdapter(EventBusPort):
         stream_key: str,
         group_name: str,
         count: int = 10,
-    ) -> list[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get pending messages for a consumer group (messages not yet acknowledged).
 
@@ -365,7 +366,7 @@ class RedisEventBusAdapter(EventBusPort):
         consumer_name: str,
         min_idle_ms: int,
         message_ids: list[str],
-    ) -> list[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Claim pending messages from another consumer (for recovery).
 
@@ -456,7 +457,7 @@ class RedisEventBusAdapter(EventBusPort):
     async def publish_to_stream(
         self,
         conversation_id: str,
-        event: Dict[str, Any],
+        event: dict[str, Any],
         maxlen: int = 1000,
     ) -> str:
         """
@@ -490,7 +491,7 @@ class RedisEventBusAdapter(EventBusPort):
         conversation_id: str,
         last_seq: int = 0,
         block_ms: int = 5000,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Subscribe to agent events using Redis Stream.
 

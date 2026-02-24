@@ -1,7 +1,6 @@
 """Channel configuration database models."""
 
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -53,38 +52,38 @@ class ChannelConfigModel(IdGeneratorMixin, Base):
     )
     
     # Credentials (should be encrypted in production)
-    app_id: Mapped[Optional[str]] = mapped_column(
+    app_id: Mapped[str | None] = mapped_column(
         String, 
         nullable=True,
         comment="App ID for the channel"
     )
-    app_secret: Mapped[Optional[str]] = mapped_column(
+    app_secret: Mapped[str | None] = mapped_column(
         String, 
         nullable=True,
         comment="App secret (encrypted)"
     )
-    encrypt_key: Mapped[Optional[str]] = mapped_column(
+    encrypt_key: Mapped[str | None] = mapped_column(
         String, 
         nullable=True,
         comment="Encrypt key for webhook verification"
     )
-    verification_token: Mapped[Optional[str]] = mapped_column(
+    verification_token: Mapped[str | None] = mapped_column(
         String, 
         nullable=True,
         comment="Verification token for webhook"
     )
     
     # Webhook settings
-    webhook_url: Mapped[Optional[str]] = mapped_column(
+    webhook_url: Mapped[str | None] = mapped_column(
         String, 
         nullable=True,
         comment="Webhook URL for receiving events"
     )
-    webhook_port: Mapped[Optional[int]] = mapped_column(
+    webhook_port: Mapped[int | None] = mapped_column(
         nullable=True,
         comment="Webhook server port"
     )
-    webhook_path: Mapped[Optional[str]] = mapped_column(
+    webhook_path: Mapped[str | None] = mapped_column(
         String, 
         nullable=True,
         comment="Webhook endpoint path"
@@ -103,12 +102,12 @@ class ChannelConfigModel(IdGeneratorMixin, Base):
         nullable=False,
         comment="Group policy: open, allowlist, disabled",
     )
-    allow_from: Mapped[Optional[list]] = mapped_column(
+    allow_from: Mapped[list | None] = mapped_column(
         JSON,
         nullable=True,
         comment="Allowlist of user IDs for DM access (wildcard * = all)",
     )
-    group_allow_from: Mapped[Optional[list]] = mapped_column(
+    group_allow_from: Mapped[list | None] = mapped_column(
         JSON,
         nullable=True,
         comment="Allowlist of group/chat IDs allowed to trigger the agent",
@@ -120,12 +119,12 @@ class ChannelConfigModel(IdGeneratorMixin, Base):
     )
 
     # Channel-specific settings
-    domain: Mapped[Optional[str]] = mapped_column(
+    domain: Mapped[str | None] = mapped_column(
         String,
         default="feishu",
         comment="Domain: feishu, lark, or custom"
     )
-    extra_settings: Mapped[Optional[dict]] = mapped_column(
+    extra_settings: Mapped[dict | None] = mapped_column(
         JSON,
         nullable=True,
         comment="Additional channel-specific settings"
@@ -137,19 +136,19 @@ class ChannelConfigModel(IdGeneratorMixin, Base):
         default="disconnected",
         comment="Connection status: connected, disconnected, error"
     )
-    last_error: Mapped[Optional[str]] = mapped_column(
+    last_error: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Last error message if any"
     )
     
     # Metadata
-    description: Mapped[Optional[str]] = mapped_column(
+    description: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Optional description"
     )
-    created_by: Mapped[Optional[str]] = mapped_column(
+    created_by: Mapped[str | None] = mapped_column(
         String,
         ForeignKey("users.id"),
         nullable=True,
@@ -158,7 +157,7 @@ class ChannelConfigModel(IdGeneratorMixin, Base):
         DateTime(timezone=True), 
         server_default=func.now()
     )
-    updated_at: Mapped[Optional[datetime]] = mapped_column(
+    updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), 
         onupdate=func.now(),
         nullable=True
@@ -228,7 +227,7 @@ class ChannelMessageModel(IdGeneratorMixin, Base):
         index=True,
         nullable=False,
     )
-    sender_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    sender_name: Mapped[str | None] = mapped_column(String, nullable=True)
     
     # Content
     message_type: Mapped[str] = mapped_column(
@@ -236,23 +235,23 @@ class ChannelMessageModel(IdGeneratorMixin, Base):
         nullable=False,
         comment="text, image, file, card, etc."
     )
-    content_text: Mapped[Optional[str]] = mapped_column(
+    content_text: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
     )
-    content_data: Mapped[Optional[dict]] = mapped_column(
+    content_data: Mapped[dict | None] = mapped_column(
         JSON,
         nullable=True,
         comment="Structured content data"
     )
     
     # Reply info
-    reply_to: Mapped[Optional[str]] = mapped_column(
+    reply_to: Mapped[str | None] = mapped_column(
         String,
         nullable=True,
         comment="ID of message being replied to"
     )
-    mentions: Mapped[Optional[list]] = mapped_column(
+    mentions: Mapped[list | None] = mapped_column(
         JSON,
         nullable=True,
         comment="List of mentioned user IDs"
@@ -266,7 +265,7 @@ class ChannelMessageModel(IdGeneratorMixin, Base):
     )
     
     # Raw data for debugging
-    raw_data: Mapped[Optional[dict]] = mapped_column(
+    raw_data: Mapped[dict | None] = mapped_column(
         JSON,
         nullable=True,
         comment="Original message data from channel"
@@ -322,15 +321,15 @@ class ChannelSessionBindingModel(IdGeneratorMixin, Base):
     channel_type: Mapped[str] = mapped_column(String, nullable=False)
     chat_id: Mapped[str] = mapped_column(String, nullable=False)
     chat_type: Mapped[str] = mapped_column(String, nullable=False)
-    thread_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    topic_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    thread_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    topic_id: Mapped[str | None] = mapped_column(String, nullable=True)
     session_key: Mapped[str] = mapped_column(String(512), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
-    updated_at: Mapped[Optional[datetime]] = mapped_column(
+    updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         onupdate=func.now(),
         nullable=True,
@@ -388,7 +387,7 @@ class ChannelOutboxModel(IdGeneratorMixin, Base):
         nullable=False,
     )
     chat_id: Mapped[str] = mapped_column(String, nullable=False)
-    reply_to_channel_message_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    reply_to_channel_message_id: Mapped[str | None] = mapped_column(String, nullable=True)
     content_text: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(
         String(20),
@@ -398,16 +397,16 @@ class ChannelOutboxModel(IdGeneratorMixin, Base):
     )
     attempt_count: Mapped[int] = mapped_column(default=0, nullable=False)
     max_attempts: Mapped[int] = mapped_column(default=3, nullable=False)
-    sent_channel_message_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    last_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    next_retry_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    metadata_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    sent_channel_message_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
-    updated_at: Mapped[Optional[datetime]] = mapped_column(
+    updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         onupdate=func.now(),
         nullable=True,

@@ -14,13 +14,13 @@ from src.application.use_cases.agent.list_conversations import ListConversations
 from src.application.use_cases.agent.synthesize_results import SynthesizeResultsUseCase
 
 __all__ = [
-    "CreateConversationUseCase",
-    "ListConversationsUseCase",
-    "GetConversationUseCase",
     "ChatUseCase",
-    "ExecuteStepUseCase",
-    "SynthesizeResultsUseCase",
-    "FindSimilarPattern",
-    "LearnPattern",
     "ComposeToolsUseCase",
+    "CreateConversationUseCase",
+    "ExecuteStepUseCase",
+    "FindSimilarPattern",
+    "GetConversationUseCase",
+    "LearnPattern",
+    "ListConversationsUseCase",
+    "SynthesizeResultsUseCase",
 ]

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
@@ -30,10 +30,10 @@ class PluginManagerTool(AgentTool):
 
     def __init__(
         self,
-        tenant_id: Optional[str],
-        project_id: Optional[str],
+        tenant_id: str | None,
+        project_id: str | None,
         *,
-        mutation_ledger: Optional[MutationLedger] = None,
+        mutation_ledger: MutationLedger | None = None,
         mutation_loop_threshold: int = 10,
         mutation_loop_window_seconds: int = 120,
     ) -> None:
@@ -60,7 +60,7 @@ class PluginManagerTool(AgentTool):
         self._pending_events.clear()
         return events
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get tool parameter schema for function calling."""
         return {
             "type": "object",
@@ -86,7 +86,7 @@ class PluginManagerTool(AgentTool):
             "required": [],
         }
 
-    async def execute(self, **kwargs: Any) -> Dict[str, Any]:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> dict[str, Any]:
         """Execute plugin management operation."""
         action = str(kwargs.get("action", "list")).strip().lower() or "list"
         dry_run = self._as_bool(kwargs.get("dry_run", False))
@@ -884,12 +884,12 @@ class PluginManagerTool(AgentTool):
         self,
         *,
         action: str,
-        plugin_name: Optional[str],
+        plugin_name: str | None,
         trace_id: str,
-        mutation_fingerprint: Optional[str],
-        reload_plan: Dict[str, Any],
-        rollback: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        mutation_fingerprint: str | None,
+        reload_plan: dict[str, Any],
+        rollback: dict[str, Any],
+    ) -> dict[str, Any]:
         lifecycle = SelfModifyingLifecycleOrchestrator.run_post_change(
             source=TOOL_NAME,
             tenant_id=self._tenant_id,
@@ -916,12 +916,12 @@ class PluginManagerTool(AgentTool):
         self,
         *,
         action: str,
-        plugin_name: Optional[str],
-        lifecycle: Dict[str, Any],
+        plugin_name: str | None,
+        lifecycle: dict[str, Any],
         trace_id: str,
-        mutation_fingerprint: Optional[str],
-        reload_plan: Dict[str, Any],
-        details: Dict[str, Any],
+        mutation_fingerprint: str | None,
+        reload_plan: dict[str, Any],
+        details: dict[str, Any],
     ) -> None:
         self._pending_events.append(
             {
@@ -938,19 +938,19 @@ class PluginManagerTool(AgentTool):
                     "details": details,
                     "lifecycle": lifecycle,
                 },
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
         )
 
     def _build_reload_plan(
         self,
         *,
-        manager: Any,  # noqa: ANN401
+        manager: Any,
         action: str,
-        plugin_name: Optional[str],
+        plugin_name: str | None,
         dry_run: bool,
-        reason: Optional[str],
-    ) -> Dict[str, Any]:
+        reason: str | None,
+    ) -> dict[str, Any]:
         plugins, diagnostics = manager.list_plugins(tenant_id=self._tenant_id)
         return build_plugin_reload_plan(
             action=action,
@@ -966,10 +966,10 @@ class PluginManagerTool(AgentTool):
         self,
         *,
         action: str,
-        plugin_name: Optional[str],
-        requirement: Optional[str] = None,
-    ) -> Optional[str]:
-        payload: Dict[str, Any] = {
+        plugin_name: str | None,
+        requirement: str | None = None,
+    ) -> str | None:
+        payload: dict[str, Any] = {
             "action": action,
             "plugin_name": plugin_name,
             "requirement": requirement,
@@ -981,9 +981,9 @@ class PluginManagerTool(AgentTool):
         }
         return build_mutation_fingerprint(TOOL_NAME, normalized_payload)
 
-    def _snapshot_plugin_inventory(self, manager: Any) -> list[Dict[str, Any]]:  # noqa: ANN401
+    def _snapshot_plugin_inventory(self, manager: Any) -> list[dict[str, Any]]:
         plugins, _diagnostics = manager.list_plugins(tenant_id=self._tenant_id)
-        snapshot: list[Dict[str, Any]] = []
+        snapshot: list[dict[str, Any]] = []
         for plugin in plugins:
             snapshot.append(
                 {
@@ -1006,9 +1006,9 @@ class PluginManagerTool(AgentTool):
     @staticmethod
     def _build_provenance_summary(
         *,
-        before_snapshot: list[Dict[str, Any]],
-        after_snapshot: list[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        before_snapshot: list[dict[str, Any]],
+        after_snapshot: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         before_by_name = {item["name"]: item for item in before_snapshot}
         after_by_name = {item["name"]: item for item in after_snapshot}
         before_names = set(before_by_name.keys())
@@ -1027,7 +1027,7 @@ class PluginManagerTool(AgentTool):
             "after_snapshot": after_snapshot,
         }
 
-    def _evaluate_mutation_guard(self, mutation_fingerprint: Optional[str]) -> Dict[str, Any]:
+    def _evaluate_mutation_guard(self, mutation_fingerprint: str | None) -> dict[str, Any]:
         guard = {
             "blocked": False,
             "recent_count": 0,
@@ -1050,16 +1050,16 @@ class PluginManagerTool(AgentTool):
         *,
         trace_id: str,
         action: str,
-        plugin_name: Optional[str],
-        requirement: Optional[str],
-        mutation_fingerprint: Optional[str],
+        plugin_name: str | None,
+        requirement: str | None,
+        mutation_fingerprint: str | None,
         status: str,
         dry_run: bool,
-        rollback: Dict[str, Any],
+        rollback: dict[str, Any],
         message: str,
-        details: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {
+        details: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "trace_id": trace_id,
             "source": TOOL_NAME,
             "tenant_id": self._tenant_id,
@@ -1080,12 +1080,12 @@ class PluginManagerTool(AgentTool):
         self,
         *,
         action: str,
-        plugin_name: Optional[str],
-        before_snapshot: list[Dict[str, Any]],
-        requirement: Optional[str] = None,
-        provenance: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        rollback: Dict[str, Any] = {
+        plugin_name: str | None,
+        before_snapshot: list[dict[str, Any]],
+        requirement: str | None = None,
+        provenance: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        rollback: dict[str, Any] = {
             "source_action": action,
             "available": False,
             "action": None,
@@ -1158,9 +1158,9 @@ class PluginManagerTool(AgentTool):
 
     @staticmethod
     def _resolve_requirement_for_plugin(
-        snapshot: list[Dict[str, Any]],
-        plugin_name: Optional[str],
-    ) -> Optional[str]:
+        snapshot: list[dict[str, Any]],
+        plugin_name: str | None,
+    ) -> str | None:
         if not plugin_name:
             return None
         plugin = next(
@@ -1194,8 +1194,8 @@ class PluginManagerTool(AgentTool):
         *,
         trace_id: str,
         action: str,
-        plugin_name: Optional[str],
-        requirement: Optional[str],
+        plugin_name: str | None,
+        requirement: str | None,
     ) -> MutationTransaction:
         return MutationTransaction(
             source=TOOL_NAME,
@@ -1208,7 +1208,7 @@ class PluginManagerTool(AgentTool):
         )
 
     @staticmethod
-    def _as_bool(value: Any) -> bool:  # noqa: ANN401
+    def _as_bool(value: Any) -> bool:
         if isinstance(value, bool):
             return value
         if isinstance(value, str):
@@ -1216,7 +1216,7 @@ class PluginManagerTool(AgentTool):
         return bool(value)
 
     @staticmethod
-    def _format_plugin_list(plugins: list[Dict[str, Any]]) -> str:
+    def _format_plugin_list(plugins: list[dict[str, Any]]) -> str:
         if not plugins:
             return "No plugins discovered."
         lines = []
@@ -1228,7 +1228,7 @@ class PluginManagerTool(AgentTool):
         return "\n".join(lines)
 
     @staticmethod
-    def _error_response(message: str, **extra: Any) -> Dict[str, Any]:  # noqa: ANN401
+    def _error_response(message: str, **extra: Any) -> dict[str, Any]:
         return {
             "title": "Plugin Manager Failed",
             "output": f"Error: {message}",
@@ -1240,7 +1240,7 @@ class PluginManagerTool(AgentTool):
         }
 
 
-def _serialize_diagnostic(diagnostic: Any) -> Dict[str, Any]:  # noqa: ANN401
+def _serialize_diagnostic(diagnostic: Any) -> dict[str, Any]:
     return {
         "plugin_name": diagnostic.plugin_name,
         "code": diagnostic.code,

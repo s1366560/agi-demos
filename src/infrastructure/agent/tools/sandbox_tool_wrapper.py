@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -39,10 +39,10 @@ class SandboxMCPToolWrapper(AgentTool):
         self,
         sandbox_id: str,
         tool_name: str,
-        tool_schema: Dict[str, Any],
+        tool_schema: dict[str, Any],
         sandbox_adapter: SandboxPort,
-        retry_config: Optional[RetryConfig] = None,
-    ):
+        retry_config: RetryConfig | None = None,
+    ) -> None:
         """
         Initialize the wrapper.
 
@@ -76,7 +76,7 @@ class SandboxMCPToolWrapper(AgentTool):
             f"tool={tool_name}, permission={self.permission}"
         )
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get parameters schema from MCP tool schema."""
         input_schema = self._schema.get("input_schema", {})
 
@@ -103,7 +103,7 @@ class SandboxMCPToolWrapper(AgentTool):
             "required": required,
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         """Validate arguments against the MCP tool schema."""
         input_schema = self._schema.get("input_schema", {})
 
@@ -113,7 +113,7 @@ class SandboxMCPToolWrapper(AgentTool):
         required = input_schema.get("required", [])
         return all(arg in kwargs for arg in required)
 
-    async def execute(self, **kwargs: Any) -> Any:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> Any:
         """
         Execute the tool with automatic error handling and retry.
 
@@ -125,8 +125,8 @@ class SandboxMCPToolWrapper(AgentTool):
         """
         import time
 
-        last_error: Optional[MCPToolError] = None
-        configured_timeout_s: Optional[float] = None
+        last_error: MCPToolError | None = None
+        configured_timeout_s: float | None = None
 
         # Extract configured timeout from tool arguments for duration-aware classification
         tool_timeout = kwargs.get("timeout")

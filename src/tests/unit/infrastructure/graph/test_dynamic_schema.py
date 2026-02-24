@@ -252,7 +252,7 @@ class TestGetProjectSchemaContext:
             # Create mock result for EntityType query
             entity_result = MagicMock()
             entity_scalars = MagicMock()
-            entity_scalars.all.return_value = mock_default_types + [mock_entity_type]
+            entity_scalars.all.return_value = [*mock_default_types, mock_entity_type]
             entity_result.scalars.return_value = entity_scalars
 
             # Create empty result for EdgeTypeMap query

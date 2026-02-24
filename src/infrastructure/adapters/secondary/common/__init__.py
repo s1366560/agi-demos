@@ -59,35 +59,35 @@ __all__ = [
     # Repository patterns
     "BaseRepository",
     "CachedRepositoryMixin",
-    "QueryBuilder",
-    "TransactionManager",
-    # Decorators
-    "handle_db_errors",
-    "transactional",
-    # Health check
-    "HealthCheckError",
-    "HealthStatus",
-    "PostgresHealthChecker",
-    "RedisHealthChecker",
-    "Neo4jHealthChecker",
-    "SystemHealthChecker",
-    # Retry logic
-    "TransientError",
-    "MaxRetriesExceededError",
-    "is_transient_error",
-    "retry_with_backoff",
-    "retry_decorator",
     # Circuit breaker
     "CircuitBreaker",
     "CircuitBreakerConfig",
-    "CircuitState",
     "CircuitBreakerOpenError",
-    "get_circuit_breaker",
+    "CircuitState",
+    # Health check
+    "HealthCheckError",
+    "HealthStatus",
+    "MaxRetriesExceededError",
+    "Neo4jHealthChecker",
+    "PostgresHealthChecker",
+    "QueryBuilder",
+    "QueryInfo",
     # Query monitoring
     "QueryMonitor",
     "QueryMonitorConfig",
-    "QueryInfo",
     "QueryStats",
+    "RedisHealthChecker",
     "SlowQueryError",
+    "SystemHealthChecker",
+    "TransactionManager",
+    # Retry logic
+    "TransientError",
+    "get_circuit_breaker",
     "get_query_monitor",
+    # Decorators
+    "handle_db_errors",
+    "is_transient_error",
+    "retry_decorator",
+    "retry_with_backoff",
+    "transactional",
 ]

@@ -23,11 +23,11 @@ def get_permission_manager() -> PermissionManager:
 
 __all__ = [
     "PermissionAction",
-    "PermissionRule",
-    "PermissionManager",
-    "PermissionRequest",
-    "PermissionError",
     "PermissionDeniedError",
+    "PermissionError",
+    "PermissionManager",
     "PermissionRejectedError",
+    "PermissionRequest",
+    "PermissionRule",
     "get_permission_manager",
 ]

@@ -21,8 +21,8 @@ Key Design Decisions:
 import json
 import logging
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -53,24 +53,24 @@ class HITLAgentState:
     # HITL request info
     hitl_request_id: str
     hitl_type: str
-    hitl_request_data: Dict[str, Any]
+    hitl_request_data: dict[str, Any]
 
     # Conversation state
-    messages: List[Dict[str, Any]] = field(default_factory=list)
+    messages: list[dict[str, Any]] = field(default_factory=list)
     user_message: str = ""
     user_id: str = ""
-    correlation_id: Optional[str] = None
+    correlation_id: str | None = None
 
     # Execution state
     step_count: int = 0
     current_plan_step: int = 0
-    work_plan_id: Optional[str] = None
-    work_plan_steps: List[Dict[str, Any]] = field(default_factory=list)
+    work_plan_id: str | None = None
+    work_plan_steps: list[dict[str, Any]] = field(default_factory=list)
     last_event_time_us: int = 0
     last_event_counter: int = 0
 
     # Pending tool calls (serialized)
-    pending_tool_calls: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    pending_tool_calls: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     # Current message being built
     current_message_text: str = ""
@@ -82,18 +82,18 @@ class HITLAgentState:
     total_output_tokens: int = 0
 
     # Metadata
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     timeout_seconds: float = 300.0
 
     # Pending HITL tool call ID (for injecting tool result on resume)
-    pending_tool_call_id: Optional[str] = None
+    pending_tool_call_id: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "HITLAgentState":
+    def from_dict(cls, data: dict[str, Any]) -> "HITLAgentState":
         """Create from dictionary."""
         # Handle backward compatibility for old states without pending_tool_call_id
         known_fields = {f.name for f in cls.__dataclass_fields__.values()}
@@ -129,7 +129,7 @@ class HITLStateStore:
     # Default TTL buffer (added to HITL timeout)
     TTL_BUFFER_SECONDS = 60
 
-    def __init__(self, redis_client):
+    def __init__(self, redis_client) -> None:
         """
         Initialize state store.
 
@@ -154,7 +154,7 @@ class HITLStateStore:
     async def save_state(
         self,
         state: HITLAgentState,
-        ttl_seconds: Optional[float] = None,
+        ttl_seconds: float | None = None,
     ) -> str:
         """
         Save Agent state to Redis.
@@ -188,7 +188,7 @@ class HITLStateStore:
 
         return state_key
 
-    async def load_state(self, state_key: str) -> Optional[HITLAgentState]:
+    async def load_state(self, state_key: str) -> HITLAgentState | None:
         """
         Load Agent state from Redis.
 
@@ -222,7 +222,7 @@ class HITLStateStore:
     async def load_state_by_request(
         self,
         request_id: str,
-    ) -> Optional[HITLAgentState]:
+    ) -> HITLAgentState | None:
         """
         Load Agent state by HITL request ID.
 

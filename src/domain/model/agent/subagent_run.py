@@ -2,9 +2,9 @@
 
 import uuid
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class SubAgentRunStatus(str, Enum):
@@ -27,14 +27,14 @@ class SubAgentRun:
     task: str
     run_id: str = field(default_factory=lambda: uuid.uuid4().hex)
     status: SubAgentRunStatus = SubAgentRunStatus.PENDING
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    started_at: Optional[datetime] = None
-    ended_at: Optional[datetime] = None
-    summary: Optional[str] = None
-    error: Optional[str] = None
-    execution_time_ms: Optional[int] = None
-    tokens_used: Optional[int] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    summary: str | None = None
+    error: str | None = None
+    execution_time_ms: int | None = None
+    tokens_used: int | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.run_id or not self.run_id.strip():
@@ -46,13 +46,13 @@ class SubAgentRun:
         if not self.task or not self.task.strip():
             raise ValueError("task cannot be empty")
 
-    def start(self, now: Optional[datetime] = None) -> "SubAgentRun":
+    def start(self, now: datetime | None = None) -> "SubAgentRun":
         """Mark run as running."""
         if self.status is not SubAgentRunStatus.PENDING:
             raise ValueError(
                 f"Invalid status transition: {self.status.value} -> {SubAgentRunStatus.RUNNING.value}"
             )
-        timestamp = now or datetime.now(timezone.utc)
+        timestamp = now or datetime.now(UTC)
         return replace(
             self,
             status=SubAgentRunStatus.RUNNING,
@@ -63,17 +63,17 @@ class SubAgentRun:
 
     def complete(
         self,
-        summary: Optional[str] = None,
-        tokens_used: Optional[int] = None,
-        execution_time_ms: Optional[int] = None,
-        now: Optional[datetime] = None,
+        summary: str | None = None,
+        tokens_used: int | None = None,
+        execution_time_ms: int | None = None,
+        now: datetime | None = None,
     ) -> "SubAgentRun":
         """Mark run as completed."""
         if self.status is not SubAgentRunStatus.RUNNING:
             raise ValueError(
                 f"Invalid status transition: {self.status.value} -> {SubAgentRunStatus.COMPLETED.value}"
             )
-        timestamp = now or datetime.now(timezone.utc)
+        timestamp = now or datetime.now(UTC)
         return replace(
             self,
             status=SubAgentRunStatus.COMPLETED,
@@ -89,15 +89,15 @@ class SubAgentRun:
     def fail(
         self,
         error: str,
-        execution_time_ms: Optional[int] = None,
-        now: Optional[datetime] = None,
+        execution_time_ms: int | None = None,
+        now: datetime | None = None,
     ) -> "SubAgentRun":
         """Mark run as failed."""
         if self.status is not SubAgentRunStatus.RUNNING:
             raise ValueError(
                 f"Invalid status transition: {self.status.value} -> {SubAgentRunStatus.FAILED.value}"
             )
-        timestamp = now or datetime.now(timezone.utc)
+        timestamp = now or datetime.now(UTC)
         return replace(
             self,
             status=SubAgentRunStatus.FAILED,
@@ -108,13 +108,13 @@ class SubAgentRun:
             ),
         )
 
-    def cancel(self, reason: Optional[str] = None, now: Optional[datetime] = None) -> "SubAgentRun":
+    def cancel(self, reason: str | None = None, now: datetime | None = None) -> "SubAgentRun":
         """Mark run as cancelled."""
         if self.status not in {SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING}:
             raise ValueError(
                 f"Invalid status transition: {self.status.value} -> {SubAgentRunStatus.CANCELLED.value}"
             )
-        timestamp = now or datetime.now(timezone.utc)
+        timestamp = now or datetime.now(UTC)
         return replace(
             self,
             status=SubAgentRunStatus.CANCELLED,
@@ -123,14 +123,14 @@ class SubAgentRun:
         )
 
     def time_out(
-        self, reason: str = "SubAgent execution timed out", now: Optional[datetime] = None
+        self, reason: str = "SubAgent execution timed out", now: datetime | None = None
     ) -> "SubAgentRun":
         """Mark run as timed out."""
         if self.status not in {SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING}:
             raise ValueError(
                 f"Invalid status transition: {self.status.value} -> {SubAgentRunStatus.TIMED_OUT.value}"
             )
-        timestamp = now or datetime.now(timezone.utc)
+        timestamp = now or datetime.now(UTC)
         return replace(
             self,
             status=SubAgentRunStatus.TIMED_OUT,
@@ -138,7 +138,7 @@ class SubAgentRun:
             error=reason,
         )
 
-    def to_event_data(self) -> Dict[str, Any]:
+    def to_event_data(self) -> dict[str, Any]:
         """Serialize to stream-friendly event payload."""
         return {
             "run_id": self.run_id,

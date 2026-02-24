@@ -14,8 +14,8 @@ import hmac
 import logging
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -39,16 +39,16 @@ class SandboxAccessToken:
 
     def is_expired(self) -> bool:
         """Check if token has expired."""
-        return datetime.now(timezone.utc) > self.expires_at
+        return datetime.now(UTC) > self.expires_at
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API response."""
         return {
             "token": self.token,
             "project_id": self.project_id,
             "sandbox_type": self.sandbox_type,
             "expires_at": self.expires_at.isoformat(),
-            "expires_in": max(0, int((self.expires_at - datetime.now(timezone.utc)).total_seconds())),
+            "expires_in": max(0, int((self.expires_at - datetime.now(UTC)).total_seconds())),
         }
 
 
@@ -57,11 +57,11 @@ class TokenValidationResult:
     """Result of token validation."""
 
     valid: bool
-    project_id: Optional[str] = None
-    user_id: Optional[str] = None
-    tenant_id: Optional[str] = None
-    sandbox_type: Optional[str] = None
-    error: Optional[str] = None
+    project_id: str | None = None
+    user_id: str | None = None
+    tenant_id: str | None = None
+    sandbox_type: str | None = None
+    error: str | None = None
 
 
 class SandboxTokenService:
@@ -78,8 +78,8 @@ class SandboxTokenService:
         self,
         secret_key: str,
         token_ttl: int = DEFAULT_TOKEN_TTL,
-        token_store: Optional[Dict[str, Dict[str, Any]]] = None,
-    ):
+        token_store: dict[str, dict[str, Any]] | None = None,
+    ) -> None:
         """Initialize token service.
 
         Args:
@@ -90,7 +90,7 @@ class SandboxTokenService:
         self._secret_key = secret_key.encode() if isinstance(secret_key, str) else secret_key
         self._token_ttl = token_ttl
         # In-memory store for simple deployments; use Redis for production
-        self._tokens: Dict[str, Dict[str, Any]] = token_store if token_store is not None else {}
+        self._tokens: dict[str, dict[str, Any]] = token_store if token_store is not None else {}
 
     def generate_token(
         self,
@@ -98,7 +98,7 @@ class SandboxTokenService:
         user_id: str,
         tenant_id: str,
         sandbox_type: str = "cloud",
-        ttl_override: Optional[int] = None,
+        ttl_override: int | None = None,
     ) -> SandboxAccessToken:
         """Generate a new sandbox access token.
 
@@ -112,7 +112,7 @@ class SandboxTokenService:
         Returns:
             SandboxAccessToken with token string and metadata
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         ttl = ttl_override if ttl_override is not None else self._token_ttl
         expires_at = now + timedelta(seconds=ttl)
 
@@ -159,7 +159,7 @@ class SandboxTokenService:
     def validate_token(
         self,
         token: str,
-        project_id: Optional[str] = None,
+        project_id: str | None = None,
     ) -> TokenValidationResult:
         """Validate a sandbox access token.
 
@@ -182,7 +182,7 @@ class SandboxTokenService:
         # Check expiration
         try:
             expires_at = datetime.fromisoformat(token_data["expires_at"])
-            if datetime.now(timezone.utc) > expires_at:
+            if datetime.now(UTC) > expires_at:
                 # Clean up expired token
                 del self._tokens[token]
                 logger.info(f"Token expired for project={token_data.get('project_id')}")
@@ -249,7 +249,7 @@ class SandboxTokenService:
         Returns:
             Number of tokens cleaned up
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expired = [
             token
             for token, data in self._tokens.items()
@@ -279,7 +279,7 @@ class SandboxTokenService:
             hashlib.sha256,
         ).hexdigest()  # Full SHA256 for security
 
-    def get_active_token_count(self, project_id: Optional[str] = None) -> int:
+    def get_active_token_count(self, project_id: str | None = None) -> int:
         """Get count of active (non-expired) tokens.
 
         Args:
@@ -288,9 +288,9 @@ class SandboxTokenService:
         Returns:
             Count of active tokens
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         count = 0
-        for token, data in self._tokens.items():
+        for _token, data in self._tokens.items():
             try:
                 expires_at = datetime.fromisoformat(data.get("expires_at", "1970-01-01"))
                 if expires_at > now:

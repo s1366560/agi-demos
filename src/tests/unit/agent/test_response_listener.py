@@ -246,7 +246,7 @@ class TestListenLoop:
         # Wait for message processing with timeout
         try:
             await asyncio.wait_for(message_delivered.wait(), timeout=2.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass  # Test will fail on assertion anyway
 
         # Stop

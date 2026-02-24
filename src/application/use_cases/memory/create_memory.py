@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -19,12 +19,12 @@ class CreateMemoryCommand(BaseModel):
     author_id: str
     tenant_id: str
     content_type: str = "text"
-    tags: Optional[List[str]] = Field(default=None)
-    entities: Optional[List[Dict[str, Any]]] = Field(default=None)
-    relationships: Optional[List[Dict[str, Any]]] = Field(default=None)
-    collaborators: Optional[List[str]] = Field(default=None)
+    tags: list[str] | None = Field(default=None)
+    entities: list[dict[str, Any]] | None = Field(default=None)
+    relationships: list[dict[str, Any]] | None = Field(default=None)
+    collaborators: list[str] | None = Field(default=None)
     is_public: bool = False
-    metadata: Optional[Dict[str, Any]] = Field(default=None)
+    metadata: dict[str, Any] | None = Field(default=None)
 
     @field_validator("project_id", "title", "content", "author_id", "tenant_id")
     @classmethod
@@ -35,7 +35,7 @@ class CreateMemoryCommand(BaseModel):
 
 
 class CreateMemoryUseCase:
-    def __init__(self, memory_repository: MemoryRepository, graph_service: GraphServicePort):
+    def __init__(self, memory_repository: MemoryRepository, graph_service: GraphServicePort) -> None:
         self._memory_repo = memory_repository
         self._graph_service = graph_service
 

@@ -12,7 +12,7 @@ import asyncio
 import json
 import os
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 # Add project to path
 sys.path.insert(0, os.getcwd())
@@ -25,7 +25,7 @@ from src.infrastructure.agent.processor import ProcessorConfig, SessionProcessor
 class MockTool:
     """Mock tool for testing."""
     
-    def __init__(self, name: str, description: str = ""):
+    def __init__(self, name: str, description: str = "") -> None:
         self.name = name
         self.description = description or f"Tool: {name}"
     
@@ -33,7 +33,7 @@ class MockTool:
         return f"Result from {self.name}"
 
 
-def create_mock_tool_def(name: str, permission: Optional[str] = None) -> ToolDefinition:
+def create_mock_tool_def(name: str, permission: str | None = None) -> ToolDefinition:
     """Create a mock tool definition."""
     
     async def execute(**kwargs):
@@ -57,9 +57,9 @@ def create_mock_tool_def(name: str, permission: Optional[str] = None) -> ToolDef
 class MultiHITLTest:
     """Test multiple HITL scenarios."""
     
-    def __init__(self):
-        self.hitl_responses: Dict[str, Dict[str, Any]] = {}
-        self.events: List[Dict[str, Any]] = []
+    def __init__(self) -> None:
+        self.hitl_responses: dict[str, dict[str, Any]] = {}
+        self.events: list[dict[str, Any]] = []
         
     async def test_handler_reuse_issue(self):
         """
@@ -219,7 +219,7 @@ class MultiHITLTest:
         print("\n=== Test 4: Message Context Preservation ===")
         
         # Simulate initial conversation
-        messages: List[Dict[str, Any]] = [
+        messages: list[dict[str, Any]] = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Help me with a complex task."},
         ]

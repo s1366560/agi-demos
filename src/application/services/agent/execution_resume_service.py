@@ -6,8 +6,8 @@ when execution was interrupted due to failure, timeout, or disconnection.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from src.domain.model.agent.execution.execution_checkpoint import (
     ExecutionCheckpoint,
@@ -28,8 +28,8 @@ class ResumeResult:
     checkpoint_id: str
     step_number: int
     message: str
-    resumed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    error: Optional[str] = None
+    resumed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    error: str | None = None
 
 
 @dataclass
@@ -41,7 +41,7 @@ class ResumeContext:
     tenant_id: str
     user_id: str
     checkpoint: ExecutionCheckpoint
-    pending_message: Optional[str] = None
+    pending_message: str | None = None
 
 
 class ExecutionResumeService:
@@ -58,7 +58,7 @@ class ExecutionResumeService:
     def __init__(
         self,
         checkpoint_repo: ExecutionCheckpointRepository,
-    ):
+    ) -> None:
         """Initialize the resume service.
 
         Args:
@@ -69,7 +69,7 @@ class ExecutionResumeService:
     async def get_resume_context(
         self,
         conversation_id: str,
-    ) -> Optional[ResumeContext]:
+    ) -> ResumeContext | None:
         """Get the context needed to resume execution.
 
         Args:
@@ -116,8 +116,8 @@ class ExecutionResumeService:
     async def prepare_resume_request(
         self,
         conversation_id: str,
-        override_message: Optional[str] = None,
-    ) -> Optional[Dict[str, Any]]:
+        override_message: str | None = None,
+    ) -> dict[str, Any] | None:
         """Prepare a request dictionary for resuming execution.
 
         This method extracts all necessary information from the checkpoint
@@ -171,7 +171,7 @@ class ExecutionResumeService:
             checkpoint_type="resumed",
             execution_state={
                 "resumed_from_checkpoint": checkpoint_id,
-                "resumed_at": datetime.now(timezone.utc).isoformat(),
+                "resumed_at": datetime.now(UTC).isoformat(),
             },
             step_number=None,
         )

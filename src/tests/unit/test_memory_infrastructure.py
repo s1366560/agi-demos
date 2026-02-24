@@ -4,7 +4,7 @@ Tests chunker, MMR, temporal decay, query expansion,
 prompt safety, and cached embedding service.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 import pytest
@@ -169,19 +169,19 @@ class TestTemporalDecay:
         assert temporal_decay_multiplier(-5) == 1.0
 
     def test_apply_temporal_decay_with_datetime(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         created_at = now - timedelta(days=30)
         score = apply_temporal_decay(1.0, created_at, half_life_days=30, now=now)
         assert score == pytest.approx(0.5, abs=0.01)
 
     def test_apply_temporal_decay_naive_datetime(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         created_at = now.replace(tzinfo=None) - timedelta(days=15)
         score = apply_temporal_decay(1.0, created_at, half_life_days=30, now=now)
         assert 0.5 < score < 1.0
 
     def test_apply_preserves_zero_score(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         assert apply_temporal_decay(0.0, now - timedelta(days=10), now=now) == 0.0
 
 

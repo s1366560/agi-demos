@@ -1,6 +1,5 @@
 """DI sub-container for memory domain."""
 
-from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,8 +32,8 @@ class MemoryContainer:
 
     def __init__(
         self,
-        db: Optional[AsyncSession] = None,
-        graph_service: Optional[GraphServicePort] = None,
+        db: AsyncSession | None = None,
+        graph_service: GraphServicePort | None = None,
     ) -> None:
         self._db = db
         self._graph_service = graph_service

@@ -12,7 +12,8 @@ import asyncio
 import functools
 import logging
 import random
-from typing import Any, Callable, Coroutine, Optional, TypeVar
+from collections.abc import Callable, Coroutine
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ class TransientError(Exception):
     if retried after a delay.
     """
 
-    def __init__(self, message: str, code: Optional[int] = None, retry_after: Optional[int] = None):
+    def __init__(self, message: str, code: int | None = None, retry_after: int | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.retry_after = retry_after
@@ -46,9 +47,9 @@ class MaxRetriesExceededError(Exception):
     def __init__(
         self,
         message: str = "Max retries exceeded",
-        last_error: Optional[Exception] = None,
+        last_error: Exception | None = None,
         attempts: int = 0,
-    ):
+    ) -> None:
         super().__init__(message)
         self.last_error = last_error
         self.attempts = attempts
@@ -155,13 +156,13 @@ def _calculate_delay(
     return max(0, delay)
 
 
-async def retry_with_backoff(
+async def retry_with_backoff[T](
     func: Callable[[], Coroutine[Any, Any, T]],
     max_retries: int = 3,
     base_delay: float = 0.1,
     max_delay: float = 60.0,
-    is_transient_fn: Optional[Callable[[Exception], bool]] = None,
-    on_retry: Optional[Callable[[Exception, int, float], Any]] = None,
+    is_transient_fn: Callable[[Exception], bool] | None = None,
+    on_retry: Callable[[Exception, int, float], Any] | None = None,
     jitter: bool = True,
 ) -> T:
     """
@@ -186,7 +187,7 @@ async def retry_with_backoff(
     if is_transient_fn is None:
         is_transient_fn = is_transient_error
 
-    last_error: Optional[Exception] = None
+    last_error: Exception | None = None
 
     for attempt in range(max_retries + 1):
         try:
@@ -236,7 +237,7 @@ def retry_decorator(
     max_retries: int = 3,
     base_delay: float = 0.1,
     max_delay: float = 60.0,
-    is_transient_fn: Optional[Callable[[Exception], bool]] = None,
+    is_transient_fn: Callable[[Exception], bool] | None = None,
     jitter: bool = True,
 ):
     """
@@ -262,7 +263,7 @@ def retry_decorator(
         func: Callable[..., Coroutine[Any, Any, T]],
     ) -> Callable[..., Coroutine[Any, Any, T]]:
         @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:  # noqa: ANN401
+        async def wrapper(*args: Any, **kwargs: Any) -> T:
             async def bound_func() -> T:
                 return await func(*args, **kwargs)
 
@@ -295,7 +296,7 @@ class RetryTracker:
         self.total_attempts: int = 0
         self.successful_retries: int = 0
         self.failed_retries: int = 0
-        self.last_error: Optional[Exception] = None
+        self.last_error: Exception | None = None
 
     def record_attempt(self) -> None:
         """Record a retry attempt."""

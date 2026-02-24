@@ -4,7 +4,7 @@ This module defines a hierarchy of sandbox-related exceptions to enable
 better error handling and retry logic.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class SandboxError(Exception):
@@ -13,17 +13,17 @@ class SandboxError(Exception):
     def __init__(
         self,
         message: str,
-        sandbox_id: Optional[str] = None,
-        operation: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-    ):
+        sandbox_id: str | None = None,
+        operation: str | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.sandbox_id = sandbox_id
         self.operation = operation
         self.details = details or {}
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert exception to dictionary for API responses."""
         return {
             "error_type": self.__class__.__name__,
@@ -40,11 +40,11 @@ class SandboxConnectionError(SandboxError):
     def __init__(
         self,
         message: str,
-        sandbox_id: Optional[str] = None,
-        endpoint: Optional[str] = None,
+        sandbox_id: str | None = None,
+        endpoint: str | None = None,
         retryable: bool = True,
-        operation: Optional[str] = None,
-    ):
+        operation: str | None = None,
+    ) -> None:
         super().__init__(message, sandbox_id, operation or "connect")
         self.endpoint = endpoint
         self.retryable = retryable
@@ -57,9 +57,9 @@ class SandboxResourceError(SandboxError):
         self,
         message: str,
         resource_type: str,
-        sandbox_id: Optional[str] = None,
-        available: Optional[int] = None,
-    ):
+        sandbox_id: str | None = None,
+        available: int | None = None,
+    ) -> None:
         super().__init__(message, sandbox_id, "acquire_resource")
         self.resource_type = resource_type
         self.available = available
@@ -72,10 +72,10 @@ class SandboxTimeoutError(SandboxError):
     def __init__(
         self,
         message: str,
-        sandbox_id: Optional[str] = None,
-        operation: Optional[str] = None,
-        timeout_seconds: Optional[float] = None,
-    ):
+        sandbox_id: str | None = None,
+        operation: str | None = None,
+        timeout_seconds: float | None = None,
+    ) -> None:
         super().__init__(message, sandbox_id, operation)
         self.timeout_seconds = timeout_seconds
         self.retryable = True
@@ -87,9 +87,9 @@ class SandboxValidationError(SandboxError):
     def __init__(
         self,
         message: str,
-        field: Optional[str] = None,
-        value: Optional[Any] = None,  # noqa: ANN401
-    ):
+        field: str | None = None,
+        value: Any | None = None,
+    ) -> None:
         super().__init__(message, None, "validate")
         self.field = field
         self.value = value
@@ -104,8 +104,8 @@ class SandboxStateTransitionError(SandboxError):
         sandbox_id: str,
         current_state: str,
         target_state: str,
-        allowed_transitions: Optional[Dict[str, set]] = None,
-    ):
+        allowed_transitions: dict[str, set] | None = None,
+    ) -> None:
         message = (
             f"Invalid state transition for sandbox {sandbox_id}: "
             f"{current_state} -> {target_state}"
@@ -123,9 +123,9 @@ class SandboxHealthCheckError(SandboxError):
     def __init__(
         self,
         message: str,
-        sandbox_id: Optional[str] = None,
-        health_check_type: Optional[str] = None,
-    ):
+        sandbox_id: str | None = None,
+        health_check_type: str | None = None,
+    ) -> None:
         super().__init__(message, sandbox_id, "health_check")
         self.health_check_type = health_check_type
         self.retryable = True
@@ -137,9 +137,9 @@ class SandboxLockTimeoutError(SandboxError):
     def __init__(
         self,
         message: str,
-        project_id: Optional[str] = None,
-        timeout_seconds: Optional[float] = None,
-    ):
+        project_id: str | None = None,
+        timeout_seconds: float | None = None,
+    ) -> None:
         super().__init__(message, None, "acquire_lock")
         self.project_id = project_id
         self.timeout_seconds = timeout_seconds

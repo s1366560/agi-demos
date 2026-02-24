@@ -9,7 +9,7 @@ from src.infrastructure.agent.actor import hitl_router_actor
 
 
 class _FakeContinue:
-    def __init__(self):
+    def __init__(self) -> None:
         self.called_with = None
 
     def remote(self, request_id, response_data, conversation_id=None):
@@ -18,7 +18,7 @@ class _FakeContinue:
 
 
 class _FakeActor:
-    def __init__(self):
+    def __init__(self) -> None:
         self.continue_chat = _FakeContinue()
 
 

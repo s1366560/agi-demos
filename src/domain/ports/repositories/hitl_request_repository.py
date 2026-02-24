@@ -7,7 +7,6 @@ following the Repository pattern with tenant and project-level isolation.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import List, Optional
 
 from src.domain.model.agent.hitl_request import HITLRequest
 
@@ -37,7 +36,7 @@ class HITLRequestRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_by_id(self, request_id: str) -> Optional[HITLRequest]:
+    async def get_by_id(self, request_id: str) -> HITLRequest | None:
         """
         Get an HITL request by its ID.
 
@@ -53,7 +52,7 @@ class HITLRequestRepositoryPort(ABC):
     async def get_by_conversation(
         self,
         conversation_id: str,
-    ) -> List[HITLRequest]:
+    ) -> list[HITLRequest]:
         """
         Get all HITL requests for a conversation (regardless of status).
 
@@ -71,7 +70,7 @@ class HITLRequestRepositoryPort(ABC):
         conversation_id: str,
         tenant_id: str,
         project_id: str,
-    ) -> List[HITLRequest]:
+    ) -> list[HITLRequest]:
         """
         Get all pending HITL requests for a conversation.
 
@@ -91,7 +90,7 @@ class HITLRequestRepositoryPort(ABC):
         tenant_id: str,
         project_id: str,
         limit: int = 50,
-    ) -> List[HITLRequest]:
+    ) -> list[HITLRequest]:
         """
         Get all pending HITL requests for a project.
 
@@ -110,8 +109,8 @@ class HITLRequestRepositoryPort(ABC):
         self,
         request_id: str,
         response: str,
-        response_metadata: Optional[dict] = None,
-    ) -> Optional[HITLRequest]:
+        response_metadata: dict | None = None,
+    ) -> HITLRequest | None:
         """
         Update an HITL request with a response.
 
@@ -129,8 +128,8 @@ class HITLRequestRepositoryPort(ABC):
     async def mark_timeout(
         self,
         request_id: str,
-        default_response: Optional[str] = None,
-    ) -> Optional[HITLRequest]:
+        default_response: str | None = None,
+    ) -> HITLRequest | None:
         """
         Mark an HITL request as timed out.
 
@@ -144,7 +143,7 @@ class HITLRequestRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def mark_cancelled(self, request_id: str) -> Optional[HITLRequest]:
+    async def mark_cancelled(self, request_id: str) -> HITLRequest | None:
         """
         Mark an HITL request as cancelled.
 

@@ -6,9 +6,9 @@ This model represents a pre-generated plan for complex query execution.
 """
 
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, NoReturn
+from typing import Any, NoReturn
 
 from src.domain.shared_kernel import Entity
 
@@ -57,7 +57,7 @@ class ExecutionStep:
     step_id: str
     description: str
     tool_name: str
-    tool_input: Dict[str, Any] = field(default_factory=dict)
+    tool_input: dict[str, Any] = field(default_factory=dict)
     dependencies: list[str] = field(default_factory=list)
     status: ExecutionStepStatus = ExecutionStepStatus.PENDING
     result: str | None = None
@@ -68,7 +68,7 @@ class ExecutionStep:
     def mark_started(self) -> "ExecutionStep":
         """Mark step as started. Returns new instance."""
         return replace(
-            self, status=ExecutionStepStatus.RUNNING, started_at=datetime.now(timezone.utc)
+            self, status=ExecutionStepStatus.RUNNING, started_at=datetime.now(UTC)
         )
 
     def mark_completed(self, result: str) -> "ExecutionStep":
@@ -77,7 +77,7 @@ class ExecutionStep:
             self,
             status=ExecutionStepStatus.COMPLETED,
             result=result,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
 
     def mark_failed(self, error: str) -> "ExecutionStep":
@@ -86,7 +86,7 @@ class ExecutionStep:
             self,
             status=ExecutionStepStatus.FAILED,
             error=error,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
 
     def mark_skipped(self, reason: str) -> "ExecutionStep":
@@ -95,7 +95,7 @@ class ExecutionStep:
             self,
             status=ExecutionStepStatus.SKIPPED,
             error=reason,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
 
     def is_ready(self, completed_steps: set[str]) -> bool:
@@ -104,7 +104,7 @@ class ExecutionStep:
             return False
         return all(dep in completed_steps for dep in self.dependencies)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert step to dictionary for serialization."""
         return {
             "step_id": self.step_id,
@@ -230,7 +230,7 @@ class ExecutionPlan(Entity):
     def mark_executing(self) -> "ExecutionPlan":
         """Mark plan as executing. Returns new plan instance."""
         return replace(
-            self, status=ExecutionPlanStatus.EXECUTING, started_at=datetime.now(timezone.utc)
+            self, status=ExecutionPlanStatus.EXECUTING, started_at=datetime.now(UTC)
         )
 
     def mark_completed(self) -> "ExecutionPlan":
@@ -238,7 +238,7 @@ class ExecutionPlan(Entity):
         return replace(
             self,
             status=ExecutionPlanStatus.COMPLETED,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
 
     def mark_failed(self, error: str) -> "ExecutionPlan":
@@ -247,7 +247,7 @@ class ExecutionPlan(Entity):
             self,
             status=ExecutionPlanStatus.FAILED,
             error=error,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
 
     def mark_cancelled(self) -> "ExecutionPlan":
@@ -255,7 +255,7 @@ class ExecutionPlan(Entity):
         return replace(
             self,
             status=ExecutionPlanStatus.CANCELLED,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
 
     @property
@@ -294,7 +294,7 @@ class ExecutionPlan(Entity):
         """
         raise NotImplementedError("Plan snapshot system is being refactored")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert plan to dictionary for serialization."""
         return {
             "id": self.id,

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import ray
 
@@ -42,17 +42,17 @@ class ProjectAgentActor:
     """Ray Actor that runs a project-level agent instance."""
 
     def __init__(self) -> None:
-        self._config: Optional[ProjectAgentActorConfig] = None
-        self._agent: Optional[ProjectReActAgent] = None
-        self._created_at = datetime.now(timezone.utc)
+        self._config: ProjectAgentActorConfig | None = None
+        self._agent: ProjectReActAgent | None = None
+        self._created_at = datetime.now(UTC)
         self._bootstrapped = False
         self._bootstrap_lock = asyncio.Lock()
         self._init_lock = asyncio.Lock()
-        self._tasks: Dict[str, asyncio.Task] = {}
-        self._task_conversations: Dict[str, str] = {}
-        self._abort_signals: Dict[str, asyncio.Event] = {}
-        self._current_conversation_id: Optional[str] = None
-        self._current_message_id: Optional[str] = None
+        self._tasks: dict[str, asyncio.Task] = {}
+        self._task_conversations: dict[str, str] = {}
+        self._abort_signals: dict[str, asyncio.Event] = {}
+        self._current_conversation_id: str | None = None
+        self._current_message_id: str | None = None
 
     @staticmethod
     def actor_id(tenant_id: str, project_id: str, agent_mode: str) -> str:
@@ -60,7 +60,7 @@ class ProjectAgentActor:
 
     async def initialize(
         self, config: ProjectAgentActorConfig, force_refresh: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Initialize the ProjectReActAgent instance."""
         async with self._init_lock:
             await self._bootstrap_runtime()
@@ -107,7 +107,7 @@ class ProjectAgentActor:
 
             return {"status": status, "cached": False}
 
-    async def chat(self, request: ProjectChatRequest) -> Dict[str, Any]:
+    async def chat(self, request: ProjectChatRequest) -> dict[str, Any]:
         """Start a chat execution in the background."""
         if not self._agent:
             if not self._config:
@@ -126,8 +126,8 @@ class ProjectAgentActor:
         return {"status": "started", "message_id": request.message_id}
 
     async def continue_chat(
-        self, request_id: str, response_data: Dict[str, Any], conversation_id: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, request_id: str, response_data: dict[str, Any], conversation_id: str | None = None
+    ) -> dict[str, Any]:
         """Continue a paused chat after HITL response."""
         if not self._agent:
             if not self._config:
@@ -184,7 +184,7 @@ class ProjectAgentActor:
     async def status(self) -> ProjectAgentStatus:
         """Return current actor status."""
         agent_status = self._agent.get_status() if self._agent else None
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         uptime_seconds = (now - self._created_at).total_seconds()
 
         return ProjectAgentStatus(
@@ -231,7 +231,7 @@ class ProjectAgentActor:
     async def _run_chat(
         self,
         request: ProjectChatRequest,
-        abort_signal: Optional[asyncio.Event] = None,
+        abort_signal: asyncio.Event | None = None,
     ) -> None:
         self._current_conversation_id = request.conversation_id
         self._current_message_id = request.message_id
@@ -252,7 +252,7 @@ class ProjectAgentActor:
                 result.error_message,
             )
 
-    async def _run_continue(self, request_id: str, response_data: Dict[str, Any]) -> None:
+    async def _run_continue(self, request_id: str, response_data: dict[str, Any]) -> None:
         if not self._agent:
             return
 

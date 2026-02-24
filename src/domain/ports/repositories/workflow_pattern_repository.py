@@ -8,7 +8,6 @@ workflow patterns, following the Repository pattern.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from src.domain.model.agent.workflow_pattern import WorkflowPattern
 
@@ -39,7 +38,7 @@ class WorkflowPatternRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_by_id(self, pattern_id: str) -> Optional[WorkflowPattern]:
+    async def get_by_id(self, pattern_id: str) -> WorkflowPattern | None:
         """
         Get a pattern by its ID.
 
@@ -84,7 +83,7 @@ class WorkflowPatternRepositoryPort(ABC):
     async def list_by_tenant(
         self,
         tenant_id: str,
-    ) -> List[WorkflowPattern]:
+    ) -> list[WorkflowPattern]:
         """
         List all patterns for a tenant.
 
@@ -104,7 +103,7 @@ class WorkflowPatternRepositoryPort(ABC):
         self,
         tenant_id: str,
         name: str,
-    ) -> Optional[WorkflowPattern]:
+    ) -> WorkflowPattern | None:
         """
         Find a pattern by name within a tenant.
 

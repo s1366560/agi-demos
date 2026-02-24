@@ -2,7 +2,7 @@
 Tests for V2 SqlTenantAgentConfigRepository using BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,8 +37,8 @@ class TestSqlTenantAgentConfigRepositoryCreate:
             tool_timeout_seconds=60,
             enabled_tools=["search", "calculate"],
             disabled_tools=["danger"],
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         result = await v2_config_repo.save(config)
@@ -61,8 +61,8 @@ class TestSqlTenantAgentConfigRepositoryCreate:
             tool_timeout_seconds=30,
             enabled_tools=[],
             disabled_tools=[],
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         await v2_config_repo.save(config)
@@ -70,7 +70,7 @@ class TestSqlTenantAgentConfigRepositoryCreate:
         # Update
         config.llm_model = "gpt-3.5"
         config.llm_temperature = 0.5
-        config.updated_at = datetime.now(timezone.utc)
+        config.updated_at = datetime.now(UTC)
 
         result = await v2_config_repo.save(config)
         assert result.llm_model == "gpt-3.5"
@@ -94,8 +94,8 @@ class TestSqlTenantAgentConfigRepositoryFind:
             tool_timeout_seconds=30,
             enabled_tools=[],
             disabled_tools=[],
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_config_repo.save(config)
 
@@ -129,8 +129,8 @@ class TestSqlTenantAgentConfigRepositoryDelete:
             tool_timeout_seconds=30,
             enabled_tools=[],
             disabled_tools=[],
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_config_repo.save(config)
 
@@ -164,8 +164,8 @@ class TestSqlTenantAgentConfigRepositoryExists:
             tool_timeout_seconds=30,
             enabled_tools=[],
             disabled_tools=[],
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_config_repo.save(config)
 

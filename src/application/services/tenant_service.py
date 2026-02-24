@@ -6,8 +6,7 @@ including roles and permissions.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from src.domain.model.tenant.tenant import Tenant
 from src.domain.ports.repositories.tenant_repository import TenantRepository
@@ -19,12 +18,12 @@ logger = logging.getLogger(__name__)
 class TenantService:
     """Service for managing tenants"""
 
-    def __init__(self, tenant_repo: TenantRepository, user_repo: UserRepository):
+    def __init__(self, tenant_repo: TenantRepository, user_repo: UserRepository) -> None:
         self._tenant_repo = tenant_repo
         self._user_repo = user_repo
 
     async def create_tenant(
-        self, name: str, owner_id: str, description: Optional[str] = None, plan: str = "free"
+        self, name: str, owner_id: str, description: str | None = None, plan: str = "free"
     ) -> Tenant:
         """
         Create a new tenant.
@@ -53,14 +52,14 @@ class TenantService:
             owner_id=owner_id,
             description=description,
             plan=plan,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         await self._tenant_repo.save(tenant)
         logger.info(f"Created tenant {tenant.id} for owner {owner_id}")
         return tenant
 
-    async def get_tenant(self, tenant_id: str) -> Optional[Tenant]:
+    async def get_tenant(self, tenant_id: str) -> Tenant | None:
         """
         Retrieve a tenant by ID.
 
@@ -72,7 +71,7 @@ class TenantService:
         """
         return await self._tenant_repo.find_by_id(tenant_id)
 
-    async def list_tenants(self, owner_id: str, limit: int = 50, offset: int = 0) -> List[Tenant]:
+    async def list_tenants(self, owner_id: str, limit: int = 50, offset: int = 0) -> list[Tenant]:
         """
         List tenants owned by a user.
 
@@ -89,9 +88,9 @@ class TenantService:
     async def update_tenant(
         self,
         tenant_id: str,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
-        plan: Optional[str] = None,
+        name: str | None = None,
+        description: str | None = None,
+        plan: str | None = None,
     ) -> Tenant:
         """
         Update tenant properties.
@@ -120,7 +119,7 @@ class TenantService:
         if plan is not None:
             tenant.plan = plan
 
-        tenant.updated_at = datetime.now(timezone.utc)
+        tenant.updated_at = datetime.now(UTC)
 
         await self._tenant_repo.save(tenant)
         logger.info(f"Updated tenant {tenant_id}")

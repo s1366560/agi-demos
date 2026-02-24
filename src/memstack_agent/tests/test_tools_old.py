@@ -199,17 +199,15 @@ class TestInferTypeSchema:
 
     def test_list_type(self) -> None:
         """Test schema inference for list types."""
-        from typing import List
 
-        schema = infer_type_schema(List[str])
+        schema = infer_type_schema(list[str])
         assert schema["type"] == "array"
         assert schema["items"] == {"type": "string"}
 
     def test_dict_type(self) -> None:
         """Test schema inference for dict types."""
-        from typing import Dict
 
-        schema = infer_type_schema(Dict[str, int])
+        schema = infer_type_schema(dict[str, int])
         assert schema["type"] == "object"
         assert schema["additionalProperties"] == {"type": "integer"}
 

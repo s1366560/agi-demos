@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-MessageList = List[Dict[str, Any]]
+MessageList = list[dict[str, Any]]
 PreCompressionPolicy = Callable[[MessageList], MessageList]
 SummaryPolicy = Callable[[str, MessageList], str]
 
@@ -21,8 +22,8 @@ _FAILURE_HINT_RE = re.compile(r"\b(error|failed|exception|traceback|timeout)\b",
 class ContextPolicyRegistry:
     """Registry for context policies applied during context building."""
 
-    pre_compression: List[Tuple[str, PreCompressionPolicy]] = field(default_factory=list)
-    summary_enrichment: List[Tuple[str, SummaryPolicy]] = field(default_factory=list)
+    pre_compression: list[tuple[str, PreCompressionPolicy]] = field(default_factory=list)
+    summary_enrichment: list[tuple[str, SummaryPolicy]] = field(default_factory=list)
 
     def register_pre_compression(self, name: str, policy: PreCompressionPolicy) -> None:
         self.pre_compression.append((name, policy))
@@ -30,9 +31,9 @@ class ContextPolicyRegistry:
     def register_summary_enrichment(self, name: str, policy: SummaryPolicy) -> None:
         self.summary_enrichment.append((name, policy))
 
-    def apply_pre_compression(self, messages: MessageList) -> tuple[MessageList, Dict[str, Any]]:
+    def apply_pre_compression(self, messages: MessageList) -> tuple[MessageList, dict[str, Any]]:
         current = list(messages)
-        metadata: Dict[str, Any] = {"applied": [], "errors": []}
+        metadata: dict[str, Any] = {"applied": [], "errors": []}
         for name, policy in self.pre_compression:
             try:
                 current = policy(current)
@@ -46,9 +47,9 @@ class ContextPolicyRegistry:
         self,
         summary_text: str,
         messages: MessageList,
-    ) -> tuple[str, Dict[str, Any]]:
+    ) -> tuple[str, dict[str, Any]]:
         current = summary_text
-        metadata: Dict[str, Any] = {"applied": [], "errors": []}
+        metadata: dict[str, Any] = {"applied": [], "errors": []}
         for name, policy in self.summary_enrichment:
             try:
                 current = policy(current, messages)
@@ -81,7 +82,7 @@ def dedupe_cached_summary_messages(messages: MessageList) -> MessageList:
 
 def enrich_summary_with_tool_failures(summary_text: str, messages: MessageList) -> str:
     """Append compact tool-failure highlights extracted from source messages."""
-    failures: List[str] = []
+    failures: list[str] = []
     for msg in messages:
         if msg.get("role") != "tool":
             continue
@@ -103,7 +104,7 @@ def enrich_summary_with_tool_failures(summary_text: str, messages: MessageList) 
 
 def enrich_summary_with_file_activity(summary_text: str, messages: MessageList) -> str:
     """Append referenced file paths to improve continuity across compaction."""
-    found_paths: List[str] = []
+    found_paths: list[str] = []
     for msg in messages:
         content = msg.get("content", "")
         if not isinstance(content, str):

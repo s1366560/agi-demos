@@ -7,7 +7,7 @@ common functionality for tool execution.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.model.mcp.tool import MCPTool, MCPToolResult, MCPToolSchema
 
@@ -28,7 +28,7 @@ class BaseMCPToolAdapter(ABC):
     transport-specific execution logic.
     """
 
-    def __init__(self, server_name: str):
+    def __init__(self, server_name: str) -> None:
         """
         Initialize the adapter.
 
@@ -36,7 +36,7 @@ class BaseMCPToolAdapter(ABC):
             server_name: Name of the MCP server providing tools
         """
         self._server_name = server_name
-        self._tools_cache: Dict[str, MCPToolSchema] = {}
+        self._tools_cache: dict[str, MCPToolSchema] = {}
         self._initialized = False
 
     @property
@@ -52,8 +52,8 @@ class BaseMCPToolAdapter(ABC):
     async def execute_tool(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
-        timeout_ms: Optional[int] = None,
+        arguments: dict[str, Any],
+        timeout_ms: int | None = None,
     ) -> MCPToolResult:
         """
         Execute a tool and return the result.
@@ -83,7 +83,7 @@ class BaseMCPToolAdapter(ABC):
             logger.error(f"Tool execution failed for {tool_name}: {e}")
             return MCPToolResult.error(str(e))
 
-    async def list_tools(self) -> List[MCPTool]:
+    async def list_tools(self) -> list[MCPTool]:
         """
         List available tools from the server.
 
@@ -125,8 +125,8 @@ class BaseMCPToolAdapter(ABC):
     async def _execute_tool_internal(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
-        timeout_ms: Optional[int],
+        arguments: dict[str, Any],
+        timeout_ms: int | None,
     ) -> MCPToolResult:
         """
         Transport-specific tool execution.
@@ -142,7 +142,7 @@ class BaseMCPToolAdapter(ABC):
         ...
 
     @abstractmethod
-    async def _list_tools_internal(self) -> List[MCPToolSchema]:
+    async def _list_tools_internal(self) -> list[MCPToolSchema]:
         """
         Transport-specific tool listing.
 
@@ -173,9 +173,9 @@ class LocalToolAdapter(BaseMCPToolAdapter):
         self,
         server_name: str,
         command: str,
-        args: Optional[List[str]] = None,
-        env: Optional[Dict[str, str]] = None,
-    ):
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
+    ) -> None:
         """
         Initialize local tool adapter.
 
@@ -213,8 +213,8 @@ class LocalToolAdapter(BaseMCPToolAdapter):
     async def _execute_tool_internal(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
-        timeout_ms: Optional[int],
+        arguments: dict[str, Any],
+        timeout_ms: int | None,
     ) -> MCPToolResult:
         """Execute tool via subprocess."""
         if not self._client:
@@ -229,7 +229,7 @@ class LocalToolAdapter(BaseMCPToolAdapter):
             artifact=result.artifact,
         )
 
-    async def _list_tools_internal(self) -> List[MCPToolSchema]:
+    async def _list_tools_internal(self) -> list[MCPToolSchema]:
         """List tools from subprocess client."""
         if not self._client:
             return []
@@ -252,7 +252,7 @@ class WebSocketToolAdapter(BaseMCPToolAdapter):
     Delegates to WebSocket MCP client for tool execution.
     """
 
-    def __init__(self, server_name: str, websocket_url: str):
+    def __init__(self, server_name: str, websocket_url: str) -> None:
         """
         Initialize WebSocket tool adapter.
 
@@ -282,8 +282,8 @@ class WebSocketToolAdapter(BaseMCPToolAdapter):
     async def _execute_tool_internal(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
-        timeout_ms: Optional[int],
+        arguments: dict[str, Any],
+        timeout_ms: int | None,
     ) -> MCPToolResult:
         """Execute tool via WebSocket."""
         if not self._client:
@@ -298,7 +298,7 @@ class WebSocketToolAdapter(BaseMCPToolAdapter):
             artifact=result.get("artifact"),
         )
 
-    async def _list_tools_internal(self) -> List[MCPToolSchema]:
+    async def _list_tools_internal(self) -> list[MCPToolSchema]:
         """List tools from WebSocket client."""
         if not self._client:
             return []

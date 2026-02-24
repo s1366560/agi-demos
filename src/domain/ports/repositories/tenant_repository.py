@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from src.domain.model.tenant.tenant import Tenant
 
@@ -13,22 +12,22 @@ class TenantRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(self, tenant_id: str) -> Optional[Tenant]:
+    async def find_by_id(self, tenant_id: str) -> Tenant | None:
         """Find a tenant by ID"""
         pass
 
     @abstractmethod
-    async def find_by_owner(self, owner_id: str, limit: int = 50, offset: int = 0) -> List[Tenant]:
+    async def find_by_owner(self, owner_id: str, limit: int = 50, offset: int = 0) -> list[Tenant]:
         """List all tenants owned by a user"""
         pass
 
     @abstractmethod
-    async def find_by_name(self, name: str) -> Optional[Tenant]:
+    async def find_by_name(self, name: str) -> Tenant | None:
         """Find a tenant by name"""
         pass
 
     @abstractmethod
-    async def list_all(self, limit: int = 50, offset: int = 0) -> List[Tenant]:
+    async def list_all(self, limit: int = 50, offset: int = 0) -> list[Tenant]:
         """List all tenants with pagination"""
         pass
 

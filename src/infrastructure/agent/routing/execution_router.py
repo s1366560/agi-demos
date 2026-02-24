@@ -9,7 +9,7 @@ Decides the execution path based on input and context:
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Protocol
 
 from src.infrastructure.agent.config import ExecutionConfig
 
@@ -29,8 +29,8 @@ class RoutingDecision:
     path: ExecutionPath
     confidence: float  # 0.0 to 1.0
     reason: str
-    target: Optional[str] = None  # Skill/subagent name if applicable
-    metadata: Dict[str, Any] = None
+    target: str | None = None  # Skill/subagent name if applicable
+    metadata: dict[str, Any] = None
 
     def __post_init__(self) -> None:
         if self.metadata is None:
@@ -40,7 +40,7 @@ class RoutingDecision:
 class SkillMatcher(Protocol):
     """Protocol for skill matching."""
 
-    def match(self, query: str, context: Dict[str, Any]) -> Optional[str]:
+    def match(self, query: str, context: dict[str, Any]) -> str | None:
         """Match a query to a skill name.
 
         Args:
@@ -67,7 +67,7 @@ class SkillMatcher(Protocol):
 class SubAgentMatcher(Protocol):
     """Protocol for sub-agent matching."""
 
-    def match(self, query: str, context: Dict[str, Any]) -> Optional[str]:
+    def match(self, query: str, context: dict[str, Any]) -> str | None:
         """Match a query to a sub-agent.
 
         Args:
@@ -79,7 +79,7 @@ class SubAgentMatcher(Protocol):
         """
         ...
 
-    def get_subagent(self, name: str) -> Any:  # noqa: ANN401
+    def get_subagent(self, name: str) -> Any:
         """Get a sub-agent by name.
 
         Args:
@@ -94,7 +94,7 @@ class SubAgentMatcher(Protocol):
 class PlanEvaluator(Protocol):
     """Protocol for plan mode evaluation."""
 
-    def should_use_plan_mode(self, query: str, context: Dict[str, Any]) -> bool:
+    def should_use_plan_mode(self, query: str, context: dict[str, Any]) -> bool:
         """Determine if plan mode should be used.
 
         Args:
@@ -129,10 +129,10 @@ class ExecutionRouter:
 
     def __init__(
         self,
-        config: Optional[ExecutionConfig] = None,
-        skill_matcher: Optional[SkillMatcher] = None,
-        subagent_matcher: Optional[SubAgentMatcher] = None,
-        plan_evaluator: Optional[PlanEvaluator] = None,
+        config: ExecutionConfig | None = None,
+        skill_matcher: SkillMatcher | None = None,
+        subagent_matcher: SubAgentMatcher | None = None,
+        plan_evaluator: PlanEvaluator | None = None,
     ) -> None:
         """Initialize the execution router.
 
@@ -150,7 +150,7 @@ class ExecutionRouter:
     def decide(
         self,
         message: str,
-        context: Dict[str, Any],
+        context: dict[str, Any],
     ) -> RoutingDecision:
         """Decide the execution path for a request.
 
@@ -213,7 +213,7 @@ class ExecutionRouter:
         self,
         message: str,
         skill_name: str,
-        context: Dict[str, Any],
+        context: dict[str, Any],
     ) -> float:
         """Calculate confidence score for skill matching.
 
@@ -245,7 +245,7 @@ class ExecutionRouter:
         self,
         message: str,
         subagent_name: str,
-        context: Dict[str, Any],
+        context: dict[str, Any],
     ) -> float:
         """Calculate confidence score for sub-agent matching.
 
@@ -275,7 +275,7 @@ class ExecutionRouter:
 
         return min(base, 1.0)
 
-    def can_execute_directly(self, message: str, context: Dict[str, Any]) -> bool:
+    def can_execute_directly(self, message: str, context: dict[str, Any]) -> bool:
         """Quick check if message can be executed directly.
 
         Args:
@@ -291,7 +291,7 @@ class ExecutionRouter:
         skill = self._skill_matcher.match(message, context)
         return skill is not None and self._skill_matcher.can_execute_directly(skill) and self._calculate_skill_confidence(message, skill, context) >= self._config.skill_match_threshold
 
-    def get_routing_summary(self, decisions: List[RoutingDecision]) -> Dict[str, Any]:
+    def get_routing_summary(self, decisions: list[RoutingDecision]) -> dict[str, Any]:
         """Get summary statistics for routing decisions.
 
         Args:
@@ -314,7 +314,7 @@ class ExecutionRouter:
         }
 
 
-def create_default_router(config: Optional[ExecutionConfig] = None) -> ExecutionRouter:
+def create_default_router(config: ExecutionConfig | None = None) -> ExecutionRouter:
     """Create an execution router with default matchers.
 
     Args:

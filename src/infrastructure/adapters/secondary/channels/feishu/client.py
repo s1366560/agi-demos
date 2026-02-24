@@ -1,7 +1,7 @@
 """Feishu utility functions for direct API calls."""
 
 import json
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 from src.domain.model.channels.message import SenderInfo
 
@@ -18,18 +18,18 @@ class FeishuClient:
     - Media operations
     """
     
-    def __init__(self, app_id: str, app_secret: str, domain: str = "feishu"):
+    def __init__(self, app_id: str, app_secret: str, domain: str = "feishu") -> None:
         self.app_id = app_id
         self.app_secret = app_secret
         self.domain = domain
-        self._client: Optional[Any] = None
+        self._client: Any | None = None
         
         # Lazy-loaded sub-clients
-        self._media: Optional[Any] = None
-        self._docs: Optional[Any] = None
-        self._wiki: Optional[Any] = None
-        self._drive: Optional[Any] = None
-        self._bitable: Optional[Any] = None
+        self._media: Any | None = None
+        self._docs: Any | None = None
+        self._wiki: Any | None = None
+        self._drive: Any | None = None
+        self._bitable: Any | None = None
     
     def _get_client(self):
         """Lazy load Feishu client."""
@@ -117,7 +117,7 @@ class FeishuClient:
     async def send_card_message(
         self,
         to: str,
-        card: Union[Dict[str, Any], str]
+        card: dict[str, Any] | str
     ) -> str:
         """Send interactive card message.
         
@@ -149,7 +149,7 @@ class FeishuClient:
         self,
         to: str,
         content: str,
-        title: Optional[str] = None
+        title: str | None = None
     ) -> str:
         """Send a markdown card message.
         
@@ -283,7 +283,7 @@ class FeishuClient:
             }
         )
     
-    async def get_message(self, message_id: str) -> Optional[Dict[str, Any]]:
+    async def get_message(self, message_id: str) -> dict[str, Any] | None:
         """Get message by ID.
         
         Args:
@@ -348,7 +348,7 @@ class FeishuClient:
             }
         )
     
-    async def get_chat_info(self, chat_id: str) -> Dict[str, Any]:
+    async def get_chat_info(self, chat_id: str) -> dict[str, Any]:
         """Get chat group information.
         
         Args:
@@ -370,7 +370,7 @@ class FeishuClient:
             "owner_id": chat.get("owner_id"),
         }
     
-    async def get_chat_members(self, chat_id: str) -> List[SenderInfo]:
+    async def get_chat_members(self, chat_id: str) -> list[SenderInfo]:
         """Get chat members.
         
         Args:
@@ -392,7 +392,7 @@ class FeishuClient:
             for m in members
         ]
     
-    async def get_user_info(self, user_id: str) -> Optional[SenderInfo]:
+    async def get_user_info(self, user_id: str) -> SenderInfo | None:
         """Get user information.
         
         Args:
@@ -478,7 +478,7 @@ async def send_feishu_card(
     app_id: str,
     app_secret: str,
     to: str,
-    card: Dict[str, Any]
+    card: dict[str, Any]
 ) -> str:
     """Send card message to Feishu (convenience function)."""
     client = FeishuClient(app_id, app_secret)

@@ -379,7 +379,7 @@ class TestRestart:
         create_call = mock_adapter.create_sandbox.call_args
         if create_call and create_call.kwargs:
             # If sandbox_id is passed, it should be the original one
-            assert "sandbox_id" in create_call.kwargs or True  # Implementation detail
+            assert True  # Implementation detail
 
 
 class TestTerminate:
@@ -606,7 +606,7 @@ class TestHealthCheck:
         )
         # Mock recent health check (using timezone-aware datetime to match domain model)
         import datetime
-        existing.health_checked_at = datetime.datetime.now(datetime.timezone.utc)
+        existing.health_checked_at = datetime.datetime.now(datetime.UTC)
         service._repository.find_by_project.return_value = existing
 
         result = await service.health_check(project_id="proj-123")

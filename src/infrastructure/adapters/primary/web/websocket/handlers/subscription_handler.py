@@ -5,7 +5,7 @@ Handles subscribe and unsubscribe message types for conversation events.
 """
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
@@ -22,7 +22,7 @@ class SubscribeHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "subscribe"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Handle subscribe: Subscribe to a conversation's events."""
         conversation_id = message.get("conversation_id")
 
@@ -64,7 +64,7 @@ class UnsubscribeHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "unsubscribe"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Handle unsubscribe: Stop receiving events from a conversation."""
         conversation_id = message.get("conversation_id")
 

@@ -9,7 +9,7 @@ Refactored to use SandboxOrchestrator for unified sandbox service management.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -46,10 +46,10 @@ class DesktopTool(AgentTool):
 
     def __init__(
         self,
-        orchestrator: Optional[SandboxOrchestrator] = None,
-        sandbox_adapter: Optional[SandboxPort] = None,
+        orchestrator: SandboxOrchestrator | None = None,
+        sandbox_adapter: SandboxPort | None = None,
         sandbox_id: str = "test_sandbox",
-    ):
+    ) -> None:
         """
         Initialize the DesktopTool.
 
@@ -67,7 +67,7 @@ class DesktopTool(AgentTool):
         self._sandbox_adapter = sandbox_adapter
         self._sandbox_id = sandbox_id
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """
         Get the parameters schema for LLM function calling.
 
@@ -101,7 +101,7 @@ class DesktopTool(AgentTool):
             "required": ["action"],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         """
         Validate tool arguments before execution.
 
@@ -123,7 +123,7 @@ class DesktopTool(AgentTool):
 
         return True
 
-    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str:
         """
         Execute the desktop tool with the given arguments.
 
@@ -151,7 +151,7 @@ class DesktopTool(AgentTool):
         else:
             return f"Error: Unknown action '{action}'. Valid actions are: start, stop, status"
 
-    async def _start_desktop(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def _start_desktop(self, **kwargs: Any) -> str:
         """
         Start the remote desktop server.
 
@@ -179,7 +179,7 @@ class DesktopTool(AgentTool):
             logger.error(f"Failed to start desktop: {e}")
             return f"Error: Failed to start desktop - {e!s}"
 
-    async def _start_desktop_legacy(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def _start_desktop_legacy(self, **kwargs: Any) -> str:
         """Legacy start_desktop using direct adapter call."""
         if not self._sandbox_adapter:
             return "Error: No orchestrator or sandbox adapter available"
@@ -302,7 +302,7 @@ class DesktopTool(AgentTool):
 
         return " | ".join(parts) if parts else success_message
 
-    def _format_legacy_result(self, result: Dict[str, Any], success_message: str) -> str:
+    def _format_legacy_result(self, result: dict[str, Any], success_message: str) -> str:
         """
         Format the result from legacy MCP tool call.
 

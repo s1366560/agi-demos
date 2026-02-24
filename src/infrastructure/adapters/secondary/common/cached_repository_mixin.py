@@ -11,7 +11,7 @@ Provides:
 
 import json
 import logging
-from typing import Any, Optional, TypeVar
+from typing import Any, TypeVar
 
 from redis.asyncio import Redis
 from sqlalchemy.orm import DeclarativeBase
@@ -42,13 +42,13 @@ class CachedRepositoryMixin:
     # Default configuration (can be overridden in subclasses)
     _cache_prefix: str = "cache:"
     _cache_ttl: int = 300  # 5 minutes default
-    _entity_class: Optional[type] = None
+    _entity_class: type | None = None
 
     def __init__(
         self,
-        redis_client: Optional[Redis] = None,
-        cache_prefix: Optional[str] = None,
-        cache_ttl_seconds: Optional[int] = None,
+        redis_client: Redis | None = None,
+        cache_prefix: str | None = None,
+        cache_ttl_seconds: int | None = None,
     ) -> None:
         """
         Initialize the caching mixin.
@@ -69,7 +69,7 @@ class CachedRepositoryMixin:
     def _cache_key(
         self,
         entity_id: str,
-        namespace: Optional[str] = None,
+        namespace: str | None = None,
     ) -> str:
         """
         Generate a cache key for an entity.
@@ -90,8 +90,8 @@ class CachedRepositoryMixin:
     async def _cache_get(
         self,
         entity_id: str,
-        namespace: Optional[str] = None,
-    ) -> Optional[Any]:  # noqa: ANN401
+        namespace: str | None = None,
+    ) -> Any | None:
         """
         Get entity from cache.
 
@@ -120,9 +120,9 @@ class CachedRepositoryMixin:
     async def _cache_set(
         self,
         entity_id: str,
-        entity: Any,  # noqa: ANN401
-        namespace: Optional[str] = None,
-        ttl: Optional[int] = None,
+        entity: Any,
+        namespace: str | None = None,
+        ttl: int | None = None,
     ) -> None:
         """
         Store entity in cache.
@@ -145,7 +145,7 @@ class CachedRepositoryMixin:
     async def _cache_delete(
         self,
         entity_id: str,
-        namespace: Optional[str] = None,
+        namespace: str | None = None,
     ) -> None:
         """
         Delete entity from cache.
@@ -184,7 +184,7 @@ class CachedRepositoryMixin:
     async def _cache_exists(
         self,
         entity_id: str,
-        namespace: Optional[str] = None,
+        namespace: str | None = None,
     ) -> bool:
         """
         Check if entity exists in cache.
@@ -208,8 +208,8 @@ class CachedRepositoryMixin:
     async def find_cached(
         self,
         entity_id: str,
-        namespace: Optional[str] = None,
-    ) -> Optional[Any]:  # noqa: ANN401
+        namespace: str | None = None,
+    ) -> Any | None:
         """
         Find entity with cache fallback.
 
@@ -264,7 +264,7 @@ class CachedRepositoryMixin:
 
     # === Serialization ===
 
-    async def _serialize(self, entity: Any) -> str:  # noqa: ANN401
+    async def _serialize(self, entity: Any) -> str:
         """
         Serialize entity for storage.
 
@@ -288,7 +288,7 @@ class CachedRepositoryMixin:
 
         return json.dumps(str(entity))
 
-    async def _deserialize(self, data: str) -> Any:  # noqa: ANN401
+    async def _deserialize(self, data: str) -> Any:
         """
         Deserialize entity from storage.
 

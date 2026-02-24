@@ -23,9 +23,9 @@ Features:
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 import httpx
 
@@ -67,12 +67,12 @@ class SkillInstallerTool(AgentTool):
 
     def __init__(
         self,
-        project_path: Optional[Path] = None,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
+        project_path: Path | None = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
         permission_manager: Optional["PermissionManager"] = None,
-        session_id: Optional[str] = None,
-    ):
+        session_id: str | None = None,
+    ) -> None:
         """
         Initialize the skill installer tool.
 
@@ -116,7 +116,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
         self._pending_events.clear()
         return events
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
         return {
             "type": "object",
@@ -142,14 +142,12 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
             "required": ["skill_source"],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         """Validate that skill_source argument is provided."""
         skill_source = kwargs.get("skill_source")
-        if not isinstance(skill_source, str) or not skill_source.strip():
-            return False
-        return True
+        return not (not isinstance(skill_source, str) or not skill_source.strip())
 
-    def _parse_skill_source(self, skill_source: str) -> tuple[str, str, Optional[str]]:
+    def _parse_skill_source(self, skill_source: str) -> tuple[str, str, str | None]:
         """
         Parse skill source into owner, repo, and optional skill name.
 
@@ -220,7 +218,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
         repo: str,
         path: str,
         branch: str = "main",
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Fetch a file from GitHub raw content.
 
@@ -313,7 +311,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
         skill_name: str,
         install_path: Path,
         branch: str = "main",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Install a single skill to the specified path.
 
@@ -387,7 +385,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
             "skill_name": skill_name,
             "branch": branch,
             "source_path": used_path,
-            "installed_files": ["SKILL.md"] + additional_files,
+            "installed_files": ["SKILL.md", *additional_files],
         }
 
         metadata_file = install_path / ".skill-meta.json"
@@ -407,7 +405,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
             "files_installed": ["SKILL.md"],
         }
 
-    async def execute(self, **kwargs: Any) -> Union[str, Dict[str, Any]]:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str | dict[str, Any]:
         """
         Execute skill installation.
 
@@ -515,7 +513,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
                         "skill_name": skill_name,
                         "lifecycle": lifecycle_result,
                     },
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -545,7 +543,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
             logger.error(f"Failed to install skill from '{skill_source}': {e}")
             return self._error_response(f"Installation failed: {e!s}")
 
-    def _invalidate_skill_cache(self, *, skill_name: str) -> Dict[str, Any]:
+    def _invalidate_skill_cache(self, *, skill_name: str) -> dict[str, Any]:
         """
         Invalidate skill loader caches so newly installed skill is discovered.
 
@@ -571,7 +569,7 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
         )
         return lifecycle_result
 
-    def _error_response(self, message: str, **extra: Any) -> Dict[str, Any]:  # noqa: ANN401
+    def _error_response(self, message: str, **extra: Any) -> dict[str, Any]:
         """
         Create an error response.
 

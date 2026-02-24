@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import BinaryIO, Optional, Union
+from typing import BinaryIO
 
 import httpx
 
@@ -12,12 +12,12 @@ logger = logging.getLogger(__name__)
 class FeishuMediaManager:
     """Manager for Feishu media operations (upload/download)."""
     
-    def __init__(self, client):
+    def __init__(self, client) -> None:
         self._client = client
     
     async def upload_image(
         self,
-        image: Union[bytes, BinaryIO, Path, str],
+        image: bytes | BinaryIO | Path | str,
         image_type: str = "message"
     ) -> str:
         """Upload an image to Feishu.
@@ -59,10 +59,10 @@ class FeishuMediaManager:
     
     async def upload_file(
         self,
-        file: Union[bytes, BinaryIO, Path, str],
+        file: bytes | BinaryIO | Path | str,
         file_name: str,
-        file_type: Optional[str] = None,
-        duration: Optional[int] = None
+        file_type: str | None = None,
+        duration: int | None = None
     ) -> str:
         """Upload a file to Feishu.
         
@@ -179,6 +179,6 @@ class FeishuMediaManager:
 class MediaUploadResult:
     """Result of a media upload operation."""
     
-    def __init__(self, key: str, key_type: str):
+    def __init__(self, key: str, key_type: str) -> None:
         self.key = key
         self.key_type = key_type  # "image_key" or "file_key"

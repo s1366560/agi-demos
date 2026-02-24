@@ -7,8 +7,7 @@ Temporal's built-in mechanisms.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from src.domain.model.task.task_log import TaskLog, TaskLogStatus
 from src.domain.ports.repositories.task_repository import TaskRepository
@@ -19,10 +18,10 @@ logger = logging.getLogger(__name__)
 class TaskService:
     """Service for managing background tasks"""
 
-    def __init__(self, task_repo: TaskRepository):
+    def __init__(self, task_repo: TaskRepository) -> None:
         self._task_repo = task_repo
 
-    async def get_task_status(self, task_id: str) -> Optional[TaskLog]:
+    async def get_task_status(self, task_id: str) -> TaskLog | None:
         """
         Get the current status of a task.
 
@@ -35,8 +34,8 @@ class TaskService:
         return await self._task_repo.find_by_id(task_id)
 
     async def list_tasks(
-        self, group_id: str, status: Optional[str] = None, limit: int = 50, offset: int = 0
-    ) -> List[TaskLog]:
+        self, group_id: str, status: str | None = None, limit: int = 50, offset: int = 0
+    ) -> list[TaskLog]:
         """
         List tasks with optional filtering.
 
@@ -54,8 +53,8 @@ class TaskService:
         )
 
     async def list_user_tasks(
-        self, user_id: str, status: Optional[str] = None, limit: int = 50, offset: int = 0
-    ) -> List[TaskLog]:
+        self, user_id: str, status: str | None = None, limit: int = 50, offset: int = 0
+    ) -> list[TaskLog]:
         """
         List tasks for a specific user.
 
@@ -137,7 +136,7 @@ class TaskService:
 
         # Update task status
         task.status = TaskLogStatus.STOPPED
-        task.stopped_at = datetime.now(timezone.utc)
+        task.stopped_at = datetime.now(UTC)
         await self._task_repo.save(task)
 
         logger.info(f"Stopped task {task_id}")

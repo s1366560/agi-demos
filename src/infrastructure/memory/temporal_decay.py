@@ -7,7 +7,7 @@ Applies exponential decay based on document age.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 def decay_lambda(half_life_days: float) -> float:
@@ -57,10 +57,10 @@ def apply_temporal_decay(
         Decayed score.
     """
     if now is None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
     if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
+        created_at = created_at.replace(tzinfo=UTC)
 
     age_seconds = (now - created_at).total_seconds()
     age_days = max(0, age_seconds / 86400)

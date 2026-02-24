@@ -4,7 +4,6 @@ Tests the unified event bus port, routing key, and event router.
 """
 
 import asyncio
-from typing import List
 
 import pytest
 
@@ -186,7 +185,7 @@ class TestEventRouter:
     @pytest.mark.asyncio
     async def test_route_to_matching_handler(self, router, sample_event):
         """Test routing to a matching handler."""
-        events_received: List[EventWithMetadata] = []
+        events_received: list[EventWithMetadata] = []
 
         @router.handler("agent.*")
         async def handle_agent(event):

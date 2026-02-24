@@ -10,7 +10,8 @@ The SessionProcessor orchestrates the complete agent execution cycle:
 This is the core execution engine that integrates all components.
 """
 
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from memstack_agent.core.events import AgentEvent
 from memstack_agent.core.types import (
@@ -82,7 +83,7 @@ class SessionProcessor:
         self,
         tool_name: str,
         tool_input: dict[str, Any],
-    ) -> Any:  # noqa: ANN401
+    ) -> Any:
         """Execute a single tool call.
 
         Args:

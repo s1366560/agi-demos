@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 from src.infrastructure.agent.context.policy_registry import (
     ContextPolicyRegistry,
@@ -63,14 +63,14 @@ class ContextRuntimeRegistry:
 
     def apply_pre_compression(
         self,
-        messages: List[Dict[str, Any]],
-    ) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+        messages: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         return self._registry.apply_pre_compression(messages)
 
     def apply_summary_enrichment(
         self,
         summary_text: str,
-        messages: List[Dict[str, Any]],
-    ) -> tuple[str, Dict[str, Any]]:
+        messages: list[dict[str, Any]],
+    ) -> tuple[str, dict[str, Any]]:
         return self._registry.apply_summary_enrichment(summary_text, messages)
 

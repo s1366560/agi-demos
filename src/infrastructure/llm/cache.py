@@ -30,7 +30,7 @@ import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from threading import Lock
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,7 @@ class ResponseCache:
     Thread-safe implementation using OrderedDict for LRU ordering.
     """
 
-    def __init__(self, config: Optional[CacheConfig] = None):
+    def __init__(self, config: CacheConfig | None = None) -> None:
         """
         Initialize the cache.
 
@@ -106,7 +106,7 @@ class ResponseCache:
         messages: list[dict[str, Any]],
         model: str,
         temperature: float = 0.0,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> str:
         """
         Generate a cache key from request parameters.
@@ -155,8 +155,8 @@ class ResponseCache:
         messages: list[dict[str, Any]],
         model: str,
         temperature: float = 0.0,
-        **kwargs: Any,  # noqa: ANN401
-    ) -> Optional[dict[str, Any]]:
+        **kwargs: Any,
+    ) -> dict[str, Any] | None:
         """
         Get a cached response if available.
 
@@ -209,7 +209,7 @@ class ResponseCache:
         response: dict[str, Any],
         model: str,
         temperature: float = 0.0,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> None:
         """
         Cache a response.
@@ -256,7 +256,7 @@ class ResponseCache:
         messages: list[dict[str, Any]],
         model: str,
         temperature: float = 0.0,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> bool:
         """
         Invalidate a cached entry.
@@ -321,7 +321,7 @@ class ResponseCache:
 
 
 # Global cache instance
-_response_cache: Optional[ResponseCache] = None
+_response_cache: ResponseCache | None = None
 
 
 def get_response_cache() -> ResponseCache:

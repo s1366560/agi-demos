@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Any, BinaryIO, Dict, List, Optional, Union
+from typing import Any, BinaryIO
 
 import httpx
 
@@ -12,14 +12,14 @@ logger = logging.getLogger(__name__)
 class FeishuDriveClient:
     """Client for Feishu Drive operations."""
     
-    def __init__(self, client):
+    def __init__(self, client) -> None:
         self._client = client
     
     async def list_files(
         self,
-        folder_token: Optional[str] = None,
+        folder_token: str | None = None,
         page_size: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List files in a folder.
         
         Args:
@@ -33,7 +33,7 @@ class FeishuDriveClient:
         page_token = None
         
         while True:
-            params: Dict[str, Any] = {"page_size": page_size}
+            params: dict[str, Any] = {"page_size": page_size}
             if folder_token:
                 params["folder_token"] = folder_token
             if page_token:
@@ -53,7 +53,7 @@ class FeishuDriveClient:
         
         return files
     
-    async def get_file(self, file_token: str) -> Dict[str, Any]:
+    async def get_file(self, file_token: str) -> dict[str, Any]:
         """Get file metadata.
         
         Args:
@@ -72,7 +72,7 @@ class FeishuDriveClient:
     async def create_folder(
         self,
         name: str,
-        parent_token: Optional[str] = None
+        parent_token: str | None = None
     ) -> str:
         """Create a new folder.
         
@@ -83,7 +83,7 @@ class FeishuDriveClient:
         Returns:
             New folder token
         """
-        data: Dict[str, Any] = {"name": name}
+        data: dict[str, Any] = {"name": name}
         if parent_token:
             data["folder_token"] = parent_token
         
@@ -96,10 +96,10 @@ class FeishuDriveClient:
     
     async def upload_file(
         self,
-        file: Union[bytes, BinaryIO, Path, str],
+        file: bytes | BinaryIO | Path | str,
         file_name: str,
         parent_type: str = "explorer",
-        parent_token: Optional[str] = None,
+        parent_token: str | None = None,
     ) -> str:
         """Upload a file to Drive.
         
@@ -126,7 +126,7 @@ class FeishuDriveClient:
         else:
             file_data = file
         
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "file_name": file_name,
             "parent_type": parent_type,
             "file": file_data,
@@ -144,8 +144,8 @@ class FeishuDriveClient:
     async def download_file(
         self,
         file_token: str,
-        local_path: Optional[Union[str, Path]] = None
-    ) -> Union[bytes, Path]:
+        local_path: str | Path | None = None
+    ) -> bytes | Path:
         """Download a file from Drive.
         
         Args:
@@ -201,7 +201,7 @@ class FeishuDriveClient:
         file_token: str,
         target_folder_token: str,
         target_type: str = "folder",
-        name: Optional[str] = None,
+        name: str | None = None,
     ) -> str:
         """Copy a file to another folder.
         
@@ -214,7 +214,7 @@ class FeishuDriveClient:
         Returns:
             New file token
         """
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "file_token": file_token,
             "target_folder_token": target_folder_token,
             "target_type": target_type,
@@ -248,7 +248,7 @@ class FeishuDriveClient:
         query: str,
         search_type: str = "file",  # file, folder, wiki
         page_size: int = 50
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Search for files.
         
         Args:
@@ -263,7 +263,7 @@ class FeishuDriveClient:
         page_token = None
         
         while True:
-            params: Dict[str, Any] = {
+            params: dict[str, Any] = {
                 "query": query,
                 "search_type": search_type,
                 "page_size": page_size,
@@ -287,7 +287,7 @@ class FeishuDriveClient:
         
         return results
     
-    async def get_file_permissions(self, file_token: str) -> Dict[str, Any]:
+    async def get_file_permissions(self, file_token: str) -> dict[str, Any]:
         """Get file permissions.
         
         Args:
@@ -336,7 +336,7 @@ class FeishuDriveClient:
 class DriveSearchResult:
     """Result of a drive search."""
     
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> None:
         self.total = data.get("total", 0)
         self.has_more = data.get("has_more", False)
         self.files = data.get("files", [])
@@ -344,5 +344,5 @@ class DriveSearchResult:
     def __iter__(self):
         return iter(self.files)
     
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.files)

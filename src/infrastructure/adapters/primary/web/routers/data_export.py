@@ -1,8 +1,7 @@
 """Data export and management API routes."""
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
@@ -58,7 +57,7 @@ def _first_value(recs, key):
 
 @router.post("/export")
 async def export_data(
-    tenant_id: Optional[str] = Body(None, description="Filter by tenant ID"),
+    tenant_id: str | None = Body(None, description="Filter by tenant ID"),
     include_episodes: bool = Body(True, description="Include episode data"),
     include_entities: bool = Body(True, description="Include entity data"),
     include_relationships: bool = Body(True, description="Include relationship data"),
@@ -71,7 +70,7 @@ async def export_data(
     """
     try:
         data = {
-            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "exported_at": datetime.now(UTC).isoformat(),
             "tenant_id": tenant_id,
             "episodes": [],
             "entities": [],
@@ -146,7 +145,7 @@ async def export_data(
     except Exception as e:
         logger.error(f"Failed to export data: {e}")
         return {
-            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "exported_at": datetime.now(UTC).isoformat(),
             "tenant_id": tenant_id,
             "episodes": [],
             "entities": [],
@@ -157,7 +156,7 @@ async def export_data(
 
 @router.get("/stats")
 async def get_graph_stats(
-    tenant_id: Optional[str] = Query(None, description="Filter by tenant ID"),
+    tenant_id: str | None = Query(None, description="Filter by tenant ID"),
     current_user: User = Depends(get_current_user),
     graphiti_client=Depends(get_graphiti_client),
 ):
@@ -238,12 +237,12 @@ async def get_graph_stats(
 
 @router.post("/cleanup")
 async def cleanup_data(
-    dry_run: Optional[bool] = Query(None, description="If true, only report what would be deleted"),
-    older_than_days: Optional[int] = Query(
+    dry_run: bool | None = Query(None, description="If true, only report what would be deleted"),
+    older_than_days: int | None = Query(
         None, ge=1, description="Delete data older than this many days"
     ),
-    tenant_id: Optional[str] = Query(None, description="Filter by tenant ID"),
-    body: Optional[dict] = Body(None),
+    tenant_id: str | None = Query(None, description="Filter by tenant ID"),
+    body: dict | None = Body(None),
     current_user: User = Depends(get_current_user),
     graphiti_client=Depends(get_graphiti_client),
 ):
@@ -265,7 +264,7 @@ async def cleanup_data(
             effective_days = 90
         effective_tenant = body.get("tenant_id") if body and "tenant_id" in body else tenant_id
 
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=int(effective_days))
+        cutoff_date = datetime.now(UTC) - timedelta(days=int(effective_days))
 
         # Count episodes that would be deleted
         tenant_filter = "{tenant_id: $tenant_id}" if effective_tenant else ""

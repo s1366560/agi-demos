@@ -7,7 +7,7 @@ with MCP-specific attributes.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.ports.services.sandbox_port import SandboxInstance, SandboxStatus
 
@@ -32,21 +32,21 @@ class MCPSandboxInstance(SandboxInstance):
     """
 
     # MCP WebSocket client (lazy import to avoid circular deps)
-    mcp_client: Optional[Any] = None
-    websocket_url: Optional[str] = None
+    mcp_client: Any | None = None
+    websocket_url: str | None = None
 
     # Service ports on host
-    mcp_port: Optional[int] = None
-    desktop_port: Optional[int] = None
-    terminal_port: Optional[int] = None
+    mcp_port: int | None = None
+    desktop_port: int | None = None
+    terminal_port: int | None = None
 
     # Service URLs
-    desktop_url: Optional[str] = None
-    terminal_url: Optional[str] = None
+    desktop_url: str | None = None
+    terminal_url: str | None = None
 
     # Tool caching
-    tools_cache: List[Dict[str, Any]] = field(default_factory=list)
-    last_tool_refresh: Optional[datetime] = None
+    tools_cache: list[dict[str, Any]] = field(default_factory=list)
+    last_tool_refresh: datetime | None = None
 
     @property
     def is_mcp_connected(self) -> bool:
@@ -54,7 +54,7 @@ class MCPSandboxInstance(SandboxInstance):
         return self.mcp_client is not None and getattr(self.mcp_client, "connected", False)
 
     @property
-    def allocated_ports(self) -> List[int]:
+    def allocated_ports(self) -> list[int]:
         """Get list of all allocated ports."""
         ports = []
         if self.mcp_port:
@@ -66,16 +66,16 @@ class MCPSandboxInstance(SandboxInstance):
         return ports
 
     @property
-    def project_id(self) -> Optional[str]:
+    def project_id(self) -> str | None:
         """Get project ID from labels."""
         return self.labels.get("memstack.project_id") or self.labels.get("memstack.project.id")
 
     @property
-    def tenant_id(self) -> Optional[str]:
+    def tenant_id(self) -> str | None:
         """Get tenant ID from labels."""
         return self.labels.get("memstack.tenant_id") or self.labels.get("memstack.tenant.id")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert instance to dictionary for API responses."""
         return {
             "id": self.id,
@@ -107,7 +107,7 @@ class SandboxResourceUsage:
     network_rx_bytes: int = 0
     network_tx_bytes: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "memory_mb": self.memory_mb,
@@ -126,6 +126,6 @@ class SandboxPorts:
     desktop_port: int
     terminal_port: int
 
-    def as_list(self) -> List[int]:
+    def as_list(self) -> list[int]:
         """Get all ports as list."""
         return [self.mcp_port, self.desktop_port, self.terminal_port]

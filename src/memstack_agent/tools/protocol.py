@@ -12,8 +12,9 @@ Key design:
 - Async-first execution model
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -44,7 +45,7 @@ class Tool(Protocol):
         """Human-readable description of what the tool does."""
         ...
 
-    async def execute(self, **kwargs: Any) -> Any:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> Any:
         """Execute the tool with given arguments.
 
         Args:
@@ -58,7 +59,7 @@ class Tool(Protocol):
         """
         ...
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get JSON Schema for tool parameters.
 
         Returns:
@@ -67,7 +68,7 @@ class Tool(Protocol):
         ...
 
     @property
-    def permission(self) -> Optional[str]:
+    def permission(self) -> str | None:
         """Optional permission required to use this tool.
 
         Returns:
@@ -92,12 +93,12 @@ class ToolMetadata:
     - UI rendering hints
     """
 
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     visible_to_model: bool = True
-    timeout_seconds: Optional[int] = None
-    ui_category: Optional[str] = None  # For UI grouping
-    ui_component: Optional[str] = None  # For custom UI rendering
-    extra: Dict[str, Any] = field(default_factory=dict)
+    timeout_seconds: int | None = None
+    ui_category: str | None = None  # For UI grouping
+    ui_component: str | None = None  # For custom UI rendering
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -117,13 +118,13 @@ class ToolDefinition:
 
     name: str
     description: str
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
     execute: Callable[..., Any]
-    permission: Optional[str] = None
+    permission: str | None = None
     metadata: ToolMetadata = field(default_factory=ToolMetadata)
     _tool_instance: Any = field(default=None, repr=False)
 
-    def to_openai_format(self) -> Dict[str, Any]:
+    def to_openai_format(self) -> dict[str, Any]:
         """Convert to OpenAI tool format.
 
         Returns:
@@ -146,7 +147,7 @@ class ToolDefinition:
             },
         }
 
-    def to_anthropic_format(self) -> Dict[str, Any]:
+    def to_anthropic_format(self) -> dict[str, Any]:
         """Convert to Anthropic tool format.
 
         Returns:
@@ -163,7 +164,7 @@ class ToolDefinition:
             "input_schema": self.parameters,
         }
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to generic dictionary representation.
 
         Returns:
@@ -202,7 +203,7 @@ class SimpleTool:
     description: str
 
     @property
-    def permission(self) -> Optional[str]:
+    def permission(self) -> str | None:
         """Permission required to use this tool."""
         return None
 
@@ -211,11 +212,11 @@ class SimpleTool:
         """Tool metadata."""
         return ToolMetadata()
 
-    async def execute(self, **kwargs: Any) -> Any:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> Any:
         """Execute the tool. Must be implemented by subclasses."""
         raise NotImplementedError(f"{self.name}.execute() not implemented")
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Default empty parameters schema. Override for custom schemas."""
         return {
             "type": "object",
@@ -225,8 +226,8 @@ class SimpleTool:
 
 
 __all__ = [
+    "SimpleTool",
     "Tool",
     "ToolDefinition",
     "ToolMetadata",
-    "SimpleTool",
 ]

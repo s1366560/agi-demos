@@ -4,7 +4,6 @@ The DIContainer delegates to domain-specific sub-containers while preserving
 the exact same public interface for all callers.
 """
 
-from typing import Optional
 
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -120,12 +119,12 @@ class DIContainer:
 
     def __init__(
         self,
-        db: Optional[AsyncSession] = None,
-        graph_service: Optional[GraphServicePort] = None,
-        redis_client: Optional[redis.Redis] = None,
-        session_factory: Optional[async_sessionmaker[AsyncSession]] = None,
-        workflow_engine: Optional[WorkflowEnginePort] = None,
-    ):
+        db: AsyncSession | None = None,
+        graph_service: GraphServicePort | None = None,
+        redis_client: redis.Redis | None = None,
+        session_factory: async_sessionmaker[AsyncSession] | None = None,
+        workflow_engine: WorkflowEnginePort | None = None,
+    ) -> None:
         # Store raw deps for with_db() and properties
         self._db = db
         self._graph_service = graph_service
@@ -266,13 +265,13 @@ class DIContainer:
 
     # === Infra Container delegates ===
 
-    def redis(self) -> Optional[redis.Redis]:
+    def redis(self) -> redis.Redis | None:
         return self._infra.redis()
 
     def sequence_service(self):
         return self._infra.sequence_service()
 
-    def hitl_message_bus(self) -> Optional[HITLMessageBusPort]:
+    def hitl_message_bus(self) -> HITLMessageBusPort | None:
         return self._infra.hitl_message_bus()
 
     def storage_service(self):
@@ -281,7 +280,7 @@ class DIContainer:
     def distributed_lock_adapter(self):
         return self._infra.distributed_lock_adapter()
 
-    def workflow_engine_port(self) -> Optional[WorkflowEnginePort]:
+    def workflow_engine_port(self) -> WorkflowEnginePort | None:
         return self._infra.workflow_engine_port()
 
     def sandbox_adapter(self):

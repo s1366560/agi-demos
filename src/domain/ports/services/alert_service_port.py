@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict
+from typing import Any
 
 
 class AlertSeverity(Enum):
@@ -38,9 +38,9 @@ class Alert:
     severity: AlertSeverity
     source: str
     timestamp: datetime = field(default_factory=datetime.utcnow)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert alert to dictionary representation."""
         return {
             "title": self.title,
@@ -103,7 +103,7 @@ class CompositeAlertServicePort(AlertServicePort):
     Useful for sending critical alerts to multiple channels simultaneously.
     """
 
-    def __init__(self, services: list[AlertServicePort]):
+    def __init__(self, services: list[AlertServicePort]) -> None:
         """Initialize with list of alert services.
 
         Args:

@@ -10,10 +10,10 @@ from __future__ import annotations
 
 import logging
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ class MCPReconcileResult:
 class MCPRuntimeService:
     """Unified runtime lifecycle service for MCP servers and apps."""
 
-    _ERROR_MESSAGES: Dict[str, str] = {
+    _ERROR_MESSAGES: dict[str, str] = {
         "create": "Failed to bootstrap MCP server runtime",
         "enable": "Failed to enable MCP server runtime",
         "reconfigure": "Failed to reconfigure MCP server runtime",
@@ -74,7 +74,7 @@ class MCPRuntimeService:
         app_repo: SqlMCPAppRepository,
         app_service: MCPAppService,
         sandbox_manager: SandboxMCPServerManager,
-        redis_client: Optional[Redis] = None,
+        redis_client: Redis | None = None,
     ) -> None:
         self._db = db
         self._server_repo = server_repo
@@ -89,9 +89,9 @@ class MCPRuntimeService:
         tenant_id: str,
         project_id: str,
         name: str,
-        description: Optional[str],
+        description: str | None,
         server_type: str,
-        transport_config: Dict[str, Any],
+        transport_config: dict[str, Any],
         enabled: bool,
     ) -> MCPServer:
         """Create server and bootstrap runtime metadata/lifecycle."""
@@ -168,11 +168,11 @@ class MCPRuntimeService:
         *,
         server_id: str,
         tenant_id: str,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
-        server_type: Optional[str] = None,
-        transport_config: Optional[Dict[str, Any]] = None,
-        enabled: Optional[bool] = None,
+        name: str | None = None,
+        description: str | None = None,
+        server_type: str | None = None,
+        transport_config: dict[str, Any] | None = None,
+        enabled: bool | None = None,
     ) -> MCPServer:
         """Update server config and reconcile lifecycle transitions."""
         server = await self.get_server_for_tenant(server_id, tenant_id)
@@ -479,10 +479,8 @@ class MCPRuntimeService:
         try:
             yield
         finally:
-            try:
+            with suppress(Exception):
                 await lock.release()
-            except Exception:
-                pass
 
     async def reconcile_project(self, project_id: str, tenant_id: str) -> MCPReconcileResult:
         """Reconcile enabled DB servers with sandbox runtime."""
@@ -603,7 +601,7 @@ class MCPRuntimeService:
             raise PermissionError("Access denied")
         return server
 
-    def _error_runtime_metadata(self, action: str) -> Dict[str, str]:
+    def _error_runtime_metadata(self, action: str) -> dict[str, str]:
         """Build a client-safe runtime error payload."""
         normalized_action = action.replace("-", "_")
         message = self._ERROR_MESSAGES.get(normalized_action, "MCP runtime operation failed")
@@ -613,7 +611,7 @@ class MCPRuntimeService:
             "last_error_message": message,
         }
 
-    def _failure_runtime_metadata(self, action: str) -> Dict[str, Any]:
+    def _failure_runtime_metadata(self, action: str) -> dict[str, Any]:
         """Build a runtime failure payload with action/timestamp metadata."""
         return {
             **self._error_runtime_metadata(action),
@@ -721,8 +719,8 @@ class MCPRuntimeService:
         server: MCPServer,
         reason: str,
         *,
-        runtime_server_name: Optional[str] = None,
-        runtime_project_id: Optional[str] = None,
+        runtime_server_name: str | None = None,
+        runtime_project_id: str | None = None,
     ) -> None:
         """Stop server and update runtime/app state."""
         runtime_server_name = runtime_server_name or server.name
@@ -788,10 +786,10 @@ class MCPRuntimeService:
         project_id: str,
         event_type: str,
         status: str,
-        server_id: Optional[str] = None,
-        app_id: Optional[str] = None,
-        error_message: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        server_id: str | None = None,
+        app_id: str | None = None,
+        error_message: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Persist lifecycle audit event."""
         if not tenant_id or not project_id:

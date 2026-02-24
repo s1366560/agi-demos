@@ -7,9 +7,10 @@ Provides REST API endpoints for managing persistent sandboxes per project:
 """
 
 import asyncio
+import contextlib
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import (
     APIRouter,
@@ -64,7 +65,7 @@ async def verify_project_access(
     project_id: str,
     user: User,
     db: AsyncSession,
-    required_roles: Optional[List[str]] = None,
+    required_roles: list[str] | None = None,
 ) -> None:
     """Verify user has access to the project. Raises 403 if not."""
     query = select(UserProject).where(
@@ -92,17 +93,17 @@ class ProjectSandboxResponse(BaseModel):
     project_id: str = Field(..., description="Associated project ID")
     tenant_id: str = Field(..., description="Tenant ID")
     status: str = Field(..., description="Sandbox lifecycle status")
-    endpoint: Optional[str] = Field(None, description="MCP WebSocket endpoint")
-    websocket_url: Optional[str] = Field(None, description="WebSocket URL")
-    mcp_port: Optional[int] = Field(None, description="MCP server port")
-    desktop_port: Optional[int] = Field(None, description="noVNC desktop port")
-    terminal_port: Optional[int] = Field(None, description="ttyd terminal port")
-    desktop_url: Optional[str] = Field(None, description="noVNC access URL")
-    terminal_url: Optional[str] = Field(None, description="Terminal access URL")
-    created_at: Optional[str] = Field(None, description="Creation timestamp")
-    last_accessed_at: Optional[str] = Field(None, description="Last access timestamp")
+    endpoint: str | None = Field(None, description="MCP WebSocket endpoint")
+    websocket_url: str | None = Field(None, description="WebSocket URL")
+    mcp_port: int | None = Field(None, description="MCP server port")
+    desktop_port: int | None = Field(None, description="noVNC desktop port")
+    terminal_port: int | None = Field(None, description="ttyd terminal port")
+    desktop_url: str | None = Field(None, description="noVNC access URL")
+    terminal_url: str | None = Field(None, description="Terminal access URL")
+    created_at: str | None = Field(None, description="Creation timestamp")
+    last_accessed_at: str | None = Field(None, description="Last access timestamp")
     is_healthy: bool = Field(False, description="Whether sandbox is healthy")
-    error_message: Optional[str] = Field(None, description="Error description if any")
+    error_message: str | None = Field(None, description="Error description if any")
 
     @classmethod
     def from_info(cls, info: SandboxInfo) -> "ProjectSandboxResponse":
@@ -129,7 +130,7 @@ class ProjectSandboxResponse(BaseModel):
 class EnsureSandboxRequest(BaseModel):
     """Request to ensure a project's sandbox exists and is running."""
 
-    profile: Optional[str] = Field(
+    profile: str | None = Field(
         default=None, description="Sandbox profile: lite, standard, or full"
     )
     auto_create: bool = Field(default=True, description="Auto-create sandbox if it doesn't exist")
@@ -142,7 +143,7 @@ class ExecuteToolRequest(BaseModel):
     """Request to execute a tool in the project's sandbox."""
 
     tool_name: str = Field(..., description="MCP tool name (bash, read, write, etc.)")
-    arguments: Dict[str, Any] = Field(default_factory=dict, description="Tool arguments")
+    arguments: dict[str, Any] = Field(default_factory=dict, description="Tool arguments")
     timeout: float = Field(
         default=30.0,
         ge=1.0,
@@ -155,9 +156,9 @@ class ExecuteToolResponse(BaseModel):
     """Response from tool execution."""
 
     success: bool = Field(..., description="Whether execution succeeded")
-    content: List[Dict[str, Any]] = Field(default_factory=list, description="Tool output")
+    content: list[dict[str, Any]] = Field(default_factory=list, description="Tool output")
     is_error: bool = Field(default=False, description="Whether tool returned an error")
-    execution_time_ms: Optional[int] = Field(None, description="Execution time")
+    execution_time_ms: int | None = Field(None, description="Execution time")
 
 
 class HealthCheckResponse(BaseModel):
@@ -180,14 +181,14 @@ class SandboxStatsResponse(BaseModel):
     memory_usage: int = Field(default=0, description="Memory usage in bytes")
     memory_limit: int = Field(default=0, description="Memory limit in bytes")
     memory_percent: float = Field(default=0.0, description="Memory usage percentage")
-    disk_usage: Optional[int] = Field(None, description="Disk usage in bytes")
-    disk_limit: Optional[int] = Field(None, description="Disk limit in bytes")
-    disk_percent: Optional[float] = Field(None, description="Disk usage percentage")
-    network_rx_bytes: Optional[int] = Field(None, description="Network bytes received")
-    network_tx_bytes: Optional[int] = Field(None, description="Network bytes transmitted")
+    disk_usage: int | None = Field(None, description="Disk usage in bytes")
+    disk_limit: int | None = Field(None, description="Disk limit in bytes")
+    disk_percent: float | None = Field(None, description="Disk usage percentage")
+    network_rx_bytes: int | None = Field(None, description="Network bytes received")
+    network_tx_bytes: int | None = Field(None, description="Network bytes transmitted")
     pids: int = Field(default=0, description="Number of processes")
-    uptime_seconds: Optional[int] = Field(None, description="Container uptime in seconds")
-    created_at: Optional[str] = Field(None, description="Container creation time")
+    uptime_seconds: int | None = Field(None, description="Container uptime in seconds")
+    created_at: str | None = Field(None, description="Container creation time")
     collected_at: str = Field(..., description="Timestamp when stats were collected")
 
 
@@ -196,13 +197,13 @@ class SandboxActionResponse(BaseModel):
 
     success: bool = Field(..., description="Whether action succeeded")
     message: str = Field(..., description="Status message")
-    sandbox: Optional[ProjectSandboxResponse] = Field(None, description="Updated sandbox info")
+    sandbox: ProjectSandboxResponse | None = Field(None, description="Updated sandbox info")
 
 
 class ListProjectSandboxesResponse(BaseModel):
     """Response for listing project sandboxes."""
 
-    sandboxes: List[ProjectSandboxResponse] = Field(default_factory=list)
+    sandboxes: list[ProjectSandboxResponse] = Field(default_factory=list)
     total: int = Field(..., description="Total count")
 
 
@@ -216,7 +217,7 @@ class CleanupStaleRequest(BaseModel):
 class CleanupStaleResponse(BaseModel):
     """Response from stale sandbox cleanup."""
 
-    terminated: List[str] = Field(default_factory=list, description="Terminated sandbox IDs")
+    terminated: list[str] = Field(default_factory=list, description="Terminated sandbox IDs")
     dry_run: bool = Field(..., description="Whether this was a dry run")
 
 
@@ -275,7 +276,7 @@ def get_lifecycle_service_for_websocket(
     return container.project_sandbox_lifecycle_service()
 
 
-def get_event_publisher(request: Request) -> Optional[SandboxEventPublisher]:
+def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
     """Get the sandbox event publisher from app container.
 
     Uses the properly initialized container from app.state which has
@@ -342,7 +343,7 @@ async def ensure_project_sandbox(
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
-    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
 ):
     """Ensure a project's sandbox exists and is running.
 
@@ -439,7 +440,7 @@ async def check_project_sandbox_health(
             sandbox_id=info.sandbox_id,
             healthy=healthy,
             status=info.status,
-            checked_at=datetime.now(timezone.utc).isoformat(),
+            checked_at=datetime.now(UTC).isoformat(),
         )
 
     except HTTPException:
@@ -478,11 +479,11 @@ async def get_project_sandbox_stats(
         # Calculate uptime if we have creation time
         uptime_seconds = None
         if info.created_at:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             created_at = info.created_at
             # Ensure created_at is timezone-aware
             if created_at.tzinfo is None:
-                created_at = created_at.replace(tzinfo=timezone.utc)
+                created_at = created_at.replace(tzinfo=UTC)
             uptime_seconds = int((now - created_at).total_seconds())
 
         return SandboxStatsResponse(
@@ -499,7 +500,7 @@ async def get_project_sandbox_stats(
             pids=stats.get("pids", 0),
             uptime_seconds=uptime_seconds,
             created_at=info.created_at.isoformat() if info.created_at else None,
-            collected_at=datetime.now(timezone.utc).isoformat(),
+            collected_at=datetime.now(UTC).isoformat(),
         )
 
     except HTTPException:
@@ -548,7 +549,7 @@ async def restart_project_sandbox(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
-    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
 ):
     """Restart the sandbox for a project."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
@@ -609,7 +610,7 @@ async def terminate_project_sandbox(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
-    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
 ):
     """Terminate the sandbox for a project."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
@@ -694,7 +695,7 @@ async def sync_project_sandbox_status(
 
 @router.get("/sandboxes", response_model=ListProjectSandboxesResponse)
 async def list_project_sandboxes(
-    status: Optional[str] = Query(None, description="Filter by status"),
+    status: str | None = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_current_user),
@@ -1021,7 +1022,7 @@ async def proxy_project_desktop_websocket(
     project_id: str,
     current_user: User = Depends(get_current_user_from_header_or_query),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
-):
+) -> None:
     """WebSocket proxy for the project's sandbox desktop (KasmVNC).
 
     Bridges browser WebSocket connections to the container's KasmVNC WebSocket,
@@ -1077,7 +1078,7 @@ async def proxy_project_desktop_websocket(
 
         logger.info(f"Desktop WS proxy: upstream connected to {ws_target}")
 
-        async def relay_browser_to_upstream():
+        async def relay_browser_to_upstream() -> None:
             """Forward frames from browser to KasmVNC."""
             frame_count = 0
             try:
@@ -1101,7 +1102,7 @@ async def proxy_project_desktop_websocket(
                     f"{type(e).__name__}: {e}"
                 )
 
-        async def relay_upstream_to_browser():
+        async def relay_upstream_to_browser() -> None:
             """Forward frames from KasmVNC to browser."""
             frame_count = 0
             try:
@@ -1121,43 +1122,35 @@ async def proxy_project_desktop_websocket(
         upstream_task = asyncio.create_task(relay_upstream_to_browser())
 
         # Wait for either direction to finish
-        done, pending = await asyncio.wait(
+        _done, pending = await asyncio.wait(
             [browser_task, upstream_task],
             return_when=asyncio.FIRST_COMPLETED,
         )
         for task in pending:
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
 
     except Exception as e:
         logger.error(f"Desktop WebSocket proxy error for project {project_id}: {e}")
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_text(f'{{"error": "{e!s}"}}')
-        except Exception:
-            pass
     finally:
         if upstream_ws:
-            try:
+            with contextlib.suppress(Exception):
                 await upstream_ws.close()
-            except Exception:
-                pass
-        try:
+        with contextlib.suppress(Exception):
             await websocket.close()
-        except Exception:
-            pass
 
 
 @router.websocket("/{project_id}/sandbox/terminal/proxy/ws")
 async def proxy_project_terminal_websocket(
     websocket: WebSocket,
     project_id: str,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
     current_user: User = Depends(get_current_user_from_header_or_query),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
-):
+) -> None:
     """WebSocket proxy for the project's sandbox terminal service.
     
     This allows browser WebSocket connections to the terminal without exposing container ports.
@@ -1182,7 +1175,7 @@ async def proxy_project_terminal_websocket(
     await websocket.accept()
     
     proxy = get_terminal_proxy()
-    session: Optional[TerminalSession] = None
+    session: TerminalSession | None = None
     
     try:
         # Create or get session using terminal proxy (docker exec)
@@ -1212,7 +1205,7 @@ async def proxy_project_terminal_websocket(
         )
         
         # Start output reader task
-        async def read_output():
+        async def read_output() -> None:
             """Background task to read and forward output."""
             while session and session.is_active:
                 try:
@@ -1251,25 +1244,19 @@ async def proxy_project_terminal_websocket(
     
     except Exception as e:
         logger.error(f"Terminal WebSocket proxy error: {e}")
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_json({"type": "error", "message": str(e)})
-        except Exception:
-            pass
     
     finally:
         # Cleanup
         if "output_task" in locals():
             output_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await output_task
-            except asyncio.CancelledError:
-                pass
         
         # Don't close session on disconnect - allow reconnection
-        try:
+        with contextlib.suppress(Exception):
             await websocket.close()
-        except Exception:
-            pass
 
 
 @router.websocket("/{project_id}/sandbox/mcp/proxy")
@@ -1278,7 +1265,7 @@ async def proxy_project_mcp_websocket(
     project_id: str,
     current_user: User = Depends(get_current_user_from_header_or_query),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
-):
+) -> None:
     """WebSocket proxy for the project's sandbox MCP server.
 
     Tunnels MCP JSON-RPC protocol traffic between browser and sandbox MCP server.
@@ -1323,7 +1310,7 @@ async def proxy_project_mcp_websocket(
 
         logger.info(f"MCP WS proxy: upstream connected to {ws_target}")
 
-        async def relay_browser_to_upstream():
+        async def relay_browser_to_upstream() -> None:
             """Forward JSON-RPC messages from browser to MCP server."""
             try:
                 while True:
@@ -1339,12 +1326,10 @@ async def proxy_project_mcp_websocket(
                 logger.warning(f"MCP proxy browser->upstream: {type(e).__name__}: {e}")
             finally:
                 # Signal upstream to close when browser disconnects
-                try:
+                with contextlib.suppress(Exception):
                     await upstream_ws.close()
-                except Exception:
-                    pass
 
-        async def relay_upstream_to_browser():
+        async def relay_upstream_to_browser() -> None:
             """Forward JSON-RPC messages from MCP server to browser."""
             try:
                 async for message in upstream_ws:
@@ -1356,39 +1341,29 @@ async def proxy_project_mcp_websocket(
                 logger.warning(f"MCP proxy upstream->browser: {type(e).__name__}: {e}")
             finally:
                 # Signal browser to close when upstream disconnects
-                try:
+                with contextlib.suppress(Exception):
                     await websocket.close(code=1001, reason="Upstream disconnected")
-                except Exception:
-                    pass
 
         browser_task = asyncio.create_task(relay_browser_to_upstream())
         upstream_task = asyncio.create_task(relay_upstream_to_browser())
 
-        done, pending = await asyncio.wait(
+        _done, pending = await asyncio.wait(
             [browser_task, upstream_task],
             return_when=asyncio.FIRST_COMPLETED,
         )
         for task in pending:
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
 
     except Exception as e:
         logger.error(f"MCP WebSocket proxy error for project {project_id}: {e}")
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_text(f'{{"error": "{e!s}"}}')
-        except Exception:
-            pass
     finally:
         # Ensure both connections are closed
         if upstream_ws:
-            try:
+            with contextlib.suppress(Exception):
                 await upstream_ws.close()
-            except Exception:
-                pass
-        try:
+        with contextlib.suppress(Exception):
             await websocket.close()
-        except Exception:
-            pass

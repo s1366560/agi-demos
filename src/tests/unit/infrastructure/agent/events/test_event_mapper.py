@@ -107,7 +107,7 @@ class TestSSEEvent:
         result = event.to_sse_format()
 
         # Extract and parse data line
-        data_line = [l for l in result.split("\n") if l.startswith("data: ")][0]
+        data_line = next(l for l in result.split("\n") if l.startswith("data: "))
         data_json = data_line.replace("data: ", "")
         parsed = json.loads(data_json)
 

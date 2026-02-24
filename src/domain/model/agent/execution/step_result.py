@@ -1,9 +1,9 @@
 """Step result for tracking execution outcomes."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from src.domain.shared_kernel import ValueObject
 
@@ -32,12 +32,12 @@ class StepResult(ValueObject):
 
     step_id: str
     outcome: StepOutcome
-    output: Optional[str] = None
-    error: Optional[str] = None
-    error_code: Optional[str] = None
+    output: str | None = None
+    error: str | None = None
+    error_code: str | None = None
     duration_ms: int = 0
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    executed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    metadata: dict[str, Any] = field(default_factory=dict)
+    executed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def is_success(self) -> bool:
         """Check if step executed successfully."""
@@ -47,7 +47,7 @@ class StepResult(ValueObject):
         """Check if step execution failed."""
         return self.outcome in (StepOutcome.FAILURE, StepOutcome.TIMEOUT, StepOutcome.ABORTED)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "step_id": self.step_id,
@@ -71,7 +71,7 @@ class StepResult(ValueObject):
         )
 
     @classmethod
-    def failure(cls, step_id: str, error: str, error_code: Optional[str] = None) -> "StepResult":
+    def failure(cls, step_id: str, error: str, error_code: str | None = None) -> "StepResult":
         """Create a failed step result."""
         return cls(
             step_id=step_id,

@@ -6,8 +6,9 @@ Uses the RedisDistributedLock class for actual locking operations.
 
 from __future__ import annotations
 
+import contextlib
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from src.domain.ports.services.distributed_lock_port import (
     DistributedLockPort,
@@ -49,7 +50,7 @@ class RedisDistributedLockAdapter(DistributedLockPort):
         default_ttl: int = 60,
         retry_interval: float = 0.1,
         max_retries: int = 300,
-    ):
+    ) -> None:
         """
         Initialize the Redis lock adapter.
 
@@ -80,8 +81,8 @@ class RedisDistributedLockAdapter(DistributedLockPort):
         key: str,
         ttl: int = 60,
         blocking: bool = True,
-        timeout: Optional[float] = None,
-    ) -> Optional[LockHandle]:
+        timeout: float | None = None,
+    ) -> LockHandle | None:
         """
         Acquire a distributed lock.
 
@@ -137,7 +138,7 @@ class RedisDistributedLockAdapter(DistributedLockPort):
         result = await lock.release()
         return result
 
-    async def extend(self, handle: LockHandle, additional_ttl: Optional[int] = None) -> bool:
+    async def extend(self, handle: LockHandle, additional_ttl: int | None = None) -> bool:
         """
         Extend lock TTL.
 
@@ -190,8 +191,6 @@ class RedisDistributedLockAdapter(DistributedLockPort):
         Should be called during shutdown.
         """
         for lock in list(self._active_locks.values()):
-            try:
+            with contextlib.suppress(Exception):
                 await lock.release()
-            except Exception:
-                pass
         self._active_locks.clear()

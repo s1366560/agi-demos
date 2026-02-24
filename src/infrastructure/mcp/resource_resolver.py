@@ -7,7 +7,8 @@ Supports both sandbox-hosted and external MCP servers.
 import asyncio
 import enum
 import logging
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 from src.domain.model.mcp.app import MCPAppResource
 
@@ -41,8 +42,8 @@ class MCPAppResourceResolver:
 
     def __init__(
         self,
-        sandbox_mcp_server_manager: Any = None,  # noqa: ANN401
-        manager_factory: Optional[Callable] = None,
+        sandbox_mcp_server_manager: Any = None,
+        manager_factory: Callable | None = None,
     ) -> None:
         """Initialize resource resolver.
 
@@ -57,7 +58,7 @@ class MCPAppResourceResolver:
         self._mcp_manager = sandbox_mcp_server_manager
         self._manager_factory = manager_factory
 
-    def _get_manager(self) -> Any:  # noqa: ANN401
+    def _get_manager(self) -> Any:
         """Get the MCP manager, creating it lazily from factory if needed."""
         if self._mcp_manager is None and self._manager_factory is not None:
             self._mcp_manager = self._manager_factory()

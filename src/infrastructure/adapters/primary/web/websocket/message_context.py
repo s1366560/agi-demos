@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from fastapi import WebSocket
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +45,7 @@ class MessageContext:
     container: DIContainer
 
     # Lazy-loaded connection manager (to avoid circular imports)
-    _connection_manager: Optional[ConnectionManager] = None
+    _connection_manager: ConnectionManager | None = None
 
     @property
     def connection_manager(self) -> ConnectionManager:
@@ -58,18 +58,18 @@ class MessageContext:
             self._connection_manager = get_connection_manager()
         return self._connection_manager
 
-    async def send_json(self, message: Dict[str, Any]) -> None:
+    async def send_json(self, message: dict[str, Any]) -> None:
         """Send a JSON message to the client."""
         await self.websocket.send_json(message)
 
     async def send_ack(
-        self, action: str, extra: Optional[Dict[str, Any]] = None, **kwargs: Any  # noqa: ANN401
+        self, action: str, extra: dict[str, Any] | None = None, **kwargs: Any
     ) -> None:
         """Send an acknowledgment message."""
         message = {
             "type": "ack",
             "action": action,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             **kwargs,
         }
         if extra:
@@ -79,16 +79,16 @@ class MessageContext:
     async def send_error(
         self,
         message: str,
-        code: Optional[str] = None,
-        conversation_id: Optional[str] = None,
-        extra: Optional[Dict[str, Any]] = None,
+        code: str | None = None,
+        conversation_id: str | None = None,
+        extra: dict[str, Any] | None = None,
     ) -> None:
         """Send an error message."""
-        data: Dict[str, Any] = {"message": message}
+        data: dict[str, Any] = {"message": message}
         if code:
             data["code"] = code
 
-        error_msg: Dict[str, Any] = {
+        error_msg: dict[str, Any] = {
             "type": "error",
             "data": data,
         }

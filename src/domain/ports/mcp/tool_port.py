@@ -6,7 +6,8 @@ away the underlying transport and server management.
 """
 
 from abc import abstractmethod
-from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, runtime_checkable
+from collections.abc import AsyncIterator
+from typing import Any, Protocol, runtime_checkable
 
 from src.domain.model.mcp.tool import MCPTool, MCPToolResult
 
@@ -24,10 +25,10 @@ class MCPToolExecutorPort(Protocol):
     async def execute(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         tenant_id: str,
-        timeout: Optional[float] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        timeout: float | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> MCPToolResult:
         """
         Execute an MCP tool by name.
@@ -54,11 +55,11 @@ class MCPToolExecutorPort(Protocol):
     async def execute_streaming(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         tenant_id: str,
-        timeout: Optional[float] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        timeout: float | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute an MCP tool with streaming output.
 
@@ -83,8 +84,8 @@ class MCPToolExecutorPort(Protocol):
     async def list_available_tools(
         self,
         tenant_id: str,
-        server_name: Optional[str] = None,
-    ) -> List[MCPTool]:
+        server_name: str | None = None,
+    ) -> list[MCPTool]:
         """
         List all available MCP tools.
 
@@ -102,7 +103,7 @@ class MCPToolExecutorPort(Protocol):
         self,
         tool_name: str,
         tenant_id: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Get the JSON schema for a tool's input.
 
@@ -128,7 +129,7 @@ class MCPToolAdapterPort(Protocol):
     def get_tool_definitions(
         self,
         tenant_id: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get tool definitions in agent-compatible format.
 
@@ -145,9 +146,9 @@ class MCPToolAdapterPort(Protocol):
         self,
         tool_call_id: str,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         tenant_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Execute a tool call from the agent.
 

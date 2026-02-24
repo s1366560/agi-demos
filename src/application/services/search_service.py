@@ -7,8 +7,8 @@ pagination.
 """
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.domain.ports.services.graph_service_port import GraphServicePort
@@ -20,8 +20,8 @@ class GraphContext:
     """Container for graph context around an entity"""
 
     def __init__(
-        self, entity_id: str, entity_name: str, neighbors: List[Dict[str, Any]], depth: int
-    ):
+        self, entity_id: str, entity_name: str, neighbors: list[dict[str, Any]], depth: int
+    ) -> None:
         self.entity_id = entity_id
         self.entity_name = entity_name
         self.neighbors = neighbors
@@ -38,8 +38,8 @@ class SearchResult:
         title: str,
         content: str,
         score: float,
-        metadata: Optional[Dict[str, Any]] = None,
-    ):
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
         self.id = id
         self.type = type  # "memory", "entity", "community"
         self.title = title
@@ -54,11 +54,11 @@ class SearchResults:
     def __init__(
         self,
         query: str,
-        results: List[SearchResult],
+        results: list[SearchResult],
         total: int,
         page: int = 1,
         page_size: int = 10,
-    ):
+    ) -> None:
         self.query = query
         self.results = results
         self.total = total
@@ -70,7 +70,7 @@ class SearchResults:
 class SearchService:
     """Service for unified search across all content types"""
 
-    def __init__(self, graph_service: GraphServicePort, memory_repo: MemoryRepository):
+    def __init__(self, graph_service: GraphServicePort, memory_repo: MemoryRepository) -> None:
         self._graph_service = graph_service
         self._memory_repo = memory_repo
 
@@ -78,7 +78,7 @@ class SearchService:
         self,
         query: str,
         project_id: str,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
         limit: int = 10,
         offset: int = 0,
     ) -> SearchResults:
@@ -161,8 +161,8 @@ class SearchService:
             raise
 
     async def search_memories_by_tags(
-        self, tags: List[str], project_id: str, limit: int = 50
-    ) -> List[Dict[str, Any]]:
+        self, tags: list[str], project_id: str, limit: int = 50
+    ) -> list[dict[str, Any]]:
         """
         Search memories by tags.
 
@@ -207,9 +207,9 @@ class SearchService:
         self,
         project_id: str,
         date_from: datetime,
-        date_to: Optional[datetime] = None,
+        date_to: datetime | None = None,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Search memories by date range.
 
@@ -223,7 +223,7 @@ class SearchService:
             List of memories within date range
         """
         if date_to is None:
-            date_to = datetime.now(timezone.utc)
+            date_to = datetime.now(UTC)
 
         try:
             # Get all memories in project
@@ -330,7 +330,7 @@ class SearchService:
 
     async def get_recent_activity(
         self, project_id: str, days: int = 7, limit: int = 20
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Get recent activity in a project.
 
@@ -343,7 +343,7 @@ class SearchService:
             Dictionary with recent memories, entities, and activity summary
         """
         try:
-            date_from = datetime.now(timezone.utc) - timedelta(days=days)
+            date_from = datetime.now(UTC) - timedelta(days=days)
 
             # Get recent memories
             memories = await self.search_by_date_range(

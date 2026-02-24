@@ -16,7 +16,8 @@ GetEnvVarTool and CheckEnvVarsTool do NOT use HITL, they just read from database
 
 import json
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from src.domain.model.agent.tool_environment_variable import (
     EnvVarScope,
@@ -35,9 +36,9 @@ from src.infrastructure.security.encryption_service import (
 logger = logging.getLogger(__name__)
 
 __all__ = [
+    "CheckEnvVarsTool",
     "GetEnvVarTool",
     "RequestEnvVarTool",
-    "CheckEnvVarsTool",
 ]
 
 
@@ -58,12 +59,12 @@ class GetEnvVarTool(AgentTool):
 
     def __init__(
         self,
-        repository: Optional[ToolEnvironmentVariableRepositoryPort] = None,
-        encryption_service: Optional[EncryptionService] = None,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-        session_factory: Optional[Any] = None,  # noqa: ANN401
-    ):
+        repository: ToolEnvironmentVariableRepositoryPort | None = None,
+        encryption_service: EncryptionService | None = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+        session_factory: Any | None = None,
+    ) -> None:
         """
         Initialize the get env var tool.
 
@@ -87,12 +88,12 @@ class GetEnvVarTool(AgentTool):
         self._project_id = project_id
         self._session_factory = session_factory
 
-    def set_context(self, tenant_id: str, project_id: Optional[str] = None):
+    def set_context(self, tenant_id: str, project_id: str | None = None) -> None:
         """Set the tenant and project context."""
         self._tenant_id = tenant_id
         self._project_id = project_id
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         """Validate arguments."""
         if not self._tenant_id:
             logger.error("tenant_id not set")
@@ -187,7 +188,7 @@ class GetEnvVarTool(AgentTool):
                 }
             )
 
-    async def get_all_for_tool(self, tool_name: str) -> Dict[str, str]:
+    async def get_all_for_tool(self, tool_name: str) -> dict[str, str]:
         """
         Get all environment variables for a tool.
 
@@ -227,7 +228,7 @@ class GetEnvVarTool(AgentTool):
 
         return result
 
-    def get_output_schema(self) -> Dict[str, Any]:
+    def get_output_schema(self) -> dict[str, Any]:
         """Get output schema for tool composition."""
         return {
             "type": "object",
@@ -241,7 +242,7 @@ class GetEnvVarTool(AgentTool):
             },
         }
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
         return {
             "type": "object",
@@ -285,14 +286,14 @@ class RequestEnvVarTool(AgentTool):
 
     def __init__(
         self,
-        hitl_handler: Optional[RayHITLHandler] = None,
-        repository: Optional[ToolEnvironmentVariableRepositoryPort] = None,
-        encryption_service: Optional[EncryptionService] = None,
-        event_publisher: Optional[Callable[[Dict[str, Any]], None]] = None,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-        session_factory: Optional[Any] = None,  # noqa: ANN401
-    ):
+        hitl_handler: RayHITLHandler | None = None,
+        repository: ToolEnvironmentVariableRepositoryPort | None = None,
+        encryption_service: EncryptionService | None = None,
+        event_publisher: Callable[[dict[str, Any]], None] | None = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+        session_factory: Any | None = None,
+    ) -> None:
         """
         Initialize the request env var tool.
 
@@ -321,7 +322,7 @@ class RequestEnvVarTool(AgentTool):
         self._project_id = project_id
         self._session_factory = session_factory
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
         return {
             "type": "object",
@@ -384,9 +385,9 @@ class RequestEnvVarTool(AgentTool):
     def set_context(
         self,
         tenant_id: str,
-        project_id: Optional[str] = None,
-        event_publisher: Optional[Callable[[Dict[str, Any]], None]] = None,
-    ):
+        project_id: str | None = None,
+        event_publisher: Callable[[dict[str, Any]], None] | None = None,
+    ) -> None:
         """Set the tenant, project, and event publisher context."""
         self._tenant_id = tenant_id
         self._project_id = project_id
@@ -397,7 +398,7 @@ class RequestEnvVarTool(AgentTool):
         """Set the HITL handler (for late binding)."""
         self._hitl_handler = handler
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         """Validate arguments."""
         if not self._tenant_id:
             logger.error("tenant_id not set")
@@ -416,8 +417,8 @@ class RequestEnvVarTool(AgentTool):
     async def execute(
         self,
         tool_name: str,
-        fields: List[Dict[str, Any]],
-        context: Optional[Dict[str, Any]] = None,
+        fields: list[dict[str, Any]],
+        context: dict[str, Any] | None = None,
         save_to_project: bool = False,
         timeout: float = 600.0,
     ) -> str:
@@ -590,7 +591,7 @@ class RequestEnvVarTool(AgentTool):
                 }
             )
 
-    def get_output_schema(self) -> Dict[str, Any]:
+    def get_output_schema(self) -> dict[str, Any]:
         """Get output schema for tool composition."""
         return {
             "type": "object",
@@ -626,12 +627,12 @@ class CheckEnvVarsTool(AgentTool):
 
     def __init__(
         self,
-        repository: Optional[ToolEnvironmentVariableRepositoryPort] = None,
-        encryption_service: Optional[EncryptionService] = None,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-        session_factory: Optional[Any] = None,  # noqa: ANN401
-    ):
+        repository: ToolEnvironmentVariableRepositoryPort | None = None,
+        encryption_service: EncryptionService | None = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+        session_factory: Any | None = None,
+    ) -> None:
         """
         Initialize the check env vars tool.
 
@@ -655,12 +656,12 @@ class CheckEnvVarsTool(AgentTool):
         self._project_id = project_id
         self._session_factory = session_factory
 
-    def set_context(self, tenant_id: str, project_id: Optional[str] = None):
+    def set_context(self, tenant_id: str, project_id: str | None = None) -> None:
         """Set the tenant and project context."""
         self._tenant_id = tenant_id
         self._project_id = project_id
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         """Validate arguments."""
         if not self._tenant_id:
             logger.error("tenant_id not set")
@@ -676,7 +677,7 @@ class CheckEnvVarsTool(AgentTool):
     async def execute(
         self,
         tool_name: str,
-        required_vars: List[str],
+        required_vars: list[str],
     ) -> str:
         """
         Check if required environment variables are available.
@@ -742,7 +743,7 @@ class CheckEnvVarsTool(AgentTool):
                 }
             )
 
-    def get_output_schema(self) -> Dict[str, Any]:
+    def get_output_schema(self) -> dict[str, Any]:
         """Get output schema for tool composition."""
         return {
             "type": "object",
@@ -756,7 +757,7 @@ class CheckEnvVarsTool(AgentTool):
             },
         }
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
         return {
             "type": "object",

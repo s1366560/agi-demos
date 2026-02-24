@@ -1,6 +1,6 @@
 """Integration tests for database repositories."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -218,7 +218,7 @@ class TestDatabaseIntegration:
 
         # Update task status
         retrieved.status = "PROCESSING"
-        retrieved.started_at = datetime.now(timezone.utc)
+        retrieved.started_at = datetime.now(UTC)
         await test_db.commit()
         await test_db.refresh(retrieved)
 
@@ -227,7 +227,7 @@ class TestDatabaseIntegration:
 
         # Complete task
         retrieved.status = "COMPLETED"
-        retrieved.completed_at = datetime.now(timezone.utc)
+        retrieved.completed_at = datetime.now(UTC)
         await test_db.commit()
         await test_db.refresh(retrieved)
 

@@ -1,7 +1,6 @@
 """Tenant management API endpoints."""
 
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -30,7 +29,7 @@ router = APIRouter(prefix="/api/v1/tenants", tags=["tenants"])
 
 class AddMemberRequest(BaseModel):
     user_id: str
-    role: Optional[str] = "member"
+    role: str | None = "member"
 
 
 @router.post("/", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
@@ -76,7 +75,7 @@ async def create_tenant(
 async def list_tenants(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
-    search: Optional[str] = Query(None, description="Search query"),
+    search: str | None = Query(None, description="Search query"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TenantListResponse:
@@ -443,7 +442,7 @@ async def get_tenant_stats(
     storage_used = storage_result.scalar() or 0
 
     # New projects this week
-    one_week_ago = datetime.now(timezone.utc) - timedelta(days=7)
+    one_week_ago = datetime.now(UTC) - timedelta(days=7)
     new_projects_result = await db.execute(
         select(func.count(Project.id)).where(
             and_(Project.tenant_id == tenant_id, Project.created_at >= one_week_ago)
@@ -554,7 +553,7 @@ async def get_tenant_analytics(
     # Determine time range
     days_map = {"7d": 7, "30d": 30, "90d": 90}
     days = days_map.get(period, 30)
-    _start_date = datetime.now(timezone.utc) - timedelta(days=days)
+    _start_date = datetime.now(UTC) - timedelta(days=days)
 
     # Get projects for this tenant
     projects_result = await db.execute(
@@ -614,7 +613,7 @@ async def _get_memory_growth_by_day(
     if not project_ids:
         return []
 
-    _start_date = datetime.now(timezone.utc) - timedelta(days=days)
+    _start_date = datetime.now(UTC) - timedelta(days=days)
 
     # Query memory counts grouped by date
     result = await db.execute(

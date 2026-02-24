@@ -17,7 +17,7 @@ import json
 import os
 import sys
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import websockets
 
@@ -33,16 +33,16 @@ TEST_CONVERSATION_ID = os.environ.get("TEST_CONVERSATION_ID", "")
 class MultiHITLTester:
     """Test multiple HITL interactions."""
 
-    def __init__(self, api_key: str, project_id: str, conversation_id: str):
+    def __init__(self, api_key: str, project_id: str, conversation_id: str) -> None:
         self.api_key = api_key
         self.project_id = project_id
         self.conversation_id = conversation_id
-        self.session_id: Optional[str] = None
-        self.ws: Optional[websockets.WebSocketClientProtocol] = None
+        self.session_id: str | None = None
+        self.ws: websockets.WebSocketClientProtocol | None = None
         self.hitl_count = 0
         self.max_hitls = 5  # Safety limit
-        self.events_log: List[Dict[str, Any]] = []
-        self.errors: List[str] = []
+        self.events_log: list[dict[str, Any]] = []
+        self.errors: list[str] = []
 
     async def connect(self) -> bool:
         """Connect to WebSocket."""
@@ -56,10 +56,10 @@ class MultiHITLTester:
 
     async def receive_events_until(
         self, 
-        target_events: List[str], 
+        target_events: list[str], 
         timeout: float = 60.0,
         max_events: int = 1000
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Receive events until target event or timeout."""
         events = []
         start_time = time.time()
@@ -85,7 +85,7 @@ class MultiHITLTester:
                     if event_type in target_events:
                         return events
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
         except Exception as e:

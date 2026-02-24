@@ -12,7 +12,7 @@ from src.domain.model.channels import ChannelConfig, Message
 from src.infrastructure.adapters.secondary.channels.feishu import FeishuAdapter
 
 
-async def basic_example():
+async def basic_example() -> None:
     """Basic usage example."""
     # Create channel service
     service = ChannelService()
@@ -30,7 +30,7 @@ async def basic_example():
     service.register_adapter(feishu)
     
     # Handle incoming messages
-    def on_message(message: Message):
+    def on_message(message: Message) -> None:
         print(f"[{message.channel}] {message.sender.name}: {message.content.text}")
         
         # Reply if message contains "hello"
@@ -58,7 +58,7 @@ async def basic_example():
     await service.disconnect_all()
 
 
-async def multi_channel_example():
+async def multi_channel_example() -> None:
     """Multi-channel example."""
     service = ChannelService()
     
@@ -89,7 +89,7 @@ async def multi_channel_example():
     await service.disconnect_all()
 
 
-async def direct_api_example():
+async def direct_api_example() -> None:
     """Direct API usage example (without adapter)."""
     from src.infrastructure.adapters.secondary.channels.feishu import (
         FeishuClient,

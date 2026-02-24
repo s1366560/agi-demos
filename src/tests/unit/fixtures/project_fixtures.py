@@ -5,8 +5,8 @@ Provides builder pattern for creating test Project instances with sensible defau
 and the ability to customize specific fields.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List
+from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from src.domain.model.project import Project
@@ -20,7 +20,7 @@ class ProjectTestDataBuilder:
         tenant_id: str = "test-tenant-123",
         name: str = "Test Project",
         owner_id: str = "test-user-123",
-    ):
+    ) -> None:
         """Initialize builder with default values."""
         self._tenant_id = tenant_id
         self._name = name
@@ -51,7 +51,7 @@ class ProjectTestDataBuilder:
         self._description = description
         return self
 
-    def with_members(self, member_ids: List[str]) -> "ProjectTestDataBuilder":
+    def with_members(self, member_ids: list[str]) -> "ProjectTestDataBuilder":
         """Set custom member IDs."""
         self._member_ids = member_ids
         return self
@@ -61,22 +61,22 @@ class ProjectTestDataBuilder:
         self._member_ids.append(user_id)
         return self
 
-    def with_memory_rules(self, rules: Dict[str, Any]) -> "ProjectTestDataBuilder":
+    def with_memory_rules(self, rules: dict[str, Any]) -> "ProjectTestDataBuilder":
         """Set custom memory rules."""
         self._memory_rules = rules
         return self
 
-    def add_memory_rule(self, key: str, value: Any) -> "ProjectTestDataBuilder":  # noqa: ANN401
+    def add_memory_rule(self, key: str, value: Any) -> "ProjectTestDataBuilder":
         """Add a single memory rule."""
         self._memory_rules[key] = value
         return self
 
-    def with_graph_config(self, config: Dict[str, Any]) -> "ProjectTestDataBuilder":
+    def with_graph_config(self, config: dict[str, Any]) -> "ProjectTestDataBuilder":
         """Set custom graph configuration."""
         self._graph_config = config
         return self
 
-    def add_graph_config(self, key: str, value: Any) -> "ProjectTestDataBuilder":  # noqa: ANN401
+    def add_graph_config(self, key: str, value: Any) -> "ProjectTestDataBuilder":
         """Add a single graph config setting."""
         self._graph_config[key] = value
         return self
@@ -98,7 +98,7 @@ class ProjectTestDataBuilder:
             memory_rules=self._memory_rules.copy(),
             graph_config=self._graph_config.copy(),
             is_public=self._is_public,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             updated_at=None,
         )
 

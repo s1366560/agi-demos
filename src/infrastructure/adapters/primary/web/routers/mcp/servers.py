@@ -6,7 +6,6 @@ MCP servers are project-scoped and run inside project sandbox containers.
 
 import logging
 import time
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,9 +98,9 @@ async def create_mcp_server(
         )
 
 
-@router.get("/list", response_model=List[MCPServerResponse])
+@router.get("/list", response_model=list[MCPServerResponse])
 async def list_mcp_servers(
-    project_id: Optional[str] = Query(None, description="Filter by project ID"),
+    project_id: str | None = Query(None, description="Filter by project ID"),
     enabled_only: bool = Query(False, description="Only return enabled servers"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
@@ -215,7 +214,7 @@ async def delete_mcp_server(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> None:
     """
     Delete an MCP server.
 
@@ -441,7 +440,7 @@ def _compute_server_health(server) -> MCPServerHealthStatus:
 
 @router.get("/health/summary", response_model=MCPHealthSummary)
 async def get_mcp_health_summary(
-    project_id: Optional[str] = Query(None, description="Filter by project ID"),
+    project_id: str | None = Query(None, description="Filter by project ID"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
 ):

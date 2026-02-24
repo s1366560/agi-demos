@@ -5,7 +5,7 @@ Simple HTTP request/response transport for MCP servers.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -27,10 +27,10 @@ class HTTPTransport(BaseTransport):
     Simple but lacks streaming and bidirectional communication.
     """
 
-    def __init__(self, config: Optional[TransportConfig] = None):
+    def __init__(self, config: TransportConfig | None = None) -> None:
         """Initialize HTTP transport."""
         super().__init__(config)
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     async def start(self, config: TransportConfig) -> None:
         """
@@ -77,8 +77,8 @@ class HTTPTransport(BaseTransport):
 
     async def send(
         self,
-        message: Dict[str, Any],
-        timeout: Optional[float] = None,
+        message: dict[str, Any],
+        timeout: float | None = None,
     ) -> None:
         """
         Send is combined with receive in HTTP transport.
@@ -90,8 +90,8 @@ class HTTPTransport(BaseTransport):
 
     async def receive(
         self,
-        timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         """
         Receive is combined with send in HTTP transport.
 
@@ -104,9 +104,9 @@ class HTTPTransport(BaseTransport):
     async def send_request(
         self,
         method: str,
-        params: Optional[Dict[str, Any]] = None,
-        timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        params: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         """
         Send HTTP POST request with JSON-RPC payload.
 
@@ -151,12 +151,12 @@ class HTTPTransport(BaseTransport):
 
     # High-level API methods
 
-    async def list_tools(self) -> List[Dict[str, Any]]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools from the MCP server."""
         result = await self.send_request("tools/list")
         return result.get("tools", [])
 
-    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the MCP server."""
         params = {"name": tool_name, "arguments": arguments}
         return await self.send_request("tools/call", params)

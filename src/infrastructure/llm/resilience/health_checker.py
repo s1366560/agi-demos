@@ -22,11 +22,12 @@ Example:
 """
 
 import asyncio
+import contextlib
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Callable, Optional
 
 import httpx
 
@@ -52,9 +53,9 @@ class HealthCheckResult:
 
     provider_type: ProviderType
     status: HealthStatus
-    response_time_ms: Optional[float] = None
-    error_message: Optional[str] = None
-    checked_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    response_time_ms: float | None = None
+    error_message: str | None = None
+    checked_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def is_healthy(self) -> bool:
@@ -79,7 +80,7 @@ class HealthCheckConfig:
     history_size: int = 10
 
     # Callback when health status changes
-    on_status_change: Optional[Callable[[ProviderType, HealthStatus, HealthStatus], None]] = None
+    on_status_change: Callable[[ProviderType, HealthStatus, HealthStatus], None] | None = None
 
 
 class HealthChecker:
@@ -91,8 +92,8 @@ class HealthChecker:
 
     def __init__(
         self,
-        config: Optional[HealthCheckConfig] = None,
-    ):
+        config: HealthCheckConfig | None = None,
+    ) -> None:
         """
         Initialize health checker.
 
@@ -104,7 +105,7 @@ class HealthChecker:
         self._results: dict[ProviderType, list[HealthCheckResult]] = {}
         self._current_status: dict[ProviderType, HealthStatus] = {}
         self._running = False
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
         self._encryption_service = get_encryption_service()
 
@@ -145,10 +146,8 @@ class HealthChecker:
         self._running = False
         if self._task:
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
             self._task = None
         logger.info("Health checker stopped")
 
@@ -193,7 +192,7 @@ class HealthChecker:
                 error_message="Provider not registered",
             )
 
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
         result: HealthCheckResult
 
         try:
@@ -422,7 +421,7 @@ class HealthChecker:
 
 
 # Global health checker instance
-_health_checker: Optional[HealthChecker] = None
+_health_checker: HealthChecker | None = None
 
 
 def get_health_checker() -> HealthChecker:

@@ -19,9 +19,9 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
 
@@ -77,13 +77,13 @@ class LifecycleStateChangeMessage:
     total_skill_count: int = 0
     loaded_skill_count: int = 0
     subagent_count: int = 0
-    conversation_id: Optional[str] = None
-    error_message: Optional[str] = None
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    conversation_id: str | None = None
+    error_message: str | None = None
+    timestamp: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
-    def to_ws_message(self) -> Dict[str, Any]:
+    def to_ws_message(self) -> dict[str, Any]:
         """Convert to WebSocket message format."""
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "lifecycle_state": self.lifecycle_state.value,
             "is_initialized": self.is_initialized,
             "is_active": self.is_active,
@@ -123,7 +123,7 @@ class WebSocketNotifier:
         await notifier.notify_ready(tenant_id, project_id, tool_count=10)
     """
 
-    def __init__(self, connection_manager: ConnectionManager):
+    def __init__(self, connection_manager: ConnectionManager) -> None:
         """
         Initialize the notifier.
 
@@ -168,7 +168,7 @@ class WebSocketNotifier:
         self,
         tenant_id: str,
         project_id: str,
-        event: Dict[str, Any],
+        event: dict[str, Any],
     ) -> int:
         """Notify subscribers of detached subagent lifecycle hook events."""
         try:
@@ -177,7 +177,7 @@ class WebSocketNotifier:
                 "project_id": project_id,
                 "tenant_id": tenant_id,
                 "data": dict(event),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
             count = await self._manager.broadcast_to_project(
                 tenant_id=tenant_id,

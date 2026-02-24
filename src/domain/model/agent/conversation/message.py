@@ -1,9 +1,9 @@
 """Message entity for conversation messages."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict
+from typing import Any
 
 from src.domain.model.agent.execution.thought_level import ThoughtLevel
 from src.domain.shared_kernel import Entity
@@ -43,7 +43,7 @@ class ToolCall:
     """
 
     name: str
-    arguments: Dict[str, Any]
+    arguments: dict[str, Any]
     call_id: str | None = None
 
 
@@ -80,8 +80,8 @@ class Message(Entity):
     message_type: MessageType = MessageType.TEXT
     tool_calls: list[ToolCall] = field(default_factory=list)
     tool_results: list[ToolResult] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     # Multi-level thinking support
     work_plan_ref: str | None = None  # ID of the work plan this belongs to

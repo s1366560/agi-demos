@@ -5,7 +5,6 @@ Provides authentication utilities for WebSocket connections using API keys.
 """
 
 import logging
-from typing import Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +21,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_user_repository impor
 logger = logging.getLogger(__name__)
 
 
-async def authenticate_websocket(token: str, db: AsyncSession) -> Optional[Tuple[str, str]]:
+async def authenticate_websocket(token: str, db: AsyncSession) -> tuple[str, str] | None:
     """
     Authenticate WebSocket connection using API key.
 

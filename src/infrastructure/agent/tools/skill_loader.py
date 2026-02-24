@@ -16,7 +16,7 @@ Features:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 from src.application.services.skill_service import SkillService
 from src.domain.model.agent.skill import Skill
@@ -52,13 +52,13 @@ class SkillLoaderTool(AgentTool):
         self,
         skill_service: SkillService,
         tenant_id: str,
-        project_id: Optional[str] = None,
+        project_id: str | None = None,
         agent_mode: str = "default",
-        permission_manager: Optional[PermissionManager] = None,
-        session_id: Optional[str] = None,
-        resource_sync_service: Optional[SkillResourceSyncService] = None,
-        sandbox_id: Optional[str] = None,
-    ):
+        permission_manager: PermissionManager | None = None,
+        session_id: str | None = None,
+        resource_sync_service: SkillResourceSyncService | None = None,
+        sandbox_id: str | None = None,
+    ) -> None:
         """
         Initialize the skill loader tool.
 
@@ -86,7 +86,7 @@ class SkillLoaderTool(AgentTool):
         self._session_id = session_id
         self._resource_sync_service = resource_sync_service
         self._sandbox_id = sandbox_id
-        self._skills_cache: List[Skill] = []
+        self._skills_cache: list[Skill] = []
         self._description_built = False
 
     async def initialize(self) -> None:
@@ -124,7 +124,7 @@ class SkillLoaderTool(AgentTool):
             logger.error(f"Failed to initialize SkillLoaderTool: {e}")
             # Keep default description on failure
 
-    async def initialize_with_skills(self, skills: List[Skill]) -> None:
+    async def initialize_with_skills(self, skills: list[Skill]) -> None:
         """
         Initialize the tool with preloaded skills.
 
@@ -212,12 +212,12 @@ class SkillLoaderTool(AgentTool):
         """Get the tool description."""
         return self._description
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
         # Build enum from cached skills if available
         skill_names = [skill.name for skill in self._skills_cache]
 
-        schema: Dict[str, Any] = {
+        schema: dict[str, Any] = {
             "type": "object",
             "properties": {
                 "skill_name": {
@@ -234,14 +234,12 @@ class SkillLoaderTool(AgentTool):
 
         return schema
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         """Validate that skill_name argument is provided."""
         skill_name = kwargs.get("skill_name")
-        if not isinstance(skill_name, str) or not skill_name.strip():
-            return False
-        return True
+        return not (not isinstance(skill_name, str) or not skill_name.strip())
 
-    async def execute(self, **kwargs: Any) -> Union[str, Dict[str, Any]]:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str | dict[str, Any]:
         """
         Execute skill loading.
 
@@ -354,8 +352,8 @@ class SkillLoaderTool(AgentTool):
     def _error_response(
         self,
         message: str,
-        available_skills: Optional[List[str]] = None,
-    ) -> Dict[str, Any]:
+        available_skills: list[str] | None = None,
+    ) -> dict[str, Any]:
         """
         Create a structured error response.
 
@@ -380,7 +378,7 @@ class SkillLoaderTool(AgentTool):
             },
         }
 
-    def get_available_skills(self) -> List[str]:
+    def get_available_skills(self) -> list[str]:
         """
         Get list of available skill names.
 
@@ -434,7 +432,7 @@ class SkillLoaderTool(AgentTool):
         """
         self._resource_sync_service = sync_service
 
-    def get_output_schema(self) -> Dict[str, Any]:
+    def get_output_schema(self) -> dict[str, Any]:
         """Get the output schema for tool composition."""
         return {
             "type": "object",

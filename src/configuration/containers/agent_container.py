@@ -1,6 +1,6 @@
 """DI sub-container for agent domain."""
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -80,15 +80,15 @@ class AgentContainer:
 
     def __init__(
         self,
-        db: Optional[AsyncSession] = None,
-        graph_service: Optional[GraphServicePort] = None,
-        redis_client: Optional[redis.Redis] = None,
+        db: AsyncSession | None = None,
+        graph_service: GraphServicePort | None = None,
+        redis_client: redis.Redis | None = None,
         settings=None,
-        neo4j_client_factory: Optional[Callable] = None,
-        storage_service_factory: Optional[Callable] = None,
-        sandbox_orchestrator_factory: Optional[Callable] = None,
-        sandbox_event_publisher_factory: Optional[Callable] = None,
-        sequence_service_factory: Optional[Callable] = None,
+        neo4j_client_factory: Callable | None = None,
+        storage_service_factory: Callable | None = None,
+        sandbox_orchestrator_factory: Callable | None = None,
+        sandbox_event_publisher_factory: Callable | None = None,
+        sequence_service_factory: Callable | None = None,
     ) -> None:
         self._db = db
         self._graph_service = graph_service
@@ -99,7 +99,7 @@ class AgentContainer:
         self._sandbox_orchestrator_factory = sandbox_orchestrator_factory
         self._sandbox_event_publisher_factory = sandbox_event_publisher_factory
         self._sequence_service_factory = sequence_service_factory
-        self._skill_service_instance: Optional[SkillService] = None
+        self._skill_service_instance: SkillService | None = None
 
     # === Agent Repositories ===
 
@@ -210,7 +210,7 @@ class AgentContainer:
                 sandbox_event_pub = self._sandbox_event_publisher_factory()
                 if sandbox_event_pub and sandbox_event_pub._event_bus:
 
-                    async def publish_event(project_id: str, event):
+                    async def publish_event(project_id: str, event) -> None:
                         await sandbox_event_pub._publish(project_id, event)
 
                     event_publisher = publish_event

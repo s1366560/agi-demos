@@ -44,28 +44,28 @@ from src.infrastructure.adapters.primary.web.websocket.handlers.subscription_han
 )
 
 __all__ = [
-    "WebSocketMessageHandler",
-    # Chat
-    "SendMessageHandler",
-    "StopSessionHandler",
-    # Subscription
-    "SubscribeHandler",
-    "UnsubscribeHandler",
-    # Status
-    "SubscribeStatusHandler",
-    "UnsubscribeStatusHandler",
-    # Lifecycle
-    "SubscribeLifecycleStateHandler",
-    "UnsubscribeLifecycleStateHandler",
-    "StartAgentHandler",
-    "StopAgentHandler",
-    "RestartAgentHandler",
-    # Sandbox
-    "SubscribeSandboxHandler",
-    "UnsubscribeSandboxHandler",
     # HITL
     "ClarificationRespondHandler",
     "DecisionRespondHandler",
     "EnvVarRespondHandler",
     "PermissionRespondHandler",
+    "RestartAgentHandler",
+    # Chat
+    "SendMessageHandler",
+    "StartAgentHandler",
+    "StopAgentHandler",
+    "StopSessionHandler",
+    # Subscription
+    "SubscribeHandler",
+    # Lifecycle
+    "SubscribeLifecycleStateHandler",
+    # Sandbox
+    "SubscribeSandboxHandler",
+    # Status
+    "SubscribeStatusHandler",
+    "UnsubscribeHandler",
+    "UnsubscribeLifecycleStateHandler",
+    "UnsubscribeSandboxHandler",
+    "UnsubscribeStatusHandler",
+    "WebSocketMessageHandler",
 ]

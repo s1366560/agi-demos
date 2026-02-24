@@ -18,7 +18,7 @@ Usage:
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,8 @@ class LLMMetrics:
     
     # Timing
     start_time: float = field(default_factory=time.time)
-    end_time: Optional[float] = None
-    latency_ms: Optional[float] = None
+    end_time: float | None = None
+    latency_ms: float | None = None
     
     # Token usage
     input_tokens: int = 0
@@ -50,20 +50,20 @@ class LLMMetrics:
     cache_write_tokens: int = 0
     
     # Request metadata
-    tenant_id: Optional[str] = None
-    user_id: Optional[str] = None
-    project_id: Optional[str] = None
-    conversation_id: Optional[str] = None
+    tenant_id: str | None = None
+    user_id: str | None = None
+    project_id: str | None = None
+    conversation_id: str | None = None
     
     # Response metadata
-    finish_reason: Optional[str] = None
+    finish_reason: str | None = None
     tool_calls: int = 0
     has_error: bool = False
-    error_type: Optional[str] = None
-    error_message: Optional[str] = None
+    error_type: str | None = None
+    error_message: str | None = None
     
     # Cost tracking (if available)
-    estimated_cost: Optional[float] = None
+    estimated_cost: float | None = None
     currency: str = "USD"
     
     def to_dict(self) -> dict[str, Any]:
@@ -126,7 +126,7 @@ class StructuredLLMLogger:
             )
     """
     
-    def __init__(self, base_logger: logging.Logger | None = None):
+    def __init__(self, base_logger: logging.Logger | None = None) -> None:
         """
         Initialize structured LLM logger.
         
@@ -159,12 +159,12 @@ class StructuredLLMLogger:
         provider: str,
         model: str,
         operation: str = "completion",
-        request_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-        conversation_id: Optional[str] = None,
-        **kwargs: Any,  # noqa: ANN401
+        request_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+        project_id: str | None = None,
+        conversation_id: str | None = None,
+        **kwargs: Any,
     ) -> str:
         """
         Log start of LLM call.
@@ -217,11 +217,11 @@ class StructuredLLMLogger:
         reasoning_tokens: int = 0,
         cache_read_tokens: int = 0,
         cache_write_tokens: int = 0,
-        latency_ms: Optional[float] = None,
-        finish_reason: Optional[str] = None,
+        latency_ms: float | None = None,
+        finish_reason: str | None = None,
         tool_calls: int = 0,
-        estimated_cost: Optional[float] = None,
-        **kwargs: Any,  # noqa: ANN401
+        estimated_cost: float | None = None,
+        **kwargs: Any,
     ) -> None:
         """
         Log end of LLM call.
@@ -284,7 +284,7 @@ class StructuredLLMLogger:
         request_id: str,
         error: Exception,
         input_tokens: int = 0,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> None:
         """
         Log LLM call error.
@@ -324,7 +324,7 @@ class StructuredLLMLogger:
         self,
         request_id: str,
         event_type: str,
-        event_data: Optional[dict[str, Any]] = None,
+        event_data: dict[str, Any] | None = None,
     ) -> None:
         """
         Log streaming event.
@@ -399,7 +399,7 @@ def log_llm_call(
     provider: str,
     model: str,
     operation: str = "completion",
-    **kwargs: Any,  # noqa: ANN401
+    **kwargs: Any,
 ) -> tuple[str, StructuredLLMLogger]:
     """
     Convenience function to log LLM call start.

@@ -17,8 +17,8 @@ import asyncio
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 
@@ -48,19 +48,19 @@ class SandboxInfo:
     project_id: str
     tenant_id: str
     status: str
-    endpoint: Optional[str] = None
-    websocket_url: Optional[str] = None
-    mcp_port: Optional[int] = None
-    desktop_port: Optional[int] = None
-    terminal_port: Optional[int] = None
-    desktop_url: Optional[str] = None
-    terminal_url: Optional[str] = None
-    created_at: Optional[datetime] = None
-    last_accessed_at: Optional[datetime] = None
+    endpoint: str | None = None
+    websocket_url: str | None = None
+    mcp_port: int | None = None
+    desktop_port: int | None = None
+    terminal_port: int | None = None
+    desktop_url: str | None = None
+    terminal_url: str | None = None
+    created_at: datetime | None = None
+    last_accessed_at: datetime | None = None
     is_healthy: bool = False
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "sandbox_id": self.sandbox_id,
@@ -116,13 +116,13 @@ class ProjectSandboxLifecycleService:
         self,
         repository: ProjectSandboxRepository,
         sandbox_adapter: MCPSandboxAdapter,
-        distributed_lock: Optional[DistributedLockPort] = None,
+        distributed_lock: DistributedLockPort | None = None,
         default_profile: SandboxProfileType = SandboxProfileType.STANDARD,
         health_check_interval_seconds: int = 60,
         auto_recover: bool = True,
-        memory_limit_override: Optional[str] = None,
-        cpu_limit_override: Optional[str] = None,
-    ):
+        memory_limit_override: str | None = None,
+        cpu_limit_override: str | None = None,
+    ) -> None:
         """Initialize the lifecycle service.
 
         Args:
@@ -147,7 +147,7 @@ class ProjectSandboxLifecycleService:
 
         # Per-project locks to prevent concurrent sandbox creation for the same project
         # This ensures exactly one sandbox per project even under high concurrency
-        self._project_locks: Dict[str, asyncio.Lock] = {}
+        self._project_locks: dict[str, asyncio.Lock] = {}
         self._locks_lock = asyncio.Lock()  # Lock for accessing _project_locks
 
     async def _get_project_lock(self, project_id: str) -> asyncio.Lock:
@@ -177,8 +177,8 @@ class ProjectSandboxLifecycleService:
         self,
         project_id: str,
         tenant_id: str,
-        profile: Optional[SandboxProfileType] = None,
-        config_override: Optional[Dict[str, Any]] = None,
+        profile: SandboxProfileType | None = None,
+        config_override: dict[str, Any] | None = None,
         max_retries: int = 3,
     ) -> SandboxInfo:
         """Get existing sandbox or create a new one for the project.
@@ -236,8 +236,8 @@ class ProjectSandboxLifecycleService:
         self,
         project_id: str,
         tenant_id: str,
-        profile: Optional[SandboxProfileType] = None,
-        config_override: Optional[Dict[str, Any]] = None,
+        profile: SandboxProfileType | None = None,
+        config_override: dict[str, Any] | None = None,
     ) -> SandboxInfo:
         """Internal implementation of get_or_create_sandbox with multi-layer locking.
 
@@ -391,7 +391,7 @@ class ProjectSandboxLifecycleService:
                     # Fallback: release PostgreSQL advisory lock
                     await self._repository.release_project_lock(project_id)
 
-    async def get_project_sandbox(self, project_id: str) -> Optional[SandboxInfo]:
+    async def get_project_sandbox(self, project_id: str) -> SandboxInfo | None:
         """Get sandbox info for a project if it exists.
 
         Args:
@@ -436,9 +436,9 @@ class ProjectSandboxLifecycleService:
         self,
         project_id: str,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         timeout: float = 30.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Execute a tool in the project's sandbox.
 
         Automatically ensures the sandbox is running before execution.
@@ -575,10 +575,10 @@ class ProjectSandboxLifecycleService:
     async def list_project_sandboxes(
         self,
         tenant_id: str,
-        status: Optional[ProjectSandboxStatus] = None,
+        status: ProjectSandboxStatus | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[SandboxInfo]:
+    ) -> list[SandboxInfo]:
         """List all project sandboxes for a tenant.
 
         Args:
@@ -604,7 +604,7 @@ class ProjectSandboxLifecycleService:
         # Parallelize info retrieval
         tasks = [self._get_sandbox_info(a) for a in associations]
         gathered = await asyncio.gather(*tasks, return_exceptions=True)
-        for association, result in zip(associations, gathered):
+        for association, result in zip(associations, gathered, strict=False):
             if isinstance(result, Exception):
                 logger.warning(f"Failed to get info for sandbox {association.sandbox_id}: {result}")
             else:
@@ -616,7 +616,7 @@ class ProjectSandboxLifecycleService:
         self,
         max_idle_seconds: int = 3600,
         dry_run: bool = False,
-    ) -> List[str]:
+    ) -> list[str]:
         """Clean up sandboxes that haven't been accessed recently.
 
         Args:
@@ -699,8 +699,8 @@ class ProjectSandboxLifecycleService:
         self,
         project_id: str,
         tenant_id: str,
-        profile: Optional[SandboxProfileType] = None,
-        config_override: Optional[Dict[str, Any]] = None,
+        profile: SandboxProfileType | None = None,
+        config_override: dict[str, Any] | None = None,
     ) -> SandboxInfo:
         """Create a new sandbox for a project."""
         sandbox_id = f"proj-sb-{uuid.uuid4().hex[:12]}"
@@ -731,7 +731,7 @@ class ProjectSandboxLifecycleService:
             # Update association with success
             association.sandbox_id = instance.id  # Use actual container ID
             association.status = ProjectSandboxStatus.RUNNING
-            association.started_at = datetime.now(timezone.utc)
+            association.started_at = datetime.now(UTC)
             association.mark_healthy()
             await self._repository.save(association)
 
@@ -822,7 +822,7 @@ class ProjectSandboxLifecycleService:
             # Update status (sandbox_id should remain the same)
             association.sandbox_id = instance.id
             association.status = ProjectSandboxStatus.RUNNING
-            association.started_at = datetime.now(timezone.utc)
+            association.started_at = datetime.now(UTC)
             association.mark_healthy()
             await self._repository.save(association)
 
@@ -1095,8 +1095,8 @@ class ProjectSandboxLifecycleService:
 
     def _resolve_config(
         self,
-        profile: Optional[SandboxProfileType],
-        config_override: Optional[Dict[str, Any]],
+        profile: SandboxProfileType | None,
+        config_override: dict[str, Any] | None,
     ) -> SandboxConfig:
         """Resolve sandbox configuration from profile and overrides."""
         profile_type = profile or self._default_profile

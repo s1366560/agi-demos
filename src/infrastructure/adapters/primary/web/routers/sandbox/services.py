@@ -6,7 +6,6 @@ Provides management of interactive services:
 """
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -50,7 +49,7 @@ async def start_desktop(
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
-    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
 ):
     """
     Start the remote desktop service (noVNC) for a sandbox.
@@ -112,7 +111,7 @@ async def stop_desktop(
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
-    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
 ):
     """
     Stop the remote desktop service for a sandbox.
@@ -197,7 +196,7 @@ async def start_terminal(
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
-    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
 ):
     """
     Start the web terminal service (ttyd) for a sandbox.
@@ -252,7 +251,7 @@ async def stop_terminal(
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
-    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
 ):
     """
     Stop the web terminal service for a sandbox.

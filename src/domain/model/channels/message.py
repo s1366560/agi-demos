@@ -1,9 +1,10 @@
 """Channels domain model - Message entities and value objects."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Protocol
+from typing import Any, Protocol
 
 from src.domain.shared_kernel import DomainEvent, Entity, ValueObject
 
@@ -33,19 +34,19 @@ class MessageContent(ValueObject):
     """Message content value object."""
 
     type: MessageType
-    text: Optional[str] = None
-    image_key: Optional[str] = None
-    file_key: Optional[str] = None
-    file_name: Optional[str] = None
-    card: Optional[Dict[str, Any]] = None
+    text: str | None = None
+    image_key: str | None = None
+    file_key: str | None = None
+    file_name: str | None = None
+    card: dict[str, Any] | None = None
     # Media metadata fields
-    duration: Optional[int] = None  # Audio/video duration in seconds
-    size: Optional[int] = None  # File size in bytes
-    mime_type: Optional[str] = None  # MIME type
-    thumbnail_key: Optional[str] = None  # Video thumbnail key
-    extra_media_data: Optional[Dict[str, Any]] = None  # Additional metadata
-    sandbox_path: Optional[str] = None  # Path after import to sandbox
-    artifact_id: Optional[str] = None  # Artifact reference
+    duration: int | None = None  # Audio/video duration in seconds
+    size: int | None = None  # File size in bytes
+    mime_type: str | None = None  # MIME type
+    thumbnail_key: str | None = None  # Video thumbnail key
+    extra_media_data: dict[str, Any] | None = None  # Additional metadata
+    sandbox_path: str | None = None  # Path after import to sandbox
+    artifact_id: str | None = None  # Artifact reference
 
     def is_text(self) -> bool:
         return self.type == MessageType.TEXT
@@ -96,8 +97,8 @@ class SenderInfo(ValueObject):
     """Sender information value object."""
 
     id: str
-    name: Optional[str] = None
-    avatar: Optional[str] = None
+    name: str | None = None
+    avatar: str | None = None
 
 
 @dataclass(kw_only=True)
@@ -109,13 +110,13 @@ class Message(Entity):
     chat_id: str
     sender: SenderInfo
     content: MessageContent
-    project_id: Optional[str] = None
-    reply_to: Optional[str] = None  # message_id being replied to
-    thread_id: Optional[str] = None  # thread/topic identifier
+    project_id: str | None = None
+    reply_to: str | None = None  # message_id being replied to
+    thread_id: str | None = None  # thread/topic identifier
     sender_type: str = "user"  # user, bot, app
-    mentions: List[str] = field(default_factory=list)  # mentioned user IDs
-    raw_data: Optional[Dict[str, Any]] = field(default=None, repr=False)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    mentions: list[str] = field(default_factory=list)  # mentioned user IDs
+    raw_data: dict[str, Any] | None = field(default=None, repr=False)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def is_group_message(self) -> bool:
@@ -131,15 +132,15 @@ class ChannelConfig(ValueObject):
     """Channel configuration value object."""
 
     enabled: bool = True
-    app_id: Optional[str] = None
-    app_secret: Optional[str] = None
-    encrypt_key: Optional[str] = None
-    verification_token: Optional[str] = None
+    app_id: str | None = None
+    app_secret: str | None = None
+    encrypt_key: str | None = None
+    verification_token: str | None = None
     connection_mode: str = "websocket"  # websocket or webhook
-    webhook_port: Optional[int] = None
-    webhook_path: Optional[str] = None
-    domain: Optional[str] = None  # feishu, lark, or custom
-    extra: Dict[str, Any] = field(default_factory=dict)
+    webhook_port: int | None = None
+    webhook_path: str | None = None
+    domain: str | None = None  # feishu, lark, or custom
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 class ChannelAdapter(Protocol):
@@ -175,7 +176,7 @@ class ChannelAdapter(Protocol):
         ...
 
     async def send_message(
-        self, to: str, content: MessageContent, reply_to: Optional[str] = None
+        self, to: str, content: MessageContent, reply_to: str | None = None
     ) -> str:
         """Send a message to the specified recipient.
 
@@ -189,7 +190,7 @@ class ChannelAdapter(Protocol):
         """
         ...
 
-    async def send_text(self, to: str, text: str, reply_to: Optional[str] = None) -> str:
+    async def send_text(self, to: str, text: str, reply_to: str | None = None) -> str:
         """Send a text message (convenience method)."""
         ...
 
@@ -204,11 +205,11 @@ class ChannelAdapter(Protocol):
         """Register an error handler callback."""
         ...
 
-    async def get_chat_members(self, chat_id: str) -> List[SenderInfo]:
+    async def get_chat_members(self, chat_id: str) -> list[SenderInfo]:
         """Get members of a chat group."""
         ...
 
-    async def get_user_info(self, user_id: str) -> Optional[SenderInfo]:
+    async def get_user_info(self, user_id: str) -> SenderInfo | None:
         """Get user information by ID."""
         ...
 
@@ -223,8 +224,8 @@ class ChannelAdapter(Protocol):
     async def send_card(
         self,
         to: str,
-        card: Dict[str, Any],
-        reply_to: Optional[str] = None,
+        card: dict[str, Any],
+        reply_to: str | None = None,
     ) -> str:
         """Send an interactive card message."""
         ...
@@ -249,7 +250,7 @@ class ChannelAdapter(Protocol):
         self,
         to: str,
         markdown: str,
-        reply_to: Optional[str] = None,
+        reply_to: str | None = None,
     ) -> str:
         """Send markdown content as an interactive card."""
         ...
@@ -287,7 +288,7 @@ class ChannelDisconnectedEvent(DomainEvent):
     """Event emitted when a channel disconnects."""
 
     channel: str
-    reason: Optional[str] = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)

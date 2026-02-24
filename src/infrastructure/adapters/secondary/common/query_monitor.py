@@ -14,8 +14,8 @@ import time
 from collections import defaultdict
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class SlowQueryError(Exception):
         threshold_ms: The threshold that was exceeded
     """
 
-    def __init__(self, query: str, duration_ms: float, threshold_ms: float):
+    def __init__(self, query: str, duration_ms: float, threshold_ms: float) -> None:
         self.query = query
         self.duration_ms = duration_ms
         self.threshold_ms = threshold_ms
@@ -75,14 +75,14 @@ class QueryInfo:
     query_text: str
     duration_ms: float
     rows_affected: int = 0
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    error: Optional[str] = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    error: str | None = None
 
     def is_slow(self, threshold_ms: int = 100) -> bool:
         """Check if query is slow."""
         return self.duration_ms >= threshold_ms
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "query_hash": self.query_hash,
@@ -119,7 +119,7 @@ class QueryStats:
         self._total_duration_ms: float = 0
         self._min_duration_ms: float = float("inf")
         self._max_duration_ms: float = 0
-        self._durations: List[float] = []
+        self._durations: list[float] = []
 
     def record(self, duration_ms: float, failed: bool = False) -> None:
         """
@@ -196,7 +196,7 @@ class QueryStats:
         self._max_duration_ms = 0
         self._durations = []
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert statistics to dictionary."""
         slow_percentage = (
             (self._slow_queries / self._total_queries * 100) if self._total_queries > 0 else 0
@@ -238,7 +238,7 @@ class QueryMonitor:
     def __init__(
         self,
         name: str,
-        config: Optional[QueryMonitorConfig] = None,
+        config: QueryMonitorConfig | None = None,
     ) -> None:
         """
         Initialize query monitor.
@@ -250,8 +250,8 @@ class QueryMonitor:
         self._name = name
         self._config = config or QueryMonitorConfig()
         self._stats = QueryStats(threshold_ms=self._config.slow_query_threshold_ms)
-        self._query_history: List[QueryInfo] = []
-        self._query_counts: Dict[str, int] = defaultdict(int)
+        self._query_history: list[QueryInfo] = []
+        self._query_counts: dict[str, int] = defaultdict(int)
         self._lock = asyncio.Lock()
 
     @property
@@ -270,7 +270,7 @@ class QueryMonitor:
         return self._stats
 
     @property
-    def query_history(self) -> List[QueryInfo]:
+    def query_history(self) -> list[QueryInfo]:
         """Get query history."""
         return list(self._query_history)
 
@@ -293,11 +293,11 @@ class QueryMonitor:
 
     async def execute(
         self,
-        session: Any,  # noqa: ANN401
-        query: Any,  # noqa: ANN401
-        params: Optional[Dict[str, Any]] = None,
-        duration_ms: Optional[float] = None,
-    ) -> Any:  # noqa: ANN401
+        session: Any,
+        query: Any,
+        params: dict[str, Any] | None = None,
+        duration_ms: float | None = None,
+    ) -> Any:
         """
         Execute and monitor a query.
 
@@ -352,7 +352,7 @@ class QueryMonitor:
         query_hash: str,
         query_text: str,
         duration_ms: float,
-        error: Optional[str] = None,
+        error: str | None = None,
     ) -> None:
         """
         Record query execution information.
@@ -395,9 +395,9 @@ class QueryMonitor:
 
     def get_slow_queries(
         self,
-        threshold_ms: Optional[int] = None,
-        limit: Optional[int] = None,
-    ) -> List[QueryInfo]:
+        threshold_ms: int | None = None,
+        limit: int | None = None,
+    ) -> list[QueryInfo]:
         """
         Get list of slow queries.
 
@@ -420,7 +420,7 @@ class QueryMonitor:
 
         return slow_queries
 
-    def get_slowest_queries(self, limit: int = 10) -> List[QueryInfo]:
+    def get_slowest_queries(self, limit: int = 10) -> list[QueryInfo]:
         """
         Get the slowest queries.
 
@@ -433,7 +433,7 @@ class QueryMonitor:
         queries = sorted(self._query_history, key=lambda q: q.duration_ms, reverse=True)
         return queries[:limit]
 
-    def get_most_frequent_queries(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_most_frequent_queries(self, limit: int = 10) -> list[dict[str, Any]]:
         """
         Get most frequently executed queries.
 
@@ -444,7 +444,7 @@ class QueryMonitor:
             List of queries with execution counts
         """
         # Group by hash
-        query_groups: Dict[str, Dict[str, Any]] = {}
+        query_groups: dict[str, dict[str, Any]] = {}
 
         for q in self._query_history:
             if q.query_hash not in query_groups:
@@ -469,7 +469,7 @@ class QueryMonitor:
 
         return result[:limit]
 
-    def get_statistics(self) -> Dict[str, Any]:
+    def get_statistics(self) -> dict[str, Any]:
         """
         Get aggregated statistics.
 
@@ -478,7 +478,7 @@ class QueryMonitor:
         """
         return self._stats.to_dict()
 
-    def get_dashboard_data(self) -> Dict[str, Any]:
+    def get_dashboard_data(self) -> dict[str, Any]:
         """
         Get data for performance dashboard.
 
@@ -524,7 +524,7 @@ class QueryMonitor:
         query_text = f"Operation: {operation}"
 
         class Tracker:
-            def __init__(self, monitor_obj: QueryMonitor, query: str, start: float):
+            def __init__(self, monitor_obj: QueryMonitor, query: str, start: float) -> None:
                 self._monitor = monitor_obj
                 self._query = query
                 self._start = start
@@ -553,13 +553,13 @@ class QueryMonitorRegistry:
     """
 
     def __init__(self) -> None:
-        self._monitors: Dict[str, QueryMonitor] = {}
+        self._monitors: dict[str, QueryMonitor] = {}
         self._lock = asyncio.Lock()
 
     async def get_or_create(
         self,
         name: str,
-        config: Optional[QueryMonitorConfig] = None,
+        config: QueryMonitorConfig | None = None,
     ) -> QueryMonitor:
         """
         Get existing monitor or create new one.
@@ -576,7 +576,7 @@ class QueryMonitorRegistry:
                 self._monitors[name] = QueryMonitor(name, config)
             return self._monitors[name]
 
-    async def get(self, name: str) -> Optional[QueryMonitor]:
+    async def get(self, name: str) -> QueryMonitor | None:
         """
         Get monitor by name.
 
@@ -589,7 +589,7 @@ class QueryMonitorRegistry:
         async with self._lock:
             return self._monitors.get(name)
 
-    async def get_all_dashboard_data(self) -> Dict[str, Any]:
+    async def get_all_dashboard_data(self) -> dict[str, Any]:
         """Get dashboard data for all monitors."""
         async with self._lock:
             return {name: monitor.get_dashboard_data() for name, monitor in self._monitors.items()}
@@ -607,7 +607,7 @@ _global_monitor_registry = QueryMonitorRegistry()
 
 async def get_query_monitor(
     name: str,
-    config: Optional[QueryMonitorConfig] = None,
+    config: QueryMonitorConfig | None = None,
 ) -> QueryMonitor:
     """Get or create query monitor from global registry."""
     return await _global_monitor_registry.get_or_create(name, config)

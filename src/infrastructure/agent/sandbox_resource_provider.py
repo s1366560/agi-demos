@@ -8,13 +8,12 @@ agent workflow.
 """
 
 import logging
-from typing import Optional
 
 from src.domain.ports.services.sandbox_resource_port import SandboxResourcePort
 
 logger = logging.getLogger(__name__)
 
-_sandbox_resource_port: Optional[SandboxResourcePort] = None
+_sandbox_resource_port: SandboxResourcePort | None = None
 
 
 def set_sandbox_resource_port(port: SandboxResourcePort) -> None:
@@ -30,7 +29,7 @@ def set_sandbox_resource_port(port: SandboxResourcePort) -> None:
     logger.info("[SandboxResourceProvider] SandboxResourcePort registered")
 
 
-def get_sandbox_resource_port() -> Optional[SandboxResourcePort]:
+def get_sandbox_resource_port() -> SandboxResourcePort | None:
     """Get the sandbox resource port for agent workflow access.
 
     Returns:

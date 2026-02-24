@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -40,7 +40,7 @@ def test_mutation_ledger_loop_guard_ignores_stale_and_dry_run(tmp_path) -> None:
     """Loop guard should ignore stale records and dry-run status entries."""
     ledger = MutationLedger(tmp_path / "mutation-ledger.json", max_records=100)
     fingerprint = "tool=plugin_manager|action=reload"
-    stale_time = (datetime.now(timezone.utc) - timedelta(seconds=3600)).isoformat()
+    stale_time = (datetime.now(UTC) - timedelta(seconds=3600)).isoformat()
     ledger.append(
         {
             "timestamp": stale_time,

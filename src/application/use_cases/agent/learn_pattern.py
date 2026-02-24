@@ -8,8 +8,8 @@ and potentially stored as a pattern for future reuse.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from src.domain.model.agent.workflow_pattern import PatternStep, WorkflowPattern
 from src.domain.ports.repositories.workflow_pattern_repository import WorkflowPatternRepositoryPort
@@ -20,19 +20,19 @@ class LearnPatternRequest:
     """Request to learn a pattern from an execution."""
 
     tenant_id: str
-    name: Optional[str]  # Will be generated if not provided
+    name: str | None  # Will be generated if not provided
     description: str
     conversation_id: str
     execution_id: str
-    steps: List[Dict[str, Any]]
-    metadata: Optional[Dict[str, Any]] = None
+    steps: list[dict[str, Any]]
+    metadata: dict[str, Any] | None = None
 
 
 @dataclass
 class LearnPatternResult:
     """Result of learning a pattern."""
 
-    pattern: Optional[WorkflowPattern]
+    pattern: WorkflowPattern | None
     was_new_pattern: bool  # True if created new, False if updated existing
 
 
@@ -44,7 +44,7 @@ class LearnPattern:
     reusable workflow patterns that can be matched to future queries.
     """
 
-    def __init__(self, repository: WorkflowPatternRepositoryPort):
+    def __init__(self, repository: WorkflowPatternRepositoryPort) -> None:
         self._repository = repository
 
     async def execute(self, request: LearnPatternRequest) -> WorkflowPattern:
@@ -95,14 +95,14 @@ class LearnPattern:
                 success_rate=similar_pattern.success_rate,
                 usage_count=similar_pattern.usage_count + 1,
                 created_at=similar_pattern.created_at,
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(UTC),
                 metadata=similar_pattern.metadata,
             )
             await self._repository.update(updated_pattern)
             return updated_pattern
         else:
             # Create new pattern
-            pattern_id = f"pattern-{request.tenant_id}-{datetime.now(timezone.utc).timestamp()}"
+            pattern_id = f"pattern-{request.tenant_id}-{datetime.now(UTC).timestamp()}"
 
             pattern = WorkflowPattern(
                 id=pattern_id,
@@ -112,8 +112,8 @@ class LearnPattern:
                 steps=pattern_steps,
                 success_rate=1.0,  # New pattern starts with perfect success rate
                 usage_count=1,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
                 metadata={
                     **(request.metadata or {}),
                     "source_conversation": request.conversation_id,
@@ -126,8 +126,8 @@ class LearnPattern:
     def _find_similar_pattern(
         self,
         request: LearnPatternRequest,
-        existing_patterns: List[WorkflowPattern],
-    ) -> Optional[WorkflowPattern]:
+        existing_patterns: list[WorkflowPattern],
+    ) -> WorkflowPattern | None:
         """
         Find an existing pattern that is similar to the request.
 

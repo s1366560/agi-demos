@@ -23,7 +23,7 @@ class SynthesizeResultsUseCase:
     def __init__(
         self,
         llm: LLMClient,
-    ):
+    ) -> None:
         """
         Initialize the use case.
 
@@ -138,7 +138,7 @@ Be thorough but concise. Focus on actionable insights.
         parts = ["Based on the analysis completed:"]
         parts.append("")
 
-        for i, (step, result) in enumerate(zip(work_plan.steps, step_results)):
+        for i, (step, result) in enumerate(zip(work_plan.steps, step_results, strict=False)):
             parts.append(f"{i + 1}. {step.description}")
             if result.get("success"):
                 tool_results = result.get("tool_results", [])

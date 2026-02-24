@@ -8,7 +8,6 @@
 
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional
 
 
 class SandboxProfileType(str, Enum):
@@ -31,15 +30,15 @@ class SandboxProfile:
     memory_limit: str
     cpu_limit: str
     timeout_seconds: int
-    preinstalled_tools: List[str] = field(default_factory=list)
+    preinstalled_tools: list[str] = field(default_factory=list)
     max_instances: int = 5
-    image_name: Optional[str] = None
+    image_name: str | None = None
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """转换为字典."""
         return asdict(self)
 
-    def get_config(self) -> Dict:
+    def get_config(self) -> dict:
         """获取 Sandbox 创建配置."""
         return {
             "memory_limit": self.memory_limit,
@@ -50,7 +49,7 @@ class SandboxProfile:
 
 
 # 预定义配置模板
-SANDBOX_PROFILES: Dict[SandboxProfileType, SandboxProfile] = {
+SANDBOX_PROFILES: dict[SandboxProfileType, SandboxProfile] = {
     SandboxProfileType.LITE: SandboxProfile(
         name="Lite",
         description="轻量级 sandbox，无桌面，仅 MCP + Terminal",
@@ -116,7 +115,7 @@ def register_profile(profile: SandboxProfile) -> None:
     SANDBOX_PROFILES[profile.profile_type] = profile
 
 
-def list_profiles() -> List[SandboxProfile]:
+def list_profiles() -> list[SandboxProfile]:
     """列出所有可用的配置模板.
 
     Returns:

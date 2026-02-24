@@ -6,7 +6,7 @@ moved to enhanced_search.py to avoid duplication.
 """
 
 import logging
-from typing import List, Optional
+from datetime import UTC
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/graph", tags=["graph"])
 
 
-def _serialize_datetime(value) -> Optional[str]:
+def _serialize_datetime(value) -> str | None:
     """Convert Neo4j DateTime to ISO string for JSON serialization."""
     if value is None:
         return None
@@ -43,9 +43,9 @@ class Entity(BaseModel):
     name: str
     entity_type: str
     summary: str
-    tenant_id: Optional[str] = None
-    project_id: Optional[str] = None
-    created_at: Optional[str] = None
+    tenant_id: str | None = None
+    project_id: str | None = None
+    created_at: str | None = None
 
 
 class Community(BaseModel):
@@ -53,10 +53,10 @@ class Community(BaseModel):
     name: str
     summary: str
     member_count: int
-    tenant_id: Optional[str] = None
-    project_id: Optional[str] = None
-    formed_at: Optional[str] = None
-    created_at: Optional[str] = None
+    tenant_id: str | None = None
+    project_id: str | None = None
+    formed_at: str | None = None
+    created_at: str | None = None
 
 
 class GraphData(BaseModel):
@@ -64,11 +64,11 @@ class GraphData(BaseModel):
 
 
 class SubgraphRequest(BaseModel):
-    node_uuids: List[str]
+    node_uuids: list[str]
     include_neighbors: bool = True
     limit: int = 100
-    tenant_id: Optional[str] = None
-    project_id: Optional[str] = None
+    tenant_id: str | None = None
+    project_id: str | None = None
 
 
 # --- Graph Structure Endpoints ---
@@ -76,8 +76,8 @@ class SubgraphRequest(BaseModel):
 
 @router.get("/communities/")
 async def list_communities(
-    project_id: Optional[str] = None,
-    min_members: Optional[int] = Query(None, description="Minimum member count"),
+    project_id: str | None = None,
+    min_members: int | None = Query(None, description="Minimum member count"),
     limit: int = Query(50, ge=1, le=200, description="Maximum items to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: User = Depends(get_current_user),
@@ -153,8 +153,8 @@ async def list_communities(
 
 @router.get("/entities/")
 async def list_entities(
-    project_id: Optional[str] = None,
-    entity_type: Optional[str] = Query(None, description="Filter by entity type"),
+    project_id: str | None = None,
+    entity_type: str | None = Query(None, description="Filter by entity type"),
     limit: int = Query(50, ge=1, le=200, description="Maximum items to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: User = Depends(get_current_user),
@@ -228,7 +228,7 @@ async def list_entities(
 
 @router.get("/entities/types")
 async def get_entity_types(
-    project_id: Optional[str] = None,
+    project_id: str | None = None,
     current_user: User = Depends(get_current_user),
     neo4j_client=Depends(get_neo4j_client),
 ):
@@ -338,7 +338,7 @@ async def get_entity(
 @router.get("/entities/{entity_id}/relationships")
 async def get_entity_relationships(
     entity_id: str,
-    relationship_type: Optional[str] = Query(None, description="Filter by relationship type"),
+    relationship_type: str | None = Query(None, description="Filter by relationship type"),
     limit: int = Query(50, ge=1, le=200, description="Maximum relationships to return"),
     current_user: User = Depends(get_current_user),
     neo4j_client=Depends(get_neo4j_client),
@@ -427,7 +427,7 @@ async def get_entity_relationships(
 
 @router.get("/memory/graph")
 async def get_graph(
-    project_id: Optional[str] = None,
+    project_id: str | None = None,
     limit: int = 100,
     current_user: User = Depends(get_current_user),
     neo4j_client=Depends(get_neo4j_client),
@@ -712,7 +712,7 @@ async def get_community_members(
 @router.post("/communities/rebuild")
 async def rebuild_communities(
     background: bool = Query(False, description="Run in background mode"),
-    project_id: Optional[str] = Query(None, description="Project ID to rebuild communities for"),
+    project_id: str | None = Query(None, description="Project ID to rebuild communities for"),
     current_user: User = Depends(get_current_user),
     neo4j_client=Depends(get_neo4j_client),
     workflow_engine=Depends(get_workflow_engine),
@@ -735,7 +735,7 @@ async def rebuild_communities(
     Set background=true to run asynchronously and return a task ID for tracking.
     The task can then be monitored via GET /api/v1/tasks/{task_id}
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
     from uuid import uuid4
 
     # Get project_id from query parameter, or fall back to user's default project
@@ -756,18 +756,17 @@ async def rebuild_communities(
 
         # Create TaskLog record
         task_id = str(uuid4())
-        async with async_session_factory() as session:
-            async with session.begin():
-                task_log = TaskLog(
-                    id=task_id,
-                    group_id=target_project_id,
-                    task_type="rebuild_communities",
-                    status="PENDING",
-                    payload=task_payload,
-                    entity_type="community",
-                    created_at=datetime.now(timezone.utc),
-                )
-                session.add(task_log)
+        async with async_session_factory() as session, session.begin():
+            task_log = TaskLog(
+                id=task_id,
+                group_id=target_project_id,
+                task_type="rebuild_communities",
+                status="PENDING",
+                payload=task_payload,
+                entity_type="community",
+                created_at=datetime.now(UTC),
+            )
+            session.add(task_log)
 
         # Add task_id to payload for progress tracking
         task_payload["task_id"] = task_id

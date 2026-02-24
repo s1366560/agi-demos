@@ -6,8 +6,7 @@ and predict resource requirements.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,7 @@ class TrendAnalysis:
     metric_name: str
     trend_direction: str  # "increasing", "decreasing", "stable"
     trend_strength: float  # 0.0 to 1.0
-    predicted_value: Optional[float] = None
+    predicted_value: float | None = None
     confidence: float = 0.0
 
 
@@ -45,10 +44,10 @@ class PoolTrendAnalysis:
     request_trend: TrendAnalysis
     latency_trend: TrendAnalysis
     error_rate_trend: TrendAnalysis
-    peak_hours: List[int]  # Hours of day with highest load (0-23)
+    peak_hours: list[int]  # Hours of day with highest load (0-23)
     recommended_instance_count: int
     confidence_score: float
-    analysis_timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    analysis_timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -60,7 +59,7 @@ class ScalingRecommendation:
     reason: str
     confidence: float
     urgency: str  # "low", "medium", "high", "critical"
-    estimated_cost_impact: Optional[float] = None
+    estimated_cost_impact: float | None = None
 
 
 class PoolMetricsAnalyzer:
@@ -79,7 +78,7 @@ class PoolMetricsAnalyzer:
         min_data_points: int = 10,
         analysis_window_hours: int = 24,
         prediction_horizon_hours: int = 4,
-    ):
+    ) -> None:
         """Initialize the analyzer.
 
         Args:
@@ -93,7 +92,7 @@ class PoolMetricsAnalyzer:
 
     def analyze_trends(
         self,
-        metrics_history: List[MetricsDataPoint],
+        metrics_history: list[MetricsDataPoint],
         current_instance_count: int = 1,
     ) -> PoolTrendAnalysis:
         """Analyze trends from historical metrics.
@@ -207,7 +206,7 @@ class PoolMetricsAnalyzer:
 
     def _analyze_single_metric(
         self,
-        data: List[tuple],
+        data: list[tuple],
         metric_name: str,
     ) -> TrendAnalysis:
         """Analyze trend for a single metric."""
@@ -258,7 +257,7 @@ class PoolMetricsAnalyzer:
 
     def _analyze_error_rate(
         self,
-        metrics: List[MetricsDataPoint],
+        metrics: list[MetricsDataPoint],
     ) -> TrendAnalysis:
         """Analyze error rate trend."""
         error_rates = []
@@ -276,9 +275,9 @@ class PoolMetricsAnalyzer:
 
         return self._analyze_single_metric(error_rates, "error_rate")
 
-    def _identify_peak_hours(self, metrics: List[MetricsDataPoint]) -> List[int]:
+    def _identify_peak_hours(self, metrics: list[MetricsDataPoint]) -> list[int]:
         """Identify peak hours from metrics."""
-        hourly_load: Dict[int, List[float]] = {}
+        hourly_load: dict[int, list[float]] = {}
 
         for m in metrics:
             hour = m.timestamp.hour
@@ -306,7 +305,7 @@ class PoolMetricsAnalyzer:
 
     def _calculate_recommended_instances(
         self,
-        metrics_history: List[MetricsDataPoint],
+        metrics_history: list[MetricsDataPoint],
         current_count: int,
         cpu_trend: TrendAnalysis,
         request_trend: TrendAnalysis,
@@ -348,7 +347,7 @@ class PoolMetricsAnalyzer:
         # Combine factors
         return data_factor * 0.6 + trend_consistency * 0.4
 
-    def _check_trend_consistency(self, trends: List[TrendAnalysis]) -> float:
+    def _check_trend_consistency(self, trends: list[TrendAnalysis]) -> float:
         """Check if trends are consistent (all pointing same direction)."""
         if not trends:
             return 0.5

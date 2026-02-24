@@ -7,8 +7,9 @@ This module provides:
 - Integration with Neo4j for storing community results
 """
 
+import contextlib
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import uuid4
 
 from src.infrastructure.graph.neo4j_client import Neo4jClient
@@ -34,7 +35,7 @@ class LouvainDetector:
         neo4j_client: Neo4jClient,
         use_gds: bool = True,
         min_community_size: int = 2,
-    ):
+    ) -> None:
         """
         Initialize Louvain detector.
 
@@ -46,13 +47,13 @@ class LouvainDetector:
         self._neo4j_client = neo4j_client
         self._use_gds = use_gds
         self._min_community_size = min_community_size
-        self._gds_available: Optional[bool] = None
+        self._gds_available: bool | None = None
 
     async def detect_communities(
         self,
         project_id: str,
-        tenant_id: Optional[str] = None,
-    ) -> List[CommunityNode]:
+        tenant_id: str | None = None,
+    ) -> list[CommunityNode]:
         """
         Detect communities in the knowledge graph for a project.
 
@@ -93,8 +94,8 @@ class LouvainDetector:
     async def _detect_with_gds(
         self,
         project_id: str,
-        tenant_id: Optional[str],
-    ) -> List[CommunityNode]:
+        tenant_id: str | None,
+    ) -> list[CommunityNode]:
         """
         Detect communities using Neo4j GDS Louvain algorithm.
 
@@ -190,19 +191,17 @@ class LouvainDetector:
 
         finally:
             # Clean up projected graph
-            try:
+            with contextlib.suppress(Exception):
                 await self._neo4j_client.execute_query(
                     "CALL gds.graph.drop($name, false)",
                     name=graph_name,
                 )
-            except Exception:
-                pass
 
     async def _detect_with_networkx(
         self,
         project_id: str,
-        tenant_id: Optional[str],
-    ) -> List[CommunityNode]:
+        tenant_id: str | None,
+    ) -> list[CommunityNode]:
         """
         Detect communities using networkx (in-memory fallback).
 
@@ -289,7 +288,7 @@ class LouvainDetector:
     async def get_community_members(
         self,
         community_uuid: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get entity members of a community.
 
@@ -313,7 +312,7 @@ class LouvainDetector:
     async def save_community(
         self,
         community: CommunityNode,
-        member_uuids: List[str],
+        member_uuids: list[str],
     ) -> None:
         """
         Save a community and its member relationships.

@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import List, Optional
 
 
 @dataclass
@@ -12,7 +11,7 @@ class UploadResult:
     object_key: str
     size_bytes: int
     content_type: str
-    etag: Optional[str] = None
+    etag: str | None = None
 
 
 @dataclass
@@ -44,7 +43,7 @@ class StorageServicePort(ABC):
         file_content: bytes,
         object_key: str,
         content_type: str,
-        metadata: Optional[dict] = None,
+        metadata: dict | None = None,
     ) -> UploadResult:
         """
         Upload a file to storage.
@@ -65,7 +64,7 @@ class StorageServicePort(ABC):
         self,
         object_key: str,
         expiration_seconds: int = 3600,
-        content_disposition: Optional[str] = None,
+        content_disposition: str | None = None,
     ) -> str:
         """
         Generate a presigned URL for downloading a file.
@@ -107,7 +106,7 @@ class StorageServicePort(ABC):
         pass
 
     @abstractmethod
-    async def get_file(self, object_key: str) -> Optional[bytes]:
+    async def get_file(self, object_key: str) -> bytes | None:
         """
         Retrieve a file's content from storage.
 
@@ -144,7 +143,7 @@ class StorageServicePort(ABC):
         self,
         object_key: str,
         content_type: str,
-        metadata: Optional[dict] = None,
+        metadata: dict | None = None,
     ) -> MultipartUploadResult:
         """
         Initialize a multipart upload.
@@ -186,7 +185,7 @@ class StorageServicePort(ABC):
         self,
         object_key: str,
         upload_id: str,
-        parts: List[PartUploadResult],
+        parts: list[PartUploadResult],
     ) -> UploadResult:
         """
         Complete a multipart upload.

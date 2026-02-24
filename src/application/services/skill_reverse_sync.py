@@ -14,9 +14,9 @@ from __future__ import annotations
 import base64
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from src.domain.model.agent.skill import Skill, SkillScope, TriggerPattern, TriggerType
 from src.domain.model.agent.skill.skill_source import SkillSource
@@ -86,11 +86,11 @@ class SkillReverseSync:
         tenant_id: str,
         sandbox_adapter: SandboxPort,
         sandbox_id: str,
-        project_id: Optional[str] = None,
-        change_summary: Optional[str] = None,
+        project_id: str | None = None,
+        change_summary: str | None = None,
         created_by: str = "agent",
-        skill_path: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        skill_path: str | None = None,
+    ) -> dict[str, Any]:
         """
         Read skill files from sandbox, persist to DB with version snapshot,
         and write to host filesystem.
@@ -137,7 +137,7 @@ class SkillReverseSync:
         # Step 5: Update skill's current_version
         skill.current_version = version.version_number
         skill.version_label = version.version_label
-        skill.updated_at = datetime.now(timezone.utc)
+        skill.updated_at = datetime.now(UTC)
         await self._skill_repo.update(skill)
 
         # Step 6: Write to host filesystem
@@ -161,7 +161,7 @@ class SkillReverseSync:
         self,
         skill_id: str,
         version_number: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Rollback a skill to a specific version.
 
@@ -202,7 +202,7 @@ class SkillReverseSync:
         # Update skill's current version
         skill.current_version = rollback_version.version_number
         skill.version_label = rollback_version.version_label
-        skill.updated_at = datetime.now(timezone.utc)
+        skill.updated_at = datetime.now(UTC)
         await self._skill_repo.update(skill)
 
         # Write restored files to host filesystem
@@ -227,9 +227,9 @@ class SkillReverseSync:
         sandbox_adapter: SandboxPort,
         sandbox_id: str,
         container_path: str,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """Read all files from a skill directory in the sandbox container."""
-        files: Dict[str, str] = {}
+        files: dict[str, str] = {}
 
         try:
             # List all files
@@ -304,7 +304,7 @@ class SkillReverseSync:
         skill_name: str,
         parsed: SkillMarkdown,
         tenant_id: str,
-        project_id: Optional[str],
+        project_id: str | None,
         skill_md_content: str,
     ) -> Skill:
         """Create or update a skill in the database."""
@@ -316,7 +316,7 @@ class SkillReverseSync:
             existing.trigger_patterns = [TriggerPattern(pattern=p) for p in parsed.trigger_patterns]
             existing.tools = parsed.tools
             existing.full_content = skill_md_content
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             if parsed.version:
                 existing.version_label = parsed.version
             await self._skill_repo.update(existing)
@@ -348,8 +348,8 @@ class SkillReverseSync:
         self,
         skill: Skill,
         skill_md_content: str,
-        resource_files: Dict[str, str],
-        change_summary: Optional[str],
+        resource_files: dict[str, str],
+        change_summary: str | None,
         created_by: str,
     ) -> SkillVersion:
         """Create a version snapshot for a skill."""
@@ -394,7 +394,7 @@ class SkillReverseSync:
         self,
         prev_version: SkillVersion,
         new_md_content: str,
-        new_resource_files: Dict[str, str],
+        new_resource_files: dict[str, str],
     ) -> str:
         """Generate a simple change summary by comparing with previous version."""
         changes = []
@@ -421,7 +421,7 @@ class SkillReverseSync:
 
         return "; ".join(changes) if changes else "No changes detected"
 
-    async def _write_to_host(self, skill_name: str, files: Dict[str, str]) -> None:
+    async def _write_to_host(self, skill_name: str, files: dict[str, str]) -> None:
         """Write skill files to host filesystem."""
         skill_dir = self._host_project_path / ".memstack" / "skills" / skill_name
         skill_dir.mkdir(parents=True, exist_ok=True)
@@ -444,13 +444,13 @@ class SkillReverseSync:
         logger.info(f"Wrote {len(files)} files to {skill_dir}")
 
     @staticmethod
-    def _extract_file_paths(glob_result: Any) -> List[str]:  # noqa: ANN401
+    def _extract_file_paths(glob_result: Any) -> list[str]:
         """Extract file paths from MCP glob tool result.
 
         The MCP glob tool returns newline-separated file paths in a single
         text content item. We need to split and filter them.
         """
-        raw_paths: List[str] = []
+        raw_paths: list[str] = []
 
         if isinstance(glob_result, dict):
             if "files" in glob_result:
@@ -479,13 +479,13 @@ class SkillReverseSync:
         ]
 
     @staticmethod
-    def _extract_content(read_result: Any) -> Optional[str]:  # noqa: ANN401
+    def _extract_content(read_result: Any) -> str | None:
         """Extract text content from MCP read tool result.
 
         Handles line-number prefixes (e.g. '     1\\t...') that the MCP read
         tool adds by default. Strips them so callers get raw file content.
         """
-        raw: Optional[str] = None
+        raw: str | None = None
         if isinstance(read_result, dict):
             if "content" in read_result:
                 content = read_result["content"]

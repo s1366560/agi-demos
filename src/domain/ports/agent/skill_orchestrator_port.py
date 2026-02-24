@@ -5,9 +5,10 @@ Skills are declarative tool compositions (L2 layer) that combine multiple
 tools into reusable workflows.
 """
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class SkillExecutionMode(str, Enum):
@@ -31,8 +32,8 @@ class SkillMatchRequest:
 
     message: str
     project_id: str
-    available_skills: Optional[List[Dict[str, Any]]] = None
-    context: Dict[str, Any] = field(default_factory=dict)
+    available_skills: list[dict[str, Any]] | None = None
+    context: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -49,11 +50,11 @@ class SkillMatchResult:
     """
 
     matched: bool
-    skill_name: Optional[str] = None
-    skill_definition: Optional[Dict[str, Any]] = None
+    skill_name: str | None = None
+    skill_definition: dict[str, Any] | None = None
     confidence: float = 0.0
     execution_mode: SkillExecutionMode = SkillExecutionMode.DIRECT
-    extracted_params: Dict[str, Any] = field(default_factory=dict)
+    extracted_params: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -72,12 +73,12 @@ class SkillExecutionRequest:
     """
 
     skill_name: str
-    skill_definition: Dict[str, Any]
-    params: Dict[str, Any]
+    skill_definition: dict[str, Any]
+    params: dict[str, Any]
     project_id: str
-    user_id: Optional[str] = None
-    session_id: Optional[str] = None
-    sandbox_id: Optional[str] = None
+    user_id: str | None = None
+    session_id: str | None = None
+    sandbox_id: str | None = None
     stream: bool = False
 
 
@@ -97,11 +98,11 @@ class SkillExecutionResult:
 
     success: bool
     output: str = ""
-    error: Optional[str] = None
-    artifacts: List[Dict[str, Any]] = field(default_factory=list)
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
-    duration_ms: Optional[float] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    error: str | None = None
+    artifacts: list[dict[str, Any]] = field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    duration_ms: float | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @runtime_checkable
@@ -159,7 +160,7 @@ class SkillOrchestratorPort(Protocol):
 
     async def execute_stream(
         self, request: SkillExecutionRequest
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute a skill with streaming output.
 
@@ -171,7 +172,7 @@ class SkillOrchestratorPort(Protocol):
         """
         ...
 
-    def get_available_skills(self, project_id: str) -> List[Dict[str, Any]]:
+    def get_available_skills(self, project_id: str) -> list[dict[str, Any]]:
         """
         Get available skills for a project.
 

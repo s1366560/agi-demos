@@ -1,7 +1,6 @@
 """S3 Storage Adapter - Implementation of StorageServicePort for S3/MinIO."""
 
 import logging
-from typing import List, Optional
 
 import aioboto3
 from botocore.exceptions import ClientError
@@ -27,11 +26,11 @@ class S3StorageAdapter(StorageServicePort):
         self,
         bucket_name: str,
         region: str,
-        access_key_id: Optional[str] = None,
-        secret_access_key: Optional[str] = None,
-        endpoint_url: Optional[str] = None,
+        access_key_id: str | None = None,
+        secret_access_key: str | None = None,
+        endpoint_url: str | None = None,
         no_proxy: bool = False,
-    ):
+    ) -> None:
         """
         Initialize S3 storage adapter.
 
@@ -87,7 +86,7 @@ class S3StorageAdapter(StorageServicePort):
         file_content: bytes,
         object_key: str,
         content_type: str,
-        metadata: Optional[dict] = None,
+        metadata: dict | None = None,
     ) -> UploadResult:
         """Upload a file to S3."""
         async with await self._get_client() as s3:
@@ -134,7 +133,7 @@ class S3StorageAdapter(StorageServicePort):
         self,
         object_key: str,
         expiration_seconds: int = 3600,
-        content_disposition: Optional[str] = None,
+        content_disposition: str | None = None,
     ) -> str:
         """Generate a presigned URL for downloading a file."""
         async with await self._get_client() as s3:
@@ -198,7 +197,7 @@ class S3StorageAdapter(StorageServicePort):
                 logger.error(f"Error checking file existence: {object_key}, error: {e}")
                 raise
 
-    async def get_file(self, object_key: str) -> Optional[bytes]:
+    async def get_file(self, object_key: str) -> bytes | None:
         """Retrieve a file's content from S3."""
         async with await self._get_client() as s3:
             try:
@@ -284,7 +283,7 @@ class S3StorageAdapter(StorageServicePort):
         self,
         object_key: str,
         content_type: str,
-        metadata: Optional[dict] = None,
+        metadata: dict | None = None,
     ) -> MultipartUploadResult:
         """Initialize a multipart upload in S3."""
         async with await self._get_client() as s3:
@@ -357,7 +356,7 @@ class S3StorageAdapter(StorageServicePort):
         self,
         object_key: str,
         upload_id: str,
-        parts: List[PartUploadResult],
+        parts: list[PartUploadResult],
     ) -> UploadResult:
         """Complete a multipart upload in S3."""
         async with await self._get_client() as s3:

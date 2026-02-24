@@ -2,7 +2,7 @@
 Tests for V2 SqlTaskRepository using BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,7 +38,7 @@ class TestSqlTaskRepositoryCreate:
             worker_id=None,
             retry_count=0,
             error_message=None,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             started_at=None,
             completed_at=None,
             stopped_at=None,
@@ -71,7 +71,7 @@ class TestSqlTaskRepositoryUpdate:
             worker_id=None,
             retry_count=0,
             error_message=None,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             started_at=None,
             completed_at=None,
             stopped_at=None,
@@ -91,8 +91,8 @@ class TestSqlTaskRepositoryUpdate:
             retry_count=0,
             error_message=None,
             created_at=task.created_at,
-            started_at=datetime.now(timezone.utc),
-            completed_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
             stopped_at=None,
         )
         await v2_task_repo.save(updated)
@@ -121,7 +121,7 @@ class TestSqlTaskRepositoryFind:
             worker_id=None,
             retry_count=0,
             error_message=None,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             started_at=None,
             completed_at=None,
             stopped_at=None,
@@ -154,7 +154,7 @@ class TestSqlTaskRepositoryFind:
                 worker_id=None,
                 retry_count=0,
                 error_message=None,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
                 started_at=None,
                 completed_at=None,
                 stopped_at=None,
@@ -180,7 +180,7 @@ class TestSqlTaskRepositoryFind:
                 worker_id=None,
                 retry_count=0,
                 error_message=None,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
                 started_at=None,
                 completed_at=None,
                 stopped_at=None,
@@ -206,7 +206,7 @@ class TestSqlTaskRepositoryFind:
                 worker_id=None,
                 retry_count=0,
                 error_message=None,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
                 started_at=None,
                 completed_at=None,
                 stopped_at=None,
@@ -236,7 +236,7 @@ class TestSqlTaskRepositoryDelete:
             worker_id=None,
             retry_count=0,
             error_message=None,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             started_at=None,
             completed_at=None,
             stopped_at=None,
@@ -275,7 +275,7 @@ class TestSqlTaskRepositoryToDb:
             worker_id=None,
             retry_count=0,
             error_message=None,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             started_at=None,
             completed_at=None,
             stopped_at=None,

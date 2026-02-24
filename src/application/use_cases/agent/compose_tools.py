@@ -13,7 +13,7 @@ Key Features:
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.model.agent import ToolComposition
 from src.domain.ports.agent.agent_tool_port import AgentToolBase
@@ -30,8 +30,8 @@ class ComposeToolsUseCase:
     def __init__(
         self,
         composition_repository: ToolCompositionRepositoryPort,
-        available_tools: Dict[str, AgentToolBase],
-    ):
+        available_tools: dict[str, AgentToolBase],
+    ) -> None:
         """
         Initialize the use case.
 
@@ -44,9 +44,9 @@ class ComposeToolsUseCase:
 
     async def execute(
         self,
-        tool_names: List[str],
-        execution_context: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        tool_names: list[str],
+        execution_context: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Execute a tool composition.
 
@@ -107,8 +107,8 @@ class ComposeToolsUseCase:
 
     async def _find_composition_for_tools(
         self,
-        tool_names: List[str],
-    ) -> Optional[ToolComposition]:
+        tool_names: list[str],
+    ) -> ToolComposition | None:
         """Find an existing composition for the given tools."""
         compositions = await self._composition_repository.list_by_tools(tool_names)
 
@@ -121,8 +121,8 @@ class ComposeToolsUseCase:
 
     async def _create_composition(
         self,
-        tool_names: List[str],
-        tools: List[AgentToolBase],
+        tool_names: list[str],
+        tools: list[AgentToolBase],
     ) -> ToolComposition:
         """Create a new tool composition."""
         # Validate tool compatibility
@@ -155,9 +155,9 @@ class ComposeToolsUseCase:
     async def _execute_composition(
         self,
         composition: ToolComposition,
-        tools: List[AgentToolBase],
-        execution_context: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        tools: list[AgentToolBase],
+        execution_context: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Execute the tool composition.
 
@@ -178,9 +178,9 @@ class ComposeToolsUseCase:
     async def _execute_sequential(
         self,
         composition: ToolComposition,
-        tools: List[AgentToolBase],
-        execution_context: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        tools: list[AgentToolBase],
+        execution_context: dict[str, Any],
+    ) -> dict[str, Any]:
         """Execute tools sequentially, passing output from one to the next."""
         steps = []
         current_output = None
@@ -222,9 +222,9 @@ class ComposeToolsUseCase:
     async def _execute_parallel(
         self,
         composition: ToolComposition,
-        tools: List[AgentToolBase],
-        execution_context: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        tools: list[AgentToolBase],
+        execution_context: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Execute all tools in parallel.
 
@@ -250,7 +250,7 @@ class ComposeToolsUseCase:
             step_results = await asyncio.gather(*tasks, return_exceptions=True)
 
             # Process results
-            for tool, step_result in zip(tools, step_results):
+            for tool, step_result in zip(tools, step_results, strict=False):
                 if isinstance(step_result, Exception):
                     logger.error(f"Tool {tool.name} failed: {step_result}")
                     step_result = {
@@ -288,9 +288,9 @@ class ComposeToolsUseCase:
     async def _execute_conditional(
         self,
         composition: ToolComposition,
-        tools: List[AgentToolBase],
-        execution_context: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        tools: list[AgentToolBase],
+        execution_context: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Execute tools conditionally based on execution_template conditions.
 
@@ -366,9 +366,9 @@ class ComposeToolsUseCase:
     def _evaluate_condition(
         self,
         tool_index: int,
-        current_output: Any,  # noqa: ANN401
-        execution_context: Dict[str, Any],
-        conditions: List[Dict[str, Any]],
+        current_output: Any,
+        execution_context: dict[str, Any],
+        conditions: list[dict[str, Any]],
     ) -> bool:
         """
         Evaluate whether a tool should execute based on conditions.
@@ -424,10 +424,10 @@ class ComposeToolsUseCase:
     async def _execute_tool_step(
         self,
         tool: AgentToolBase,
-        previous_output: Optional[Any],  # noqa: ANN401
-        execution_context: Dict[str, Any],
+        previous_output: Any | None,
+        execution_context: dict[str, Any],
         is_chained: bool,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Execute a single tool in the composition chain."""
         try:
             # Prepare input for this tool
@@ -462,9 +462,9 @@ class ComposeToolsUseCase:
 
     async def list_compositions(
         self,
-        tool_names: Optional[List[str]] = None,
+        tool_names: list[str] | None = None,
         limit: int = 100,
-    ) -> List[ToolComposition]:
+    ) -> list[ToolComposition]:
         """
         List tool compositions.
 
@@ -479,11 +479,11 @@ class ComposeToolsUseCase:
             return await self._composition_repository.list_by_tools(tool_names)
         return await self._composition_repository.list_all(limit)
 
-    async def get_composition(self, composition_id: str) -> Optional[ToolComposition]:
+    async def get_composition(self, composition_id: str) -> ToolComposition | None:
         """Get a specific composition by ID."""
         return await self._composition_repository.get_by_id(composition_id)
 
-    async def get_composition_by_name(self, name: str) -> Optional[ToolComposition]:
+    async def get_composition_by_name(self, name: str) -> ToolComposition | None:
         """Get a specific composition by name."""
         return await self._composition_repository.get_by_name(name)
 

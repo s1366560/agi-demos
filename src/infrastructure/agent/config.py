@@ -7,7 +7,7 @@ tenant-level overrides and dynamic configuration updates.
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -143,7 +143,7 @@ class PermissionConfig:
     auto_approve_safe_tools: bool = True
 
     # Safe tools list
-    safe_tools: Set[str] = field(
+    safe_tools: set[str] = field(
         default_factory=lambda: {
             "read_file",
             "list_directory",
@@ -206,7 +206,7 @@ class AgentConfig:
     monitoring: MonitoringConfig = field(default_factory=MonitoringConfig)
 
     # Tenant-level overrides
-    tenant_id: Optional[str] = None
+    tenant_id: str | None = None
     environment: str = "production"
 
     def validate(self) -> None:
@@ -217,7 +217,7 @@ class AgentConfig:
         self.permission.validate()
         self.monitoring.validate()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert configuration to dictionary."""
         return {
             "execution": {
@@ -250,7 +250,7 @@ class AgentConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AgentConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "AgentConfig":
         """Create configuration from dictionary.
 
         Args:
@@ -282,7 +282,7 @@ class AgentConfig:
         """Get default configuration."""
         return cls()
 
-    def with_tenant_override(self, overrides: Dict[str, Any]) -> "AgentConfig":
+    def with_tenant_override(self, overrides: dict[str, Any]) -> "AgentConfig":
         """Create a copy with tenant-specific overrides.
 
         Args:
@@ -299,17 +299,17 @@ class AgentConfig:
 class ConfigManager:
     """Manages agent configuration with support for dynamic updates."""
 
-    def __init__(self, default_config: Optional[AgentConfig] = None) -> None:
+    def __init__(self, default_config: AgentConfig | None = None) -> None:
         """Initialize the configuration manager.
 
         Args:
             default_config: Default configuration to use
         """
         self._default = default_config or AgentConfig()
-        self._tenant_configs: Dict[str, AgentConfig] = {}
-        self._change_callbacks: Set[callable] = set()
+        self._tenant_configs: dict[str, AgentConfig] = {}
+        self._change_callbacks: set[callable] = set()
 
-    def get_config(self, tenant_id: Optional[str] = None) -> AgentConfig:
+    def get_config(self, tenant_id: str | None = None) -> AgentConfig:
         """Get configuration for a tenant.
 
         Args:
@@ -365,7 +365,7 @@ class ConfigManager:
         """
         self._change_callbacks.discard(callback)
 
-    def _notify_change(self, tenant_id: Optional[str]) -> None:
+    def _notify_change(self, tenant_id: str | None) -> None:
         """Notify listeners of a configuration change."""
         for callback in self._change_callbacks:
             try:
@@ -373,7 +373,7 @@ class ConfigManager:
             except Exception as e:
                 logger.warning(f"Config change callback failed: {e}")
 
-    def _merge_dict(self, base: Dict[str, Any], updates: Dict[str, Any]) -> None:
+    def _merge_dict(self, base: dict[str, Any], updates: dict[str, Any]) -> None:
         """Recursively merge updates into base dictionary."""
         for key, value in updates.items():
             if key in base and isinstance(base[key], dict) and isinstance(value, dict):
@@ -386,7 +386,7 @@ class ConfigManager:
 _global_config: ConfigManager = ConfigManager()
 
 
-def get_config(tenant_id: Optional[str] = None) -> AgentConfig:
+def get_config(tenant_id: str | None = None) -> AgentConfig:
     """Get the global configuration for a tenant.
 
     Args:

@@ -5,7 +5,6 @@ Endpoints for listing tools and tool compositions.
 
 import logging
 from collections import Counter
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -129,7 +128,7 @@ async def get_tool_capabilities(
 
 @router.get("/tools/compositions", response_model=ToolCompositionsListResponse)
 async def list_tool_compositions(
-    tools: Optional[str] = Query(
+    tools: str | None = Query(
         None, description="Comma-separated list of tool names to filter by"
     ),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of compositions"),

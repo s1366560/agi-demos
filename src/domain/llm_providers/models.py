@@ -7,7 +7,7 @@ following Domain-Driven Design principles.
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -44,13 +44,13 @@ class ModelMetadata(BaseModel):
     max_output_tokens: int = Field(
         default=4096, ge=1, description="Maximum output tokens per request"
     )
-    input_cost_per_1m: Optional[float] = Field(
+    input_cost_per_1m: float | None = Field(
         None, ge=0, description="Cost per 1M input tokens (USD)"
     )
-    output_cost_per_1m: Optional[float] = Field(
+    output_cost_per_1m: float | None = Field(
         None, ge=0, description="Cost per 1M output tokens (USD)"
     )
-    capabilities: List[ModelCapability] = Field(
+    capabilities: list[ModelCapability] = Field(
         default_factory=list, description="Model capabilities"
     )
     supports_streaming: bool = Field(default=True, description="Whether model supports streaming")
@@ -71,13 +71,13 @@ class ProviderModelsConfig(BaseModel):
     """
 
     llm: ModelMetadata = Field(..., description="Primary LLM model metadata")
-    llm_small: Optional[ModelMetadata] = Field(None, description="Smaller/faster LLM metadata")
-    embedding: Optional[ModelMetadata] = Field(None, description="Embedding model metadata")
-    reranker: Optional[ModelMetadata] = Field(None, description="Reranker model metadata")
+    llm_small: ModelMetadata | None = Field(None, description="Smaller/faster LLM metadata")
+    embedding: ModelMetadata | None = Field(None, description="Embedding model metadata")
+    reranker: ModelMetadata | None = Field(None, description="Reranker model metadata")
 
 
 # Default model metadata for common providers (used as fallback)
-DEFAULT_MODEL_METADATA: Dict[str, ModelMetadata] = {
+DEFAULT_MODEL_METADATA: dict[str, ModelMetadata] = {
     # OpenAI models
     "gpt-4-turbo": ModelMetadata(
         name="gpt-4-turbo",
@@ -294,15 +294,15 @@ class OperationType(str, Enum):
 class EmbeddingConfig(BaseModel):
     """Structured embedding configuration for provider runtime calls."""
 
-    model: Optional[str] = Field(None, min_length=1, description="Embedding model name")
-    dimensions: Optional[int] = Field(None, ge=1, description="Requested embedding dimensions")
-    encoding_format: Optional[Literal["float", "base64"]] = Field(
+    model: str | None = Field(None, min_length=1, description="Embedding model name")
+    dimensions: int | None = Field(None, ge=1, description="Requested embedding dimensions")
+    encoding_format: Literal["float", "base64"] | None = Field(
         None,
         description="Embedding encoding format",
     )
-    user: Optional[str] = Field(None, min_length=1, description="Provider user identifier")
-    timeout: Optional[float] = Field(None, gt=0, description="Embedding request timeout in seconds")
-    provider_options: Dict[str, Any] = Field(
+    user: str | None = Field(None, min_length=1, description="Provider user identifier")
+    timeout: float | None = Field(None, gt=0, description="Embedding request timeout in seconds")
+    provider_options: dict[str, Any] = Field(
         default_factory=dict,
         description="Additional provider-specific embedding parameters",
     )
@@ -313,17 +313,17 @@ class ProviderConfigBase(BaseModel):
 
     name: str = Field(..., min_length=1, description="Human-readable provider name")
     provider_type: ProviderType = Field(..., description="Provider type (openai, dashscope, etc.)")
-    tenant_id: Optional[str] = Field("default", description="Tenant/group ID")
-    base_url: Optional[str] = Field(None, description="Custom base URL for API calls")
+    tenant_id: str | None = Field("default", description="Tenant/group ID")
+    base_url: str | None = Field(None, description="Custom base URL for API calls")
     llm_model: str = Field(..., min_length=1, description="Primary LLM model")
-    llm_small_model: Optional[str] = Field(None, description="Smaller/faster LLM model")
-    embedding_model: Optional[str] = Field(None, description="Embedding model")
-    embedding_config: Optional[EmbeddingConfig] = Field(
+    llm_small_model: str | None = Field(None, description="Smaller/faster LLM model")
+    embedding_model: str | None = Field(None, description="Embedding model")
+    embedding_config: EmbeddingConfig | None = Field(
         None,
         description="Structured embedding model configuration",
     )
-    reranker_model: Optional[str] = Field(None, description="Reranker model")
-    config: Dict[str, Any] = Field(
+    reranker_model: str | None = Field(None, description="Reranker model")
+    config: dict[str, Any] = Field(
         default_factory=dict, description="Additional provider-specific config"
     )
     is_active: bool = Field(True, description="Whether provider is enabled")
@@ -341,11 +341,11 @@ class ProviderConfigBase(BaseModel):
 class ProviderConfigCreate(ProviderConfigBase):
     """Model for creating a new provider (includes API key)"""
 
-    api_key: Optional[str] = Field(None, description="API key for the provider")
+    api_key: str | None = Field(None, description="API key for the provider")
 
     @field_validator("api_key")
     @classmethod
-    def normalize_api_key(cls, v: Optional[str]) -> Optional[str]:
+    def normalize_api_key(cls, v: str | None) -> str | None:
         """Normalize API key by trimming whitespace."""
         return v.strip() if isinstance(v, str) else v
 
@@ -364,22 +364,22 @@ class ProviderConfigCreate(ProviderConfigBase):
 class ProviderConfigUpdate(BaseModel):
     """Model for updating an existing provider"""
 
-    name: Optional[str] = Field(None, min_length=1)
-    provider_type: Optional[ProviderType] = None
-    api_key: Optional[str] = Field(None, min_length=1)
-    base_url: Optional[str] = None
-    llm_model: Optional[str] = None
-    llm_small_model: Optional[str] = None
-    embedding_model: Optional[str] = None
-    embedding_config: Optional[EmbeddingConfig] = None
-    reranker_model: Optional[str] = None
-    config: Optional[Dict[str, Any]] = None
-    is_active: Optional[bool] = None
-    is_default: Optional[bool] = None
+    name: str | None = Field(None, min_length=1)
+    provider_type: ProviderType | None = None
+    api_key: str | None = Field(None, min_length=1)
+    base_url: str | None = None
+    llm_model: str | None = None
+    llm_small_model: str | None = None
+    embedding_model: str | None = None
+    embedding_config: EmbeddingConfig | None = None
+    reranker_model: str | None = None
+    config: dict[str, Any] | None = None
+    is_active: bool | None = None
+    is_default: bool | None = None
 
     @field_validator("api_key")
     @classmethod
-    def normalize_api_key(cls, v: Optional[str]) -> Optional[str]:
+    def normalize_api_key(cls, v: str | None) -> str | None:
         """Normalize API key by trimming whitespace."""
         return v.strip() if isinstance(v, str) else v
 
@@ -411,7 +411,7 @@ class RateLimitStats(BaseModel):
     max_concurrent: int = Field(50, description="Maximum concurrent requests")
     total_requests: int = Field(0, description="Total requests made")
     requests_per_minute: int = Field(0, description="Requests in current minute window")
-    max_rpm: Optional[int] = Field(None, description="Maximum requests per minute")
+    max_rpm: int | None = Field(None, description="Maximum requests per minute")
 
 
 class ResilienceStatus(BaseModel):
@@ -435,12 +435,12 @@ class ProviderConfigResponse(ProviderConfigBase):
     api_key_masked: str = Field(..., description="Masked API key (e.g., 'sk-...xyz')")
     created_at: datetime
     updated_at: datetime
-    health_status: Optional[ProviderStatus] = None
-    health_last_check: Optional[datetime] = None
-    response_time_ms: Optional[int] = None
-    error_message: Optional[str] = None
+    health_status: ProviderStatus | None = None
+    health_last_check: datetime | None = None
+    response_time_ms: int | None = None
+    error_message: str | None = None
     # New resilience fields
-    resilience: Optional[ResilienceStatus] = Field(
+    resilience: ResilienceStatus | None = Field(
         None, description="Provider resilience status (circuit breaker + rate limiter)"
     )
 
@@ -486,8 +486,8 @@ class ProviderHealthCreate(BaseModel):
 
     provider_id: UUID
     status: ProviderStatus
-    error_message: Optional[str] = None
-    response_time_ms: Optional[int] = Field(None, ge=0)
+    error_message: str | None = None
+    response_time_ms: int | None = Field(None, ge=0)
 
 
 class ProviderHealth(BaseModel):
@@ -496,8 +496,8 @@ class ProviderHealth(BaseModel):
     provider_id: UUID
     status: ProviderStatus
     last_check: datetime
-    error_message: Optional[str] = None
-    response_time_ms: Optional[int] = None
+    error_message: str | None = None
+    response_time_ms: int | None = None
 
     class Config:
         from_attributes = True
@@ -512,12 +512,12 @@ class LLMUsageLogCreate(BaseModel):
     """Model for creating usage log entry"""
 
     provider_id: UUID
-    tenant_id: Optional[str] = None
+    tenant_id: str | None = None
     operation_type: OperationType
     model_name: str
     prompt_tokens: int = Field(0, ge=0)
     completion_tokens: int = Field(0, ge=0)
-    cost_usd: Optional[float] = Field(None, ge=0)
+    cost_usd: float | None = Field(None, ge=0)
 
 
 class LLMUsageLog(BaseModel):
@@ -525,13 +525,13 @@ class LLMUsageLog(BaseModel):
 
     id: UUID
     provider_id: UUID
-    tenant_id: Optional[str]
+    tenant_id: str | None
     operation_type: OperationType
     model_name: str
     prompt_tokens: int
     completion_tokens: int
     total_tokens: int
-    cost_usd: Optional[float]
+    cost_usd: float | None
     created_at: datetime
 
     class Config:
@@ -542,16 +542,16 @@ class UsageStatistics(BaseModel):
     """Aggregated usage statistics"""
 
     provider_id: UUID
-    tenant_id: Optional[str]
-    operation_type: Optional[OperationType]
+    tenant_id: str | None
+    operation_type: OperationType | None
     total_requests: int
     total_prompt_tokens: int
     total_completion_tokens: int
     total_tokens: int
-    total_cost_usd: Optional[float]
-    avg_response_time_ms: Optional[float]
-    first_request_at: Optional[datetime]
-    last_request_at: Optional[datetime]
+    total_cost_usd: float | None
+    avg_response_time_ms: float | None
+    first_request_at: datetime | None
+    last_request_at: datetime | None
 
 
 # ============================================================================
@@ -571,6 +571,6 @@ class ResolvedProvider(BaseModel):
 class NoActiveProviderError(Exception):
     """Raised when no active provider can be found"""
 
-    def __init__(self, message: str = "No active LLM provider configured"):
+    def __init__(self, message: str = "No active LLM provider configured") -> None:
         self.message = message
         super().__init__(self.message)

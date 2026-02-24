@@ -10,8 +10,9 @@ Provides:
 """
 
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Any, AsyncGenerator, Optional
+from typing import Any
 
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession as SQLAlchemyAsyncSession
@@ -34,7 +35,7 @@ class TransactionManager:
     def __init__(
         self,
         session: SQLAlchemyAsyncSession,
-        read_session: Optional[SQLAlchemyAsyncSession] = None,
+        read_session: SQLAlchemyAsyncSession | None = None,
         max_retries: int = 3,
     ) -> None:
         """
@@ -178,8 +179,8 @@ class TransactionManager:
     @asynccontextmanager
     async def distributed_transaction(
         self,
-        neo4j_tx: Optional[Any] = None,  # noqa: ANN401
-        redis_tx: Optional[Any] = None,  # noqa: ANN401
+        neo4j_tx: Any | None = None,
+        redis_tx: Any | None = None,
     ) -> AsyncGenerator["TransactionManager", None]:
         """
         Context manager for distributed transactions across multiple databases.

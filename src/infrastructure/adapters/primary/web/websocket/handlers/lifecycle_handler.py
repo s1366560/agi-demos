@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
@@ -31,7 +31,7 @@ class SubscribeLifecycleStateHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "subscribe_lifecycle_state"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Subscribe to agent lifecycle state updates and send current state."""
         from src.infrastructure.adapters.secondary.ray.client import await_ray
         from src.infrastructure.agent.actor.actor_manager import get_actor_if_exists
@@ -67,7 +67,7 @@ class SubscribeLifecycleStateHandler(WebSocketMessageHandler):
                                 "is_active": False,
                                 "is_initialized": False,
                             },
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "timestamp": datetime.now(UTC).isoformat(),
                         }
                     )
                     logger.debug(
@@ -95,7 +95,7 @@ class SubscribeLifecycleStateHandler(WebSocketMessageHandler):
                             "subagent_count": status.subagent_count or 0,
                             "error_message": None,
                         },
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     }
                 )
                 logger.debug(
@@ -118,7 +118,7 @@ class UnsubscribeLifecycleStateHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "unsubscribe_lifecycle_state"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Unsubscribe from lifecycle state updates."""
         project_id = message.get("project_id")
 
@@ -139,7 +139,7 @@ class StartAgentHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "start_agent"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Start the Agent Actor for a project."""
         from src.configuration.config import get_settings
         from src.infrastructure.adapters.secondary.ray.client import await_ray
@@ -182,7 +182,7 @@ class StartAgentHandler(WebSocketMessageHandler):
                             project_id,
                             agent_mode,
                         ),
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     }
                 )
                 return
@@ -228,7 +228,7 @@ class StartAgentHandler(WebSocketMessageHandler):
                     "project_id": project_id,
                     "status": "started",
                     "workflow_id": actor_id,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -255,7 +255,7 @@ class StopAgentHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "stop_agent"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Stop the Agent Actor for a project."""
         import ray
 
@@ -283,7 +283,7 @@ class StopAgentHandler(WebSocketMessageHandler):
                         "project_id": project_id,
                         "status": "not_found",
                         "workflow_id": actor_id,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     }
                 )
                 return
@@ -300,7 +300,7 @@ class StopAgentHandler(WebSocketMessageHandler):
                     "project_id": project_id,
                     "status": "stopping",
                     "workflow_id": actor_id,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -327,7 +327,7 @@ class RestartAgentHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "restart_agent"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Restart the Agent Actor for a project."""
         import ray
 
@@ -417,7 +417,7 @@ class RestartAgentHandler(WebSocketMessageHandler):
                     "project_id": project_id,
                     "status": "restarted",
                     "workflow_id": actor_id,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -442,7 +442,7 @@ class RestartAgentHandler(WebSocketMessageHandler):
 # =============================================================================
 
 
-async def _ensure_sandbox_exists(context: MessageContext, project_id: str) -> Optional[SandboxInfo]:
+async def _ensure_sandbox_exists(context: MessageContext, project_id: str) -> SandboxInfo | None:
     """Ensure sandbox exists for the project before starting agent."""
     try:
         from src.application.services.project_sandbox_lifecycle_service import (
@@ -498,7 +498,7 @@ async def _ensure_sandbox_exists(context: MessageContext, project_id: str) -> Op
         return None
 
 
-async def _sync_and_repair_sandbox(context: MessageContext, project_id: str) -> Optional[SandboxInfo]:
+async def _sync_and_repair_sandbox(context: MessageContext, project_id: str) -> SandboxInfo | None:
     """Sync and repair sandbox on agent restart."""
     try:
         from src.application.services.project_sandbox_lifecycle_service import (

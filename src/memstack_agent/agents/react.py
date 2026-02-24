@@ -11,7 +11,7 @@ The ReActAgent uses a SessionProcessor to orchestrate the
 execution loop and emit events.
 """
 
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
 from memstack_agent.core.events import (
     AgentEvent,

@@ -22,7 +22,6 @@ Key Features:
 """
 
 import logging
-from typing import List, Optional
 
 from sqlalchemy import delete, desc, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -136,10 +135,10 @@ class SqlConversationRepository(
     async def list_by_project(
         self,
         project_id: str,
-        status: Optional[ConversationStatus] = None,
+        status: ConversationStatus | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[Conversation]:
+    ) -> list[Conversation]:
         """
         List conversations for a project.
 
@@ -168,10 +167,10 @@ class SqlConversationRepository(
     async def list_by_user(
         self,
         user_id: str,
-        project_id: Optional[str] = None,
+        project_id: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[Conversation]:
+    ) -> list[Conversation]:
         """
         List conversations for a user.
 
@@ -214,7 +213,7 @@ class SqlConversationRepository(
         await self._session.flush()
 
     async def count_by_project(
-        self, project_id: str, status: Optional[ConversationStatus] = None
+        self, project_id: str, status: ConversationStatus | None = None
     ) -> int:
         """
         Count conversations for a project.
@@ -238,7 +237,7 @@ class SqlConversationRepository(
 
     # === Conversion methods ===
 
-    def _to_domain(self, db_conversation: Optional[DBConversation]) -> Optional[Conversation]:
+    def _to_domain(self, db_conversation: DBConversation | None) -> Conversation | None:
         """
         Convert database model to domain model.
 

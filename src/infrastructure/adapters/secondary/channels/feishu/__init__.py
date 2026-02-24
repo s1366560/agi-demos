@@ -38,25 +38,25 @@ from src.infrastructure.adapters.secondary.channels.feishu.webhook import (
 )
 
 __all__ = [
+    "EVENT_BOT_ADDED",
+    "EVENT_BOT_DELETED",
+    "EVENT_MESSAGE_DELETED",
+    "EVENT_MESSAGE_RECEIVE",
+    "EVENT_MESSAGE_UPDATED",
+    # Cards
+    "CardBuilder",
     # Main adapter and client
     "FeishuAdapter",
     "FeishuClient",
-    "send_feishu_text",
-    "send_feishu_card",
+    "FeishuEventDispatcher",
     # Media
     "FeishuMediaManager",
+    # Webhook
+    "FeishuWebhookHandler",
     "MediaUploadResult",
-    # Cards
-    "CardBuilder",
     "PostBuilder",
     "build_mentioned_message",
     "extract_post_text",
-    # Webhook
-    "FeishuWebhookHandler",
-    "FeishuEventDispatcher",
-    "EVENT_MESSAGE_RECEIVE",
-    "EVENT_MESSAGE_UPDATED",
-    "EVENT_MESSAGE_DELETED",
-    "EVENT_BOT_ADDED",
-    "EVENT_BOT_DELETED",
+    "send_feishu_card",
+    "send_feishu_text",
 ]

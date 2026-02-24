@@ -2,7 +2,6 @@
 Use case for listing task logs.
 """
 
-from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -15,8 +14,8 @@ class ListTasksQuery(BaseModel):
 
     model_config = {"frozen": True}
 
-    group_id: Optional[str] = None
-    status: Optional[str] = None
+    group_id: str | None = None
+    status: str | None = None
     limit: int = Field(default=100, ge=1, le=10000)
     offset: int = Field(default=0, ge=0)
 
@@ -24,10 +23,10 @@ class ListTasksQuery(BaseModel):
 class ListTasksUseCase:
     """Use case for listing task logs"""
 
-    def __init__(self, task_repository: TaskRepository):
+    def __init__(self, task_repository: TaskRepository) -> None:
         self._task_repo = task_repository
 
-    async def execute(self, query: ListTasksQuery) -> List[TaskLog]:
+    async def execute(self, query: ListTasksQuery) -> list[TaskLog]:
         """
         List tasks with optional filters.
 

@@ -6,7 +6,8 @@ supporting multiple protocols (stdio, HTTP, SSE, WebSocket).
 """
 
 from abc import abstractmethod
-from typing import Any, AsyncIterator, Callable, Dict, Optional, Protocol, runtime_checkable
+from collections.abc import AsyncIterator, Callable
+from typing import Any, Protocol, runtime_checkable
 
 from src.domain.model.mcp.transport import TransportConfig
 
@@ -45,8 +46,8 @@ class MCPTransportPort(Protocol):
     @abstractmethod
     async def send(
         self,
-        message: Dict[str, Any],
-        timeout: Optional[float] = None,
+        message: dict[str, Any],
+        timeout: float | None = None,
     ) -> None:
         """
         Send a message over the transport.
@@ -64,8 +65,8 @@ class MCPTransportPort(Protocol):
     @abstractmethod
     async def receive(
         self,
-        timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         """
         Receive a message from the transport.
 
@@ -83,7 +84,7 @@ class MCPTransportPort(Protocol):
         ...
 
     @abstractmethod
-    async def receive_stream(self) -> AsyncIterator[Dict[str, Any]]:
+    async def receive_stream(self) -> AsyncIterator[dict[str, Any]]:
         """
         Receive messages as an async iterator.
 
@@ -143,7 +144,7 @@ class MCPTransportFactoryPort(Protocol):
 
 
 # Type alias for message handlers
-MessageHandler = Callable[[Dict[str, Any]], Any]
+MessageHandler = Callable[[dict[str, Any]], Any]
 
 
 @runtime_checkable
@@ -168,8 +169,8 @@ class MCPBidirectionalTransportPort(Protocol):
     @abstractmethod
     async def send(
         self,
-        message: Dict[str, Any],
-        timeout: Optional[float] = None,
+        message: dict[str, Any],
+        timeout: float | None = None,
     ) -> None:
         """Send a message over the transport."""
         ...

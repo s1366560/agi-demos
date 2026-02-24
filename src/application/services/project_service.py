@@ -6,8 +6,7 @@ following the hexagonal architecture pattern.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from src.domain.model.project.project import Project
 from src.domain.ports.repositories.project_repository import ProjectRepository
@@ -19,7 +18,7 @@ logger = logging.getLogger(__name__)
 class ProjectService:
     """Service for managing projects"""
 
-    def __init__(self, project_repo: ProjectRepository, user_repo: UserRepository):
+    def __init__(self, project_repo: ProjectRepository, user_repo: UserRepository) -> None:
         self._project_repo = project_repo
         self._user_repo = user_repo
 
@@ -28,7 +27,7 @@ class ProjectService:
         name: str,
         owner_id: str,
         tenant_id: str,
-        description: Optional[str] = None,
+        description: str | None = None,
         is_public: bool = False,
     ) -> Project:
         """
@@ -60,7 +59,7 @@ class ProjectService:
             owner_id=owner_id,
             description=description,
             is_public=is_public,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             member_ids=[owner_id],  # Owner is automatically a member
         )
 
@@ -68,7 +67,7 @@ class ProjectService:
         logger.info(f"Created project {project.id} for tenant {tenant_id}")
         return project
 
-    async def get_project(self, project_id: str) -> Optional[Project]:
+    async def get_project(self, project_id: str) -> Project | None:
         """
         Retrieve a project by ID.
 
@@ -81,8 +80,8 @@ class ProjectService:
         return await self._project_repo.find_by_id(project_id)
 
     async def list_projects(
-        self, tenant_id: str, owner_id: Optional[str] = None, limit: int = 50, offset: int = 0
-    ) -> List[Project]:
+        self, tenant_id: str, owner_id: str | None = None, limit: int = 50, offset: int = 0
+    ) -> list[Project]:
         """
         List projects with optional filtering.
 
@@ -108,11 +107,11 @@ class ProjectService:
     async def update_project(
         self,
         project_id: str,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
-        is_public: Optional[bool] = None,
-        memory_rules: Optional[dict] = None,
-        graph_config: Optional[dict] = None,
+        name: str | None = None,
+        description: str | None = None,
+        is_public: bool | None = None,
+        memory_rules: dict | None = None,
+        graph_config: dict | None = None,
     ) -> Project:
         """
         Update project properties.
@@ -147,7 +146,7 @@ class ProjectService:
         if graph_config is not None:
             project.graph_config = graph_config
 
-        project.updated_at = datetime.now(timezone.utc)
+        project.updated_at = datetime.now(UTC)
 
         await self._project_repo.save(project)
         logger.info(f"Updated project {project_id}")
@@ -194,7 +193,7 @@ class ProjectService:
             return
 
         project.member_ids.append(user_id)
-        project.updated_at = datetime.now(timezone.utc)
+        project.updated_at = datetime.now(UTC)
 
         await self._project_repo.save(project)
         logger.info(f"Added user {user_id} to project {project_id}")
@@ -223,12 +222,12 @@ class ProjectService:
             return
 
         project.member_ids.remove(user_id)
-        project.updated_at = datetime.now(timezone.utc)
+        project.updated_at = datetime.now(UTC)
 
         await self._project_repo.save(project)
         logger.info(f"Removed user {user_id} from project {project_id}")
 
-    async def get_members(self, project_id: str) -> List[str]:
+    async def get_members(self, project_id: str) -> list[str]:
         """
         Get list of project member IDs.
 

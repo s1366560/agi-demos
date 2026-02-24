@@ -1,8 +1,7 @@
 """Episode management API routes."""
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -25,14 +24,14 @@ router = APIRouter(prefix="/api/v1/episodes", tags=["episodes"])
 
 
 class EpisodeCreate(BaseModel):
-    name: Optional[str] = None  # Auto-generated if not provided
+    name: str | None = None  # Auto-generated if not provided
     content: str
-    source_description: Optional[str] = "text"
-    episode_type: Optional[str] = "text"
-    metadata: Optional[dict] = None
-    project_id: Optional[str] = None
-    tenant_id: Optional[str] = None
-    user_id: Optional[str] = None
+    source_description: str | None = "text"
+    episode_type: str | None = "text"
+    metadata: dict | None = None
+    project_id: str | None = None
+    tenant_id: str | None = None
+    user_id: str | None = None
 
 
 class EpisodeResponse(BaseModel):
@@ -40,23 +39,23 @@ class EpisodeResponse(BaseModel):
     name: str
     content: str
     status: str
-    created_at: Optional[str] = None
-    message: Optional[str] = None
-    task_id: Optional[str] = None  # Task ID for SSE streaming
-    workflow_id: Optional[str] = None  # Temporal workflow ID
+    created_at: str | None = None
+    message: str | None = None
+    task_id: str | None = None  # Task ID for SSE streaming
+    workflow_id: str | None = None  # Temporal workflow ID
 
 
 class EpisodeDetail(BaseModel):
     uuid: str
     name: str
     content: str
-    source_description: Optional[str] = None
-    created_at: Optional[str] = None
-    valid_at: Optional[str] = None
-    tenant_id: Optional[str] = None
-    project_id: Optional[str] = None
-    user_id: Optional[str] = None
-    status: Optional[str] = None
+    source_description: str | None = None
+    created_at: str | None = None
+    valid_at: str | None = None
+    tenant_id: str | None = None
+    project_id: str | None = None
+    user_id: str | None = None
+    status: str | None = None
 
 
 # --- Endpoints ---
@@ -115,19 +114,18 @@ async def create_episode(
 
             # Create TaskLog record
             task_id = str(uuid4())
-            async with async_session_factory() as session:
-                async with session.begin():
-                    task_log = TaskLog(
-                        id=task_id,
-                        group_id=group_id,
-                        task_type="add_episode",
-                        status="PENDING",
-                        payload=task_payload,
-                        entity_id=episode_uuid,
-                        entity_type="episode",
-                        created_at=datetime.now(timezone.utc),
-                    )
-                    session.add(task_log)
+            async with async_session_factory() as session, session.begin():
+                task_log = TaskLog(
+                    id=task_id,
+                    group_id=group_id,
+                    task_type="add_episode",
+                    status="PENDING",
+                    payload=task_payload,
+                    entity_id=episode_uuid,
+                    entity_type="episode",
+                    created_at=datetime.now(UTC),
+                )
+                session.add(task_log)
 
             # Add task_id to payload for progress tracking
             task_payload["task_id"] = task_id
@@ -156,7 +154,7 @@ async def create_episode(
                 content=episode.content,
                 status="queued",
                 message=message,
-                created_at=datetime.now(timezone.utc).isoformat(),
+                created_at=datetime.now(UTC).isoformat(),
                 task_id=task_id,
                 workflow_id=workflow_id,
             )
@@ -172,7 +170,7 @@ async def create_episode(
                     name=episode.name,
                     episode_body=episode.content,  # Graphiti expects 'episode_body' not 'content'
                     source_description=episode.source_description or "text",
-                    reference_time=datetime.now(timezone.utc),  # Required parameter
+                    reference_time=datetime.now(UTC),  # Required parameter
                 )
 
                 episode_uuid = result.episode.uuid if result.episode else str(uuid4())
@@ -185,7 +183,7 @@ async def create_episode(
                     content=episode.content,
                     status="processing",
                     message="Episode queued for ingestion",
-                    created_at=datetime.now(timezone.utc).isoformat(),
+                    created_at=datetime.now(UTC).isoformat(),
                 )
             finally:
                 # CRITICAL: Always restore original driver state
@@ -247,9 +245,9 @@ async def get_episode(
 
 @router.get("/")
 async def list_episodes(
-    tenant_id: Optional[str] = Query(None, description="Filter by tenant ID"),
-    project_id: Optional[str] = Query(None, description="Filter by project ID"),
-    user_id: Optional[str] = Query(None, description="Filter by user ID"),
+    tenant_id: str | None = Query(None, description="Filter by tenant ID"),
+    project_id: str | None = Query(None, description="Filter by project ID"),
+    user_id: str | None = Query(None, description="Filter by user ID"),
     limit: int = Query(50, ge=1, le=200, description="Maximum items to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     sort_by: str = Query("created_at", description="Sort field"),
@@ -373,6 +371,6 @@ async def health_check(
     try:
         # Simple check - can we execute a query?
         await graphiti_client.driver.execute_query("RETURN 1 as test")
-        return {"status": "healthy", "timestamp": datetime.now(timezone.utc).isoformat()}
+        return {"status": "healthy", "timestamp": datetime.now(UTC).isoformat()}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Service unhealthy: {e!s}")

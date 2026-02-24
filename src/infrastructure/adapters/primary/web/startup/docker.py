@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
@@ -16,10 +16,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Module-level reference for shutdown
-_docker_event_monitor: Optional[DockerEventMonitor] = None
+_docker_event_monitor: DockerEventMonitor | None = None
 
 
-async def initialize_docker_services(container: DIContainer) -> Optional[DockerEventMonitor]:
+async def initialize_docker_services(container: DIContainer) -> DockerEventMonitor | None:
     """
     Initialize Docker-related services including sandbox sync and event monitor.
 

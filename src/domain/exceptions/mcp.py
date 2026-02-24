@@ -16,7 +16,7 @@ Exception Hierarchy:
     └── MCPConnectionError              - Connection/transport failure
 """
 
-from typing import Any, Optional
+from typing import Any
 
 
 class MCPError(Exception):
@@ -25,8 +25,8 @@ class MCPError(Exception):
     def __init__(
         self,
         message: str,
-        original_error: Optional[Exception] = None,
-        details: Optional[dict[str, Any]] = None,
+        original_error: Exception | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.message = message
@@ -48,9 +48,9 @@ class MCPServerNotFoundError(MCPServerError):
 
     def __init__(
         self,
-        server_id: Optional[str] = None,
-        server_name: Optional[str] = None,
-        message: Optional[str] = None,
+        server_id: str | None = None,
+        server_name: str | None = None,
+        message: str | None = None,
     ) -> None:
         self.server_id = server_id
         self.server_name = server_name
@@ -62,7 +62,7 @@ class MCPServerNotFoundError(MCPServerError):
 class MCPServerAlreadyExistsError(MCPServerError):
     """Raised when creating a server with a name that already exists."""
 
-    def __init__(self, server_name: str, message: Optional[str] = None) -> None:
+    def __init__(self, server_name: str, message: str | None = None) -> None:
         self.server_name = server_name
         msg = message or f"MCP server '{server_name}' already exists"
         super().__init__(msg, details={"server_name": server_name})
@@ -71,7 +71,7 @@ class MCPServerAlreadyExistsError(MCPServerError):
 class MCPServerNotConnectedError(MCPServerError):
     """Raised when attempting operations on a disconnected server."""
 
-    def __init__(self, server_name: str, message: Optional[str] = None) -> None:
+    def __init__(self, server_name: str, message: str | None = None) -> None:
         self.server_name = server_name
         msg = message or f"MCP server '{server_name}' is not connected"
         super().__init__(msg, details={"server_name": server_name})
@@ -87,8 +87,8 @@ class MCPToolNotFoundError(MCPToolError):
     def __init__(
         self,
         tool_name: str,
-        server_name: Optional[str] = None,
-        message: Optional[str] = None,
+        server_name: str | None = None,
+        message: str | None = None,
     ) -> None:
         self.tool_name = tool_name
         self.server_name = server_name
@@ -105,8 +105,8 @@ class MCPToolExecutionError(MCPToolError):
     def __init__(
         self,
         tool_name: str,
-        message: Optional[str] = None,
-        original_error: Optional[Exception] = None,
+        message: str | None = None,
+        original_error: Exception | None = None,
     ) -> None:
         self.tool_name = tool_name
         msg = message or f"Tool '{tool_name}' execution failed"
@@ -118,9 +118,9 @@ class MCPConnectionError(MCPError):
 
     def __init__(
         self,
-        endpoint: Optional[str] = None,
-        message: Optional[str] = None,
-        original_error: Optional[Exception] = None,
+        endpoint: str | None = None,
+        message: str | None = None,
+        original_error: Exception | None = None,
     ) -> None:
         self.endpoint = endpoint
         msg = message or "MCP connection failed"

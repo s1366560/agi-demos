@@ -8,10 +8,11 @@ The infrastructure AgentTool class extends this base and adds
 implementation details (truncation, composition logic).
 """
 
+import contextlib
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ class AgentToolBase(ABC):
         ...
 
     @abstractmethod
-    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str:
         """Execute the tool with the given arguments.
 
         Args:
@@ -55,7 +56,7 @@ class AgentToolBase(ABC):
         """
         ...
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         """Validate tool arguments before execution.
 
         Default implementation always returns True.
@@ -63,7 +64,7 @@ class AgentToolBase(ABC):
         """
         return True
 
-    async def safe_execute(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def safe_execute(self, **kwargs: Any) -> str:
         """Safely execute the tool with error handling."""
         try:
             if not self.validate_args(**kwargs):
@@ -79,7 +80,7 @@ class AgentToolBase(ABC):
             logger.error(error_msg)
             return error_msg
 
-    def get_output_schema(self) -> Dict[str, Any]:
+    def get_output_schema(self) -> dict[str, Any]:
         """Get the output schema of this tool for composition."""
         return {"type": "string", "description": f"Output from {self.name} tool"}
 
@@ -91,8 +92,8 @@ class AgentToolBase(ABC):
         self,
         output: str,
         target_tool: "AgentToolBase",
-        transformation: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        transformation: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Transform this tool's output for use as input to another tool."""
         try:
             parsed = json.loads(output)
@@ -132,21 +133,19 @@ class AgentToolBase(ABC):
                 elif agg_type == "last" and parsed:
                     parsed = parsed[-1]
                 elif agg_type == "sum":
-                    try:
+                    with contextlib.suppress(TypeError, ValueError):
                         parsed = {"sum": sum(parsed)}
-                    except (TypeError, ValueError):
-                        pass
 
         if not isinstance(parsed, dict):
             return {"data": parsed}
 
         return parsed
 
-    def get_input_schema(self) -> Dict[str, Any]:
+    def get_input_schema(self) -> dict[str, Any]:
         """Get the input schema of this tool (helper for composition)."""
         return {"type": "object", "description": f"Input for {self.name} tool"}
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
         return {
             "type": "object",
@@ -154,7 +153,7 @@ class AgentToolBase(ABC):
             "required": [],
         }
 
-    def extract_output_field(self, output: str, field_path: str) -> Any:  # noqa: ANN401
+    def extract_output_field(self, output: str, field_path: str) -> Any:
         """Extract a specific field from tool output using a dot-separated path."""
         try:
             data = json.loads(output)

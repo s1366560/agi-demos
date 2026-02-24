@@ -8,7 +8,7 @@ These tests verify:
 4. API endpoint responses
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -118,7 +118,7 @@ class TestHITLTypeSystemIntegration:
         )
 
         # Create a request manually with timezone-aware datetime
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         request = HITLRequest(
             request_id="test_exp",
             hitl_type=HITLType.CLARIFICATION,

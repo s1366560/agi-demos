@@ -6,6 +6,7 @@ including auth storage, OAuth provider, and callback server.
 """
 
 import asyncio
+import contextlib
 import time
 
 import pytest
@@ -504,14 +505,10 @@ class TestMCPOAuthCallbackServer:
         finally:
             server.cancel_pending(state1)
             server.cancel_pending(state2)
-            try:
+            with contextlib.suppress(Exception):
                 await future1
-            except Exception:
-                pass
-            try:
+            with contextlib.suppress(Exception):
                 await future2
-            except Exception:
-                pass
 
 
 @pytest.mark.unit

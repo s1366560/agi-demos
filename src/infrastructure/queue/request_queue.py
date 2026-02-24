@@ -7,8 +7,9 @@ to prevent overwhelming the system during high load.
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Optional
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid
 
 from src.configuration.config import get_settings
@@ -26,16 +27,16 @@ class QueuedRequest:
         args: tuple,
         kwargs: dict,
         priority: int = 0,
-    ):
+    ) -> None:
         self.request_id = request_id
         self.func = func
         self.args = args
         self.kwargs = kwargs
         self.priority = priority  # Higher = processed first
-        self.created_at = datetime.now(timezone.utc)
+        self.created_at = datetime.now(UTC)
         self.future: asyncio.Future[Any] = asyncio.Future()
-        self.started_at: Optional[datetime] = None
-        self.completed_at: Optional[datetime] = None
+        self.started_at: datetime | None = None
+        self.completed_at: datetime | None = None
 
 
 class RequestQueue:
@@ -54,7 +55,7 @@ class RequestQueue:
         max_concurrent: int = 10,
         max_queue_size: int = 100,
         request_timeout: int = 300,  # 5 minutes
-    ):
+    ) -> None:
         """
         Initialize the request queue.
 
@@ -71,7 +72,7 @@ class RequestQueue:
         self._workers: list[asyncio.Task] = []
         self._running = False
 
-    def _get_next_request(self) -> Optional[QueuedRequest]:
+    def _get_next_request(self) -> QueuedRequest | None:
         """Get the next highest-priority request from the queue."""
         if not self._queue:
             return None
@@ -97,7 +98,7 @@ class RequestQueue:
 
             # Process the request
             self._processing[request.request_id] = request
-            request.started_at = datetime.now(timezone.utc)
+            request.started_at = datetime.now(UTC)
 
             try:
                 # Execute with timeout
@@ -110,14 +111,14 @@ class RequestQueue:
                     f"Request {request.request_id} completed in "
                     f"{(request.completed_at - request.started_at).total_seconds():.2f}s"
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 request.future.set_exception(TimeoutError("Request timed out"))
                 logger.warning(f"Request {request.request_id} timed out")
             except Exception as e:
                 request.future.set_exception(e)
                 logger.error(f"Request {request.request_id} failed: {e}")
             finally:
-                request.completed_at = datetime.now(timezone.utc)
+                request.completed_at = datetime.now(UTC)
                 del self._processing[request.request_id]
 
     async def enqueue(
@@ -126,7 +127,7 @@ class RequestQueue:
         args: tuple = (),
         kwargs: dict | None = None,
         priority: int = 0,
-    ) -> Any:  # noqa: ANN401
+    ) -> Any:
         """
         Enqueue a request to be processed.
 
@@ -213,7 +214,7 @@ class QueueFullError(Exception):
 
 
 # Global request queue instance
-_request_queue: Optional[RequestQueue] = None
+_request_queue: RequestQueue | None = None
 
 
 def get_request_queue() -> RequestQueue:

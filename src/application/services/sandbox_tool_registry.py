@@ -9,7 +9,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ class SandboxToolRegistration:
     sandbox_id: str
     project_id: str
     tenant_id: str
-    tool_names: List[str] = field(default_factory=list)
+    tool_names: list[str] = field(default_factory=list)
     registered_at: datetime = field(default_factory=datetime.now)
 
     def age_seconds(self) -> int:
@@ -45,9 +45,9 @@ class SandboxToolRegistry:
 
     def __init__(
         self,
-        redis_client: Optional[Redis] = None,
-        mcp_adapter: Optional[MCPSandboxAdapter] = None,
-    ):
+        redis_client: Redis | None = None,
+        mcp_adapter: MCPSandboxAdapter | None = None,
+    ) -> None:
         """
         Initialize the registry.
 
@@ -57,7 +57,7 @@ class SandboxToolRegistry:
         """
         self._redis = redis_client
         self._mcp_adapter = mcp_adapter
-        self._registrations: Dict[str, SandboxToolRegistration] = {}
+        self._registrations: dict[str, SandboxToolRegistration] = {}
 
         # Redis key patterns
         self._key_prefix = "sandbox:tools:"
@@ -68,8 +68,8 @@ class SandboxToolRegistry:
         sandbox_id: str,
         project_id: str,
         tenant_id: str,
-        tools: Optional[List[str]] = None,
-    ) -> List[str]:
+        tools: list[str] | None = None,
+    ) -> list[str]:
         """
         Register a sandbox's MCP tools to the Agent tool context.
 
@@ -161,7 +161,7 @@ class SandboxToolRegistry:
     async def get_sandbox_tools(
         self,
         sandbox_id: str,
-    ) -> Optional[List[str]]:
+    ) -> list[str] | None:
         """
         Get tool names registered for a sandbox.
 
@@ -177,7 +177,7 @@ class SandboxToolRegistry:
     async def get_project_sandboxes(
         self,
         project_id: str,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Get all sandbox IDs registered for a project.
 
@@ -243,7 +243,7 @@ class SandboxToolRegistry:
 
         return len(expired_ids)
 
-    async def _save_to_redis(self, registration: SandboxToolRegistration):
+    async def _save_to_redis(self, registration: SandboxToolRegistration) -> None:
         """Save registration to Redis cache."""
         try:
             # Save registration record
@@ -278,7 +278,7 @@ class SandboxToolRegistry:
         self,
         sandbox_id: str,
         project_id: str,
-    ):
+    ) -> None:
         """Clear registration from Redis cache."""
         try:
             # Remove registration record
@@ -295,7 +295,7 @@ class SandboxToolRegistry:
         except Exception as e:
             logger.warning(f"[SandboxToolRegistry] Failed to clear from Redis: {e}")
 
-    async def load_from_redis(self, sandbox_id: str) -> Optional[SandboxToolRegistration]:
+    async def load_from_redis(self, sandbox_id: str) -> SandboxToolRegistration | None:
         """Load registration from Redis cache."""
         if not self._redis:
             return None
@@ -379,7 +379,7 @@ class SandboxToolRegistry:
 
     async def get_or_restore_registration(
         self, sandbox_id: str
-    ) -> Optional[SandboxToolRegistration]:
+    ) -> SandboxToolRegistration | None:
         """
         Get registration from memory or restore from Redis.
 

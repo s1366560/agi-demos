@@ -20,11 +20,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -78,10 +79,10 @@ class CompensatingTransaction:
     created_at: datetime
     status: CompensatingTransactionStatus = CompensatingTransactionStatus.PENDING
     # Store original operation data for replay
-    neo4j_query: Optional[str] = None
-    neo4j_params: Optional[Dict[str, Any]] = None
-    redis_command: Optional[str] = None
-    redis_args: Optional[List[Any]] = None
+    neo4j_query: str | None = None
+    neo4j_params: dict[str, Any] | None = None
+    redis_command: str | None = None
+    redis_args: list[Any] | None = None
 
 
 @dataclass
@@ -89,15 +90,15 @@ class TransactionContext:
     """Context for a distributed transaction."""
 
     transaction_id: str
-    pg_session: Optional[AsyncSession]
-    neo4j_client: Optional[Any]
-    redis_client: Optional[Any]
-    neo4j_tx: Optional[Any] = None
-    redis_pipeline: Optional[Any] = None
+    pg_session: AsyncSession | None
+    neo4j_client: Any | None
+    redis_client: Any | None
+    neo4j_tx: Any | None = None
+    redis_pipeline: Any | None = None
     timeout_seconds: float = 30.0
-    key: Optional[str] = None  # For distributed locking
-    operations: List[str] = field(default_factory=list)
-    committed_databases: Dict[str, bool] = field(default_factory=dict)
+    key: str | None = None  # For distributed locking
+    operations: list[str] = field(default_factory=list)
+    committed_databases: dict[str, bool] = field(default_factory=dict)
 
 
 class DistributedTransactionCoordinator:
@@ -124,11 +125,11 @@ class DistributedTransactionCoordinator:
 
     def __init__(
         self,
-        pg_session: Optional[AsyncSession] = None,
-        neo4j_client: Optional[Neo4jClient] = None,
-        redis_client: Optional[Redis] = None,
+        pg_session: AsyncSession | None = None,
+        neo4j_client: Neo4jClient | None = None,
+        redis_client: Redis | None = None,
         timeout_seconds: float = 30.0,
-    ):
+    ) -> None:
         """
         Initialize the distributed transaction coordinator.
 
@@ -147,7 +148,7 @@ class DistributedTransactionCoordinator:
         self._stats = TransactionStats()
 
         # Pending compensating transactions
-        self._pending_compensating: Dict[str, CompensatingTransaction] = {}
+        self._pending_compensating: dict[str, CompensatingTransaction] = {}
 
         # Transaction counter
         self._transaction_count = 0
@@ -170,7 +171,7 @@ class DistributedTransactionCoordinator:
         """Check if Redis is configured."""
         return self._redis_client is not None
 
-    def get_statistics(self) -> Dict[str, int]:
+    def get_statistics(self) -> dict[str, int]:
         """
         Get transaction statistics.
 
@@ -190,7 +191,7 @@ class DistributedTransactionCoordinator:
         """Get total number of transactions processed."""
         return self._transaction_count
 
-    def get_inconsistencies(self) -> List[Dict[str, Any]]:
+    def get_inconsistencies(self) -> list[dict[str, Any]]:
         """
         Get list of logged inconsistencies.
 
@@ -211,7 +212,7 @@ class DistributedTransactionCoordinator:
             for ct in self._pending_compensating.values()
         ]
 
-    def get_pending_compensating_transactions(self) -> List[Dict[str, Any]]:
+    def get_pending_compensating_transactions(self) -> list[dict[str, Any]]:
         """
         Get pending compensating transactions.
 
@@ -227,10 +228,10 @@ class DistributedTransactionCoordinator:
         postgres_committed: bool,
         neo4j_committed: bool,
         redis_committed: bool,
-        neo4j_query: Optional[str] = None,
-        neo4j_params: Optional[Dict[str, Any]] = None,
-        redis_command: Optional[str] = None,
-        redis_args: Optional[List[Any]] = None,
+        neo4j_query: str | None = None,
+        neo4j_params: dict[str, Any] | None = None,
+        redis_command: str | None = None,
+        redis_args: list[Any] | None = None,
     ) -> str:
         """
         Log a compensating transaction for later reconciliation.
@@ -257,7 +258,7 @@ class DistributedTransactionCoordinator:
             postgres_committed=postgres_committed,
             neo4j_committed=neo4j_committed,
             redis_committed=redis_committed,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             neo4j_query=neo4j_query,
             neo4j_params=neo4j_params,
             redis_command=redis_command,
@@ -336,8 +337,8 @@ class DistributedTransactionCoordinator:
     @asynccontextmanager
     async def begin(
         self,
-        key: Optional[str] = None,
-        timeout_seconds: Optional[float] = None,
+        key: str | None = None,
+        timeout_seconds: float | None = None,
     ) -> AsyncGenerator[DistributedTransaction, None]:
         """
         Begin a distributed transaction.
@@ -386,7 +387,7 @@ class DistributedTransactionCoordinator:
             await tx._commit_all()
             self._stats.committed_transactions += 1
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             await tx._rollback_all()
             self._stats.failed_transactions += 1
             self._stats.rollback_count += 1
@@ -410,7 +411,7 @@ class DistributedTransaction:
         self,
         context: TransactionContext,
         coordinator: DistributedTransactionCoordinator,
-    ):
+    ) -> None:
         """
         Initialize the distributed transaction.
 
@@ -456,7 +457,7 @@ class DistributedTransaction:
             self._context.redis_pipeline = self._context.redis_client.pipeline()
             self._prepared["redis"] = True
 
-    async def execute_postgres(self, query: str, **params: Any) -> Any:  # noqa: ANN401
+    async def execute_postgres(self, query: str, **params: Any) -> Any:
         """
         Execute a PostgreSQL query within this transaction.
 
@@ -473,7 +474,7 @@ class DistributedTransaction:
         self._context.operations.append(f"postgres:{query[:50]}")
         return await self._context.pg_session.execute(query, params)
 
-    async def execute_neo4j(self, query: str, **params: Any) -> Any:  # noqa: ANN401
+    async def execute_neo4j(self, query: str, **params: Any) -> Any:
         """
         Execute a Neo4j query within this transaction.
 
@@ -492,7 +493,7 @@ class DistributedTransaction:
         # For tests, use the client directly
         return await self._context.neo4j_client.execute_query(query, **params)
 
-    async def execute_redis(self, command: str) -> Any:  # noqa: ANN401
+    async def execute_redis(self, command: str) -> Any:
         """
         Execute a Redis command within this transaction.
 

@@ -16,8 +16,8 @@ Attributes:
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 
 @dataclass
@@ -52,14 +52,14 @@ class ToolComposition:
     tenant_id: str  # Required for multi-tenant isolation
     name: str
     description: str
-    project_id: Optional[str] = None  # Optional project-level isolation
-    tools: List[str] = field(default_factory=list)
-    execution_template: Dict[str, Any] = field(default_factory=dict)
+    project_id: str | None = None  # Optional project-level isolation
+    tools: list[str] = field(default_factory=list)
+    execution_template: dict[str, Any] = field(default_factory=dict)
     success_count: int = 0
     failure_count: int = 0
     usage_count: int = 0
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self):
         """Validate the composition."""
@@ -147,10 +147,10 @@ class ToolComposition:
             failure_count=self.failure_count + (0 if success else 1),
             usage_count=self.usage_count + 1,
             created_at=self.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
 
-    def get_fallback_tools(self) -> List[str]:
+    def get_fallback_tools(self) -> list[str]:
         """
         Get fallback alternative tools from the execution template.
 
@@ -168,7 +168,7 @@ class ToolComposition:
         """
         return self.execution_template.get("type", "sequential")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "id": self.id,
@@ -192,10 +192,10 @@ class ToolComposition:
         tenant_id: str,
         name: str,
         description: str,
-        tools: List[str],
+        tools: list[str],
         composition_type: str = "sequential",
-        fallback_alternatives: Optional[List[str]] = None,
-        project_id: Optional[str] = None,
+        fallback_alternatives: list[str] | None = None,
+        project_id: str | None = None,
     ) -> "ToolComposition":
         """
         Create a new tool composition.
@@ -230,7 +230,7 @@ class ToolComposition:
         )
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ToolComposition":
+    def from_dict(cls, data: dict[str, Any]) -> "ToolComposition":
         """Create from dictionary (e.g., from database)."""
 
         # Handle ISO 8601 timestamps with 'Z' suffix
@@ -252,10 +252,10 @@ class ToolComposition:
             usage_count=data.get("usage_count", 0),
             created_at=parse_timestamp(data["created_at"])
             if "created_at" in data
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
             updated_at=parse_timestamp(data["updated_at"])
             if "updated_at" in data
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
         )
 
 

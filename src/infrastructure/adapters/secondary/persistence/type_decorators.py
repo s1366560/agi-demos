@@ -5,7 +5,7 @@ These decorators enable automatic validation and serialization of
 Pydantic models stored in JSON columns.
 """
 
-from typing import Any, Generic, List, Optional, Type, TypeVar
+from typing import Any, TypeVar
 
 from pydantic import BaseModel
 from sqlalchemy import JSON
@@ -15,7 +15,7 @@ from sqlalchemy.types import TypeDecorator
 T = TypeVar("T", bound=BaseModel)
 
 
-class PydanticType(TypeDecorator, Generic[T]):
+class PydanticType[T: BaseModel](TypeDecorator):
     """
     SQLAlchemy TypeDecorator for storing Pydantic models as JSON.
 
@@ -27,11 +27,11 @@ class PydanticType(TypeDecorator, Generic[T]):
     impl = JSON
     cache_ok = True
 
-    def __init__(self, pydantic_type: Type[T], *args, **kwargs):
+    def __init__(self, pydantic_type: type[T], *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.pydantic_type = pydantic_type
 
-    def process_bind_param(self, value: Optional[T], dialect: Dialect) -> Optional[dict]:
+    def process_bind_param(self, value: T | None, dialect: Dialect) -> dict | None:
         """Convert Pydantic model to dict for storage."""
         if value is None:
             return None
@@ -43,14 +43,14 @@ class PydanticType(TypeDecorator, Generic[T]):
             return value.model_dump(mode="json", by_alias=True)
         raise ValueError(f"Expected {self.pydantic_type.__name__} or dict, got {type(value)}")
 
-    def process_result_value(self, value: Optional[dict], dialect: Dialect) -> Optional[T]:
+    def process_result_value(self, value: dict | None, dialect: Dialect) -> T | None:
         """Convert stored dict back to Pydantic model."""
         if value is None:
             return None
         return self.pydantic_type.model_validate(value)
 
 
-class PydanticListType(TypeDecorator, Generic[T]):
+class PydanticListType[T: BaseModel](TypeDecorator):
     """
     SQLAlchemy TypeDecorator for storing lists of Pydantic models as JSON.
 
@@ -62,13 +62,13 @@ class PydanticListType(TypeDecorator, Generic[T]):
     impl = JSON
     cache_ok = True
 
-    def __init__(self, pydantic_type: Type[T], *args, **kwargs):
+    def __init__(self, pydantic_type: type[T], *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.pydantic_type = pydantic_type
 
     def process_bind_param(
-        self, value: Optional[List[T]], dialect: Dialect
-    ) -> Optional[List[dict]]:
+        self, value: list[T] | None, dialect: Dialect
+    ) -> list[dict] | None:
         """Convert list of Pydantic models to list of dicts for storage."""
         if value is None:
             return None
@@ -86,8 +86,8 @@ class PydanticListType(TypeDecorator, Generic[T]):
         return result
 
     def process_result_value(
-        self, value: Optional[List[dict]], dialect: Dialect
-    ) -> Optional[List[T]]:
+        self, value: list[dict] | None, dialect: Dialect
+    ) -> list[T] | None:
         """Convert stored list of dicts back to list of Pydantic models."""
         if value is None:
             return None
@@ -109,11 +109,11 @@ class ValidatedJSON(TypeDecorator):
     impl = JSON
     cache_ok = True
 
-    def __init__(self, pydantic_type: Optional[Type[BaseModel]] = None, *args, **kwargs):
+    def __init__(self, pydantic_type: type[BaseModel] | None = None, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.pydantic_type = pydantic_type
 
-    def process_bind_param(self, value: Any, dialect: Dialect) -> Optional[dict]:  # noqa: ANN401
+    def process_bind_param(self, value: Any, dialect: Dialect) -> dict | None:
         """Validate and convert value for storage."""
         if value is None:
             return None
@@ -129,7 +129,7 @@ class ValidatedJSON(TypeDecorator):
             return value
         raise ValueError(f"Expected dict, got {type(value)}")
 
-    def process_result_value(self, value: Any, dialect: Dialect) -> Any:  # noqa: ANN401
+    def process_result_value(self, value: Any, dialect: Dialect) -> Any:
         """Return stored value as-is (dict)."""
         return value
 
@@ -137,16 +137,16 @@ class ValidatedJSON(TypeDecorator):
 # === Convenience Factories ===
 
 
-def pydantic_column(pydantic_type: Type[T]) -> PydanticType[T]:
+def pydantic_column[T: BaseModel](pydantic_type: type[T]) -> PydanticType[T]:
     """Create a PydanticType column for a Pydantic model."""
     return PydanticType(pydantic_type)
 
 
-def pydantic_list_column(pydantic_type: Type[T]) -> PydanticListType[T]:
+def pydantic_list_column[T: BaseModel](pydantic_type: type[T]) -> PydanticListType[T]:
     """Create a PydanticListType column for a list of Pydantic models."""
     return PydanticListType(pydantic_type)
 
 
-def validated_json_column(pydantic_type: Optional[Type[BaseModel]] = None) -> ValidatedJSON:
+def validated_json_column(pydantic_type: type[BaseModel] | None = None) -> ValidatedJSON:
     """Create a ValidatedJSON column with optional validation."""
     return ValidatedJSON(pydantic_type)

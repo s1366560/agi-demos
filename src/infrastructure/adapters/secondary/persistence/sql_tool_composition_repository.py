@@ -3,7 +3,7 @@ V2 SQLAlchemy implementation of ToolCompositionRepositoryPort using BaseReposito
 """
 
 import logging
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,7 +85,7 @@ class SqlToolCompositionRepository(
         db_composition = result.scalar_one_or_none()
         return self._to_domain(db_composition) if db_composition else None
 
-    async def list_by_tools(self, tool_names: List[str]) -> List["ToolComposition"]:
+    async def list_by_tools(self, tool_names: list[str]) -> list["ToolComposition"]:
         """List tool compositions that use the specified tools."""
         # Load all compositions and filter in Python
         result = await self._session.execute(select(DBToolComposition))
@@ -101,7 +101,7 @@ class SqlToolCompositionRepository(
 
         return [self._to_domain(c) for c in matching_compositions]
 
-    async def list_all(self, limit: int = 100) -> List["ToolComposition"]:
+    async def list_all(self, limit: int = 100) -> list["ToolComposition"]:
         """List all tool compositions."""
         result = await self._session.execute(
             select(DBToolComposition).order_by(DBToolComposition.usage_count.desc()).limit(limit)

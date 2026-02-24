@@ -3,8 +3,7 @@ SQLAlchemy implementation of MCPAppRepository.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,13 +44,13 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
         )
         return app
 
-    async def find_by_id(self, app_id: str) -> Optional[MCPApp]:
+    async def find_by_id(self, app_id: str) -> MCPApp | None:
         """Find an MCP App by its ID."""
         result = await self._session.execute(select(MCPAppModel).where(MCPAppModel.id == app_id))
         db_app = result.scalar_one_or_none()
         return self._to_domain(db_app) if db_app else None
 
-    async def find_by_server_and_tool(self, server_id: str, tool_name: str) -> Optional[MCPApp]:
+    async def find_by_server_and_tool(self, server_id: str, tool_name: str) -> MCPApp | None:
         """Find an MCP App by server and tool name."""
         result = await self._session.execute(
             select(MCPAppModel).where(
@@ -64,7 +63,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
 
     async def find_by_server_name_and_tool(
         self, server_name: str, tool_name: str
-    ) -> Optional[MCPApp]:
+    ) -> MCPApp | None:
         """Find an MCP App by server name and tool name."""
         result = await self._session.execute(
             select(MCPAppModel).where(
@@ -77,7 +76,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
 
     async def find_by_project(
         self, project_id: str, include_disabled: bool = False
-    ) -> List[MCPApp]:
+    ) -> list[MCPApp]:
         """Find all MCP Apps for a project."""
         query = select(MCPAppModel).where(MCPAppModel.project_id == project_id)
         if not include_disabled:
@@ -87,7 +86,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
         result = await self._session.execute(query)
         return [self._to_domain(db) for db in result.scalars().all()]
 
-    async def find_ready_by_project(self, project_id: str) -> List[MCPApp]:
+    async def find_ready_by_project(self, project_id: str) -> list[MCPApp]:
         """Find all ready MCP Apps for a project."""
         result = await self._session.execute(
             select(MCPAppModel)
@@ -99,7 +98,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
         )
         return [self._to_domain(db) for db in result.scalars().all()]
 
-    async def find_by_tenant(self, tenant_id: str, include_disabled: bool = False) -> List[MCPApp]:
+    async def find_by_tenant(self, tenant_id: str, include_disabled: bool = False) -> list[MCPApp]:
         """Find all MCP Apps for a tenant (across all projects)."""
         query = select(MCPAppModel).where(MCPAppModel.tenant_id == tenant_id)
         if not include_disabled:
@@ -139,7 +138,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
             )
             .values(
                 status=MCPAppStatus.DISABLED.value,
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(UTC),
             )
         )
         count = result.rowcount
@@ -155,7 +154,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
             return False
         existing = db_app.lifecycle_metadata or {}
         db_app.lifecycle_metadata = {**existing, **(metadata or {})}
-        db_app.updated_at = datetime.now(timezone.utc)
+        db_app.updated_at = datetime.now(UTC)
         await self._session.flush()
         return True
 
@@ -220,7 +219,7 @@ class SqlMCPAppRepository(MCPAppRepositoryPort):
         db.error_message = app.error_message
         db.source = app.source.value
         db.lifecycle_metadata = app.lifecycle_metadata or {}
-        db.updated_at = datetime.now(timezone.utc)
+        db.updated_at = datetime.now(UTC)
 
         if app.resource:
             db.resource_html = app.resource.html_content

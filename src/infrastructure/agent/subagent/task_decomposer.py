@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -33,7 +33,7 @@ class SubTask:
 
     id: str
     description: str
-    target_subagent: Optional[str] = None
+    target_subagent: str | None = None
     dependencies: tuple = field(default_factory=tuple)
     priority: int = 0
 
@@ -54,8 +54,8 @@ class DecompositionResult:
 
 
 def _build_decomposition_tool_schema(
-    available_agents: List[str],
-) -> List[Dict[str, Any]]:
+    available_agents: list[str],
+) -> list[dict[str, Any]]:
     """Build LLM function calling schema for task decomposition."""
     return [
         {
@@ -85,7 +85,7 @@ def _build_decomposition_tool_schema(
                                     },
                                     "target_agent": {
                                         "type": "string",
-                                        "enum": available_agents + ["auto"],
+                                        "enum": [*available_agents, "auto"],
                                         "description": "Best agent for this task, or 'auto'.",
                                     },
                                     "depends_on": {
@@ -138,9 +138,9 @@ class TaskDecomposer:
     def __init__(
         self,
         llm_client: LLMClient,
-        available_agent_names: Optional[List[str]] = None,
+        available_agent_names: list[str] | None = None,
         max_subtasks: int = 4,
-    ):
+    ) -> None:
         """Initialize TaskDecomposer.
 
         Args:
@@ -152,14 +152,14 @@ class TaskDecomposer:
         self._agent_names = available_agent_names or []
         self._max_subtasks = max_subtasks
 
-    def update_agents(self, agent_names: List[str]) -> None:
+    def update_agents(self, agent_names: list[str]) -> None:
         """Update the list of available agent names."""
         self._agent_names = agent_names
 
     async def decompose(
         self,
         query: str,
-        conversation_context: Optional[str] = None,
+        conversation_context: str | None = None,
     ) -> DecompositionResult:
         """Decompose a user query into sub-tasks.
 
@@ -207,7 +207,7 @@ class TaskDecomposer:
             )
 
     def _parse_response(
-        self, response: Dict[str, Any], original_query: str
+        self, response: dict[str, Any], original_query: str
     ) -> DecompositionResult:
         """Parse LLM response into DecompositionResult."""
         tool_calls = response.get("tool_calls", [])

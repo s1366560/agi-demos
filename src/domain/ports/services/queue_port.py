@@ -11,9 +11,9 @@ class QueuePort(ABC):
         source_description: str,
         episode_type: str,
         uuid: str,
-        tenant_id: str = None,
-        project_id: str = None,
-        user_id: str = None,
-        memory_id: str = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+        user_id: str | None = None,
+        memory_id: str | None = None,
     ) -> None:
         pass

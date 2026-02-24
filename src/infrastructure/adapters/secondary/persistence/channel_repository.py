@@ -1,7 +1,7 @@
 """Channel configuration repository."""
 
-from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, List, Optional
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -34,7 +34,7 @@ class ChannelConfigRepository:
         await self._session.flush()
         return config
 
-    async def get_by_id(self, config_id: str) -> Optional[ChannelConfigModel]:
+    async def get_by_id(self, config_id: str) -> ChannelConfigModel | None:
         """Get configuration by ID."""
         result = await self._session.execute(
             select(ChannelConfigModel).where(ChannelConfigModel.id == config_id)
@@ -42,8 +42,8 @@ class ChannelConfigRepository:
         return result.scalar_one_or_none()
 
     async def list_by_project(
-        self, project_id: str, channel_type: Optional[str] = None, enabled_only: bool = False
-    ) -> List[ChannelConfigModel]:
+        self, project_id: str, channel_type: str | None = None, enabled_only: bool = False
+    ) -> list[ChannelConfigModel]:
         """List configurations for a project."""
         query = select(ChannelConfigModel).where(ChannelConfigModel.project_id == project_id)
 
@@ -56,7 +56,7 @@ class ChannelConfigRepository:
         result = await self._session.execute(query)
         return list(result.scalars().all())
 
-    async def list_all_enabled(self) -> List[ChannelConfigModel]:
+    async def list_all_enabled(self) -> list[ChannelConfigModel]:
         """List all enabled configurations across all projects.
 
         Used by ChannelConnectionManager to load configurations at startup.
@@ -83,7 +83,7 @@ class ChannelConfigRepository:
             return True
         return False
 
-    async def update_status(self, config_id: str, status: str, error: Optional[str] = None) -> bool:
+    async def update_status(self, config_id: str, status: str, error: str | None = None) -> bool:
         """Update connection status."""
         config = await self.get_by_id(config_id)
         if not config:
@@ -122,7 +122,7 @@ class ChannelMessageRepository:
         chat_id: str,
         limit: int = 100,
         offset: int = 0,
-    ) -> List["ChannelMessageModel"]:
+    ) -> list["ChannelMessageModel"]:
         """List messages in a chat."""
         from src.infrastructure.adapters.secondary.persistence.channel_models import (
             ChannelMessageModel,
@@ -151,7 +151,7 @@ class ChannelSessionBindingRepository:
         self,
         project_id: str,
         session_key: str,
-    ) -> Optional[ChannelSessionBindingModel]:
+    ) -> ChannelSessionBindingModel | None:
         """Get binding by project and deterministic session key."""
         result = await self._session.execute(
             select(ChannelSessionBindingModel).where(
@@ -164,7 +164,7 @@ class ChannelSessionBindingRepository:
     async def get_by_conversation_id(
         self,
         conversation_id: str,
-    ) -> Optional[ChannelSessionBindingModel]:
+    ) -> ChannelSessionBindingModel | None:
         """Get binding by conversation ID."""
         result = await self._session.execute(
             select(ChannelSessionBindingModel).where(
@@ -183,8 +183,8 @@ class ChannelSessionBindingRepository:
         chat_id: str,
         chat_type: str,
         session_key: str,
-        thread_id: Optional[str] = None,
-        topic_id: Optional[str] = None,
+        thread_id: str | None = None,
+        topic_id: str | None = None,
     ) -> ChannelSessionBindingModel:
         """Create a deterministic session binding if absent."""
         existing = await self.get_by_session_key(project_id, session_key)
@@ -230,14 +230,14 @@ class ChannelOutboxRepository:
         await self._session.flush()
         return item
 
-    async def get_by_id(self, outbox_id: str) -> Optional[ChannelOutboxModel]:
+    async def get_by_id(self, outbox_id: str) -> ChannelOutboxModel | None:
         """Get outbox record by ID."""
         result = await self._session.execute(
             select(ChannelOutboxModel).where(ChannelOutboxModel.id == outbox_id)
         )
         return result.scalar_one_or_none()
 
-    async def mark_sent(self, outbox_id: str, sent_channel_message_id: Optional[str]) -> bool:
+    async def mark_sent(self, outbox_id: str, sent_channel_message_id: str | None) -> bool:
         """Mark outbox message as sent."""
         result = await self._session.execute(
             update(ChannelOutboxModel)
@@ -275,7 +275,7 @@ class ChannelOutboxRepository:
         next_retry_at = None
         if not move_to_dead_letter:
             backoff_seconds = min(2**next_attempt_count, 300)
-            next_retry_at = datetime.now(timezone.utc) + timedelta(seconds=backoff_seconds)
+            next_retry_at = datetime.now(UTC) + timedelta(seconds=backoff_seconds)
 
         result = await self._session.execute(
             update(ChannelOutboxModel)
@@ -294,12 +294,12 @@ class ChannelOutboxRepository:
         await self._session.flush()
         return result.rowcount > 0
 
-    async def list_pending_retry(self, limit: int = 20) -> List[ChannelOutboxModel]:
+    async def list_pending_retry(self, limit: int = 20) -> list[ChannelOutboxModel]:
         """List outbox messages eligible for retry.
 
         Returns failed messages whose next_retry_at has passed.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         result = await self._session.execute(
             select(ChannelOutboxModel)
             .where(

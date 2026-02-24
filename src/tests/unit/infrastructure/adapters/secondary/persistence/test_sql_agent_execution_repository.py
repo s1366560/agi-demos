@@ -7,7 +7,7 @@ These tests verify that the migrated repository maintains 100% compatibility
 with the original implementation while leveraging the BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +45,7 @@ class TestSqlAgentExecutionRepositoryCreate:
             tool_input={"key": "value"},
             tool_output="Test output",
             metadata={"meta": "data"},
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             completed_at=None,
         )
 
@@ -81,7 +81,7 @@ class TestSqlAgentExecutionRepositoryCreate:
             tool_input={},
             tool_output=None,
             metadata={},
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             completed_at=None,
         )
 
@@ -116,7 +116,7 @@ class TestSqlAgentExecutionRepositoryUpdate:
             tool_input={},
             tool_output=None,
             metadata={},
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             completed_at=None,
         )
         await v2_agent_execution_repo.save(execution)
@@ -135,7 +135,7 @@ class TestSqlAgentExecutionRepositoryUpdate:
             tool_output="Updated output",
             metadata={"updated": "metadata"},
             started_at=execution.started_at,
-            completed_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(UTC),
         )
         await v2_agent_execution_repo.save(updated_execution)
 
@@ -170,7 +170,7 @@ class TestSqlAgentExecutionRepositoryFind:
             tool_input={},
             tool_output=None,
             metadata={},
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             completed_at=None,
         )
         await v2_agent_execution_repo.save(execution)
@@ -203,7 +203,7 @@ class TestSqlAgentExecutionRepositoryFind:
                 tool_input={},
                 tool_output=None,
                 metadata={},
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
                 completed_at=None,
             )
             await v2_agent_execution_repo.save(execution)
@@ -221,7 +221,7 @@ class TestSqlAgentExecutionRepositoryFind:
             tool_input={},
             tool_output=None,
             metadata={},
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             completed_at=None,
         )
         await v2_agent_execution_repo.save(other_execution)
@@ -250,7 +250,7 @@ class TestSqlAgentExecutionRepositoryFind:
                 tool_input={},
                 tool_output=None,
                 metadata={},
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
                 completed_at=None,
             )
             await v2_agent_execution_repo.save(execution)
@@ -268,7 +268,7 @@ class TestSqlAgentExecutionRepositoryFind:
             tool_input={},
             tool_output=None,
             metadata={},
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             completed_at=None,
         )
         await v2_agent_execution_repo.save(other_execution)
@@ -295,7 +295,7 @@ class TestSqlAgentExecutionRepositoryFind:
                 tool_input={},
                 tool_output=None,
                 metadata={},
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
                 completed_at=None,
             )
             await v2_agent_execution_repo.save(execution)
@@ -325,7 +325,7 @@ class TestSqlAgentExecutionRepositoryDelete:
                 tool_input={},
                 tool_output=None,
                 metadata={},
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
                 completed_at=None,
             )
             await v2_agent_execution_repo.save(execution)
@@ -356,7 +356,7 @@ class TestSqlAgentExecutionRepositoryToDomain:
             tool_input={"domain": "input"},
             tool_output="Domain output",
             metadata={"domain": "metadata"},
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             completed_at=None,
         )
         await v2_agent_execution_repo.save(execution)
@@ -397,7 +397,7 @@ class TestSqlAgentExecutionRepositoryToDb:
             tool_input={},
             tool_output=None,
             metadata={},
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             completed_at=None,
         )
 
@@ -430,7 +430,7 @@ class TestSqlAgentExecutionRepositoryEdgeCases:
             tool_input=None,  # None instead of {}
             tool_output=None,
             metadata=None,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
             completed_at=None,
         )
         await v2_agent_execution_repo.save(execution)
@@ -455,7 +455,7 @@ class TestSqlAgentExecutionRepositoryEdgeCases:
                 tool_input={},
                 tool_output=None,
                 metadata={},
-                started_at=datetime.now(timezone.utc),
+                started_at=datetime.now(UTC),
                 completed_at=None,
             )
             await v2_agent_execution_repo.save(execution)

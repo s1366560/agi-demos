@@ -12,8 +12,9 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 from src.infrastructure.agent.tools.base import AgentTool
 
@@ -29,10 +30,10 @@ class MemorySearchTool(AgentTool):
 
     def __init__(
         self,
-        chunk_search: Any,  # noqa: ANN401
-        graph_service: Any = None,  # noqa: ANN401
+        chunk_search: Any,
+        graph_service: Any = None,
         project_id: str = "",
-    ):
+    ) -> None:
         super().__init__(
             name="memory_search",
             description=(
@@ -46,7 +47,7 @@ class MemorySearchTool(AgentTool):
         self._graph_service = graph_service
         self._project_id = project_id
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -68,7 +69,7 @@ class MemorySearchTool(AgentTool):
             "required": ["query"],
         }
 
-    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str:
         query = kwargs.get("query", "")
         max_results = kwargs.get("max_results", 5)
         category = kwargs.get("category")
@@ -132,7 +133,7 @@ class MemorySearchTool(AgentTool):
                 logger.debug(f"Graph search failed (non-critical): {e}")
 
         # Format citations
-        for i, r in enumerate(results):
+        for _i, r in enumerate(results):
             created = r.get("created_at", "")
             if isinstance(created, datetime):
                 created = created.strftime("%Y-%m-%d")
@@ -158,9 +159,9 @@ class MemoryGetTool(AgentTool):
 
     def __init__(
         self,
-        session_factory: Optional[Callable] = None,
+        session_factory: Callable | None = None,
         project_id: str = "",
-    ):
+    ) -> None:
         super().__init__(
             name="memory_get",
             description=(
@@ -171,7 +172,7 @@ class MemoryGetTool(AgentTool):
         self._session_factory = session_factory
         self._project_id = project_id
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -183,7 +184,7 @@ class MemoryGetTool(AgentTool):
             "required": ["source_id"],
         }
 
-    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str:
         source_id = kwargs.get("source_id", "")
         if not source_id:
             return json.dumps({"error": "source_id parameter is required"})

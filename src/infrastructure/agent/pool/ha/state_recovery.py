@@ -23,9 +23,9 @@ import json
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -47,11 +47,11 @@ class StateCheckpoint:
     checkpoint_id: str
     instance_key: str
     checkpoint_type: CheckpointType
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    state_data: Dict[str, Any] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    state_data: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "checkpoint_id": self.checkpoint_id,
@@ -63,7 +63,7 @@ class StateCheckpoint:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "StateCheckpoint":
+    def from_dict(cls, data: dict[str, Any]) -> "StateCheckpoint":
         """Create from dictionary."""
         return cls(
             checkpoint_id=data["checkpoint_id"],
@@ -81,9 +81,9 @@ class RecoveryResult:
 
     success: bool
     instance_key: str
-    checkpoint_id: Optional[str] = None
-    recovered_state: Optional[Dict[str, Any]] = None
-    error_message: Optional[str] = None
+    checkpoint_id: str | None = None
+    recovered_state: dict[str, Any] | None = None
+    error_message: str | None = None
     recovery_time_ms: float = 0.0
 
 
@@ -100,19 +100,19 @@ class StateRecoveryService:
 
     def __init__(
         self,
-        redis_url: Optional[str] = None,
-        db_url: Optional[str] = None,
+        redis_url: str | None = None,
+        db_url: str | None = None,
         checkpoint_ttl_seconds: int = 86400,  # 24 hours
         max_checkpoints_per_instance: int = 10,
-    ):
+    ) -> None:
         self._redis_url = redis_url
         self._db_url = db_url
         self._checkpoint_ttl = checkpoint_ttl_seconds
         self._max_checkpoints = max_checkpoints_per_instance
-        self._redis_client: Optional[Any] = None
+        self._redis_client: Any | None = None
         self._is_running = False
         # In-memory fallback storage
-        self._memory_storage: Dict[str, List[str]] = {}
+        self._memory_storage: dict[str, list[str]] = {}
 
     async def start(self) -> None:
         """Start the recovery service."""
@@ -147,8 +147,8 @@ class StateRecoveryService:
         self,
         instance_key: str,
         checkpoint_type: CheckpointType,
-        state_data: Dict[str, Any],
-        metadata: Optional[Dict[str, Any]] = None,
+        state_data: dict[str, Any],
+        metadata: dict[str, Any] | None = None,
     ) -> StateCheckpoint:
         """
         Create a state checkpoint.
@@ -184,7 +184,7 @@ class StateRecoveryService:
     async def recover_instance(
         self,
         instance_key: str,
-        checkpoint_type: Optional[CheckpointType] = None,
+        checkpoint_type: CheckpointType | None = None,
     ) -> RecoveryResult:
         """
         Recover instance state from checkpoint.
@@ -229,7 +229,7 @@ class StateRecoveryService:
                 recovery_time_ms=(time.time() - start_time) * 1000,
             )
 
-    async def recover_all_instances(self) -> List[RecoveryResult]:
+    async def recover_all_instances(self) -> list[RecoveryResult]:
         """
         Recover all instances with checkpoints.
 
@@ -264,12 +264,12 @@ class StateRecoveryService:
         logger.info(f"Deleted {count} checkpoints for {instance_key}")
         return count
 
-    async def get_checkpoint_stats(self) -> Dict[str, Any]:
+    async def get_checkpoint_stats(self) -> dict[str, Any]:
         """Get checkpoint statistics."""
         instance_keys = await self._get_all_instance_keys()
 
         total_checkpoints = 0
-        by_type: Dict[str, int] = {}
+        by_type: dict[str, int] = {}
 
         for instance_key in instance_keys:
             checkpoints = await self._list_checkpoints(instance_key)
@@ -310,8 +310,8 @@ class StateRecoveryService:
     async def _get_latest_checkpoint(
         self,
         instance_key: str,
-        checkpoint_type: Optional[CheckpointType] = None,
-    ) -> Optional[StateCheckpoint]:
+        checkpoint_type: CheckpointType | None = None,
+    ) -> StateCheckpoint | None:
         """Get latest checkpoint for instance."""
         if checkpoint_type:
             key = f"checkpoint:{instance_key}:{checkpoint_type.value}"
@@ -323,7 +323,7 @@ class StateRecoveryService:
                 return StateCheckpoint.from_dict(json.loads(self._memory_storage[key][0]))
         else:
             # Get latest across all types
-            latest: Optional[StateCheckpoint] = None
+            latest: StateCheckpoint | None = None
             for cp_type in CheckpointType:
                 key = f"checkpoint:{instance_key}:{cp_type.value}"
                 data = None
@@ -342,7 +342,7 @@ class StateRecoveryService:
     async def _list_checkpoints(
         self,
         instance_key: str,
-    ) -> List[StateCheckpoint]:
+    ) -> list[StateCheckpoint]:
         """List all checkpoints for instance."""
         checkpoints = []
 
@@ -389,7 +389,7 @@ class StateRecoveryService:
 
         return count
 
-    async def _get_all_instance_keys(self) -> List[str]:
+    async def _get_all_instance_keys(self) -> list[str]:
         """Get all instance keys with checkpoints."""
         instance_keys = set()
 
@@ -421,7 +421,7 @@ async def checkpoint_lifecycle_state(
     recovery_service: StateRecoveryService,
     instance_key: str,
     lifecycle_state: str,
-    extra_data: Optional[Dict[str, Any]] = None,
+    extra_data: dict[str, Any] | None = None,
 ) -> StateCheckpoint:
     """Create lifecycle state checkpoint."""
     state_data = {
@@ -439,8 +439,8 @@ async def checkpoint_conversation(
     recovery_service: StateRecoveryService,
     instance_key: str,
     conversation_id: str,
-    messages: List[Dict[str, Any]],
-    context: Optional[Dict[str, Any]] = None,
+    messages: list[dict[str, Any]],
+    context: dict[str, Any] | None = None,
 ) -> StateCheckpoint:
     """Create conversation checkpoint."""
     state_data = {
@@ -461,7 +461,7 @@ async def checkpoint_execution(
     instance_key: str,
     execution_id: str,
     step_index: int,
-    tool_calls: List[Dict[str, Any]],
+    tool_calls: list[dict[str, Any]],
 ) -> StateCheckpoint:
     """Create execution checkpoint."""
     state_data = {

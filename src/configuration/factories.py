@@ -6,7 +6,6 @@ for each provider, and the NativeGraphAdapter for knowledge graph operations.
 """
 
 import logging
-from typing import Optional
 
 from src.configuration.config import get_settings
 from src.domain.llm_providers.llm_types import LLMClient
@@ -25,7 +24,7 @@ EMBEDDING_DIMS = {
 
 
 async def create_native_graph_adapter(
-    tenant_id: Optional[str] = None,
+    tenant_id: str | None = None,
 ):
     """
     Create NativeGraphAdapter for knowledge graph operations.
@@ -124,7 +123,7 @@ async def create_native_graph_adapter(
     return adapter
 
 
-async def create_llm_client(tenant_id: Optional[str] = None) -> LLMClient:
+async def create_llm_client(tenant_id: str | None = None) -> LLMClient:
     """Create a unified LLM client using AIServiceFactory.
 
     Resolves provider configuration from the database.
@@ -137,7 +136,7 @@ async def create_llm_client(tenant_id: Optional[str] = None) -> LLMClient:
 
 
 # Deprecated: Use create_llm_client instead
-async def create_langchain_llm(tenant_id: Optional[str] = None) -> LLMClient:
+async def create_langchain_llm(tenant_id: str | None = None) -> LLMClient:
     """
     DEPRECATED: Use create_llm_client() instead.
 

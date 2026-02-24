@@ -1,7 +1,6 @@
 """Redis client initialization for startup."""
 
 import logging
-from typing import Optional
 
 from src.configuration.config import get_settings
 
@@ -9,7 +8,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
-async def initialize_redis_client() -> Optional[object]:
+async def initialize_redis_client() -> object | None:
     """
     Initialize Redis client for event bus and caching.
 

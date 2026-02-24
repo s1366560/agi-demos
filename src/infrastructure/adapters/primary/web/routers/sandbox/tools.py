@@ -202,7 +202,7 @@ async def execute_bash(
     sandbox_id: str,
     command: str,
     timeout: int = 300,
-    working_dir: str = None,
+    working_dir: str | None = None,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
 ):

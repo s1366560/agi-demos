@@ -13,7 +13,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -40,12 +40,12 @@ class HealthCheckResult:
     level: HealthCheckLevel
     status: HealthStatus
     healthy: bool
-    details: Dict[str, Any]
-    timestamp: Optional[datetime]
+    details: dict[str, Any]
+    timestamp: datetime | None
     sandbox_id: str
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """转换为字典."""
         return {
             "level": self.level.value,
@@ -66,9 +66,9 @@ class ComponentHealth:
     desktop_service: bool = False
     terminal_service: bool = False
     container_status: str = "unknown"
-    mcp_port: Optional[int] = None
-    desktop_port: Optional[int] = None
-    terminal_port: Optional[int] = None
+    mcp_port: int | None = None
+    desktop_port: int | None = None
+    terminal_port: int | None = None
 
 
 class SandboxHealthService:
@@ -77,7 +77,7 @@ class SandboxHealthService:
     执行不同级别的健康检查并返回结果。
     """
 
-    def __init__(self, sandbox_adapter=None, default_timeout: float = 5.0):
+    def __init__(self, sandbox_adapter=None, default_timeout: float = 5.0) -> None:
         """初始化健康检查服务.
 
         Args:
@@ -102,8 +102,8 @@ class SandboxHealthService:
             HealthCheckResult 结果
         """
         timestamp = datetime.now()
-        errors: List[str] = []
-        details: Dict[str, Any] = {}
+        errors: list[str] = []
+        details: dict[str, Any] = {}
 
         # 基础检查 - 容器状态
         if self._adapter is None:
@@ -251,7 +251,7 @@ class SandboxHealthService:
             logger.error(f"Error checking MCP health: {e}")
             return False
 
-    async def check_services_health(self, sandbox_id: str) -> Dict[str, bool]:
+    async def check_services_health(self, sandbox_id: str) -> dict[str, bool]:
         """检查 Desktop 和 Terminal 服务健康状态.
 
         Args:
@@ -304,9 +304,9 @@ class SandboxHealthService:
 
     async def check_all_sandboxes(
         self,
-        sandbox_ids: List[str],
+        sandbox_ids: list[str],
         level: HealthCheckLevel = HealthCheckLevel.BASIC,
-    ) -> List[HealthCheckResult]:
+    ) -> list[HealthCheckResult]:
         """批量检查多个 Sandbox 健康状态.
 
         Args:

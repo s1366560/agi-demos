@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -35,24 +35,24 @@ class BackgroundCompressor:
 
     def __init__(self, engine: ContextCompressionEngine) -> None:
         self._engine = engine
-        self._task: Optional[asyncio.Task] = None
-        self._last_result: Optional[CompressionResult] = None
+        self._task: asyncio.Task | None = None
+        self._last_result: CompressionResult | None = None
 
     @property
     def is_running(self) -> bool:
         return self._task is not None and not self._task.done()
 
     @property
-    def last_result(self) -> Optional[CompressionResult]:
+    def last_result(self) -> CompressionResult | None:
         return self._last_result
 
     def schedule(
         self,
         system_prompt: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         model_limits: ModelLimits,
-        llm_client: Optional[LLMClient] = None,
-        level: Optional[CompressionLevel] = None,
+        llm_client: LLMClient | None = None,
+        level: CompressionLevel | None = None,
     ) -> bool:
         """Schedule background compression.
 
@@ -73,10 +73,10 @@ class BackgroundCompressor:
     async def _run(
         self,
         system_prompt: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         model_limits: ModelLimits,
-        llm_client: Optional[LLMClient],
-        level: Optional[CompressionLevel],
+        llm_client: LLMClient | None,
+        level: CompressionLevel | None,
     ) -> None:
         """Execute compression in background."""
         try:
@@ -96,7 +96,7 @@ class BackgroundCompressor:
             logger.error(f"Background compression failed: {e}", exc_info=True)
             self._engine.state.clear_pending()
 
-    async def get_result(self, timeout: float = 5.0) -> Optional[CompressionResult]:
+    async def get_result(self, timeout: float = 5.0) -> CompressionResult | None:
         """Wait for and return the background compression result.
 
         Args:
@@ -111,7 +111,7 @@ class BackgroundCompressor:
         if not self._task.done():
             try:
                 await asyncio.wait_for(asyncio.shield(self._task), timeout=timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.debug("Background compression still running after timeout")
                 return None
 

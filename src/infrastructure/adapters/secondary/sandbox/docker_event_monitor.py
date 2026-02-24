@@ -5,8 +5,10 @@ to the event bus for real-time frontend updates.
 """
 
 import asyncio
+import contextlib
 import logging
-from typing import Any, Awaitable, Callable, Dict, Optional, Set
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import docker
 from docker.errors import DockerException
@@ -45,9 +47,9 @@ class DockerEventMonitor:
 
     def __init__(
         self,
-        on_status_change: Optional[Callable[[str, str, str, str], Awaitable[bool]]] = None,
-        docker_client: Optional[docker.DockerClient] = None,
-    ):
+        on_status_change: Callable[[str, str, str, str], Awaitable[bool]] | None = None,
+        docker_client: docker.DockerClient | None = None,
+    ) -> None:
         """Initialize the monitor.
 
         Args:
@@ -57,9 +59,9 @@ class DockerEventMonitor:
         self._on_status_change = on_status_change
         self._docker = docker_client
         self._running = False
-        self._monitor_task: Optional[asyncio.Task] = None
-        self._tracked_containers: Set[str] = set()
-        self._loop: Optional[asyncio.AbstractEventLoop] = None  # Store main event loop
+        self._monitor_task: asyncio.Task | None = None
+        self._tracked_containers: set[str] = set()
+        self._loop: asyncio.AbstractEventLoop | None = None  # Store main event loop
 
     async def start(self) -> None:
         """Start monitoring Docker events."""
@@ -89,10 +91,8 @@ class DockerEventMonitor:
 
         if self._monitor_task:
             self._monitor_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._monitor_task
-            except asyncio.CancelledError:
-                pass
             self._monitor_task = None
 
         logger.info("[DockerEventMonitor] Stopped monitoring Docker events")
@@ -139,7 +139,7 @@ class DockerEventMonitor:
             if self._running:
                 logger.error(f"[DockerEventMonitor] Events stream error: {e}")
 
-    def _handle_event(self, event: Dict[str, Any]) -> None:
+    def _handle_event(self, event: dict[str, Any]) -> None:
         """Handle a single Docker event."""
         action = event.get("Action", "")
         actor = event.get("Actor", {})
@@ -172,7 +172,7 @@ class DockerEventMonitor:
             except Exception as e:
                 logger.error(f"[DockerEventMonitor] Callback error: {e}")
 
-    async def sync_current_state(self) -> Dict[str, str]:
+    async def sync_current_state(self) -> dict[str, str]:
         """Sync current state of all sandbox containers.
 
         Returns:
@@ -213,10 +213,10 @@ class DockerEventMonitor:
 
 
 # Global monitor instance
-_monitor: Optional[DockerEventMonitor] = None
+_monitor: DockerEventMonitor | None = None
 
 
-def get_docker_event_monitor() -> Optional[DockerEventMonitor]:
+def get_docker_event_monitor() -> DockerEventMonitor | None:
     """Get the global Docker event monitor instance."""
     return _monitor
 

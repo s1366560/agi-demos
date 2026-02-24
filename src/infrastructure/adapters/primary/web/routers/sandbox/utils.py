@@ -7,7 +7,6 @@ import asyncio
 import logging
 import re
 import threading
-from typing import Optional
 
 from fastapi import Request
 
@@ -24,11 +23,11 @@ logger = logging.getLogger(__name__)
 
 # Thread-safe singleton management with lock
 _singleton_lock = threading.Lock()
-_sandbox_adapter: Optional[MCPSandboxAdapter] = None
-_sandbox_orchestrator: Optional[SandboxOrchestrator] = None
-_event_publisher: Optional[SandboxEventPublisher] = None
-_sandbox_token_service: Optional[SandboxTokenService] = None
-_worker_id: Optional[int] = None  # Track worker ID for multi-worker detection
+_sandbox_adapter: MCPSandboxAdapter | None = None
+_sandbox_orchestrator: SandboxOrchestrator | None = None
+_event_publisher: SandboxEventPublisher | None = None
+_sandbox_token_service: SandboxTokenService | None = None
+_worker_id: int | None = None  # Track worker ID for multi-worker detection
 _sync_pending: bool = False  # Track if sync is pending
 _sync_lock = asyncio.Lock()  # Async lock for sync operation
 
@@ -146,7 +145,7 @@ def get_sandbox_orchestrator() -> SandboxOrchestrator:
         return _sandbox_orchestrator
 
 
-def get_event_publisher(request: Request) -> Optional[SandboxEventPublisher]:
+def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
     """Get the sandbox event publisher from app container.
 
     Uses the properly initialized container from app.state which has

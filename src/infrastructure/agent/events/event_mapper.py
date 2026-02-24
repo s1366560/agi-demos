@@ -8,9 +8,10 @@ for backward compatibility.
 """
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 # Import unified types - SINGLE SOURCE OF TRUTH
 from src.domain.events.types import AgentEventType
@@ -26,8 +27,8 @@ class SSEEvent:
 
     id: str
     event: AgentEventType  # Now uses unified type
-    data: Dict[str, Any]
-    retry: Optional[int] = None
+    data: dict[str, Any]
+    retry: int | None = None
 
     def to_sse_format(self) -> str:
         """Convert to SSE format string.
@@ -55,10 +56,10 @@ class AgentDomainEvent:
     """
 
     event_type: AgentEventType  # Now uses unified type
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    conversation_id: Optional[str] = None
-    sandbox_id: Optional[str] = None
-    data: Dict[str, Any] = field(default_factory=dict)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    conversation_id: str | None = None
+    sandbox_id: str | None = None
+    data: dict[str, Any] = field(default_factory=dict)
 
     def to_sse(self, event_id: str) -> SSEEvent:
         """Convert domain event to SSE event.
@@ -105,8 +106,8 @@ class EventMapper:
         self._include_timestamp = include_timestamp
         self._include_conversation_id = include_conversation_id
         self._include_sandbox_id = include_sandbox_id
-        self._event_filters: List[Callable[[AgentDomainEvent], bool]] = []
-        self._event_transformers: Dict[AgentEventType, Callable[[AgentDomainEvent], Dict[str, Any]]] = {}
+        self._event_filters: list[Callable[[AgentDomainEvent], bool]] = []
+        self._event_transformers: dict[AgentEventType, Callable[[AgentDomainEvent], dict[str, Any]]] = {}
 
     def register_filter(self, filter_fn: Callable[[AgentDomainEvent], bool]) -> None:
         """Register an event filter.
@@ -119,7 +120,7 @@ class EventMapper:
     def register_transformer(
         self,
         event_type: AgentEventType,
-        transformer: Callable[[AgentDomainEvent], Dict[str, Any]],
+        transformer: Callable[[AgentDomainEvent], dict[str, Any]],
     ) -> None:
         """Register a custom transformer for an event type.
 
@@ -133,7 +134,7 @@ class EventMapper:
         self,
         event: AgentDomainEvent,
         event_id: str,
-    ) -> Optional[SSEEvent]:
+    ) -> SSEEvent | None:
         """Convert a domain event to SSE format.
 
         Args:
@@ -178,9 +179,9 @@ class EventMapper:
 
     def to_sse_batch(
         self,
-        events: List[AgentDomainEvent],
+        events: list[AgentDomainEvent],
         id_prefix: str = "evt",
-    ) -> List[SSEEvent]:
+    ) -> list[SSEEvent]:
         """Convert multiple events to SSE format.
 
         Args:
@@ -200,7 +201,7 @@ class EventMapper:
 
     def create_sse_stream(
         self,
-        events: List[AgentDomainEvent],
+        events: list[AgentDomainEvent],
     ) -> str:
         """Create a complete SSE stream string from events.
 
@@ -222,22 +223,22 @@ class EventBus:
     enabling loose coupling between event producers and consumers.
     """
 
-    def __init__(self, mapper: Optional[EventMapper] = None) -> None:
+    def __init__(self, mapper: EventMapper | None = None) -> None:
         """Initialize the event bus.
 
         Args:
             mapper: Optional event mapper for SSE conversion
         """
         self._mapper = mapper or EventMapper()
-        self._subscribers: Dict[AgentEventType, List[Callable]] = {}
-        self._global_subscribers: List[Callable] = []
-        self._event_history: List[AgentDomainEvent] = []
+        self._subscribers: dict[AgentEventType, list[Callable]] = {}
+        self._global_subscribers: list[Callable] = []
+        self._event_history: list[AgentDomainEvent] = []
         self._max_history = 1000
 
     def subscribe(
         self,
-        event_type: Optional[AgentEventType] = None,
-        callback: Optional[Callable[[AgentDomainEvent], None]] = None,
+        event_type: AgentEventType | None = None,
+        callback: Callable[[AgentDomainEvent], None] | None = None,
     ) -> Callable[[], None]:
         """Subscribe to events.
 
@@ -295,9 +296,9 @@ class EventBus:
 
     def get_history(
         self,
-        event_type: Optional[AgentEventType] = None,
+        event_type: AgentEventType | None = None,
         limit: int = 100,
-    ) -> List[AgentDomainEvent]:
+    ) -> list[AgentDomainEvent]:
         """Get events from history.
 
         Args:
@@ -329,7 +330,7 @@ class EventBus:
 
 
 # Global event bus instance
-_global_event_bus: Optional[EventBus] = None
+_global_event_bus: EventBus | None = None
 
 
 def get_event_bus() -> EventBus:

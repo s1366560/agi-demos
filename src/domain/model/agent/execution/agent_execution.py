@@ -1,9 +1,9 @@
 """AgentExecution entity for tracking agent execution cycles."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict
+from typing import Any
 
 from src.domain.shared_kernel import Entity
 
@@ -42,30 +42,30 @@ class AgentExecution(Entity):
     # Action taken (Act phase)
     action: str | None = None
     tool_name: str | None = None
-    tool_input: Dict[str, Any] = field(default_factory=dict)
+    tool_input: dict[str, Any] = field(default_factory=dict)
 
     # Result of action (Observe phase)
     observation: str | None = None
     tool_output: str | None = None
 
     # Additional metadata
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     # Timestamps
-    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None
 
     # Multi-level thinking support
     work_level_thought: str | None = None  # Work-level plan
     task_level_thought: str | None = None  # Task-level reasoning
-    plan_steps: list[Dict[str, Any]] | None = None  # Planned steps
+    plan_steps: list[dict[str, Any]] | None = None  # Planned steps
     current_step_index: int | None = None  # Current step number
     workflow_pattern_id: str | None = None  # Pattern used (if any)
 
     def mark_completed(self) -> None:
         """Mark this execution as completed."""
         self.status = ExecutionStatus.COMPLETED
-        self.completed_at = datetime.now(timezone.utc)
+        self.completed_at = datetime.now(UTC)
 
     def mark_failed(self, error: str) -> None:
         """
@@ -75,7 +75,7 @@ class AgentExecution(Entity):
             error: Error message describing the failure
         """
         self.status = ExecutionStatus.FAILED
-        self.completed_at = datetime.now(timezone.utc)
+        self.completed_at = datetime.now(UTC)
         self.metadata["error"] = error
 
     def set_thinking(self, thought: str) -> None:
@@ -88,7 +88,7 @@ class AgentExecution(Entity):
         self.status = ExecutionStatus.THINKING
         self.thought = thought
 
-    def set_acting(self, tool_name: str, tool_input: Dict[str, Any]) -> None:
+    def set_acting(self, tool_name: str, tool_input: dict[str, Any]) -> None:
         """
         Set the acting phase content.
 

@@ -17,7 +17,6 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -89,16 +88,16 @@ class ScanResult:
         scanned_dirs: Set of directories that were scanned
     """
 
-    skills: List[SkillFileInfo] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
-    scanned_dirs: Set[str] = field(default_factory=set)
+    skills: list[SkillFileInfo] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    scanned_dirs: set[str] = field(default_factory=set)
 
     @property
     def count(self) -> int:
         """Return the number of skills found."""
         return len(self.skills)
 
-    def get_skill_names(self) -> List[str]:
+    def get_skill_names(self) -> list[str]:
         """Return list of skill IDs."""
         return [s.skill_id for s in self.skills]
 
@@ -140,12 +139,12 @@ class FileSystemSkillScanner:
 
     def __init__(
         self,
-        skill_dirs: Optional[List[str]] = None,
+        skill_dirs: list[str] | None = None,
         follow_symlinks: bool = True,
         include_global: bool = True,
         include_system: bool = True,
-        system_skills_path: Optional[Path] = None,
-    ):
+        system_skills_path: Path | None = None,
+    ) -> None:
         """
         Initialize the scanner.
 
@@ -177,8 +176,8 @@ class FileSystemSkillScanner:
     def scan(
         self,
         base_path: Path,
-        include_global: Optional[bool] = None,
-        include_system: Optional[bool] = None,
+        include_global: bool | None = None,
+        include_system: bool | None = None,
     ) -> ScanResult:
         """
         Scan for SKILL.md files starting from base path.
@@ -367,7 +366,7 @@ class FileSystemSkillScanner:
         file_path: Path,
         source_type: str,
         is_system: bool = False,
-    ) -> Optional[SkillFileInfo]:
+    ) -> SkillFileInfo | None:
         """
         Create a SkillFileInfo from a file path.
 
@@ -411,9 +410,9 @@ class FileSystemSkillScanner:
         self,
         base_path: Path,
         skill_name: str,
-        include_global: Optional[bool] = None,
-        include_system: Optional[bool] = None,
-    ) -> Optional[SkillFileInfo]:
+        include_global: bool | None = None,
+        include_system: bool | None = None,
+    ) -> SkillFileInfo | None:
         """
         Find a specific skill by name.
 

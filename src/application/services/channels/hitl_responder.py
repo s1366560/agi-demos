@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +34,11 @@ class HITLChannelResponder:
         self,
         request_id: str,
         hitl_type: str,
-        response_data: Dict[str, Any],
+        response_data: dict[str, Any],
         *,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-        responder_id: Optional[str] = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+        responder_id: str | None = None,
     ) -> bool:
         """Submit a HITL response from a channel interaction.
 
@@ -86,8 +86,8 @@ class HITLChannelResponder:
         session: AsyncSession,
         request_id: str,
         hitl_type: str,
-        response_data: Dict[str, Any],
-        responder_id: Optional[str],
+        response_data: dict[str, Any],
+        responder_id: str | None,
     ) -> bool:
         """Internal: load request from DB and publish response to Redis."""
         from src.infrastructure.adapters.secondary.persistence.sql_hitl_request_repository import (
@@ -119,10 +119,10 @@ class HITLChannelResponder:
         self,
         request_id: str,
         hitl_type: str,
-        response_data: Dict[str, Any],
+        response_data: dict[str, Any],
         tenant_id: str,
         project_id: str,
-        responder_id: Optional[str],
+        responder_id: str | None,
     ) -> bool:
         """Publish HITL response to the Redis stream.
 

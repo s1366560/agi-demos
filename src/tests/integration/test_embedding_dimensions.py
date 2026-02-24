@@ -20,7 +20,7 @@ DIM_1536 = 1536  # OpenAI
 class MockEmbedder(EmbedderClient):
     """Mock embedder for testing dimension validation."""
 
-    def __init__(self, config: EmbedderConfig, return_dimension: int):
+    def __init__(self, config: EmbedderConfig, return_dimension: int) -> None:
         """Initialize mock embedder with specific return dimension."""
         self.config = config
         self._return_dimension = return_dimension
@@ -90,7 +90,7 @@ class TestValidatedEmbedder:
 
         # Create embedder that returns inconsistent dimensions
         class InconsistentMockEmbedder(EmbedderClient):
-            def __init__(self, config: EmbedderConfig):
+            def __init__(self, config: EmbedderConfig) -> None:
                 self.config = config
                 self._call_count = 0
 
@@ -125,7 +125,7 @@ class TestValidatedEmbedder:
         config = EmbedderConfig(embedding_dim=DIM_1024)
 
         class EmptyMockEmbedder(EmbedderClient):
-            def __init__(self, config: EmbedderConfig):
+            def __init__(self, config: EmbedderConfig) -> None:
                 self.config = config
 
             async def create(self, input_data: str) -> list[float]:

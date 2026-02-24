@@ -12,10 +12,11 @@ Extracted from react_agent.py to reduce complexity and improve testability.
 """
 
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional, Protocol
+from typing import Any, Protocol
 
 from src.domain.events.agent_events import (
     AgentDomainEvent,
@@ -37,8 +38,8 @@ class SkillProtocol(Protocol):
     id: str
     name: str
     description: str
-    tools: List[str]
-    prompt_template: Optional[str]
+    tools: list[str]
+    prompt_template: str | None
     status: Any  # SkillStatus
 
     def is_accessible_by_agent(self, agent_mode: str) -> bool:
@@ -61,8 +62,8 @@ class SkillExecutorProtocol(Protocol):
         self,
         skill: SkillProtocol,
         query: str,
-        context: Dict[str, Any],
-        sandbox_id: Optional[str] = None,
+        context: dict[str, Any],
+        sandbox_id: str | None = None,
     ) -> AsyncIterator[AgentDomainEvent]:
         """Execute skill and yield domain events."""
         ...
@@ -71,7 +72,7 @@ class SkillExecutorProtocol(Protocol):
 class ToolProtocol(Protocol):
     """Protocol for tool definitions."""
 
-    sandbox_id: Optional[str]
+    sandbox_id: str | None
 
 
 # ============================================================================
@@ -91,7 +92,7 @@ class SkillExecutionMode(str, Enum):
 class SkillMatchResult:
     """Result of skill matching."""
 
-    skill: Optional[SkillProtocol] = None
+    skill: SkillProtocol | None = None
     score: float = 0.0
     mode: SkillExecutionMode = SkillExecutionMode.NONE
 
@@ -119,7 +120,7 @@ class SkillExecutionContext:
     user_id: str
     tenant_id: str
     query: str
-    sandbox_id: Optional[str] = None
+    sandbox_id: str | None = None
 
 
 @dataclass
@@ -130,9 +131,9 @@ class SkillExecutionSummary:
     skill_name: str
     success: bool
     summary: str
-    tool_results: List[Dict[str, Any]] = field(default_factory=list)
+    tool_results: list[dict[str, Any]] = field(default_factory=list)
     execution_time_ms: int = 0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 # ============================================================================
@@ -154,13 +155,13 @@ class SkillOrchestrator:
 
     def __init__(
         self,
-        skills: Optional[List[SkillProtocol]] = None,
-        skill_executor: Optional[SkillExecutorProtocol] = None,
-        tools: Optional[Dict[str, ToolProtocol]] = None,
-        config: Optional[SkillExecutionConfig] = None,
+        skills: list[SkillProtocol] | None = None,
+        skill_executor: SkillExecutorProtocol | None = None,
+        tools: dict[str, ToolProtocol] | None = None,
+        config: SkillExecutionConfig | None = None,
         agent_mode: str = "default",
         debug_logging: bool = False,
-    ):
+    ) -> None:
         """
         Initialize skill orchestrator.
 
@@ -274,7 +275,7 @@ class SkillOrchestrator:
 
     def _determine_mode(
         self,
-        skill: Optional[SkillProtocol],
+        skill: SkillProtocol | None,
         score: float,
     ) -> SkillExecutionMode:
         """
@@ -305,7 +306,7 @@ class SkillOrchestrator:
         self,
         skill: SkillProtocol,
         context: SkillExecutionContext,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute skill directly via SkillExecutor.
 
@@ -342,7 +343,7 @@ class SkillOrchestrator:
                 "tools": list(skill.tools),
                 "total_steps": len(skill.tools),
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         tool_results = []
@@ -388,10 +389,10 @@ class SkillOrchestrator:
                             "execution_time_ms": domain_event.execution_time_ms,
                             "error": domain_event.error,
                         },
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     }
 
-    def _extract_sandbox_id(self, tool_names: List[str]) -> Optional[str]:
+    def _extract_sandbox_id(self, tool_names: list[str]) -> str | None:
         """Extract sandbox_id from tools if available."""
         for tool_name in tool_names:
             tool = self._tools.get(tool_name)
@@ -404,7 +405,7 @@ class SkillOrchestrator:
         domain_event: AgentDomainEvent,
         skill: SkillProtocol,
         current_step: int,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Convert domain event to SSE format.
 
@@ -416,7 +417,7 @@ class SkillOrchestrator:
         Returns:
             Converted event dict or None
         """
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = datetime.now(UTC).isoformat()
 
         if domain_event.event_type == AgentEventType.THOUGHT:
             thought_level = getattr(domain_event, "thought_level", "reasoning")
@@ -477,9 +478,9 @@ class SkillOrchestrator:
     def _summarize_results(
         self,
         skill: SkillProtocol,
-        tool_results: List[Dict[str, Any]],
+        tool_results: list[dict[str, Any]],
         success: bool,
-        error: Optional[str],
+        error: str | None,
     ) -> str:
         """
         Generate summary from skill execution results.
@@ -524,7 +525,7 @@ class SkillOrchestrator:
         else:
             return f"Skill '{skill.name}' completed successfully"
 
-    def to_skill_dict(self, skill: SkillProtocol) -> Dict[str, Any]:
+    def to_skill_dict(self, skill: SkillProtocol) -> dict[str, Any]:
         """
         Convert skill to dict format for prompt context.
 
@@ -542,7 +543,7 @@ class SkillOrchestrator:
             "prompt_template": skill.prompt_template,
         }
 
-    def get_skills_data(self) -> Optional[List[Dict[str, Any]]]:
+    def get_skills_data(self) -> list[dict[str, Any]] | None:
         """
         Get all skills as dict format for prompt context.
 
@@ -569,7 +570,7 @@ class SkillOrchestrator:
 # Singleton Management
 # ============================================================================
 
-_orchestrator: Optional[SkillOrchestrator] = None
+_orchestrator: SkillOrchestrator | None = None
 
 
 def get_skill_orchestrator() -> SkillOrchestrator:
@@ -595,10 +596,10 @@ def set_skill_orchestrator(orchestrator: SkillOrchestrator) -> None:
 
 
 def create_skill_orchestrator(
-    skills: Optional[List[SkillProtocol]] = None,
-    skill_executor: Optional[SkillExecutorProtocol] = None,
-    tools: Optional[Dict[str, ToolProtocol]] = None,
-    config: Optional[SkillExecutionConfig] = None,
+    skills: list[SkillProtocol] | None = None,
+    skill_executor: SkillExecutorProtocol | None = None,
+    tools: dict[str, ToolProtocol] | None = None,
+    config: SkillExecutionConfig | None = None,
     agent_mode: str = "default",
     debug_logging: bool = False,
 ) -> SkillOrchestrator:

@@ -8,7 +8,6 @@ Used when the ReActAgent runs in SYSTEM environment without a Sandbox.
 import hashlib
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from src.domain.ports.services.skill_resource_port import (
     ResourceEnvironment,
@@ -35,9 +34,9 @@ class LocalSkillResourceAdapter(SkillResourcePort):
 
     def __init__(
         self,
-        default_project_path: Optional[Path] = None,
-        scanner: Optional[FileSystemSkillScanner] = None,
-    ):
+        default_project_path: Path | None = None,
+        scanner: FileSystemSkillScanner | None = None,
+    ) -> None:
         """
         Initialize the local adapter.
 
@@ -48,9 +47,9 @@ class LocalSkillResourceAdapter(SkillResourcePort):
         self._default_project_path = default_project_path or Path.cwd()
         self._scanner = scanner or FileSystemSkillScanner()
         # Cache: skill_name -> skill_dir
-        self._skill_dir_cache: Dict[str, Path] = {}
+        self._skill_dir_cache: dict[str, Path] = {}
         # Cache: virtual_path -> local_path
-        self._path_cache: Dict[str, Path] = {}
+        self._path_cache: dict[str, Path] = {}
 
     @property
     def environment(self) -> ResourceEnvironment:
@@ -61,7 +60,7 @@ class LocalSkillResourceAdapter(SkillResourcePort):
         self,
         context: SkillResourceContext,
         tier: int = 3,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Load SKILL.md content from local file system."""
         skill_dir = await self._get_skill_dir(context)
         if not skill_dir:
@@ -98,7 +97,7 @@ class LocalSkillResourceAdapter(SkillResourcePort):
         self,
         context: SkillResourceContext,
         virtual_path: str,
-    ) -> Optional[SkillResource]:
+    ) -> SkillResource | None:
         """Get resource by virtual path from local file system."""
         skill_name, relative_path = self.parse_virtual_path(virtual_path)
 
@@ -154,7 +153,7 @@ class LocalSkillResourceAdapter(SkillResourcePort):
     async def list_resources(
         self,
         context: SkillResourceContext,
-    ) -> List[SkillResource]:
+    ) -> list[SkillResource]:
         """List all resources for a skill from local file system."""
         skill_dir = await self._get_skill_dir(context)
         if not skill_dir:
@@ -195,7 +194,7 @@ class LocalSkillResourceAdapter(SkillResourcePort):
     async def sync_resources(
         self,
         context: SkillResourceContext,
-        resources: Optional[List[SkillResource]] = None,
+        resources: list[SkillResource] | None = None,
     ) -> ResourceSyncResult:
         """
         Sync resources - no-op for local environment.
@@ -261,7 +260,7 @@ class LocalSkillResourceAdapter(SkillResourcePort):
 
     # Private helper methods
 
-    async def _get_skill_dir(self, context: SkillResourceContext) -> Optional[Path]:
+    async def _get_skill_dir(self, context: SkillResourceContext) -> Path | None:
         """Get skill directory, using cache if available."""
         cache_key = f"{context.skill_name}:{context.project_path or self._default_project_path}"
 

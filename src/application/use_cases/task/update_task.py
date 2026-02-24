@@ -3,7 +3,6 @@ Use case for updating a task log.
 """
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -17,12 +16,12 @@ class UpdateTaskCommand(BaseModel):
     model_config = {"frozen": True}
 
     task_id: str
-    status: Optional[str] = None
-    error_message: Optional[str] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    stopped_at: Optional[datetime] = None
-    worker_id: Optional[str] = None
+    status: str | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    stopped_at: datetime | None = None
+    worker_id: str | None = None
 
     @field_validator("task_id")
     @classmethod
@@ -35,10 +34,10 @@ class UpdateTaskCommand(BaseModel):
 class UpdateTaskUseCase:
     """Use case for updating task logs"""
 
-    def __init__(self, task_repository: TaskRepository):
+    def __init__(self, task_repository: TaskRepository) -> None:
         self._task_repo = task_repository
 
-    async def execute(self, command: UpdateTaskCommand) -> Optional[TaskLog]:
+    async def execute(self, command: UpdateTaskCommand) -> TaskLog | None:
         """
         Update a task.
 

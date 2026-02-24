@@ -6,7 +6,7 @@ used by the IntentRouter to make routing decisions.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -16,20 +16,20 @@ class RoutingCandidate:
     name: str
     display_name: str
     description: str
-    examples: List[str] = field(default_factory=list)
+    examples: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
 class LLMRoutingDecision:
     """Parsed routing decision from LLM function call response."""
 
-    subagent_name: Optional[str] = None
+    subagent_name: str | None = None
     confidence: float = 0.0
     reasoning: str = ""
     matched: bool = False
 
 
-def build_routing_tool_schema(candidates: List[RoutingCandidate]) -> List[Dict[str, Any]]:
+def build_routing_tool_schema(candidates: list[RoutingCandidate]) -> list[dict[str, Any]]:
     """Build the function calling tool schema for routing.
 
     Creates a single tool `route_to_subagent` whose `subagent_name` parameter
@@ -79,7 +79,7 @@ def build_routing_tool_schema(candidates: List[RoutingCandidate]) -> List[Dict[s
     ]
 
 
-def build_routing_system_prompt(candidates: List[RoutingCandidate]) -> str:
+def build_routing_system_prompt(candidates: list[RoutingCandidate]) -> str:
     """Build the system prompt for the routing LLM call.
 
     Lists all available SubAgents with their descriptions and examples
@@ -115,7 +115,7 @@ def build_routing_system_prompt(candidates: List[RoutingCandidate]) -> str:
     return "\n".join(lines)
 
 
-def parse_routing_response(response: Dict[str, Any]) -> LLMRoutingDecision:
+def parse_routing_response(response: dict[str, Any]) -> LLMRoutingDecision:
     """Parse LLM function call response into a routing decision.
 
     Args:

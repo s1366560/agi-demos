@@ -23,15 +23,15 @@ from src.domain.model.sandbox.state_machine import (
 )
 
 __all__ = [
+    "InvalidStateTransitionError",
+    "LocalSandboxConfig",
     # Entity and value objects
     "ProjectSandbox",
     "ProjectSandboxStatus",
-    "SandboxType",
-    "SandboxTransport",
-    "LocalSandboxConfig",
     # State machine
     "SandboxStateMachine",
-    "InvalidStateTransitionError",
+    "SandboxTransport",
+    "SandboxType",
     "StateTransition",
     "get_state_machine",
     "validate_transition",

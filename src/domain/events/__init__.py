@@ -50,39 +50,39 @@ from src.domain.events.types import (
 )
 
 __all__ = [
-    # Types
-    "AgentEventType",
-    "EventCategory",
     # Type sets
     "DELTA_EVENT_TYPES",
     "HITL_EVENT_TYPES",
     "INTERNAL_EVENT_TYPES",
     "TERMINAL_EVENT_TYPES",
+    # Domain events
+    "AgentDomainEvent",
+    # Types
+    "AgentEventType",
+    "DeserializationError",
+    "DeserializationResult",
+    "EventCategory",
+    # Envelope
+    "EventEnvelope",
+    # Schema Registry
+    "EventSchemaRegistry",
+    # Serialization
+    "EventSerializer",
+    "MigrationInfo",
+    "SchemaInfo",
+    "SerializationError",
+    "VersionMismatchError",
+    "create_child_envelope",
+    "create_serializer",
+    "deserialize_event",
     # Utility functions
     "get_event_category",
+    "get_event_type_docstring",
     "get_frontend_event_types",
+    "get_schema",
     "is_delta_event",
     "is_hitl_event",
     "is_terminal_event",
-    # Domain events
-    "AgentDomainEvent",
-    "get_event_type_docstring",
-    # Envelope
-    "EventEnvelope",
-    "create_child_envelope",
-    # Schema Registry
-    "EventSchemaRegistry",
-    "SchemaInfo",
-    "MigrationInfo",
-    "get_schema",
     "migrate_event",
-    # Serialization
-    "EventSerializer",
-    "DeserializationResult",
-    "SerializationError",
-    "DeserializationError",
-    "VersionMismatchError",
     "serialize_event",
-    "deserialize_event",
-    "create_serializer",
 ]

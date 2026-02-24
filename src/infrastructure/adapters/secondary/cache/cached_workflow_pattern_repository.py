@@ -7,7 +7,7 @@ when frequently accessing patterns for matching.
 
 import json
 import logging
-from typing import List, Optional
+from datetime import UTC
 
 from src.domain.model.agent.workflow_pattern import WorkflowPattern
 from src.domain.ports.repositories.workflow_pattern_repository import WorkflowPatternRepositoryPort
@@ -33,7 +33,7 @@ class CachedWorkflowPatternRepository(WorkflowPatternRepositoryPort):
         redis_client,
         pattern_ttl: int = 3600,  # 1 hour
         list_ttl: int = 900,  # 15 minutes
-    ):
+    ) -> None:
         """
         Initialize cached repository.
 
@@ -61,7 +61,7 @@ class CachedWorkflowPatternRepository(WorkflowPatternRepositoryPort):
 
         return created
 
-    async def get_by_id(self, pattern_id: str) -> Optional[WorkflowPattern]:
+    async def get_by_id(self, pattern_id: str) -> WorkflowPattern | None:
         """Get a pattern by ID, using cache if available."""
         # Try cache first
         cached = await self._get_cached_pattern(pattern_id)
@@ -108,7 +108,7 @@ class CachedWorkflowPatternRepository(WorkflowPatternRepositoryPort):
     async def list_by_tenant(
         self,
         tenant_id: str,
-    ) -> List[WorkflowPattern]:
+    ) -> list[WorkflowPattern]:
         """List patterns for a tenant, using cache if available."""
         # Try cache first
         cached = await self._get_cached_tenant_list(tenant_id)
@@ -127,7 +127,7 @@ class CachedWorkflowPatternRepository(WorkflowPatternRepositoryPort):
         self,
         tenant_id: str,
         name: str,
-    ) -> Optional[WorkflowPattern]:
+    ) -> WorkflowPattern | None:
         """
         Find a pattern by name within a tenant.
 
@@ -146,7 +146,7 @@ class CachedWorkflowPatternRepository(WorkflowPatternRepositoryPort):
             raise ValueError(f"Pattern not found: {pattern_id}")
 
         # Create updated pattern
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         updated_pattern = WorkflowPattern(
             id=pattern.id,
@@ -157,7 +157,7 @@ class CachedWorkflowPatternRepository(WorkflowPatternRepositoryPort):
             success_rate=pattern.success_rate,
             usage_count=pattern.usage_count + 1,
             created_at=pattern.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
             metadata=pattern.metadata,
         )
 
@@ -183,7 +183,7 @@ class CachedWorkflowPatternRepository(WorkflowPatternRepositoryPort):
         except Exception as e:
             logger.warning(f"Failed to cache pattern {pattern.id}: {e}")
 
-    async def _get_cached_pattern(self, pattern_id: str) -> Optional[WorkflowPattern]:
+    async def _get_cached_pattern(self, pattern_id: str) -> WorkflowPattern | None:
         """Get a pattern from cache."""
         try:
             cache_key = self._pattern_cache_key(pattern_id)
@@ -194,7 +194,7 @@ class CachedWorkflowPatternRepository(WorkflowPatternRepositoryPort):
             logger.warning(f"Failed to get cached pattern {pattern_id}: {e}")
         return None
 
-    async def _cache_tenant_list(self, tenant_id: str, patterns: List[WorkflowPattern]) -> None:
+    async def _cache_tenant_list(self, tenant_id: str, patterns: list[WorkflowPattern]) -> None:
         """Cache a tenant's pattern list."""
         try:
             cache_key = self._tenant_list_cache_key(tenant_id)
@@ -203,7 +203,7 @@ class CachedWorkflowPatternRepository(WorkflowPatternRepositoryPort):
         except Exception as e:
             logger.warning(f"Failed to cache tenant {tenant_id} pattern list: {e}")
 
-    async def _get_cached_tenant_list(self, tenant_id: str) -> Optional[List[WorkflowPattern]]:
+    async def _get_cached_tenant_list(self, tenant_id: str) -> list[WorkflowPattern] | None:
         """Get a tenant's pattern list from cache."""
         try:
             cache_key = self._tenant_list_cache_key(tenant_id)

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -36,7 +36,7 @@ class ExecutionConfigLike(Protocol):
     enable_subagent_routing: bool
 
 
-def _safe_float(value: Any, default: float) -> float:  # noqa: ANN401
+def _safe_float(value: Any, default: float) -> float:
     try:
         return float(value)
     except (TypeError, ValueError):
@@ -61,7 +61,7 @@ class HybridRouterConfig:
 
     @classmethod
     def from_execution_config(
-        cls, execution_config: Optional[ExecutionConfigLike]
+        cls, execution_config: ExecutionConfigLike | None
     ) -> HybridRouterConfig:
         """Build HybridRouterConfig from ExecutionConfig-like object."""
         if execution_config is None:
@@ -117,11 +117,11 @@ class HybridRouter:
 
     def __init__(
         self,
-        subagents: List[SubAgent],
-        llm_client: Optional[LLMClient] = None,
-        config: Optional[HybridRouterConfig] = None,
+        subagents: list[SubAgent],
+        llm_client: LLMClient | None = None,
+        config: HybridRouterConfig | None = None,
         default_confidence_threshold: float = 0.5,
-    ):
+    ) -> None:
         """Initialize HybridRouter.
 
         Args:
@@ -140,7 +140,7 @@ class HybridRouter:
         )
 
         # L2: LLM intent router (optional, for semantic fallback)
-        self._intent_router: Optional[IntentRouter] = None
+        self._intent_router: IntentRouter | None = None
         if llm_client and self._config.enable_llm_routing:
             candidates = self._build_candidates(subagents)
             self._intent_router = IntentRouter(
@@ -151,7 +151,7 @@ class HybridRouter:
         self._subagents = {s.name: s for s in subagents if s.enabled}
 
     @staticmethod
-    def _build_candidates(subagents: List[SubAgent]) -> List[RoutingCandidate]:
+    def _build_candidates(subagents: list[SubAgent]) -> list[RoutingCandidate]:
         """Convert SubAgents to RoutingCandidates for the IntentRouter."""
         return [
             RoutingCandidate(
@@ -167,7 +167,7 @@ class HybridRouter:
     def match(
         self,
         query: str,
-        confidence_threshold: Optional[float] = None,
+        confidence_threshold: float | None = None,
     ) -> SubAgentMatch:
         """Synchronous keyword-only match (protocol compatibility).
 
@@ -187,8 +187,8 @@ class HybridRouter:
     async def match_async(
         self,
         query: str,
-        confidence_threshold: Optional[float] = None,
-        conversation_context: Optional[str] = None,
+        confidence_threshold: float | None = None,
+        conversation_context: str | None = None,
     ) -> SubAgentMatch:
         """Async hybrid match: keyword fast path + LLM semantic fallback.
 
@@ -267,30 +267,30 @@ class HybridRouter:
     # Delegated methods (pass through to keyword router)
     # ====================================================================
 
-    def get_subagent(self, name: str) -> Optional[SubAgent]:
+    def get_subagent(self, name: str) -> SubAgent | None:
         """Get SubAgent by name."""
         return self._keyword_router.get_subagent(name)
 
-    def list_subagents(self) -> List[SubAgent]:
+    def list_subagents(self) -> list[SubAgent]:
         """List all enabled SubAgents."""
         return self._keyword_router.list_subagents()
 
-    def get_subagent_config(self, subagent: SubAgent) -> Dict[str, Any]:
+    def get_subagent_config(self, subagent: SubAgent) -> dict[str, Any]:
         """Get configuration for running a SubAgent."""
         return self._keyword_router.get_subagent_config(subagent)
 
     def filter_tools(
         self,
         subagent: SubAgent,
-        available_tools: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        available_tools: dict[str, Any],
+    ) -> dict[str, Any]:
         """Filter tools based on SubAgent permissions."""
         return self._keyword_router.filter_tools(subagent, available_tools)
 
     def get_or_create_explore_agent(
         self,
         tenant_id: str,
-        project_id: Optional[str] = None,
+        project_id: str | None = None,
     ) -> SubAgent:
         """Get or create an explore-agent for Plan Mode."""
         return self._keyword_router.get_or_create_explore_agent(tenant_id, project_id)

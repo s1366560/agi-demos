@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Dict, List, Optional
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any
 
 import litellm
 from litellm import acompletion
@@ -66,10 +67,10 @@ class LiteLLMAdapter(LLMClient):
 
     def _build_completion_params(
         self,
-        messages: List[Message],
-        tools: Optional[List[ToolDefinition]] = None,
-        **kwargs: Any,  # noqa: ANN401
-    ) -> Dict[str, Any]:
+        messages: list[Message],
+        tools: list[ToolDefinition] | None = None,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
         """Build parameters for litellm completion call.
 
         Args:
@@ -80,7 +81,7 @@ class LiteLLMAdapter(LLMClient):
         Returns:
             Dictionary of completion parameters
         """
-        params: Dict[str, Any] = {
+        params: dict[str, Any] = {
             "model": self._config.model,
             "messages": [msg.to_dict() for msg in messages],
             "temperature": self._config.temperature,
@@ -105,7 +106,7 @@ class LiteLLMAdapter(LLMClient):
 
         return params
 
-    def _tool_to_litellm_format(self, tool: ToolDefinition) -> Dict[str, Any]:
+    def _tool_to_litellm_format(self, tool: ToolDefinition) -> dict[str, Any]:
         """Convert ToolDefinition to LiteLLM tool format.
 
         Args:
@@ -123,7 +124,7 @@ class LiteLLMAdapter(LLMClient):
             },
         }
 
-    def _parse_tool_calls(self, response_tool_calls: List[Any]) -> List[ToolCall]:
+    def _parse_tool_calls(self, response_tool_calls: list[Any]) -> list[ToolCall]:
         """Parse tool calls from LiteLLM response.
 
         Args:
@@ -171,9 +172,9 @@ class LiteLLMAdapter(LLMClient):
 
     async def generate(
         self,
-        messages: List[Message],
-        tools: Optional[List[ToolDefinition]] = None,
-        **kwargs: Any,  # noqa: ANN401
+        messages: list[Message],
+        tools: list[ToolDefinition] | None = None,
+        **kwargs: Any,
     ) -> ChatResponse:
         """Generate a non-streaming response.
 
@@ -228,9 +229,9 @@ class LiteLLMAdapter(LLMClient):
 
     async def stream(
         self,
-        messages: List[Message],
-        tools: Optional[List[ToolDefinition]] = None,
-        **kwargs: Any,  # noqa: ANN401
+        messages: list[Message],
+        tools: list[ToolDefinition] | None = None,
+        **kwargs: Any,
     ) -> AsyncGenerator[StreamChunk, None]:
         """Generate a streaming response.
 
@@ -279,7 +280,7 @@ class LiteLLMAdapter(LLMClient):
             logger.error(f"LiteLLM stream error: {e}")
             raise
 
-    def with_config(self, **kwargs: Any) -> LiteLLMAdapter:  # noqa: ANN401
+    def with_config(self, **kwargs: Any) -> LiteLLMAdapter:
         """Create a new adapter with modified configuration.
 
         Args:
@@ -302,8 +303,8 @@ class LiteLLMAdapter(LLMClient):
 
 def create_llm_client(
     model: str,
-    api_key: Optional[str] = None,
-    **kwargs: Any,  # noqa: ANN401
+    api_key: str | None = None,
+    **kwargs: Any,
 ) -> LiteLLMAdapter:
     """Factory function to create an LLM client.
 

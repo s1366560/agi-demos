@@ -1,7 +1,7 @@
 """Memory sharing API endpoints."""
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -90,11 +90,11 @@ async def create_share(
         try:
             expires_at = datetime.fromisoformat(share_data["expires_at"])
         except Exception:
-            expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+            expires_at = datetime.now(UTC) + timedelta(days=7)
     elif "expires_in_days" in share_data:
         days = share_data["expires_in_days"]
         if isinstance(days, int) and days > 0:
-            expires_at = datetime.now(timezone.utc) + timedelta(days=days)
+            expires_at = datetime.now(UTC) + timedelta(days=days)
     share = MemoryShare(
         id=str(uuid4()),
         memory_id=memory_id,
@@ -232,8 +232,8 @@ async def get_shared_memory(
     if share.expires_at:
         exp = share.expires_at
         if exp.tzinfo is None:
-            exp = exp.replace(tzinfo=timezone.utc)
-        if exp < datetime.now(timezone.utc):
+            exp = exp.replace(tzinfo=UTC)
+        if exp < datetime.now(UTC):
             raise HTTPException(status_code=403, detail="Share link has expired")
 
     # Get memory

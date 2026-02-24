@@ -8,15 +8,14 @@
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
 class SandboxInstanceInfo:
     """Sandbox 实例信息，用于 URL 构建."""
-    mcp_port: Optional[int] = None
-    desktop_port: Optional[int] = None
-    terminal_port: Optional[int] = None
+    mcp_port: int | None = None
+    desktop_port: int | None = None
+    terminal_port: int | None = None
     sandbox_id: str = ""
     host: str = "localhost"
 
@@ -24,17 +23,17 @@ class SandboxInstanceInfo:
 @dataclass
 class SandboxUrls:
     """所有 Sandbox 相关的 URL."""
-    mcp_url: Optional[str]
-    desktop_url: Optional[str]
-    desktop_url_with_token: Optional[str]
-    terminal_url: Optional[str]
-    sse_url: Optional[str]
+    mcp_url: str | None
+    desktop_url: str | None
+    desktop_url_with_token: str | None
+    terminal_url: str | None
+    sse_url: str | None
 
 
 class SandboxUrlService:
     """统一的 Sandbox URL 服务."""
 
-    def __init__(self, default_host: str = "localhost", api_base: str = "/api/v1"):
+    def __init__(self, default_host: str = "localhost", api_base: str = "/api/v1") -> None:
         """初始化 URL 服务.
 
         Args:
@@ -44,7 +43,7 @@ class SandboxUrlService:
         self._default_host = default_host
         self._api_base = api_base
 
-    def build_mcp_url(self, instance: SandboxInstanceInfo) -> Optional[str]:
+    def build_mcp_url(self, instance: SandboxInstanceInfo) -> str | None:
         """构建 MCP WebSocket URL.
 
         Args:
@@ -59,8 +58,8 @@ class SandboxUrlService:
         return f"ws://{host}:{instance.mcp_port}"
 
     def build_desktop_url(
-        self, instance: SandboxInstanceInfo, token: Optional[str] = None
-    ) -> Optional[str]:
+        self, instance: SandboxInstanceInfo, token: str | None = None
+    ) -> str | None:
         """Build Desktop (KasmVNC) URL.
 
         Args:
@@ -80,7 +79,7 @@ class SandboxUrlService:
             return f"{base_url}?token={token}"
         return base_url
 
-    def build_terminal_url(self, instance: SandboxInstanceInfo) -> Optional[str]:
+    def build_terminal_url(self, instance: SandboxInstanceInfo) -> str | None:
         """构建 Terminal (ttyd) WebSocket URL.
 
         Args:
@@ -112,8 +111,8 @@ class SandboxUrlService:
     def build_all_urls(
         self,
         instance: SandboxInstanceInfo,
-        project_id: Optional[str] = None,
-        token: Optional[str] = None,
+        project_id: str | None = None,
+        token: str | None = None,
     ) -> SandboxUrls:
         """构建所有 URL。
 

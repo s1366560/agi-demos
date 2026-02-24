@@ -7,7 +7,7 @@ isolated tool access and custom system prompts.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.model.agent.subagent import AgentModel, SubAgent
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class SubAgentMatch:
     """Result of SubAgent matching."""
 
-    subagent: Optional[SubAgent]
+    subagent: SubAgent | None
     confidence: float
     match_reason: str
 
@@ -33,9 +33,9 @@ class SubAgentRouter:
 
     def __init__(
         self,
-        subagents: List[SubAgent],
+        subagents: list[SubAgent],
         default_confidence_threshold: float = 0.5,
-    ):
+    ) -> None:
         """
         Initialize SubAgent router.
 
@@ -47,7 +47,7 @@ class SubAgentRouter:
         self.default_confidence_threshold = default_confidence_threshold
 
         # Build keyword index for fast matching
-        self._keyword_index: Dict[str, List[str]] = {}  # keyword -> [subagent_names]
+        self._keyword_index: dict[str, list[str]] = {}  # keyword -> [subagent_names]
         for subagent in subagents:
             if not subagent.enabled:
                 continue
@@ -60,7 +60,7 @@ class SubAgentRouter:
     def match(
         self,
         query: str,
-        confidence_threshold: Optional[float] = None,
+        confidence_threshold: float | None = None,
     ) -> SubAgentMatch:
         """
         Find the best SubAgent for a query.
@@ -79,7 +79,7 @@ class SubAgentRouter:
         query_words = set(query_lower.split())
 
         # First try keyword matching
-        keyword_matches: Dict[str, int] = {}  # subagent_name -> match_count
+        keyword_matches: dict[str, int] = {}  # subagent_name -> match_count
 
         for word in query_words:
             if word in self._keyword_index:
@@ -135,15 +135,15 @@ class SubAgentRouter:
             match_reason="No match found",
         )
 
-    def get_subagent(self, name: str) -> Optional[SubAgent]:
+    def get_subagent(self, name: str) -> SubAgent | None:
         """Get SubAgent by name."""
         return self.subagents.get(name)
 
-    def list_subagents(self) -> List[SubAgent]:
+    def list_subagents(self) -> list[SubAgent]:
         """List all enabled SubAgents."""
         return list(self.subagents.values())
 
-    def get_subagent_config(self, subagent: SubAgent) -> Dict[str, Any]:
+    def get_subagent_config(self, subagent: SubAgent) -> dict[str, Any]:
         """
         Get configuration for running a SubAgent.
 
@@ -169,8 +169,8 @@ class SubAgentRouter:
     def filter_tools(
         self,
         subagent: SubAgent,
-        available_tools: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        available_tools: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Filter tools based on SubAgent permissions.
 
@@ -193,7 +193,7 @@ class SubAgentRouter:
     def get_or_create_explore_agent(
         self,
         tenant_id: str,
-        project_id: Optional[str] = None,
+        project_id: str | None = None,
     ) -> SubAgent:
         """
         Get or create an explore-agent for Plan Mode.
@@ -250,9 +250,9 @@ class SubAgentExecutor:
         self,
         subagent: SubAgent,
         base_model: str,
-        base_api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-    ):
+        base_api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> None:
         """
         Initialize SubAgent executor.
 
@@ -277,7 +277,7 @@ class SubAgentExecutor:
         """Get the SubAgent's system prompt."""
         return self.subagent.system_prompt
 
-    def get_config(self) -> Dict[str, Any]:
+    def get_config(self) -> dict[str, Any]:
         """Get execution configuration."""
         return {
             "model": self.model,

@@ -16,8 +16,9 @@ Supported Providers:
 """
 
 import logging
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable, List, Optional
+from typing import Any
 
 from src.configuration.config import get_settings
 from src.domain.llm_providers.base import BaseEmbedder
@@ -97,15 +98,15 @@ class LiteLLMEmbedderConfig:
     """Configuration for LiteLLM Embedder."""
 
     embedding_model: str
-    embedding_dim: Optional[int] = None
-    dimensions: Optional[int] = None
-    encoding_format: Optional[str] = None
-    user: Optional[str] = None
-    timeout: Optional[float] = None
+    embedding_dim: int | None = None
+    dimensions: int | None = None
+    encoding_format: str | None = None
+    user: str | None = None
+    timeout: float | None = None
     provider_options: dict[str, Any] = field(default_factory=dict)
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    provider_type: Optional[ProviderType] = None
+    api_key: str | None = None
+    base_url: str | None = None
+    provider_type: ProviderType | None = None
 
 
 class LiteLLMEmbedder(BaseEmbedder):
@@ -123,8 +124,8 @@ class LiteLLMEmbedder(BaseEmbedder):
     def __init__(
         self,
         config: ProviderConfig | LiteLLMEmbedderConfig,
-        embedding_dim: Optional[int] = None,
-    ):
+        embedding_dim: int | None = None,
+    ) -> None:
         """
         Initialize LiteLLM embedder.
 
@@ -132,11 +133,11 @@ class LiteLLMEmbedder(BaseEmbedder):
             config: Provider configuration or embedder config
             embedding_dim: Override embedding dimension (auto-detected if not provided)
         """
-        self._dimensions_override: Optional[int] = None
-        self._encoding_format: Optional[str] = None
-        self._embedding_user: Optional[str] = None
+        self._dimensions_override: int | None = None
+        self._encoding_format: str | None = None
+        self._embedding_user: str | None = None
         self._provider_options: dict[str, Any] = {}
-        timeout_override: Optional[float] = None
+        timeout_override: float | None = None
 
         if isinstance(config, LiteLLMEmbedderConfig):
             self._embedding_model = config.embedding_model
@@ -194,14 +195,14 @@ class LiteLLMEmbedder(BaseEmbedder):
         )
 
     @staticmethod
-    def _normalize_optional_str(value: Any) -> Optional[str]:  # noqa: ANN401
+    def _normalize_optional_str(value: Any) -> str | None:
         if not isinstance(value, str):
             return None
         normalized = value.strip()
         return normalized or None
 
     @staticmethod
-    def _normalize_optional_int(value: Any) -> Optional[int]:  # noqa: ANN401
+    def _normalize_optional_int(value: Any) -> int | None:
         if value is None:
             return None
         try:
@@ -211,7 +212,7 @@ class LiteLLMEmbedder(BaseEmbedder):
         return parsed if parsed > 0 else None
 
     @staticmethod
-    def _normalize_optional_float(value: Any) -> Optional[float]:  # noqa: ANN401
+    def _normalize_optional_float(value: Any) -> float | None:
         if value is None:
             return None
         try:
@@ -221,11 +222,11 @@ class LiteLLMEmbedder(BaseEmbedder):
         return parsed if parsed > 0 else None
 
     @staticmethod
-    def _normalize_provider_options(value: Any) -> dict[str, Any]:  # noqa: ANN401
+    def _normalize_provider_options(value: Any) -> dict[str, Any]:
         return dict(value) if isinstance(value, dict) else {}
 
     @classmethod
-    def _normalize_encoding_format(cls, value: Any) -> Optional[str]:  # noqa: ANN401
+    def _normalize_encoding_format(cls, value: Any) -> str | None:
         normalized = cls._normalize_optional_str(value)
         if normalized in {"float", "base64"}:
             return normalized
@@ -270,8 +271,8 @@ class LiteLLMEmbedder(BaseEmbedder):
 
     @staticmethod
     def _resolve_api_base(
-        provider_type: Optional[ProviderType], base_url: Optional[str]
-    ) -> Optional[str]:
+        provider_type: ProviderType | None, base_url: str | None
+    ) -> str | None:
         """Resolve api_base using configured value or local-provider defaults."""
         if base_url:
             return base_url
@@ -286,7 +287,7 @@ class LiteLLMEmbedder(BaseEmbedder):
         """Get embedding dimension."""
         return self._embedding_dim
 
-    def _configure_litellm(self):
+    def _configure_litellm(self) -> None:
         """No-op. Kept for backward compatibility.
 
         API key is now passed per-request via the ``api_key`` parameter to
@@ -355,7 +356,7 @@ class LiteLLMEmbedder(BaseEmbedder):
     async def create(
         self,
         input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]],
-    ) -> List[float]:
+    ) -> list[float]:
         """
         Create embeddings using LiteLLM.
 
@@ -589,7 +590,7 @@ class LiteLLMEmbedder(BaseEmbedder):
 
 def create_litellm_embedder(
     provider_config: ProviderConfig,
-    embedding_dim: Optional[int] = None,
+    embedding_dim: int | None = None,
 ) -> LiteLLMEmbedder:
     """
     Factory function to create LiteLLM embedder from provider configuration.

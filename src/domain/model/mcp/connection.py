@@ -10,7 +10,7 @@ Consolidates definitions from:
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.model.mcp.tool import MCPToolSchema
 
@@ -42,13 +42,13 @@ class ConnectionInfo:
 
     endpoint: str  # Connection endpoint (URL or command)
     state: ConnectionState = ConnectionState.DISCONNECTED
-    connected_at: Optional[datetime] = None
-    disconnected_at: Optional[datetime] = None
-    last_activity_at: Optional[datetime] = None
-    last_ping_at: Optional[datetime] = None
-    tools: List[MCPToolSchema] = field(default_factory=list)
-    server_info: Optional[Dict[str, Any]] = None
-    error_message: Optional[str] = None
+    connected_at: datetime | None = None
+    disconnected_at: datetime | None = None
+    last_activity_at: datetime | None = None
+    last_ping_at: datetime | None = None
+    tools: list[MCPToolSchema] = field(default_factory=list)
+    server_info: dict[str, Any] | None = None
+    error_message: str | None = None
     reconnect_count: int = 0
 
     @property
@@ -57,7 +57,7 @@ class ConnectionInfo:
         return self.state == ConnectionState.CONNECTED
 
     @property
-    def connection_duration_seconds(self) -> Optional[float]:
+    def connection_duration_seconds(self) -> float | None:
         """Get connection duration in seconds."""
         if not self.connected_at:
             return None
@@ -66,8 +66,8 @@ class ConnectionInfo:
 
     def mark_connected(
         self,
-        server_info: Optional[Dict[str, Any]] = None,
-        tools: Optional[List[MCPToolSchema]] = None,
+        server_info: dict[str, Any] | None = None,
+        tools: list[MCPToolSchema] | None = None,
     ) -> "ConnectionInfo":
         """Create new instance marking as connected."""
         now = datetime.now()
@@ -81,7 +81,7 @@ class ConnectionInfo:
             reconnect_count=self.reconnect_count,
         )
 
-    def mark_disconnected(self, error_message: Optional[str] = None) -> "ConnectionInfo":
+    def mark_disconnected(self, error_message: str | None = None) -> "ConnectionInfo":
         """Create new instance marking as disconnected."""
         now = datetime.now()
         state = ConnectionState.ERROR if error_message else ConnectionState.DISCONNECTED
@@ -126,7 +126,7 @@ class ConnectionInfo:
             reconnect_count=self.reconnect_count + 1,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "endpoint": self.endpoint,
@@ -160,8 +160,8 @@ class ConnectionMetrics:
     successful_tool_calls: int = 0
     failed_tool_calls: int = 0
     average_latency_ms: float = 0.0
-    last_error: Optional[str] = None
-    last_error_at: Optional[datetime] = None
+    last_error: str | None = None
+    last_error_at: datetime | None = None
 
     def record_connection_success(self) -> None:
         """Record a successful connection."""
@@ -204,7 +204,7 @@ class ConnectionMetrics:
             return 0.0
         return self.successful_tool_calls / self.total_tool_calls
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for monitoring."""
         return {
             "total_connections": self.total_connections,

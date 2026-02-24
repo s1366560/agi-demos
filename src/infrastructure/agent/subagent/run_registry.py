@@ -3,11 +3,12 @@
 import json
 import logging
 import uuid
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterator, List, Optional, Sequence
+from typing import Any
 
 try:
     import fcntl
@@ -35,22 +36,22 @@ class SubAgentRunRegistry:
     def __init__(
         self,
         max_runs_per_conversation: int = 200,
-        persistence_path: Optional[str] = None,
-        postgres_persistence_dsn: Optional[str] = None,
-        sqlite_persistence_path: Optional[str] = None,
-        redis_cache_url: Optional[str] = None,
+        persistence_path: str | None = None,
+        postgres_persistence_dsn: str | None = None,
+        sqlite_persistence_path: str | None = None,
+        redis_cache_url: str | None = None,
         redis_cache_ttl_seconds: int = 60,
-        repository: Optional[SubAgentRunRepository] = None,
+        repository: SubAgentRunRepository | None = None,
         terminal_retention_seconds: int = 86400,
         recover_inflight_on_boot: bool = True,
         sync_across_processes: bool = True,
     ) -> None:
-        self._runs_by_conversation: Dict[str, Dict[str, SubAgentRun]] = {}
+        self._runs_by_conversation: dict[str, dict[str, SubAgentRun]] = {}
         self._max_runs_per_conversation = max(1, max_runs_per_conversation)
         self._persistence_path = Path(persistence_path).expanduser() if persistence_path else None
-        self._repository: Optional[SubAgentRunRepository] = repository
+        self._repository: SubAgentRunRepository | None = repository
         if self._repository is None:
-            db_repo: Optional[SubAgentRunRepository] = None
+            db_repo: SubAgentRunRepository | None = None
             if postgres_persistence_dsn:
                 db_repo = PostgresSubAgentRunRepository(postgres_persistence_dsn)
             elif sqlite_persistence_path:
@@ -80,11 +81,11 @@ class SubAgentRunRegistry:
         conversation_id: str,
         subagent_name: str,
         task: str,
-        metadata: Optional[Dict[str, object]] = None,
-        run_id: Optional[str] = None,
-        requester_session_key: Optional[str] = None,
-        parent_run_id: Optional[str] = None,
-        lineage_root_run_id: Optional[str] = None,
+        metadata: dict[str, object] | None = None,
+        run_id: str | None = None,
+        requester_session_key: str | None = None,
+        parent_run_id: str | None = None,
+        lineage_root_run_id: str | None = None,
     ) -> SubAgentRun:
         """Create and register a new pending run."""
         run_metadata = dict(metadata or {})
@@ -112,9 +113,9 @@ class SubAgentRunRegistry:
         self,
         conversation_id: str,
         run_id: str,
-        metadata: Optional[Dict[str, object]] = None,
-        expected_statuses: Optional[Sequence[SubAgentRunStatus]] = None,
-    ) -> Optional[SubAgentRun]:
+        metadata: dict[str, object] | None = None,
+        expected_statuses: Sequence[SubAgentRunStatus] | None = None,
+    ) -> SubAgentRun | None:
         """Transition run to RUNNING."""
         return self._mutate_run(
             conversation_id=conversation_id,
@@ -129,12 +130,12 @@ class SubAgentRunRegistry:
         self,
         conversation_id: str,
         run_id: str,
-        summary: Optional[str] = None,
-        tokens_used: Optional[int] = None,
-        execution_time_ms: Optional[int] = None,
-        metadata: Optional[Dict[str, object]] = None,
-        expected_statuses: Optional[Sequence[SubAgentRunStatus]] = None,
-    ) -> Optional[SubAgentRun]:
+        summary: str | None = None,
+        tokens_used: int | None = None,
+        execution_time_ms: int | None = None,
+        metadata: dict[str, object] | None = None,
+        expected_statuses: Sequence[SubAgentRunStatus] | None = None,
+    ) -> SubAgentRun | None:
         """Transition run to COMPLETED."""
 
         def _mutator(run: SubAgentRun) -> SubAgentRun:
@@ -159,10 +160,10 @@ class SubAgentRunRegistry:
         conversation_id: str,
         run_id: str,
         error: str,
-        execution_time_ms: Optional[int] = None,
-        metadata: Optional[Dict[str, object]] = None,
-        expected_statuses: Optional[Sequence[SubAgentRunStatus]] = None,
-    ) -> Optional[SubAgentRun]:
+        execution_time_ms: int | None = None,
+        metadata: dict[str, object] | None = None,
+        expected_statuses: Sequence[SubAgentRunStatus] | None = None,
+    ) -> SubAgentRun | None:
         """Transition run to FAILED."""
 
         def _mutator(run: SubAgentRun) -> SubAgentRun:
@@ -182,10 +183,10 @@ class SubAgentRunRegistry:
         self,
         conversation_id: str,
         run_id: str,
-        reason: Optional[str] = None,
-        metadata: Optional[Dict[str, object]] = None,
-        expected_statuses: Optional[Sequence[SubAgentRunStatus]] = None,
-    ) -> Optional[SubAgentRun]:
+        reason: str | None = None,
+        metadata: dict[str, object] | None = None,
+        expected_statuses: Sequence[SubAgentRunStatus] | None = None,
+    ) -> SubAgentRun | None:
         """Transition run to CANCELLED."""
 
         def _mutator(run: SubAgentRun) -> SubAgentRun:
@@ -206,9 +207,9 @@ class SubAgentRunRegistry:
         conversation_id: str,
         run_id: str,
         reason: str = "SubAgent execution timed out",
-        metadata: Optional[Dict[str, object]] = None,
-        expected_statuses: Optional[Sequence[SubAgentRunStatus]] = None,
-    ) -> Optional[SubAgentRun]:
+        metadata: dict[str, object] | None = None,
+        expected_statuses: Sequence[SubAgentRunStatus] | None = None,
+    ) -> SubAgentRun | None:
         """Transition run to TIMED_OUT."""
 
         def _mutator(run: SubAgentRun) -> SubAgentRun:
@@ -228,9 +229,9 @@ class SubAgentRunRegistry:
         self,
         conversation_id: str,
         run_id: str,
-        metadata: Dict[str, object],
-        expected_statuses: Optional[Sequence[SubAgentRunStatus]] = None,
-    ) -> Optional[SubAgentRun]:
+        metadata: dict[str, object],
+        expected_statuses: Sequence[SubAgentRunStatus] | None = None,
+    ) -> SubAgentRun | None:
         """Merge metadata into a run."""
 
         def _mutator(run: SubAgentRun) -> SubAgentRun:
@@ -245,7 +246,7 @@ class SubAgentRunRegistry:
             mutator=_mutator,
         )
 
-    def get_run(self, conversation_id: str, run_id: str) -> Optional[SubAgentRun]:
+    def get_run(self, conversation_id: str, run_id: str) -> SubAgentRun | None:
         """Get one run by conversation + run id."""
         self._sync_from_disk()
         return self._runs_by_conversation.get(conversation_id, {}).get(run_id)
@@ -253,8 +254,8 @@ class SubAgentRunRegistry:
     def list_runs(
         self,
         conversation_id: str,
-        statuses: Optional[Sequence[SubAgentRunStatus]] = None,
-    ) -> List[SubAgentRun]:
+        statuses: Sequence[SubAgentRunStatus] | None = None,
+    ) -> list[SubAgentRun]:
         """List runs for a conversation in reverse chronological order."""
         self._sync_from_disk()
         runs = list(self._runs_by_conversation.get(conversation_id, {}).values())
@@ -270,8 +271,8 @@ class SubAgentRunRegistry:
         requester_session_key: str,
         *,
         visibility: str = "self",
-        statuses: Optional[Sequence[SubAgentRunStatus]] = None,
-    ) -> List[SubAgentRun]:
+        statuses: Sequence[SubAgentRunStatus] | None = None,
+    ) -> list[SubAgentRun]:
         """List runs scoped by requester visibility boundary."""
         runs = self.list_runs(conversation_id, statuses=statuses)
         key = requester_session_key.strip()
@@ -284,14 +285,14 @@ class SubAgentRunRegistry:
 
         # tree: requester-owned roots and all descendants.
         bucket = self._runs_by_conversation.get(conversation_id, {})
-        children_by_parent: Dict[str, List[str]] = {}
+        children_by_parent: dict[str, list[str]] = {}
         for run in bucket.values():
             parent_id = str(run.metadata.get("parent_run_id") or "").strip()
             if parent_id:
                 children_by_parent.setdefault(parent_id, []).append(run.run_id)
 
         visible_ids: set[str] = set()
-        queue: List[str] = []
+        queue: list[str] = []
         for run in bucket.values():
             if self._run_requester_key(run) == key:
                 visible_ids.add(run.run_id)
@@ -313,11 +314,11 @@ class SubAgentRunRegistry:
         parent_run_id: str,
         *,
         include_terminal: bool = True,
-    ) -> List[SubAgentRun]:
+    ) -> list[SubAgentRun]:
         """List descendants of a run using metadata.parent_run_id."""
         self._sync_from_disk()
         bucket = self._runs_by_conversation.get(conversation_id, {})
-        children_by_parent: Dict[str, List[SubAgentRun]] = {}
+        children_by_parent: dict[str, list[SubAgentRun]] = {}
         for run in bucket.values():
             parent_id = str(run.metadata.get("parent_run_id") or "").strip()
             if not parent_id:
@@ -326,7 +327,7 @@ class SubAgentRunRegistry:
 
         queue = [parent_run_id]
         visited: set[str] = set()
-        descendants: List[SubAgentRun] = []
+        descendants: list[SubAgentRun] = []
         while queue:
             current = queue.pop(0)
             for child in children_by_parent.get(current, []):
@@ -404,8 +405,8 @@ class SubAgentRunRegistry:
         run_id: str,
         *,
         mutator: Callable[[SubAgentRun], SubAgentRun],
-        expected_statuses: Optional[Sequence[SubAgentRunStatus]] = None,
-    ) -> Optional[SubAgentRun]:
+        expected_statuses: Sequence[SubAgentRunStatus] | None = None,
+    ) -> SubAgentRun | None:
         with self._with_registry_lock(exclusive=True):
             self._sync_from_disk_locked()
             run = self._runs_by_conversation.get(conversation_id, {}).get(run_id)
@@ -453,7 +454,7 @@ class SubAgentRunRegistry:
         bucket = self._runs_by_conversation.get(conversation_id, {})
         if not bucket:
             return
-        threshold = datetime.now(timezone.utc) - timedelta(seconds=self._terminal_retention_seconds)
+        threshold = datetime.now(UTC) - timedelta(seconds=self._terminal_retention_seconds)
         for run in list(bucket.values()):
             if run.status in self._ACTIVE_STATUSES:
                 continue
@@ -518,11 +519,11 @@ class SubAgentRunRegistry:
         if not isinstance(conversations, dict):
             return
 
-        loaded: Dict[str, Dict[str, SubAgentRun]] = {}
+        loaded: dict[str, dict[str, SubAgentRun]] = {}
         for conversation_id, runs in conversations.items():
             if not isinstance(runs, dict):
                 continue
-            bucket: Dict[str, SubAgentRun] = {}
+            bucket: dict[str, SubAgentRun] = {}
             for run_id, payload in runs.items():
                 run = self._deserialize_run(payload)
                 if run is None:
@@ -537,7 +538,7 @@ class SubAgentRunRegistry:
 
     def _recover_inflight_runs(self) -> None:
         updated = False
-        for conversation_id, bucket in self._runs_by_conversation.items():
+        for _conversation_id, bucket in self._runs_by_conversation.items():
             for run_id, run in list(bucket.items()):
                 if run.status not in self._ACTIVE_STATUSES:
                     continue
@@ -585,7 +586,7 @@ class SubAgentRunRegistry:
             logger.warning(f"[SubAgentRunRegistry] Failed to persist runs: {exc}")
 
     @staticmethod
-    def _deserialize_run(payload: Any) -> Optional[SubAgentRun]:  # noqa: ANN401
+    def _deserialize_run(payload: Any) -> SubAgentRun | None:
         if not isinstance(payload, dict):
             return None
         try:
@@ -605,7 +606,7 @@ class SubAgentRunRegistry:
                 task=str(payload.get("task") or ""),
                 status=status,
                 created_at=SubAgentRunRegistry._parse_datetime(payload.get("created_at"))
-                or datetime.now(timezone.utc),
+                or datetime.now(UTC),
                 started_at=SubAgentRunRegistry._parse_datetime(payload.get("started_at")),
                 ended_at=SubAgentRunRegistry._parse_datetime(payload.get("ended_at")),
                 summary=SubAgentRunRegistry._optional_str(payload.get("summary")),
@@ -621,7 +622,7 @@ class SubAgentRunRegistry:
         return run
 
     @staticmethod
-    def _parse_datetime(value: Any) -> Optional[datetime]:  # noqa: ANN401
+    def _parse_datetime(value: Any) -> datetime | None:
         if not isinstance(value, str) or not value.strip():
             return None
         try:
@@ -629,18 +630,18 @@ class SubAgentRunRegistry:
         except ValueError:
             return None
         if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=timezone.utc)
-        return parsed.astimezone(timezone.utc)
+            return parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
 
     @staticmethod
-    def _optional_str(value: Any) -> Optional[str]:  # noqa: ANN401
+    def _optional_str(value: Any) -> str | None:
         if value is None:
             return None
         text = str(value)
         return text if text else None
 
     @staticmethod
-    def _optional_int(value: Any) -> Optional[int]:  # noqa: ANN401
+    def _optional_int(value: Any) -> int | None:
         if value is None:
             return None
         try:

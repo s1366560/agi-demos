@@ -9,7 +9,7 @@ from src.infrastructure.agent.hitl.state_store import HITLAgentState
 
 
 class _FakeAgent:
-    def __init__(self):
+    def __init__(self) -> None:
         self.calls = []
 
     async def execute_chat(
@@ -37,7 +37,7 @@ class _FakeAgent:
 
 
 class _FakeStateStore:
-    def __init__(self, redis_client):
+    def __init__(self, redis_client) -> None:
         self.deleted_request_id = None
 
     async def load_state_by_request(self, request_id):

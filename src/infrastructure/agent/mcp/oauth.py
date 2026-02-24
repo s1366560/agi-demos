@@ -20,7 +20,7 @@ import secrets
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +40,9 @@ class OAuthTokens:
     """OAuth tokens from authorization server."""
 
     access_token: str
-    refresh_token: Optional[str] = None
-    expires_at: Optional[float] = None
-    scope: Optional[str] = None
+    refresh_token: str | None = None
+    expires_at: float | None = None
+    scope: str | None = None
 
 
 @dataclass
@@ -50,20 +50,20 @@ class OAuthClientInfo:
     """OAuth client registration information."""
 
     client_id: str
-    client_secret: Optional[str] = None
-    client_id_issued_at: Optional[float] = None
-    client_secret_expires_at: Optional[float] = None
+    client_secret: str | None = None
+    client_id_issued_at: float | None = None
+    client_secret_expires_at: float | None = None
 
 
 @dataclass
 class MCPAuthEntry:
     """Stored authentication data for an MCP server."""
 
-    tokens: Optional[OAuthTokens] = None
-    client_info: Optional[OAuthClientInfo] = None
-    code_verifier: Optional[str] = None
-    oauth_state: Optional[str] = None
-    server_url: Optional[str] = None  # Track URL these credentials are for
+    tokens: OAuthTokens | None = None
+    client_info: OAuthClientInfo | None = None
+    code_verifier: str | None = None
+    oauth_state: str | None = None
+    server_url: str | None = None  # Track URL these credentials are for
 
 
 # ============================================
@@ -83,7 +83,7 @@ class MCPAuthStorage:
     _SENSITIVE_TOKEN_FIELDS = ("accessToken", "refreshToken")
     _SENSITIVE_CLIENT_FIELDS = ("clientSecret",)
 
-    def __init__(self, data_dir: Optional[Path] = None, encryption_service=None):
+    def __init__(self, data_dir: Path | None = None, encryption_service=None) -> None:
         """Initialize auth storage.
 
         Args:
@@ -130,7 +130,7 @@ class MCPAuthStorage:
                 return value
         return value
 
-    async def _read_all(self) -> Dict[str, Dict[str, Any]]:
+    async def _read_all(self) -> dict[str, dict[str, Any]]:
         """Read all auth entries from storage.
 
         Returns:
@@ -147,7 +147,7 @@ class MCPAuthStorage:
         except (OSError, json.JSONDecodeError):
             return {}
 
-    def _entry_to_dict(self, entry: MCPAuthEntry) -> Dict[str, Any]:
+    def _entry_to_dict(self, entry: MCPAuthEntry) -> dict[str, Any]:
         """Convert MCPAuthEntry to dictionary for storage.
 
         Args:
@@ -156,7 +156,7 @@ class MCPAuthStorage:
         Returns:
             Dictionary representation
         """
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         if entry.tokens:
             result["tokens"] = {
@@ -195,7 +195,7 @@ class MCPAuthStorage:
 
         return result
 
-    def _dict_to_entry(self, data: Dict[str, Any]) -> MCPAuthEntry:
+    def _dict_to_entry(self, data: dict[str, Any]) -> MCPAuthEntry:
         """Convert dictionary to MCPAuthEntry.
 
         Args:
@@ -243,7 +243,7 @@ class MCPAuthStorage:
 
         return entry
 
-    async def get(self, mcp_name: str) -> Optional[MCPAuthEntry]:
+    async def get(self, mcp_name: str) -> MCPAuthEntry | None:
         """Get auth entry for MCP server.
 
         Args:
@@ -259,7 +259,7 @@ class MCPAuthStorage:
                 return self._dict_to_entry(data)
             return None
 
-    async def get_for_url(self, mcp_name: str, server_url: str) -> Optional[MCPAuthEntry]:
+    async def get_for_url(self, mcp_name: str, server_url: str) -> MCPAuthEntry | None:
         """Get auth entry and validate it's for the correct URL.
 
         Args:
@@ -284,7 +284,7 @@ class MCPAuthStorage:
         return entry
 
     async def set(
-        self, mcp_name: str, entry: MCPAuthEntry, server_url: Optional[str] = None
+        self, mcp_name: str, entry: MCPAuthEntry, server_url: str | None = None
     ) -> None:
         """Save auth entry for MCP server.
 
@@ -327,7 +327,7 @@ class MCPAuthStorage:
                 logger.info(f"Removed auth entry for MCP server: {mcp_name}")
 
     async def update_tokens(
-        self, mcp_name: str, tokens: OAuthTokens, server_url: Optional[str] = None
+        self, mcp_name: str, tokens: OAuthTokens, server_url: str | None = None
     ) -> None:
         """Update tokens for MCP server.
 
@@ -341,7 +341,7 @@ class MCPAuthStorage:
         await self.set(mcp_name, entry, server_url)
 
     async def update_client_info(
-        self, mcp_name: str, client_info: OAuthClientInfo, server_url: Optional[str] = None
+        self, mcp_name: str, client_info: OAuthClientInfo, server_url: str | None = None
     ) -> None:
         """Update client info for MCP server.
 
@@ -398,7 +398,7 @@ class MCPAuthStorage:
             entry.oauth_state = None
             await self.set(mcp_name, entry)
 
-    async def is_token_expired(self, mcp_name: str) -> Optional[bool]:
+    async def is_token_expired(self, mcp_name: str) -> bool | None:
         """Check if stored tokens are expired.
 
         Args:
@@ -460,10 +460,10 @@ class MCPOAuthProvider:
         mcp_name: str,
         server_url: str,
         storage: MCPAuthStorage,
-        client_id: Optional[str] = None,
-        client_secret: Optional[str] = None,
-        scope: Optional[str] = None,
-    ):
+        client_id: str | None = None,
+        client_secret: str | None = None,
+        scope: str | None = None,
+    ) -> None:
         """Initialize OAuth provider.
 
         Args:
@@ -487,7 +487,7 @@ class MCPOAuthProvider:
         return f"http://127.0.0.1:{OAUTH_CALLBACK_PORT}{OAUTH_CALLBACK_PATH}"
 
     @property
-    def client_metadata(self) -> Dict[str, Any]:
+    def client_metadata(self) -> dict[str, Any]:
         """Get OAuth client metadata for dynamic registration."""
         return {
             "redirect_uris": [self.redirect_url],
@@ -498,7 +498,7 @@ class MCPOAuthProvider:
             "token_endpoint_auth_method": "client_secret_post" if self._client_secret else "none",
         }
 
-    async def client_information(self) -> Optional[OAuthClientInfo]:
+    async def client_information(self) -> OAuthClientInfo | None:
         """Get OAuth client information.
 
         Checks in order:
@@ -534,9 +534,9 @@ class MCPOAuthProvider:
     async def save_client_information(
         self,
         client_id: str,
-        client_secret: Optional[str] = None,
-        client_id_issued_at: Optional[float] = None,
-        client_secret_expires_at: Optional[float] = None,
+        client_secret: str | None = None,
+        client_id_issued_at: float | None = None,
+        client_secret_expires_at: float | None = None,
     ) -> None:
         """Save dynamically registered client information.
 
@@ -555,7 +555,7 @@ class MCPOAuthProvider:
         await self._storage.update_client_info(self._mcp_name, client_info, self._server_url)
         logger.info(f"Saved dynamically registered client for {self._mcp_name}: {client_id}")
 
-    async def get_tokens(self) -> Optional[OAuthTokens]:
+    async def get_tokens(self) -> OAuthTokens | None:
         """Get stored OAuth tokens.
 
         Returns:
@@ -567,7 +567,7 @@ class MCPOAuthProvider:
 
         return entry.tokens
 
-    async def get_valid_tokens(self) -> Optional[OAuthTokens]:
+    async def get_valid_tokens(self) -> OAuthTokens | None:
         """Get valid (non-expired) OAuth tokens, refreshing if necessary.
 
         Checks token expiration and attempts automatic refresh using
@@ -623,27 +623,26 @@ class MCPOAuthProvider:
             if client_info.client_secret:
                 data["client_secret"] = client_info.client_secret
 
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    token_url, data=data, timeout=aiohttp.ClientTimeout(total=30)
-                ) as resp:
-                    if resp.status != 200:
-                        body = await resp.text()
-                        logger.warning(
-                            f"Token refresh failed for {self._mcp_name}: "
-                            f"status={resp.status}, body={body[:200]}"
-                        )
-                        return False
-
-                    result = await resp.json()
-                    await self.save_tokens(
-                        access_token=result["access_token"],
-                        refresh_token=result.get("refresh_token", tokens.refresh_token),
-                        expires_in=result.get("expires_in"),
-                        scope=result.get("scope", tokens.scope),
+            async with aiohttp.ClientSession() as session, session.post(
+                token_url, data=data, timeout=aiohttp.ClientTimeout(total=30)
+            ) as resp:
+                if resp.status != 200:
+                    body = await resp.text()
+                    logger.warning(
+                        f"Token refresh failed for {self._mcp_name}: "
+                        f"status={resp.status}, body={body[:200]}"
                     )
-                    logger.info(f"Successfully refreshed OAuth token for {self._mcp_name}")
-                    return True
+                    return False
+
+                result = await resp.json()
+                await self.save_tokens(
+                    access_token=result["access_token"],
+                    refresh_token=result.get("refresh_token", tokens.refresh_token),
+                    expires_in=result.get("expires_in"),
+                    scope=result.get("scope", tokens.scope),
+                )
+                logger.info(f"Successfully refreshed OAuth token for {self._mcp_name}")
+                return True
 
         except Exception as e:
             logger.error(f"Failed to refresh OAuth token for {self._mcp_name}: {e}")
@@ -652,9 +651,9 @@ class MCPOAuthProvider:
     async def save_tokens(
         self,
         access_token: str,
-        refresh_token: Optional[str] = None,
-        expires_in: Optional[int] = None,
-        scope: Optional[str] = None,
+        refresh_token: str | None = None,
+        expires_in: int | None = None,
+        scope: str | None = None,
     ) -> None:
         """Save OAuth tokens.
 

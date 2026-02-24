@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import RLock
-from typing import Any, Dict, Optional
+from typing import Any
 
-_DEFAULT_STATE: Dict[str, Any] = {"plugins": {}, "tenants": {}}
+_DEFAULT_STATE: dict[str, Any] = {"plugins": {}, "tenants": {}}
 
 
 class PluginStateStore:
     """Manage plugin runtime state persisted under .memstack/plugins/state.json."""
 
-    def __init__(self, base_path: Optional[Path] = None) -> None:
+    def __init__(self, base_path: Path | None = None) -> None:
         root = base_path or Path.cwd()
         self._state_path = root / ".memstack" / "plugins" / "state.json"
         self._lock = RLock()
@@ -25,7 +25,7 @@ class PluginStateStore:
         """Return the plugin state file path."""
         return self._state_path
 
-    def list_plugins(self, *, tenant_id: Optional[str] = None) -> Dict[str, Dict[str, Any]]:
+    def list_plugins(self, *, tenant_id: str | None = None) -> dict[str, dict[str, Any]]:
         """Return all persisted plugin states keyed by plugin name."""
         state = self._read_state()
         plugins = self._get_scope_plugins(state, tenant_id=tenant_id)
@@ -37,7 +37,7 @@ class PluginStateStore:
             if isinstance(name, str) and isinstance(payload, dict)
         }
 
-    def get_plugin(self, plugin_name: str, *, tenant_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_plugin(self, plugin_name: str, *, tenant_id: str | None = None) -> dict[str, Any]:
         """Get persisted state for one plugin."""
         global_state = self.list_plugins().get(plugin_name, {})
         if not isinstance(global_state, dict):
@@ -54,7 +54,7 @@ class PluginStateStore:
         merged.update(tenant_state)
         return merged
 
-    def is_enabled(self, plugin_name: str, *, tenant_id: Optional[str] = None) -> bool:
+    def is_enabled(self, plugin_name: str, *, tenant_id: str | None = None) -> bool:
         """Check if a plugin is enabled (defaults to True when unset)."""
         plugin_state = self.get_plugin(plugin_name, tenant_id=tenant_id)
         enabled = plugin_state.get("enabled")
@@ -67,8 +67,8 @@ class PluginStateStore:
         plugin_name: str,
         enabled: bool,
         *,
-        tenant_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        tenant_id: str | None = None,
+    ) -> dict[str, Any]:
         """Persist plugin enabled status."""
         return self.update_plugin(plugin_name, enabled=enabled, tenant_id=tenant_id)
 
@@ -76,18 +76,18 @@ class PluginStateStore:
         self,
         plugin_name: str,
         *,
-        enabled: Optional[bool] = None,
-        source: Optional[str] = None,
-        package: Optional[str] = None,
-        version: Optional[str] = None,
-        requirement: Optional[str] = None,
-        kind: Optional[str] = None,
-        manifest_id: Optional[str] = None,
-        channels: Optional[list[str]] = None,
-        providers: Optional[list[str]] = None,
-        skills: Optional[list[str]] = None,
-        tenant_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        enabled: bool | None = None,
+        source: str | None = None,
+        package: str | None = None,
+        version: str | None = None,
+        requirement: str | None = None,
+        kind: str | None = None,
+        manifest_id: str | None = None,
+        channels: list[str] | None = None,
+        providers: list[str] | None = None,
+        skills: list[str] | None = None,
+        tenant_id: str | None = None,
+    ) -> dict[str, Any]:
         """Create or update plugin metadata entry."""
         if not plugin_name:
             raise ValueError("plugin_name is required")
@@ -117,12 +117,12 @@ class PluginStateStore:
                 current["providers"] = _normalize_string_list(providers)
             if skills is not None:
                 current["skills"] = _normalize_string_list(skills)
-            current["updated_at"] = datetime.now(timezone.utc).isoformat()
+            current["updated_at"] = datetime.now(UTC).isoformat()
             plugins[plugin_name] = current
             self._write_state(state)
             return dict(current)
 
-    def remove_plugin(self, plugin_name: str, *, tenant_id: Optional[str] = None) -> None:
+    def remove_plugin(self, plugin_name: str, *, tenant_id: str | None = None) -> None:
         """Remove a plugin state record."""
         with self._lock:
             state = self._read_state()
@@ -155,7 +155,7 @@ class PluginStateStore:
             if changed:
                 self._write_state(state)
 
-    def _read_state(self) -> Dict[str, Any]:
+    def _read_state(self) -> dict[str, Any]:
         if not self._state_path.exists():
             return deepcopy(_DEFAULT_STATE)
         try:
@@ -167,18 +167,18 @@ class PluginStateStore:
             return deepcopy(_DEFAULT_STATE)
         return deepcopy(_DEFAULT_STATE)
 
-    def _write_state(self, state: Dict[str, Any]) -> None:
+    def _write_state(self, state: dict[str, Any]) -> None:
         self._state_path.parent.mkdir(parents=True, exist_ok=True)
         payload = json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True)
         self._state_path.write_text(payload, encoding="utf-8")
 
     def _get_scope_plugins(
         self,
-        state: Dict[str, Any],
+        state: dict[str, Any],
         *,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
         create_if_missing: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         if tenant_id:
             tenants = state.get("tenants")
             if not isinstance(tenants, dict):
@@ -211,7 +211,7 @@ class PluginStateStore:
         return plugins
 
 
-def _normalize_string_list(value: Any) -> list[str]:  # noqa: ANN401
+def _normalize_string_list(value: Any) -> list[str]:
     if not isinstance(value, (list, tuple)):
         return []
     normalized: list[str] = []

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
@@ -46,18 +46,18 @@ class MCPAppResponse(BaseModel):
     id: str
     project_id: str
     tenant_id: str
-    server_id: Optional[str] = None
+    server_id: str | None = None
     server_name: str
     tool_name: str
     ui_metadata: dict
     source: str
     status: str
     lifecycle_metadata: dict = Field(default_factory=dict)
-    error_message: Optional[str] = None
+    error_message: str | None = None
     has_resource: bool = False
-    resource_size_bytes: Optional[int] = None
-    created_at: Optional[str] = None
-    updated_at: Optional[str] = None
+    resource_size_bytes: int | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
 
 
 class MCPAppResourceResponse(BaseModel):
@@ -86,8 +86,8 @@ class MCPAppToolCallResponse(BaseModel):
 
     content: list = Field(default_factory=list)
     is_error: bool = False
-    error_message: Optional[str] = None
-    error_code: Optional[int] = Field(None, description="JSON-RPC error code (-32000 for proxy)")
+    error_message: str | None = None
+    error_code: int | None = Field(None, description="JSON-RPC error code (-32000 for proxy)")
 
 
 # === Dependency ===
@@ -121,10 +121,10 @@ def _validate_tenant(app: MCPApp, tenant_id: str) -> None:
 # === Endpoints ===
 
 
-@router.get("", response_model=List[MCPAppResponse])
+@router.get("", response_model=list[MCPAppResponse])
 async def list_mcp_apps(
     request: Request,
-    project_id: Optional[str] = Query(None, description="Filter by project ID"),
+    project_id: str | None = Query(None, description="Filter by project ID"),
     include_disabled: bool = Query(False, description="Include disabled apps"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
@@ -417,7 +417,7 @@ class MCPResourceReadRequest(BaseModel):
 
     uri: str = Field(..., description="MCP resource URI (e.g. ui://server/index.html)")
     project_id: str = Field(..., description="Project ID for server resolution")
-    server_name: Optional[str] = Field(None, description="Server name hint (optional)")
+    server_name: str | None = Field(None, description="Server name hint (optional)")
 
 
 class MCPResourceReadResponse(BaseModel):
@@ -426,7 +426,7 @@ class MCPResourceReadResponse(BaseModel):
     contents: list = Field(default_factory=list)
 
 
-def _extract_server_name_from_uri(uri: str) -> Optional[str]:
+def _extract_server_name_from_uri(uri: str) -> str | None:
     """Extract server name from MCP app resource URI.
 
     Supported URI schemes:
@@ -501,7 +501,7 @@ async def proxy_resource_read(
         container = get_container_with_db(request, db)
         mcp_manager = container.sandbox_mcp_server_manager()
 
-        async def _read_resource() -> Any:  # noqa: ANN401
+        async def _read_resource() -> Any:
             """Call __resources_read__ with a 15s timeout."""
             return await asyncio.wait_for(
                 mcp_manager.call_tool(
@@ -524,7 +524,7 @@ async def proxy_resource_read(
             result = await _read_resource()
             if result.is_error:
                 need_retry = True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("resources/read timed out after 15s: uri=%s", body.uri)
             need_retry = True
 
@@ -554,7 +554,7 @@ async def proxy_resource_read(
                     raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}")
             except HTTPException:
                 raise
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("resources/read retry timed out after reinstall: uri=%s", body.uri)
                 raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}")
             except Exception as reinstall_err:
@@ -615,7 +615,7 @@ class MCPResourceListRequest(BaseModel):
     """Request schema for standard MCP resources/list proxy."""
 
     project_id: str = Field(..., description="Project ID for server resolution")
-    server_name: Optional[str] = Field(None, description="Server name hint (optional)")
+    server_name: str | None = Field(None, description="Server name hint (optional)")
 
 
 class MCPResourceListResponse(BaseModel):

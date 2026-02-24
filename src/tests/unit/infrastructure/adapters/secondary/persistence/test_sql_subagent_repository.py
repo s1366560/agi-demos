@@ -2,7 +2,7 @@
 Tests for V2 SqlSubAgentRepository using BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,8 +49,8 @@ def make_subagent(
         total_invocations=0,
         avg_execution_time_ms=0.0,
         success_rate=1.0,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
         metadata={},
     )
 

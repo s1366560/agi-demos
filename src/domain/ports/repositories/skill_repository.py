@@ -11,7 +11,6 @@ Supports three-level scoping for multi-tenant isolation:
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus
 
@@ -41,7 +40,7 @@ class SkillRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_by_id(self, skill_id: str) -> Optional[Skill]:
+    async def get_by_id(self, skill_id: str) -> Skill | None:
         """
         Get a skill by its ID.
 
@@ -58,8 +57,8 @@ class SkillRepositoryPort(ABC):
         self,
         tenant_id: str,
         name: str,
-        scope: Optional[SkillScope] = None,
-    ) -> Optional[Skill]:
+        scope: SkillScope | None = None,
+    ) -> Skill | None:
         """
         Get a skill by name within a tenant.
 
@@ -106,11 +105,11 @@ class SkillRepositoryPort(ABC):
     async def list_by_tenant(
         self,
         tenant_id: str,
-        status: Optional[SkillStatus] = None,
-        scope: Optional[SkillScope] = None,
+        status: SkillStatus | None = None,
+        scope: SkillScope | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[Skill]:
+    ) -> list[Skill]:
         """
         List all skills for a tenant.
 
@@ -130,9 +129,9 @@ class SkillRepositoryPort(ABC):
     async def list_by_project(
         self,
         project_id: str,
-        status: Optional[SkillStatus] = None,
-        scope: Optional[SkillScope] = None,
-    ) -> List[Skill]:
+        status: SkillStatus | None = None,
+        scope: SkillScope | None = None,
+    ) -> list[Skill]:
         """
         List all skills for a specific project.
 
@@ -153,7 +152,7 @@ class SkillRepositoryPort(ABC):
         query: str,
         threshold: float = 0.5,
         limit: int = 5,
-    ) -> List[Skill]:
+    ) -> list[Skill]:
         """
         Find skills that match a query.
 
@@ -195,8 +194,8 @@ class SkillRepositoryPort(ABC):
     async def count_by_tenant(
         self,
         tenant_id: str,
-        status: Optional[SkillStatus] = None,
-        scope: Optional[SkillScope] = None,
+        status: SkillStatus | None = None,
+        scope: SkillScope | None = None,
     ) -> int:
         """
         Count skills for a tenant.

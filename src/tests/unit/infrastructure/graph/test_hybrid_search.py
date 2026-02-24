@@ -1,6 +1,6 @@
 """Unit tests for HybridSearch."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -331,7 +331,7 @@ class TestTemporalDecay:
     @pytest.mark.unit
     def test_temporal_decay_reduces_old_scores(self, hybrid_search):
         """Older items get lower scores after temporal decay."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         recent_ts = (now - timedelta(days=1)).isoformat()
         old_ts = (now - timedelta(days=90)).isoformat()
 
@@ -356,7 +356,7 @@ class TestTemporalDecay:
     @pytest.mark.unit
     def test_temporal_decay_disabled(self, hybrid_search_no_enhancements):
         """No decay applied when enable_temporal_decay=False."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         old_ts = (now - timedelta(days=365)).isoformat()
 
         item = _make_entity("old", "Old", "summary", 0.9, created_at=old_ts)
@@ -486,14 +486,12 @@ class TestQueryExpansion:
         """Query expansion is skipped when disabled."""
         with patch.object(
             hybrid_search_no_enhancements, "_vector_search_entities", return_value=[]
+        ), patch.object(
+            hybrid_search_no_enhancements, "_keyword_search_entities", return_value=[]
+        ) as mock_kw, patch.object(
+            hybrid_search_no_enhancements, "_keyword_search_episodes", return_value=[]
         ):
-            with patch.object(
-                hybrid_search_no_enhancements, "_keyword_search_entities", return_value=[]
-            ) as mock_kw:
-                with patch.object(
-                    hybrid_search_no_enhancements, "_keyword_search_episodes", return_value=[]
-                ):
-                    await hybrid_search_no_enhancements.search("What is machine learning?")
+            await hybrid_search_no_enhancements.search("What is machine learning?")
 
         # Should pass original query unmodified
         kw_query = mock_kw.call_args[0][0]
@@ -540,14 +538,12 @@ class TestOverFetch:
         """Without MMR, fetch_limit = limit * 2."""
         with patch.object(
             hybrid_search_no_enhancements, "_vector_search_entities", return_value=[]
-        ) as mock_vec:
-            with patch.object(
-                hybrid_search_no_enhancements, "_keyword_search_entities", return_value=[]
-            ):
-                with patch.object(
-                    hybrid_search_no_enhancements, "_keyword_search_episodes", return_value=[]
-                ):
-                    await hybrid_search_no_enhancements.search("test", limit=10)
+        ) as mock_vec, patch.object(
+            hybrid_search_no_enhancements, "_keyword_search_entities", return_value=[]
+        ), patch.object(
+            hybrid_search_no_enhancements, "_keyword_search_episodes", return_value=[]
+        ):
+            await hybrid_search_no_enhancements.search("test", limit=10)
 
         called_limit = mock_vec.call_args[0][2]
         assert called_limit == 20
@@ -597,7 +593,7 @@ class TestPostProcessingPipeline:
     @pytest.mark.unit
     def test_full_pipeline_order(self, hybrid_search):
         """Temporal decay runs before MMR in the pipeline."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         # Recent + unique content should rank first
         recent_unique = _make_entity(
             "ru",
@@ -638,7 +634,7 @@ class TestPostProcessingPipeline:
             0.9,
             search_type="vector",
             entity_type="Person",
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
         )
         result = hybrid_search._apply_post_processing([item])
         assert result[0].metadata.get("search_type") == "vector"

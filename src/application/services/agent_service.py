@@ -18,8 +18,9 @@ import json
 import logging
 import time as time_module
 import uuid
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from src.domain.events.agent_events import AgentMessageEvent
 from src.domain.llm_providers.llm_types import LLMClient
@@ -84,7 +85,7 @@ class AgentService(AgentServicePort):
         db_session=None,
         sequence_service=None,
         context_loader=None,
-    ):
+    ) -> None:
         """
         Initialize the agent service.
 
@@ -157,7 +158,7 @@ class AgentService(AgentServicePort):
             skill_service=self._skill_service,
         )
 
-    async def _build_react_agent_async(self, project_id: str, user_id: str, tenant_id: str):
+    async def _build_react_agent_async(self, project_id: str, user_id: str, tenant_id: str) -> None:
         # Deprecated: Agent execution moved to Ray Actors
         pass
 
@@ -168,11 +169,11 @@ class AgentService(AgentServicePort):
         project_id: str,
         user_id: str,
         tenant_id: str,
-        attachment_ids: Optional[List[str]] = None,
-        file_metadata: Optional[List[Dict[str, Any]]] = None,
-        forced_skill_name: Optional[str] = None,
-        app_model_context: Optional[Dict[str, Any]] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        attachment_ids: list[str] | None = None,
+        file_metadata: list[dict[str, Any]] | None = None,
+        forced_skill_name: str | None = None,
+        app_model_context: dict[str, Any] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response using Ray Actors.
 
@@ -197,7 +198,7 @@ class AgentService(AgentServicePort):
                 yield {
                     "type": "error",
                     "data": {"message": f"Conversation {conversation_id} not found"},
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
                 return
 
@@ -210,7 +211,7 @@ class AgentService(AgentServicePort):
                 yield {
                     "type": "error",
                     "data": {"message": "You do not have permission to access this conversation"},
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
                 return
 
@@ -284,7 +285,7 @@ class AgentService(AgentServicePort):
                 "type": "message",
                 "data": user_event_data,
                 "correlation_id": correlation_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
             # Get conversation context with smart summary caching.
@@ -344,7 +345,7 @@ class AgentService(AgentServicePort):
             yield {
                 "type": "error",
                 "data": {"message": str(e)},
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
     async def _start_chat_actor(
@@ -352,13 +353,13 @@ class AgentService(AgentServicePort):
         conversation: Conversation,
         message_id: str,
         user_message: str,
-        conversation_context: list[Dict[str, Any]],
-        attachment_ids: Optional[List[str]] = None,
-        file_metadata: Optional[List[Dict[str, Any]]] = None,
-        correlation_id: Optional[str] = None,
-        forced_skill_name: Optional[str] = None,
-        context_summary_data: Optional[Dict[str, Any]] = None,
-        app_model_context: Optional[Dict[str, Any]] = None,
+        conversation_context: list[dict[str, Any]],
+        attachment_ids: list[str] | None = None,
+        file_metadata: list[dict[str, Any]] | None = None,
+        correlation_id: str | None = None,
+        forced_skill_name: str | None = None,
+        context_summary_data: dict[str, Any] | None = None,
+        app_model_context: dict[str, Any] | None = None,
     ) -> str:
         """Start agent execution via Ray Actor, with local fallback."""
         return await self._runtime.start_chat_actor(
@@ -376,7 +377,7 @@ class AgentService(AgentServicePort):
 
     async def _get_stream_events(
         self, conversation_id: str, message_id: str, last_event_time_us: int
-    ) -> list[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Retrieve events from Redis Stream (for reliable replay).
 
@@ -424,8 +425,8 @@ class AgentService(AgentServicePort):
     async def connect_chat_stream(
         self,
         conversation_id: str,
-        message_id: Optional[str] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        message_id: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Connect to a chat stream, handling replay and real-time events.
 
@@ -504,7 +505,7 @@ class AgentService(AgentServicePort):
                 yield {
                     "type": event.get("type"),
                     "data": event.get("data"),
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "event_time_us": event.get("event_time_us", 0),
                     "event_counter": event.get("event_counter", 0),
                 }
@@ -566,7 +567,7 @@ class AgentService(AgentServicePort):
                 yield {
                     "type": event_type,
                     "data": event_data,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "event_time_us": evt_time_us,
                     "event_counter": evt_counter,
                 }
@@ -661,7 +662,7 @@ class AgentService(AgentServicePort):
                                 yield {
                                     "type": delayed_type,
                                     "data": delayed_data,
-                                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                                    "timestamp": datetime.now(UTC).isoformat(),
                                     "event_time_us": delayed_time_us,
                                     "event_counter": delayed_counter,
                                 }
@@ -689,7 +690,7 @@ class AgentService(AgentServicePort):
         user_id: str,
         tenant_id: str,
         title: str | None = None,
-        agent_config: Dict[str, Any] | None = None,
+        agent_config: dict[str, Any] | None = None,
     ) -> Conversation:
         """Create a new conversation."""
         conversation = await self._conversation_mgr.create_conversation(
@@ -895,9 +896,9 @@ class AgentService(AgentServicePort):
                     "data": {
                         "conversation_id": conversation_id,
                         "title": title,
-                        "generated_at": datetime.now(timezone.utc).isoformat(),
+                        "generated_at": datetime.now(UTC).isoformat(),
                     },
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "conversation_id": conversation_id,
                 }
                 stream_key = f"agent:events:{conversation_id}"
@@ -956,7 +957,7 @@ class AgentService(AgentServicePort):
         project_id: str,
         user_id: str,
         limit: int = 50,
-    ) -> list[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get the execution history for a conversation."""
         return await self._conversation_mgr.get_execution_history(
             conversation_id=conversation_id,
@@ -971,7 +972,7 @@ class AgentService(AgentServicePort):
 
     async def get_available_tools(
         self, project_id: str, tenant_id: str, agent_mode: str = "default"
-    ) -> list[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get list of available tools for the agent."""
         return await self._tool_discovery.get_available_tools(
             project_id=project_id,
@@ -981,7 +982,7 @@ class AgentService(AgentServicePort):
 
     async def get_conversation_context(
         self, conversation_id: str, max_messages: int = 50
-    ) -> list[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get conversation context for agent processing."""
         return await self._conversation_mgr.get_conversation_context(
             conversation_id=conversation_id,

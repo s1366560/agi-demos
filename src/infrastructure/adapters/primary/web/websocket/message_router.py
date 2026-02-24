@@ -6,8 +6,8 @@ Uses the handler pattern for clean separation of concerns.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
@@ -30,8 +30,8 @@ class MessageRouter:
         await router.route(context, message)
     """
 
-    def __init__(self):
-        self._handlers: Dict[str, WebSocketMessageHandler] = {}
+    def __init__(self) -> None:
+        self._handlers: dict[str, WebSocketMessageHandler] = {}
 
     def register(self, handler: WebSocketMessageHandler) -> "MessageRouter":
         """
@@ -61,7 +61,7 @@ class MessageRouter:
             self.register(handler)
         return self
 
-    async def route(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def route(self, context: MessageContext, message: dict[str, Any]) -> None:
         """
         Route a message to the appropriate handler.
 
@@ -80,7 +80,7 @@ class MessageRouter:
             await context.send_json(
                 {
                     "type": "pong",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
             )
             return
@@ -105,7 +105,7 @@ class MessageRouter:
 
 
 # Global router instance with default handlers
-_message_router: Optional[MessageRouter] = None
+_message_router: MessageRouter | None = None
 
 
 def get_message_router() -> MessageRouter:

@@ -7,7 +7,6 @@ Uses environment variable for encryption key management.
 
 import base64
 import os
-from typing import Optional
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from pydantic import SecretStr
@@ -21,7 +20,7 @@ class EncryptionService:
     If not set, a warning is logged and a development key is used (NOT FOR PRODUCTION).
     """
 
-    def __init__(self, encryption_key: Optional[str] = None):
+    def __init__(self, encryption_key: str | None = None) -> None:
         """
         Initialize encryption service.
 
@@ -32,7 +31,7 @@ class EncryptionService:
         self.key = self._load_or_generate_key(encryption_key)
         self.aesgcm = AESGCM(self.key)
 
-    def _load_or_generate_key(self, provided_key: Optional[str]) -> bytes:
+    def _load_or_generate_key(self, provided_key: str | None) -> bytes:
         """
         Load encryption key from environment or generate a development key.
 
@@ -44,7 +43,7 @@ class EncryptionService:
         """
         import warnings
 
-        def try_parse_hex(key: str, source: str) -> Optional[bytes]:
+        def try_parse_hex(key: str, source: str) -> bytes | None:
             """Try to parse a hex string, return None if invalid."""
             try:
                 key_bytes = bytes.fromhex(key)
@@ -162,7 +161,7 @@ class EncryptionService:
 
 
 # Singleton instance for use in dependency injection
-_encryption_service: Optional[EncryptionService] = None
+_encryption_service: EncryptionService | None = None
 
 
 def get_encryption_service() -> EncryptionService:

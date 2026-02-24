@@ -6,7 +6,7 @@ enabling event-driven architectures and temporal queries.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 
 class EventStorePort(ABC):
@@ -23,7 +23,7 @@ class EventStorePort(ABC):
         event_type: str,
         event_data: dict[str, Any],
         *,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> tuple[int, int]:
         """Append an event to a stream.
 
@@ -45,9 +45,9 @@ class EventStorePort(ABC):
         *,
         from_time_us: int = 0,
         from_counter: int = 0,
-        to_time_us: Optional[int] = None,
-        to_counter: Optional[int] = None,
-        event_types: Optional[list[str]] = None,
+        to_time_us: int | None = None,
+        to_counter: int | None = None,
+        event_types: list[str] | None = None,
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
         """Retrieve events from a stream.
@@ -73,8 +73,8 @@ class EventStorePort(ABC):
         stream_id: str,
         *,
         start_time: datetime,
-        end_time: Optional[datetime] = None,
-        event_types: Optional[list[str]] = None,
+        end_time: datetime | None = None,
+        event_types: list[str] | None = None,
         limit: int = 1000,
     ) -> list[dict[str, Any]]:
         """Retrieve events within a time range.
@@ -107,7 +107,7 @@ class EventStorePort(ABC):
     async def get_stream_ids(
         self,
         *,
-        prefix: Optional[str] = None,
+        prefix: str | None = None,
         limit: int = 100,
     ) -> list[str]:
         """List available event stream IDs.

@@ -5,9 +5,9 @@ sandbox/MCP tool executions that need to be stored and displayed in the UI.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from src.domain.shared_kernel import Entity
 
@@ -81,7 +81,7 @@ class ArtifactContentType(str, Enum):
 
 
 # MIME type to category mapping
-MIME_TO_CATEGORY: Dict[str, ArtifactCategory] = {
+MIME_TO_CATEGORY: dict[str, ArtifactCategory] = {
     # Images
     "image/png": ArtifactCategory.IMAGE,
     "image/jpeg": ArtifactCategory.IMAGE,
@@ -138,7 +138,7 @@ MIME_TO_CATEGORY: Dict[str, ArtifactCategory] = {
 }
 
 # File extension to MIME type mapping for detection
-EXTENSION_TO_MIME: Dict[str, str] = {
+EXTENSION_TO_MIME: dict[str, str] = {
     # Images
     ".png": "image/png",
     ".jpg": "image/jpeg",
@@ -252,9 +252,9 @@ class Artifact(Entity):
     # Ownership & context
     project_id: str
     tenant_id: str
-    sandbox_id: Optional[str] = None
-    tool_execution_id: Optional[str] = None
-    conversation_id: Optional[str] = None
+    sandbox_id: str | None = None
+    tool_execution_id: str | None = None
+    conversation_id: str | None = None
 
     # File information
     filename: str
@@ -264,20 +264,20 @@ class Artifact(Entity):
 
     # Storage references
     object_key: str = ""
-    url: Optional[str] = None
-    preview_url: Optional[str] = None
+    url: str | None = None
+    preview_url: str | None = None
 
     # Status
     status: ArtifactStatus = ArtifactStatus.PENDING
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
     # Source information
-    source_tool: Optional[str] = None
-    source_path: Optional[str] = None
+    source_tool: str | None = None
+    source_path: str | None = None
 
     # Metadata
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self):
         """Auto-detect category from mime_type if not set."""
@@ -288,7 +288,7 @@ class Artifact(Entity):
         """Mark artifact as uploading."""
         self.status = ArtifactStatus.UPLOADING
 
-    def mark_ready(self, url: str, preview_url: Optional[str] = None) -> None:
+    def mark_ready(self, url: str, preview_url: str | None = None) -> None:
         """Mark artifact as ready with access URL."""
         self.status = ArtifactStatus.READY
         self.url = url
@@ -318,7 +318,7 @@ class Artifact(Entity):
         """Check if artifact supports thumbnail preview."""
         return self.category == ArtifactCategory.IMAGE
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert artifact to dictionary for API responses."""
         return {
             "id": self.id,

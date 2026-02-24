@@ -99,66 +99,55 @@ select = [
     "F",      # pyflakes
     "I",      # isort
     "N",      # pep8-naming
-    "UP",     # pyupgrade (modern Python syntax)
-    "B",      # flake8-bugbear (common bugs)
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
     "C4",     # flake8-comprehensions
     "SIM",    # flake8-simplify
-    "RUF",    # Ruff-specific rules
-    "ANN401", # disallow Any type annotations
+    "RUF",    # Ruff-specific
+    # Type annotation rules (new)
+    "ANN001", # function parameter type annotation missing
+    "ANN002", # *args type annotation missing
+    "ANN003", # **kwargs type annotation missing
+    "ANN201", # public function return type missing
+    "ANN202", # private function return type missing
+    # "ANN401", # disallow Any (enable progressively)
+    # Code quality
+    "C901",   # cyclomatic complexity (threshold configurable)
+    "PLR091", # Pylint refactoring rules
 ]
 ignore = [
-    "E501",   # line too long (handled by formatter)
-    "E731",   # lambda assignment (sometimes clearer)
-    "E741",   # ambiguous variable name (l, O, I)
-    "N802",   # function name lowercase (test methods may vary)
-    "N805",   # first argument of method should be self
-    "N806",   # variable in function should be lowercase
-    "N815",   # mixedCase variable in class scope
-    "N818",   # exception should be named with Error suffix
-    "B007",   # unused loop variable (often intentional)
-    "B008",   # function call in default argument (FastAPI Depends)
-    "B017",   # pytest.raises without match
-    "B023",   # function variable not used in loop
-    "B024",   # abstract class without abstract methods
-    "B904",   # raise without from (sometimes intentional)
-    "B905",   # zip without strict (Python 3.10+)
-    "C401",   # unnecessary generator (sometimes clearer)
-    "C416",   # unnecessary comprehension (sometimes clearer)
-    "UP006",  # use dict instead of Dict (gradual migration)
-    "UP007",  # use X | Y instead of Optional (gradual migration)
-    "UP017",  # use datetime.UTC (gradual migration)
-    "UP035",  # deprecated typing imports (gradual migration)
-    "UP041",  # replace aliased TimeoutError (gradual migration)
-    "UP045",  # use X | None instead of Optional (gradual migration)
-    "UP046",  # use X | Y for Union (gradual migration)
-    "UP047",  # use X | Y for Optional (gradual migration)
-    "SIM102", # nested if (sometimes clearer)
-    "SIM103", # return condition directly (sometimes clearer)
-    "SIM105", # contextlib.suppress (sometimes clearer with try/except)
-    "SIM108", # ternary operator (sometimes clearer to use if/else)
-    "SIM110", # any/all instead of loop (sometimes clearer)
-    "SIM116", # dict instead of if-elif (sometimes clearer)
-    "SIM117", # nested with (sometimes clearer)
-    "SIM118", # key in dict vs dict.keys() (micro-optimization)
-    "SIM222", # or instead of any (sometimes clearer)
-    "RUF001", # ambiguous unicode in string (Chinese allowed)
-    "RUF002", # ambiguous unicode in docstring (Chinese allowed)
-    "RUF003", # ambiguous unicode in comment (Chinese allowed)
-    "RUF005", # collection literal concatenation (sometimes clearer)
-    "RUF006", # asyncio.create_task reference (sometimes not needed)
-    "RUF012", # mutable class attribute ClassVar (too strict)
-    "RUF013", # implicit Optional (gradual migration)
-    "RUF015", # prefer next over list[0] (sometimes clearer)
-    "RUF022", # unsorted __all__ (minor)
-    "RUF043", # ambiguous encoding in config (intentional)
-    "RUF059", # unused unpacked assignment (often intentional)
+    # Formatting (handled by formatter)
+    "E501",
+    # Naming style (project conventions)
+    "N802", "N805", "N806", "N815", "N818",
+    # Micro-optimizations (readability first)
+    "C401", "C416", "SIM102", "SIM108", "SIM110", "SIM116", "SIM118",
+    # Chinese characters (business requirement)
+    "RUF001", "RUF002", "RUF003",
+    # FastAPI dependency injection
+    "B008",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"scripts/*" = ["E402"]
-"examples/*" = ["E402"]
-"src/tests/*" = ["N802", "N803"]  # test methods/params can have non-standard names
-"alembic/*" = ["N999"]  # alembic migrations have non-standard module names
+# Delayed import exemptions (logging config etc.)
+"src/infrastructure/adapters/primary/web/main.py" = ["E402"]
+"src/infrastructure/adapters/secondary/ray/__init__.py" = ["E402"]
+"src/infrastructure/llm/litellm/litellm_client.py" = ["E402"]
+"src/tests/unit/infrastructure/llm/conftest.py" = ["E402"]
+
+# Test files relaxed
+"src/tests/**" = ["ANN001", "ANN201", "ANN202", "N802", "N803"]
+
+# Alembic migration files
+"src/alembic/**" = ["ANN", "N999"]
+
+# Legacy modules (progressively tighten)
+"src/memstack_agent/**" = ["ANN"]
+
+# High cyclomatic complexity files (progressively refactor)
+"src/application/services/agent_service.py" = ["C901"]
+"src/infrastructure/agent/core/react_agent.py" = ["C901"]
+"src/infrastructure/agent/processor/processor.py" = ["C901"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]
@@ -166,15 +155,50 @@ section-order = ["future", "standard-library", "third-party", "first-party", "lo
 combine-as-imports = true
 force-single-line = false
 
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12  # Default 10, relaxed slightly
+
+[tool.ruff.lint.pylint]
+max-args = 8  # Default 5, FastAPI dependency injection requires more params
+
 [tool.mypy]
 python_version = "3.12"
-warn_return_any = false
+strict = true
+warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = false
-exclude = ["sdk/"]
-# NOTE: 1606 pre-existing type errors remain (arg-type, union-attr, attr-defined, etc.)
-# These were masked by ignore_errors=true. Fixing them is a separate effort.
-# Run: uv run mypy src/ --ignore-missing-imports  to see current state.
+disallow_untyped_defs = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_unreachable = true
+strict_equality = true
+
+# Excluded directories
+exclude = [
+    "src/tests/",
+    "src/alembic/",
+    "src/memstack_agent/",  # Legacy code, migrate progressively
+]
+
+# Handle untyped third-party libraries
+ignore_missing_imports = true
+
+# Progressive enablement - fix first, then enable
+# disallow_untyped_calls = true   # Phase 2
+# disallow_incomplete_defs = true  # Phase 2
+# check_untyped_defs = true        # Phase 3
+
+[[tool.mypy.overrides]]
+module = "src.infrastructure.llm.litellm.*"
+ignore_errors = true  # Legacy code
+
+[[tool.mypy.overrides]]
+module = "src.infrastructure.adapters.secondary.ray.*"
+ignore_errors = true  # Ray library type issues
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -42,20 +42,20 @@ from src.infrastructure.agent.hitl.state_store import (
 )
 
 __all__ = [
+    "AgentSessionRegistry",
+    "HITLAgentState",
     # Coordinator (primary)
     "HITLCoordinator",
-    "resolve_by_request_id",
-    # Legacy
-    "RayHITLHandler",
-    "HITLAgentState",
-    "HITLStateStore",
-    "get_hitl_state_store",
     # Real-time (low-latency)
     "HITLResponseListener",
-    "get_hitl_response_listener",
-    "shutdown_hitl_response_listener",
-    "AgentSessionRegistry",
+    "HITLStateStore",
     "HITLWaiter",
+    # Legacy
+    "RayHITLHandler",
+    "get_hitl_response_listener",
+    "get_hitl_state_store",
     "get_session_registry",
     "reset_session_registry",
+    "resolve_by_request_id",
+    "shutdown_hitl_response_listener",
 ]

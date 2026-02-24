@@ -7,7 +7,7 @@ for retry logic and user-friendly error messages.
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class MCPToolErrorType(str, Enum):
@@ -49,12 +49,12 @@ class MCPToolError:
     is_retryable: bool = False
     retry_count: int = 0
     max_retries: int = 0
-    context: Dict[str, Any] = field(default_factory=dict)
-    original_error: Optional[Exception] = None
-    execution_duration_ms: Optional[int] = None
-    configured_timeout_s: Optional[float] = None
+    context: dict[str, Any] = field(default_factory=dict)
+    original_error: Exception | None = None
+    execution_duration_ms: int | None = None
+    configured_timeout_s: float | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         result = {
             "error_type": self.error_type.value,
@@ -172,8 +172,8 @@ class MCPToolErrorClassifier:
     @classmethod
     def _is_real_timeout(
         cls,
-        execution_duration_ms: Optional[int],
-        configured_timeout_s: Optional[float],
+        execution_duration_ms: int | None,
+        configured_timeout_s: float | None,
     ) -> bool:
         """Check if duration indicates a real timeout vs false positive from text matching.
 
@@ -194,7 +194,7 @@ class MCPToolErrorClassifier:
         error: Exception,
         tool_name: str,
         sandbox_id: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> MCPToolError:
         """
         Classify an error into an MCPToolError.
@@ -215,8 +215,8 @@ class MCPToolErrorClassifier:
             MCPToolError with classification and retry strategy
         """
         ctx = context or {}
-        execution_duration_ms: Optional[int] = ctx.get("execution_duration_ms")
-        configured_timeout_s: Optional[float] = ctx.get("configured_timeout_s")
+        execution_duration_ms: int | None = ctx.get("execution_duration_ms")
+        configured_timeout_s: float | None = ctx.get("configured_timeout_s")
 
         error_message = str(error).lower()
         error_type = MCPToolErrorType.UNKNOWN_ERROR
@@ -306,7 +306,7 @@ class RetryConfig:
         max_delay: float = 30.0,
         exponential_base: float = 2.0,
         jitter: bool = True,
-    ):
+    ) -> None:
         """
         Initialize retry configuration.
 

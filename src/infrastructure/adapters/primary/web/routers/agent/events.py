@@ -9,7 +9,6 @@ Provides endpoints for event management and execution monitoring:
 
 import logging
 from datetime import datetime
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -221,7 +220,7 @@ async def get_execution_status(
 @router.post("/conversations/{conversation_id}/resume", status_code=202)
 async def resume_execution(
     conversation_id: str,
-    override_message: Optional[str] = Query(
+    override_message: str | None = Query(
         None, description="Optional message to use instead of pending message"
     ),
     current_user: User = Depends(get_current_user),
@@ -287,7 +286,7 @@ async def resume_execution(
 )
 async def get_workflow_status(
     conversation_id: str,
-    message_id: Optional[str] = Query(None, description="Message ID to get workflow status for"),
+    message_id: str | None = Query(None, description="Message ID to get workflow status for"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     request: Request = None,

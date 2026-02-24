@@ -12,8 +12,8 @@ Extracted from react_agent.py to reduce complexity and improve testability.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Protocol
+from datetime import UTC, datetime
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +35,9 @@ class SubAgentProtocol(Protocol):
     max_tokens: int
     max_iterations: int
     system_prompt: str
-    allowed_tools: List[str]
-    allowed_skills: List[str]
-    allowed_mcp_servers: List[str]
+    allowed_tools: list[str]
+    allowed_skills: list[str]
+    allowed_mcp_servers: list[str]
 
     def record_execution(self, execution_time_ms: int, success: bool) -> None:
         """Record execution statistics."""
@@ -50,24 +50,24 @@ class SubAgentRouterProtocol(Protocol):
     def match(
         self,
         query: str,
-        confidence_threshold: Optional[float] = None,
-    ) -> Any:  # SubAgentMatch  # noqa: ANN401
+        confidence_threshold: float | None = None,
+    ) -> Any:  # SubAgentMatch
         """Find the best SubAgent for a query."""
         ...
 
     def filter_tools(
         self,
         subagent: SubAgentProtocol,
-        available_tools: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        available_tools: dict[str, Any],
+    ) -> dict[str, Any]:
         """Filter tools based on SubAgent permissions."""
         ...
 
-    def get_subagent_config(self, subagent: SubAgentProtocol) -> Dict[str, Any]:
+    def get_subagent_config(self, subagent: SubAgentProtocol) -> dict[str, Any]:
         """Get configuration for running a SubAgent."""
         ...
 
-    def list_subagents(self) -> List[SubAgentProtocol]:
+    def list_subagents(self) -> list[SubAgentProtocol]:
         """List all enabled SubAgents."""
         ...
 
@@ -81,7 +81,7 @@ class SubAgentExecutorProtocol(Protocol):
         """Get the SubAgent's system prompt."""
         ...
 
-    def get_config(self) -> Dict[str, Any]:
+    def get_config(self) -> dict[str, Any]:
         """Get execution configuration."""
         ...
 
@@ -99,7 +99,7 @@ class SubAgentExecutorProtocol(Protocol):
 class SubAgentRoutingResult:
     """Result of SubAgent routing."""
 
-    subagent: Optional[SubAgentProtocol] = None
+    subagent: SubAgentProtocol | None = None
     confidence: float = 0.0
     match_reason: str = "No match"
     routed: bool = False
@@ -114,14 +114,14 @@ class SubAgentRoutingResult:
 class SubAgentExecutionConfig:
     """Configuration for SubAgent execution."""
 
-    model: Optional[str] = None
+    model: str | None = None
     temperature: float = 0.7
     max_tokens: int = 4096
     max_iterations: int = 20
     system_prompt: str = ""
-    allowed_tools: List[str] = field(default_factory=list)
-    allowed_skills: List[str] = field(default_factory=list)
-    allowed_mcp_servers: List[str] = field(default_factory=list)
+    allowed_tools: list[str] = field(default_factory=list)
+    allowed_skills: list[str] = field(default_factory=list)
+    allowed_mcp_servers: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -151,13 +151,13 @@ class SubAgentOrchestrator:
 
     def __init__(
         self,
-        router: Optional[SubAgentRouterProtocol] = None,
-        config: Optional[SubAgentOrchestratorConfig] = None,
+        router: SubAgentRouterProtocol | None = None,
+        config: SubAgentOrchestratorConfig | None = None,
         base_model: str = "gpt-4",
-        base_api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        base_api_key: str | None = None,
+        base_url: str | None = None,
         debug_logging: bool = False,
-    ):
+    ) -> None:
         """
         Initialize SubAgent orchestrator.
 
@@ -182,7 +182,7 @@ class SubAgentOrchestrator:
         return self._router is not None
 
     @property
-    def available_subagents(self) -> List[SubAgentProtocol]:
+    def available_subagents(self) -> list[SubAgentProtocol]:
         """Get list of available SubAgents."""
         if not self._router:
             return []
@@ -191,7 +191,7 @@ class SubAgentOrchestrator:
     def match(
         self,
         query: str,
-        confidence_threshold: Optional[float] = None,
+        confidence_threshold: float | None = None,
     ) -> SubAgentRoutingResult:
         """
         Match query against available SubAgents.
@@ -239,8 +239,8 @@ class SubAgentOrchestrator:
     async def match_async(
         self,
         query: str,
-        confidence_threshold: Optional[float] = None,
-        conversation_context: Optional[str] = None,
+        confidence_threshold: float | None = None,
+        conversation_context: str | None = None,
     ) -> SubAgentRoutingResult:
         """Async match with hybrid routing support (keyword + LLM).
 
@@ -289,8 +289,8 @@ class SubAgentOrchestrator:
     def filter_tools(
         self,
         subagent: SubAgentProtocol,
-        available_tools: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        available_tools: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         Filter tools based on SubAgent permissions.
 
@@ -316,7 +316,7 @@ class SubAgentOrchestrator:
     def get_execution_config(
         self,
         subagent: SubAgentProtocol,
-        override_model: Optional[str] = None,
+        override_model: str | None = None,
     ) -> SubAgentExecutionConfig:
         """
         Build execution configuration for a SubAgent.
@@ -353,7 +353,7 @@ class SubAgentOrchestrator:
     def create_routing_event(
         self,
         result: SubAgentRoutingResult,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Create routing event for SSE emission.
 
@@ -377,7 +377,7 @@ class SubAgentOrchestrator:
                 "confidence": result.confidence,
                 "reason": result.match_reason,
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     def record_execution(
@@ -406,7 +406,7 @@ class SubAgentOrchestrator:
                 f"[SubAgentOrchestrator] Failed to record execution: {e}"
             )
 
-    def get_subagents_data(self) -> Optional[List[Dict[str, Any]]]:
+    def get_subagents_data(self) -> list[dict[str, Any]] | None:
         """
         Get all SubAgents as dict format for prompt context.
 
@@ -435,7 +435,7 @@ class SubAgentOrchestrator:
 # Singleton Management
 # ============================================================================
 
-_orchestrator: Optional[SubAgentOrchestrator] = None
+_orchestrator: SubAgentOrchestrator | None = None
 
 
 def get_subagent_orchestrator() -> SubAgentOrchestrator:
@@ -461,11 +461,11 @@ def set_subagent_orchestrator(orchestrator: SubAgentOrchestrator) -> None:
 
 
 def create_subagent_orchestrator(
-    router: Optional[SubAgentRouterProtocol] = None,
-    config: Optional[SubAgentOrchestratorConfig] = None,
+    router: SubAgentRouterProtocol | None = None,
+    config: SubAgentOrchestratorConfig | None = None,
     base_model: str = "gpt-4",
-    base_api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
+    base_api_key: str | None = None,
+    base_url: str | None = None,
     debug_logging: bool = False,
 ) -> SubAgentOrchestrator:
     """

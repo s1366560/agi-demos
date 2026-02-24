@@ -16,7 +16,7 @@ Usage:
     def generate(self, messages: list[MessageDict], **kwargs: CompletionKwargs) -> ...
 """
 
-from typing import Any, Literal, Optional, TypedDict, Union
+from typing import Any, Literal, TypedDict
 
 
 class MessageDict(TypedDict, total=False):
@@ -27,10 +27,10 @@ class MessageDict(TypedDict, total=False):
     """
     
     role: Literal["system", "user", "assistant", "tool"]
-    content: Union[str, list[dict[str, Any]], None]
-    name: Optional[str]
-    tool_calls: Optional[list["ToolCallDict"]]
-    tool_call_id: Optional[str]
+    content: str | list[dict[str, Any]] | None
+    name: str | None
+    tool_calls: list["ToolCallDict"] | None
+    tool_call_id: str | None
 
 
 class ToolCallDict(TypedDict, total=False):
@@ -40,7 +40,7 @@ class ToolCallDict(TypedDict, total=False):
     
     id: str
     type: Literal["function"]
-    index: Optional[int]
+    index: int | None
     function: "FunctionCallDict"
 
 
@@ -68,9 +68,9 @@ class FunctionDefinitionDict(TypedDict, total=False):
     """
     
     name: str
-    description: Optional[str]
+    description: str | None
     parameters: dict[str, Any]
-    strict: Optional[bool]
+    strict: bool | None
 
 
 class UsageData(TypedDict, total=False):
@@ -81,11 +81,11 @@ class UsageData(TypedDict, total=False):
     input_tokens: int
     output_tokens: int
     total_tokens: int
-    reasoning_tokens: Optional[int]
-    cache_read_tokens: Optional[int]
-    cache_write_tokens: Optional[int]
-    prompt_tokens: Optional[int]  # Alternative name for input_tokens
-    completion_tokens: Optional[int]  # Alternative name for output_tokens
+    reasoning_tokens: int | None
+    cache_read_tokens: int | None
+    cache_write_tokens: int | None
+    prompt_tokens: int | None  # Alternative name for input_tokens
+    completion_tokens: int | None  # Alternative name for output_tokens
 
 
 class CompletionKwargs(TypedDict, total=False):
@@ -100,41 +100,41 @@ class CompletionKwargs(TypedDict, total=False):
     messages: list[MessageDict]
     
     # Optional generation parameters
-    temperature: Optional[float]
-    max_tokens: Optional[int]
-    top_p: Optional[float]
-    frequency_penalty: Optional[float]
-    presence_penalty: Optional[float]
-    stop: Optional[Union[str, list[str]]]
+    temperature: float | None
+    max_tokens: int | None
+    top_p: float | None
+    frequency_penalty: float | None
+    presence_penalty: float | None
+    stop: str | list[str] | None
     
     # Streaming
-    stream: Optional[bool]
-    stream_options: Optional[dict[str, Any]]
+    stream: bool | None
+    stream_options: dict[str, Any] | None
     
     # Tool calling
-    tools: Optional[list[ToolDefinition]]
-    tool_choice: Optional[Union[str, dict[str, Any]]]
+    tools: list[ToolDefinition] | None
+    tool_choice: str | dict[str, Any] | None
     
     # Response format
-    response_format: Optional[dict[str, Any]]
+    response_format: dict[str, Any] | None
     
     # Authentication
-    api_key: Optional[str]
-    api_base: Optional[str]
-    api_version: Optional[str]
+    api_key: str | None
+    api_base: str | None
+    api_version: str | None
     
     # Request configuration
-    timeout: Optional[int]
-    num_retries: Optional[int]
-    metadata: Optional[dict[str, Any]]
+    timeout: int | None
+    num_retries: int | None
+    metadata: dict[str, Any] | None
     
     # Provider-specific
-    extra_headers: Optional[dict[str, Any]]
-    extra_query: Optional[dict[str, Any]]
-    extra_body: Optional[dict[str, Any]]
+    extra_headers: dict[str, Any] | None
+    extra_query: dict[str, Any] | None
+    extra_body: dict[str, Any] | None
     
     # Caching
-    cache: Optional[bool]
+    cache: bool | None
 
 
 class EmbeddingKwargs(TypedDict, total=False):
@@ -144,19 +144,19 @@ class EmbeddingKwargs(TypedDict, total=False):
     
     # Required
     model: str
-    input: Union[str, list[str]]
+    input: str | list[str]
     
     # Optional parameters
-    dimensions: Optional[int]
-    encoding_format: Optional[Literal["float", "base64"]]
-    user: Optional[str]
+    dimensions: int | None
+    encoding_format: Literal["float", "base64"] | None
+    user: str | None
     
     # Authentication
-    api_key: Optional[str]
-    api_base: Optional[str]
+    api_key: str | None
+    api_base: str | None
     
     # Request configuration
-    timeout: Optional[int]
+    timeout: int | None
 
 
 class RerankKwargs(TypedDict, total=False):
@@ -170,16 +170,16 @@ class RerankKwargs(TypedDict, total=False):
     documents: list[str]
     
     # Optional parameters
-    top_n: Optional[int]
-    return_documents: Optional[bool]
-    max_chunks_per_doc: Optional[int]
+    top_n: int | None
+    return_documents: bool | None
+    max_chunks_per_doc: int | None
     
     # Authentication
-    api_key: Optional[str]
-    api_base: Optional[str]
+    api_key: str | None
+    api_base: str | None
     
     # Request configuration
-    timeout: Optional[int]
+    timeout: int | None
 
 
 class StreamEventDict(TypedDict, total=False):
@@ -206,8 +206,8 @@ class ChoiceDict(TypedDict, total=False):
     
     index: int
     message: MessageDict
-    finish_reason: Optional[str]
-    delta: Optional[MessageDict]
+    finish_reason: str | None
+    delta: MessageDict | None
 
 
 class CompletionResponseDict(TypedDict, total=False):
@@ -220,8 +220,8 @@ class CompletionResponseDict(TypedDict, total=False):
     created: int
     object: Literal["chat.completion", "chat.completion.chunk"]
     choices: list[ChoiceDict]
-    usage: Optional[UsageData]
-    system_fingerprint: Optional[str]
+    usage: UsageData | None
+    system_fingerprint: str | None
 
 
 class EmbeddingResponseDataDict(TypedDict, total=False):
@@ -239,11 +239,11 @@ class EmbeddingResponseDict(TypedDict, total=False):
     Dictionary representation of embedding response.
     """
     
-    id: Optional[str]
+    id: str | None
     model: str
     object: Literal["list"]
     data: list[EmbeddingResponseDataDict]
-    usage: Optional[UsageData]
+    usage: UsageData | None
 
 
 class RerankResultDict(TypedDict, total=False):
@@ -253,7 +253,7 @@ class RerankResultDict(TypedDict, total=False):
     
     index: int
     relevance_score: float
-    document: Optional[dict[str, Any]]
+    document: dict[str, Any] | None
 
 
 class RerankResponseDict(TypedDict, total=False):
@@ -261,10 +261,10 @@ class RerankResponseDict(TypedDict, total=False):
     Dictionary representation of rerank response.
     """
     
-    id: Optional[str]
+    id: str | None
     model: str
     results: list[RerankResultDict]
-    usage: Optional[UsageData]
+    usage: UsageData | None
 
 
 # Langfuse context types
@@ -277,16 +277,16 @@ class LangfuseContextDict(TypedDict, total=False):
     
     trace_name: str
     trace_id: str
-    session_id: Optional[str]
-    user_id: Optional[str]
-    tags: Optional[list[str]]
-    metadata: Optional[dict[str, Any]]
-    extra: Optional[dict[str, Any]]
+    session_id: str | None
+    user_id: str | None
+    tags: list[str] | None
+    metadata: dict[str, Any] | None
+    extra: dict[str, Any] | None
     
     # Multi-tenant context
-    tenant_id: Optional[str]
-    project_id: Optional[str]
-    conversation_id: Optional[str]
+    tenant_id: str | None
+    project_id: str | None
+    conversation_id: str | None
 
 
 # Provider configuration types
@@ -297,27 +297,27 @@ class ProviderConfigDict(TypedDict, total=False):
     Dictionary representation of provider configuration.
     """
     
-    id: Optional[str]
+    id: str | None
     provider_type: str
     api_key_encrypted: str
-    base_url: Optional[str]
+    base_url: str | None
     
     # Model configuration
     llm_model: str
-    llm_small_model: Optional[str]
-    embedding_model: Optional[str]
-    reranker_model: Optional[str]
+    llm_small_model: str | None
+    embedding_model: str | None
+    reranker_model: str | None
     
     # Health check configuration
     health_check_enabled: bool
-    health_check_model: Optional[str]
+    health_check_model: str | None
     
     # Rate limiting
     max_concurrent_requests: int
     
     # Metadata
-    created_at: Optional[str]
-    updated_at: Optional[str]
+    created_at: str | None
+    updated_at: str | None
     is_active: bool
 
 
@@ -332,8 +332,8 @@ class CacheKeyDict(TypedDict, total=False):
     messages_hash: str
     model: str
     temperature: float
-    tools_hash: Optional[str]
-    response_format_hash: Optional[str]
+    tools_hash: str | None
+    response_format_hash: str | None
 
 
 class CachedResponseDict(TypedDict, total=False):
@@ -342,8 +342,8 @@ class CachedResponseDict(TypedDict, total=False):
     """
     
     content: str
-    tool_calls: Optional[list[ToolCallDict]]
-    finish_reason: Optional[str]
-    usage: Optional[UsageData]
+    tool_calls: list[ToolCallDict] | None
+    finish_reason: str | None
+    usage: UsageData | None
     created_at: float
-    expires_at: Optional[float]
+    expires_at: float | None

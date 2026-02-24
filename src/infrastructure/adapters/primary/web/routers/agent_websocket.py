@@ -22,9 +22,9 @@ from src.infrastructure.adapters.primary.web.websocket.router import (
 manager = get_connection_manager()
 
 __all__ = [
-    "router",
     "ConnectionManager",
     "get_connection_manager",
     "get_ws_connection_manager",
     "manager",
+    "router",
 ]

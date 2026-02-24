@@ -11,7 +11,8 @@ P0-2 Optimization: Reduces I/O overhead during streaming by:
 import logging
 import random
 import time
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ class TokenDeltaSampler:
         self,
         sample_rate: float = 0.1,
         min_sample_interval: float = 0.5,
-    ):
+    ) -> None:
         """
         Initialize the token delta sampler.
 
@@ -120,8 +121,8 @@ class BatchLogBuffer:
         self,
         max_size: int = 100,
         flush_interval: float = 1.0,
-        flush_callback: Optional[Callable[[List[Dict[str, Any]]], None]] = None,
-    ):
+        flush_callback: Callable[[list[dict[str, Any]]], None] | None = None,
+    ) -> None:
         """
         Initialize the batch log buffer.
 
@@ -133,10 +134,10 @@ class BatchLogBuffer:
         self.max_size = max_size
         self.flush_interval = flush_interval
         self.flush_callback = flush_callback or self._default_flush
-        self.entries: List[Dict[str, Any]] = []
+        self.entries: list[dict[str, Any]] = []
         self._last_flush_time = time.time()
 
-    def _default_flush(self, entries: List[Dict[str, Any]]) -> None:
+    def _default_flush(self, entries: list[dict[str, Any]]) -> None:
         """Default flush callback - logs to standard logger."""
         for entry in entries:
             level = entry.get("level", "info").lower()

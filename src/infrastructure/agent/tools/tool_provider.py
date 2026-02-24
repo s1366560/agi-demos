@@ -5,18 +5,19 @@ for ReActAgent, enabling dynamic tool loading at runtime.
 """
 
 import logging
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-SelectionContextProvider = Callable[[], Dict[str, Any]]
-SelectionPipeline = Callable[[Dict[str, Any], Optional[Dict[str, Any]]], Dict[str, Any]]
+SelectionContextProvider = Callable[[], dict[str, Any]]
+SelectionPipeline = Callable[[dict[str, Any], dict[str, Any] | None], dict[str, Any]]
 
 
 def create_cached_tool_provider(
     project_id: str,
-    fallback_tools: Optional[Dict[str, Any]] = None,
-) -> Callable[[], Dict[str, Any]]:
+    fallback_tools: dict[str, Any] | None = None,
+) -> Callable[[], dict[str, Any]]:
     """Create a tool provider that reads from the tools cache.
 
     This is the recommended way to enable hot-plug for tools. The provider
@@ -34,7 +35,7 @@ def create_cached_tool_provider(
         get_cached_tools_for_project,
     )
 
-    def provider() -> Dict[str, Any]:
+    def provider() -> dict[str, Any]:
         cached = get_cached_tools_for_project(project_id)
         if cached is not None:
             return cached
@@ -53,8 +54,8 @@ def create_cached_tool_provider(
 
 
 def create_composite_tool_provider(
-    providers: list[Callable[[], Dict[str, Any]]],
-) -> Callable[[], Dict[str, Any]]:
+    providers: list[Callable[[], dict[str, Any]]],
+) -> Callable[[], dict[str, Any]]:
     """Create a tool provider that aggregates multiple providers.
 
     Useful for combining builtin tools, MCP tools, and skill tools.
@@ -65,7 +66,7 @@ def create_composite_tool_provider(
     Returns:
         A callable that returns merged tools dict from all providers
     """
-    def provider() -> Dict[str, Any]:
+    def provider() -> dict[str, Any]:
         tools = {}
         for p in providers:
             try:
@@ -78,10 +79,10 @@ def create_composite_tool_provider(
 
 
 def create_pipeline_tool_provider(
-    base_provider: Callable[[], Dict[str, Any]],
+    base_provider: Callable[[], dict[str, Any]],
     selection_pipeline: SelectionPipeline,
-    context_provider: Optional[SelectionContextProvider] = None,
-) -> Callable[[], Dict[str, Any]]:
+    context_provider: SelectionContextProvider | None = None,
+) -> Callable[[], dict[str, Any]]:
     """Wrap a provider with a selection pipeline.
 
     Args:
@@ -93,7 +94,7 @@ def create_pipeline_tool_provider(
         Provider callable that applies selection pipeline.
     """
 
-    def provider() -> Dict[str, Any]:
+    def provider() -> dict[str, Any]:
         tools = base_provider()
         context = context_provider() if context_provider else None
         selected = selection_pipeline(tools, context)
@@ -108,7 +109,7 @@ def create_pipeline_tool_provider(
 
 def create_mcp_tool_provider(
     tenant_id: str,
-) -> Callable[[], Dict[str, Any]]:
+) -> Callable[[], dict[str, Any]]:
     """Create a tool provider that reads MCP tools from cache.
 
     This provider returns MCP tools from the TTL cache without making
@@ -122,7 +123,7 @@ def create_mcp_tool_provider(
     """
 
     # Access the MCP tools cache directly (synchronous)
-    def provider() -> Dict[str, Any]:
+    def provider() -> dict[str, Any]:
         # Note: This accesses the internal cache structure
         # A more robust solution would expose a sync API in agent_session_pool
         try:
@@ -143,8 +144,8 @@ def create_mcp_tool_provider(
 
 
 def create_static_tool_provider(
-    tools: Dict[str, Any],
-) -> Callable[[], Dict[str, Any]]:
+    tools: dict[str, Any],
+) -> Callable[[], dict[str, Any]]:
     """Create a tool provider that always returns the same tools.
 
     Useful for testing or when tools don't need to change.
@@ -155,7 +156,7 @@ def create_static_tool_provider(
     Returns:
         A callable that returns the static tools
     """
-    def provider() -> Dict[str, Any]:
+    def provider() -> dict[str, Any]:
         return tools.copy()
 
     return provider

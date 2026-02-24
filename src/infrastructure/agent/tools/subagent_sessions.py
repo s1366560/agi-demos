@@ -4,8 +4,9 @@ import asyncio
 import inspect
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def _resolve_spawn_callback_signature(
     callback: Callable[..., Awaitable[str]],
-) -> tuple[Optional[set[str]], bool]:
+) -> tuple[set[str] | None, bool]:
     """Resolve callback kwargs support for backwards-compatible spawn options."""
     target = callback
     side_effect = getattr(callback, "side_effect", None)
@@ -45,10 +46,10 @@ def _resolve_spawn_callback_signature(
 
 
 def _filter_spawn_options(
-    options: Dict[str, Any],
-    accepted_params: Optional[set[str]],
+    options: dict[str, Any],
+    accepted_params: set[str] | None,
     accepts_kwargs: bool,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     if accepts_kwargs or accepted_params is None:
         return dict(options)
     return {
@@ -61,7 +62,7 @@ def _record_announce_event(
     conversation_id: str,
     run_id: str,
     event_type: str,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     max_events: int = 20,
 ) -> None:
     """Persist bounded announce history into run metadata."""
@@ -78,11 +79,11 @@ def _record_announce_event(
     announce_events.append(
         {
             "type": event_type,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             **payload,
         }
     )
-    metadata: Dict[str, Any] = {"announce_events": announce_events}
+    metadata: dict[str, Any] = {"announce_events": announce_events}
     if dropped > 0:
         metadata["announce_events_dropped"] = dropped
     run_registry.attach_metadata(conversation_id, run_id, metadata)
@@ -92,13 +93,13 @@ def _build_lifecycle_metadata(
     *,
     session_mode: str,
     requester_session_key: str,
-    lineage_root_run_id: Optional[str],
-    parent_run_id: Optional[str] = None,
-    delegation_depth: Optional[int] = None,
-    extra: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    lineage_root_run_id: str | None,
+    parent_run_id: str | None = None,
+    delegation_depth: int | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Build normalized run metadata for control-plane lifecycle tracking."""
-    metadata: Dict[str, Any] = {
+    metadata: dict[str, Any] = {
         "session_mode": session_mode,
         "requester_session_key": requester_session_key,
         "control_plane_version": "v2",
@@ -119,15 +120,15 @@ class SessionsSpawnTool(AgentTool):
 
     def __init__(
         self,
-        subagent_names: List[str],
-        subagent_descriptions: Dict[str, str],
+        subagent_names: list[str],
+        subagent_descriptions: dict[str, str],
         spawn_callback: Callable[..., Awaitable[str]],
         run_registry: SubAgentRunRegistry,
         conversation_id: str,
         max_active_runs: int = 16,
-        max_active_runs_per_lineage: Optional[int] = None,
-        max_children_per_requester: Optional[int] = None,
-        requester_session_key: Optional[str] = None,
+        max_active_runs_per_lineage: int | None = None,
+        max_children_per_requester: int | None = None,
+        requester_session_key: str | None = None,
         delegation_depth: int = 0,
         max_delegation_depth: int = 1,
         max_spawn_retries: int = 2,
@@ -156,14 +157,14 @@ class SessionsSpawnTool(AgentTool):
         self._spawn_callback_params, self._spawn_callback_accepts_kwargs = (
             _resolve_spawn_callback_signature(spawn_callback)
         )
-        self._pending_events: List[Dict[str, Any]] = []
+        self._pending_events: list[dict[str, Any]] = []
 
-    def consume_pending_events(self) -> List[Dict[str, Any]]:
+    def consume_pending_events(self) -> list[dict[str, Any]]:
         events = list(self._pending_events)
         self._pending_events.clear()
         return events
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -223,7 +224,7 @@ class SessionsSpawnTool(AgentTool):
         agent_id: str = "",
         model: str = "",
         thinking: str = "",
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> str:
         self._pending_events.clear()
         if not subagent_name or subagent_name not in self._subagent_names:
@@ -264,7 +265,7 @@ class SessionsSpawnTool(AgentTool):
 
         model_override = (model or "").strip() or None
         thinking_override = (thinking or "").strip() or None
-        spawn_options: Dict[str, Any] = {
+        spawn_options: dict[str, Any] = {
             "spawn_mode": spawn_mode,
             "thread_requested": thread_requested,
             "cleanup": cleanup_policy,
@@ -365,7 +366,7 @@ class SessionsSpawnTool(AgentTool):
         subagent_name: str,
         task: str,
         run_id: str,
-        spawn_options: Dict[str, Any],
+        spawn_options: dict[str, Any],
     ) -> str:
         filtered_options = _filter_spawn_options(
             spawn_options,
@@ -379,9 +380,9 @@ class SessionsSpawnTool(AgentTool):
         run_id: str,
         subagent_name: str,
         task: str,
-        spawn_options: Dict[str, Any],
+        spawn_options: dict[str, Any],
     ) -> int:
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         for attempt in range(self._max_spawn_retries + 1):
             try:
                 await self._invoke_spawn_callback(
@@ -455,7 +456,7 @@ class SessionsListTool(AgentTool):
         self,
         run_registry: SubAgentRunRegistry,
         conversation_id: str,
-        requester_session_key: Optional[str] = None,
+        requester_session_key: str | None = None,
         visibility_default: str = "tree",
     ) -> None:
         super().__init__(
@@ -479,7 +480,7 @@ class SessionsListTool(AgentTool):
             else "tree"
         )
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -516,9 +517,9 @@ class SessionsListTool(AgentTool):
         status: str = "active",
         visibility: str = "",
         limit: int = 20,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> str:
-        statuses: Optional[List[SubAgentRunStatus]]
+        statuses: list[SubAgentRunStatus] | None
         if status == "active":
             statuses = [SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING]
         elif status:
@@ -558,7 +559,7 @@ class SessionsHistoryTool(AgentTool):
         self,
         run_registry: SubAgentRunRegistry,
         conversation_id: str,
-        requester_session_key: Optional[str] = None,
+        requester_session_key: str | None = None,
         visibility_default: str = "tree",
     ) -> None:
         super().__init__(
@@ -579,7 +580,7 @@ class SessionsHistoryTool(AgentTool):
             else "tree"
         )
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -598,7 +599,7 @@ class SessionsHistoryTool(AgentTool):
             "required": [],
         }
 
-    async def execute(self, visibility: str = "", limit: int = 50, **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, visibility: str = "", limit: int = 50, **kwargs: Any) -> str:
         effective_visibility = (visibility or self._visibility_default).strip().lower()
         if effective_visibility not in {"self", "tree", "all"}:
             return f"Error: invalid visibility '{effective_visibility}'"
@@ -631,7 +632,7 @@ class SessionsTimelineTool(AgentTool):
         self._run_registry = run_registry
         self._conversation_id = conversation_id
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -655,7 +656,7 @@ class SessionsTimelineTool(AgentTool):
         run_id: str = "",
         include_descendants: bool = False,
         include_announce: bool = True,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> str:
         if not run_id:
             return "Error: run_id is required"
@@ -663,7 +664,7 @@ class SessionsTimelineTool(AgentTool):
         if not root_run:
             return f"Error: run_id '{run_id}' not found"
 
-        runs: Dict[str, SubAgentRun] = {root_run.run_id: root_run}
+        runs: dict[str, SubAgentRun] = {root_run.run_id: root_run}
         if include_descendants:
             descendants = self._run_registry.list_descendant_runs(
                 self._conversation_id,
@@ -673,7 +674,7 @@ class SessionsTimelineTool(AgentTool):
             for run in descendants:
                 runs[run.run_id] = run
 
-        events: List[Dict[str, Any]] = []
+        events: list[dict[str, Any]] = []
         for run in runs.values():
             events.extend(self._build_timeline_for_run(run, include_announce=include_announce))
 
@@ -695,8 +696,8 @@ class SessionsTimelineTool(AgentTool):
         run: SubAgentRun,
         *,
         include_announce: bool,
-    ) -> List[Dict[str, Any]]:
-        events: List[Dict[str, Any]] = [
+    ) -> list[dict[str, Any]]:
+        events: list[dict[str, Any]] = [
             {
                 "run_id": run.run_id,
                 "subagent_name": run.subagent_name,
@@ -780,9 +781,9 @@ class SessionsOverviewTool(AgentTool):
         self,
         run_registry: SubAgentRunRegistry,
         conversation_id: str,
-        requester_session_key: Optional[str] = None,
+        requester_session_key: str | None = None,
         visibility_default: str = "tree",
-        observability_stats_provider: Optional[Callable[[], Dict[str, Any]]] = None,
+        observability_stats_provider: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         super().__init__(
             name="sessions_overview",
@@ -803,7 +804,7 @@ class SessionsOverviewTool(AgentTool):
         )
         self._observability_stats_provider = observability_stats_provider
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -816,7 +817,7 @@ class SessionsOverviewTool(AgentTool):
             "required": [],
         }
 
-    async def execute(self, visibility: str = "", **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, visibility: str = "", **kwargs: Any) -> str:
         effective_visibility = (visibility or self._visibility_default).strip().lower()
         if effective_visibility not in {"self", "tree", "all"}:
             return f"Error: invalid visibility '{effective_visibility}'"
@@ -826,18 +827,18 @@ class SessionsOverviewTool(AgentTool):
             self._requester_session_key,
             visibility=effective_visibility,
         )
-        status_counts: Dict[str, int] = {status.value: 0 for status in SubAgentRunStatus}
-        subagent_counts: Dict[str, int] = {}
-        error_counts: Dict[str, int] = {}
+        status_counts: dict[str, int] = {status.value: 0 for status in SubAgentRunStatus}
+        subagent_counts: dict[str, int] = {}
+        error_counts: dict[str, int] = {}
         announce_retry_count = 0
         announce_giveup_count = 0
         announce_delivered_count = 0
         announce_dropped_count = 0
         announce_backlog_count = 0
-        lane_wait_values: List[int] = []
-        archive_lag_values: List[int] = []
+        lane_wait_values: list[int] = []
+        archive_lag_values: list[int] = []
         retention_seconds = max(int(self._run_registry.terminal_retention_seconds), 0)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         terminal_statuses = {
             SubAgentRunStatus.COMPLETED,
             SubAgentRunStatus.FAILED,
@@ -973,7 +974,7 @@ class SessionsWaitTool(AgentTool):
         self._run_registry = run_registry
         self._conversation_id = conversation_id
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -999,7 +1000,7 @@ class SessionsWaitTool(AgentTool):
         run_id: str = "",
         timeout_seconds: float = 30,
         poll_interval_ms: int = 200,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> str:
         if not run_id:
             return "Error: run_id is required"
@@ -1012,12 +1013,12 @@ class SessionsWaitTool(AgentTool):
         except (TypeError, ValueError):
             poll_interval = 0.2
 
-        started_at = datetime.now(timezone.utc)
+        started_at = datetime.now(UTC)
         while True:
             run = self._run_registry.get_run(self._conversation_id, run_id)
             if not run:
                 return f"Error: run_id '{run_id}' not found"
-            elapsed = (datetime.now(timezone.utc) - started_at).total_seconds()
+            elapsed = (datetime.now(UTC) - started_at).total_seconds()
             is_terminal = run.status in self._TERMINAL_STATUSES
             if is_terminal or elapsed >= timeout:
                 announce_payload = run.metadata.get("announce_payload")
@@ -1059,7 +1060,7 @@ class SessionsAckTool(AgentTool):
         self,
         run_registry: SubAgentRunRegistry,
         conversation_id: str,
-        requester_session_key: Optional[str] = None,
+        requester_session_key: str | None = None,
     ) -> None:
         super().__init__(
             name="sessions_ack",
@@ -1069,7 +1070,7 @@ class SessionsAckTool(AgentTool):
         self._conversation_id = conversation_id
         self._requester_session_key = (requester_session_key or conversation_id).strip()
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -1083,7 +1084,7 @@ class SessionsAckTool(AgentTool):
             "required": ["run_id"],
         }
 
-    async def execute(self, run_id: str = "", note: str = "", **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, run_id: str = "", note: str = "", **kwargs: Any) -> str:
         if not run_id:
             return "Error: run_id is required"
         run = self._run_registry.get_run(self._conversation_id, run_id)
@@ -1102,7 +1103,7 @@ class SessionsAckTool(AgentTool):
             ack_events = ack_events[-19:]
         ack_event = {
             "type": "ack",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "requester_session_key": self._requester_session_key,
         }
         if note and note.strip():
@@ -1144,9 +1145,9 @@ class SessionsSendTool(AgentTool):
         conversation_id: str,
         spawn_callback: Callable[..., Awaitable[str]],
         max_active_runs: int = 16,
-        max_active_runs_per_lineage: Optional[int] = None,
-        max_children_per_requester: Optional[int] = None,
-        requester_session_key: Optional[str] = None,
+        max_active_runs_per_lineage: int | None = None,
+        max_children_per_requester: int | None = None,
+        requester_session_key: str | None = None,
         delegation_depth: int = 0,
         max_delegation_depth: int = 1,
         max_spawn_retries: int = 2,
@@ -1173,14 +1174,14 @@ class SessionsSendTool(AgentTool):
         self._spawn_callback_params, self._spawn_callback_accepts_kwargs = (
             _resolve_spawn_callback_signature(spawn_callback)
         )
-        self._pending_events: List[Dict[str, Any]] = []
+        self._pending_events: list[dict[str, Any]] = []
 
-    def consume_pending_events(self) -> List[Dict[str, Any]]:
+    def consume_pending_events(self) -> list[dict[str, Any]]:
         events = list(self._pending_events)
         self._pending_events.clear()
         return events
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -1201,7 +1202,7 @@ class SessionsSendTool(AgentTool):
         run_id: str = "",
         task: str = "",
         run_timeout_seconds: int = 0,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> str:
         self._pending_events.clear()
         if not run_id:
@@ -1251,7 +1252,7 @@ class SessionsSendTool(AgentTool):
             parent_timeout = int(parent_run.metadata.get("run_timeout_seconds") or 0)
         except (TypeError, ValueError):
             parent_timeout = 0
-        follow_up_options: Dict[str, Any] = {
+        follow_up_options: dict[str, Any] = {
             "spawn_mode": str(parent_run.metadata.get("spawn_mode") or "run"),
             "thread_requested": bool(parent_run.metadata.get("thread_requested")),
             "cleanup": str(parent_run.metadata.get("cleanup") or "keep"),
@@ -1340,7 +1341,7 @@ class SessionsSendTool(AgentTool):
         subagent_name: str,
         task: str,
         run_id: str,
-        spawn_options: Dict[str, Any],
+        spawn_options: dict[str, Any],
     ) -> str:
         filtered_options = _filter_spawn_options(
             spawn_options,
@@ -1354,9 +1355,9 @@ class SessionsSendTool(AgentTool):
         run_id: str,
         subagent_name: str,
         task: str,
-        spawn_options: Dict[str, Any],
+        spawn_options: dict[str, Any],
     ) -> int:
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
         for attempt in range(self._max_spawn_retries + 1):
             try:
                 await self._invoke_spawn_callback(
@@ -1432,15 +1433,15 @@ class SubAgentsControlTool(AgentTool):
         self,
         run_registry: SubAgentRunRegistry,
         conversation_id: str,
-        subagent_names: List[str],
-        subagent_descriptions: Dict[str, str],
+        subagent_names: list[str],
+        subagent_descriptions: dict[str, str],
         cancel_callback: Callable[[str], Awaitable[bool]],
-        restart_callback: Optional[Callable[[str, str, str], Awaitable[str]]] = None,
+        restart_callback: Callable[[str, str, str], Awaitable[str]] | None = None,
         steer_rate_limit_ms: int = 2000,
         max_active_runs: int = 16,
-        max_active_runs_per_lineage: Optional[int] = None,
-        max_children_per_requester: Optional[int] = None,
-        requester_session_key: Optional[str] = None,
+        max_active_runs_per_lineage: int | None = None,
+        max_children_per_requester: int | None = None,
+        requester_session_key: str | None = None,
         delegation_depth: int = 0,
         max_delegation_depth: int = 1,
     ) -> None:
@@ -1468,15 +1469,15 @@ class SubAgentsControlTool(AgentTool):
         self._requester_session_key = (requester_session_key or conversation_id).strip()
         self._delegation_depth = delegation_depth
         self._max_delegation_depth = max(1, max_delegation_depth)
-        self._last_steer_at: Dict[str, datetime] = {}
-        self._pending_events: List[Dict[str, Any]] = []
+        self._last_steer_at: dict[str, datetime] = {}
+        self._pending_events: list[dict[str, Any]] = []
 
-    def consume_pending_events(self) -> List[Dict[str, Any]]:
+    def consume_pending_events(self) -> list[dict[str, Any]]:
         events = list(self._pending_events)
         self._pending_events.clear()
         return events
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -1532,7 +1533,7 @@ class SubAgentsControlTool(AgentTool):
         run_timeout_seconds: int = 0,
         include_descendants: bool = True,
         include_announce: bool = True,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> str:
         self._pending_events.clear()
         normalized_action = (action or "list").strip().lower()
@@ -1571,7 +1572,7 @@ class SubAgentsControlTool(AgentTool):
             return await self._steer_run(run_id=run_id, target=target, instruction=instruction)
         return "Error: action must be one of list|info|log|send|kill|steer"
 
-    def _ensure_mutation_allowed(self, action_name: str) -> Optional[str]:
+    def _ensure_mutation_allowed(self, action_name: str) -> str | None:
         if self._delegation_depth >= self._max_delegation_depth:
             return (
                 f"Error: subagents {action_name} is disabled at current delegation depth "
@@ -1596,7 +1597,7 @@ class SubAgentsControlTool(AgentTool):
             }
             for idx, run in enumerate(active_runs)
         ]
-        active_by_name: Dict[str, int] = {}
+        active_by_name: dict[str, int] = {}
         for run in active_runs:
             active_by_name[run.subagent_name] = active_by_name.get(run.subagent_name, 0) + 1
         return json.dumps(
@@ -1618,7 +1619,7 @@ class SubAgentsControlTool(AgentTool):
         )
 
     @staticmethod
-    def _run_label(run: SubAgentRun) -> Optional[str]:
+    def _run_label(run: SubAgentRun) -> str | None:
         for key in ("label", "run_label", "session_label"):
             value = str(run.metadata.get(key) or "").strip()
             if value:
@@ -1633,7 +1634,7 @@ class SubAgentsControlTool(AgentTool):
         target_token: str,
         *,
         include_terminal: bool,
-    ) -> tuple[List[SubAgentRun], Optional[str]]:
+    ) -> tuple[list[SubAgentRun], str | None]:
         token = target_token.strip()
         if not token:
             return [], "Error: target (or run_id) is required"
@@ -1676,7 +1677,7 @@ class SubAgentsControlTool(AgentTool):
         return [run], None
 
     @staticmethod
-    def _serialize_run_snapshot(run: SubAgentRun) -> Dict[str, Any]:
+    def _serialize_run_snapshot(run: SubAgentRun) -> dict[str, Any]:
         return {
             "run_id": run.run_id,
             "subagent_name": run.subagent_name,
@@ -1698,7 +1699,7 @@ class SubAgentsControlTool(AgentTool):
         if error:
             return error
 
-        run_by_id: Dict[str, SubAgentRun] = {}
+        run_by_id: dict[str, SubAgentRun] = {}
         for run in matched_runs:
             run_by_id[run.run_id] = run
             if include_descendants:
@@ -1794,7 +1795,7 @@ class SubAgentsControlTool(AgentTool):
         ):
             return f"Run {target_token} is already terminal ({matched_roots[0].status.value})"
 
-        candidate_roots: Dict[str, str] = {}
+        candidate_roots: dict[str, str] = {}
         for root in matched_roots:
             if root.status in self._ACTIVE_STATUSES:
                 candidate_roots[root.run_id] = root.run_id
@@ -1870,7 +1871,7 @@ class SubAgentsControlTool(AgentTool):
         run = active_runs[0]
         resolved_run_id = run.run_id
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         last_steer = self._last_steer_at.get(resolved_run_id)
         if last_steer:
             elapsed_ms = int((now - last_steer).total_seconds() * 1000)

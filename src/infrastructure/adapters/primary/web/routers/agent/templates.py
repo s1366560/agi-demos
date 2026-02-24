@@ -1,8 +1,7 @@
 """Prompt template CRUD API endpoints."""
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -38,22 +37,22 @@ class TemplateCreateRequest(BaseModel):
     title: str = Field(..., max_length=200)
     content: str = Field(..., min_length=1)
     category: str = Field(default="general", max_length=50)
-    project_id: Optional[str] = None
+    project_id: str | None = None
     variables: list[TemplateVariableSchema] = Field(default_factory=list)
     is_system: bool = False
 
 
 class TemplateUpdateRequest(BaseModel):
-    title: Optional[str] = Field(default=None, max_length=200)
-    content: Optional[str] = None
-    category: Optional[str] = Field(default=None, max_length=50)
-    variables: Optional[list[TemplateVariableSchema]] = None
+    title: str | None = Field(default=None, max_length=200)
+    content: str | None = None
+    category: str | None = Field(default=None, max_length=50)
+    variables: list[TemplateVariableSchema] | None = None
 
 
 class TemplateResponse(BaseModel):
     id: str
     tenant_id: str
-    project_id: Optional[str] = None
+    project_id: str | None = None
     created_by: str
     title: str
     content: str
@@ -138,8 +137,8 @@ async def create_template(
 @router.get("/templates", response_model=list[TemplateResponse])
 async def list_templates(
     tenant_id: str = Query(..., description="Tenant ID"),
-    category: Optional[str] = Query(default=None),
-    project_id: Optional[str] = Query(default=None),
+    category: str | None = Query(default=None),
+    project_id: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
@@ -208,7 +207,7 @@ async def update_template(
                 )
                 for v in data.variables
             ]
-        template.updated_at = datetime.now(timezone.utc)
+        template.updated_at = datetime.now(UTC)
         saved = await repo.save(template)
         await db.commit()
         return _to_response(saved)

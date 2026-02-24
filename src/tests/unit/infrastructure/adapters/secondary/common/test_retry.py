@@ -9,6 +9,8 @@ Tests the retry mechanism with:
 """
 
 
+import contextlib
+
 import pytest
 
 from src.infrastructure.adapters.secondary.common.retry import (
@@ -192,14 +194,12 @@ class TestRetryWithBackoff:
             import time
             for _ in range(5):
                 before = time.time()
-                try:
+                with contextlib.suppress(MaxRetriesExceededError):
                     await retry_with_backoff(
                         lambda: (_ for _ in ()).throw(ConnectionError("Failed")),
                         max_retries=1,
                         base_delay=0.05,
                     )
-                except MaxRetriesExceededError:
-                    pass
                 after = time.time()
                 delays_list.append(after - before)
 
@@ -296,7 +296,7 @@ class TestRetryWithBackoff:
     async def test_exception_with_custom_attributes(self):
         """Test that exception attributes are preserved."""
         class CustomError(Exception):
-            def __init__(self, message, code):
+            def __init__(self, message, code) -> None:
                 super().__init__(message)
                 self.code = code
 
@@ -374,7 +374,7 @@ class TestRetryDecorator:
     async def test_decorator_on_method(self):
         """Test decorator on class method."""
         class MyClass:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.attempts = 0
 
             @retry_decorator(max_retries=3, base_delay=0.01)

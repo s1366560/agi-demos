@@ -11,7 +11,7 @@ import asyncio
 import logging
 import re
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from neo4j import AsyncDriver, AsyncGraphDatabase
 
@@ -79,7 +79,7 @@ class Neo4jClient:
         connection_timeout: float = CONNECTION_TIMEOUT,
         acquisition_timeout: float = ACQUISITION_TIMEOUT,
         max_pool_size: int = MAX_CONNECTION_POOL_SIZE,
-    ):
+    ) -> None:
         """
         Initialize Neo4j client.
 
@@ -100,7 +100,7 @@ class Neo4jClient:
         self.acquisition_timeout = acquisition_timeout
         self.max_pool_size = max_pool_size
 
-        self._driver: Optional[AsyncDriver] = None
+        self._driver: AsyncDriver | None = None
         self._initialized = False
 
     async def initialize(self) -> None:
@@ -132,7 +132,7 @@ class Neo4jClient:
             )
             self._initialized = True
             logger.info("Neo4j connection established successfully")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"Neo4j connection timeout after {self.connection_timeout}s")
             raise ConnectionError(f"Neo4j connection timeout to {self.uri}")
         except Exception as e:
@@ -167,8 +167,8 @@ class Neo4jClient:
         self,
         query: str,
         timeout: float = TRANSACTION_TIMEOUT,
-        **parameters: Any,  # noqa: ANN401
-    ) -> Any:  # noqa: ANN401
+        **parameters: Any,
+    ) -> Any:
         """
         Execute a Cypher query with timeout handling.
 
@@ -193,7 +193,7 @@ class Neo4jClient:
                 timeout=timeout,
             )
             return result
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"Query timeout after {timeout}s: {query[:100]}...")
             raise TimeoutError(f"Neo4j query timeout after {timeout}s")
 
@@ -215,9 +215,9 @@ class Neo4jClient:
 
     async def save_node(
         self,
-        labels: List[str],
+        labels: list[str],
         uuid: str,
-        properties: Dict[str, Any],
+        properties: dict[str, Any],
     ) -> None:
         """
         Save (MERGE) a node with the given labels and properties.
@@ -256,7 +256,7 @@ class Neo4jClient:
         from_uuid: str,
         to_uuid: str,
         relationship_type: str,
-        properties: Optional[Dict[str, Any]] = None,
+        properties: dict[str, Any] | None = None,
     ) -> None:
         """
         Save (MERGE) an edge between two nodes.
@@ -320,8 +320,8 @@ class Neo4jClient:
     async def find_node_by_uuid(
         self,
         uuid: str,
-        labels: Optional[List[str]] = None,
-    ) -> Optional[Dict[str, Any]]:
+        labels: list[str] | None = None,
+    ) -> dict[str, Any] | None:
         """
         Find a node by UUID.
 
@@ -406,7 +406,7 @@ class Neo4jClient:
                     self.execute_query(index_query),
                     timeout=TRANSACTION_TIMEOUT,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(f"Index creation timed out: {index_query[:50]}...")
             except Exception as e:
                 # Already exists errors are OK
@@ -452,7 +452,7 @@ class Neo4jClient:
             if "EquivalentSchemaRuleAlreadyExists" not in str(e):
                 logger.warning(f"Failed to create vector index: {e}")
 
-    async def get_vector_index_dimension(self, index_name: str) -> Optional[int]:
+    async def get_vector_index_dimension(self, index_name: str) -> int | None:
         """
         Get the dimension of an existing vector index.
 
@@ -535,10 +535,10 @@ class Neo4jClient:
     async def vector_search(
         self,
         index_name: str,
-        query_vector: List[float],
+        query_vector: list[float],
         limit: int = 10,
-        project_id: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        project_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Perform vector similarity search.
 
@@ -586,8 +586,8 @@ class Neo4jClient:
         index_name: str,
         query: str,
         limit: int = 10,
-        project_id: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        project_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         """
         Perform fulltext search.
 

@@ -5,7 +5,6 @@ This module defines all system roles and their associated permissions.
 Roles are hierarchical and organized by scope (tenant, project, system).
 """
 
-from typing import Dict, List
 
 from src.domain.model.auth.permissions import PermissionCode
 
@@ -34,7 +33,7 @@ class RoleDefinition:
     SYSTEM_ADMIN = "system_admin"
 
     # Mapping of role names to their permissions
-    ROLES: Dict[str, List[str]] = {
+    ROLES: dict[str, list[str]] = {
         # ========== Tenant Roles ==========
         TENANT_OWNER: [
             # Full control over tenant
@@ -148,7 +147,7 @@ class RoleDefinition:
     }
 
     @classmethod
-    def get_permissions_for_role(cls, role_name: str) -> List[str]:
+    def get_permissions_for_role(cls, role_name: str) -> list[str]:
         """
         Get all permissions for a given role.
 
@@ -180,7 +179,7 @@ class RoleDefinition:
         return role_name in cls.ROLES
 
     @classmethod
-    def get_all_roles(cls) -> List[str]:
+    def get_all_roles(cls) -> list[str]:
         """
         Get a list of all role names.
 
@@ -190,7 +189,7 @@ class RoleDefinition:
         return list(cls.ROLES.keys())
 
     @classmethod
-    def get_tenant_roles(cls) -> List[str]:
+    def get_tenant_roles(cls) -> list[str]:
         """
         Get all tenant-level roles.
 
@@ -200,7 +199,7 @@ class RoleDefinition:
         return [cls.TENANT_OWNER, cls.TENANT_ADMIN, cls.TENANT_MEMBER]
 
     @classmethod
-    def get_project_roles(cls) -> List[str]:
+    def get_project_roles(cls) -> list[str]:
         """
         Get all project-level roles.
 

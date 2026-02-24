@@ -27,7 +27,7 @@ class RedisSequenceService:
     SEQUENCE_KEY_PREFIX = "event_seq:"
     SEQUENCE_TTL = 86400 * 7  # 7 days
 
-    def __init__(self, redis_client: redis.Redis):
+    def __init__(self, redis_client: redis.Redis) -> None:
         """
         Initialize the Redis sequence service.
 

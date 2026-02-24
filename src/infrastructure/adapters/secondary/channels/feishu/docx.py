@@ -1,7 +1,7 @@
 """Feishu document (Docx) operations."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -9,14 +9,14 @@ logger = logging.getLogger(__name__)
 class FeishuDocClient:
     """Client for Feishu document operations."""
     
-    def __init__(self, client):
+    def __init__(self, client) -> None:
         self._client = client
     
     async def create_document(
         self,
         title: str,
-        folder_token: Optional[str] = None
-    ) -> Dict[str, str]:
+        folder_token: str | None = None
+    ) -> dict[str, str]:
         """Create a new document.
         
         Args:
@@ -43,7 +43,7 @@ class FeishuDocClient:
             "url": response["data"]["document"].get("url", ""),
         }
     
-    async def get_document(self, document_token: str) -> Dict[str, Any]:
+    async def get_document(self, document_token: str) -> dict[str, Any]:
         """Get document metadata.
         
         Args:
@@ -87,7 +87,7 @@ class FeishuDocClient:
         self,
         document_token: str,
         page_size: int = 500
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List all blocks in a document.
         
         Args:
@@ -122,7 +122,7 @@ class FeishuDocClient:
         
         return blocks
     
-    async def get_block(self, document_token: str, block_id: str) -> Dict[str, Any]:
+    async def get_block(self, document_token: str, block_id: str) -> dict[str, Any]:
         """Get a specific block.
         
         Args:
@@ -146,9 +146,9 @@ class FeishuDocClient:
         document_token: str,
         parent_block_id: str,
         block_type: int,
-        content: Dict[str, Any],
+        content: dict[str, Any],
         index: int = 0
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """Create a new block in the document.
         
         Args:
@@ -190,7 +190,7 @@ class FeishuDocClient:
         self,
         document_token: str,
         block_id: str,
-        content: Dict[str, Any]
+        content: dict[str, Any]
     ) -> None:
         """Update a block.
         

@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.shared_kernel import Entity
 
@@ -25,11 +25,11 @@ class LocalSandboxConfig:
     """
 
     workspace_path: str = "/workspace"
-    tunnel_url: Optional[str] = None
+    tunnel_url: str | None = None
     host: str = "localhost"
     port: int = 8765
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "workspace_path": self.workspace_path,
             "tunnel_url": self.tunnel_url,
@@ -38,7 +38,7 @@ class LocalSandboxConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "LocalSandboxConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "LocalSandboxConfig":
         return cls(
             workspace_path=data.get("workspace_path", "/workspace"),
             tunnel_url=data.get("tunnel_url"),
@@ -57,16 +57,16 @@ class SandboxConfig:
     """
 
     sandbox_type: SandboxType = SandboxType.CLOUD
-    local_config: Optional[LocalSandboxConfig] = None
+    local_config: LocalSandboxConfig | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "sandbox_type": self.sandbox_type.value,
             "local_config": self.local_config.to_dict() if self.local_config else None,
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SandboxConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "SandboxConfig":
         sandbox_type = data.get("sandbox_type", "cloud")
         if isinstance(sandbox_type, str):
             sandbox_type = SandboxType(sandbox_type)
@@ -85,20 +85,20 @@ class Project(Entity):
     tenant_id: str
     name: str
     owner_id: str
-    description: Optional[str] = None
-    member_ids: List[str] = field(default_factory=list)
-    memory_rules: Dict[str, Any] = field(default_factory=dict)
-    graph_config: Dict[str, Any] = field(default_factory=dict)
+    description: str | None = None
+    member_ids: list[str] = field(default_factory=list)
+    memory_rules: dict[str, Any] = field(default_factory=dict)
+    graph_config: dict[str, Any] = field(default_factory=dict)
     sandbox_config: SandboxConfig = field(default_factory=SandboxConfig)
     is_public: bool = False
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: Optional[datetime] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime | None = None
 
     def is_local_sandbox(self) -> bool:
         """Check if project uses local sandbox."""
         return self.sandbox_config.sandbox_type == SandboxType.LOCAL
 
-    def get_sandbox_tunnel_url(self) -> Optional[str]:
+    def get_sandbox_tunnel_url(self) -> str | None:
         """Get tunnel URL for local sandbox."""
         if self.sandbox_config.local_config:
             return self.sandbox_config.local_config.tunnel_url

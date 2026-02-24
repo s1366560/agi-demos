@@ -8,7 +8,7 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.model.mcp.transport import TransportConfig, TransportType
 from src.infrastructure.mcp.transport.base import (
@@ -28,10 +28,10 @@ class StdioTransport(BaseTransport):
     via JSON-RPC over stdin/stdout.
     """
 
-    def __init__(self, config: Optional[TransportConfig] = None):
+    def __init__(self, config: TransportConfig | None = None) -> None:
         """Initialize stdio transport."""
         super().__init__(config)
-        self._process: Optional[asyncio.subprocess.Process] = None
+        self._process: asyncio.subprocess.Process | None = None
         self._initialized = False
 
     async def start(self, config: TransportConfig) -> None:
@@ -108,7 +108,7 @@ class StdioTransport(BaseTransport):
 
         self._initialized = True
 
-    async def _send_notification(self, method: str, params: Dict[str, Any]) -> None:
+    async def _send_notification(self, method: str, params: dict[str, Any]) -> None:
         """Send a JSON-RPC notification (no response expected)."""
         if not self._process or not self._process.stdin:
             raise MCPTransportClosedError("Transport not connected")
@@ -119,9 +119,9 @@ class StdioTransport(BaseTransport):
     async def _send_request(
         self,
         method: str,
-        params: Optional[Dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
         timeout: float = 30.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Send a JSON-RPC request and wait for response."""
         request_id = self._next_request_id()
 
@@ -152,7 +152,7 @@ class StdioTransport(BaseTransport):
             try:
                 self._process.terminate()
                 await asyncio.wait_for(self._process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._process.kill()
                 await self._process.wait()
             except Exception as e:
@@ -164,8 +164,8 @@ class StdioTransport(BaseTransport):
 
     async def send(
         self,
-        message: Dict[str, Any],
-        timeout: Optional[float] = None,
+        message: dict[str, Any],
+        timeout: float | None = None,
     ) -> None:
         """
         Send a message to the subprocess stdin.
@@ -185,8 +185,8 @@ class StdioTransport(BaseTransport):
 
     async def receive(
         self,
-        timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         """
         Receive a message from subprocess stdout.
 
@@ -209,7 +209,7 @@ class StdioTransport(BaseTransport):
         try:
             logger.debug(f"Waiting for response (timeout={timeout}s)...")
             line = await asyncio.wait_for(self._process.stdout.readline(), timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Check if process is still running
             if self._process.returncode is not None:
                 stderr = await self._process.stderr.read() if self._process.stderr else b""
@@ -229,12 +229,12 @@ class StdioTransport(BaseTransport):
 
     # High-level API methods
 
-    async def list_tools(self) -> List[Dict[str, Any]]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools from the MCP server."""
         result = await self._send_request("tools/list")
         return result.get("tools", [])
 
-    async def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Dict[str, Any]:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the MCP server."""
         params = {"name": tool_name, "arguments": arguments}
         return await self._send_request("tools/call", params)

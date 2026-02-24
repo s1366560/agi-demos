@@ -6,7 +6,6 @@ following the Repository pattern.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from src.domain.model.agent.subagent import SubAgent
 
@@ -37,7 +36,7 @@ class SubAgentRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_by_id(self, subagent_id: str) -> Optional[SubAgent]:
+    async def get_by_id(self, subagent_id: str) -> SubAgent | None:
         """
         Get a subagent by its ID.
 
@@ -54,7 +53,7 @@ class SubAgentRepositoryPort(ABC):
         self,
         tenant_id: str,
         name: str,
-    ) -> Optional[SubAgent]:
+    ) -> SubAgent | None:
         """
         Get a subagent by name within a tenant.
 
@@ -103,7 +102,7 @@ class SubAgentRepositoryPort(ABC):
         enabled_only: bool = False,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[SubAgent]:
+    ) -> list[SubAgent]:
         """
         List all subagents for a tenant.
 
@@ -122,9 +121,9 @@ class SubAgentRepositoryPort(ABC):
     async def list_by_project(
         self,
         project_id: str,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
         enabled_only: bool = False,
-    ) -> List[SubAgent]:
+    ) -> list[SubAgent]:
         """
         List subagents for a project, including tenant-wide ones (project_id IS NULL).
 
@@ -206,7 +205,7 @@ class SubAgentRepositoryPort(ABC):
         tenant_id: str,
         query: str,
         enabled_only: bool = True,
-    ) -> List[SubAgent]:
+    ) -> list[SubAgent]:
         """
         Find subagents by keyword matching.
 

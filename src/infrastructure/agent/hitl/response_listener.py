@@ -20,10 +20,11 @@ Reliability:
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
-from typing import Any, Dict, Optional, Set
+from typing import Any
 
 import redis.asyncio as aioredis
 
@@ -72,9 +73,9 @@ class HITLResponseListener:
     def __init__(
         self,
         redis_client: aioredis.Redis,
-        session_registry: Optional[AgentSessionRegistry] = None,
-        worker_id: Optional[str] = None,
-    ):
+        session_registry: AgentSessionRegistry | None = None,
+        worker_id: str | None = None,
+    ) -> None:
         """
         Initialize the HITL Response Listener.
 
@@ -88,11 +89,11 @@ class HITLResponseListener:
         self._worker_id = worker_id or f"worker-{os.getpid()}"
 
         # Projects being listened to
-        self._projects: Set[tuple] = set()  # Set of (tenant_id, project_id)
+        self._projects: set[tuple] = set()  # Set of (tenant_id, project_id)
 
         # Running state
         self._running = False
-        self._listen_task: Optional[asyncio.Task] = None
+        self._listen_task: asyncio.Task | None = None
 
         # Metrics
         self._messages_received = 0
@@ -166,10 +167,8 @@ class HITLResponseListener:
 
         if self._listen_task:
             self._listen_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._listen_task
-            except asyncio.CancelledError:
-                pass
             self._listen_task = None
 
         logger.info(
@@ -227,7 +226,7 @@ class HITLResponseListener:
         self,
         stream_key: str,
         msg_id: str,
-        fields: Dict[bytes, bytes],
+        fields: dict[bytes, bytes],
     ) -> None:
         """
         Handle a single HITL response message.
@@ -318,7 +317,7 @@ class HITLResponseListener:
         except Exception as e:
             logger.warning(f"[HITLListener] Failed to ack message {msg_id}: {e}")
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get listener statistics."""
         return {
             "running": self._running,
@@ -337,11 +336,11 @@ class HITLResponseListener:
 
 
 # Global singleton for the current Worker process
-_listener_instance: Optional[HITLResponseListener] = None
+_listener_instance: HITLResponseListener | None = None
 
 
 async def get_hitl_response_listener(
-    redis_client: Optional[aioredis.Redis] = None,
+    redis_client: aioredis.Redis | None = None,
 ) -> HITLResponseListener:
     """
     Get or create the global HITLResponseListener instance.

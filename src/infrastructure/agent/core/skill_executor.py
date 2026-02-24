@@ -10,4 +10,4 @@ from src.infrastructure.agent.skill.skill_executor import (
     SkillExecutor,
 )
 
-__all__ = ["SkillExecutor", "SkillExecutionResult"]
+__all__ = ["SkillExecutionResult", "SkillExecutor"]

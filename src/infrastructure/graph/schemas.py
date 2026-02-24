@@ -8,9 +8,9 @@ This module defines the data structures used throughout the native graph system:
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator
@@ -43,10 +43,10 @@ class BaseNode(BaseModel):
     """Base class for all graph nodes."""
 
     uuid: str = Field(default_factory=lambda: str(uuid4()))
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    tenant_id: Optional[str] = None
-    project_id: Optional[str] = None
-    user_id: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    tenant_id: str | None = None
+    project_id: str | None = None
+    user_id: str | None = None
 
     class Config:
         """Pydantic config."""
@@ -66,17 +66,17 @@ class EpisodicNode(BaseNode):
     content: str
     source_description: str = ""
     source: EpisodeType = EpisodeType.TEXT
-    valid_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    valid_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     group_id: str = "global"
-    memory_id: Optional[str] = None
+    memory_id: str | None = None
     status: EpisodeStatus = EpisodeStatus.PROCESSING
-    entity_edges: List[str] = Field(default_factory=list)  # Edge UUIDs
+    entity_edges: list[str] = Field(default_factory=list)  # Edge UUIDs
 
-    def get_labels(self) -> List[str]:
+    def get_labels(self) -> list[str]:
         """Get Neo4j labels for this node."""
         return ["Episodic", "Node"]
 
-    def to_neo4j_properties(self) -> Dict[str, Any]:
+    def to_neo4j_properties(self) -> dict[str, Any]:
         """Convert to Neo4j-compatible property dict."""
         return {
             "uuid": self.uuid,
@@ -114,20 +114,20 @@ class EntityNode(BaseNode):
 
     name: str
     entity_type: str  # e.g., "Person", "Organization", "Location", "Concept"
-    labels: List[str] = Field(default_factory=list)  # Additional Neo4j labels
+    labels: list[str] = Field(default_factory=list)  # Additional Neo4j labels
     summary: str = ""
-    name_embedding: Optional[List[float]] = None
-    embedding_dim: Optional[int] = None  # Dimension of the embedding vector
-    attributes: Dict[str, Any] = Field(default_factory=dict)
+    name_embedding: list[float] | None = None
+    embedding_dim: int | None = None  # Dimension of the embedding vector
+    attributes: dict[str, Any] = Field(default_factory=dict)
 
-    def get_labels(self) -> List[str]:
+    def get_labels(self) -> list[str]:
         """Get Neo4j labels for this node including custom labels."""
         base_labels = ["Entity", "Node"]
         # Add custom labels (ensure uniqueness)
         all_labels = base_labels + [lbl for lbl in self.labels if lbl not in base_labels]
         return all_labels
 
-    def to_neo4j_properties(self) -> Dict[str, Any]:
+    def to_neo4j_properties(self) -> dict[str, Any]:
         """Convert to Neo4j-compatible property dict."""
         props = {
             "uuid": self.uuid,
@@ -160,11 +160,11 @@ class CommunityNode(BaseNode):
     summary: str = ""
     member_count: int = 0
 
-    def get_labels(self) -> List[str]:
+    def get_labels(self) -> list[str]:
         """Get Neo4j labels for this node."""
         return ["Community"]
 
-    def to_neo4j_properties(self) -> Dict[str, Any]:
+    def to_neo4j_properties(self) -> dict[str, Any]:
         """Convert to Neo4j-compatible property dict."""
         return {
             "uuid": self.uuid,
@@ -188,7 +188,7 @@ class BaseEdge(BaseModel):
     uuid: str = Field(default_factory=lambda: str(uuid4()))
     source_uuid: str
     target_uuid: str
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     class Config:
         """Pydantic config."""
@@ -205,7 +205,7 @@ class EpisodicEdge(BaseEdge):
 
     relationship_type: str = "MENTIONS"
 
-    def to_neo4j_properties(self) -> Dict[str, Any]:
+    def to_neo4j_properties(self) -> dict[str, Any]:
         """Convert to Neo4j-compatible property dict."""
         return {
             "created_at": self.created_at.isoformat(),
@@ -236,12 +236,12 @@ class EntityEdge(BaseEdge):
     fact: str = ""  # Natural language fact description
     summary: str = ""  # Deprecated, kept for backwards compatibility
     weight: float = 0.5  # Relationship strength (0-1)
-    episodes: List[str] = Field(default_factory=list)  # Supporting episode UUIDs
-    valid_at: Optional[datetime] = None  # When fact became true
-    invalid_at: Optional[datetime] = None  # When fact stopped being true
-    expired_at: Optional[datetime] = None  # When edge was invalidated
-    attributes: Dict[str, Any] = Field(default_factory=dict)  # Additional attributes
-    relationship_embedding: Optional[List[float]] = None  # Fact embedding
+    episodes: list[str] = Field(default_factory=list)  # Supporting episode UUIDs
+    valid_at: datetime | None = None  # When fact became true
+    invalid_at: datetime | None = None  # When fact stopped being true
+    expired_at: datetime | None = None  # When edge was invalidated
+    attributes: dict[str, Any] = Field(default_factory=dict)  # Additional attributes
+    relationship_embedding: list[float] | None = None  # Fact embedding
 
     @field_validator("weight")
     @classmethod
@@ -251,7 +251,7 @@ class EntityEdge(BaseEdge):
             raise ValueError(f"Weight must be between 0 and 1, got {v}")
         return v
 
-    def to_neo4j_properties(self) -> Dict[str, Any]:
+    def to_neo4j_properties(self) -> dict[str, Any]:
         """Convert to Neo4j-compatible property dict."""
         props = {
             "uuid": self.uuid,
@@ -283,7 +283,7 @@ class CommunityEdge(BaseEdge):
 
     relationship_type: str = "BELONGS_TO"
 
-    def to_neo4j_properties(self) -> Dict[str, Any]:
+    def to_neo4j_properties(self) -> dict[str, Any]:
         """Convert to Neo4j-compatible property dict."""
         return {
             "created_at": self.created_at.isoformat(),
@@ -304,14 +304,14 @@ class ExtractedEntity(BaseModel):
 
     name: str = Field(description="Entity name as it appears in the text")
     entity_type: str = Field(description="Type of entity (Person, Organization, etc.)")
-    entity_type_id: Optional[int] = Field(
+    entity_type_id: int | None = Field(
         default=None, description="ID of the classified entity type from provided types"
     )
-    labels: List[str] = Field(
+    labels: list[str] = Field(
         default_factory=list, description="Additional labels for custom entity types"
     )
     summary: str = Field(default="", description="Brief description of the entity")
-    attributes: Dict[str, Any] = Field(
+    attributes: dict[str, Any] = Field(
         default_factory=dict, description="Additional attributes extracted"
     )
 
@@ -331,13 +331,13 @@ class ExtractedRelationship(BaseModel):
     weight: float = Field(
         default=0.5, ge=0.0, le=1.0, description="Confidence/strength of the relationship"
     )
-    valid_at: Optional[str] = Field(
+    valid_at: str | None = Field(
         default=None, description="ISO 8601 datetime when the fact became true"
     )
-    invalid_at: Optional[str] = Field(
+    invalid_at: str | None = Field(
         default=None, description="ISO 8601 datetime when the fact stopped being true"
     )
-    attributes: Dict[str, Any] = Field(
+    attributes: dict[str, Any] = Field(
         default_factory=dict, description="Additional relationship attributes"
     )
 
@@ -345,19 +345,19 @@ class ExtractedRelationship(BaseModel):
 class EntityExtractionResult(BaseModel):
     """Result of entity extraction from LLM."""
 
-    entities: List[ExtractedEntity] = Field(default_factory=list)
+    entities: list[ExtractedEntity] = Field(default_factory=list)
 
 
 class RelationshipExtractionResult(BaseModel):
     """Result of relationship extraction from LLM."""
 
-    relationships: List[ExtractedRelationship] = Field(default_factory=list)
+    relationships: list[ExtractedRelationship] = Field(default_factory=list)
 
 
 class ReflexionResult(BaseModel):
     """Result of reflexion check for missed entities."""
 
-    missed_entities: List[ExtractedEntity] = Field(default_factory=list)
+    missed_entities: list[ExtractedEntity] = Field(default_factory=list)
     explanation: str = Field(default="", description="Explanation of missed entities")
 
 
@@ -371,17 +371,17 @@ class SearchResultItem(BaseModel):
 
     type: str  # "episode" or "entity"
     uuid: str
-    name: Optional[str] = None
-    content: Optional[str] = None
-    summary: Optional[str] = None
+    name: str | None = None
+    content: str | None = None
+    summary: str | None = None
     score: float = 0.0
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class HybridSearchResult(BaseModel):
     """Result of hybrid search combining vector and keyword search."""
 
-    items: List[SearchResultItem] = Field(default_factory=list)
+    items: list[SearchResultItem] = Field(default_factory=list)
     total_results: int = 0
     vector_results_count: int = 0
     keyword_results_count: int = 0
@@ -396,8 +396,8 @@ class AddEpisodeResult(BaseModel):
     """Result of adding an episode to the knowledge graph."""
 
     episode: EpisodicNode
-    nodes: List[EntityNode] = Field(default_factory=list)
-    edges: List[EntityEdge] = Field(default_factory=list)
-    episodic_edges: List[EpisodicEdge] = Field(default_factory=list)
-    communities: List[CommunityNode] = Field(default_factory=list)
-    community_edges: List[CommunityEdge] = Field(default_factory=list)
+    nodes: list[EntityNode] = Field(default_factory=list)
+    edges: list[EntityEdge] = Field(default_factory=list)
+    episodic_edges: list[EpisodicEdge] = Field(default_factory=list)
+    communities: list[CommunityNode] = Field(default_factory=list)
+    community_edges: list[CommunityEdge] = Field(default_factory=list)

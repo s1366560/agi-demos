@@ -12,7 +12,6 @@ Three-level scoping for multi-tenant isolation:
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
 from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus
@@ -47,9 +46,9 @@ class SkillService:
     def __init__(
         self,
         skill_repository: SkillRepositoryPort,
-        tenant_skill_config_repository: Optional[TenantSkillConfigRepositoryPort] = None,
-        filesystem_loader: Optional[FileSystemSkillLoader] = None,
-    ):
+        tenant_skill_config_repository: TenantSkillConfigRepositoryPort | None = None,
+        filesystem_loader: FileSystemSkillLoader | None = None,
+    ) -> None:
         """
         Initialize the skill service.
 
@@ -69,8 +68,8 @@ class SkillService:
         skill_repository: SkillRepositoryPort,
         base_path: Path,
         tenant_id: str,
-        project_id: Optional[str] = None,
-        tenant_skill_config_repository: Optional[TenantSkillConfigRepositoryPort] = None,
+        project_id: str | None = None,
+        tenant_skill_config_repository: TenantSkillConfigRepositoryPort | None = None,
         include_system: bool = True,
     ) -> "SkillService":
         """
@@ -120,13 +119,13 @@ class SkillService:
     async def list_available_skills(
         self,
         tenant_id: str,
-        project_id: Optional[str] = None,
+        project_id: str | None = None,
         tier: int = 1,
-        status: Optional[SkillStatus] = None,
+        status: SkillStatus | None = None,
         agent_mode: str = "default",
         skip_database: bool = False,
-        scope: Optional[SkillScope] = None,
-    ) -> List[Skill]:
+        scope: SkillScope | None = None,
+    ) -> list[Skill]:
         """
         List available skills from all sources with three-level loading.
 
@@ -147,10 +146,10 @@ class SkillService:
         Returns:
             List of Skill entities (content level depends on tier)
         """
-        skills_by_name: Dict[str, Skill] = {}
+        skills_by_name: dict[str, Skill] = {}
 
         # Get tenant skill configs for system skill filtering
-        tenant_configs: Dict[str, TenantSkillConfig] = {}
+        tenant_configs: dict[str, TenantSkillConfig] = {}
         if self._tenant_config_repo and not skip_database:
             try:
                 tenant_configs = await self._tenant_config_repo.get_configs_map(tenant_id)
@@ -197,9 +196,9 @@ class SkillService:
     async def _load_system_skills(
         self,
         tenant_id: str,
-        skills_by_name: Dict[str, Skill],
-        tenant_configs: Dict[str, TenantSkillConfig],
-        status: Optional[SkillStatus],
+        skills_by_name: dict[str, Skill],
+        tenant_configs: dict[str, TenantSkillConfig],
+        status: SkillStatus | None,
         agent_mode: str,
         tier: int,
     ) -> None:
@@ -236,9 +235,9 @@ class SkillService:
     async def _load_tenant_skills(
         self,
         tenant_id: str,
-        skills_by_name: Dict[str, Skill],
-        tenant_configs: Dict[str, TenantSkillConfig],
-        status: Optional[SkillStatus],
+        skills_by_name: dict[str, Skill],
+        tenant_configs: dict[str, TenantSkillConfig],
+        status: SkillStatus | None,
         agent_mode: str,
         tier: int,
         skip_database: bool,
@@ -306,8 +305,8 @@ class SkillService:
         self,
         tenant_id: str,
         project_id: str,
-        skills_by_name: Dict[str, Skill],
-        status: Optional[SkillStatus],
+        skills_by_name: dict[str, Skill],
+        status: SkillStatus | None,
         agent_mode: str,
         tier: int,
         skip_database: bool,
@@ -400,7 +399,7 @@ class SkillService:
         self,
         tenant_id: str,
         skill_name: str,
-    ) -> Optional[Skill]:
+    ) -> Skill | None:
         """
         Get a skill by name.
 
@@ -427,7 +426,7 @@ class SkillService:
         self,
         tenant_id: str,
         skill_name: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Load the full content of a skill (Tier 3).
 
@@ -550,7 +549,7 @@ class SkillService:
         query: str,
         threshold: float = 0.5,
         limit: int = 5,
-    ) -> List[Skill]:
+    ) -> list[Skill]:
         """
         Find skills that match a query.
 
@@ -588,7 +587,7 @@ class SkillService:
         tenant_id: str,
         skill_name: str,
         success: bool,
-    ) -> Optional[Skill]:
+    ) -> Skill | None:
         """
         Record usage of a skill.
 
@@ -621,7 +620,7 @@ class SkillService:
             self._fs_loader.invalidate_cache()
         self._initialized = False
 
-    def format_skill_list_for_tool(self, skills: List[Skill]) -> str:
+    def format_skill_list_for_tool(self, skills: list[Skill]) -> str:
         """
         Format skills list for injection into tool description.
 
@@ -653,7 +652,7 @@ class SkillService:
     # Tenant Skill Config Management
     # =========================================================================
 
-    async def list_system_skills(self, tenant_id: str, tier: int = 1) -> List[Skill]:
+    async def list_system_skills(self, tenant_id: str, tier: int = 1) -> list[Skill]:
         """
         List all system skills.
 
@@ -779,7 +778,7 @@ class SkillService:
     async def list_tenant_skill_configs(
         self,
         tenant_id: str,
-    ) -> List[TenantSkillConfig]:
+    ) -> list[TenantSkillConfig]:
         """
         List all skill configs for a tenant.
 
@@ -798,7 +797,7 @@ class SkillService:
         self,
         tenant_id: str,
         system_skill_name: str,
-    ) -> Optional[TenantSkillConfig]:
+    ) -> TenantSkillConfig | None:
         """
         Get a specific tenant skill config.
 
@@ -837,10 +836,10 @@ class SkillService:
         tenant_id: str,
         name: str,
         description: str,
-        tools: List[str],
-        project_id: Optional[str] = None,
-        prompt_template: Optional[str] = None,
-        full_content: Optional[str] = None,
+        tools: list[str],
+        project_id: str | None = None,
+        prompt_template: str | None = None,
+        full_content: str | None = None,
         scope: SkillScope = SkillScope.TENANT,
     ) -> Skill:
         """

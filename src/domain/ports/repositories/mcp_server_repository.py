@@ -7,7 +7,7 @@ following the Repository pattern.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from src.domain.model.mcp.server import MCPServer
@@ -28,7 +28,7 @@ class MCPServerRepositoryPort(ABC):
         tenant_id: str,
         project_id: str,
         name: str,
-        description: Optional[str],
+        description: str | None,
         server_type: str,
         transport_config: dict,
         enabled: bool = True,
@@ -82,7 +82,7 @@ class MCPServerRepositoryPort(ABC):
         self,
         project_id: str,
         enabled_only: bool = False,
-    ) -> List["MCPServer"]:
+    ) -> list["MCPServer"]:
         """
         List all MCP servers for a project.
 
@@ -100,7 +100,7 @@ class MCPServerRepositoryPort(ABC):
         self,
         tenant_id: str,
         enabled_only: bool = False,
-    ) -> List["MCPServer"]:
+    ) -> list["MCPServer"]:
         """
         List all MCP servers for a tenant (across all projects).
 
@@ -117,11 +117,11 @@ class MCPServerRepositoryPort(ABC):
     async def update(
         self,
         server_id: str,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
-        server_type: Optional[str] = None,
-        transport_config: Optional[dict] = None,
-        enabled: Optional[bool] = None,
+        name: str | None = None,
+        description: str | None = None,
+        server_type: str | None = None,
+        transport_config: dict | None = None,
+        enabled: bool | None = None,
     ) -> bool:
         """
         Update an MCP server configuration.
@@ -143,9 +143,9 @@ class MCPServerRepositoryPort(ABC):
     async def update_discovered_tools(
         self,
         server_id: str,
-        tools: List[dict],
+        tools: list[dict],
         last_sync_at: datetime,
-        sync_error: Optional[str] = None,
+        sync_error: str | None = None,
     ) -> bool:
         """
         Update the discovered tools for an MCP server.
@@ -178,8 +178,8 @@ class MCPServerRepositoryPort(ABC):
     async def get_enabled_servers(
         self,
         tenant_id: str,
-        project_id: Optional[str] = None,
-    ) -> List["MCPServer"]:
+        project_id: str | None = None,
+    ) -> list["MCPServer"]:
         """
         Get all enabled MCP servers.
 

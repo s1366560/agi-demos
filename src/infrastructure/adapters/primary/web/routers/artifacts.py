@@ -8,7 +8,6 @@ Provides REST API endpoints for:
 """
 
 import logging
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -24,7 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/artifacts", tags=["artifacts"])
 
 # Singleton artifact service
-_artifact_service: Optional[ArtifactService] = None
+_artifact_service: ArtifactService | None = None
 
 
 def get_artifact_service() -> ArtifactService:
@@ -49,23 +48,23 @@ class ArtifactResponse(BaseModel):
     id: str
     project_id: str
     tenant_id: str
-    sandbox_id: Optional[str] = None
-    tool_execution_id: Optional[str] = None
-    conversation_id: Optional[str] = None
+    sandbox_id: str | None = None
+    tool_execution_id: str | None = None
+    conversation_id: str | None = None
 
     filename: str
     mime_type: str
     category: str
     size_bytes: int
 
-    url: Optional[str] = None
-    preview_url: Optional[str] = None
+    url: str | None = None
+    preview_url: str | None = None
 
     status: str
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
-    source_tool: Optional[str] = None
-    source_path: Optional[str] = None
+    source_tool: str | None = None
+    source_path: str | None = None
 
     metadata: dict = Field(default_factory=dict)
     created_at: str
@@ -74,7 +73,7 @@ class ArtifactResponse(BaseModel):
 class ArtifactListResponse(BaseModel):
     """Response model for artifact list."""
 
-    artifacts: List[ArtifactResponse]
+    artifacts: list[ArtifactResponse]
     total: int
 
 
@@ -96,7 +95,7 @@ class UpdateContentResponse(BaseModel):
 
     artifact_id: str
     size_bytes: int
-    url: Optional[str] = None
+    url: str | None = None
 
 
 # === API Endpoints ===
@@ -105,8 +104,8 @@ class UpdateContentResponse(BaseModel):
 @router.get("", response_model=ArtifactListResponse)
 async def list_artifacts(
     project_id: str = Query(..., description="Project ID to list artifacts for"),
-    category: Optional[str] = Query(None, description="Filter by category"),
-    tool_execution_id: Optional[str] = Query(None, description="Filter by tool execution"),
+    category: str | None = Query(None, description="Filter by category"),
+    tool_execution_id: str | None = Query(None, description="Filter by tool execution"),
     limit: int = Query(100, ge=1, le=500, description="Maximum number of artifacts to return"),
     current_user: User = Depends(get_current_user),
 ):

@@ -28,7 +28,7 @@ class MockTool(Tool):
         self,
         name: str = "test_tool",
         description: str = "A test tool",
-        execute_result: Any = "success",  # noqa: ANN401
+        execute_result: Any = "success",
         should_fail: bool = False,
         delay_ms: float = 0,
         category: str = "test",
@@ -51,7 +51,7 @@ class MockTool(Tool):
         """Tool description."""
         return self._description
 
-    async def execute(self, **kwargs) -> Any:  # noqa: ANN401
+    async def execute(self, **kwargs) -> Any:
         """Execute the tool."""
         if self._delay_ms:
             await asyncio.sleep(self._delay_ms / 1000)
@@ -77,7 +77,7 @@ class MockTool(Tool):
 class SlowMockTool(Tool):
     """Mock tool that takes time to execute."""
 
-    def __init__(self, delay: float = 1.0):
+    def __init__(self, delay: float = 1.0) -> None:
         """Initialize slow tool."""
         self._delay = delay
         self._name = "slow_tool"
@@ -91,7 +91,7 @@ class SlowMockTool(Tool):
     def description(self) -> str:
         return self._description
 
-    async def execute(self, **kwargs) -> Any:  # noqa: ANN401
+    async def execute(self, **kwargs) -> Any:
         await asyncio.sleep(self._delay)
         return "slow_result"
 

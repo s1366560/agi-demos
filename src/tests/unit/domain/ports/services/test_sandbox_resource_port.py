@@ -125,7 +125,7 @@ class TestSandboxResourcePortImplementation:
     async def test_ensure_sandbox_ready_creates_if_needed(self):
         """ensure_sandbox_ready should create sandbox if not exists."""
         class MockSandboxResource(SandboxResourcePort):
-            def __init__(self):
+            def __init__(self) -> None:
                 self.created = False
 
             async def get_sandbox_id(self, project_id: str, tenant_id: str):
@@ -178,7 +178,7 @@ class TestSandboxResourcePortImplementation:
         import base64
 
         class MockSandboxResource(SandboxResourcePort):
-            def __init__(self):
+            def __init__(self) -> None:
                 self.synced_files = []
 
             async def get_sandbox_id(self, project_id: str, tenant_id: str):

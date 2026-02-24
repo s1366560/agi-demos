@@ -5,7 +5,6 @@ lifecycle associations.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from src.domain.model.sandbox.project_sandbox import ProjectSandbox, ProjectSandboxStatus
 
@@ -27,7 +26,7 @@ class ProjectSandboxRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(self, association_id: str) -> Optional[ProjectSandbox]:
+    async def find_by_id(self, association_id: str) -> ProjectSandbox | None:
         """Find a project-sandbox association by its ID.
 
         Args:
@@ -39,7 +38,7 @@ class ProjectSandboxRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_project(self, project_id: str) -> Optional[ProjectSandbox]:
+    async def find_by_project(self, project_id: str) -> ProjectSandbox | None:
         """Find the sandbox association for a specific project.
 
         Each project should have at most one active sandbox association.
@@ -53,7 +52,7 @@ class ProjectSandboxRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_sandbox(self, sandbox_id: str) -> Optional[ProjectSandbox]:
+    async def find_by_sandbox(self, sandbox_id: str) -> ProjectSandbox | None:
         """Find the project association for a specific sandbox.
 
         Args:
@@ -68,10 +67,10 @@ class ProjectSandboxRepository(ABC):
     async def find_by_tenant(
         self,
         tenant_id: str,
-        status: Optional[ProjectSandboxStatus] = None,
+        status: ProjectSandboxStatus | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[ProjectSandbox]:
+    ) -> list[ProjectSandbox]:
         """List all sandbox associations for a tenant.
 
         Args:
@@ -91,7 +90,7 @@ class ProjectSandboxRepository(ABC):
         status: ProjectSandboxStatus,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[ProjectSandbox]:
+    ) -> list[ProjectSandbox]:
         """Find all associations with a specific status.
 
         Useful for health check sweeps and cleanup operations.
@@ -111,7 +110,7 @@ class ProjectSandboxRepository(ABC):
         self,
         max_idle_seconds: int,
         limit: int = 50,
-    ) -> List[ProjectSandbox]:
+    ) -> list[ProjectSandbox]:
         """Find associations that haven't been accessed recently.
 
         Useful for identifying sandboxes that could be stopped to save resources.
@@ -165,7 +164,7 @@ class ProjectSandboxRepository(ABC):
     async def count_by_tenant(
         self,
         tenant_id: str,
-        status: Optional[ProjectSandboxStatus] = None,
+        status: ProjectSandboxStatus | None = None,
     ) -> int:
         """Count sandbox associations for a tenant.
 
@@ -220,7 +219,7 @@ class ProjectSandboxRepository(ABC):
     async def find_and_lock_by_project(
         self,
         project_id: str,
-    ) -> Optional[ProjectSandbox]:
+    ) -> ProjectSandbox | None:
         """Find sandbox by project with row-level lock (SELECT FOR UPDATE).
 
         This prevents TOCTOU race conditions by locking the row while checking.

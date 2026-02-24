@@ -6,7 +6,7 @@ is well-known and stable, providing better type safety and IDE support.
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, TypedDict, Union
+from typing import Any, TypedDict, Union
 
 # =============================================================================
 # SSE / Streaming Event Dicts
@@ -17,7 +17,7 @@ class SSEEventDict(TypedDict):
     """Standard SSE event dict emitted by AgentDomainEvent.to_event_dict()."""
 
     type: str
-    data: Dict[str, Any]
+    data: dict[str, Any]
     timestamp: str
 
 
@@ -33,12 +33,12 @@ class ToolPartDict(TypedDict):
     call_id: str
     tool: str
     status: str
-    input: Dict[str, Any]
-    output: Optional[str]
-    error: Optional[str]
-    title: Optional[str]
-    metadata: Dict[str, Any]
-    duration_ms: Optional[int]
+    input: dict[str, Any]
+    output: str | None
+    error: str | None
+    title: str | None
+    metadata: dict[str, Any]
+    duration_ms: int | None
 
 
 class TextPartDict(TypedDict):
@@ -54,7 +54,7 @@ class ReasoningPartDict(TypedDict):
 
     type: str
     text: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 
 # Union of all part dicts
@@ -68,15 +68,15 @@ class MessageDict(TypedDict):
     session_id: str
     role: str
     content: str
-    parts: List[MessagePartDict]
-    agent: Optional[str]
-    parent_id: Optional[str]
-    finish_reason: Optional[str]
-    tokens: Dict[str, int]
+    parts: list[MessagePartDict]
+    agent: str | None
+    parent_id: str | None
+    finish_reason: str | None
+    tokens: dict[str, int]
     cost: float
-    error: Optional[Dict[str, Any]]
+    error: dict[str, Any] | None
     created_at: float
-    completed_at: Optional[float]
+    completed_at: float | None
 
 
 class LLMMessageDict(TypedDict, total=False):
@@ -87,8 +87,8 @@ class LLMMessageDict(TypedDict, total=False):
     """
 
     role: str
-    content: Optional[str]
-    tool_calls: List[Dict[str, Any]]
+    content: str | None
+    tool_calls: list[dict[str, Any]]
 
 
 # =============================================================================
@@ -101,7 +101,7 @@ class TaskListUpdatedEventData(TypedDict):
 
     type: str
     conversation_id: str
-    tasks: List[Dict[str, Any]]
+    tasks: list[dict[str, Any]]
 
 
 class TaskUpdatedEventData(TypedDict):
@@ -111,7 +111,7 @@ class TaskUpdatedEventData(TypedDict):
     conversation_id: str
     task_id: str
     status: str
-    content: Optional[str]
+    content: str | None
 
 
 TodoPendingEvent = Union[TaskListUpdatedEventData, TaskUpdatedEventData]

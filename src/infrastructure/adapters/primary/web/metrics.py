@@ -10,10 +10,11 @@ Supports both Prometheus export format and OpenTelemetry metrics.
 import logging
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import wraps
-from typing import Any, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ class MetricData:
     """Single metric data point."""
 
     value: float
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     labels: dict[str, str] = field(default_factory=dict)
 
 
@@ -73,7 +74,7 @@ class AgentMetrics:
     - Error frequencies
     """
 
-    def __init__(self, enable_otel: bool = True):
+    def __init__(self, enable_otel: bool = True) -> None:
         """Initialize metrics collector.
 
         Args:
@@ -85,7 +86,7 @@ class AgentMetrics:
         self._labels: dict[str, dict[str, str]] = {}
         self._enable_otel = enable_otel
 
-    def increment(self, name: str, value: int = 1, labels: dict[str, str] | None = None):
+    def increment(self, name: str, value: int = 1, labels: dict[str, str] | None = None) -> None:
         """
         Increment a counter metric.
 
@@ -105,7 +106,7 @@ class AgentMetrics:
                 metric_name = name.replace(".", "_")
                 increment_counter_fn(f"agent_{metric_name}", f"Agent {metric_name}", amount=value, attributes=labels or {})
 
-    def set_gauge(self, name: str, value: float, labels: dict[str, str] | None = None):
+    def set_gauge(self, name: str, value: float, labels: dict[str, str] | None = None) -> None:
         """
         Set a gauge metric.
 
@@ -118,7 +119,7 @@ class AgentMetrics:
         self._gauges[key].append(value)
         self._labels[key] = labels or {}
 
-    def observe(self, name: str, value: float, labels: dict[str, str] | None = None):
+    def observe(self, name: str, value: float, labels: dict[str, str] | None = None) -> None:
         """
         Observe a value for a histogram metric.
 
@@ -189,7 +190,7 @@ class AgentMetrics:
             "histograms": {k: self.get_histogram_stats(k) for k in self._histograms.keys()},
         }
 
-    def reset(self):
+    def reset(self) -> None:
         """Reset all metrics."""
         self._counters.clear()
         self._gauges.clear()

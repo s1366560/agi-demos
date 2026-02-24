@@ -24,6 +24,9 @@ from src.domain.model.mcp.tool import MCPTool, MCPToolResult, MCPToolSchema
 from src.domain.model.mcp.transport import TransportConfig, TransportType
 
 __all__ = [
+    "ConnectionInfo",
+    # Connection
+    "ConnectionState",
     # App
     "MCPApp",
     "MCPAppResource",
@@ -36,12 +39,9 @@ __all__ = [
     "MCPServerStatus",
     # Tool
     "MCPTool",
-    "MCPToolSchema",
     "MCPToolResult",
+    "MCPToolSchema",
+    "TransportConfig",
     # Transport
     "TransportType",
-    "TransportConfig",
-    # Connection
-    "ConnectionState",
-    "ConnectionInfo",
 ]

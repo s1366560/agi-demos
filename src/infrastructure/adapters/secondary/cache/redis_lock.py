@@ -34,9 +34,10 @@ import asyncio
 import logging
 import secrets
 import time
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, AsyncGenerator, Optional
+from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +92,7 @@ class RedisDistributedLock:
         retry_interval: float = 0.1,
         max_retries: int = 300,
         namespace: str = "memstack:lock",
-    ):
+    ) -> None:
         """
         Initialize a distributed lock.
 
@@ -110,7 +111,7 @@ class RedisDistributedLock:
         self._max_retries = max_retries
         self._owner = secrets.token_hex(16)  # Unique owner token
         self._acquired = False
-        self._acquired_at: Optional[float] = None
+        self._acquired_at: float | None = None
 
     @property
     def key(self) -> str:
@@ -127,7 +128,7 @@ class RedisDistributedLock:
         """Get the owner token for this lock."""
         return self._owner
 
-    async def acquire(self, blocking: bool = True, timeout: Optional[float] = None) -> bool:
+    async def acquire(self, blocking: bool = True, timeout: float | None = None) -> bool:
         """
         Acquire the lock.
 
@@ -242,7 +243,7 @@ class RedisDistributedLock:
             self._acquired_at = None
             return False
 
-    async def extend(self, additional_ttl: Optional[int] = None) -> bool:
+    async def extend(self, additional_ttl: int | None = None) -> bool:
         """
         Extend the lock TTL.
 
@@ -299,7 +300,7 @@ class RedisDistributedLock:
             logger.error(f"Error checking lock status {self._key}: {e}")
             return False
 
-    async def get_owner(self) -> Optional[str]:
+    async def get_owner(self) -> str | None:
         """
         Get the current lock owner.
 
@@ -368,7 +369,7 @@ class RedisLockManager:
         default_ttl: int = 60,
         default_retry_interval: float = 0.1,
         default_max_retries: int = 300,
-    ):
+    ) -> None:
         """
         Initialize the lock manager.
 
@@ -388,9 +389,9 @@ class RedisLockManager:
     def create_lock(
         self,
         key: str,
-        ttl: Optional[int] = None,
-        retry_interval: Optional[float] = None,
-        max_retries: Optional[int] = None,
+        ttl: int | None = None,
+        retry_interval: float | None = None,
+        max_retries: int | None = None,
     ) -> RedisDistributedLock:
         """
         Create a new distributed lock.
@@ -417,9 +418,9 @@ class RedisLockManager:
     async def lock(
         self,
         key: str,
-        ttl: Optional[int] = None,
+        ttl: int | None = None,
         blocking: bool = True,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> AsyncGenerator[RedisDistributedLock, None]:
         """
         Context manager for acquiring a lock.

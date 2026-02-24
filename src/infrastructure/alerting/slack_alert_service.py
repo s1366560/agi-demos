@@ -5,7 +5,7 @@ Sends alerts to Slack via webhook.
 
 import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 import httpx
 
@@ -43,10 +43,10 @@ class SlackAlertService(AlertServicePort):
     def __init__(
         self,
         webhook_url: str,
-        channel: Optional[str] = None,
+        channel: str | None = None,
         username: str = "MemStack Alerts",
         timeout_seconds: float = 10.0,
-    ):
+    ) -> None:
         """Initialize Slack alert service.
 
         Args:
@@ -126,13 +126,13 @@ class SlackAlertService(AlertServicePort):
         except Exception:
             return False
 
-    def _build_slack_payload(self, alert: Alert) -> Dict[str, Any]:
+    def _build_slack_payload(self, alert: Alert) -> dict[str, Any]:
         """Build Slack message payload from alert."""
         color = self.SEVERITY_COLORS.get(alert.severity, "#808080")
         emoji = self.SEVERITY_EMOJIS.get(alert.severity, ":bell:")
 
         # Build attachment with alert details
-        attachment: Dict[str, Any] = {
+        attachment: dict[str, Any] = {
             "color": color,
             "title": f"{emoji} {alert.title}",
             "text": alert.message,
@@ -168,7 +168,7 @@ class SlackAlertService(AlertServicePort):
                         }
                     )
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "username": self._username,
             "attachments": [attachment],
         }

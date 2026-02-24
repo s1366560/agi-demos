@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.adapters.secondary.persistence.models import AgentSessionSnapshot
@@ -20,7 +19,7 @@ async def save_hitl_snapshot(
     snapshot_type: str = "hitl",
 ) -> None:
     """Persist HITL state snapshot to Postgres."""
-    expires_at = datetime.now(timezone.utc) + timedelta(seconds=state.timeout_seconds + 60)
+    expires_at = datetime.now(UTC) + timedelta(seconds=state.timeout_seconds + 60)
 
     snapshot = AgentSessionSnapshot(
         id=str(uuid.uuid4()),
@@ -30,7 +29,7 @@ async def save_hitl_snapshot(
         request_id=state.hitl_request_id,
         snapshot_type=snapshot_type,
         snapshot_data=state.to_dict(),
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         expires_at=expires_at,
     )
 
@@ -40,7 +39,7 @@ async def save_hitl_snapshot(
         await session.commit()
 
 
-async def load_hitl_snapshot(request_id: str) -> Optional[HITLAgentState]:
+async def load_hitl_snapshot(request_id: str) -> HITLAgentState | None:
     """Load latest HITL state snapshot for a request."""
     async with async_session_factory() as session:
         repo = SqlAgentSessionSnapshotRepository(session)

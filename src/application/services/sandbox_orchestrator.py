@@ -9,7 +9,7 @@ import json
 import logging
 import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from src.domain.ports.services.sandbox_port import SandboxPort
 
@@ -54,11 +54,11 @@ class DesktopStatus:
     """Desktop service status."""
 
     running: bool
-    url: Optional[str] = None
+    url: str | None = None
     display: str = ":1"
     resolution: str = "1920x1080"
     port: int = 6080
-    pid: Optional[int] = None
+    pid: int | None = None
     audio_enabled: bool = False
     dynamic_resize: bool = True
     encoding: str = "webp"
@@ -69,10 +69,10 @@ class TerminalStatus:
     """Terminal service status."""
 
     running: bool
-    url: Optional[str] = None
+    url: str | None = None
     port: int = 7681
-    pid: Optional[int] = None
-    session_id: Optional[str] = None
+    pid: int | None = None
+    session_id: str | None = None
 
 
 @dataclass
@@ -122,9 +122,9 @@ class SandboxOrchestrator:
     def __init__(
         self,
         sandbox_adapter: SandboxPort,  # SandboxPort (MCPSandboxAdapter for cloud)
-        event_publisher: Optional[SandboxEventPublisher] = None,  # Reserved for future use
+        event_publisher: SandboxEventPublisher | None = None,  # Reserved for future use
         default_timeout: int = 30,
-        local_sandbox_adapter: Optional[LocalSandboxAdapter] = None,
+        local_sandbox_adapter: LocalSandboxAdapter | None = None,
     ) -> None:
         """
         Initialize the orchestrator.
@@ -140,7 +140,7 @@ class SandboxOrchestrator:
         self._events = event_publisher  # Currently not used; events handled by API layer
         self._default_timeout = default_timeout
         # Track sandbox type mapping: sandbox_id -> "cloud" or "local"
-        self._sandbox_types: Dict[str, str] = {}
+        self._sandbox_types: dict[str, str] = {}
 
     def register_sandbox_type(self, sandbox_id: str, sandbox_type: str) -> None:
         """
@@ -174,7 +174,7 @@ class SandboxOrchestrator:
     async def start_desktop(
         self,
         sandbox_id: str,
-        config: Optional[DesktopConfig] = None,
+        config: DesktopConfig | None = None,
     ) -> DesktopStatus:
         """
         Start the remote desktop service.
@@ -259,7 +259,7 @@ class SandboxOrchestrator:
     async def start_terminal(
         self,
         sandbox_id: str,
-        config: Optional[TerminalConfig] = None,
+        config: TerminalConfig | None = None,
     ) -> TerminalStatus:
         """Start the web terminal service."""
         config = config or TerminalConfig()
@@ -379,7 +379,7 @@ class SandboxOrchestrator:
     # Result Parsing Helpers
     # ========================================================================
 
-    def _parse_desktop_result(self, result: Dict[str, Any]) -> DesktopStatus:
+    def _parse_desktop_result(self, result: dict[str, Any]) -> DesktopStatus:
         """Parse MCP tool result to DesktopStatus."""
         content_list = result.get("content", [])
         if not content_list:
@@ -406,7 +406,7 @@ class SandboxOrchestrator:
             logger.error(f"Failed to parse desktop result: {e}, content: {content_list}")
             return DesktopStatus(running=False, url=None, display="", resolution="", port=0)
 
-    def _parse_terminal_result(self, result: Dict[str, Any]) -> TerminalStatus:
+    def _parse_terminal_result(self, result: dict[str, Any]) -> TerminalStatus:
         """Parse MCP tool result to TerminalStatus."""
         logger.debug(f"Parsing terminal result: {result}")
         content_list = result.get("content", [])

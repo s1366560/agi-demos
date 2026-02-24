@@ -1,6 +1,5 @@
 """DI sub-container for infrastructure services."""
 
-from typing import Optional
 
 import redis.asyncio as redis
 
@@ -17,15 +16,15 @@ class InfraContainer:
 
     def __init__(
         self,
-        redis_client: Optional[redis.Redis] = None,
-        workflow_engine: Optional[WorkflowEnginePort] = None,
+        redis_client: redis.Redis | None = None,
+        workflow_engine: WorkflowEnginePort | None = None,
         settings=None,
     ) -> None:
         self._redis_client = redis_client
         self._workflow_engine = workflow_engine
         self._settings = settings
 
-    def redis(self) -> Optional[redis.Redis]:
+    def redis(self) -> redis.Redis | None:
         """Get the Redis client for cache operations."""
         return self._redis_client
 
@@ -39,7 +38,7 @@ class InfraContainer:
 
         return RedisSequenceService(self._redis_client)
 
-    def hitl_message_bus(self) -> Optional[HITLMessageBusPort]:
+    def hitl_message_bus(self) -> HITLMessageBusPort | None:
         """Get the HITL message bus for cross-process communication.
 
         Returns the Redis Streams based message bus for HITL tools
@@ -88,7 +87,7 @@ class InfraContainer:
             max_retries=300,
         )
 
-    def workflow_engine_port(self) -> Optional[WorkflowEnginePort]:
+    def workflow_engine_port(self) -> WorkflowEnginePort | None:
         """Get WorkflowEnginePort for workflow orchestration."""
         return self._workflow_engine
 

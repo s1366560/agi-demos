@@ -9,8 +9,8 @@ Rollbacks create a new version entry with created_by="rollback".
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 
 @dataclass(kw_only=True)
@@ -33,12 +33,12 @@ class SkillVersion:
     id: str
     skill_id: str
     version_number: int
-    version_label: Optional[str] = None
+    version_label: str | None = None
     skill_md_content: str = ""
-    resource_files: Dict[str, str] = field(default_factory=dict)
-    change_summary: Optional[str] = None
+    resource_files: dict[str, str] = field(default_factory=dict)
+    change_summary: str | None = None
     created_by: str = "agent"
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -48,7 +48,7 @@ class SkillVersion:
         if self.version_number < 1:
             raise ValueError("version_number must be >= 1")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "id": self.id,
@@ -63,7 +63,7 @@ class SkillVersion:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SkillVersion":
+    def from_dict(cls, data: dict[str, Any]) -> "SkillVersion":
         """Create from dictionary."""
         return cls(
             id=data["id"],
@@ -76,5 +76,5 @@ class SkillVersion:
             created_by=data.get("created_by", "agent"),
             created_at=datetime.fromisoformat(data["created_at"])
             if "created_at" in data
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
         )

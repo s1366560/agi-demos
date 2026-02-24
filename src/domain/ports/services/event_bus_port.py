@@ -1,12 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Dict, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 
 class EventBusPort(ABC):
     """Port for event bus operations (Pub/Sub and Stream)."""
 
     @abstractmethod
-    async def publish(self, channel: str, message: Dict[str, Any]) -> int:
+    async def publish(self, channel: str, message: dict[str, Any]) -> int:
         """
         Publish a message to a channel (Pub/Sub).
 
@@ -20,7 +21,7 @@ class EventBusPort(ABC):
         pass
 
     @abstractmethod
-    async def subscribe(self, channel: str) -> AsyncIterator[Dict[str, Any]]:
+    async def subscribe(self, channel: str) -> AsyncIterator[dict[str, Any]]:
         """
         Subscribe to a channel (Pub/Sub).
 
@@ -40,8 +41,8 @@ class EventBusPort(ABC):
     async def stream_add(
         self,
         stream_key: str,
-        message: Dict[str, Any],
-        maxlen: Optional[int] = None,
+        message: dict[str, Any],
+        maxlen: int | None = None,
     ) -> str:
         """
         Add a message to a Redis Stream.
@@ -61,9 +62,9 @@ class EventBusPort(ABC):
         self,
         stream_key: str,
         last_id: str = "0",
-        count: Optional[int] = None,
-        block_ms: Optional[int] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        count: int | None = None,
+        block_ms: int | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Read messages from a Redis Stream.
 
@@ -85,9 +86,9 @@ class EventBusPort(ABC):
         group_name: str,
         consumer_name: str,
         last_id: str = ">",
-        count: Optional[int] = None,
-        block_ms: Optional[int] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        count: int | None = None,
+        block_ms: int | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Read messages from a Redis Stream using consumer groups.
 
@@ -157,7 +158,7 @@ class EventBusPort(ABC):
         stream_key: str,
         group_name: str,
         count: int = 10,
-    ) -> list[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get pending messages for a consumer group (messages not yet acknowledged).
 
@@ -179,7 +180,7 @@ class EventBusPort(ABC):
         consumer_name: str,
         min_idle_ms: int,
         message_ids: list[str],
-    ) -> list[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Claim pending messages from another consumer (for recovery).
 

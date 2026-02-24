@@ -1,8 +1,7 @@
 """Graph maintenance and optimization API routes."""
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
@@ -25,7 +24,7 @@ router = APIRouter(prefix="/api/v1/maintenance", tags=["maintenance"])
 
 @router.post("/refresh/incremental")
 async def incremental_refresh(
-    episode_uuids: Optional[List[str]] = Body(None, description="Episode UUIDs to reprocess"),
+    episode_uuids: list[str] | None = Body(None, description="Episode UUIDs to reprocess"),
     rebuild_communities: bool = Body(False, description="Whether to rebuild communities"),
     current_user: User = Depends(get_current_user),
     neo4j_client=Depends(get_neo4j_client),
@@ -65,18 +64,17 @@ async def incremental_refresh(
 
         # Create TaskLog record
         task_id = str(uuid4())
-        async with async_session_factory() as session:
-            async with session.begin():
-                task_log = TaskLog(
-                    id=task_id,
-                    group_id=group_id,
-                    task_type="incremental_refresh",
-                    status="PENDING",
-                    payload=task_payload,
-                    entity_type="episode",
-                    created_at=datetime.now(timezone.utc),
-                )
-                session.add(task_log)
+        async with async_session_factory() as session, session.begin():
+            task_log = TaskLog(
+                id=task_id,
+                group_id=group_id,
+                task_type="incremental_refresh",
+                status="PENDING",
+                payload=task_payload,
+                entity_type="episode",
+                created_at=datetime.now(UTC),
+            )
+            session.add(task_log)
 
         # Add task_id to payload for progress tracking
         task_payload["task_id"] = task_id
@@ -176,18 +174,17 @@ async def deduplicate_entities(
 
             # Create TaskLog record
             task_id = str(uuid4())
-            async with async_session_factory() as session:
-                async with session.begin():
-                    task_log = TaskLog(
-                        id=task_id,
-                        group_id=group_id,
-                        task_type="deduplicate_entities",
-                        status="PENDING",
-                        payload=task_payload,
-                        entity_type="entity",
-                        created_at=datetime.now(timezone.utc),
-                    )
-                    session.add(task_log)
+            async with async_session_factory() as session, session.begin():
+                task_log = TaskLog(
+                    id=task_id,
+                    group_id=group_id,
+                    task_type="deduplicate_entities",
+                    status="PENDING",
+                    payload=task_payload,
+                    entity_type="entity",
+                    created_at=datetime.now(UTC),
+                )
+                session.add(task_log)
 
             # Add task_id to payload for progress tracking
             task_payload["task_id"] = task_id
@@ -237,7 +234,7 @@ async def invalidate_stale_edges(
     Set dry_run=false to actually delete stale edges.
     """
     try:
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_since_update)
+        cutoff_date = datetime.now(UTC) - timedelta(days=days_since_update)
 
         # Find stale edges (relationships with created_at timestamp)
         query = """
@@ -316,7 +313,7 @@ async def get_maintenance_status(
         community_count = community_result.records[0]["count"] if community_result.records else 0
 
         # Get old episodes count
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=90)
+        cutoff_date = datetime.now(UTC) - timedelta(days=90)
         old_query = """
         MATCH (e:Episodic)
         WHERE e.created_at < datetime($cutoff_date)
@@ -365,7 +362,7 @@ async def get_maintenance_status(
                 "old_episodes": old_episode_count,
             },
             "recommendations": recommendations,
-            "last_checked": datetime.now(timezone.utc).isoformat(),
+            "last_checked": datetime.now(UTC).isoformat(),
         }
 
     except Exception as e:
@@ -375,7 +372,7 @@ async def get_maintenance_status(
 
 @router.post("/optimize")
 async def optimize_graph(
-    operations: List[str] = Body(
+    operations: list[str] = Body(
         ["incremental_refresh", "deduplicate"],
         description="List of operations to run",
     ),
@@ -404,7 +401,7 @@ async def optimize_graph(
         results = {
             "operations_run": [],
             "dry_run": dry_run,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         group_id = getattr(current_user, "project_id", None) or "neo4j"
@@ -424,18 +421,17 @@ async def optimize_graph(
                     "user_id": user_id,
                 }
                 task_id = str(uuid4())
-                async with async_session_factory() as session:
-                    async with session.begin():
-                        task_log = TaskLog(
-                            id=task_id,
-                            group_id=group_id,
-                            task_type="incremental_refresh",
-                            status="PENDING",
-                            payload=task_payload,
-                            entity_type="episode",
-                            created_at=datetime.now(timezone.utc),
-                        )
-                        session.add(task_log)
+                async with async_session_factory() as session, session.begin():
+                    task_log = TaskLog(
+                        id=task_id,
+                        group_id=group_id,
+                        task_type="incremental_refresh",
+                        status="PENDING",
+                        payload=task_payload,
+                        entity_type="episode",
+                        created_at=datetime.now(UTC),
+                    )
+                    session.add(task_log)
                 task_payload["task_id"] = task_id
                 workflow_id = f"incremental-refresh-{group_id}-{task_id[:8]}"
                 await workflow_engine.start_workflow(
@@ -499,7 +495,7 @@ async def optimize_graph(
                                 status="PENDING",
                                 payload=task_payload,
                                 entity_type="entity",
-                                created_at=datetime.now(timezone.utc),
+                                created_at=datetime.now(UTC),
                             )
                             session.add(task_log)
                     task_payload["task_id"] = task_id
@@ -523,7 +519,7 @@ async def optimize_graph(
 
             elif operation == "invalidate_edges":
                 days_since_update = 30
-                cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_since_update)
+                cutoff_date = datetime.now(UTC) - timedelta(days=days_since_update)
 
                 if dry_run:
                     query = """
@@ -585,7 +581,7 @@ async def optimize_graph(
                                 status="PENDING",
                                 payload=task_payload,
                                 entity_type="community",
-                                created_at=datetime.now(timezone.utc),
+                                created_at=datetime.now(UTC),
                             )
                             session.add(task_log)
                     task_payload["task_id"] = task_id
@@ -630,7 +626,7 @@ async def optimize_graph(
 
 @router.get("/embeddings/status")
 async def get_embedding_status(
-    project_id: Optional[str] = Query(None, description="Project ID to check"),
+    project_id: str | None = Query(None, description="Project ID to check"),
     current_user: User = Depends(get_current_user),
     graphiti_client=Depends(get_graphiti_client),
 ):
@@ -725,7 +721,7 @@ async def rebuild_embeddings(
 
 @router.get("/embeddings/dimensions/check")
 async def check_embedding_dimensions(
-    project_id: Optional[str] = Query(None, description="Project ID to check"),
+    project_id: str | None = Query(None, description="Project ID to check"),
     current_user: User = Depends(get_current_user),
     graphiti_client=Depends(get_graphiti_client),
 ):
@@ -774,7 +770,7 @@ async def check_embedding_dimensions(
 
 @router.get("/embeddings/validate")
 async def validate_embeddings(
-    project_id: Optional[str] = Query(None, description="Project ID to validate"),
+    project_id: str | None = Query(None, description="Project ID to validate"),
     current_user: User = Depends(get_current_user),
     graphiti_client=Depends(get_graphiti_client),
 ):
@@ -813,7 +809,7 @@ async def validate_embeddings(
 
 @router.get("/embeddings/native/status")
 async def get_native_embedding_status(
-    project_id: Optional[str] = Query(None, description="Project ID to check"),
+    project_id: str | None = Query(None, description="Project ID to check"),
     current_user: User = Depends(get_current_user),
     neo4j_client=Depends(get_neo4j_client),
 ):
@@ -901,8 +897,8 @@ async def get_native_embedding_status(
 
 
 def _get_embedding_recommendations(
-    config_dim: Optional[int],
-    existing_dim: Optional[int],
+    config_dim: int | None,
+    existing_dim: int | None,
     total_embeddings: int,
     is_compatible: bool,
 ) -> list:
@@ -952,7 +948,7 @@ async def migrate_embeddings(
     target_model: str = Query(
         ..., description="Target embedding model (e.g., 'text-embedding-3-small')"
     ),
-    project_id: Optional[str] = Query(None, description="Project ID to migrate"),
+    project_id: str | None = Query(None, description="Project ID to migrate"),
     dry_run: bool = Query(True, description="If true, only report without migrating"),
     current_user: User = Depends(get_current_user),
     neo4j_client=Depends(get_neo4j_client),

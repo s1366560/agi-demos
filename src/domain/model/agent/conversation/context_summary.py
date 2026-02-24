@@ -7,8 +7,8 @@ loading without re-running LLM summarization on every turn.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -33,10 +33,10 @@ class ContextSummary:
     messages_covered_up_to: int  # event_time_us
     messages_covered_count: int
     compression_level: str = "l2_summarize"
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    model: Optional[str] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    model: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary for JSON storage in conversation.metadata."""
         return {
             "summary_text": self.summary_text,
@@ -49,13 +49,13 @@ class ContextSummary:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ContextSummary":
+    def from_dict(cls, data: dict[str, Any]) -> "ContextSummary":
         """Deserialize from dictionary."""
         created_at = data.get("created_at")
         if isinstance(created_at, str):
             created_at = datetime.fromisoformat(created_at)
         elif created_at is None:
-            created_at = datetime.now(timezone.utc)
+            created_at = datetime.now(UTC)
 
         return cls(
             summary_text=data["summary_text"],

@@ -8,9 +8,9 @@ This is critical for preventing dimension mismatches that cause Neo4j
 vector.similarity.cosine() operations to fail.
 """
 
+import contextlib
 import logging
 from dataclasses import dataclass
-from typing import List, Optional
 
 from src.domain.llm_providers.llm_types import EmbedderClient
 
@@ -22,7 +22,7 @@ class EmbedderConfig:
     """Configuration for validated embedder."""
 
     embedding_dim: int = 1024
-    embedding_model: Optional[str] = None
+    embedding_model: str | None = None
 
 
 class ValidatedEmbedder(EmbedderClient):
@@ -34,7 +34,7 @@ class ValidatedEmbedder(EmbedderClient):
     This prevents Neo4j vector similarity errors when dimensions don't match.
     """
 
-    def __init__(self, base_embedder: EmbedderClient, config: EmbedderConfig):
+    def __init__(self, base_embedder: EmbedderClient, config: EmbedderConfig) -> None:
         """
         Initialize the validated embedder wrapper.
 
@@ -55,10 +55,8 @@ class ValidatedEmbedder(EmbedderClient):
             if not attr.startswith("_") and callable(getattr(base_embedder, attr)):
                 # Don't override wrapper's own methods
                 if not hasattr(self, attr) or attr == "embedding_dim":
-                    try:
+                    with contextlib.suppress(AttributeError, TypeError):
                         setattr(self, attr, getattr(base_embedder, attr))
-                    except (AttributeError, TypeError):
-                        pass
 
     @property
     def embedding_dim(self) -> int:
@@ -71,8 +69,8 @@ class ValidatedEmbedder(EmbedderClient):
         return self._base_config
 
     async def create(
-        self, input_data: str | List[str] | List[int] | List[List[int]]
-    ) -> List[float]:
+        self, input_data: str | list[str] | list[int] | list[list[int]]
+    ) -> list[float]:
         """
         Create embedding with dimension validation.
 
@@ -92,7 +90,7 @@ class ValidatedEmbedder(EmbedderClient):
 
         return embedding
 
-    async def create_batch(self, input_data_list: List[str]) -> List[List[float]]:
+    async def create_batch(self, input_data_list: list[str]) -> list[list[float]]:
         """
         Create embeddings for batch of texts with dimension validation.
 
@@ -115,8 +113,8 @@ class ValidatedEmbedder(EmbedderClient):
         return validated_embeddings
 
     def _validate_and_fix_dimension(
-        self, embedding: List[float], input_context: str
-    ) -> List[float]:
+        self, embedding: list[float], input_context: str
+    ) -> list[float]:
         """
         Validate and fix embedding dimension.
 

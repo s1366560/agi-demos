@@ -358,8 +358,8 @@ Background workflows run as asyncio tasks with retry and status tracking via Tas
 **Formatting & Linting:**
 - Line length: 100 characters
 - Formatter: `ruff format`
-- Linter: `ruff check` (E, F, I, N, UP, B, C4, SIM, RUF rules)
-- Type checker: `mypy` (permissive mode)
+- Linter: `ruff check` (E, F, I, N, UP, B, C4, SIM, RUF, ANN, C901, PLR091 rules)
+- Type checker: `mypy` (strict mode, tests/alembic/legacy excluded)
 
 **Commands:**
 ```bash

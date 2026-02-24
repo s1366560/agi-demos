@@ -10,12 +10,14 @@ This improves upon the basic health check by running continuously in the backgro
 """
 
 import asyncio
+import contextlib
 import logging
 import time
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -36,12 +38,12 @@ class HealthCheckResult:
     sandbox_id: str
     healthy: bool
     level: HealthCheckLevel
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     container_running: bool = False
     mcp_connected: bool = False
     services_healthy: bool = False
-    latency_ms: Optional[float] = None
-    error_message: Optional[str] = None
+    latency_ms: float | None = None
+    error_message: str | None = None
     recovery_attempted: bool = False
     recovery_succeeded: bool = False
 
@@ -73,7 +75,7 @@ class TTLCache:
     that should be automatically cleaned up.
     """
 
-    def __init__(self, default_ttl_seconds: float = 300.0, max_size: int = 1000):
+    def __init__(self, default_ttl_seconds: float = 300.0, max_size: int = 1000) -> None:
         """
         Initialize TTL cache.
 
@@ -81,12 +83,12 @@ class TTLCache:
             default_ttl_seconds: Default TTL for entries
             max_size: Maximum number of entries before forced cleanup
         """
-        self._entries: Dict[str, TTLEntry] = {}
+        self._entries: dict[str, TTLEntry] = {}
         self._default_ttl = default_ttl_seconds
         self._max_size = max_size
         self._lock = asyncio.Lock()
 
-    async def get(self, key: str) -> Optional[Any]:  # noqa: ANN401
+    async def get(self, key: str) -> Any | None:
         """Get value if exists and not expired."""
         async with self._lock:
             entry = self._entries.get(key)
@@ -98,7 +100,7 @@ class TTLCache:
             entry.touch()
             return entry.value
 
-    async def set(self, key: str, value: Any, ttl: Optional[float] = None) -> None:  # noqa: ANN401
+    async def set(self, key: str, value: Any, ttl: float | None = None) -> None:
         """Set a value with optional custom TTL."""
         async with self._lock:
             # Check if cleanup needed
@@ -184,7 +186,7 @@ class EnhancedHealthMonitor:
         max_recovery_attempts: int = 3,
         recovery_backoff_base: float = 5.0,
         ttl_cleanup_interval_seconds: float = 300.0,
-    ):
+    ) -> None:
         """
         Initialize the health monitor.
 
@@ -209,9 +211,9 @@ class EnhancedHealthMonitor:
 
         # Running state
         self._running = False
-        self._health_check_task: Optional[asyncio.Task] = None
-        self._heartbeat_task: Optional[asyncio.Task] = None
-        self._ttl_cleanup_task: Optional[asyncio.Task] = None
+        self._health_check_task: asyncio.Task | None = None
+        self._heartbeat_task: asyncio.Task | None = None
+        self._ttl_cleanup_task: asyncio.Task | None = None
 
         # TTL caches for various tracking data
         self._rebuild_timestamps = TTLCache(default_ttl_seconds=300.0, max_size=1000)
@@ -219,12 +221,12 @@ class EnhancedHealthMonitor:
         self._last_health_results = TTLCache(default_ttl_seconds=600.0, max_size=1000)
 
         # Callbacks for state changes
-        self._on_unhealthy_callbacks: List[Callable[[str, HealthCheckResult], Coroutine]] = []
-        self._on_recovered_callbacks: List[Callable[[str, HealthCheckResult], Coroutine]] = []
-        self._on_terminated_callbacks: List[Callable[[str], Coroutine]] = []
+        self._on_unhealthy_callbacks: list[Callable[[str, HealthCheckResult], Coroutine]] = []
+        self._on_recovered_callbacks: list[Callable[[str, HealthCheckResult], Coroutine]] = []
+        self._on_terminated_callbacks: list[Callable[[str], Coroutine]] = []
 
         # Track sandboxes currently being recovered (prevent concurrent recovery)
-        self._recovering: Set[str] = set()
+        self._recovering: set[str] = set()
         self._recovering_lock = asyncio.Lock()
 
     def on_unhealthy(
@@ -282,10 +284,8 @@ class EnhancedHealthMonitor:
         for task in tasks:
             if task:
                 task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await task
-                except asyncio.CancelledError:
-                    pass
 
         self._health_check_task = None
         self._heartbeat_task = None
@@ -590,7 +590,7 @@ class EnhancedHealthMonitor:
         if total_cleaned > 0:
             logger.debug(f"TTL cleanup: removed {total_cleaned} expired entries")
 
-    async def get_health_status(self, sandbox_id: str) -> Optional[HealthCheckResult]:
+    async def get_health_status(self, sandbox_id: str) -> HealthCheckResult | None:
         """Get the last health check result for a sandbox."""
         return await self._last_health_results.get(sandbox_id)
 
@@ -600,7 +600,7 @@ class EnhancedHealthMonitor:
         await self._last_health_results.set(sandbox_id, result)
         return result
 
-    async def get_stats(self) -> Dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """Get health monitor statistics."""
         return {
             "running": self._running,

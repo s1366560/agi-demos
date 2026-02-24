@@ -5,8 +5,8 @@ Task list endpoint for agent-managed task checklists per conversation.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import List, Literal, Optional
+from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -63,7 +63,7 @@ async def switch_mode(
             .values(
                 current_mode=request_body.mode,
                 current_plan_id=None,
-                updated_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(UTC),
             )
         )
         result = await db.execute(stmt)
@@ -80,7 +80,7 @@ async def switch_mode(
         return ModeResponse(
             conversation_id=request_body.conversation_id,
             mode=request_body.mode,
-            switched_at=datetime.now(timezone.utc).isoformat(),
+            switched_at=datetime.now(UTC).isoformat(),
         )
 
     except HTTPException:
@@ -137,7 +137,7 @@ class TaskItemResponse(BaseModel):
 
 class TaskListResponse(BaseModel):
     conversation_id: str
-    tasks: List[TaskItemResponse]
+    tasks: list[TaskItemResponse]
     total_count: int
 
 
@@ -147,7 +147,7 @@ class TaskListResponse(BaseModel):
 @router.get("/tasks/{conversation_id}")
 async def get_tasks(
     conversation_id: str,
-    status: Optional[str] = Query(None, description="Filter by status"),
+    status: str | None = Query(None, description="Filter by status"),
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TaskListResponse:

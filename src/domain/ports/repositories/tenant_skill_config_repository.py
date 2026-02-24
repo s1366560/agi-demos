@@ -6,7 +6,6 @@ skill configurations (disable/override system skills).
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional
 
 from src.domain.model.agent.tenant_skill_config import TenantSkillConfig
 
@@ -36,7 +35,7 @@ class TenantSkillConfigRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_by_id(self, config_id: str) -> Optional[TenantSkillConfig]:
+    async def get_by_id(self, config_id: str) -> TenantSkillConfig | None:
         """
         Get a config by its ID.
 
@@ -53,7 +52,7 @@ class TenantSkillConfigRepositoryPort(ABC):
         self,
         tenant_id: str,
         system_skill_name: str,
-    ) -> Optional[TenantSkillConfig]:
+    ) -> TenantSkillConfig | None:
         """
         Get a config by tenant and system skill name.
 
@@ -114,7 +113,7 @@ class TenantSkillConfigRepositoryPort(ABC):
     async def list_by_tenant(
         self,
         tenant_id: str,
-    ) -> List[TenantSkillConfig]:
+    ) -> list[TenantSkillConfig]:
         """
         List all configs for a tenant.
 
@@ -130,7 +129,7 @@ class TenantSkillConfigRepositoryPort(ABC):
     async def get_configs_map(
         self,
         tenant_id: str,
-    ) -> Dict[str, TenantSkillConfig]:
+    ) -> dict[str, TenantSkillConfig]:
         """
         Get all configs for a tenant as a map keyed by system_skill_name.
 

@@ -20,7 +20,7 @@ Example:
 """
 
 import logging
-from typing import Any, Protocol, Type
+from typing import Any, Protocol
 
 from src.domain.llm_providers.llm_types import LLMClient, LLMConfig
 from src.domain.llm_providers.models import ProviderConfig, ProviderType
@@ -35,7 +35,7 @@ class AdapterFactory(Protocol):
         self,
         config: LLMConfig,
         provider_config: ProviderConfig,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> LLMClient:
         """Create an adapter instance."""
         ...
@@ -49,9 +49,9 @@ class ProviderAdapterRegistry:
     Custom adapters can be registered for specific providers if needed.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the registry with default adapters."""
-        self._adapters: dict[ProviderType, Type[LLMClient] | AdapterFactory] = {}
+        self._adapters: dict[ProviderType, type[LLMClient] | AdapterFactory] = {}
         self._register_default_adapters()
 
     def _register_default_adapters(self) -> None:
@@ -63,7 +63,7 @@ class ProviderAdapterRegistry:
     def register(
         self,
         provider_type: ProviderType,
-        adapter_class: Type[LLMClient] | AdapterFactory,
+        adapter_class: type[LLMClient] | AdapterFactory,
     ) -> None:
         """
         Register a custom adapter for a provider.
@@ -82,7 +82,7 @@ class ProviderAdapterRegistry:
     def _get_adapter_class(
         self,
         provider_type: ProviderType,
-    ) -> Type[LLMClient] | AdapterFactory:
+    ) -> type[LLMClient] | AdapterFactory:
         """
         Get adapter class for a provider.
 
@@ -101,7 +101,7 @@ class ProviderAdapterRegistry:
         self,
         provider_config: ProviderConfig,
         llm_config: LLMConfig | None = None,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> LLMClient:
         """
         Create an adapter instance for a provider.

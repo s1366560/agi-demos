@@ -5,7 +5,6 @@ This router provides endpoints for managing long-running background tasks.
 """
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -56,7 +55,7 @@ async def cancel_task(task_id: str, current_user: User = Depends(get_current_use
 
 @router.get("/")
 async def list_tasks(
-    status: Optional[str] = Query(None, description="Filter by status"),
+    status: str | None = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
 ):

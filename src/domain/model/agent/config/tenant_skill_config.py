@@ -6,9 +6,9 @@ This enables multi-tenant isolation while preserving system skill defaults.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class TenantSkillAction(str, Enum):
@@ -45,9 +45,9 @@ class TenantSkillConfig:
     tenant_id: str
     system_skill_name: str
     action: TenantSkillAction
-    override_skill_id: Optional[str] = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    override_skill_id: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self):
         """Validate the config."""
@@ -68,7 +68,7 @@ class TenantSkillConfig:
         """Check if this config overrides the system skill."""
         return self.action == TenantSkillAction.OVERRIDE
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "id": self.id,
@@ -81,7 +81,7 @@ class TenantSkillConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TenantSkillConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "TenantSkillConfig":
         """Create from dictionary (e.g., from database)."""
         return cls(
             id=data["id"],
@@ -91,10 +91,10 @@ class TenantSkillConfig:
             override_skill_id=data.get("override_skill_id"),
             created_at=datetime.fromisoformat(data["created_at"])
             if "created_at" in data
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
             updated_at=datetime.fromisoformat(data["updated_at"])
             if "updated_at" in data
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
         )
 
     @classmethod

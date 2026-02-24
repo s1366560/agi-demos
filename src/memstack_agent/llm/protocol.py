@@ -4,7 +4,8 @@ Defines Protocol-based interfaces for LLM clients, following
 the same pattern as the Tool Protocol.
 """
 
-from typing import Any, AsyncGenerator, List, Optional, Protocol, runtime_checkable
+from collections.abc import AsyncGenerator
+from typing import Any, Protocol, runtime_checkable
 
 from memstack_agent.llm.types import ChatResponse, Message, StreamChunk
 from memstack_agent.tools.protocol import ToolDefinition
@@ -41,9 +42,9 @@ class LLMClient(Protocol):
 
     async def generate(
         self,
-        messages: List[Message],
-        tools: Optional[List[ToolDefinition]] = None,
-        **kwargs: Any,  # noqa: ANN401
+        messages: list[Message],
+        tools: list[ToolDefinition] | None = None,
+        **kwargs: Any,
     ) -> ChatResponse:
         """Generate a non-streaming response.
 
@@ -59,9 +60,9 @@ class LLMClient(Protocol):
 
     async def stream(
         self,
-        messages: List[Message],
-        tools: Optional[List[ToolDefinition]] = None,
-        **kwargs: Any,  # noqa: ANN401
+        messages: list[Message],
+        tools: list[ToolDefinition] | None = None,
+        **kwargs: Any,
     ) -> AsyncGenerator[StreamChunk, None]:
         """Generate a streaming response.
 
@@ -85,9 +86,9 @@ class LLMClientSync(Protocol):
 
     def generate_sync(
         self,
-        messages: List[Message],
-        tools: Optional[List[ToolDefinition]] = None,
-        **kwargs: Any,  # noqa: ANN401
+        messages: list[Message],
+        tools: list[ToolDefinition] | None = None,
+        **kwargs: Any,
     ) -> ChatResponse:
         """Generate a non-streaming response synchronously.
 

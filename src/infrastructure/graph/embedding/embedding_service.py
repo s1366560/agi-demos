@@ -13,7 +13,7 @@ The service wraps existing embedder implementations and provides:
 import asyncio
 import logging
 import math
-from typing import List, Optional, Protocol
+from typing import Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class EmbedderProtocol(Protocol):
 
     embedding_dim: int
 
-    async def create(self, input_data: str | List[str]) -> List[float]:
+    async def create(self, input_data: str | list[str]) -> list[float]:
         """Create embedding for input data."""
         ...
 
@@ -47,7 +47,7 @@ class EmbeddingService:
         self,
         embedder: EmbedderProtocol,
         validate_dimensions: bool = True,
-    ):
+    ) -> None:
         """
         Initialize embedding service.
 
@@ -79,7 +79,7 @@ class EmbeddingService:
         logger.warning("Could not determine embedding dimension from embedder, using default 1024")
         return 1024
 
-    async def embed_text(self, text: str) -> List[float]:
+    async def embed_text(self, text: str) -> list[float]:
         """
         Generate embedding for a single text.
 
@@ -122,10 +122,10 @@ class EmbeddingService:
 
     async def embed_batch(
         self,
-        texts: List[str],
+        texts: list[str],
         batch_size: int = 100,
         max_concurrency: int = 5,
-    ) -> List[List[float]]:
+    ) -> list[list[float]]:
         """
         Generate embeddings for multiple texts.
 
@@ -152,21 +152,21 @@ class EmbeddingService:
             return [[0.0] * self.embedding_dim] * len(texts)
 
         # Generate embeddings
-        embeddings: List[Optional[List[float]]] = [None] * len(texts)
+        embeddings: list[list[float] | None] = [None] * len(texts)
 
         # Check if embedder supports batch
         if hasattr(self._embedder, "create_batch"):
             # Use batch API
             try:
                 batch_results = await self._embedder.create_batch(non_empty_texts)
-                for idx, embedding in zip(non_empty_indices, batch_results):
+                for idx, embedding in zip(non_empty_indices, batch_results, strict=False):
                     if self._validate_dimensions and len(embedding) != self.embedding_dim:
                         embedding = self._fix_dimension(embedding)
                     embeddings[idx] = embedding
             except Exception as e:
                 logger.warning(f"Batch embedding failed, falling back to individual: {e}")
                 # Fall back to individual embedding
-                for idx, text in zip(non_empty_indices, non_empty_texts):
+                for idx, text in zip(non_empty_indices, non_empty_texts, strict=False):
                     embeddings[idx] = await self.embed_text(text)
         else:
             # Use individual calls with concurrency control
@@ -179,7 +179,7 @@ class EmbeddingService:
             await asyncio.gather(
                 *[
                     embed_with_semaphore(idx, text)
-                    for idx, text in zip(non_empty_indices, non_empty_texts)
+                    for idx, text in zip(non_empty_indices, non_empty_texts, strict=False)
                 ]
             )
 
@@ -190,7 +190,7 @@ class EmbeddingService:
 
         return embeddings
 
-    def _fix_dimension(self, embedding: List[float]) -> List[float]:
+    def _fix_dimension(self, embedding: list[float]) -> list[float]:
         """
         Fix embedding dimension by padding or truncating.
 
@@ -215,7 +215,7 @@ class EmbeddingService:
 
     def validate_embedding(
         self,
-        embedding: List[float],
+        embedding: list[float],
         name: str = "unknown",
     ) -> bool:
         """
@@ -265,8 +265,8 @@ class EmbeddingService:
 
     async def compute_similarity(
         self,
-        embedding1: List[float],
-        embedding2: List[float],
+        embedding1: list[float],
+        embedding2: list[float],
     ) -> float:
         """
         Compute cosine similarity between two embeddings.
@@ -283,7 +283,7 @@ class EmbeddingService:
                 f"Embedding dimensions don't match: {len(embedding1)} vs {len(embedding2)}"
             )
 
-        dot_product = sum(a * b for a, b in zip(embedding1, embedding2))
+        dot_product = sum(a * b for a, b in zip(embedding1, embedding2, strict=False))
         magnitude1 = sum(x * x for x in embedding1) ** 0.5
         magnitude2 = sum(x * x for x in embedding2) ** 0.5
 
@@ -294,10 +294,10 @@ class EmbeddingService:
 
     async def find_most_similar(
         self,
-        query_embedding: List[float],
-        candidates: List[List[float]],
+        query_embedding: list[float],
+        candidates: list[list[float]],
         top_k: int = 5,
-    ) -> List[tuple[int, float]]:
+    ) -> list[tuple[int, float]]:
         """
         Find most similar embeddings from candidates.
 

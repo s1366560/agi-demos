@@ -7,7 +7,6 @@ This model represents file attachments in conversations, supporting:
 """
 
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import (
     JSON,
@@ -68,19 +67,19 @@ class AttachmentModel(Base):
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
 
     # Multipart upload tracking
-    upload_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
-    total_parts: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    upload_id: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    total_parts: Mapped[int | None] = mapped_column(Integer, nullable=True)
     uploaded_parts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # Sandbox integration
-    sandbox_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    sandbox_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Additional metadata (dimensions for images, page count for docs, etc.)
     # Note: Use 'file_metadata' to avoid conflict with SQLAlchemy's reserved 'metadata'
     file_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=True)
 
     # Error tracking
-    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -88,7 +87,7 @@ class AttachmentModel(Base):
         server_default=func.now(),
         nullable=False,
     )
-    expires_at: Mapped[Optional[datetime]] = mapped_column(
+    expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )

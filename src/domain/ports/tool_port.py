@@ -11,7 +11,7 @@ source of truth for tool metadata.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class ToolPermission(str, Enum):
@@ -38,9 +38,9 @@ class ToolResult:
 
     output: str
     success: bool = True
-    error: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    artifacts: List[Dict[str, Any]] = field(default_factory=list)
+    error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    artifacts: list[dict[str, Any]] = field(default_factory=list)
 
     @staticmethod
     def ok(output: str, **metadata) -> "ToolResult":
@@ -52,7 +52,7 @@ class ToolResult:
         """Create a failure result."""
         return ToolResult(output=output, success=False, error=error)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         result = {
             "output": self.output,
@@ -85,9 +85,9 @@ class ToolParameter:
     description: str
     required: bool = True
     default: Any = None
-    enum: Optional[List[Any]] = None
+    enum: list[Any] | None = None
 
-    def to_json_schema(self) -> Dict[str, Any]:
+    def to_json_schema(self) -> dict[str, Any]:
         """Convert to JSON Schema format."""
         schema = {
             "type": self.type,
@@ -146,7 +146,7 @@ class ToolPort(Protocol):
         ...
 
     @property
-    def parameters(self) -> List[ToolParameter]:
+    def parameters(self) -> list[ToolParameter]:
         """List of tool parameters."""
         ...
 
@@ -156,7 +156,7 @@ class ToolPort(Protocol):
         ...
 
     @property
-    def permission_required(self) -> Optional[str]:
+    def permission_required(self) -> str | None:
         """Permission required to use this tool."""
         ...
 
@@ -199,10 +199,10 @@ class BaseTool:
         self,
         name: str,
         description: str,
-        parameters: Optional[List[ToolParameter]] = None,
+        parameters: list[ToolParameter] | None = None,
         version: str = "1.0.0",
-        permission_required: Optional[str] = None,
-    ):
+        permission_required: str | None = None,
+    ) -> None:
         self._name = name
         self._description = description
         self._parameters = parameters or []
@@ -218,7 +218,7 @@ class BaseTool:
         return self._description
 
     @property
-    def parameters(self) -> List[ToolParameter]:
+    def parameters(self) -> list[ToolParameter]:
         return self._parameters
 
     @property
@@ -226,10 +226,10 @@ class BaseTool:
         return self._version
 
     @property
-    def permission_required(self) -> Optional[str]:
+    def permission_required(self) -> str | None:
         return self._permission_required
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get parameters as JSON Schema format."""
         properties = {}
         required = []
@@ -245,7 +245,7 @@ class BaseTool:
             "required": required,
         }
 
-    def to_openai_format(self) -> Dict[str, Any]:
+    def to_openai_format(self) -> dict[str, Any]:
         """Convert to OpenAI function calling format."""
         return {
             "type": "function",

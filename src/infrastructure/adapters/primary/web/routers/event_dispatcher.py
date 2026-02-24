@@ -13,9 +13,10 @@ Design:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,7 @@ class DispatcherConfig:
 class QueuedEvent:
     """An event waiting in queue."""
 
-    data: Dict[str, Any]
+    data: dict[str, Any]
     enqueue_time: float = field(default_factory=lambda: asyncio.get_event_loop().time())
     retry_count: int = 0
 
@@ -66,8 +67,8 @@ class EventDispatcher:
         self,
         session_id: str,
         websocket: WebSocket,
-        config: Optional[DispatcherConfig] = None,
-    ):
+        config: DispatcherConfig | None = None,
+    ) -> None:
         self.session_id = session_id
         self.websocket = websocket
         self.config = config or DispatcherConfig()
@@ -76,7 +77,7 @@ class EventDispatcher:
         self.queue: asyncio.Queue[QueuedEvent] = asyncio.Queue(maxsize=self.config.queue_size)
 
         # Sender task
-        self.sender_task: Optional[asyncio.Task] = None
+        self.sender_task: asyncio.Task | None = None
         self.running = False
 
         # Statistics
@@ -105,10 +106,8 @@ class EventDispatcher:
             sender_task = self.sender_task
             self.sender_task = None
             sender_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await sender_task
-            except asyncio.CancelledError:
-                pass
 
         # Try to flush remaining events
         await self._flush_remaining()
@@ -117,7 +116,7 @@ class EventDispatcher:
             f"[Dispatcher] Stopped for session {self.session_id[:8]}... Stats: {self.stats}"
         )
 
-    async def enqueue(self, event: Dict[str, Any]) -> bool:
+    async def enqueue(self, event: dict[str, Any]) -> bool:
         """
         Enqueue an event for sending.
 
@@ -151,7 +150,7 @@ class EventDispatcher:
                 try:
                     event = await asyncio.wait_for(self.queue.get(), timeout=0.1)
                     await self._send_event(event)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     # No events, continue loop
                     pass
             except asyncio.CancelledError:
@@ -179,7 +178,7 @@ class EventDispatcher:
                 return False
             raise
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Delta events are ephemeral — drop on timeout instead of retrying
             event_type = event.data.get("type", "")
             if "delta" in event_type:
@@ -224,7 +223,7 @@ class EventDispatcher:
             except Exception:
                 break
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get dispatcher statistics."""
         return {
             **self.stats,
@@ -235,14 +234,14 @@ class EventDispatcher:
 class DispatcherManager:
     """Manages multiple EventDispatcher instances."""
 
-    def __init__(self):
-        self.dispatchers: Dict[str, EventDispatcher] = {}
+    def __init__(self) -> None:
+        self.dispatchers: dict[str, EventDispatcher] = {}
 
     async def get_dispatcher(
         self,
         session_id: str,
         websocket: WebSocket,
-        config: Optional[DispatcherConfig] = None,
+        config: DispatcherConfig | None = None,
     ) -> EventDispatcher:
         """Get or create a dispatcher for the session."""
         if session_id not in self.dispatchers:
@@ -261,7 +260,7 @@ class DispatcherManager:
         """Clean up dispatcher for a session."""
         await self.remove_dispatcher(session_id)
 
-    def get_all_stats(self) -> Dict[str, Dict[str, Any]]:
+    def get_all_stats(self) -> dict[str, dict[str, Any]]:
         """Get stats for all dispatchers."""
         return {
             session_id: dispatcher.get_stats()
@@ -270,7 +269,7 @@ class DispatcherManager:
 
 
 # Global singleton
-_dispatcher_manager: Optional[DispatcherManager] = None
+_dispatcher_manager: DispatcherManager | None = None
 
 
 def get_dispatcher_manager() -> DispatcherManager:

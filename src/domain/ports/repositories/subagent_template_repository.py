@@ -5,7 +5,6 @@ Repository interface for persisting and retrieving SubAgent templates.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 
 class SubAgentTemplateRepositoryPort(ABC):
@@ -17,19 +16,19 @@ class SubAgentTemplateRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_by_id(self, template_id: str) -> Optional[dict]:
+    async def get_by_id(self, template_id: str) -> dict | None:
         """Get a template by ID."""
         pass
 
     @abstractmethod
     async def get_by_name(
-        self, tenant_id: str, name: str, version: Optional[str] = None
-    ) -> Optional[dict]:
+        self, tenant_id: str, name: str, version: str | None = None
+    ) -> dict | None:
         """Get a template by name within a tenant, optionally by version."""
         pass
 
     @abstractmethod
-    async def update(self, template_id: str, data: dict) -> Optional[dict]:
+    async def update(self, template_id: str, data: dict) -> dict | None:
         """Update a template. Returns updated template or None."""
         pass
 
@@ -42,13 +41,13 @@ class SubAgentTemplateRepositoryPort(ABC):
     async def list_templates(
         self,
         tenant_id: str,
-        category: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-        query: Optional[str] = None,
+        category: str | None = None,
+        tags: list[str] | None = None,
+        query: str | None = None,
         published_only: bool = True,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[dict]:
+    ) -> list[dict]:
         """List templates with filtering."""
         pass
 
@@ -56,14 +55,14 @@ class SubAgentTemplateRepositoryPort(ABC):
     async def count_templates(
         self,
         tenant_id: str,
-        category: Optional[str] = None,
+        category: str | None = None,
         published_only: bool = True,
     ) -> int:
         """Count templates matching filters."""
         pass
 
     @abstractmethod
-    async def list_categories(self, tenant_id: str) -> List[str]:
+    async def list_categories(self, tenant_id: str) -> list[str]:
         """List distinct categories for a tenant."""
         pass
 

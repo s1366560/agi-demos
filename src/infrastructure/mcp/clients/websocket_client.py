@@ -17,7 +17,7 @@ import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import aiohttp
 
@@ -37,9 +37,9 @@ class MCPWebSocketClientConfig:
     """Configuration for MCP WebSocket Client."""
 
     url: str
-    headers: Dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict)
     timeout: float = DEFAULT_TIMEOUT
-    heartbeat_interval: Optional[float] = None
+    heartbeat_interval: float | None = None
     reconnect_attempts: int = 3
 
 
@@ -75,11 +75,11 @@ class MCPWebSocketClient:
     def __init__(
         self,
         url: str,
-        headers: Optional[Dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
         timeout: float = DEFAULT_TIMEOUT,
-        heartbeat_interval: Optional[float] = None,
+        heartbeat_interval: float | None = None,
         reconnect_attempts: int = 3,
-    ):
+    ) -> None:
         """
         Initialize the WebSocket client.
 
@@ -102,38 +102,38 @@ class MCPWebSocketClient:
         self.heartbeat_interval = heartbeat_interval
         self.reconnect_attempts = reconnect_attempts
 
-        self._session: Optional[aiohttp.ClientSession] = None
-        self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
+        self._session: aiohttp.ClientSession | None = None
+        self._ws: aiohttp.ClientWebSocketResponse | None = None
         self._request_id = 0
         # Lock for request ID generation and pending_requests access
         # This is a minimal lock - only held during ID generation, not during send
         self._request_id_lock = asyncio.Lock()
         # Legacy lock - kept for backward compatibility
         self._lock = self._request_id_lock
-        self._pending_requests: Dict[int, asyncio.Future] = {}
-        self._receive_task: Optional[asyncio.Task] = None
+        self._pending_requests: dict[int, asyncio.Future] = {}
+        self._receive_task: asyncio.Task | None = None
         self._cleanup_lock = asyncio.Lock()  # Lock to prevent double cleanup
         self._is_cleaning_up = False
 
-        self.server_info: Optional[Dict[str, Any]] = None
-        self._tools: List[MCPToolSchema] = []
+        self.server_info: dict[str, Any] | None = None
+        self._tools: list[MCPToolSchema] = []
         self._connected = False
 
         # Notification handlers for server-initiated messages
-        self.on_resource_updated: Optional[callable] = None
-        self.on_resource_list_changed: Optional[callable] = None
-        self.on_progress: Optional[callable] = None
-        self.on_cancelled: Optional[callable] = None
-        self.on_prompts_list_changed: Optional[callable] = None
+        self.on_resource_updated: callable | None = None
+        self.on_resource_list_changed: callable | None = None
+        self.on_progress: callable | None = None
+        self.on_cancelled: callable | None = None
+        self.on_prompts_list_changed: callable | None = None
 
         # Request handlers for server-initiated requests (Phase 2)
-        self.on_sampling_request: Optional[callable] = None
-        self.on_elicitation_request: Optional[callable] = None
-        self.on_roots_list: Optional[callable] = None
-        self.on_roots_list_changed: Optional[callable] = None
+        self.on_sampling_request: callable | None = None
+        self.on_elicitation_request: callable | None = None
+        self.on_roots_list: callable | None = None
+        self.on_roots_list_changed: callable | None = None
 
         # Client state
-        self._roots: List[Dict[str, Any]] = []
+        self._roots: list[dict[str, Any]] = []
 
     async def __aenter__(self) -> "MCPWebSocketClient":
         """Async context manager entry - connect to server."""
@@ -144,7 +144,7 @@ class MCPWebSocketClient:
         """Async context manager exit - disconnect from server."""
         await self.disconnect()
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Destructor - ensure cleanup warning if not properly closed."""
         if self._connected or self._ws is not None or self._session is not None:
             logger.warning(
@@ -157,7 +157,7 @@ class MCPWebSocketClient:
         """Check if the client is connected."""
         return self._connected and self._ws is not None and not self._ws.closed
 
-    async def connect(self, timeout: Optional[float] = None) -> bool:
+    async def connect(self, timeout: float | None = None) -> bool:
         """
         Connect to the remote MCP server via WebSocket.
 
@@ -230,7 +230,7 @@ class MCPWebSocketClient:
             await self.disconnect()
             return False
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"MCP WebSocket connection timeout after {timeout}s to {self.url}")
             await self.disconnect()
             return False
@@ -261,7 +261,7 @@ class MCPWebSocketClient:
                 self._receive_task.cancel()
                 try:
                     await asyncio.wait_for(self._receive_task, timeout=5.0)
-                except (asyncio.CancelledError, asyncio.TimeoutError):
+                except (TimeoutError, asyncio.CancelledError):
                     pass
                 except Exception as e:
                     logger.warning(f"Error waiting for receive task: {e}")
@@ -271,7 +271,7 @@ class MCPWebSocketClient:
             if self._ws and not self._ws.closed:
                 try:
                     await asyncio.wait_for(self._ws.close(), timeout=5.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning("WebSocket close timed out")
                 except Exception as e:
                     logger.warning(f"Error closing WebSocket: {e}")
@@ -281,14 +281,14 @@ class MCPWebSocketClient:
             if self._session and not self._session.closed:
                 try:
                     await asyncio.wait_for(self._session.close(), timeout=5.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning("Session close timed out")
                 except Exception as e:
                     logger.warning(f"Error closing session: {e}")
             self._session = None
 
             # Fail pending requests
-            for request_id, future in list(self._pending_requests.items()):
+            for _request_id, future in list(self._pending_requests.items()):
                 if not future.done():
                     future.set_exception(RuntimeError("WebSocket connection closed"))
             self._pending_requests.clear()
@@ -329,7 +329,7 @@ class MCPWebSocketClient:
         finally:
             self._connected = False
             # Fail all pending requests
-            for request_id, future in list(self._pending_requests.items()):
+            for _request_id, future in list(self._pending_requests.items()):
                 if not future.done():
                     future.set_exception(RuntimeError("WebSocket connection closed"))
             self._pending_requests.clear()
@@ -383,7 +383,7 @@ class MCPWebSocketClient:
         else:
             logger.warning(f"Received unexpected message: {data}")
 
-    async def list_tools(self, timeout: Optional[float] = None) -> List[MCPToolSchema]:
+    async def list_tools(self, timeout: float | None = None) -> list[MCPToolSchema]:
         """
         List available tools.
 
@@ -412,8 +412,8 @@ class MCPWebSocketClient:
     async def call_tool(
         self,
         name: str,
-        arguments: Dict[str, Any],
-        timeout: Optional[float] = None,
+        arguments: dict[str, Any],
+        timeout: float | None = None,
     ) -> MCPToolResult:
         """
         Call a tool on the MCP server.
@@ -469,15 +469,15 @@ class MCPWebSocketClient:
             isError=True,
         )
 
-    def get_cached_tools(self) -> List[MCPToolSchema]:
+    def get_cached_tools(self) -> list[MCPToolSchema]:
         """Get cached tools list (from connection time)."""
         return self._tools
 
     async def read_resource(
         self,
         uri: str,
-        timeout: Optional[float] = None,
-    ) -> Optional[Dict[str, Any]]:
+        timeout: float | None = None,
+    ) -> dict[str, Any] | None:
         """Read a resource from the MCP server via resources/read.
 
         Args:
@@ -501,8 +501,8 @@ class MCPWebSocketClient:
 
     async def list_resources(
         self,
-        timeout: Optional[float] = None,
-    ) -> Optional[Dict[str, Any]]:
+        timeout: float | None = None,
+    ) -> dict[str, Any] | None:
         """List resources from the MCP server via resources/list.
 
         Returns:
@@ -524,7 +524,7 @@ class MCPWebSocketClient:
     # MCP Protocol Capabilities (Phase 1)
     # ========================================================================
 
-    async def ping(self, timeout: Optional[float] = None) -> bool:
+    async def ping(self, timeout: float | None = None) -> bool:
         """Send ping to check connection health.
 
         Args:
@@ -541,7 +541,7 @@ class MCPWebSocketClient:
             logger.error(f"Ping failed: {e}")
             return False
 
-    async def list_prompts(self, timeout: Optional[float] = None) -> List[Dict[str, Any]]:
+    async def list_prompts(self, timeout: float | None = None) -> list[dict[str, Any]]:
         """List available prompt templates.
 
         Args:
@@ -563,9 +563,9 @@ class MCPWebSocketClient:
     async def get_prompt(
         self,
         name: str,
-        arguments: Optional[Dict[str, Any]] = None,
-        timeout: Optional[float] = None,
-    ) -> Optional[Dict[str, Any]]:
+        arguments: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any] | None:
         """Get a specific prompt template with arguments.
 
         Args:
@@ -591,7 +591,7 @@ class MCPWebSocketClient:
     async def subscribe_resource(
         self,
         uri: str,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> bool:
         """Subscribe to resource update notifications.
 
@@ -617,7 +617,7 @@ class MCPWebSocketClient:
     async def unsubscribe_resource(
         self,
         uri: str,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> bool:
         """Unsubscribe from resource update notifications.
 
@@ -643,7 +643,7 @@ class MCPWebSocketClient:
     async def set_logging_level(
         self,
         level: str,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> bool:
         """Set server logging level.
 
@@ -669,9 +669,9 @@ class MCPWebSocketClient:
     async def _send_request(
         self,
         method: str,
-        params: Dict[str, Any],
+        params: dict[str, Any],
         timeout: float = DEFAULT_TIMEOUT,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Send a JSON-RPC request and wait for response.
 
         The lock is only held during request ID generation and pending_requests
@@ -709,7 +709,7 @@ class MCPWebSocketClient:
             result = await asyncio.wait_for(future, timeout=timeout)
             return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             async with self._request_id_lock:
                 self._pending_requests.pop(request_id, None)
             error_msg = f"MCP request '{method}' timed out after {timeout}s (url={self.url})"
@@ -731,7 +731,7 @@ class MCPWebSocketClient:
             logger.error(f"MCP request error: {e}")
             return None
 
-    async def _send_notification(self, method: str, params: Dict[str, Any]) -> None:
+    async def _send_notification(self, method: str, params: dict[str, Any]) -> None:
         """Send a JSON-RPC notification (no response expected)."""
         if not self._ws or self._ws.closed:
             return
@@ -751,14 +751,14 @@ class MCPWebSocketClient:
     async def _send_response(
         self,
         request_id: int,
-        result: Optional[Dict[str, Any]] = None,
-        error: Optional[Dict[str, Any]] = None,
+        result: dict[str, Any] | None = None,
+        error: dict[str, Any] | None = None,
     ) -> None:
         """Send a JSON-RPC response to a server request."""
         if not self._ws or self._ws.closed:
             return
 
-        response: Dict[str, Any] = {"jsonrpc": "2.0", "id": request_id}
+        response: dict[str, Any] = {"jsonrpc": "2.0", "id": request_id}
 
         if error:
             response["error"] = error
@@ -772,7 +772,7 @@ class MCPWebSocketClient:
             logger.error(f"Response error: {e}")
 
     async def _handle_server_request(
-        self, request_id: int, method: str, params: Dict[str, Any]
+        self, request_id: int, method: str, params: dict[str, Any]
     ) -> None:
         """Handle server-initiated requests."""
         try:
@@ -798,7 +798,7 @@ class MCPWebSocketClient:
                 error={"code": -32603, "message": f"Internal error: {e!s}"},
             )
 
-    async def _handle_sampling_request(self, request_id: int, params: Dict[str, Any]) -> None:
+    async def _handle_sampling_request(self, request_id: int, params: dict[str, Any]) -> None:
         """Handle sampling/createMessage request from server."""
         if not self.on_sampling_request:
             await self._send_response(
@@ -820,7 +820,7 @@ class MCPWebSocketClient:
                 error={"code": -32603, "message": f"Sampling failed: {e!s}"},
             )
 
-    async def _handle_elicitation_request(self, request_id: int, params: Dict[str, Any]) -> None:
+    async def _handle_elicitation_request(self, request_id: int, params: dict[str, Any]) -> None:
         """Handle elicitation/create request from server."""
         if not self.on_elicitation_request:
             await self._send_response(
@@ -842,7 +842,7 @@ class MCPWebSocketClient:
                 error={"code": -32603, "message": f"Elicitation failed: {e!s}"},
             )
 
-    async def _handle_roots_list_request(self, request_id: int, params: Dict[str, Any]) -> None:
+    async def _handle_roots_list_request(self, request_id: int, params: dict[str, Any]) -> None:
         """Handle roots/list request from server."""
         if self.on_roots_list:
             try:
@@ -862,7 +862,7 @@ class MCPWebSocketClient:
     # MCP Protocol Capabilities (Phase 2)
     # ========================================================================
 
-    async def set_roots(self, roots: List[Dict[str, Any]]) -> None:
+    async def set_roots(self, roots: list[dict[str, Any]]) -> None:
         """Set the client's roots and notify the server.
 
         Args:
@@ -877,11 +877,11 @@ class MCPWebSocketClient:
 
     async def complete(
         self,
-        ref: Dict[str, Any],
-        argument: Dict[str, Any],
-        context: Optional[Dict[str, Any]] = None,
-        timeout: Optional[float] = None,
-    ) -> Optional[Dict[str, Any]]:
+        ref: dict[str, Any],
+        argument: dict[str, Any],
+        context: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any] | None:
         """Request completion suggestions from the server.
 
         Args:
@@ -899,7 +899,7 @@ class MCPWebSocketClient:
         Reference: https://modelcontextprotocol.io/specification/2025-11-25
         """
         timeout = timeout or self.timeout
-        params: Dict[str, Any] = {"ref": ref, "argument": argument}
+        params: dict[str, Any] = {"ref": ref, "argument": argument}
         if context:
             params["context"] = context
 

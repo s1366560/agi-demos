@@ -6,8 +6,8 @@ Logs provider CRUD operations, configuration changes, and tenant assignments.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -21,16 +21,16 @@ logger = logging.getLogger(__name__)
 class AuditLogEntry(BaseModel):
     """Audit log entry model."""
 
-    id: Optional[str] = None
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    actor: Optional[str] = None  # User ID or system
+    id: str | None = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    actor: str | None = None  # User ID or system
     action: str  # e.g., "provider.created", "provider.updated"
     resource_type: str  # e.g., "provider", "tenant_mapping"
-    resource_id: Optional[str] = None
-    tenant_id: Optional[str] = None
-    details: Dict[str, Any] = Field(default_factory=dict)
-    ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
+    resource_id: str | None = None
+    tenant_id: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+    ip_address: str | None = None
+    user_agent: str | None = None
 
     class Config:
         json_encoders = {datetime: lambda v: v.isoformat()}
@@ -49,8 +49,8 @@ class AuditLogService:
     def __init__(
         self,
         backend: str = "console",  # "database", "file", "console"
-        log_file: Optional[str] = None,
-    ):
+        log_file: str | None = None,
+    ) -> None:
         """
         Initialize audit log service.
 
@@ -65,12 +65,12 @@ class AuditLogService:
         self,
         action: str,
         resource_type: str,
-        resource_id: Optional[str] = None,
-        actor: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
+        resource_id: str | None = None,
+        actor: str | None = None,
+        tenant_id: str | None = None,
+        details: dict[str, Any] | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> AuditLogEntry:
         """
         Log an audit event.
@@ -109,7 +109,7 @@ class AuditLogService:
 
         return entry
 
-    async def _log_to_database(self, entry: AuditLogEntry):
+    async def _log_to_database(self, entry: AuditLogEntry) -> None:
         """Store audit log in database."""
         try:
             async with async_session_factory() as session:
@@ -140,7 +140,7 @@ class AuditLogService:
 
         return str(uuid4())
 
-    async def _log_to_file(self, entry: AuditLogEntry):
+    async def _log_to_file(self, entry: AuditLogEntry) -> None:
         """Store audit log in file."""
         try:
             import json
@@ -161,7 +161,7 @@ class AuditLogService:
             logger.error(f"Failed to log to file: {e}")
             await self._log_to_console(entry)
 
-    async def _log_to_console(self, entry: AuditLogEntry):
+    async def _log_to_console(self, entry: AuditLogEntry) -> None:
         """Log audit entry to console."""
         log_msg = (
             f"AUDIT: {entry.action} | "
@@ -181,8 +181,8 @@ class AuditLogService:
         provider_id: UUID,
         provider_name: str,
         provider_type: str,
-        actor: Optional[str] = None,
-        tenant_id: Optional[str] = None,
+        actor: str | None = None,
+        tenant_id: str | None = None,
     ):
         """Log provider creation."""
         return await self.log_event(
@@ -200,9 +200,9 @@ class AuditLogService:
     async def log_provider_updated(
         self,
         provider_id: UUID,
-        changes: Dict[str, Any],
-        actor: Optional[str] = None,
-        tenant_id: Optional[str] = None,
+        changes: dict[str, Any],
+        actor: str | None = None,
+        tenant_id: str | None = None,
     ):
         """Log provider update."""
         return await self.log_event(
@@ -218,8 +218,8 @@ class AuditLogService:
         self,
         provider_id: UUID,
         provider_name: str,
-        actor: Optional[str] = None,
-        tenant_id: Optional[str] = None,
+        actor: str | None = None,
+        tenant_id: str | None = None,
     ):
         """Log provider deletion."""
         return await self.log_event(
@@ -235,8 +235,8 @@ class AuditLogService:
         self,
         provider_id: UUID,
         status: str,
-        response_time_ms: Optional[int] = None,
-        actor: Optional[str] = None,
+        response_time_ms: int | None = None,
+        actor: str | None = None,
     ):
         """Log provider health check."""
         return await self.log_event(
@@ -255,7 +255,7 @@ class AuditLogService:
         tenant_id: str,
         provider_id: UUID,
         priority: int,
-        actor: Optional[str] = None,
+        actor: str | None = None,
     ):
         """Log tenant-provider assignment."""
         return await self.log_event(
@@ -274,7 +274,7 @@ class AuditLogService:
         self,
         tenant_id: str,
         provider_id: UUID,
-        actor: Optional[str] = None,
+        actor: str | None = None,
     ):
         """Log tenant-provider unassignment."""
         return await self.log_event(
@@ -288,7 +288,7 @@ class AuditLogService:
 
 
 # Singleton instance
-_audit_service: Optional[AuditLogService] = None
+_audit_service: AuditLogService | None = None
 
 
 def get_audit_service() -> AuditLogService:

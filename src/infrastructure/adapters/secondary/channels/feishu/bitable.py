@@ -1,7 +1,7 @@
 """Feishu Bitable (Multi-dimensional Table) operations."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -9,13 +9,13 @@ logger = logging.getLogger(__name__)
 class FeishuBitableClient:
     """Client for Feishu Bitable operations."""
     
-    def __init__(self, client):
+    def __init__(self, client) -> None:
         self._client = client
     
     async def create_app(
         self,
         name: str,
-        folder_token: Optional[str] = None,
+        folder_token: str | None = None,
         time_zone: str = "Asia/Shanghai",
     ) -> str:
         """Create a new Bitable app.
@@ -28,7 +28,7 @@ class FeishuBitableClient:
         Returns:
             App token
         """
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "name": name,
             "time_zone": time_zone,
         }
@@ -42,7 +42,7 @@ class FeishuBitableClient:
         
         return response["data"]["app_token"]
     
-    async def get_app(self, app_token: str) -> Dict[str, Any]:
+    async def get_app(self, app_token: str) -> dict[str, Any]:
         """Get Bitable app info.
         
         Args:
@@ -58,7 +58,7 @@ class FeishuBitableClient:
         
         return response["data"]
     
-    async def list_tables(self, app_token: str) -> List[Dict[str, Any]]:
+    async def list_tables(self, app_token: str) -> list[dict[str, Any]]:
         """List tables in a Bitable.
         
         Args:
@@ -78,7 +78,7 @@ class FeishuBitableClient:
         self,
         app_token: str,
         name: str,
-        fields: Optional[List[Dict[str, Any]]] = None,
+        fields: list[dict[str, Any]] | None = None,
     ) -> str:
         """Create a new table.
         
@@ -90,7 +90,7 @@ class FeishuBitableClient:
         Returns:
             Table ID
         """
-        data: Dict[str, Any] = {"table": {"name": name}}
+        data: dict[str, Any] = {"table": {"name": name}}
         if fields:
             data["table"]["fields"] = fields
         
@@ -108,8 +108,8 @@ class FeishuBitableClient:
         self,
         app_token: str,
         table_id: str,
-        view_id: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        view_id: str | None = None,
+    ) -> list[dict[str, Any]]:
         """List fields in a table.
         
         Args:
@@ -140,7 +140,7 @@ class FeishuBitableClient:
         table_id: str,
         field_name: str,
         field_type: int,
-        property: Optional[Dict[str, Any]] = None,
+        property: dict[str, Any] | None = None,
     ) -> str:
         """Create a new field.
         
@@ -154,7 +154,7 @@ class FeishuBitableClient:
         Returns:
             Field ID
         """
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "field_name": field_name,
             "type": field_type,
         }
@@ -175,11 +175,11 @@ class FeishuBitableClient:
         self,
         app_token: str,
         table_id: str,
-        view_id: Optional[str] = None,
-        filter_: Optional[str] = None,
-        sort: Optional[List[str]] = None,
+        view_id: str | None = None,
+        filter_: str | None = None,
+        sort: list[str] | None = None,
         page_size: int = 500,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List records in a table.
         
         Args:
@@ -197,7 +197,7 @@ class FeishuBitableClient:
         page_token = None
         
         while True:
-            params: Dict[str, Any] = {"page_size": min(page_size, 500)}
+            params: dict[str, Any] = {"page_size": min(page_size, 500)}
             if view_id:
                 params["view_id"] = view_id
             if filter_:
@@ -231,7 +231,7 @@ class FeishuBitableClient:
         app_token: str,
         table_id: str,
         record_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get a specific record.
         
         Args:
@@ -259,7 +259,7 @@ class FeishuBitableClient:
         self,
         app_token: str,
         table_id: str,
-        fields: Dict[str, Any],
+        fields: dict[str, Any],
     ) -> str:
         """Create a new record.
         
@@ -286,7 +286,7 @@ class FeishuBitableClient:
         app_token: str,
         table_id: str,
         record_id: str,
-        fields: Dict[str, Any],
+        fields: dict[str, Any],
     ) -> None:
         """Update a record.
         
@@ -337,7 +337,7 @@ class FeishuBitableClient:
         app_token: str,
         table_id: str,
         query: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Search records by text.
         
         Args:

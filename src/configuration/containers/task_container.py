@@ -1,6 +1,5 @@
 """DI sub-container for task domain."""
 
-from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,7 +23,7 @@ class TaskContainer:
     and all task use cases.
     """
 
-    def __init__(self, db: Optional[AsyncSession] = None) -> None:
+    def __init__(self, db: AsyncSession | None = None) -> None:
         self._db = db
 
     def task_repository(self) -> TaskRepository:

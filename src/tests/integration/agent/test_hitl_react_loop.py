@@ -14,7 +14,7 @@ import json
 import os
 import sys
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import websockets
 
@@ -30,17 +30,17 @@ TEST_CONVERSATION_ID = os.environ.get("TEST_CONVERSATION_ID", "")
 class HITLReactLoopTester:
     """Test HITL to ReAct event loop recovery."""
 
-    def __init__(self, api_key: str, project_id: str, conversation_id: str):
+    def __init__(self, api_key: str, project_id: str, conversation_id: str) -> None:
         self.api_key = api_key
         self.project_id = project_id
         self.conversation_id = conversation_id
-        self.session_id: Optional[str] = None
-        self.ws: Optional[websockets.WebSocketClientProtocol] = None
-        self.events_before_hitl: List[Dict[str, Any]] = []
-        self.events_after_hitl: List[Dict[str, Any]] = []
-        self.errors: List[str] = []
-        self.hitl_request_id: Optional[str] = None
-        self.hitl_type: Optional[str] = None
+        self.session_id: str | None = None
+        self.ws: websockets.WebSocketClientProtocol | None = None
+        self.events_before_hitl: list[dict[str, Any]] = []
+        self.events_after_hitl: list[dict[str, Any]] = []
+        self.errors: list[str] = []
+        self.hitl_request_id: str | None = None
+        self.hitl_type: str | None = None
 
     async def connect(self) -> bool:
         """Connect to WebSocket."""
@@ -52,7 +52,7 @@ class HITLReactLoopTester:
             self.errors.append(f"Connection failed: {e}")
             return False
 
-    async def receive_until_event(self, target_events: List[str], timeout: float = 30.0) -> List[Dict[str, Any]]:
+    async def receive_until_event(self, target_events: list[str], timeout: float = 30.0) -> list[dict[str, Any]]:
         """Receive events until one of target events is received."""
         events = []
         start_time = time.time()
@@ -77,7 +77,7 @@ class HITLReactLoopTester:
                     if event_type in target_events:
                         return events
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
         except Exception as e:
@@ -203,7 +203,7 @@ class HITLReactLoopTester:
             print("   ✓ SUCCESS: ReAct Agent continued and completed after HITL!")
             return True
         elif "error" in event_types_after:
-            error_event = [e for e in self.events_after_hitl if e.get("type") == "error"][0]
+            error_event = next(e for e in self.events_after_hitl if e.get("type") == "error")
             print(f"   ✗ ERROR after HITL: {error_event.get('data', {})}")
             return False
         else:

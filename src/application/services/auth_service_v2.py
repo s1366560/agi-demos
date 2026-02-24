@@ -8,8 +8,7 @@ following the Dependency Inversion Principle.
 import hashlib
 import logging
 import secrets
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import bcrypt
@@ -32,7 +31,7 @@ class AuthService:
         self,
         user_repository: UserRepository,
         api_key_repository: APIKeyRepository,
-    ):
+    ) -> None:
         self._user_repo = user_repository
         self._api_key_repo = api_key_repository
 
@@ -71,7 +70,7 @@ class AuthService:
 
     # === API Key Operations ===
 
-    async def verify_api_key(self, api_key: str) -> Optional[APIKey]:
+    async def verify_api_key(self, api_key: str) -> APIKey | None:
         """
         Verify an API key and return the API key object if valid.
 
@@ -96,7 +95,7 @@ class AuthService:
         if not stored_key.is_active:
             raise ValueError("API key has been deactivated")
 
-        if stored_key.expires_at and stored_key.expires_at < datetime.now(timezone.utc):
+        if stored_key.expires_at and stored_key.expires_at < datetime.now(UTC):
             raise ValueError("API key has expired")
 
         # NOTE: last_used_at update is intentionally skipped here to avoid
@@ -111,7 +110,7 @@ class AuthService:
         user_id: str,
         name: str,
         permissions: list[str],
-        expires_in_days: Optional[int] = None,
+        expires_in_days: int | None = None,
     ) -> tuple[str, APIKey]:
         """
         Create a new API key for a user.
@@ -130,7 +129,7 @@ class AuthService:
 
         expires_at = None
         if expires_in_days:
-            expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
+            expires_at = datetime.now(UTC) + timedelta(days=expires_in_days)
 
         api_key = APIKey(
             id=str(uuid4()),
@@ -158,7 +157,7 @@ class AuthService:
 
     # === User Operations ===
 
-    async def get_user_by_api_key(self, api_key_str: str) -> Optional[User]:
+    async def get_user_by_api_key(self, api_key_str: str) -> User | None:
         """
         Get a user from their API key.
 
@@ -214,10 +213,10 @@ class AuthService:
         await self._user_repo.save(user)
         return user
 
-    async def get_user_by_id(self, user_id: str) -> Optional[User]:
+    async def get_user_by_id(self, user_id: str) -> User | None:
         """Get a user by ID."""
         return await self._user_repo.find_by_id(user_id)
 
-    async def get_user_by_email(self, email: str) -> Optional[User]:
+    async def get_user_by_email(self, email: str) -> User | None:
         """Get a user by email."""
         return await self._user_repo.find_by_email(email)

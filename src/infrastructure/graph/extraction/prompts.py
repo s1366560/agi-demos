@@ -11,7 +11,8 @@ This module provides prompt templates for:
 All prompts are designed for structured JSON output.
 """
 
-from typing import Any, Dict, List, Optional
+from datetime import UTC
+from typing import Any
 
 # =============================================================================
 # Default Entity Types (legacy format for backward compatibility)
@@ -57,10 +58,10 @@ Rules:
 
 def build_entity_extraction_prompt(
     content: str,
-    entity_types: Optional[str] = None,
-    entity_types_context: Optional[List[Dict[str, Any]]] = None,
-    previous_context: Optional[str] = None,
-    custom_instructions: Optional[str] = None,
+    entity_types: str | None = None,
+    entity_types_context: list[dict[str, Any]] | None = None,
+    previous_context: str | None = None,
+    custom_instructions: str | None = None,
 ) -> str:
     """
     Build the user prompt for entity extraction.
@@ -158,8 +159,8 @@ Your task is to:
 
 def build_reflexion_prompt(
     content: str,
-    extracted_entities: List[Dict[str, Any]],
-    previous_context: Optional[str] = None,
+    extracted_entities: list[dict[str, Any]],
+    previous_context: str | None = None,
 ) -> str:
     """
     Build the user prompt for reflexion (checking missed entities).
@@ -174,7 +175,7 @@ def build_reflexion_prompt(
     """
 
     # Handle both EntityNode objects and dictionaries
-    def get_entity_info(e):
+    def get_entity_info(e) -> str:
         if hasattr(e, "name"):
             # EntityNode object
             return f"- {e.name} ({e.entity_type or 'Unknown'}): {e.summary or ''}"
@@ -249,11 +250,11 @@ Rules:
 
 def build_relationship_extraction_prompt(
     content: str,
-    entities: List[Dict[str, Any]],
-    relationship_types: Optional[str] = None,
-    previous_context: Optional[str] = None,
-    custom_instructions: Optional[str] = None,
-    reference_time: Optional[str] = None,
+    entities: list[dict[str, Any]],
+    relationship_types: str | None = None,
+    previous_context: str | None = None,
+    custom_instructions: str | None = None,
+    reference_time: str | None = None,
 ) -> str:
     """
     Build the user prompt for relationship extraction.
@@ -269,13 +270,13 @@ def build_relationship_extraction_prompt(
     Returns:
         Formatted user prompt string
     """
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     types_section = relationship_types or DEFAULT_RELATIONSHIP_TYPES
 
     # Use current time if not provided
     if reference_time is None:
-        reference_time = datetime.now(timezone.utc).isoformat()
+        reference_time = datetime.now(UTC).isoformat()
 
     # Format entities list
     entities_str = "\n".join(
@@ -364,8 +365,8 @@ Your task is to:
 
 
 def build_dedupe_prompt(
-    new_entities: List[Dict[str, Any]],
-    existing_entities: List[Dict[str, Any]],
+    new_entities: list[dict[str, Any]],
+    existing_entities: list[dict[str, Any]],
 ) -> str:
     """
     Build the user prompt for entity deduplication.
@@ -433,8 +434,8 @@ Your task is to:
 
 
 def build_community_summary_prompt(
-    entities: List[Dict[str, Any]],
-    relationships: Optional[List[Dict[str, Any]]] = None,
+    entities: list[dict[str, Any]],
+    relationships: list[dict[str, Any]] | None = None,
 ) -> str:
     """
     Build the user prompt for community summarization.

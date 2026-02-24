@@ -7,7 +7,7 @@ allowing MCP tools to be used seamlessly alongside native agent tools.
 
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from src.infrastructure.agent.mcp.registry import MCPServerRegistry
 from src.infrastructure.agent.tools.base import AgentTool
@@ -28,7 +28,7 @@ class MCPToolAdapter(AgentTool):
         server_id: str,
         tool_definition: dict,
         registry: MCPServerRegistry,
-    ):
+    ) -> None:
         """
         Initialize MCP tool adapter.
 
@@ -54,7 +54,7 @@ class MCPToolAdapter(AgentTool):
 
         self.original_name = tool_name
 
-    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str:
         """
         Execute the MCP tool via the registry.
 
@@ -85,7 +85,7 @@ class MCPToolAdapter(AgentTool):
             logger.error(f"{error_msg} (server={self.server_id}, tool={self.original_name})")
             return error_msg
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         """
         Validate arguments against the MCP input schema.
 
@@ -124,7 +124,7 @@ class MCPToolAdapter(AgentTool):
 
         return True
 
-    def _validate_type(self, value: Any, expected_type: str) -> bool:  # noqa: ANN401
+    def _validate_type(self, value: Any, expected_type: str) -> bool:
         """
         Validate value against JSON Schema type.
 
@@ -171,7 +171,7 @@ class MCPToolFactory:
     AgentTool adapters for each discovered tool.
     """
 
-    def __init__(self, registry: MCPServerRegistry):
+    def __init__(self, registry: MCPServerRegistry) -> None:
         """
         Initialize MCP tool factory.
 
@@ -225,7 +225,7 @@ class MCPToolFactory:
         logger.info(f"Created {len(all_adapters)} MCP tool adapters")
         return all_adapters
 
-    async def create_tool_by_name(self, server_id: str, tool_name: str) -> Optional[MCPToolAdapter]:
+    async def create_tool_by_name(self, server_id: str, tool_name: str) -> MCPToolAdapter | None:
         """
         Create a tool adapter for a specific tool by name.
 

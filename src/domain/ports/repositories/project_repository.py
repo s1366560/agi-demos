@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from src.domain.model.project.project import Project
 
@@ -13,24 +12,24 @@ class ProjectRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(self, project_id: str) -> Optional[Project]:
+    async def find_by_id(self, project_id: str) -> Project | None:
         """Find a project by ID"""
         pass
 
     @abstractmethod
     async def find_by_tenant(
         self, tenant_id: str, limit: int = 50, offset: int = 0
-    ) -> List[Project]:
+    ) -> list[Project]:
         """List all projects in a tenant"""
         pass
 
     @abstractmethod
-    async def find_by_owner(self, owner_id: str, limit: int = 50, offset: int = 0) -> List[Project]:
+    async def find_by_owner(self, owner_id: str, limit: int = 50, offset: int = 0) -> list[Project]:
         """List all projects owned by a user"""
         pass
 
     @abstractmethod
-    async def find_public_projects(self, limit: int = 50, offset: int = 0) -> List[Project]:
+    async def find_public_projects(self, limit: int = 50, offset: int = 0) -> list[Project]:
         """List all public projects"""
         pass
 

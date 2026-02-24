@@ -17,7 +17,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 
 from src.domain.events.envelope import EventEnvelope
 from src.domain.events.registry import EventSchemaRegistry
@@ -57,8 +57,8 @@ class DeserializationResult:
 
     envelope: EventEnvelope
     migrated: bool = False
-    original_version: Optional[str] = None
-    target_version: Optional[str] = None
+    original_version: str | None = None
+    target_version: str | None = None
 
 
 class EventSerializer:
@@ -74,7 +74,7 @@ class EventSerializer:
         auto_migrate: bool = True,
         target_version: str = "latest",
         strict_mode: bool = False,
-    ):
+    ) -> None:
         """Initialize the serializer.
 
         Args:
@@ -113,7 +113,7 @@ class EventSerializer:
         self,
         json_str: str,
         *,
-        expected_type: Optional[str] = None,
+        expected_type: str | None = None,
     ) -> DeserializationResult:
         """Deserialize JSON to an event envelope.
 
@@ -133,9 +133,9 @@ class EventSerializer:
 
     def deserialize_dict(
         self,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         *,
-        expected_type: Optional[str] = None,
+        expected_type: str | None = None,
     ) -> DeserializationResult:
         """Deserialize a dictionary to an event envelope.
 
@@ -249,7 +249,7 @@ class EventSerializer:
             raise ValueError(f"Unknown format: {format}")
 
     @staticmethod
-    def _json_serializer(obj: Any) -> Any:  # noqa: ANN401
+    def _json_serializer(obj: Any) -> Any:
         """Custom JSON serializer for special types."""
         if isinstance(obj, datetime):
             return obj.isoformat()

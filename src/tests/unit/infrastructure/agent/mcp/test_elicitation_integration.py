@@ -7,7 +7,7 @@ MCP Elicitation allows MCP servers to request information from users
 through the agent. We integrate this with the existing HITL infrastructure.
 """
 
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -79,7 +79,7 @@ class TestMCPElicitationIntegration:
         """
         handler_called = False
 
-        async def handler(server_id: str, message: str, schema: Dict[str, Any]) -> Dict[str, Any]:
+        async def handler(server_id: str, message: str, schema: dict[str, Any]) -> dict[str, Any]:
             nonlocal handler_called
             handler_called = True
             return {"api_key": "test-key"}
@@ -99,7 +99,7 @@ class TestMCPElicitationIntegration:
         """
         response_received = None
 
-        async def handler(server_id: str, message: str, schema: Dict[str, Any]) -> Dict[str, Any]:
+        async def handler(server_id: str, message: str, schema: dict[str, Any]) -> dict[str, Any]:
             nonlocal response_received
             response_received = {"server_id": server_id, "message": message, "schema": schema}
             return {"api_key": "user-provided-key"}
@@ -142,7 +142,7 @@ class TestMCPElicitationIntegration:
 
         _conversion_result = None
 
-        async def handler(server_id: str, message: str, schema: Dict[str, Any]) -> Dict[str, Any]:
+        async def handler(server_id: str, message: str, schema: dict[str, Any]) -> dict[str, Any]:
             return {"result": "success"}
 
         registry.set_elicitation_handler(handler)
@@ -177,8 +177,8 @@ class TestMCPElicitationIntegration:
         import asyncio
 
         async def slow_handler(
-            server_id: str, message: str, schema: Dict[str, Any]
-        ) -> Dict[str, Any]:
+            server_id: str, message: str, schema: dict[str, Any]
+        ) -> dict[str, Any]:
             await asyncio.sleep(10)  # Simulate slow response
             return {"result": "too late"}
 

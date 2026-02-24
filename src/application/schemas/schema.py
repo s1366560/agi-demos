@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import Dict, Optional
 
 from pydantic import BaseModel, Field
 
@@ -8,8 +7,8 @@ from src.domain.model.enums import DataStatus
 
 class EntityTypeBase(BaseModel):
     name: str
-    description: Optional[str] = None
-    schema_def: Dict = Field(default_factory=dict, alias="schema")
+    description: str | None = None
+    schema_def: dict = Field(default_factory=dict, alias="schema")
     status: DataStatus = DataStatus.ENABLED
     source: str = "user"
 
@@ -19,15 +18,15 @@ class EntityTypeCreate(EntityTypeBase):
 
 
 class EntityTypeUpdate(BaseModel):
-    description: Optional[str] = None
-    schema_def: Optional[Dict] = Field(None, alias="schema")
+    description: str | None = None
+    schema_def: dict | None = Field(None, alias="schema")
 
 
 class EntityTypeResponse(EntityTypeBase):
     id: str
     project_id: str
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
 
     class Config:
         from_attributes = True
@@ -36,8 +35,8 @@ class EntityTypeResponse(EntityTypeBase):
 
 class EdgeTypeBase(BaseModel):
     name: str
-    description: Optional[str] = None
-    schema_def: Dict = Field(default_factory=dict, alias="schema")
+    description: str | None = None
+    schema_def: dict = Field(default_factory=dict, alias="schema")
     status: DataStatus = DataStatus.ENABLED
     source: str = "user"
 
@@ -47,15 +46,15 @@ class EdgeTypeCreate(EdgeTypeBase):
 
 
 class EdgeTypeUpdate(BaseModel):
-    description: Optional[str] = None
-    schema_def: Optional[Dict] = Field(None, alias="schema")
+    description: str | None = None
+    schema_def: dict | None = Field(None, alias="schema")
 
 
 class EdgeTypeResponse(EdgeTypeBase):
     id: str
     project_id: str
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
 
     class Config:
         from_attributes = True

@@ -1,8 +1,8 @@
 """ToolExecutionRecord entity for tracking tool executions."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import UTC, datetime
+from typing import Any
 
 from src.domain.ports.agent.tool_executor_port import ToolExecutionStatus
 from src.domain.shared_kernel import Entity
@@ -21,13 +21,13 @@ class ToolExecutionRecord(Entity):
     message_id: str
     call_id: str
     tool_name: str
-    tool_input: Dict[str, Any] = field(default_factory=dict)
+    tool_input: dict[str, Any] = field(default_factory=dict)
     tool_output: str | None = None
     status: ToolExecutionStatus = ToolExecutionStatus.RUNNING
     error: str | None = None
     step_number: int | None = None
     sequence_number: int = 0  # Order within message
-    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = None
     duration_ms: int | None = None
 
@@ -35,7 +35,7 @@ class ToolExecutionRecord(Entity):
         """Mark this execution as successful."""
         self.status = ToolExecutionStatus.SUCCESS
         self.tool_output = output
-        self.completed_at = datetime.now(timezone.utc)
+        self.completed_at = datetime.now(UTC)
         if self.started_at:
             self.duration_ms = int((self.completed_at - self.started_at).total_seconds() * 1000)
 
@@ -43,11 +43,11 @@ class ToolExecutionRecord(Entity):
         """Mark this execution as failed."""
         self.status = ToolExecutionStatus.FAILED
         self.error = error
-        self.completed_at = datetime.now(timezone.utc)
+        self.completed_at = datetime.now(UTC)
         if self.started_at:
             self.duration_ms = int((self.completed_at - self.started_at).total_seconds() * 1000)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API response."""
         return {
             "id": self.id,

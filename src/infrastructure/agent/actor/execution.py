@@ -7,8 +7,8 @@ import json
 import logging
 import time as time_module
 import uuid
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.model.agent.hitl.hitl_types import HITLPendingException
@@ -43,9 +43,9 @@ _PERSIST_INTERVAL_SECONDS = 30
 
 
 def _inject_app_model_context(
-    conversation_context: List[Dict[str, Any]],
-    app_model_context: Optional[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+    conversation_context: list[dict[str, Any]],
+    app_model_context: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
     """Inject MCP App model context as a system message (SEP-1865).
 
     If the frontend received a ui/update-model-context from an MCP App,
@@ -69,15 +69,15 @@ def _inject_app_model_context(
 async def execute_project_chat(
     agent: ProjectReActAgent,
     request: ProjectChatRequest,
-    abort_signal: Optional[asyncio.Event] = None,
+    abort_signal: asyncio.Event | None = None,
 ) -> ProjectChatResult:
     """Execute a chat request and publish events to Redis/DB."""
     start_time = time_module.time()
-    events: List[Dict[str, Any]] = []
+    events: list[dict[str, Any]] = []
     final_content = ""
     is_error = False
     error_message = None
-    summary_save_data: Optional[Dict[str, Any]] = None
+    summary_save_data: dict[str, Any] | None = None
 
     await set_agent_running(request.conversation_id, request.message_id)
 
@@ -320,11 +320,11 @@ async def handle_hitl_pending(
 async def continue_project_chat(
     agent: ProjectReActAgent,
     request_id: str,
-    response_data: Dict[str, Any],
+    response_data: dict[str, Any],
 ) -> ProjectChatResult:
     """Resume an HITL-paused chat using stored state."""
     start_time = time_module.time()
-    events: List[Dict[str, Any]] = []
+    events: list[dict[str, Any]] = []
     final_content = ""
     is_error = False
     error_message = None
@@ -534,8 +534,8 @@ async def _get_last_db_event_time(conversation_id: str) -> tuple[int, int]:
 async def _persist_events(
     conversation_id: str,
     message_id: str,
-    events: List[Dict[str, Any]],
-    correlation_id: Optional[str] = None,
+    events: list[dict[str, Any]],
+    correlation_id: str | None = None,
 ) -> None:
     """Persist agent events to database."""
     from sqlalchemy import select
@@ -549,84 +549,83 @@ async def _persist_events(
 
     try:
         has_text_end_messages = False
-        async with async_session_factory() as session:
-            async with session.begin():
-                existing_assistant_result = await session.execute(
-                    select(AgentExecutionEvent.event_data)
-                    .where(
-                        AgentExecutionEvent.conversation_id == conversation_id,
-                        AgentExecutionEvent.message_id == message_id,
-                        AgentExecutionEvent.event_type == "assistant_message",
-                    )
+        async with async_session_factory() as session, session.begin():
+            existing_assistant_result = await session.execute(
+                select(AgentExecutionEvent.event_data)
+                .where(
+                    AgentExecutionEvent.conversation_id == conversation_id,
+                    AgentExecutionEvent.message_id == message_id,
+                    AgentExecutionEvent.event_type == "assistant_message",
                 )
-                has_complete_assistant_message = any(
-                    isinstance(existing_event_data, dict)
-                    and existing_event_data.get("source") == "complete"
-                    for existing_event_data in existing_assistant_result.scalars().all()
-                )
+            )
+            has_complete_assistant_message = any(
+                isinstance(existing_event_data, dict)
+                and existing_event_data.get("source") == "complete"
+                for existing_event_data in existing_assistant_result.scalars().all()
+            )
 
-                for event in events:
-                    event_type = event.get("type", "unknown")
-                    event_data = event.get("data", {})
-                    evt_time_us = event.get("event_time_us", 0)
-                    evt_counter = event.get("event_counter", 0)
+            for event in events:
+                event_type = event.get("type", "unknown")
+                event_data = event.get("data", {})
+                evt_time_us = event.get("event_time_us", 0)
+                evt_counter = event.get("event_counter", 0)
 
-                    if event_type in SKIP_EVENT_TYPES:
+                if event_type in SKIP_EVENT_TYPES:
+                    continue
+
+                # Persist text_end as assistant_message so intermediate
+                # text between tool calls survives in history.
+                if event_type == "text_end":
+                    full_text = event_data.get("full_text", "")
+                    if full_text and full_text.strip():
+                        event_type = "assistant_message"
+                        event_data = {
+                            "content": full_text,
+                            "message_id": str(uuid.uuid4()),
+                            "role": "assistant",
+                            "source": "text_end",
+                        }
+                        has_text_end_messages = True
+                    else:
                         continue
 
-                    # Persist text_end as assistant_message so intermediate
-                    # text between tool calls survives in history.
-                    if event_type == "text_end":
-                        full_text = event_data.get("full_text", "")
-                        if full_text and full_text.strip():
-                            event_type = "assistant_message"
-                            event_data = {
-                                "content": full_text,
-                                "message_id": str(uuid.uuid4()),
-                                "role": "assistant",
-                                "source": "text_end",
-                            }
-                            has_text_end_messages = True
-                        else:
-                            continue
+                if event_type == "complete":
+                    # Skip if text_end events already cover the text content
+                    if has_text_end_messages or has_complete_assistant_message:
+                        continue
+                    content = event_data.get("content", "")
+                    if content:
+                        event_type = "assistant_message"
+                        event_data = {
+                            "content": content,
+                            "message_id": str(uuid.uuid4()),
+                            "role": "assistant",
+                            "source": "complete",
+                        }
+                        if event.get("data", {}).get("artifacts"):
+                            event_data["artifacts"] = event["data"]["artifacts"]
+                        has_complete_assistant_message = True
+                    else:
+                        continue
 
-                    if event_type == "complete":
-                        # Skip if text_end events already cover the text content
-                        if has_text_end_messages or has_complete_assistant_message:
-                            continue
-                        content = event_data.get("content", "")
-                        if content:
-                            event_type = "assistant_message"
-                            event_data = {
-                                "content": content,
-                                "message_id": str(uuid.uuid4()),
-                                "role": "assistant",
-                                "source": "complete",
-                            }
-                            if event.get("data", {}).get("artifacts"):
-                                event_data["artifacts"] = event["data"]["artifacts"]
-                            has_complete_assistant_message = True
-                        else:
-                            continue
-
-                    stmt = (
-                        insert(AgentExecutionEvent)
-                        .values(
-                            id=str(uuid.uuid4()),
-                            conversation_id=conversation_id,
-                            message_id=message_id,
-                            event_type=event_type,
-                            event_data=event_data,
-                            event_time_us=evt_time_us,
-                            event_counter=evt_counter,
-                            correlation_id=correlation_id,
-                            created_at=datetime.now(timezone.utc),
-                        )
-                        .on_conflict_do_nothing(
-                            index_elements=["conversation_id", "event_time_us", "event_counter"]
-                        )
+                stmt = (
+                    insert(AgentExecutionEvent)
+                    .values(
+                        id=str(uuid.uuid4()),
+                        conversation_id=conversation_id,
+                        message_id=message_id,
+                        event_type=event_type,
+                        event_data=event_data,
+                        event_time_us=evt_time_us,
+                        event_counter=evt_counter,
+                        correlation_id=correlation_id,
+                        created_at=datetime.now(UTC),
                     )
-                    await session.execute(stmt)
+                    .on_conflict_do_nothing(
+                        index_elements=["conversation_id", "event_time_us", "event_counter"]
+                    )
+                )
+                await session.execute(stmt)
     except Exception as e:
         logger.error(
             f"[ActorExecution] Failed to persist {len(events)} events "
@@ -637,7 +636,7 @@ async def _persist_events(
 
 async def _save_context_summary(
     conversation_id: str,
-    summary_data: Dict[str, Any],
+    summary_data: dict[str, Any],
     last_event_time_us: int,
 ) -> None:
     """Save context summary to conversation metadata."""
@@ -655,10 +654,9 @@ async def _save_context_summary(
             compression_level=summary_data.get("compression_level", "summarize"),
         )
 
-        async with async_session_factory() as session:
-            async with session.begin():
-                adapter = SqlContextSummaryAdapter(session)
-                await adapter.save_summary(conversation_id, summary)
+        async with async_session_factory() as session, session.begin():
+            adapter = SqlContextSummaryAdapter(session)
+            await adapter.save_summary(conversation_id, summary)
 
         logger.info(
             f"[ActorExecution] Saved context summary for {conversation_id}: "
@@ -674,13 +672,13 @@ async def _publish_error_event(
     conversation_id: str,
     message_id: str,
     error_message: str,
-    correlation_id: Optional[str] = None,
+    correlation_id: str | None = None,
 ) -> None:
     settings = get_settings()
     redis_client = aioredis.from_url(settings.redis_url)
     stream_key = f"agent:events:{conversation_id}"
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     now_us = int(now.timestamp() * 1_000_000)
 
     error_event = {
@@ -704,12 +702,12 @@ async def _publish_error_event(
 
 async def _publish_event_to_stream(
     conversation_id: str,
-    event: Dict[str, Any],
+    event: dict[str, Any],
     message_id: str,
     event_time_us: int,
     event_counter: int,
-    correlation_id: Optional[str] = None,
-    redis_client: Optional[aioredis.Redis] = None,
+    correlation_id: str | None = None,
+    redis_client: aioredis.Redis | None = None,
 ) -> None:
     event_type = event.get("type", "unknown")
     event_data = event.get("data", {})
@@ -724,7 +722,7 @@ async def _publish_event_to_stream(
         "event_time_us": event_time_us,
         "event_counter": event_counter,
         "data": event_data_with_meta,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "conversation_id": conversation_id,
         "message_id": message_id,
     }
@@ -755,7 +753,7 @@ async def _get_redis_client() -> aioredis.Redis:
 
 def _format_hitl_response_as_tool_result(
     hitl_type: str,
-    response_data: Dict[str, Any],
+    response_data: dict[str, Any],
 ) -> str:
     """Format HITL response data as a tool result content string."""
     if response_data.get("cancelled") or response_data.get("timeout"):

@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class WorkflowStatus(str, Enum):
@@ -29,10 +29,10 @@ class WorkflowExecution:
     workflow_id: str
     run_id: str
     status: WorkflowStatus
-    result: Optional[Dict[str, Any]] = None
-    error_message: Optional[str] = None
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    result: dict[str, Any] | None = None
+    error_message: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 class WorkflowEnginePort(ABC):
@@ -48,10 +48,10 @@ class WorkflowEnginePort(ABC):
         self,
         workflow_name: str,
         workflow_id: str,
-        input_data: Dict[str, Any],
+        input_data: dict[str, Any],
         task_queue: str,
         timeout_seconds: int = 3600,
-        metadata: Optional[Dict[str, str]] = None,
+        metadata: dict[str, str] | None = None,
     ) -> WorkflowExecution:
         """Start a new workflow execution.
 
@@ -83,7 +83,7 @@ class WorkflowEnginePort(ABC):
     @abstractmethod
     async def get_workflow_result(
         self, workflow_id: str, timeout_seconds: int = 30
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Wait for and get the workflow result.
 
         Args:
@@ -96,7 +96,7 @@ class WorkflowEnginePort(ABC):
         pass
 
     @abstractmethod
-    async def cancel_workflow(self, workflow_id: str, reason: Optional[str] = None) -> bool:
+    async def cancel_workflow(self, workflow_id: str, reason: str | None = None) -> bool:
         """Cancel a running workflow execution.
 
         Args:
@@ -109,7 +109,7 @@ class WorkflowEnginePort(ABC):
         pass
 
     @abstractmethod
-    async def terminate_workflow(self, workflow_id: str, reason: Optional[str] = None) -> bool:
+    async def terminate_workflow(self, workflow_id: str, reason: str | None = None) -> bool:
         """Forcefully terminate a workflow execution.
 
         Unlike cancel, terminate immediately stops the workflow without
@@ -126,7 +126,7 @@ class WorkflowEnginePort(ABC):
 
     @abstractmethod
     async def signal_workflow(
-        self, workflow_id: str, signal_name: str, payload: Dict[str, Any]
+        self, workflow_id: str, signal_name: str, payload: dict[str, Any]
     ) -> bool:
         """Send a signal to a running workflow.
 
@@ -146,8 +146,8 @@ class WorkflowEnginePort(ABC):
     @abstractmethod
     async def list_workflows(
         self,
-        task_queue: Optional[str] = None,
-        status: Optional[WorkflowStatus] = None,
+        task_queue: str | None = None,
+        status: WorkflowStatus | None = None,
         limit: int = 100,
     ) -> list[WorkflowExecution]:
         """List workflow executions with optional filtering.

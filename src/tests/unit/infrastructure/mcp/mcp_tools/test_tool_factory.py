@@ -1,6 +1,6 @@
 """Unit tests for MCP Tool Factory and Adapters (Phase 6)."""
 
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -21,26 +21,26 @@ from src.infrastructure.mcp.tools.factory import MCPToolFactory
 class ConcreteTestAdapter(BaseMCPToolAdapter):
     """Concrete adapter for testing abstract base class."""
 
-    def __init__(self, server_name: str):
+    def __init__(self, server_name: str) -> None:
         super().__init__(server_name)
         self.execute_calls = []
         self.list_calls = []
         self._test_tools = []
         self._test_result = MCPToolResult(content=[{"type": "text", "text": "test"}])
 
-    def set_tools(self, tools: List[MCPToolSchema]):
+    def set_tools(self, tools: list[MCPToolSchema]):
         self._test_tools = tools
 
     def set_result(self, result: MCPToolResult):
         self._test_result = result
 
     async def _execute_tool_internal(
-        self, tool_name: str, arguments: Dict[str, Any], timeout_ms
+        self, tool_name: str, arguments: dict[str, Any], timeout_ms
     ) -> MCPToolResult:
         self.execute_calls.append((tool_name, arguments, timeout_ms))
         return self._test_result
 
-    async def _list_tools_internal(self) -> List[MCPToolSchema]:
+    async def _list_tools_internal(self) -> list[MCPToolSchema]:
         self.list_calls.append(True)
         return self._test_tools
 

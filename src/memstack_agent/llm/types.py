@@ -12,7 +12,7 @@ All types are immutable (frozen dataclass).
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class MessageRole(str, Enum):
@@ -38,9 +38,9 @@ class Message:
 
     role: str
     content: str
-    name: Optional[str] = None
-    tool_call_id: Optional[str] = None
-    tool_calls: Optional[List["ToolCall"]] = None
+    name: str | None = None
+    tool_call_id: str | None = None
+    tool_calls: list["ToolCall"] | None = None
 
     @classmethod
     def system(cls, content: str) -> "Message":
@@ -53,18 +53,18 @@ class Message:
         return cls(role=MessageRole.USER.value, content=content)
 
     @classmethod
-    def assistant(cls, content: str = "", tool_calls: Optional[List["ToolCall"]] = None) -> "Message":
+    def assistant(cls, content: str = "", tool_calls: list["ToolCall"] | None = None) -> "Message":
         """Create an assistant message."""
         return cls(role=MessageRole.ASSISTANT.value, content=content, tool_calls=tool_calls)
 
     @classmethod
-    def tool_result(cls, content: str, tool_call_id: str, name: Optional[str] = None) -> "Message":
+    def tool_result(cls, content: str, tool_call_id: str, name: str | None = None) -> "Message":
         """Create a tool result message."""
         return cls(role=MessageRole.TOOL.value, content=content, tool_call_id=tool_call_id, name=name)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API calls."""
-        result: Dict[str, Any] = {"role": self.role, "content": self.content}
+        result: dict[str, Any] = {"role": self.role, "content": self.content}
         if self.name:
             result["name"] = self.name
         if self.tool_call_id:
@@ -86,9 +86,9 @@ class ToolCall:
 
     id: str
     name: str
-    arguments: Dict[str, Any] = field(default_factory=dict)
+    arguments: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "id": self.id,
@@ -136,10 +136,10 @@ class ChatResponse:
     """
 
     content: str = ""
-    tool_calls: List[ToolCall] = field(default_factory=list)
-    finish_reason: Optional[str] = None
+    tool_calls: list[ToolCall] = field(default_factory=list)
+    finish_reason: str | None = None
     usage: Usage = field(default_factory=Usage)
-    model: Optional[str] = None
+    model: str | None = None
 
     @property
     def has_tool_calls(self) -> bool:
@@ -158,8 +158,8 @@ class StreamChunk:
     """
 
     delta: str = ""
-    tool_call_delta: Optional[ToolCall] = None
-    finish_reason: Optional[str] = None
+    tool_call_delta: ToolCall | None = None
+    finish_reason: str | None = None
 
     @property
     def is_final(self) -> bool:
@@ -168,10 +168,10 @@ class StreamChunk:
 
 
 __all__ = [
-    "MessageRole",
+    "ChatResponse",
     "Message",
+    "MessageRole",
+    "StreamChunk",
     "ToolCall",
     "Usage",
-    "ChatResponse",
-    "StreamChunk",
 ]

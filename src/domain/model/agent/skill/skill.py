@@ -26,9 +26,9 @@ Attributes:
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any
 
 from src.domain.model.agent.skill.skill_source import SkillSource
 
@@ -82,7 +82,7 @@ class TriggerPattern:
 
     pattern: str
     weight: float = 1.0
-    examples: List[str] = field(default_factory=list)
+    examples: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         """Validate the trigger pattern."""
@@ -95,7 +95,7 @@ class TriggerPattern:
         """Check if query contains the keyword pattern."""
         return self.pattern.lower() in query.lower()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "pattern": self.pattern,
@@ -104,7 +104,7 @@ class TriggerPattern:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TriggerPattern":
+    def from_dict(cls, data: dict[str, Any]) -> "TriggerPattern":
         """Create from dictionary."""
         return cls(
             pattern=data["pattern"],
@@ -151,35 +151,35 @@ class Skill:
     name: str
     description: str
     trigger_type: TriggerType
-    trigger_patterns: List[TriggerPattern]
-    tools: List[str]
-    project_id: Optional[str] = None
-    prompt_template: Optional[str] = None
+    trigger_patterns: list[TriggerPattern]
+    tools: list[str]
+    project_id: str | None = None
+    prompt_template: str | None = None
     status: SkillStatus = SkillStatus.ACTIVE
     success_count: int = 0
     failure_count: int = 0
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    metadata: Optional[Dict[str, Any]] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    metadata: dict[str, Any] | None = None
     # New fields for progressive loading
     source: SkillSource = SkillSource.DATABASE
-    file_path: Optional[str] = None
-    full_content: Optional[str] = None
+    file_path: str | None = None
+    full_content: str | None = None
     # Agent mode support - specify which agent modes can use this skill
     # ["*"] means all modes, ["default", "plan"] means only these modes
-    agent_modes: List[str] = field(default_factory=lambda: ["*"])
+    agent_modes: list[str] = field(default_factory=lambda: ["*"])
     # New fields for three-level scoping
     scope: SkillScope = SkillScope.TENANT
     is_system_skill: bool = False
     # AgentSkills.io spec fields
-    license: Optional[str] = None  # License identifier (e.g., "MIT", "Apache-2.0")
-    compatibility: Optional[str] = None  # Environment requirements (≤500 chars)
-    allowed_tools_raw: Optional[str] = None  # Raw allowed-tools string
-    allowed_tools_parsed: List[Any] = field(default_factory=list)  # List[AllowedTool]
+    license: str | None = None  # License identifier (e.g., "MIT", "Apache-2.0")
+    compatibility: str | None = None  # Environment requirements (≤500 chars)
+    allowed_tools_raw: str | None = None  # Raw allowed-tools string
+    allowed_tools_parsed: list[Any] = field(default_factory=list)  # List[AllowedTool]
     spec_version: str = "1.0"  # AgentSkills.io spec version
     # Version tracking
     current_version: int = 0  # Latest version_number from skill_versions
-    version_label: Optional[str] = None  # Display version from SKILL.md (e.g., "1.2.0")
+    version_label: str | None = None  # Display version from SKILL.md (e.g., "1.2.0")
 
     # Name validation pattern (AgentSkills.io spec)
     _NAME_PATTERN = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -271,7 +271,7 @@ class Skill:
 
     def check_permission(
         self,
-        rules: List["SkillPermissionRule"],
+        rules: list["SkillPermissionRule"],
     ) -> "SkillPermissionAction":
         """
         Check permission for this skill using a list of rules.
@@ -304,7 +304,7 @@ class Skill:
         return evaluate_skill_permission(self.name, rules)
 
     @property
-    def agent_modes_set(self) -> Set[str]:
+    def agent_modes_set(self) -> set[str]:
         """Return agent_modes as a set for fast lookup."""
         return set(self.agent_modes)
 
@@ -385,7 +385,7 @@ class Skill:
             success_count=self.success_count + (1 if success else 0),
             failure_count=self.failure_count + (0 if success else 1),
             created_at=self.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
             metadata=self.metadata,
             source=self.source,
             file_path=self.file_path,
@@ -397,7 +397,7 @@ class Skill:
             version_label=self.version_label,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "id": self.id,
@@ -435,7 +435,7 @@ class Skill:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Skill":
+    def from_dict(cls, data: dict[str, Any]) -> "Skill":
         """Create from dictionary (e.g., from database)."""
         trigger_patterns = [TriggerPattern.from_dict(p) for p in data.get("trigger_patterns", [])]
 
@@ -454,10 +454,10 @@ class Skill:
             failure_count=data.get("failure_count", 0),
             created_at=datetime.fromisoformat(data["created_at"])
             if "created_at" in data
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
             updated_at=datetime.fromisoformat(data["updated_at"])
             if "updated_at" in data
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
             metadata=data.get("metadata"),
             agent_modes=data.get("agent_modes", ["*"]),
             scope=SkillScope(data.get("scope", "tenant")),
@@ -478,21 +478,21 @@ class Skill:
         tenant_id: str,
         name: str,
         description: str,
-        tools: List[str],
+        tools: list[str],
         trigger_type: TriggerType = TriggerType.KEYWORD,
-        trigger_patterns: Optional[List[TriggerPattern]] = None,
-        project_id: Optional[str] = None,
-        prompt_template: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        agent_modes: Optional[List[str]] = None,
+        trigger_patterns: list[TriggerPattern] | None = None,
+        project_id: str | None = None,
+        prompt_template: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        agent_modes: list[str] | None = None,
         scope: SkillScope = SkillScope.TENANT,
         is_system_skill: bool = False,
-        full_content: Optional[str] = None,
+        full_content: str | None = None,
         # AgentSkills.io spec fields
-        license: Optional[str] = None,
-        compatibility: Optional[str] = None,
-        allowed_tools_raw: Optional[str] = None,
-        allowed_tools_parsed: Optional[List[Any]] = None,
+        license: str | None = None,
+        compatibility: str | None = None,
+        allowed_tools_raw: str | None = None,
+        allowed_tools_parsed: list[Any] | None = None,
     ) -> "Skill":
         """
         Create a new skill.

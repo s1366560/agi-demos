@@ -6,15 +6,16 @@ selection based on relevance to the conversation context.
 
 import logging
 import re
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from hashlib import blake2b
-from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Set
+from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
 
 # Core tools that should always be included
-CORE_TOOLS: Set[str] = {
+CORE_TOOLS: set[str] = {
     "read",
     "write",
     "edit",
@@ -37,10 +38,10 @@ class ToolSelectionContext:
     decisions about which tools are most relevant.
     """
 
-    conversation_history: List[Dict[str, str]] = field(default_factory=list)
-    project_id: Optional[str] = None
+    conversation_history: list[dict[str, str]] = field(default_factory=list)
+    project_id: str | None = None
     max_tools: int = 30
-    always_include: Set[str] = field(default_factory=lambda: CORE_TOOLS)
+    always_include: set[str] = field(default_factory=lambda: CORE_TOOLS)
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
@@ -51,11 +52,11 @@ class SemanticToolRanker(Protocol):
 
     def rank_tools(
         self,
-        tools: Dict[str, Any],
+        tools: dict[str, Any],
         context: ToolSelectionContext,
         *,
         score_fallback: Callable[[Any], float],
-    ) -> List[str]:
+    ) -> list[str]:
         """Return ordered tool names from highest to lowest relevance."""
 
 
@@ -66,11 +67,11 @@ class KeywordSemanticToolRanker:
 
     def rank_tools(
         self,
-        tools: Dict[str, Any],
+        tools: dict[str, Any],
         context: ToolSelectionContext,
         *,
         score_fallback: Callable[[Any], float],
-    ) -> List[str]:
+    ) -> list[str]:
         scored = [(name, score_fallback(tool)) for name, tool in tools.items()]
         scored.sort(key=lambda item: item[1], reverse=True)
         return [name for name, _ in scored]
@@ -86,11 +87,11 @@ class TokenVectorSemanticToolRanker:
 
     def rank_tools(
         self,
-        tools: Dict[str, Any],
+        tools: dict[str, Any],
         context: ToolSelectionContext,
         *,
         score_fallback: Callable[[Any], float],
-    ) -> List[str]:
+    ) -> list[str]:
         user_message = str(context.metadata.get("user_message", "")).strip().lower()
         conversation_text = (
             " ".join(
@@ -125,8 +126,8 @@ class TokenVectorSemanticToolRanker:
         scored.sort(key=lambda item: item[1], reverse=True)
         return [name for name, _ in scored]
 
-    def _build_sparse_vector(self, text: str) -> Dict[int, float]:
-        counts: Dict[int, float] = {}
+    def _build_sparse_vector(self, text: str) -> dict[int, float]:
+        counts: dict[int, float] = {}
         for token in re.findall(r"\b[a-z][a-z0-9_]*\b", text):
             digest = blake2b(token.encode("utf-8"), digest_size=2).digest()
             slot = int.from_bytes(digest, byteorder="big") % self._vector_dimensions
@@ -134,7 +135,7 @@ class TokenVectorSemanticToolRanker:
         return counts
 
     @staticmethod
-    def _cosine_similarity(vec_a: Dict[int, float], vec_b: Dict[int, float]) -> float:
+    def _cosine_similarity(vec_a: dict[int, float], vec_b: dict[int, float]) -> float:
         if not vec_a or not vec_b:
             return 0.0
         dot = sum(value * vec_b.get(key, 0.0) for key, value in vec_a.items())
@@ -151,17 +152,17 @@ class _CallableSemanticToolRanker:
     name = "custom_callable"
 
     def __init__(
-        self, callback: Callable[[Dict[str, Any], ToolSelectionContext], List[str]]
+        self, callback: Callable[[dict[str, Any], ToolSelectionContext], list[str]]
     ) -> None:
         self._callback = callback
 
     def rank_tools(
         self,
-        tools: Dict[str, Any],
+        tools: dict[str, Any],
         context: ToolSelectionContext,
         *,
         score_fallback: Callable[[Any], float],
-    ) -> List[str]:
+    ) -> list[str]:
         result = self._callback(tools, context)
         if not isinstance(result, list):
             raise TypeError("semantic_ranker callback must return List[str]")
@@ -176,7 +177,7 @@ class ToolSelector:
     context consumption while preserving functionality.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the tool selector."""
         self._stopwords = {
             "a",
@@ -281,9 +282,9 @@ class ToolSelector:
 
     def select_tools(
         self,
-        tools: Dict[str, Any],
+        tools: dict[str, Any],
         context: ToolSelectionContext,
-    ) -> List[str]:
+    ) -> list[str]:
         """Select the most relevant tools.
 
         Args:
@@ -333,7 +334,7 @@ class ToolSelector:
 
     def score_tool_relevance(
         self,
-        tool: Any,  # noqa: ANN401
+        tool: Any,
         context: ToolSelectionContext,
     ) -> float:
         """Score a tool's relevance to the context.
@@ -384,7 +385,7 @@ class ToolSelector:
 
     def _extract_conversation_text(
         self,
-        history: List[Dict[str, str]],
+        history: list[dict[str, str]],
     ) -> str:
         """Extract all text from conversation history.
 
@@ -401,7 +402,7 @@ class ToolSelector:
                 texts.append(content)
         return " ".join(texts).lower()
 
-    def _extract_keywords(self, text: str) -> Set[str]:
+    def _extract_keywords(self, text: str) -> set[str]:
         """Extract meaningful keywords from text.
 
         Args:
@@ -472,10 +473,10 @@ class ToolSelector:
     def _rank_with_backend(
         self,
         ranker: SemanticToolRanker,
-        tools: Dict[str, Any],
+        tools: dict[str, Any],
         context: ToolSelectionContext,
-    ) -> List[str]:
-        def _score_fallback(tool: Any) -> float:  # noqa: ANN401
+    ) -> list[str]:
+        def _score_fallback(tool: Any) -> float:
             return self.score_tool_relevance(tool, context)
 
         try:
@@ -515,7 +516,7 @@ class ToolSelector:
 
 
 # Global selector instance
-_selector: Optional[ToolSelector] = None
+_selector: ToolSelector | None = None
 
 
 def get_tool_selector() -> ToolSelector:

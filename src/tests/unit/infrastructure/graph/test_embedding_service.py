@@ -12,7 +12,7 @@ from src.infrastructure.graph.embedding.embedding_service import (
 class MockEmbedder:
     """Mock embedder for testing."""
 
-    def __init__(self, embedding_dim: int = 768):
+    def __init__(self, embedding_dim: int = 768) -> None:
         self.embedding_dim = embedding_dim
         self._create_mock = AsyncMock()
 

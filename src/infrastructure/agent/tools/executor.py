@@ -17,9 +17,10 @@ import logging
 import re
 import time
 import uuid
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional, Protocol
+from typing import Any, Protocol
 
 from src.domain.events.agent_events import (
     AgentArtifactCreatedEvent,
@@ -32,7 +33,7 @@ from src.domain.events.agent_events import (
 logger = logging.getLogger(__name__)
 
 
-def _strip_artifact_binary(result: Dict[str, Any]) -> Dict[str, Any]:
+def _strip_artifact_binary(result: dict[str, Any]) -> dict[str, Any]:
     """Return a copy of an artifact result with binary/base64 data removed."""
     cleaned = {**result}
     if "artifact" in cleaned and isinstance(cleaned["artifact"], dict):
@@ -59,9 +60,9 @@ class ToolDefinitionProtocol(Protocol):
     """Protocol for tool definitions."""
 
     name: str
-    permission: Optional[str]
+    permission: str | None
 
-    async def execute(self, **kwargs: Any) -> Any:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> Any:
         """Execute the tool."""
         ...
 
@@ -70,21 +71,21 @@ class ToolPartProtocol(Protocol):
     """Protocol for tool call part."""
 
     status: Any  # ToolState
-    error: Optional[str]
-    output: Optional[str]
+    error: str | None
+    output: str | None
     start_time: float
-    end_time: Optional[float]
+    end_time: float | None
     tool_execution_id: str
 
 
 class DoomLoopDetectorProtocol(Protocol):
     """Protocol for doom loop detector."""
 
-    def should_intervene(self, tool_name: str, arguments: Dict[str, Any]) -> bool:
+    def should_intervene(self, tool_name: str, arguments: dict[str, Any]) -> bool:
         """Check if doom loop intervention is needed."""
         ...
 
-    def record(self, tool_name: str, arguments: Dict[str, Any]) -> None:
+    def record(self, tool_name: str, arguments: dict[str, Any]) -> None:
         """Record a tool call for detection."""
         ...
 
@@ -92,16 +93,16 @@ class DoomLoopDetectorProtocol(Protocol):
 class PermissionManagerProtocol(Protocol):
     """Protocol for permission manager."""
 
-    def evaluate(self, permission: str, pattern: str) -> Any:  # noqa: ANN401
+    def evaluate(self, permission: str, pattern: str) -> Any:
         """Evaluate permission rule."""
         ...
 
     async def ask(
         self,
         permission: str,
-        patterns: List[str],
+        patterns: list[str],
         session_id: str,
-        metadata: Dict[str, Any],
+        metadata: dict[str, Any],
     ) -> str:
         """Ask for permission. Returns 'approve' or 'reject'."""
         ...
@@ -117,8 +118,8 @@ class ArtifactServiceProtocol(Protocol):
         content_type: str,
         project_id: str,
         tenant_id: str,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Upload an artifact and return metadata."""
         ...
 
@@ -150,9 +151,9 @@ class ExecutionContext:
     """Context for tool execution."""
 
     session_id: str
-    project_id: Optional[str] = None
-    tenant_id: Optional[str] = None
-    conversation_id: Optional[str] = None
+    project_id: str | None = None
+    tenant_id: str | None = None
+    conversation_id: str | None = None
     permission_timeout: float = 60.0
 
 
@@ -161,10 +162,10 @@ class ExecutionResult:
     """Result of tool execution."""
 
     success: bool
-    output: Optional[str] = None
-    error: Optional[str] = None
+    output: str | None = None
+    error: str | None = None
     duration_ms: int = 0
-    artifacts: List[Dict[str, Any]] = field(default_factory=list)
+    artifacts: list[dict[str, Any]] = field(default_factory=list)
 
 
 # ============================================================================
@@ -180,7 +181,7 @@ def escape_control_chars(s: str) -> str:
     return s
 
 
-def parse_raw_arguments(raw_args: str) -> Optional[Dict[str, Any]]:
+def parse_raw_arguments(raw_args: str) -> dict[str, Any] | None:
     """
     Attempt to parse raw JSON arguments with multiple strategies.
 
@@ -248,9 +249,9 @@ class ToolExecutor:
         self,
         doom_loop_detector: DoomLoopDetectorProtocol,
         permission_manager: PermissionManagerProtocol,
-        artifact_service: Optional[ArtifactServiceProtocol] = None,
+        artifact_service: ArtifactServiceProtocol | None = None,
         debug_logging: bool = False,
-    ):
+    ) -> None:
         """
         Initialize tool executor.
 
@@ -269,15 +270,13 @@ class ToolExecutor:
         self,
         tool_name: str,
         tool_def: ToolDefinitionProtocol,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         tool_part: ToolPartProtocol,
         context: ExecutionContext,
         call_id: str,
-        work_plan_steps: Optional[List[Dict[str, Any]]] = None,
-        tool_to_step_mapping: Optional[Dict[str, int]] = None,
-        hitl_callback: Optional[
-            Callable[[str, str, str, Dict[str, Any], ToolPartProtocol], AsyncIterator[AgentDomainEvent]]
-        ] = None,
+        work_plan_steps: list[dict[str, Any]] | None = None,
+        tool_to_step_mapping: dict[str, int] | None = None,
+        hitl_callback: Callable[[str, str, str, dict[str, Any], ToolPartProtocol], AsyncIterator[AgentDomainEvent]] | None = None,
     ) -> AsyncIterator[AgentDomainEvent]:
         """
         Execute a tool with full lifecycle management.
@@ -371,7 +370,7 @@ class ToolExecutor:
     async def _check_doom_loop(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         tool_part: ToolPartProtocol,
         context: ExecutionContext,
         call_id: str,
@@ -404,7 +403,7 @@ class ToolExecutor:
                     tool_execution_id=tool_part.tool_execution_id,
                 )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._mark_tool_error(tool_part, "Permission request timed out")
             yield AgentObserveEvent(
                 tool_name=tool_name,
@@ -417,7 +416,7 @@ class ToolExecutor:
         self,
         tool_name: str,
         tool_def: ToolDefinitionProtocol,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         tool_part: ToolPartProtocol,
         context: ExecutionContext,
         call_id: str,
@@ -471,7 +470,7 @@ class ToolExecutor:
                         tool_execution_id=tool_part.tool_execution_id,
                     )
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._mark_tool_error(tool_part, "Permission request timed out")
                 yield AgentObserveEvent(
                     tool_name=tool_name,
@@ -483,8 +482,8 @@ class ToolExecutor:
     def _validate_arguments(
         self,
         tool_name: str,
-        arguments: Dict[str, Any],
-    ) -> tuple[Dict[str, Any], Optional[str]]:
+        arguments: dict[str, Any],
+    ) -> tuple[dict[str, Any], str | None]:
         """
         Validate and fix tool arguments.
 
@@ -519,12 +518,12 @@ class ToolExecutor:
         self,
         tool_name: str,
         tool_def: ToolDefinitionProtocol,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         tool_part: ToolPartProtocol,
         context: ExecutionContext,
         call_id: str,
-        work_plan_steps: List[Dict[str, Any]],
-        tool_to_step_mapping: Dict[str, int],
+        work_plan_steps: list[dict[str, Any]],
+        tool_to_step_mapping: dict[str, int],
     ) -> AsyncIterator[AgentDomainEvent]:
         """Execute the tool and process results."""
         try:
@@ -589,7 +588,7 @@ class ToolExecutor:
     # Regex matching long base64-like sequences (256+ chars)
     _BASE64_PATTERN = re.compile(r'[A-Za-z0-9+/=]{256,}')
 
-    def _process_result(self, result: Any) -> tuple[str, Any]:  # noqa: ANN401
+    def _process_result(self, result: Any) -> tuple[str, Any]:
         """
         Process tool result into output string and SSE result.
 
@@ -639,8 +638,8 @@ class ToolExecutor:
     async def _process_artifacts(
         self,
         tool_name: str,
-        result: Any,  # noqa: ANN401
-        tool_execution_id: Optional[str],
+        result: Any,
+        tool_execution_id: str | None,
         context: ExecutionContext,
     ) -> AsyncIterator[AgentDomainEvent]:
         """Process and upload artifacts from tool result."""
@@ -708,7 +707,7 @@ class ToolExecutor:
 # Singleton Management
 # ============================================================================
 
-_executor: Optional[ToolExecutor] = None
+_executor: ToolExecutor | None = None
 
 
 def get_tool_executor() -> ToolExecutor:
@@ -735,7 +734,7 @@ def set_tool_executor(executor: ToolExecutor) -> None:
 def create_tool_executor(
     doom_loop_detector: DoomLoopDetectorProtocol,
     permission_manager: PermissionManagerProtocol,
-    artifact_service: Optional[ArtifactServiceProtocol] = None,
+    artifact_service: ArtifactServiceProtocol | None = None,
     debug_logging: bool = False,
 ) -> ToolExecutor:
     """

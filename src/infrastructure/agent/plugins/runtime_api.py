@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .registry import (
     AgentPluginRegistry,
@@ -22,7 +22,7 @@ class PluginRuntimeApi:
         self,
         plugin_name: str,
         *,
-        registry: Optional[AgentPluginRegistry] = None,
+        registry: AgentPluginRegistry | None = None,
     ) -> None:
         self._plugin_name = plugin_name
         self._registry = registry or get_plugin_registry()
@@ -50,10 +50,10 @@ class PluginRuntimeApi:
         channel_type: str,
         factory: ChannelAdapterFactory,
         *,
-        config_schema: Optional[Dict[str, Any]] = None,
-        config_ui_hints: Optional[Dict[str, Any]] = None,
-        defaults: Optional[Dict[str, Any]] = None,
-        secret_paths: Optional[List[str]] = None,
+        config_schema: dict[str, Any] | None = None,
+        config_ui_hints: dict[str, Any] | None = None,
+        defaults: dict[str, Any] | None = None,
+        secret_paths: list[str] | None = None,
         overwrite: bool = False,
     ) -> None:
         """Register a channel adapter factory for this plugin."""
@@ -73,10 +73,10 @@ class PluginRuntimeApi:
         channel_type: str,
         factory: ChannelAdapterFactory,
         *,
-        config_schema: Optional[Dict[str, Any]] = None,
-        config_ui_hints: Optional[Dict[str, Any]] = None,
-        defaults: Optional[Dict[str, Any]] = None,
-        secret_paths: Optional[List[str]] = None,
+        config_schema: dict[str, Any] | None = None,
+        config_ui_hints: dict[str, Any] | None = None,
+        defaults: dict[str, Any] | None = None,
+        secret_paths: list[str] | None = None,
         overwrite: bool = False,
     ) -> None:
         """Register channel adapter and optional config metadata for this plugin."""
@@ -123,7 +123,7 @@ class PluginRuntimeApi:
     def register_service(
         self,
         service_name: str,
-        service: Any,  # noqa: ANN401
+        service: Any,
         *,
         overwrite: bool = False,
     ) -> None:
@@ -138,7 +138,7 @@ class PluginRuntimeApi:
     def register_provider(
         self,
         provider_name: str,
-        provider: Any,  # noqa: ANN401
+        provider: Any,
         *,
         overwrite: bool = False,
     ) -> None:

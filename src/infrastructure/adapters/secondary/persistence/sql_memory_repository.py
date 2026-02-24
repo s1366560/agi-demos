@@ -3,7 +3,6 @@ V2 SQLAlchemy implementation of MemoryRepository using BaseRepository.
 """
 
 import logging
-from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,13 +50,13 @@ class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
 
         await self._session.flush()
 
-    async def find_by_id(self, memory_id: str) -> Optional[Memory]:
+    async def find_by_id(self, memory_id: str) -> Memory | None:
         """Find a memory by ID."""
         return await super().find_by_id(memory_id)
 
     async def list_by_project(
         self, project_id: str, limit: int = 50, offset: int = 0
-    ) -> List[Memory]:
+    ) -> list[Memory]:
         """List all memories for a project."""
         return await self.list_all(limit=limit, offset=offset, project_id=project_id)
 
@@ -65,7 +64,7 @@ class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
         """Delete a memory."""
         await super().delete(memory_id)
 
-    def _to_domain(self, db_memory: Optional[DBMemory]) -> Optional[Memory]:
+    def _to_domain(self, db_memory: DBMemory | None) -> Memory | None:
         """Convert database model to domain model."""
         if db_memory is None:
             return None

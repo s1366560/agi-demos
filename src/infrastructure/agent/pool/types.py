@@ -5,9 +5,9 @@ Agent Pool 类型定义.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class ProjectTier(str, Enum):
@@ -85,9 +85,9 @@ class HealthCheckResult:
     memory_usage_pct: float = 0.0
     cpu_usage_pct: float = 0.0
     active_requests: int = 0
-    last_check_at: Optional[datetime] = None
-    details: Dict[str, Any] = field(default_factory=dict)
-    error_message: Optional[str] = None
+    last_check_at: datetime | None = None
+    details: dict[str, Any] = field(default_factory=dict)
+    error_message: str | None = None
 
     def is_healthy(self) -> bool:
         """是否健康."""
@@ -115,12 +115,12 @@ class InstanceMetrics:
     cpu_used_pct: float = 0.0
 
     # 工具统计
-    tool_execution_count: Dict[str, int] = field(default_factory=dict)
+    tool_execution_count: dict[str, int] = field(default_factory=dict)
 
     # 时间戳
-    created_at: Optional[datetime] = None
-    last_request_at: Optional[datetime] = None
-    last_error_at: Optional[datetime] = None
+    created_at: datetime | None = None
+    last_request_at: datetime | None = None
+    last_error_at: datetime | None = None
 
     def error_rate(self) -> float:
         """计算错误率."""
@@ -164,8 +164,8 @@ class TierMigration:
     from_tier: ProjectTier
     to_tier: ProjectTier
     reason: str
-    scheduled_at: Optional[datetime] = None
-    executed_at: Optional[datetime] = None
+    scheduled_at: datetime | None = None
+    executed_at: datetime | None = None
     status: str = "pending"  # pending, executing, completed, failed
 
 
@@ -194,8 +194,8 @@ class ProjectMetrics:
     sla_requirement: float = 0.99  # 99%
 
     # 时间戳
-    last_request_at: Optional[datetime] = None
-    tier_updated_at: Optional[datetime] = None
+    last_request_at: datetime | None = None
+    tier_updated_at: datetime | None = None
 
 
 @dataclass
@@ -204,11 +204,11 @@ class LifecycleEvent:
 
     instance_id: str
     event_type: str  # created, initialized, started, paused, resumed, stopped, error, recovered
-    from_status: Optional[AgentInstanceStatus] = None
-    to_status: Optional[AgentInstanceStatus] = None
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    details: Dict[str, Any] = field(default_factory=dict)
-    error_message: Optional[str] = None
+    from_status: AgentInstanceStatus | None = None
+    to_status: AgentInstanceStatus | None = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    details: dict[str, Any] = field(default_factory=dict)
+    error_message: str | None = None
 
 
 @dataclass

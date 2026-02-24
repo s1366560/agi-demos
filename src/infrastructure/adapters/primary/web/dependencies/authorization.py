@@ -7,7 +7,7 @@ on FastAPI endpoints using the RBAC system.
 
 import functools
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,7 +39,7 @@ def require_permission(permission: str):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
             # Extract current_user from kwargs (injected by FastAPI Depends)
-            current_user: Optional[User] = kwargs.get("current_user")
+            current_user: User | None = kwargs.get("current_user")
             if not current_user:
                 # Try to get it from args (less common)
                 if len(args) > 0 and isinstance(args[0], User):
@@ -51,7 +51,7 @@ def require_permission(permission: str):
                 )
 
             # Get auth_service from kwargs if available, or use the one passed as dependency
-            auth_service: Optional[AuthorizationService] = kwargs.get("auth_service")
+            auth_service: AuthorizationService | None = kwargs.get("auth_service")
             if not auth_service:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -116,13 +116,13 @@ def require_any_permission(*permissions: str):
     def decorator(func: Callable):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            current_user: Optional[User] = kwargs.get("current_user")
+            current_user: User | None = kwargs.get("current_user")
             if not current_user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
                 )
 
-            auth_service: Optional[AuthorizationService] = kwargs.get("auth_service")
+            auth_service: AuthorizationService | None = kwargs.get("auth_service")
             if not auth_service:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -184,13 +184,13 @@ def require_all_permissions(*permissions: str):
     def decorator(func: Callable):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            current_user: Optional[User] = kwargs.get("current_user")
+            current_user: User | None = kwargs.get("current_user")
             if not current_user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
                 )
 
-            auth_service: Optional[AuthorizationService] = kwargs.get("auth_service")
+            auth_service: AuthorizationService | None = kwargs.get("auth_service")
             if not auth_service:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -252,13 +252,13 @@ def require_role(role: str):
     def decorator(func: Callable):
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            current_user: Optional[User] = kwargs.get("current_user")
+            current_user: User | None = kwargs.get("current_user")
             if not current_user:
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required"
                 )
 
-            auth_service: Optional[AuthorizationService] = kwargs.get("auth_service")
+            auth_service: AuthorizationService | None = kwargs.get("auth_service")
             if not auth_service:
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

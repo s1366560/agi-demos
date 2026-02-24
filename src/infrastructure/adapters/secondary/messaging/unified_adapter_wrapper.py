@@ -12,8 +12,9 @@ Migration Strategy:
 """
 
 import logging
+from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any
 
 from src.domain.events.envelope import EventEnvelope
 from src.domain.events.types import AgentEventType, is_terminal_event
@@ -55,7 +56,7 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
         unified_bus: UnifiedEventBusPort,
         *,
         stream_prefix: str = "agent",
-    ):
+    ) -> None:
         """Initialize the adapter.
 
         Args:
@@ -74,7 +75,7 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
         conversation_id: str,
         message_id: str,
         event_type: AgentEventType,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         event_time_us: int,
         event_counter: int,
     ) -> EventEnvelope:
@@ -131,7 +132,7 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
         conversation_id: str,
         message_id: str,
         event_type: AgentEventType,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         event_time_us: int,
         event_counter: int,
     ) -> str:
@@ -156,7 +157,7 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
         message_id: str,
         from_time_us: int = 0,
         from_counter: int = 0,
-        timeout_ms: Optional[int] = None,
+        timeout_ms: int | None = None,
     ) -> AsyncIterator[AgentEvent]:
         """Subscribe to events for a message (legacy interface)."""
         routing_key = self._create_routing_key(conversation_id, message_id)
@@ -194,10 +195,10 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
         message_id: str,
         from_time_us: int = 0,
         from_counter: int = 0,
-        to_time_us: Optional[int] = None,
-        to_counter: Optional[int] = None,
+        to_time_us: int | None = None,
+        to_counter: int | None = None,
         limit: int = 100,
-    ) -> List[AgentEvent]:
+    ) -> list[AgentEvent]:
         """Get events in a range (legacy interface)."""
         routing_key = self._create_routing_key(conversation_id, message_id)
 
@@ -231,7 +232,7 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
         self,
         conversation_id: str,
         message_id: str,
-    ) -> Optional[AgentEvent]:
+    ) -> AgentEvent | None:
         """Get the most recent event for a message (legacy interface)."""
         routing_key = self._create_routing_key(conversation_id, message_id)
 

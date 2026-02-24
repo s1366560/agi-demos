@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from jsonschema import Draft7Validator
@@ -51,7 +51,7 @@ async def verify_project_access(
     project_id: str,
     user: User,
     db: AsyncSession,
-    required_role: Optional[List[str]] = None,
+    required_role: list[str] | None = None,
 ):
     """Verify that user has access to the project.
 
@@ -84,8 +84,8 @@ async def verify_tenant_access(
     tenant_id: str,
     user: User,
     db: AsyncSession,
-    required_role: Optional[List[str]] = None,
-):
+    required_role: list[str] | None = None,
+) -> bool:
     """Verify that user has access to the tenant."""
     if user.is_superuser:
         return True
@@ -106,7 +106,7 @@ async def verify_tenant_access(
     return True
 
 
-async def _resolve_project_tenant_id(project_id: str, db: AsyncSession) -> Optional[str]:
+async def _resolve_project_tenant_id(project_id: str, db: AsyncSession) -> str | None:
     """Resolve tenant_id for project-scoped compatibility routes."""
     try:
         result = await db.execute(select(Project.tenant_id).where(Project.id == project_id))
@@ -132,15 +132,15 @@ class ChannelConfigCreate(BaseModel):
     connection_mode: str = Field("websocket", description="websocket or webhook")
 
     # Credentials
-    app_id: Optional[str] = Field(None, description="App ID")
-    app_secret: Optional[str] = Field(None, description="App secret")
-    encrypt_key: Optional[str] = Field(None, description="Encrypt key")
-    verification_token: Optional[str] = Field(None, description="Verification token")
+    app_id: str | None = Field(None, description="App ID")
+    app_secret: str | None = Field(None, description="App secret")
+    encrypt_key: str | None = Field(None, description="Encrypt key")
+    verification_token: str | None = Field(None, description="Verification token")
 
     # Webhook
-    webhook_url: Optional[str] = Field(None, description="Webhook URL")
-    webhook_port: Optional[int] = Field(None, ge=1, le=65535, description="Webhook port")
-    webhook_path: Optional[str] = Field(None, description="Webhook path")
+    webhook_url: str | None = Field(None, description="Webhook URL")
+    webhook_port: int | None = Field(None, ge=1, le=65535, description="Webhook port")
+    webhook_path: str | None = Field(None, description="Webhook path")
 
     # Access control
     dm_policy: str = Field(
@@ -153,18 +153,18 @@ class ChannelConfigCreate(BaseModel):
         description="Group policy: open, allowlist, disabled",
         pattern=r"^(open|allowlist|disabled)$",
     )
-    allow_from: Optional[List[str]] = Field(
+    allow_from: list[str] | None = Field(
         None, description="Allowlist of user IDs (wildcard * = all)"
     )
-    group_allow_from: Optional[List[str]] = Field(None, description="Allowlist of group/chat IDs")
+    group_allow_from: list[str] | None = Field(None, description="Allowlist of group/chat IDs")
     rate_limit_per_minute: int = Field(
         60, ge=0, description="Max messages per minute per chat (0 = unlimited)"
     )
 
     # Settings
-    domain: Optional[str] = Field("feishu", description="Domain")
-    extra_settings: Optional[dict] = Field(None, description="Extra settings")
-    description: Optional[str] = Field(None, description="Description")
+    domain: str | None = Field("feishu", description="Domain")
+    extra_settings: dict | None = Field(None, description="Extra settings")
+    description: str | None = Field(None, description="Description")
 
     @model_validator(mode="after")
     def _validate_webhook_requires_token(self) -> ChannelConfigCreate:
@@ -179,24 +179,24 @@ class ChannelConfigCreate(BaseModel):
 class ChannelConfigUpdate(BaseModel):
     """Schema for updating channel configuration."""
 
-    name: Optional[str] = None
-    enabled: Optional[bool] = None
-    connection_mode: Optional[str] = None
-    app_id: Optional[str] = None
-    app_secret: Optional[str] = None
-    encrypt_key: Optional[str] = None
-    verification_token: Optional[str] = None
-    webhook_url: Optional[str] = None
-    webhook_port: Optional[int] = Field(None, ge=1, le=65535)
-    webhook_path: Optional[str] = None
-    domain: Optional[str] = None
-    extra_settings: Optional[dict] = None
-    description: Optional[str] = None
-    dm_policy: Optional[str] = Field(None, pattern=r"^(open|allowlist|disabled)$")
-    group_policy: Optional[str] = Field(None, pattern=r"^(open|allowlist|disabled)$")
-    allow_from: Optional[List[str]] = None
-    group_allow_from: Optional[List[str]] = None
-    rate_limit_per_minute: Optional[int] = Field(None, ge=0)
+    name: str | None = None
+    enabled: bool | None = None
+    connection_mode: str | None = None
+    app_id: str | None = None
+    app_secret: str | None = None
+    encrypt_key: str | None = None
+    verification_token: str | None = None
+    webhook_url: str | None = None
+    webhook_port: int | None = Field(None, ge=1, le=65535)
+    webhook_path: str | None = None
+    domain: str | None = None
+    extra_settings: dict | None = None
+    description: str | None = None
+    dm_policy: str | None = Field(None, pattern=r"^(open|allowlist|disabled)$")
+    group_policy: str | None = Field(None, pattern=r"^(open|allowlist|disabled)$")
+    allow_from: list[str] | None = None
+    group_allow_from: list[str] | None = None
+    rate_limit_per_minute: int | None = Field(None, ge=0)
 
 
 class ChannelConfigResponse(BaseModel):
@@ -208,23 +208,23 @@ class ChannelConfigResponse(BaseModel):
     name: str
     enabled: bool
     connection_mode: str
-    app_id: Optional[str] = None
+    app_id: str | None = None
     # app_secret is excluded for security
-    webhook_url: Optional[str] = None
-    webhook_port: Optional[int] = None
-    webhook_path: Optional[str] = None
-    domain: Optional[str] = None
-    extra_settings: Optional[dict] = None
+    webhook_url: str | None = None
+    webhook_port: int | None = None
+    webhook_path: str | None = None
+    domain: str | None = None
+    extra_settings: dict | None = None
     dm_policy: str = "open"
     group_policy: str = "open"
-    allow_from: Optional[List[str]] = None
-    group_allow_from: Optional[List[str]] = None
+    allow_from: list[str] | None = None
+    group_allow_from: list[str] | None = None
     rate_limit_per_minute: int = 60
     status: str
-    last_error: Optional[str] = None
-    description: Optional[str] = None
+    last_error: str | None = None
+    description: str | None = None
     created_at: str
-    updated_at: Optional[str] = None
+    updated_at: str | None = None
 
     class Config:
         from_attributes = True
@@ -233,7 +233,7 @@ class ChannelConfigResponse(BaseModel):
 class ChannelConfigList(BaseModel):
     """Schema for listing channel configurations."""
 
-    items: List[ChannelConfigResponse]
+    items: list[ChannelConfigResponse]
     total: int
 
 
@@ -251,23 +251,23 @@ class RuntimePluginResponse(BaseModel):
 
     name: str
     source: str
-    package: Optional[str] = None
-    version: Optional[str] = None
-    kind: Optional[str] = None
-    manifest_id: Optional[str] = None
-    channels: List[str] = Field(default_factory=list)
-    providers: List[str] = Field(default_factory=list)
-    skills: List[str] = Field(default_factory=list)
+    package: str | None = None
+    version: str | None = None
+    kind: str | None = None
+    manifest_id: str | None = None
+    channels: list[str] = Field(default_factory=list)
+    providers: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
     enabled: bool = True
     discovered: bool = True
-    channel_types: List[str] = Field(default_factory=list)
+    channel_types: list[str] = Field(default_factory=list)
 
 
 class RuntimePluginListResponse(BaseModel):
     """List of runtime plugins and diagnostics."""
 
-    items: List[RuntimePluginResponse]
-    diagnostics: List[PluginDiagnosticResponse] = Field(default_factory=list)
+    items: list[RuntimePluginResponse]
+    diagnostics: list[PluginDiagnosticResponse] = Field(default_factory=list)
 
 
 class PluginInstallRequest(BaseModel):
@@ -281,7 +281,7 @@ class PluginActionResponse(BaseModel):
 
     success: bool
     message: str
-    details: Optional[Dict[str, Any]] = None
+    details: dict[str, Any] | None = None
 
 
 class ChannelPluginCatalogItemResponse(BaseModel):
@@ -290,12 +290,12 @@ class ChannelPluginCatalogItemResponse(BaseModel):
     channel_type: str
     plugin_name: str
     source: str
-    package: Optional[str] = None
-    version: Optional[str] = None
-    kind: Optional[str] = None
-    manifest_id: Optional[str] = None
-    providers: List[str] = Field(default_factory=list)
-    skills: List[str] = Field(default_factory=list)
+    package: str | None = None
+    version: str | None = None
+    kind: str | None = None
+    manifest_id: str | None = None
+    providers: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
     enabled: bool = True
     discovered: bool = True
     schema_supported: bool = False
@@ -307,23 +307,23 @@ class ChannelPluginConfigSchemaResponse(BaseModel):
     channel_type: str
     plugin_name: str
     source: str
-    package: Optional[str] = None
-    version: Optional[str] = None
-    kind: Optional[str] = None
-    manifest_id: Optional[str] = None
-    providers: List[str] = Field(default_factory=list)
-    skills: List[str] = Field(default_factory=list)
+    package: str | None = None
+    version: str | None = None
+    kind: str | None = None
+    manifest_id: str | None = None
+    providers: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
     schema_supported: bool = False
-    config_schema: Optional[Dict[str, Any]] = None
-    config_ui_hints: Optional[Dict[str, Any]] = None
-    defaults: Optional[Dict[str, Any]] = None
-    secret_paths: List[str] = Field(default_factory=list)
+    config_schema: dict[str, Any] | None = None
+    config_ui_hints: dict[str, Any] | None = None
+    defaults: dict[str, Any] | None = None
+    secret_paths: list[str] = Field(default_factory=list)
 
 
 class ChannelPluginCatalogResponse(BaseModel):
     """Catalog response for channel-capable plugins."""
 
-    items: List[ChannelPluginCatalogItemResponse]
+    items: list[ChannelPluginCatalogItemResponse]
 
 
 _CHANNEL_SETTING_FIELDS = {
@@ -347,28 +347,28 @@ def _resolve_channel_metadata(channel_type: str) -> ChannelTypeConfigMetadata | 
     return get_plugin_registry().list_channel_type_metadata().get(normalized)
 
 
-def _resolve_secret_paths(metadata: ChannelTypeConfigMetadata | None) -> List[str]:
+def _resolve_secret_paths(metadata: ChannelTypeConfigMetadata | None) -> list[str]:
     secret_paths = getattr(metadata, "secret_paths", None) if metadata is not None else None
     if not isinstance(secret_paths, list):
         return []
-    normalized: List[str] = []
+    normalized: list[str] = []
     for path in secret_paths:
         if isinstance(path, str) and path.strip():
             normalized.append(path.strip())
     return normalized
 
 
-def _as_string_list(value: Any) -> List[str]:  # noqa: ANN401
+def _as_string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
-    normalized: List[str] = []
+    normalized: list[str] = []
     for item in value[:100]:
         if isinstance(item, str) and item.strip():
             normalized.append(item.strip()[:500])
     return normalized
 
 
-def _decrypt_app_secret(encrypted_value: Optional[str]) -> Optional[str]:
+def _decrypt_app_secret(encrypted_value: str | None) -> str | None:
     if not encrypted_value:
         return None
     encryption_service = get_encryption_service()
@@ -379,14 +379,14 @@ def _decrypt_app_secret(encrypted_value: Optional[str]) -> Optional[str]:
         return encrypted_value
 
 
-def _split_path(path: str) -> List[str]:
+def _split_path(path: str) -> list[str]:
     return [segment for segment in path.split(".") if segment]
 
 
 _MISSING = object()
 
 
-def _get_path_value(data: Dict[str, Any], path: str) -> Any:  # noqa: ANN401
+def _get_path_value(data: dict[str, Any], path: str) -> Any:
     current: Any = data
     for segment in _split_path(path):
         if not isinstance(current, dict) or segment not in current:
@@ -395,11 +395,11 @@ def _get_path_value(data: Dict[str, Any], path: str) -> Any:  # noqa: ANN401
     return current
 
 
-def _set_path_value(data: Dict[str, Any], path: str, value: Any) -> None:  # noqa: ANN401
+def _set_path_value(data: dict[str, Any], path: str, value: Any) -> None:
     segments = _split_path(path)
     if not segments:
         return
-    current: Dict[str, Any] = data
+    current: dict[str, Any] = data
     for segment in segments[:-1]:
         child = current.get(segment)
         if not isinstance(child, dict):
@@ -412,9 +412,9 @@ def _set_path_value(data: Dict[str, Any], path: str, value: Any) -> None:  # noq
 def _collect_settings_from_config(
     config: ChannelConfigModel,
     *,
-    secret_paths: Optional[List[str]] = None,
-) -> Dict[str, Any]:
-    settings: Dict[str, Any] = {}
+    secret_paths: list[str] | None = None,
+) -> dict[str, Any]:
+    settings: dict[str, Any] = {}
     for field in _CHANNEL_SETTING_FIELDS:
         value = getattr(config, field, None)
         if value is not None:
@@ -435,13 +435,13 @@ def _collect_settings_from_config(
 
 def _build_plugin_settings_payload(
     *,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     metadata: ChannelTypeConfigMetadata | None,
-    existing_config: Optional[ChannelConfigModel] = None,
-    secret_paths: Optional[List[str]] = None,
+    existing_config: ChannelConfigModel | None = None,
+    secret_paths: list[str] | None = None,
     apply_defaults: bool = False,
-) -> Dict[str, Any]:
-    settings: Dict[str, Any] = {}
+) -> dict[str, Any]:
+    settings: dict[str, Any] = {}
     if existing_config is not None:
         settings.update(_collect_settings_from_config(existing_config, secret_paths=secret_paths))
     if apply_defaults and isinstance(getattr(metadata, "defaults", None), dict):
@@ -459,10 +459,10 @@ def _build_plugin_settings_payload(
 
 def _apply_secret_sentinel(
     *,
-    settings: Dict[str, Any],
-    secret_paths: List[str],
-    existing_settings: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    settings: dict[str, Any],
+    secret_paths: list[str],
+    existing_settings: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     normalized = dict(settings)
     for path in secret_paths:
         value = _get_path_value(normalized, path)
@@ -485,7 +485,7 @@ def _apply_secret_sentinel(
     return normalized
 
 
-def _decrypt_secret_values(settings: Dict[str, Any], secret_paths: List[str]) -> Dict[str, Any]:
+def _decrypt_secret_values(settings: dict[str, Any], secret_paths: list[str]) -> dict[str, Any]:
     if not secret_paths:
         return dict(settings)
     decrypted = dict(settings)
@@ -504,7 +504,7 @@ def _decrypt_secret_values(settings: Dict[str, Any], secret_paths: List[str]) ->
     return decrypted
 
 
-def _encrypt_secret_values(settings: Dict[str, Any], secret_paths: List[str]) -> Dict[str, Any]:
+def _encrypt_secret_values(settings: dict[str, Any], secret_paths: list[str]) -> dict[str, Any]:
     if not secret_paths:
         return dict(settings)
     encrypted = dict(settings)
@@ -520,9 +520,9 @@ def _encrypt_secret_values(settings: Dict[str, Any], secret_paths: List[str]) ->
 
 
 def _mask_secret_values_for_response(
-    settings: Optional[Dict[str, Any]],
-    secret_paths: List[str],
-) -> Optional[Dict[str, Any]]:
+    settings: dict[str, Any] | None,
+    secret_paths: list[str],
+) -> dict[str, Any] | None:
     if not isinstance(settings, dict):
         return settings
     if not secret_paths:
@@ -540,7 +540,7 @@ def _validate_plugin_settings_schema(
     *,
     channel_type: str,
     metadata: ChannelTypeConfigMetadata | None,
-    settings: Dict[str, Any],
+    settings: dict[str, Any],
 ) -> None:
     schema = getattr(metadata, "config_schema", None) if metadata is not None else None
     if not isinstance(schema, dict):
@@ -566,8 +566,8 @@ def _validate_plugin_settings_schema(
 
 
 def _split_settings_to_model_fields(
-    settings: Dict[str, Any],
-) -> tuple[Dict[str, Any], Optional[Dict[str, Any]]]:
+    settings: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
     model_fields = {key: settings.get(key) for key in _CHANNEL_SETTING_FIELDS if key in settings}
     extras = {key: value for key, value in settings.items() if key not in _CHANNEL_SETTING_FIELDS}
     return model_fields, extras or None
@@ -604,9 +604,9 @@ def to_response(config: ChannelConfigModel) -> ChannelConfigResponse:
     )
 
 
-def _serialize_plugin_diagnostics(diagnostics: List[Any]) -> List[PluginDiagnosticResponse]:
+def _serialize_plugin_diagnostics(diagnostics: list[Any]) -> list[PluginDiagnosticResponse]:
     """Serialize plugin diagnostics into API response models."""
-    serialized: List[PluginDiagnosticResponse] = []
+    serialized: list[PluginDiagnosticResponse] = []
     for diagnostic in diagnostics:
         if isinstance(diagnostic, dict):
             serialized.append(
@@ -640,11 +640,11 @@ def _build_plugin_control_plane() -> PluginControlPlaneService:
 
 async def _load_runtime_plugins(
     *,
-    tenant_id: Optional[str] = None,
+    tenant_id: str | None = None,
 ) -> tuple[
-    List[Dict[str, Any]],
-    List[PluginDiagnosticResponse],
-    Dict[str, List[str]],
+    list[dict[str, Any]],
+    list[PluginDiagnosticResponse],
+    dict[str, list[str]],
 ]:
     """Load plugin runtime view enriched with channel adapter ownership."""
     control_plane = _build_plugin_control_plane()
@@ -686,7 +686,7 @@ async def _ensure_channel_plugin_enabled_for_project(
         )
 
 
-async def _reconcile_channel_runtime_after_plugin_change() -> Optional[Dict[str, int]]:
+async def _reconcile_channel_runtime_after_plugin_change() -> dict[str, int] | None:
     """Reconcile running channel connections after plugin runtime changes."""
     if get_channel_manager() is None:
         return None
@@ -700,14 +700,14 @@ async def _reconcile_channel_runtime_after_plugin_change() -> Optional[Dict[str,
 
 def _build_channel_catalog_items(
     *,
-    plugin_records: List[Dict[str, Any]],
-) -> List[ChannelPluginCatalogItemResponse]:
+    plugin_records: list[dict[str, Any]],
+) -> list[ChannelPluginCatalogItemResponse]:
     plugin_by_name = {record["name"]: record for record in plugin_records}
     plugin_registry = get_plugin_registry()
     channel_factories = plugin_registry.list_channel_adapter_factories()
     channel_metadata = plugin_registry.list_channel_type_metadata()
 
-    items: List[ChannelPluginCatalogItemResponse] = []
+    items: list[ChannelPluginCatalogItemResponse] = []
     for channel_type, (plugin_name, _factory) in sorted(channel_factories.items()):
         plugin_record = plugin_by_name.get(plugin_name, {})
         metadata = channel_metadata.get(channel_type)
@@ -1144,7 +1144,7 @@ async def create_config(
     repo = ChannelConfigRepository(db)
     metadata = _resolve_channel_metadata(data.channel_type)
     payload = data.model_dump(exclude_unset=True)
-    model_settings: Dict[str, Any] = {}
+    model_settings: dict[str, Any] = {}
     normalized_extra_settings = data.extra_settings
 
     if metadata and isinstance(getattr(metadata, "config_schema", None), dict):
@@ -1219,7 +1219,7 @@ async def create_config(
 @router.get("/projects/{project_id}/configs", response_model=ChannelConfigList)
 async def list_configs(
     project_id: str,
-    channel_type: Optional[str] = None,
+    channel_type: str | None = None,
     enabled_only: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -1347,7 +1347,7 @@ async def delete_config(
     config_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> None:
     """Delete a channel configuration."""
     repo = ChannelConfigRepository(db)
     config = await repo.get_by_id(config_id)
@@ -1448,8 +1448,8 @@ class ChannelStatusResponse(BaseModel):
     channel_type: str
     status: str
     connected: bool
-    last_heartbeat: Optional[str] = None
-    last_error: Optional[str] = None
+    last_heartbeat: str | None = None
+    last_error: str | None = None
     reconnect_attempts: int = 0
 
 
@@ -1459,10 +1459,10 @@ class ChannelObservabilitySummaryResponse(BaseModel):
     project_id: str
     session_bindings_total: int
     outbox_total: int
-    outbox_by_status: Dict[str, int]
+    outbox_by_status: dict[str, int]
     active_connections: int
-    connected_config_ids: List[str]
-    latest_delivery_error: Optional[str] = None
+    connected_config_ids: list[str]
+    latest_delivery_error: str | None = None
 
 
 class ChannelOutboxItemResponse(BaseModel):
@@ -1475,17 +1475,17 @@ class ChannelOutboxItemResponse(BaseModel):
     status: str
     attempt_count: int
     max_attempts: int
-    sent_channel_message_id: Optional[str] = None
-    last_error: Optional[str] = None
-    next_retry_at: Optional[str] = None
+    sent_channel_message_id: str | None = None
+    last_error: str | None = None
+    next_retry_at: str | None = None
     created_at: str
-    updated_at: Optional[str] = None
+    updated_at: str | None = None
 
 
 class ChannelOutboxListResponse(BaseModel):
     """Paginated outbox list response."""
 
-    items: List[ChannelOutboxItemResponse]
+    items: list[ChannelOutboxItemResponse]
     total: int
 
 
@@ -1498,17 +1498,17 @@ class ChannelSessionBindingItemResponse(BaseModel):
     channel_type: str
     chat_id: str
     chat_type: str
-    thread_id: Optional[str] = None
-    topic_id: Optional[str] = None
+    thread_id: str | None = None
+    topic_id: str | None = None
     session_key: str
     created_at: str
-    updated_at: Optional[str] = None
+    updated_at: str | None = None
 
 
 class ChannelSessionBindingListResponse(BaseModel):
     """Paginated session binding list response."""
 
-    items: List[ChannelSessionBindingItemResponse]
+    items: list[ChannelSessionBindingItemResponse]
     total: int
 
 
@@ -1543,7 +1543,7 @@ async def get_project_channel_observability_summary(
         .where(ChannelOutboxModel.project_id == project_id)
         .group_by(ChannelOutboxModel.status)
     )
-    outbox_by_status: Dict[str, int] = {
+    outbox_by_status: dict[str, int] = {
         status_name: int(status_count)
         for status_name, status_count in outbox_by_status_result.all()
     }
@@ -1563,7 +1563,7 @@ async def get_project_channel_observability_summary(
     latest_delivery_error = latest_error_result.scalar_one_or_none()
 
     active_connections = 0
-    connected_config_ids: List[str] = []
+    connected_config_ids: list[str] = []
     channel_manager = get_channel_manager()
     if channel_manager:
         for connection in channel_manager.connections.values():
@@ -1588,7 +1588,7 @@ async def get_project_channel_observability_summary(
 )
 async def list_project_channel_outbox(
     project_id: str,
-    status_filter: Optional[Literal["pending", "failed", "sent", "dead_letter"]] = Query(
+    status_filter: Literal["pending", "failed", "sent", "dead_letter"] | None = Query(
         None, alias="status", description="Filter by outbox status"
     ),
     limit: int = Query(50, ge=1, le=200),
@@ -1743,7 +1743,7 @@ async def get_connection_status(
     )
 
 
-@router.get("/status", response_model=List[ChannelStatusResponse])
+@router.get("/status", response_model=list[ChannelStatusResponse])
 async def list_all_connection_status(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -1807,7 +1807,7 @@ class PushMessageRequest(BaseModel):
         default="text",
         description="Content format: text, markdown, or card (JSON)",
     )
-    card: Optional[Dict] = Field(
+    card: dict | None = Field(
         default=None,
         description="Card JSON payload (required when content_type is 'card')",
     )

@@ -13,7 +13,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +34,7 @@ class TopicSubscription:
     topic_type: TopicType
     topic_key: str  # Full topic string e.g. "agent:conv-123"
     session_id: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class TopicManager:
@@ -48,16 +48,16 @@ class TopicManager:
     - Topic parsing and validation
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         # session_id -> set of subscribed topic keys
-        self._session_topics: Dict[str, Set[str]] = {}
+        self._session_topics: dict[str, set[str]] = {}
         # topic_key -> set of session_ids
-        self._topic_sessions: Dict[str, Set[str]] = {}
+        self._topic_sessions: dict[str, set[str]] = {}
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
 
     @staticmethod
-    def parse_topic(topic: str) -> tuple[TopicType, str, Optional[str]]:
+    def parse_topic(topic: str) -> tuple[TopicType, str, str | None]:
         """
         Parse a topic string into its components.
 
@@ -88,7 +88,7 @@ class TopicManager:
         return topic_type, parts[1], None
 
     @staticmethod
-    def build_topic(topic_type: TopicType, primary_id: str, secondary_id: Optional[str] = None) -> str:
+    def build_topic(topic_type: TopicType, primary_id: str, secondary_id: str | None = None) -> str:
         """Build a topic string from components."""
         if topic_type == TopicType.LIFECYCLE and secondary_id:
             return f"{topic_type.value}:{primary_id}:{secondary_id}"
@@ -164,7 +164,7 @@ class TopicManager:
             logger.debug(f"[TopicManager] Session {session_id[:8]}... unsubscribed from {topic}")
             return True
 
-    async def unsubscribe_all(self, session_id: str) -> Set[str]:
+    async def unsubscribe_all(self, session_id: str) -> set[str]:
         """
         Unsubscribe a session from all topics.
 
@@ -190,11 +190,11 @@ class TopicManager:
             logger.debug(f"[TopicManager] Session {session_id[:8]}... unsubscribed from {len(topics)} topics")
             return topics
 
-    def get_subscribers(self, topic: str) -> Set[str]:
+    def get_subscribers(self, topic: str) -> set[str]:
         """Get all session IDs subscribed to a topic."""
         return self._topic_sessions.get(topic, set()).copy()
 
-    def get_subscriptions(self, session_id: str) -> Set[str]:
+    def get_subscriptions(self, session_id: str) -> set[str]:
         """Get all topics a session is subscribed to."""
         return self._session_topics.get(session_id, set()).copy()
 
@@ -202,7 +202,7 @@ class TopicManager:
         """Check if a session is subscribed to a topic."""
         return topic in self._session_topics.get(session_id, set())
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get subscription statistics."""
         return {
             "total_sessions": len(self._session_topics),
@@ -217,7 +217,7 @@ class TopicManager:
 
 
 # Global topic manager instance
-_topic_manager: Optional[TopicManager] = None
+_topic_manager: TopicManager | None = None
 
 
 def get_topic_manager() -> TopicManager:

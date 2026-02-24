@@ -12,7 +12,7 @@ All types are immutable (frozen dataclass).
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class SkillStatus(str, Enum):
@@ -58,7 +58,7 @@ class SkillTrigger:
     """
 
     type: TriggerType = TriggerType.KEYWORD
-    patterns: List[str] = field(default_factory=list)
+    patterns: list[str] = field(default_factory=list)
     threshold: float = 0.9
     case_sensitive: bool = False
 
@@ -133,9 +133,9 @@ class SkillStep:
 
     tool_name: str
     description: str = ""
-    parameters: Dict[str, Any] = field(default_factory=dict)
-    parameter_template: Optional[str] = None  # Jinja2 template
-    condition: Optional[str] = None  # Expression for conditional execution
+    parameters: dict[str, Any] = field(default_factory=dict)
+    parameter_template: str | None = None  # Jinja2 template
+    condition: str | None = None  # Expression for conditional execution
     on_error: str = "fail"  # skip, fail, retry
     retry_count: int = 0
 
@@ -157,13 +157,13 @@ class SkillMetadata:
 
     author: str = ""
     version: str = "1.0.0"
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     category: str = "general"
     priority: int = 0
     timeout_seconds: int = 300
     requires_confirmation: bool = False
     visible_to_model: bool = True
-    extra: Dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -194,10 +194,10 @@ class SkillDefinition:
     id: str
     name: str
     description: str
-    tools: List[str] = field(default_factory=list)
-    steps: List[SkillStep] = field(default_factory=list)
-    trigger: Optional[SkillTrigger] = None
-    prompt_template: Optional[str] = None
+    tools: list[str] = field(default_factory=list)
+    steps: list[SkillStep] = field(default_factory=list)
+    trigger: SkillTrigger | None = None
+    prompt_template: str | None = None
     status: SkillStatus = SkillStatus.ACTIVE
     metadata: SkillMetadata = field(default_factory=SkillMetadata)
     execution_mode: SkillExecutionMode = SkillExecutionMode.INJECT
@@ -220,7 +220,7 @@ class SkillDefinition:
         """Check if skill is active and ready for use."""
         return self.status == SkillStatus.ACTIVE
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation."""
         return {
             "id": self.id,
@@ -300,7 +300,7 @@ class Skill(Protocol):
         """
         ...
 
-    async def execute(self, context: Dict[str, Any], **kwargs: Any) -> Any:  # noqa: ANN401
+    async def execute(self, context: dict[str, Any], **kwargs: Any) -> Any:
         """Execute the skill.
 
         Args:
@@ -323,7 +323,7 @@ class SkillMatch:
         mode: Recommended execution mode
     """
 
-    skill: Optional[SkillDefinition] = None
+    skill: SkillDefinition | None = None
     score: float = 0.0
     mode: SkillExecutionMode = SkillExecutionMode.INJECT
 
@@ -349,20 +349,20 @@ class SkillExecutionResult:
     skill_id: str
     success: bool
     output: Any = None
-    error: Optional[str] = None
-    tool_results: List[Dict[str, Any]] = field(default_factory=list)
+    error: str | None = None
+    tool_results: list[dict[str, Any]] = field(default_factory=list)
     execution_time_ms: int = 0
 
 
 __all__ = [
-    "SkillStatus",
-    "TriggerType",
-    "SkillExecutionMode",
-    "SkillTrigger",
-    "SkillStep",
-    "SkillMetadata",
-    "SkillDefinition",
     "Skill",
-    "SkillMatch",
+    "SkillDefinition",
+    "SkillExecutionMode",
     "SkillExecutionResult",
+    "SkillMatch",
+    "SkillMetadata",
+    "SkillStatus",
+    "SkillStep",
+    "SkillTrigger",
+    "TriggerType",
 ]

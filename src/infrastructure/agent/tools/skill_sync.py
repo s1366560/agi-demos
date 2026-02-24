@@ -12,8 +12,8 @@ all resource files.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -43,11 +43,11 @@ class SkillSyncTool(AgentTool):
     def __init__(
         self,
         tenant_id: str,
-        project_id: Optional[str] = None,
-        sandbox_adapter: Optional[SandboxPort] = None,
-        sandbox_id: Optional[str] = None,
-        session_factory: Optional[Any] = None,  # noqa: ANN401
-        skill_loader_tool: Optional[Any] = None,  # noqa: ANN401
+        project_id: str | None = None,
+        sandbox_adapter: SandboxPort | None = None,
+        sandbox_id: str | None = None,
+        session_factory: Any | None = None,
+        skill_loader_tool: Any | None = None,
     ) -> None:
         super().__init__(name=TOOL_NAME, description=TOOL_DESCRIPTION)
         self._tenant_id = tenant_id
@@ -62,15 +62,15 @@ class SkillSyncTool(AgentTool):
         """Set the sandbox ID (called when sandbox becomes available)."""
         self._sandbox_id = sandbox_id
 
-    def set_sandbox_adapter(self, adapter: Any) -> None:  # noqa: ANN401
+    def set_sandbox_adapter(self, adapter: Any) -> None:
         """Set the sandbox adapter (called during initialization)."""
         self._sandbox_adapter = adapter
 
-    def set_session_factory(self, factory: Any) -> None:  # noqa: ANN401
+    def set_session_factory(self, factory: Any) -> None:
         """Set the async session factory for DB access."""
         self._session_factory = factory
 
-    def set_skill_loader_tool(self, tool: Any) -> None:  # noqa: ANN401
+    def set_skill_loader_tool(self, tool: Any) -> None:
         """Set reference to SkillLoaderTool for cache invalidation."""
         self._skill_loader_tool = tool
 
@@ -80,7 +80,7 @@ class SkillSyncTool(AgentTool):
         self._pending_events.clear()
         return events
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
         return {
             "type": "object",
@@ -104,7 +104,7 @@ class SkillSyncTool(AgentTool):
             "required": ["skill_name"],
         }
 
-    async def execute(self, **kwargs: Any) -> Union[str, Dict[str, Any]]:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str | dict[str, Any]:
         """Execute the skill sync operation."""
         skill_name = kwargs.get("skill_name", "").strip()
         if not skill_name:
@@ -171,7 +171,7 @@ class SkillSyncTool(AgentTool):
                         "skill_name": skill_name,
                         "lifecycle": lifecycle_result,
                     },
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -196,7 +196,7 @@ class SkillSyncTool(AgentTool):
             logger.error(f"Skill sync failed for '{skill_name}': {e}", exc_info=True)
             return {"error": f"Skill sync failed: {e}"}
 
-    def _invalidate_caches(self, *, skill_name: str) -> Dict[str, Any]:
+    def _invalidate_caches(self, *, skill_name: str) -> dict[str, Any]:
         """Invalidate skill caches after sync."""
         # Refresh SkillLoaderTool cache
         if self._skill_loader_tool and hasattr(self._skill_loader_tool, "refresh_skills"):

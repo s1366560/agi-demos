@@ -13,8 +13,9 @@ Pooled Agent Session Adapter.
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Callable, Dict, Optional
+from typing import Any
 
 from ..config import AgentInstanceConfig, PoolConfig
 from ..instance import AgentInstance, ChatRequest
@@ -61,17 +62,17 @@ class SessionRequest:
     tenant_id: str
     project_id: str
     agent_mode: str = "default"
-    user_id: Optional[str] = None
-    conversation_id: Optional[str] = None
+    user_id: str | None = None
+    conversation_id: str | None = None
 
     # 可选的 LLM 配置覆盖
-    model: Optional[str] = None
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
-    max_steps: Optional[int] = None
+    model: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+    max_steps: int | None = None
 
     # 请求元数据
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class PooledAgentSessionAdapter:
@@ -97,10 +98,10 @@ class PooledAgentSessionAdapter:
 
     def __init__(
         self,
-        pool_config: Optional[PoolConfig] = None,
-        adapter_config: Optional[AdapterConfig] = None,
-        agent_factory: Optional[Callable[..., Any]] = None,
-    ):
+        pool_config: PoolConfig | None = None,
+        adapter_config: AdapterConfig | None = None,
+        agent_factory: Callable[..., Any] | None = None,
+    ) -> None:
         """初始化适配器.
 
         Args:
@@ -113,10 +114,10 @@ class PooledAgentSessionAdapter:
         self._agent_factory = agent_factory
 
         # 池管理器
-        self._pool_manager: Optional[AgentPoolManager] = None
+        self._pool_manager: AgentPoolManager | None = None
 
         # 传统会话池引用 (延迟加载)
-        self._legacy_session_pool: Optional[Any] = None
+        self._legacy_session_pool: Any | None = None
 
         # 运行状态
         self._running = False
@@ -262,7 +263,7 @@ class PooledAgentSessionAdapter:
         self,
         instance: AgentInstance,
         request: ChatRequest,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """执行聊天请求.
 
         Args:
@@ -297,9 +298,9 @@ class PooledAgentSessionAdapter:
             # 传统模式下直接停止实例
             await instance.stop(graceful=not force)
 
-    async def get_stats(self) -> Dict[str, Any]:
+    async def get_stats(self) -> dict[str, Any]:
         """获取适配器统计信息."""
-        stats: Dict[str, Any] = {
+        stats: dict[str, Any] = {
             "running": self._running,
             "mode": "pooled" if self.adapter_config.enable_pool_management else "legacy",
         }
@@ -325,7 +326,7 @@ class PooledAgentSessionAdapter:
         tenant_id: str,
         project_id: str,
         agent_mode: str = "default",
-    ) -> Optional[HealthCheckResult]:
+    ) -> HealthCheckResult | None:
         """检查指定会话的健康状态.
 
         Args:
@@ -441,7 +442,7 @@ def create_pooled_adapter(
 # 全局适配器实例 (单例模式)
 # ============================================================================
 
-_global_adapter: Optional[PooledAgentSessionAdapter] = None
+_global_adapter: PooledAgentSessionAdapter | None = None
 _global_adapter_lock = asyncio.Lock()
 
 

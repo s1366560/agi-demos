@@ -5,9 +5,9 @@ enabling recovery from failures and disconnections.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from src.domain.shared_kernel import Entity
 
@@ -42,11 +42,11 @@ class ExecutionCheckpoint(Entity):
     conversation_id: str
     message_id: str
     checkpoint_type: CheckpointType | str
-    execution_state: Dict[str, Any] = field(default_factory=dict)
-    step_number: Optional[int] = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    execution_state: dict[str, Any] = field(default_factory=dict)
+    step_number: int | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API response."""
         return {
             "id": self.id,

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from fastapi import Depends
@@ -47,7 +47,7 @@ async def mock_get_current_user(db: AsyncSession = Depends(get_db)):
             full_name="Test User",  # Fixed: use full_name
             hashed_password="hashed_password",  # Fixed: use hashed_password
             is_active=True,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         db.add(user)
         await db.commit()

@@ -6,10 +6,11 @@ import importlib.metadata as importlib_metadata
 import importlib.util
 import inspect
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
-from typing import Any, List, Optional, Sequence
+from typing import Any
 
 from .manifest import (
     PluginManifestMetadata,
@@ -31,11 +32,11 @@ class DiscoveredPlugin:
     name: str
     plugin: Any
     source: str
-    package: Optional[str] = None
-    version: Optional[str] = None
-    kind: Optional[str] = None
-    manifest_id: Optional[str] = None
-    manifest_path: Optional[str] = None
+    package: str | None = None
+    version: str | None = None
+    kind: str | None = None
+    manifest_id: str | None = None
+    manifest_path: str | None = None
     channels: tuple[str, ...] = ()
     providers: tuple[str, ...] = ()
     skills: tuple[str, ...] = ()
@@ -43,16 +44,16 @@ class DiscoveredPlugin:
 
 def discover_plugins(
     *,
-    state_store: Optional[PluginStateStore] = None,
+    state_store: PluginStateStore | None = None,
     include_builtins: bool = True,
     include_entrypoints: bool = True,
     include_local_paths: bool = True,
     include_disabled: bool = False,
     strict_local_manifest: bool = False,
-) -> tuple[List[DiscoveredPlugin], List[PluginDiagnostic]]:
+) -> tuple[list[DiscoveredPlugin], list[PluginDiagnostic]]:
     """Discover plugin instances and return diagnostics for non-fatal failures."""
-    discovered: List[DiscoveredPlugin] = []
-    diagnostics: List[PluginDiagnostic] = []
+    discovered: list[DiscoveredPlugin] = []
+    diagnostics: list[PluginDiagnostic] = []
     seen_names: set[str] = set()
 
     if include_builtins:
@@ -304,7 +305,7 @@ def _iter_entry_points(group: str) -> Sequence[Any]:
     return list(entry_points.get(group, []))
 
 
-def _coerce_plugin_instance(candidate: Any) -> Any:  # noqa: ANN401
+def _coerce_plugin_instance(candidate: Any) -> Any:
     if inspect.isclass(candidate) or (callable(candidate) and not hasattr(candidate, "setup")):
         candidate = candidate()
 
@@ -316,7 +317,7 @@ def _coerce_plugin_instance(candidate: Any) -> Any:  # noqa: ANN401
 def _is_enabled(
     plugin_name: str,
     *,
-    state_store: Optional[PluginStateStore],
+    state_store: PluginStateStore | None,
     include_disabled: bool,
 ) -> bool:
     if include_disabled or state_store is None:
@@ -330,9 +331,9 @@ def _has_manifest_errors(diagnostics: Sequence[PluginDiagnostic]) -> bool:
 
 def _load_entrypoint_manifest_metadata(
     *,
-    plugin: Any,  # noqa: ANN401
+    plugin: Any,
     plugin_name: str,
-) -> tuple[Optional[PluginManifestMetadata], list[PluginDiagnostic]]:
+) -> tuple[PluginManifestMetadata | None, list[PluginDiagnostic]]:
     payload = _resolve_entrypoint_manifest_payload(plugin)
     if payload is None:
         return None, []
@@ -343,7 +344,7 @@ def _load_entrypoint_manifest_metadata(
     )
 
 
-def _resolve_entrypoint_manifest_payload(plugin: Any) -> Optional[Any]:  # noqa: ANN401
+def _resolve_entrypoint_manifest_payload(plugin: Any) -> Any | None:
     for attr in ("plugin_manifest", "manifest"):
         payload = getattr(plugin, attr, None)
         if payload is not None:
@@ -354,18 +355,18 @@ def _resolve_entrypoint_manifest_payload(plugin: Any) -> Optional[Any]:  # noqa:
     return None
 
 
-def _builtin_plugins() -> List[Any]:
+def _builtin_plugins() -> list[Any]:
     """Return built-in plugins shipped inside the core runtime."""
     return []
 
 
-def _iter_local_plugin_dirs(*, state_store: Optional[PluginStateStore]) -> List[Path]:
+def _iter_local_plugin_dirs(*, state_store: PluginStateStore | None) -> list[Path]:
     """Return local plugin directories under .memstack/plugins/*/plugin.py."""
     plugin_root = _resolve_local_plugin_root(state_store=state_store)
     if plugin_root is None or not plugin_root.exists():
         return []
 
-    local_dirs: List[Path] = []
+    local_dirs: list[Path] = []
     for path in sorted(plugin_root.iterdir(), key=lambda item: item.name):
         if not path.is_dir() or path.name.startswith("."):
             continue
@@ -374,14 +375,14 @@ def _iter_local_plugin_dirs(*, state_store: Optional[PluginStateStore]) -> List[
     return local_dirs
 
 
-def _resolve_local_plugin_root(*, state_store: Optional[PluginStateStore]) -> Optional[Path]:
+def _resolve_local_plugin_root(*, state_store: PluginStateStore | None) -> Path | None:
     """Resolve local plugin root path from state store context."""
     if state_store is None:
         return None
     return state_store.state_path.parent
 
 
-def _load_local_plugin(plugin_dir: Path) -> Any:  # noqa: ANN401
+def _load_local_plugin(plugin_dir: Path) -> Any:
     """Load one local plugin from .memstack/plugins/<name>/plugin.py."""
     plugin_file = plugin_dir / LOCAL_PLUGIN_ENTRY_FILE
     if not plugin_file.exists():
@@ -404,7 +405,7 @@ def _load_module_from_path(*, module_name: str, file_path: Path) -> ModuleType:
     return module
 
 
-def _resolve_local_plugin_candidate(module: ModuleType) -> Any:  # noqa: ANN401
+def _resolve_local_plugin_candidate(module: ModuleType) -> Any:
     """Resolve plugin candidate exported by local module."""
     exported = getattr(module, "plugin", None)
     if exported is not None:

@@ -9,7 +9,7 @@ For LLM clients, use LLMClient from llm_types.py:
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any
 
 
 class BaseEmbedder(ABC):
@@ -82,7 +82,7 @@ class BaseReranker(ABC):
         self,
         query: str,
         passages: list[str],
-        top_n: Optional[int] = None,
+        top_n: int | None = None,
     ) -> list[tuple[str, float]]:
         """
         Rank passages by relevance to query.

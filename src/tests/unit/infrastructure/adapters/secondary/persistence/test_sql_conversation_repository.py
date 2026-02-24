@@ -14,7 +14,7 @@ Key features tested:
 - Delete operations
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,8 +49,8 @@ class TestSqlConversationRepositorySave:
             agent_config={"model": "gpt-4"},
             metadata={"key": "value"},
             message_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             current_mode=AgentMode.BUILD,
         )
 
@@ -78,8 +78,8 @@ class TestSqlConversationRepositorySave:
             agent_config={},
             metadata={},
             message_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             current_mode=AgentMode.BUILD,
         )
         await v2_conversation_repo.save(conversation)
@@ -96,7 +96,7 @@ class TestSqlConversationRepositorySave:
             metadata={"updated": True},
             message_count=5,
             created_at=conversation.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
             current_mode=AgentMode.PLAN,
         )
         await v2_conversation_repo.save(updated_conversation)
@@ -121,8 +121,8 @@ class TestSqlConversationRepositorySave:
             agent_config={},
             metadata={},
             message_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             current_mode=AgentMode.BUILD,
         )
 
@@ -150,8 +150,8 @@ class TestSqlConversationRepositoryFind:
             agent_config={},
             metadata={},
             message_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             current_mode=AgentMode.BUILD,
         )
         await v2_conversation_repo.save(conversation)
@@ -186,8 +186,8 @@ class TestSqlConversationRepositoryList:
                 agent_config={},
                 metadata={},
                 message_count=0,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
                 current_mode=AgentMode.BUILD,
             )
             await v2_conversation_repo.save(conversation)
@@ -203,8 +203,8 @@ class TestSqlConversationRepositoryList:
             agent_config={},
             metadata={},
             message_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             current_mode=AgentMode.BUILD,
         )
         await v2_conversation_repo.save(other_conv)
@@ -228,8 +228,8 @@ class TestSqlConversationRepositoryList:
             agent_config={},
             metadata={},
             message_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             current_mode=AgentMode.BUILD,
         )
         await v2_conversation_repo.save(active_conv)
@@ -244,8 +244,8 @@ class TestSqlConversationRepositoryList:
             agent_config={},
             metadata={},
             message_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             current_mode=AgentMode.BUILD,
         )
         await v2_conversation_repo.save(archived_conv)
@@ -272,8 +272,8 @@ class TestSqlConversationRepositoryList:
                 agent_config={},
                 metadata={},
                 message_count=0,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
                 current_mode=AgentMode.BUILD,
             )
             await v2_conversation_repo.save(conversation)
@@ -301,8 +301,8 @@ class TestSqlConversationRepositoryList:
                 agent_config={},
                 metadata={},
                 message_count=0,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
                 current_mode=AgentMode.BUILD,
             )
             await v2_conversation_repo.save(conversation)
@@ -318,8 +318,8 @@ class TestSqlConversationRepositoryList:
             agent_config={},
             metadata={},
             message_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             current_mode=AgentMode.BUILD,
         )
         await v2_conversation_repo.save(other_conv)
@@ -343,8 +343,8 @@ class TestSqlConversationRepositoryList:
             agent_config={},
             metadata={},
             message_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             current_mode=AgentMode.BUILD,
         )
         await v2_conversation_repo.save(conv1)
@@ -359,8 +359,8 @@ class TestSqlConversationRepositoryList:
             agent_config={},
             metadata={},
             message_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             current_mode=AgentMode.BUILD,
         )
         await v2_conversation_repo.save(conv2)
@@ -387,8 +387,8 @@ class TestSqlConversationRepositoryDelete:
             agent_config={},
             metadata={},
             message_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             current_mode=AgentMode.BUILD,
         )
         await v2_conversation_repo.save(conversation)
@@ -423,8 +423,8 @@ class TestSqlConversationRepositoryCount:
                 agent_config={},
                 metadata={},
                 message_count=0,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
                 current_mode=AgentMode.BUILD,
             )
             await v2_conversation_repo.save(conversation)
@@ -449,8 +449,8 @@ class TestSqlConversationRepositoryToDomain:
             agent_config={"model": "gpt-4"},
             metadata={"test": True},
             message_count=5,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             current_mode=AgentMode.PLAN,
             current_plan_id="plan-123",
         )
@@ -489,8 +489,8 @@ class TestSqlConversationRepositoryToDb:
             agent_config={},
             metadata={},
             message_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
             current_mode=AgentMode.BUILD,
         )
 
@@ -518,8 +518,8 @@ class TestSqlConversationRepositoryTransaction:
                 agent_config={},
                 metadata={},
                 message_count=0,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
                 current_mode=AgentMode.BUILD,
             )
             await v2_conversation_repo.save(conv1)
@@ -534,8 +534,8 @@ class TestSqlConversationRepositoryTransaction:
                 agent_config={},
                 metadata={},
                 message_count=0,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
                 current_mode=AgentMode.BUILD,
             )
             await v2_conversation_repo.save(conv2)

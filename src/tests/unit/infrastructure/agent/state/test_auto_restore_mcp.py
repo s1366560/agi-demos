@@ -6,7 +6,7 @@ Tests the P1 fix: Auto-restore race condition using Redis distributed lock.
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -21,7 +21,7 @@ class MockMCPServer:
     name: str
     project_id: str
     server_type: str = "stdio"
-    transport_config: Dict[str, Any] = None
+    transport_config: dict[str, Any] = None
     enabled: bool = True
 
     def __post_init__(self):

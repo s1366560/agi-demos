@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import status
@@ -15,7 +15,7 @@ app = create_app()
 async def test_tasks_endpoints(authenticated_async_client, test_db: AsyncSession):
     client: AsyncClient = authenticated_async_client
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     # Seed some task logs
     tasks = [
         DBTaskLog(

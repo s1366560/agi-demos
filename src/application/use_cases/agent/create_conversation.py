@@ -4,7 +4,7 @@ This use case handles the creation of new conversations.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.application.services.agent_service import AgentService
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class CreateConversationUseCase:
     """Use case for creating a new conversation."""
 
-    def __init__(self, agent_service: "AgentService"):
+    def __init__(self, agent_service: "AgentService") -> None:
         """
         Initialize the use case.
 
@@ -32,7 +32,7 @@ class CreateConversationUseCase:
         user_id: str,
         tenant_id: str,
         title: str | None = None,
-        agent_config: Dict[str, Any] | None = None,
+        agent_config: dict[str, Any] | None = None,
     ) -> Conversation:
         """
         Execute the use case.

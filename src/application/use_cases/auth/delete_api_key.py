@@ -2,7 +2,6 @@
 Use case for listing API keys.
 """
 
-from typing import List
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -30,10 +29,10 @@ class ListAPIKeysQuery(BaseModel):
 class ListAPIKeysUseCase:
     """Use case for listing API keys"""
 
-    def __init__(self, api_key_repository: APIKeyRepository):
+    def __init__(self, api_key_repository: APIKeyRepository) -> None:
         self._api_key_repo = api_key_repository
 
-    async def execute(self, query: ListAPIKeysQuery) -> List[APIKey]:
+    async def execute(self, query: ListAPIKeysQuery) -> list[APIKey]:
         """List API keys for user"""
         return await self._api_key_repo.find_by_user(
             query.user_id, limit=query.limit, offset=query.offset

@@ -22,9 +22,9 @@ import asyncio
 import hashlib
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, Optional, Set
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis
@@ -57,24 +57,24 @@ class FeatureFlagConfig:
     percentage: float = 0.0  # 0-100
 
     # For allowlist/denylist
-    tenant_allowlist: Set[str] = field(default_factory=set)
-    tenant_denylist: Set[str] = field(default_factory=set)
-    project_allowlist: Set[str] = field(default_factory=set)
-    project_denylist: Set[str] = field(default_factory=set)
+    tenant_allowlist: set[str] = field(default_factory=set)
+    tenant_denylist: set[str] = field(default_factory=set)
+    project_allowlist: set[str] = field(default_factory=set)
+    project_denylist: set[str] = field(default_factory=set)
 
     # For gradual rollout
-    start_date: Optional[datetime] = None
-    end_date: Optional[datetime] = None
+    start_date: datetime | None = None
+    end_date: datetime | None = None
     start_percentage: float = 0.0
     end_percentage: float = 100.0
 
     # Metadata
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 # Default feature flags for Agent Pool
-DEFAULT_FLAGS: Dict[str, FeatureFlagConfig] = {
+DEFAULT_FLAGS: dict[str, FeatureFlagConfig] = {
     "agent_pool_enabled": FeatureFlagConfig(
         name="agent_pool_enabled",
         description="Enable new agent pool architecture",
@@ -146,25 +146,25 @@ class FeatureFlags:
 
     def __init__(
         self,
-        flags: Optional[Dict[str, FeatureFlagConfig]] = None,
-        redis_client: Optional[Redis] = None,
-    ):
+        flags: dict[str, FeatureFlagConfig] | None = None,
+        redis_client: Redis | None = None,
+    ) -> None:
         # Use default flags, then override with provided flags
-        self._flags: Dict[str, FeatureFlagConfig] = dict(DEFAULT_FLAGS)
+        self._flags: dict[str, FeatureFlagConfig] = dict(DEFAULT_FLAGS)
         if flags:
             self._flags.update(flags)
 
         self._redis_client = redis_client
-        self._cache: Dict[str, bool] = {}
+        self._cache: dict[str, bool] = {}
         self._lock = asyncio.Lock()
 
-    def get_flag(self, name: str) -> Optional[FeatureFlagConfig]:
+    def get_flag(self, name: str) -> FeatureFlagConfig | None:
         """Get flag configuration."""
         return self._flags.get(name)
 
     def set_flag(self, config: FeatureFlagConfig) -> None:
         """Set or update a flag."""
-        config.updated_at = datetime.now(timezone.utc)
+        config.updated_at = datetime.now(UTC)
         self._flags[config.name] = config
         # Clear cache for this flag
         self._cache = {k: v for k, v in self._cache.items() if not k.startswith(config.name)}
@@ -172,8 +172,8 @@ class FeatureFlags:
     async def is_enabled(
         self,
         name: str,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
     ) -> bool:
         """
         Check if a feature is enabled.
@@ -214,7 +214,7 @@ class FeatureFlags:
 
         return False
 
-    async def get_all_flags(self) -> Dict[str, Dict[str, Any]]:
+    async def get_all_flags(self) -> dict[str, dict[str, Any]]:
         """Get all flags as dictionary."""
         return {
             name: {
@@ -234,7 +234,7 @@ class FeatureFlags:
             return False
 
         flag.tenant_allowlist.add(tenant_id)
-        flag.updated_at = datetime.now(timezone.utc)
+        flag.updated_at = datetime.now(UTC)
 
         # If currently using denylist, remove from denylist
         flag.tenant_denylist.discard(tenant_id)
@@ -250,7 +250,7 @@ class FeatureFlags:
         flag.tenant_allowlist.discard(tenant_id)
         if flag.strategy == RolloutStrategy.DENYLIST:
             flag.tenant_denylist.add(tenant_id)
-        flag.updated_at = datetime.now(timezone.utc)
+        flag.updated_at = datetime.now(UTC)
 
         return True
 
@@ -268,7 +268,7 @@ class FeatureFlags:
         key = f"{tenant_id}:{project_id}"
         flag.project_allowlist.add(key)
         flag.project_denylist.discard(key)
-        flag.updated_at = datetime.now(timezone.utc)
+        flag.updated_at = datetime.now(UTC)
 
         return True
 
@@ -280,7 +280,7 @@ class FeatureFlags:
 
         flag.percentage = max(0.0, min(100.0, percentage))
         flag.strategy = RolloutStrategy.PERCENTAGE
-        flag.updated_at = datetime.now(timezone.utc)
+        flag.updated_at = datetime.now(UTC)
 
         return True
 
@@ -299,12 +299,12 @@ class FeatureFlags:
         from datetime import timedelta
 
         flag.strategy = RolloutStrategy.GRADUAL
-        flag.start_date = datetime.now(timezone.utc)
+        flag.start_date = datetime.now(UTC)
         flag.end_date = flag.start_date + timedelta(days=duration_days)
         flag.start_percentage = start_percentage
         flag.end_percentage = end_percentage
         flag.enabled = True
-        flag.updated_at = datetime.now(timezone.utc)
+        flag.updated_at = datetime.now(UTC)
 
         logger.info(
             f"Started gradual rollout for {flag_name}: "
@@ -320,8 +320,8 @@ class FeatureFlags:
     def _check_allowlist(
         self,
         flag: FeatureFlagConfig,
-        tenant_id: Optional[str],
-        project_id: Optional[str],
+        tenant_id: str | None,
+        project_id: str | None,
     ) -> bool:
         """Check if tenant/project is in allowlist."""
         # Check project allowlist first (more specific)
@@ -331,16 +331,13 @@ class FeatureFlags:
                 return True
 
         # Check tenant allowlist
-        if tenant_id and tenant_id in flag.tenant_allowlist:
-            return True
-
-        return False
+        return bool(tenant_id and tenant_id in flag.tenant_allowlist)
 
     def _check_denylist(
         self,
         flag: FeatureFlagConfig,
-        tenant_id: Optional[str],
-        project_id: Optional[str],
+        tenant_id: str | None,
+        project_id: str | None,
     ) -> bool:
         """Check if tenant/project is NOT in denylist."""
         # Check project denylist first
@@ -350,16 +347,13 @@ class FeatureFlags:
                 return False
 
         # Check tenant denylist
-        if tenant_id and tenant_id in flag.tenant_denylist:
-            return False
-
-        return True
+        return not (tenant_id and tenant_id in flag.tenant_denylist)
 
     def _check_percentage(
         self,
         flag: FeatureFlagConfig,
-        tenant_id: Optional[str],
-        project_id: Optional[str],
+        tenant_id: str | None,
+        project_id: str | None,
     ) -> bool:
         """Check percentage-based rollout using consistent hashing."""
         if flag.percentage >= 100.0:
@@ -377,14 +371,14 @@ class FeatureFlags:
     def _check_gradual(
         self,
         flag: FeatureFlagConfig,
-        tenant_id: Optional[str],
-        project_id: Optional[str],
+        tenant_id: str | None,
+        project_id: str | None,
     ) -> bool:
         """Check gradual rollout based on current time."""
         if not flag.start_date or not flag.end_date:
             return False
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Before start
         if now < flag.start_date:
@@ -409,8 +403,8 @@ class FeatureFlags:
         self,
         flag: FeatureFlagConfig,
         percentage: float,
-        tenant_id: Optional[str],
-        project_id: Optional[str],
+        tenant_id: str | None,
+        project_id: str | None,
     ) -> bool:
         """Check if tenant/project falls within percentage."""
         if percentage >= 100.0:
@@ -426,7 +420,7 @@ class FeatureFlags:
 
 
 # Global feature flags instance
-_global_flags: Optional[FeatureFlags] = None
+_global_flags: FeatureFlags | None = None
 
 
 def get_feature_flags() -> FeatureFlags:

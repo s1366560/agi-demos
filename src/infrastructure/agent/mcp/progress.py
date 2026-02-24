@@ -4,11 +4,11 @@ This module provides utilities for handling progress notifications
 from MCP tools during long-running operations.
 """
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 # Type alias for progress callback
 ProgressHandler = Callable[
-    [str, str, float, Optional[float], Optional[str]],
+    [str, str, float, float | None, str | None],
     None,
 ]
 """
@@ -29,7 +29,7 @@ Returns:
 class ProgressTracker:
     """Tracks progress for multiple concurrent operations."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the progress tracker."""
         self._active_progress: dict[str, dict] = {}
 
@@ -37,7 +37,7 @@ class ProgressTracker:
         self,
         progress_token: str,
         tool_name: str,
-        total: Optional[float] = None,
+        total: float | None = None,
     ) -> None:
         """
         Start tracking progress for an operation.
@@ -58,8 +58,8 @@ class ProgressTracker:
         self,
         progress_token: str,
         progress: float,
-        message: Optional[str] = None,
-    ) -> Optional[dict]:
+        message: str | None = None,
+    ) -> dict | None:
         """
         Update progress for a tracked operation.
 
@@ -80,7 +80,7 @@ class ProgressTracker:
 
         return self._active_progress[progress_token].copy()
 
-    def complete_tracking(self, progress_token: str) -> Optional[dict]:
+    def complete_tracking(self, progress_token: str) -> dict | None:
         """
         Mark a tracked operation as complete.
 
@@ -97,7 +97,7 @@ class ProgressTracker:
         del self._active_progress[progress_token]
         return result
 
-    def get_progress(self, progress_token: str) -> Optional[dict]:
+    def get_progress(self, progress_token: str) -> dict | None:
         """
         Get current progress for a tracked operation.
 

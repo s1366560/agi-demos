@@ -10,7 +10,7 @@ This module serves as the unified LLM abstraction layer, replacing LangChain dep
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -75,12 +75,12 @@ class ChatResponse:
 class LLMConfig:
     """Configuration for LLM clients."""
 
-    api_key: Optional[str] = None
+    api_key: str | None = None
     model: str = ""
-    small_model: Optional[str] = None
+    small_model: str | None = None
     temperature: float = 0.0
     max_tokens: int = 4096
-    base_url: Optional[str] = None
+    base_url: str | None = None
 
 
 class RateLimitError(Exception):
@@ -97,7 +97,7 @@ class LLMClient(ABC):
     It serves as a unified abstraction replacing LangChain's BaseChatModel.
     """
 
-    def __init__(self, config: LLMConfig, cache: bool = True):
+    def __init__(self, config: LLMConfig, cache: bool = True) -> None:
         """
         Initialize the LLM client.
 
@@ -153,7 +153,7 @@ class LLMClient(ABC):
     async def ainvoke(
         self,
         messages: list[Message] | str,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> ChatResponse:
         """
         Async invoke method for chat completion (LangChain-style interface).
@@ -194,11 +194,11 @@ class LLMClient(ABC):
 class EmbedderConfig:
     """Configuration for embedding clients."""
 
-    api_key: Optional[str] = None
+    api_key: str | None = None
     model: str = "text-embedding-3-small"
     embedding_dim: int = 1536
-    embedding_model: Optional[str] = None
-    base_url: Optional[str] = None
+    embedding_model: str | None = None
+    base_url: str | None = None
 
 
 class EmbedderClient(ABC):
@@ -208,7 +208,7 @@ class EmbedderClient(ABC):
     Provides a consistent interface for text embedding across different providers.
     """
 
-    def __init__(self, config: EmbedderConfig):
+    def __init__(self, config: EmbedderConfig) -> None:
         """
         Initialize the embedder client.
 
@@ -246,7 +246,7 @@ class CrossEncoderClient(ABC):
         self,
         query: str,
         passages: list[str],
-        top_n: Optional[int] = None,
+        top_n: int | None = None,
     ) -> list[tuple[int, float]]:
         """
         Rank passages by relevance to query.

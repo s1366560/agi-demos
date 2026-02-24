@@ -7,7 +7,7 @@ Tests:
 - AutoScalingService: Dynamic scaling
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -142,7 +142,7 @@ class TestStateCheckpoint:
             "checkpoint_id": "cp-456",
             "instance_key": "t:p:m",
             "checkpoint_type": "execution",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "state_data": {"foo": "bar"},
             "metadata": {},
         }

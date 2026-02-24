@@ -3,8 +3,7 @@ V2 SQLAlchemy implementation of SubAgentRepository using BaseRepository.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,7 +67,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
 
         return subagent
 
-    async def get_by_id(self, subagent_id: str) -> Optional[SubAgent]:
+    async def get_by_id(self, subagent_id: str) -> SubAgent | None:
         """Get a subagent by its ID."""
         from src.infrastructure.adapters.secondary.persistence.models import SubAgent as DBSubAgent
 
@@ -81,7 +80,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         self,
         tenant_id: str,
         name: str,
-    ) -> Optional[SubAgent]:
+    ) -> SubAgent | None:
         """Get a subagent by name within a tenant."""
         from src.infrastructure.adapters.secondary.persistence.models import SubAgent as DBSubAgent
 
@@ -146,7 +145,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         enabled_only: bool = False,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[SubAgent]:
+    ) -> list[SubAgent]:
         """List all subagents for a tenant."""
         from src.infrastructure.adapters.secondary.persistence.models import SubAgent as DBSubAgent
 
@@ -165,9 +164,9 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
     async def list_by_project(
         self,
         project_id: str,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
         enabled_only: bool = False,
-    ) -> List[SubAgent]:
+    ) -> list[SubAgent]:
         """List subagents for a project, including tenant-wide ones (project_id IS NULL).
 
         When tenant_id is provided, tenant-wide SubAgents are scoped to that tenant.
@@ -211,7 +210,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
             raise ValueError(f"SubAgent not found: {subagent_id}")
 
         db_subagent.enabled = enabled
-        db_subagent.updated_at = datetime.now(timezone.utc)
+        db_subagent.updated_at = datetime.now(UTC)
 
         await self._session.flush()
 
@@ -252,7 +251,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         tenant_id: str,
         query: str,
         enabled_only: bool = True,
-    ) -> List[SubAgent]:
+    ) -> list[SubAgent]:
         """Find subagents by keyword matching."""
         # Get all subagents for the tenant
         subagents = await self.list_by_tenant(tenant_id, enabled_only=enabled_only)
@@ -265,7 +264,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
 
         return matching
 
-    def _to_domain(self, db_subagent) -> Optional[SubAgent]:
+    def _to_domain(self, db_subagent) -> SubAgent | None:
         """Convert database model to domain entity."""
         if db_subagent is None:
             return None

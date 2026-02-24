@@ -1,7 +1,6 @@
 """Tenant data models."""
 
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -10,7 +9,7 @@ class TenantCreate(BaseModel):
     """Request model for creating a tenant."""
 
     name: str = Field(..., description="Tenant name", min_length=1, max_length=255)
-    description: Optional[str] = Field(
+    description: str | None = Field(
         default=None, description="Tenant description", max_length=1000
     )
     plan: str = Field(default="free", description="Tenant plan")
@@ -35,20 +34,20 @@ class TenantCreate(BaseModel):
 class TenantUpdate(BaseModel):
     """Request model for updating a tenant."""
 
-    name: Optional[str] = Field(
+    name: str | None = Field(
         default=None, description="Tenant name", min_length=1, max_length=255
     )
-    description: Optional[str] = Field(
+    description: str | None = Field(
         default=None, description="Tenant description", max_length=1000
     )
-    plan: Optional[str] = Field(default=None, description="Tenant plan")
-    max_projects: Optional[int] = Field(
+    plan: str | None = Field(default=None, description="Tenant plan")
+    max_projects: int | None = Field(
         default=None, ge=1, le=100, description="Maximum number of projects"
     )
-    max_users: Optional[int] = Field(
+    max_users: int | None = Field(
         default=None, ge=1, le=1000, description="Maximum number of users"
     )
-    max_storage: Optional[int] = Field(default=None, ge=0, description="Maximum storage in bytes")
+    max_storage: int | None = Field(default=None, ge=0, description="Maximum storage in bytes")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -69,14 +68,14 @@ class TenantResponse(BaseModel):
 
     id: str = Field(..., description="Tenant unique identifier")
     name: str = Field(..., description="Tenant name")
-    description: Optional[str] = Field(default=None, description="Tenant description")
+    description: str | None = Field(default=None, description="Tenant description")
     owner_id: str = Field(..., description="Owner user ID")
     plan: str = Field(default="free", description="Tenant plan")
     max_projects: int = Field(default=3, description="Maximum number of projects")
     max_users: int = Field(default=10, description="Maximum number of users")
     max_storage: int = Field(default=1073741824, description="Maximum storage in bytes")
     created_at: datetime = Field(..., description="Creation timestamp")
-    updated_at: Optional[datetime] = Field(default=None, description="Last update timestamp")
+    updated_at: datetime | None = Field(default=None, description="Last update timestamp")
 
     model_config = ConfigDict(
         from_attributes=True,

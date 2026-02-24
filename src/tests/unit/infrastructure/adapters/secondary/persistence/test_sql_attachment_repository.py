@@ -7,7 +7,7 @@ These tests verify that the migrated repository maintains 100% compatibility
 with the original implementation while leveraging the BaseRepository.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,7 +51,7 @@ class TestSqlAttachmentRepositoryCreate:
             uploaded_parts=0,
             sandbox_path=None,
             metadata=AttachmentMetadata.from_dict(None),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             expires_at=None,
             error_message=None,
         )
@@ -75,7 +75,7 @@ class TestSqlAttachmentRepositoryCreate:
     @pytest.mark.asyncio
     async def test_save_with_expiration(self, v2_attachment_repo: SqlAttachmentRepository):
         """Test saving an attachment with expiration."""
-        expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+        expires_at = datetime.now(UTC) + timedelta(hours=24)
         attachment = Attachment(
             id="att-expire-1",
             conversation_id="conv-1",
@@ -92,7 +92,7 @@ class TestSqlAttachmentRepositoryCreate:
             uploaded_parts=0,
             sandbox_path=None,
             metadata=AttachmentMetadata.from_dict(None),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             expires_at=expires_at,
             error_message=None,
         )
@@ -127,7 +127,7 @@ class TestSqlAttachmentRepositoryUpdate:
             uploaded_parts=0,
             sandbox_path=None,
             metadata=AttachmentMetadata.from_dict(None),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             expires_at=None,
             error_message=None,
         )
@@ -187,7 +187,7 @@ class TestSqlAttachmentRepositoryFind:
             uploaded_parts=0,
             sandbox_path=None,
             metadata=AttachmentMetadata.from_dict(None),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             expires_at=None,
             error_message=None,
         )
@@ -225,7 +225,7 @@ class TestSqlAttachmentRepositoryFind:
                 uploaded_parts=0,
                 sandbox_path=None,
                 metadata=AttachmentMetadata.from_dict(None),
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
                 expires_at=None,
                 error_message=None,
             )
@@ -248,7 +248,7 @@ class TestSqlAttachmentRepositoryFind:
             uploaded_parts=0,
             sandbox_path=None,
             metadata=AttachmentMetadata.from_dict(None),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             expires_at=None,
             error_message=None,
         )
@@ -280,7 +280,7 @@ class TestSqlAttachmentRepositoryFind:
                 uploaded_parts=0,
                 sandbox_path=None,
                 metadata=AttachmentMetadata.from_dict(None),
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
                 expires_at=None,
                 error_message=None,
             )
@@ -313,7 +313,7 @@ class TestSqlAttachmentRepositoryFind:
                 uploaded_parts=0,
                 sandbox_path=None,
                 metadata=AttachmentMetadata.from_dict(None),
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
                 expires_at=None,
                 error_message=None,
             )
@@ -353,7 +353,7 @@ class TestSqlAttachmentRepositoryDelete:
             uploaded_parts=0,
             sandbox_path=None,
             metadata=AttachmentMetadata.from_dict(None),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             expires_at=None,
             error_message=None,
         )
@@ -376,7 +376,7 @@ class TestSqlAttachmentRepositoryDelete:
     @pytest.mark.asyncio
     async def test_delete_expired(self, v2_attachment_repo: SqlAttachmentRepository):
         """Test deleting all expired attachments."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         past = now - timedelta(hours=1)
         future = now + timedelta(hours=1)
 
@@ -457,7 +457,7 @@ class TestSqlAttachmentRepositoryUpdateMethods:
             uploaded_parts=0,
             sandbox_path=None,
             metadata=AttachmentMetadata.from_dict(None),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             expires_at=None,
             error_message=None,
         )
@@ -494,7 +494,7 @@ class TestSqlAttachmentRepositoryUpdateMethods:
             uploaded_parts=0,
             sandbox_path=None,
             metadata=AttachmentMetadata.from_dict(None),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             expires_at=None,
             error_message=None,
         )
@@ -532,7 +532,7 @@ class TestSqlAttachmentRepositoryUpdateMethods:
             uploaded_parts=0,
             sandbox_path=None,
             metadata=AttachmentMetadata.from_dict(None),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             expires_at=None,
             error_message=None,
         )
@@ -565,7 +565,7 @@ class TestSqlAttachmentRepositoryUpdateMethods:
             uploaded_parts=0,
             sandbox_path=None,
             metadata=AttachmentMetadata.from_dict(None),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             expires_at=None,
             error_message=None,
         )
@@ -610,7 +610,7 @@ class TestSqlAttachmentRepositoryToDomain:
             uploaded_parts=5,
             sandbox_path="/sandbox/domain.txt",
             metadata=metadata,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             expires_at=None,
             error_message=None,
         )
@@ -649,7 +649,7 @@ class TestSqlAttachmentRepositoryToDb:
             uploaded_parts=0,
             sandbox_path=None,
             metadata=AttachmentMetadata.from_dict(None),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             expires_at=None,
             error_message=None,
         )

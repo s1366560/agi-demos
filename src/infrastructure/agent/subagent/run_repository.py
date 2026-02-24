@@ -6,10 +6,11 @@ import json
 import logging
 import re
 import sqlite3
-from contextlib import closing
-from datetime import datetime, timezone
+from collections.abc import Callable, Mapping
+from contextlib import closing, suppress
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Mapping, Optional, Protocol
+from typing import Any, Protocol
 
 from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
 
@@ -19,7 +20,7 @@ logger = logging.getLogger(__name__)
 class SubAgentRunRepository(Protocol):
     """Repository contract for SubAgent run persistence."""
 
-    def load_runs(self) -> Dict[str, Dict[str, SubAgentRun]]:
+    def load_runs(self) -> dict[str, dict[str, SubAgentRun]]:
         """Load all runs indexed by conversation_id -> run_id."""
 
     def save_runs(self, runs: Mapping[str, Mapping[str, SubAgentRun]]) -> None:
@@ -43,7 +44,7 @@ class SqliteSubAgentRunRepository:
         self._table_name = table_name
         self._initialize_schema()
 
-    def load_runs(self) -> Dict[str, Dict[str, SubAgentRun]]:
+    def load_runs(self) -> dict[str, dict[str, SubAgentRun]]:
         if not self._db_path.exists():
             return {}
         try:
@@ -61,7 +62,7 @@ class SqliteSubAgentRunRepository:
 
     def save_runs(self, runs: Mapping[str, Mapping[str, SubAgentRun]]) -> None:
         payload = _serialize_snapshot(runs)
-        updated_at = datetime.now(timezone.utc).isoformat()
+        updated_at = datetime.now(UTC).isoformat()
         try:
             self._db_path.parent.mkdir(parents=True, exist_ok=True)
             with closing(sqlite3.connect(self._db_path)) as conn:
@@ -113,7 +114,7 @@ class PostgresSubAgentRunRepository:
         self,
         postgres_dsn: str,
         table_name: str = "subagent_run_snapshots",
-        connect_factory: Optional[Callable[[str], Any]] = None,
+        connect_factory: Callable[[str], Any] | None = None,
     ) -> None:
         if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", table_name):
             raise ValueError(f"Invalid table_name: {table_name}")
@@ -125,7 +126,7 @@ class PostgresSubAgentRunRepository:
         self._connect_factory = connect_factory
         self._initialize_schema()
 
-    def load_runs(self) -> Dict[str, Dict[str, SubAgentRun]]:
+    def load_runs(self) -> dict[str, dict[str, SubAgentRun]]:
         conn: Any = None
         try:
             conn = self._connect()
@@ -150,7 +151,7 @@ class PostgresSubAgentRunRepository:
 
     def save_runs(self, runs: Mapping[str, Mapping[str, SubAgentRun]]) -> None:
         payload = _serialize_snapshot(runs)
-        updated_at = datetime.now(timezone.utc).isoformat()
+        updated_at = datetime.now(UTC).isoformat()
         conn: Any = None
         try:
             conn = self._connect()
@@ -184,7 +185,7 @@ class PostgresSubAgentRunRepository:
             logger.warning(f"[PostgresSubAgentRunRepository] Failed to initialize schema: {exc}")
             self._safe_rollback(conn)
 
-    def _connect(self) -> Any:  # noqa: ANN401
+    def _connect(self) -> Any:
         if self._connect_factory is not None:
             return self._connect_factory(self._postgres_dsn)
         try:
@@ -195,7 +196,7 @@ class PostgresSubAgentRunRepository:
             ) from exc
         return psycopg2.connect(self._postgres_dsn)
 
-    def _ensure_schema(self, cursor: Any) -> None:  # noqa: ANN401
+    def _ensure_schema(self, cursor: Any) -> None:
         cursor.execute(
             f"""
             CREATE TABLE IF NOT EXISTS {self._table_name} (
@@ -207,15 +208,13 @@ class PostgresSubAgentRunRepository:
         )
 
     @staticmethod
-    def _safe_rollback(conn: Any) -> None:  # noqa: ANN401
+    def _safe_rollback(conn: Any) -> None:
         if conn is None:
             return
         rollback = getattr(conn, "rollback", None)
         if callable(rollback):
-            try:
+            with suppress(Exception):
                 rollback()
-            except Exception:
-                pass
 
     def close(self) -> None:
         """No-op for postgres repository (connections are per-operation)."""
@@ -227,11 +226,11 @@ class RedisRunSnapshotCache:
 
     def __init__(
         self,
-        redis_url: Optional[str] = None,
+        redis_url: str | None = None,
         *,
         key: str = "subagent:runs:snapshot:v1",
         ttl_seconds: int = 60,
-        client: Optional[Any] = None,  # noqa: ANN401
+        client: Any | None = None,
     ) -> None:
         self._key = key
         self._ttl_seconds = max(1, int(ttl_seconds))
@@ -250,7 +249,7 @@ class RedisRunSnapshotCache:
                 logger.warning(f"[RedisRunSnapshotCache] Failed to initialize client: {exc}")
                 self._client = None
 
-    def load_runs(self) -> Optional[Dict[str, Dict[str, SubAgentRun]]]:
+    def load_runs(self) -> dict[str, dict[str, SubAgentRun]] | None:
         if self._client is None:
             return None
         try:
@@ -278,10 +277,8 @@ class RedisRunSnapshotCache:
             return
         close = getattr(self._client, "close", None)
         if callable(close):
-            try:
+            with suppress(Exception):
                 close()
-            except Exception:
-                pass
 
 
 class HybridSubAgentRunRepository:
@@ -290,12 +287,12 @@ class HybridSubAgentRunRepository:
     def __init__(
         self,
         db_repository: SubAgentRunRepository,
-        redis_cache: Optional[RedisRunSnapshotCache] = None,
+        redis_cache: RedisRunSnapshotCache | None = None,
     ) -> None:
         self._db_repository = db_repository
         self._redis_cache = redis_cache
 
-    def load_runs(self) -> Dict[str, Dict[str, SubAgentRun]]:
+    def load_runs(self) -> dict[str, dict[str, SubAgentRun]]:
         if self._redis_cache is not None:
             cached = self._redis_cache.load_runs()
             if cached is not None:
@@ -334,7 +331,7 @@ def _serialize_snapshot(runs: Mapping[str, Mapping[str, SubAgentRun]]) -> str:
     return json.dumps(payload, ensure_ascii=False)
 
 
-def _deserialize_snapshot(payload: str) -> Dict[str, Dict[str, SubAgentRun]]:
+def _deserialize_snapshot(payload: str) -> dict[str, dict[str, SubAgentRun]]:
     try:
         raw = json.loads(payload)
     except Exception:
@@ -346,11 +343,11 @@ def _deserialize_snapshot(payload: str) -> Dict[str, Dict[str, SubAgentRun]]:
     if not isinstance(conversations, dict):
         return {}
 
-    loaded: Dict[str, Dict[str, SubAgentRun]] = {}
+    loaded: dict[str, dict[str, SubAgentRun]] = {}
     for conversation_id, run_payloads in conversations.items():
         if not isinstance(run_payloads, dict):
             continue
-        bucket: Dict[str, SubAgentRun] = {}
+        bucket: dict[str, SubAgentRun] = {}
         for run_id, run_payload in run_payloads.items():
             run = _deserialize_run(run_payload)
             if run is not None:
@@ -360,7 +357,7 @@ def _deserialize_snapshot(payload: str) -> Dict[str, Dict[str, SubAgentRun]]:
     return loaded
 
 
-def _deserialize_run(payload: Any) -> Optional[SubAgentRun]:  # noqa: ANN401
+def _deserialize_run(payload: Any) -> SubAgentRun | None:
     if not isinstance(payload, dict):
         return None
     try:
@@ -379,7 +376,7 @@ def _deserialize_run(payload: Any) -> Optional[SubAgentRun]:  # noqa: ANN401
             subagent_name=str(payload.get("subagent_name") or ""),
             task=str(payload.get("task") or ""),
             status=status,
-            created_at=_parse_datetime(payload.get("created_at")) or datetime.now(timezone.utc),
+            created_at=_parse_datetime(payload.get("created_at")) or datetime.now(UTC),
             started_at=_parse_datetime(payload.get("started_at")),
             ended_at=_parse_datetime(payload.get("ended_at")),
             summary=_optional_str(payload.get("summary")),
@@ -392,7 +389,7 @@ def _deserialize_run(payload: Any) -> Optional[SubAgentRun]:  # noqa: ANN401
         return None
 
 
-def _parse_datetime(value: Any) -> Optional[datetime]:  # noqa: ANN401
+def _parse_datetime(value: Any) -> datetime | None:
     if not isinstance(value, str) or not value.strip():
         return None
     try:
@@ -400,18 +397,18 @@ def _parse_datetime(value: Any) -> Optional[datetime]:  # noqa: ANN401
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
-def _optional_str(value: Any) -> Optional[str]:  # noqa: ANN401
+def _optional_str(value: Any) -> str | None:
     if value is None:
         return None
     text = str(value)
     return text if text else None
 
 
-def _optional_int(value: Any) -> Optional[int]:  # noqa: ANN401
+def _optional_int(value: Any) -> int | None:
     if value is None:
         return None
     try:

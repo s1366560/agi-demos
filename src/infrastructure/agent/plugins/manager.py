@@ -8,7 +8,7 @@ import os
 import re
 import subprocess
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .discovery import DiscoveredPlugin, discover_plugins
 from .loader import AgentPluginLoader
@@ -32,9 +32,9 @@ class PluginRuntimeManager:
     def __init__(
         self,
         *,
-        registry: Optional[AgentPluginRegistry] = None,
-        state_store: Optional[PluginStateStore] = None,
-        strict_local_manifest: Optional[bool] = None,
+        registry: AgentPluginRegistry | None = None,
+        state_store: PluginStateStore | None = None,
+        strict_local_manifest: bool | None = None,
     ) -> None:
         self._registry = registry or get_plugin_registry()
         self._state_store = state_store or PluginStateStore()
@@ -42,14 +42,14 @@ class PluginRuntimeManager:
         self._lock = asyncio.Lock()
         self._mutation_lock = asyncio.Lock()
         self._loaded = False
-        self._last_discovered: List[DiscoveredPlugin] = []
+        self._last_discovered: list[DiscoveredPlugin] = []
         self._strict_local_manifest = (
             _read_env_bool(_MANIFEST_STRICT_ENV)
             if strict_local_manifest is None
             else bool(strict_local_manifest)
         )
 
-    async def ensure_loaded(self, *, force_reload: bool = False) -> List[PluginDiagnostic]:
+    async def ensure_loaded(self, *, force_reload: bool = False) -> list[PluginDiagnostic]:
         """Ensure enabled plugins are discovered and loaded into registry."""
         async with self._lock:
             if self._loaded and not force_reload:
@@ -79,15 +79,15 @@ class PluginRuntimeManager:
             self._loaded = True
             return discovery_diagnostics + setup_diagnostics + loaded_diagnostics
 
-    async def reload(self) -> List[PluginDiagnostic]:
+    async def reload(self) -> list[PluginDiagnostic]:
         """Force plugin re-discovery and registry rebuild."""
         return await self.ensure_loaded(force_reload=True)
 
     def list_plugins(
         self,
         *,
-        tenant_id: Optional[str] = None,
-    ) -> tuple[List[Dict[str, Any]], List[PluginDiagnostic]]:
+        tenant_id: str | None = None,
+    ) -> tuple[list[dict[str, Any]], list[PluginDiagnostic]]:
         """List discovered plugin metadata with enabled status."""
         discovered, diagnostics = discover_plugins(
             state_store=self._state_store,
@@ -97,7 +97,7 @@ class PluginRuntimeManager:
         state_map = self._state_store.list_plugins()
         tenant_state_map = self._state_store.list_plugins(tenant_id=tenant_id) if tenant_id else {}
 
-        records: List[Dict[str, Any]] = []
+        records: list[dict[str, Any]] = []
         seen = set()
         for plugin in discovered:
             state_entry = dict(state_map.get(plugin.name, {}))
@@ -164,8 +164,8 @@ class PluginRuntimeManager:
         plugin_name: str,
         enabled: bool,
         *,
-        tenant_id: Optional[str] = None,
-    ) -> List[PluginDiagnostic]:
+        tenant_id: str | None = None,
+    ) -> list[PluginDiagnostic]:
         """Enable or disable a plugin and reload runtime registry."""
         async with self._mutation_lock:
             if tenant_id:
@@ -180,7 +180,7 @@ class PluginRuntimeManager:
                 self._restore_plugin_state(plugin_name, previous_state)
                 raise
 
-    async def install_plugin(self, requirement: str) -> Dict[str, Any]:
+    async def install_plugin(self, requirement: str) -> dict[str, Any]:
         """Install plugin package with pip and reload runtime registry."""
         async with self._mutation_lock:
             normalized_requirement = requirement.strip()
@@ -219,7 +219,7 @@ class PluginRuntimeManager:
                     ),
                     timeout=_INSTALL_TIMEOUT_SECONDS,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return {
                     "success": False,
                     "requirement": normalized_requirement,
@@ -267,7 +267,7 @@ class PluginRuntimeManager:
                 "diagnostics": [_serialize_diagnostic(item) for item in diagnostics],
             }
 
-    async def uninstall_plugin(self, plugin_name: str) -> Dict[str, Any]:
+    async def uninstall_plugin(self, plugin_name: str) -> dict[str, Any]:
         """Uninstall plugin package by plugin name and reload runtime registry."""
         async with self._mutation_lock:
             normalized_name = plugin_name.strip()
@@ -316,7 +316,7 @@ class PluginRuntimeManager:
                     ),
                     timeout=_UNINSTALL_TIMEOUT_SECONDS,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 return {
                     "success": False,
                     "plugin_name": normalized_name,
@@ -349,7 +349,7 @@ class PluginRuntimeManager:
                 "diagnostics": [_serialize_diagnostic(item) for item in diagnostics],
             }
 
-    def _restore_plugin_state(self, plugin_name: str, previous_state: Dict[str, Any]) -> None:
+    def _restore_plugin_state(self, plugin_name: str, previous_state: dict[str, Any]) -> None:
         if not previous_state:
             self._state_store.remove_plugin(plugin_name)
             return
@@ -378,14 +378,14 @@ def _trim_output(text: str, *, max_chars: int = 3000) -> str:
     return text[:max_chars] + "\n... [truncated]"
 
 
-def _extract_requirement_name(requirement: str) -> Optional[str]:
+def _extract_requirement_name(requirement: str) -> str | None:
     match = _REQUIREMENT_RE.match(requirement)
     if not match:
         return None
     return match.group(1)
 
 
-def _validate_requirement(requirement: str) -> Optional[str]:
+def _validate_requirement(requirement: str) -> str | None:
     lower = requirement.lower()
     blocked_markers = ("http://", "https://", "git+", "file://", "/", "\\", ";", "&", "|", "`", "$")
     if any(marker in lower for marker in blocked_markers):
@@ -408,20 +408,20 @@ def _read_env_bool(name: str) -> bool:
     return value in {"1", "true", "yes", "on"}
 
 
-def _coalesce_str(preferred: Any, fallback: Optional[str]) -> Optional[str]:  # noqa: ANN401
+def _coalesce_str(preferred: Any, fallback: str | None) -> str | None:
     if isinstance(preferred, str) and preferred.strip():
         return preferred.strip()
     return fallback
 
 
-def _coalesce_string_list(preferred: Any, fallback: Any) -> List[str]:  # noqa: ANN401
+def _coalesce_string_list(preferred: Any, fallback: Any) -> list[str]:
     preferred_list = list(normalize_string_list(preferred))
     if preferred_list:
         return preferred_list
     return list(normalize_string_list(fallback))
 
 
-def _serialize_diagnostic(diagnostic: PluginDiagnostic) -> Dict[str, Any]:
+def _serialize_diagnostic(diagnostic: PluginDiagnostic) -> dict[str, Any]:
     return {
         "plugin_name": diagnostic.plugin_name,
         "code": diagnostic.code,

@@ -6,7 +6,8 @@ ChannelConnectionManager during application lifecycle.
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Callable, Optional
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
@@ -20,12 +21,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 # Global channel manager instance
-_channel_manager: Optional[ChannelConnectionManager] = None
+_channel_manager: ChannelConnectionManager | None = None
 _channel_plugins_loaded = False
 _channel_plugins_lock = asyncio.Lock()
 
 
-def get_channel_manager() -> Optional[ChannelConnectionManager]:
+def get_channel_manager() -> ChannelConnectionManager | None:
     """Get the global channel manager instance.
 
     Returns:
@@ -35,8 +36,8 @@ def get_channel_manager() -> Optional[ChannelConnectionManager]:
 
 
 async def initialize_channel_manager(
-    message_router: Optional[Callable[["Message"], None]] = None,
-) -> Optional[ChannelConnectionManager]:
+    message_router: Callable[["Message"], None] | None = None,
+) -> ChannelConnectionManager | None:
     """Initialize and start the channel connection manager.
 
     This function:
@@ -156,7 +157,7 @@ def set_message_router(router: Callable[["Message"], None]) -> None:
 async def reload_channel_manager_connections(
     *,
     apply_changes: bool = False,
-) -> Optional[ChannelReloadPlan]:
+) -> ChannelReloadPlan | None:
     """Reconcile channel manager state against enabled DB configs."""
     if _channel_manager is None:
         logger.warning("[ChannelStartup] Cannot reload channels: manager not initialized")

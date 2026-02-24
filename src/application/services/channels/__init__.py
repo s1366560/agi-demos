@@ -8,8 +8,8 @@ from src.application.services.channels.channel_message_router import (
 from src.application.services.channels.channel_service import ChannelService
 
 __all__ = [
-    "ChannelService",
     "ChannelMessageRouter",
+    "ChannelService",
     "get_channel_message_router",
     "route_channel_message",
 ]

@@ -9,8 +9,8 @@ but isolated between tenants.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,7 @@ class PatternStep:
     tool_name: str
     expected_output_format: str
     similarity_threshold: float = 0.8
-    tool_parameters: Optional[Dict[str, Any]] = None
+    tool_parameters: dict[str, Any] | None = None
 
     def __post_init__(self):
         """Validate the pattern step."""
@@ -97,12 +97,12 @@ class WorkflowPattern:
     tenant_id: str
     name: str
     description: str
-    steps: List[PatternStep]
+    steps: list[PatternStep]
     success_rate: float
     usage_count: int
     created_at: datetime
     updated_at: datetime
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
     def __post_init__(self):
         """Validate the workflow pattern."""
@@ -188,11 +188,11 @@ class WorkflowPattern:
             success_rate=new_success_rate,
             usage_count=new_usage_count,
             created_at=self.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
             metadata=self.metadata,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "id": self.id,
@@ -218,7 +218,7 @@ class WorkflowPattern:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "WorkflowPattern":
+    def from_dict(cls, data: dict[str, Any]) -> "WorkflowPattern":
         """Create from dictionary (e.g., from database)."""
         steps = [
             PatternStep(
@@ -242,9 +242,9 @@ class WorkflowPattern:
             usage_count=data.get("usage_count", 0),
             created_at=datetime.fromisoformat(data["created_at"])
             if "created_at" in data
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
             updated_at=datetime.fromisoformat(data["updated_at"])
             if "updated_at" in data
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
             metadata=data.get("metadata"),
         )

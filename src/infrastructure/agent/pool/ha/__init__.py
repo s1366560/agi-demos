@@ -38,25 +38,25 @@ from .state_recovery import (
 )
 
 __all__ = [
-    # State Recovery
-    "StateRecoveryService",
-    "StateCheckpoint",
-    "CheckpointType",
-    "RecoveryResult",
-    # Failure Recovery
-    "FailureRecoveryService",
-    "FailureEvent",
-    "FailurePattern",
-    "FailureType",
-    "RecoveryAction",
-    "RecoveryStatus",
-    "RecoveryStrategy",
     # Auto Scaling
     "AutoScalingService",
-    "ScalingPolicy",
-    "ScalingMetrics",
+    "CheckpointType",
+    "FailureEvent",
+    "FailurePattern",
+    # Failure Recovery
+    "FailureRecoveryService",
+    "FailureType",
+    "RecoveryAction",
+    "RecoveryResult",
+    "RecoveryStatus",
+    "RecoveryStrategy",
     "ScalingDecision",
-    "ScalingEvent",
     "ScalingDirection",
+    "ScalingEvent",
+    "ScalingMetrics",
+    "ScalingPolicy",
     "ScalingReason",
+    "StateCheckpoint",
+    # State Recovery
+    "StateRecoveryService",
 ]

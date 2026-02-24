@@ -5,7 +5,6 @@ Endpoints for listing and calling tools from database-backed MCP servers.
 
 import logging
 import time
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +26,7 @@ router = APIRouter()
 
 @router.get("/tools/all", response_model=MCPToolListResponse)
 async def list_all_mcp_tools(
-    project_id: Optional[str] = Query(None, description="Filter by project ID"),
+    project_id: str | None = Query(None, description="Filter by project ID"),
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(50, ge=1, le=200, description="Items per page"),
     db: AsyncSession = Depends(get_db),

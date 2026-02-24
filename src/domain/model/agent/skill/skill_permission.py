@@ -15,7 +15,6 @@ Features:
 import fnmatch
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import List, Optional
 
 
 class SkillPermissionAction(str, Enum):
@@ -46,7 +45,7 @@ class SkillPermissionRule:
 
     pattern: str
     action: SkillPermissionAction
-    description: Optional[str] = None
+    description: str | None = None
 
     def __post_init__(self):
         """Validate the rule."""
@@ -100,14 +99,14 @@ class SkillPermissionRuleset:
         name: Optional name for this ruleset
     """
 
-    rules: List[SkillPermissionRule] = field(default_factory=list)
-    name: Optional[str] = None
+    rules: list[SkillPermissionRule] = field(default_factory=list)
+    name: str | None = None
 
     def add_rule(self, rule: SkillPermissionRule) -> None:
         """Add a rule to the ruleset."""
         self.rules.append(rule)
 
-    def add_rules(self, rules: List[SkillPermissionRule]) -> None:
+    def add_rules(self, rules: list[SkillPermissionRule]) -> None:
         """Add multiple rules to the ruleset."""
         self.rules.extend(rules)
 
@@ -128,7 +127,7 @@ class SkillPermissionRuleset:
                 return rule.action
         return SkillPermissionAction.ASK  # Default to ask
 
-    def get_matching_rule(self, skill_name: str) -> Optional[SkillPermissionRule]:
+    def get_matching_rule(self, skill_name: str) -> SkillPermissionRule | None:
         """Get the matching rule for a skill.
 
         Args:
@@ -160,7 +159,7 @@ class SkillPermissionRuleset:
 
 def evaluate_skill_permission(
     skill_name: str,
-    rules: List[SkillPermissionRule],
+    rules: list[SkillPermissionRule],
 ) -> SkillPermissionAction:
     """Evaluate skill permission using a list of rules.
 

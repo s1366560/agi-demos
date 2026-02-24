@@ -6,8 +6,8 @@ Persists SubAgent templates to PostgreSQL for the Template Marketplace.
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,7 +35,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
         )
         return DBTemplate
 
-    def _row_to_dict(self, row) -> Dict[str, Any]:
+    def _row_to_dict(self, row) -> dict[str, Any]:
         return {
             "id": row.id,
             "tenant_id": row.tenant_id,
@@ -99,7 +99,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
         await self._session.refresh(db_obj)
         return self._row_to_dict(db_obj)
 
-    async def get_by_id(self, template_id: str) -> Optional[dict]:
+    async def get_by_id(self, template_id: str) -> dict | None:
         DBTemplate = self._get_model()
         query = select(DBTemplate).where(DBTemplate.id == template_id)
         result = await self._session.execute(query)
@@ -107,8 +107,8 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
         return self._row_to_dict(row) if row else None
 
     async def get_by_name(
-        self, tenant_id: str, name: str, version: Optional[str] = None
-    ) -> Optional[dict]:
+        self, tenant_id: str, name: str, version: str | None = None
+    ) -> dict | None:
         DBTemplate = self._get_model()
         query = select(DBTemplate).where(
             DBTemplate.tenant_id == tenant_id,
@@ -123,7 +123,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
         row = result.scalar_one_or_none()
         return self._row_to_dict(row) if row else None
 
-    async def update(self, template_id: str, data: dict) -> Optional[dict]:
+    async def update(self, template_id: str, data: dict) -> dict | None:
         DBTemplate = self._get_model()
 
         # Build update values, excluding None
@@ -156,7 +156,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
         if not values:
             return await self.get_by_id(template_id)
 
-        values["updated_at"] = datetime.now(timezone.utc)
+        values["updated_at"] = datetime.now(UTC)
 
         stmt = (
             update(DBTemplate)
@@ -176,13 +176,13 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
     async def list_templates(
         self,
         tenant_id: str,
-        category: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-        query: Optional[str] = None,
+        category: str | None = None,
+        tags: list[str] | None = None,
+        query: str | None = None,
         published_only: bool = True,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[dict]:
+    ) -> list[dict]:
         DBTemplate = self._get_model()
         stmt = select(DBTemplate).where(DBTemplate.tenant_id == tenant_id)
 
@@ -205,7 +205,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
     async def count_templates(
         self,
         tenant_id: str,
-        category: Optional[str] = None,
+        category: str | None = None,
         published_only: bool = True,
     ) -> int:
         DBTemplate = self._get_model()
@@ -220,7 +220,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
         result = await self._session.execute(stmt)
         return result.scalar_one()
 
-    async def list_categories(self, tenant_id: str) -> List[str]:
+    async def list_categories(self, tenant_id: str) -> list[str]:
         DBTemplate = self._get_model()
         stmt = (
             select(DBTemplate.category)

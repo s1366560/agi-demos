@@ -1,4 +1,3 @@
-from typing import List, Optional
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +8,7 @@ from src.infrastructure.adapters.secondary.persistence.models import Memory as M
 
 
 class SqlAlchemyMemoryRepository(MemoryRepository):
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
     def _to_domain(self, model: MemoryModel) -> Memory:
@@ -59,14 +58,14 @@ class SqlAlchemyMemoryRepository(MemoryRepository):
         await self._session.merge(model)
         await self._session.commit()
 
-    async def find_by_id(self, memory_id: str) -> Optional[Memory]:
+    async def find_by_id(self, memory_id: str) -> Memory | None:
         result = await self._session.execute(select(MemoryModel).where(MemoryModel.id == memory_id))
         model = result.scalar_one_or_none()
         return self._to_domain(model) if model else None
 
     async def list_by_project(
         self, project_id: str, limit: int = 50, offset: int = 0
-    ) -> List[Memory]:
+    ) -> list[Memory]:
         result = await self._session.execute(
             select(MemoryModel)
             .where(MemoryModel.project_id == project_id)

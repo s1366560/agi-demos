@@ -5,7 +5,7 @@ Tests the tenant-level agent configuration entity that controls
 agent behavior at the tenant level.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -43,8 +43,8 @@ class TestTenantAgentConfig:
             tool_timeout_seconds=60,
             enabled_tools=["memory_search", "entity_lookup"],
             disabled_tools=["episode_retrieval"],
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         assert config.id == "config-1"
@@ -72,8 +72,8 @@ class TestTenantAgentConfig:
                 multi_level_thinking_enabled=True,
                 max_work_plan_steps=0,
                 tool_timeout_seconds=30,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
 
     def test_validation_timeout_positive(self):
@@ -89,8 +89,8 @@ class TestTenantAgentConfig:
                 multi_level_thinking_enabled=True,
                 max_work_plan_steps=10,
                 tool_timeout_seconds=0,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
 
     def test_validation_temperature_range(self):
@@ -106,8 +106,8 @@ class TestTenantAgentConfig:
                 multi_level_thinking_enabled=True,
                 max_work_plan_steps=10,
                 tool_timeout_seconds=30,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
 
     def test_validation_tenant_id_required(self):
@@ -123,8 +123,8 @@ class TestTenantAgentConfig:
                 multi_level_thinking_enabled=True,
                 max_work_plan_steps=10,
                 tool_timeout_seconds=30,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
 
     def test_is_tool_enabled(self):
@@ -141,8 +141,8 @@ class TestTenantAgentConfig:
             tool_timeout_seconds=30,
             enabled_tools=["memory_search", "entity_lookup"],
             disabled_tools=["episode_retrieval"],
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         # Tool in enabled list
@@ -216,8 +216,8 @@ class TestTenantAgentConfig:
             "tool_timeout_seconds": 60,
             "enabled_tools": ["memory_search"],
             "disabled_tools": ["episode_retrieval"],
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
+            "updated_at": datetime.now(UTC).isoformat(),
         }
 
         config = TenantAgentConfig.from_dict(data)

@@ -13,7 +13,7 @@ import hashlib
 import json
 import logging
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +36,11 @@ class CachedEmbeddingService:
     def __init__(
         self,
         embedding_service: EmbeddingService,
-        redis_client: Optional[Redis] = None,
+        redis_client: Redis | None = None,
         model_name: str = "default",
         l1_size: int = _DEFAULT_L1_SIZE,
         l2_ttl: int = _DEFAULT_L2_TTL,
-    ):
+    ) -> None:
         self._inner = embedding_service
         self._redis = redis_client
         self._model_name = model_name
@@ -57,7 +57,7 @@ class CachedEmbeddingService:
         text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
         return f"emb:{self._model_name}:{text_hash}"
 
-    def _l1_get(self, key: str) -> Optional[list[float]]:
+    def _l1_get(self, key: str) -> list[float] | None:
         if key in self._l1:
             self._l1.move_to_end(key)
             return self._l1[key]
@@ -69,7 +69,7 @@ class CachedEmbeddingService:
         while len(self._l1) > self._l1_size:
             self._l1.popitem(last=False)
 
-    async def _l2_get(self, key: str) -> Optional[list[float]]:
+    async def _l2_get(self, key: str) -> list[float] | None:
         if not self._redis:
             return None
         try:
@@ -118,7 +118,7 @@ class CachedEmbeddingService:
 
         return embedding
 
-    async def embed_text_safe(self, text: str) -> Optional[list[float]]:
+    async def embed_text_safe(self, text: str) -> list[float] | None:
         """Generate embedding with graceful fallback.
 
         Returns None instead of raising on failure, enabling FTS-only fallback.
@@ -161,7 +161,7 @@ class CachedEmbeddingService:
         if uncached_texts:
             self._stats["misses"] += len(uncached_texts)
             embeddings = await self._inner.embed_batch(uncached_texts, batch_size=batch_size)
-            for idx, embedding in zip(uncached_indices, embeddings):
+            for idx, embedding in zip(uncached_indices, embeddings, strict=False):
                 results[idx] = embedding
                 key = self._cache_key(texts[idx])
                 self._l1_put(key, embedding)

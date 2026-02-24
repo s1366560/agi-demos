@@ -8,7 +8,8 @@ PostgreSQL and streamed to the frontend via SSE events.
 import json
 import logging
 import uuid
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from src.domain.events.event_dicts import TodoPendingEvent
 from src.domain.model.agent.task import AgentTask, TaskPriority, TaskStatus
@@ -25,7 +26,7 @@ logger = logging.getLogger(__name__)
 class TodoReadTool(AgentTool):
     """Read the task list for a conversation from DB."""
 
-    def __init__(self, session_factory: Optional[Callable] = None):
+    def __init__(self, session_factory: Callable | None = None) -> None:
         super().__init__(
             name="todoread",
             description=(
@@ -37,7 +38,7 @@ class TodoReadTool(AgentTool):
         )
         self._session_factory = session_factory
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -50,18 +51,16 @@ class TodoReadTool(AgentTool):
             "required": [],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         status = kwargs.get("status")
         valid = {"pending", "in_progress", "completed", "failed", "cancelled"}
-        if status and status not in valid:
-            return False
-        return True
+        return not (status and status not in valid)
 
     async def execute(
         self,
         session_id: str,
-        status: Optional[str] = None,
-        **kwargs: Any,  # noqa: ANN401
+        status: str | None = None,
+        **kwargs: Any,
     ) -> str:
         if not self._session_factory:
             return json.dumps({"error": "Task storage not configured", "todos": []})
@@ -96,7 +95,7 @@ class TodoReadTool(AgentTool):
 class TodoWriteTool(AgentTool):
     """Write/update the task list for a conversation. Persists to DB."""
 
-    def __init__(self, session_factory: Optional[Callable] = None):
+    def __init__(self, session_factory: Callable | None = None) -> None:
         super().__init__(
             name="todowrite",
             description=(
@@ -108,9 +107,9 @@ class TodoWriteTool(AgentTool):
             ),
         )
         self._session_factory = session_factory
-        self._pending_events: List[TodoPendingEvent] = []
+        self._pending_events: list[TodoPendingEvent] = []
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -143,15 +142,13 @@ class TodoWriteTool(AgentTool):
             "required": ["action"],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         action = kwargs.get("action")
         if action not in {"replace", "add", "update"}:
             return False
-        if action == "update" and not kwargs.get("todo_id"):
-            return False
-        return True
+        return not (action == "update" and not kwargs.get("todo_id"))
 
-    def consume_pending_events(self) -> List[TodoPendingEvent]:
+    def consume_pending_events(self) -> list[TodoPendingEvent]:
         """Consume and return any pending SSE events from the last execute()."""
         events = list(self._pending_events)
         self._pending_events.clear()
@@ -161,9 +158,9 @@ class TodoWriteTool(AgentTool):
         self,
         session_id: str,
         action: str,
-        todos: Optional[List[Dict[str, Any]]] = None,
-        todo_id: Optional[str] = None,
-        **kwargs: Any,  # noqa: ANN401
+        todos: list[dict[str, Any]] | None = None,
+        todo_id: str | None = None,
+        **kwargs: Any,
     ) -> str:
         self._pending_events.clear()
 
@@ -175,7 +172,7 @@ class TodoWriteTool(AgentTool):
         )
 
         todos = todos or []
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         async with self._session_factory() as session:
             repo = SqlAgentTaskRepository(session)
@@ -292,11 +289,11 @@ class TodoWriteTool(AgentTool):
 # =============================================================================
 
 
-def create_todoread_tool(session_factory: Optional[Callable] = None) -> TodoReadTool:
+def create_todoread_tool(session_factory: Callable | None = None) -> TodoReadTool:
     """Create a TodoReadTool instance."""
     return TodoReadTool(session_factory=session_factory)
 
 
-def create_todowrite_tool(session_factory: Optional[Callable] = None) -> TodoWriteTool:
+def create_todowrite_tool(session_factory: Callable | None = None) -> TodoWriteTool:
     """Create a TodoWriteTool instance."""
     return TodoWriteTool(session_factory=session_factory)

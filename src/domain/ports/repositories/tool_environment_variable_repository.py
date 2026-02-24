@@ -6,7 +6,6 @@ following the Repository pattern with tenant and project-level isolation.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from src.domain.model.agent.tool_environment_variable import (
     EnvVarScope,
@@ -39,7 +38,7 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_by_id(self, env_var_id: str) -> Optional[ToolEnvironmentVariable]:
+    async def get_by_id(self, env_var_id: str) -> ToolEnvironmentVariable | None:
         """
         Get an environment variable by its ID.
 
@@ -57,8 +56,8 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         tenant_id: str,
         tool_name: str,
         variable_name: str,
-        project_id: Optional[str] = None,
-    ) -> Optional[ToolEnvironmentVariable]:
+        project_id: str | None = None,
+    ) -> ToolEnvironmentVariable | None:
         """
         Get an environment variable by tenant, tool, and name.
 
@@ -82,8 +81,8 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         self,
         tenant_id: str,
         tool_name: str,
-        project_id: Optional[str] = None,
-    ) -> List[ToolEnvironmentVariable]:
+        project_id: str | None = None,
+    ) -> list[ToolEnvironmentVariable]:
         """
         Get all environment variables for a tool.
 
@@ -104,8 +103,8 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
     async def list_by_tenant(
         self,
         tenant_id: str,
-        scope: Optional[EnvVarScope] = None,
-    ) -> List[ToolEnvironmentVariable]:
+        scope: EnvVarScope | None = None,
+    ) -> list[ToolEnvironmentVariable]:
         """
         List all environment variables for a tenant.
 
@@ -123,7 +122,7 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         self,
         tenant_id: str,
         project_id: str,
-    ) -> List[ToolEnvironmentVariable]:
+    ) -> list[ToolEnvironmentVariable]:
         """
         List all environment variables for a project.
 
@@ -170,7 +169,7 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         self,
         tenant_id: str,
         tool_name: str,
-        project_id: Optional[str] = None,
+        project_id: str | None = None,
     ) -> int:
         """
         Delete all environment variables for a tool.
@@ -204,8 +203,8 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
     @abstractmethod
     async def batch_upsert(
         self,
-        env_vars: List[ToolEnvironmentVariable],
-    ) -> List[ToolEnvironmentVariable]:
+        env_vars: list[ToolEnvironmentVariable],
+    ) -> list[ToolEnvironmentVariable]:
         """
         Batch create or update environment variables.
 

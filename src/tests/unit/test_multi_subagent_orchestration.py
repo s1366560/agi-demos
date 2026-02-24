@@ -860,7 +860,7 @@ class TestNestedSessionToolInjection:
         captured_tool_names: list[str] = []
 
         class FakeSubAgentProcess:
-            def __init__(self, *args, **kwargs):
+            def __init__(self, *args, **kwargs) -> None:
                 nonlocal captured_tool_names
                 tools = kwargs["tools"]
                 captured_tool_names = [tool.name for tool in tools]
@@ -903,7 +903,7 @@ class TestNestedSessionToolInjection:
         captured_tool_names: list[str] = []
 
         class FakeSubAgentProcess:
-            def __init__(self, *args, **kwargs):
+            def __init__(self, *args, **kwargs) -> None:
                 nonlocal captured_tool_names
                 tools = kwargs["tools"]
                 captured_tool_names = [tool.name for tool in tools]
@@ -1044,7 +1044,7 @@ class TestExecuteChain:
         assert "chain_started" in types
         assert "complete" in types
         # Final complete should have chain content
-        complete_event = [e for e in events if e["type"] == "complete"][0]
+        complete_event = next(e for e in events if e["type"] == "complete")
         assert complete_event["data"]["orchestration_mode"] == "chain"
 
 
@@ -1078,9 +1078,9 @@ class TestExecuteBackground:
         assert "background_launched" in types
         assert "complete" in types
 
-        launch_event = [e for e in events if e["type"] == "background_launched"][0]
+        launch_event = next(e for e in events if e["type"] == "background_launched")
         assert launch_event["data"]["execution_id"] == "bg-abc123"
         assert launch_event["data"]["subagent_name"] == "Researcher"
 
-        complete_event = [e for e in events if e["type"] == "complete"][0]
+        complete_event = next(e for e in events if e["type"] == "complete")
         assert complete_event["data"]["orchestration_mode"] == "background"

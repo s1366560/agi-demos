@@ -1,11 +1,13 @@
 """Feishu (Lark) channel adapter implementation."""
 
 import asyncio
+import contextlib
 import json
 import logging
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from src.domain.model.channels.message import (
     ChannelConfig,
@@ -48,20 +50,20 @@ class FeishuAdapter:
 
     def __init__(self, config: ChannelConfig) -> None:
         self._config = config
-        self._client: Optional[Any] = None
-        self._ws_client: Optional[Any] = None
-        self._ws_thread: Optional[threading.Thread] = None
-        self._ws_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._client: Any | None = None
+        self._ws_client: Any | None = None
+        self._ws_thread: threading.Thread | None = None
+        self._ws_loop: asyncio.AbstractEventLoop | None = None
         self._ws_ready = threading.Event()
-        self._ws_start_error: Optional[Exception] = None
+        self._ws_start_error: Exception | None = None
         self._ws_stop_requested = False
-        self._event_dispatcher: Optional[Any] = None
+        self._event_dispatcher: Any | None = None
         self._connected = False
-        self._message_handlers: List[MessageHandler] = []
-        self._error_handlers: List[ErrorHandler] = []
-        self._message_history: Dict[str, bool] = {}
-        self._sender_name_cache: Dict[str, str] = {}
-        self._bot_open_id: Optional[str] = None
+        self._message_handlers: list[MessageHandler] = []
+        self._error_handlers: list[ErrorHandler] = []
+        self._message_history: dict[str, bool] = {}
+        self._sender_name_cache: dict[str, str] = {}
+        self._bot_open_id: str | None = None
 
         self._validate_config()
 
@@ -77,7 +79,7 @@ class FeishuAdapter:
     def connected(self) -> bool:
         return self._connected
 
-    def _build_rest_client(self) -> Any:  # noqa: ANN401
+    def _build_rest_client(self) -> Any:
         """Build a lark_oapi REST Client with proper domain configuration."""
         from lark_oapi import FEISHU_DOMAIN, LARK_DOMAIN, Client
 
@@ -208,9 +210,9 @@ class FeishuAdapter:
 
         raise RuntimeError("Feishu websocket startup timeout")
 
-    def _run_websocket(self, event_handler: Any, domain: str) -> None:  # noqa: ANN401
+    def _run_websocket(self, event_handler: Any, domain: str) -> None:
         """Run WebSocket client."""
-        ws_loop: Optional[asyncio.AbstractEventLoop] = None
+        ws_loop: asyncio.AbstractEventLoop | None = None
         try:
             from lark_oapi import LogLevel
             from lark_oapi.ws import Client as WSClient, client as ws_client_module
@@ -256,7 +258,7 @@ class FeishuAdapter:
             self._ws_loop = None
             self._ws_ready.clear()
 
-    def _on_message_receive(self, event: Any) -> None:  # noqa: ANN401
+    def _on_message_receive(self, event: Any) -> None:
         """Handle incoming message event from WebSocket."""
         try:
             # DEBUG: Log raw event
@@ -320,29 +322,29 @@ class FeishuAdapter:
             logger.error(f"[Feishu] Error processing message: {e}")
             self._handle_error(e)
 
-    def _on_message_recalled(self, event: Any) -> None:  # noqa: ANN401
+    def _on_message_recalled(self, event: Any) -> None:
         """Handle message recalled event."""
         logger.debug("[Feishu] Message recalled")
 
-    def _on_message_read(self, event: Any) -> None:  # noqa: ANN401
+    def _on_message_read(self, event: Any) -> None:
         """Handle message read receipt event (no-op, suppresses SDK warning)."""
         logger.debug("[Feishu] Message read receipt received")
 
-    def _on_bot_added(self, event: Any) -> None:  # noqa: ANN401
+    def _on_bot_added(self, event: Any) -> None:
         """Handle bot added to chat event."""
         chat_id = getattr(event.event, "chat_id", "") if hasattr(event, "event") else ""
         logger.info(f"[Feishu] Bot added to chat: {chat_id}")
 
-    def _on_bot_deleted(self, event: Any) -> None:  # noqa: ANN401
+    def _on_bot_deleted(self, event: Any) -> None:
         """Handle bot removed from chat event."""
         chat_id = getattr(event.event, "chat_id", "") if hasattr(event, "event") else ""
         logger.info(f"[Feishu] Bot removed from chat: {chat_id}")
 
-    def _on_bot_p2p_chat_entered(self, event: Any) -> None:  # noqa: ANN401
+    def _on_bot_p2p_chat_entered(self, event: Any) -> None:
         """Handle user entering bot P2P chat (no-op, suppresses SDK warning)."""
         logger.debug("[Feishu] User entered bot P2P chat")
 
-    def _on_card_action(self, event: Any) -> Any:  # noqa: ANN401
+    def _on_card_action(self, event: Any) -> Any:
         """Handle interactive card button click (card.action.trigger callback).
 
         The lark_oapi SDK deserializes the callback into typed objects:
@@ -472,7 +474,7 @@ class FeishuAdapter:
             }
         )
 
-    def _extract_selected_label(self, response_data: Dict[str, Any]) -> str:
+    def _extract_selected_label(self, response_data: dict[str, Any]) -> str:
         """Extract a human-readable label from the HITL response data."""
         if not response_data:
             return ""
@@ -493,7 +495,7 @@ class FeishuAdapter:
         self,
         hitl_type: str,
         selected_label: str = "",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Build a confirmation card after user responds to HITL request."""
         from src.infrastructure.adapters.secondary.channels.feishu.hitl_cards import (
             HITLCardBuilder,
@@ -506,7 +508,7 @@ class FeishuAdapter:
         logger.warning("[Feishu] Webhook mode not yet implemented")
         # TODO: Implement HTTP server for receiving webhooks
 
-    def _parse_message(self, message_data: Dict[str, Any], sender_data: Dict[str, Any]) -> Message:
+    def _parse_message(self, message_data: dict[str, Any], sender_data: dict[str, Any]) -> Message:
         """Parse Feishu message to unified format."""
         content = self._parse_content(
             message_data.get("content", ""), message_data.get("message_type", "text")
@@ -543,7 +545,7 @@ class FeishuAdapter:
             raw_data={"event": {"message": message_data, "sender": sender_data}},
         )
 
-    def _resolve_sender_name(self, sender_data: Dict[str, Any], sender_id: str) -> str:
+    def _resolve_sender_name(self, sender_data: dict[str, Any], sender_id: str) -> str:
         """Resolve sender display name with cache."""
         if sender_id in self._sender_name_cache:
             return self._sender_name_cache[sender_id]
@@ -558,7 +560,7 @@ class FeishuAdapter:
             self._sender_name_cache[sender_id] = name
         return name
 
-    def _extract_sender_open_id(self, sender_id_data: Any) -> str:  # noqa: ANN401
+    def _extract_sender_open_id(self, sender_id_data: Any) -> str:
         """Extract sender open_id from SDK dict/object payloads."""
         if isinstance(sender_id_data, dict):
             open_id = sender_id_data.get("open_id")
@@ -568,7 +570,7 @@ class FeishuAdapter:
         open_id = getattr(sender_id_data, "open_id", None)
         return open_id if isinstance(open_id, str) else ""
 
-    def _extract_mention_open_id(self, mention_data: Any) -> str:  # noqa: ANN401
+    def _extract_mention_open_id(self, mention_data: Any) -> str:
         """Extract mention open_id from SDK dict/object payloads."""
         if isinstance(mention_data, dict):
             mention_id = mention_data.get("id")
@@ -591,12 +593,12 @@ class FeishuAdapter:
         mention_open_id = getattr(mention_data, "open_id", None)
         return mention_open_id if isinstance(mention_open_id, str) else ""
 
-    def _extract_mentions(self, mentions_data: Any) -> List[str]:  # noqa: ANN401
+    def _extract_mentions(self, mentions_data: Any) -> list[str]:
         """Normalize mentions payload and return mentioned open_id list."""
         if not mentions_data:
             return []
 
-        mentions_list: List[Any]
+        mentions_list: list[Any]
         if isinstance(mentions_data, list):
             mentions_list = mentions_data
         else:
@@ -605,21 +607,21 @@ class FeishuAdapter:
             except TypeError:
                 return []
 
-        mention_open_ids: List[str] = []
+        mention_open_ids: list[str] = []
         for mention_data in mentions_list:
             mention_open_id = self._extract_mention_open_id(mention_data)
             if mention_open_id:
                 mention_open_ids.append(mention_open_id)
         return mention_open_ids
 
-    def _parse_content(self, content_data: Any, message_type: str) -> MessageContent:  # noqa: ANN401
+    def _parse_content(self, content_data: Any, message_type: str) -> MessageContent:
         """Parse message content based on type."""
         logger.info(
             f"[FeishuAdapter] Parsing message - type={message_type}, "
             f"content_data={str(content_data)[:200]}"
         )
 
-        parsed: Dict[str, Any]
+        parsed: dict[str, Any]
         if isinstance(content_data, dict):
             parsed = content_data
         elif isinstance(content_data, str):
@@ -705,7 +707,7 @@ class FeishuAdapter:
                 image_key=image_key,  # Will be used for media import if present
             )
 
-    def _parse_post_content(self, content: Dict[str, Any]) -> tuple:
+    def _parse_post_content(self, content: dict[str, Any]) -> tuple:
         """Parse rich text post content. Returns (text, image_key)."""
         title = content.get("title", "")
         content_blocks = content.get("content", [])
@@ -763,10 +765,8 @@ class FeishuAdapter:
                     future.result(timeout=3)
                 except Exception:
                     pass
-            try:
+            with contextlib.suppress(Exception):
                 self._ws_loop.call_soon_threadsafe(self._ws_loop.stop)
-            except Exception:
-                pass
 
         if self._ws_thread and self._ws_thread.is_alive():
             self._ws_thread.join(timeout=5)
@@ -782,7 +782,7 @@ class FeishuAdapter:
         logger.info("[Feishu] Disconnected")
 
     async def send_message(
-        self, to: str, content: MessageContent, reply_to: Optional[str] = None
+        self, to: str, content: MessageContent, reply_to: str | None = None
     ) -> str:
         """Send a message using lark_oapi v2 SDK builder pattern."""
         if not self._connected:
@@ -870,7 +870,7 @@ class FeishuAdapter:
         except ImportError:
             raise ImportError("Feishu SDK not installed. Install with: pip install lark_oapi")
 
-    async def send_text(self, to: str, text: str, reply_to: Optional[str] = None) -> str:
+    async def send_text(self, to: str, text: str, reply_to: str | None = None) -> str:
         """Send a text message."""
         content = MessageContent(type=MessageType.TEXT, text=text)
         return await self.send_message(to, content, reply_to)
@@ -878,8 +878,8 @@ class FeishuAdapter:
     async def send_card(
         self,
         to: str,
-        card: Dict[str, Any],
-        reply_to: Optional[str] = None,
+        card: dict[str, Any],
+        reply_to: str | None = None,
     ) -> str:
         """Send an interactive card message."""
         content = MessageContent(type=MessageType.CARD, card=card)
@@ -889,8 +889,8 @@ class FeishuAdapter:
         self,
         to: str,
         title: str,
-        content: List[List[Dict[str, Any]]],
-        reply_to: Optional[str] = None,
+        content: list[list[dict[str, Any]]],
+        reply_to: str | None = None,
     ) -> str:
         """Send a rich text (post) message.
 
@@ -981,7 +981,7 @@ class FeishuAdapter:
         self,
         file_data: bytes,
         file_name: str,
-        file_type: Optional[str] = None,
+        file_type: str | None = None,
     ) -> str:
         """Upload a file to Feishu and return file_key.
 
@@ -1063,7 +1063,7 @@ class FeishuAdapter:
         to: str,
         file_data: bytes,
         file_name: str,
-        reply_to: Optional[str] = None,
+        reply_to: str | None = None,
     ) -> str:
         """Upload a file and send it as a message.
 
@@ -1084,7 +1084,7 @@ class FeishuAdapter:
         self,
         to: str,
         image_data: bytes,
-        reply_to: Optional[str] = None,
+        reply_to: str | None = None,
     ) -> str:
         """Upload an image and send it as a message.
 
@@ -1104,9 +1104,9 @@ class FeishuAdapter:
         self,
         to: str,
         text: str,
-        image_data: Optional[bytes] = None,
+        image_data: bytes | None = None,
         title: str = "",
-        reply_to: Optional[str] = None,
+        reply_to: str | None = None,
     ) -> str:
         """Upload an image and send it embedded in a rich text message.
 
@@ -1217,7 +1217,7 @@ class FeishuAdapter:
         """Register message handler."""
         self._message_handlers.append(handler)
 
-        def unregister():
+        def unregister() -> None:
             self._message_handlers.remove(handler)
 
         return unregister
@@ -1226,7 +1226,7 @@ class FeishuAdapter:
         """Register error handler."""
         self._error_handlers.append(handler)
 
-        def unregister():
+        def unregister() -> None:
             self._error_handlers.remove(handler)
 
         return unregister
@@ -1234,12 +1234,10 @@ class FeishuAdapter:
     def _handle_error(self, error: Exception) -> None:
         """Handle errors."""
         for handler in self._error_handlers:
-            try:
+            with contextlib.suppress(Exception):
                 handler(error)
-            except Exception:
-                pass
 
-    async def get_chat_members(self, chat_id: str) -> List[SenderInfo]:
+    async def get_chat_members(self, chat_id: str) -> list[SenderInfo]:
         """Get chat members using lark_oapi v2 SDK."""
         try:
             from lark_oapi.api.im.v1 import GetChatMembersRequest
@@ -1257,7 +1255,7 @@ class FeishuAdapter:
             logger.warning(f"[Feishu] Get chat members failed: {e}")
             return []
 
-    async def get_user_info(self, user_id: str) -> Optional[SenderInfo]:
+    async def get_user_info(self, user_id: str) -> SenderInfo | None:
         """Get user info using lark_oapi v2 SDK."""
         try:
             from lark_oapi.api.contact.v3 import GetUserRequest
@@ -1297,7 +1295,7 @@ class FeishuAdapter:
         self,
         to: str,
         markdown: str,
-        reply_to: Optional[str] = None,
+        reply_to: str | None = None,
     ) -> str:
         """Send markdown content as an interactive card (Card JSON 2.0 format)."""
         card = {
@@ -1369,8 +1367,8 @@ class FeishuAdapter:
         self,
         to: str,
         initial_text: str = "",
-        reply_to: Optional[str] = None,
-    ) -> Optional[str]:
+        reply_to: str | None = None,
+    ) -> str | None:
         """Send an initial loading card for streaming updates (Card JSON 2.0 format).
 
         Returns the message_id for subsequent patch_card calls.
@@ -1393,7 +1391,7 @@ class FeishuAdapter:
     # CardKit API (card entity management)
     # ------------------------------------------------------------------
 
-    async def create_card_entity(self, card_data: Dict[str, Any]) -> Optional[str]:
+    async def create_card_entity(self, card_data: dict[str, Any]) -> str | None:
         """Create a card entity via CardKit API.
 
         The card entity is a server-side object that can be independently
@@ -1436,7 +1434,7 @@ class FeishuAdapter:
     async def add_card_elements(
         self,
         card_id: str,
-        elements: List[Dict[str, Any]],
+        elements: list[dict[str, Any]],
         *,
         position: str = "append",
         target_element_id: str = "",
@@ -1495,7 +1493,7 @@ class FeishuAdapter:
         self,
         to: str,
         card_id: str,
-        reply_to: Optional[str] = None,
+        reply_to: str | None = None,
     ) -> str:
         """Send a card entity as a message.
 
@@ -1570,12 +1568,12 @@ class FeishuAdapter:
         chat_id: str,
         hitl_type: str,
         request_id: str,
-        event_data: Dict[str, Any],
-        reply_to: Optional[str] = None,
+        event_data: dict[str, Any],
+        reply_to: str | None = None,
         *,
         tenant_id: str = "",
         project_id: str = "",
-    ) -> Optional[str]:
+    ) -> str | None:
         """Send an HITL card using CardKit API for dynamic element management.
 
         Creates a card entity with the question/description, adds interactive
@@ -1650,7 +1648,7 @@ class FeishuAdapter:
     async def update_card_settings(
         self,
         card_id: str,
-        settings: Dict[str, Any],
+        settings: dict[str, Any],
         sequence: int,
     ) -> bool:
         """Update card entity settings (e.g. streaming_mode).

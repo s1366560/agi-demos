@@ -5,8 +5,8 @@ including a summary for the orchestrator, execution metrics, and artifacts.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -40,10 +40,10 @@ class SubAgentResult:
     tokens_used: int = 0
     execution_time_ms: int = 0
     final_content: str = ""
-    artifacts: List[Dict[str, Any]] = field(default_factory=list)
-    error: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    completed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    artifacts: list[dict[str, Any]] = field(default_factory=list)
+    error: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    completed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def to_context_message(self) -> str:
         """Format result as a context message for the orchestrator.
@@ -66,7 +66,7 @@ class SubAgentResult:
 
         return "\n".join(parts)
 
-    def to_event_data(self) -> Dict[str, Any]:
+    def to_event_data(self) -> dict[str, Any]:
         """Convert to SSE event payload."""
         return {
             "subagent_id": self.subagent_id,

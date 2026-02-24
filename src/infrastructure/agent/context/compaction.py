@@ -12,7 +12,7 @@ Reference: vendor/opencode/packages/opencode/src/session/compaction.ts
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ PRUNE_MINIMUM_TOKENS = 20_000  # Minimum tokens before pruning is worthwhile
 PRUNE_PROTECT_TOKENS = 40_000  # Protect recent 40K tokens worth of tool calls
 
 # Tools whose output should never be pruned (aligned with vendor/opencode)
-PRUNE_PROTECTED_TOOLS: Set[str] = {"skill"}
+PRUNE_PROTECTED_TOOLS: set[str] = {"skill"}
 
 # Default output token max (aligned with vendor/opencode)
 OUTPUT_TOKEN_MAX = 8_192
@@ -59,9 +59,9 @@ class ToolPart:
     tool: str  # Tool name (e.g., "file_edit", "grep", "skill")
     status: str  # "completed", "failed", "running"
     output: str  # Tool output content
-    tokens: Optional[int] = None  # Token count of output (if known)
+    tokens: int | None = None  # Token count of output (if known)
     compacted: bool = False  # Whether output has been compacted
-    compacted_at: Optional[datetime] = None  # When compaction occurred
+    compacted_at: datetime | None = None  # When compaction occurred
 
 
 @dataclass
@@ -70,8 +70,8 @@ class MessagePart:
 
     id: str
     type: str  # "text", "tool", "compaction", etc.
-    content: Optional[str] = None
-    tool_part: Optional[ToolPart] = None
+    content: str | None = None
+    tool_part: ToolPart | None = None
     synthetic: bool = False  # If True, this part was auto-generated
 
 
@@ -81,11 +81,11 @@ class MessageInfo:
 
     id: str
     role: str  # "user", "assistant", "system"
-    parent_id: Optional[str] = None
+    parent_id: str | None = None
     summary: bool = False  # If True, this is a summary message
-    created_at: Optional[datetime] = None
-    model_provider: Optional[str] = None
-    model_id: Optional[str] = None
+    created_at: datetime | None = None
+    model_provider: str | None = None
+    model_id: str | None = None
 
 
 @dataclass
@@ -93,10 +93,10 @@ class Message:
     """A message in the conversation."""
 
     info: MessageInfo
-    parts: List[MessagePart] = field(default_factory=list)
-    tokens: Optional[TokenCount] = None
+    parts: list[MessagePart] = field(default_factory=list)
+    tokens: TokenCount | None = None
 
-    def get_tool_parts(self) -> List[ToolPart]:
+    def get_tool_parts(self) -> list[ToolPart]:
         """Get all tool parts in this message."""
         return [
             part.tool_part
@@ -159,7 +159,7 @@ def is_overflow(
 
 
 def prune_tool_outputs(
-    messages: List[Message],
+    messages: list[Message],
     enabled: bool = True,
 ) -> PruneResult:
     """
@@ -193,7 +193,7 @@ def prune_tool_outputs(
     # Find tool outputs to prune
     total_tokens = 0
     pruned_tokens = 0
-    parts_to_prune: List[tuple[Message, ToolPart]] = []
+    parts_to_prune: list[tuple[Message, ToolPart]] = []
     turns = 0  # Number of user messages seen (turns)
 
     # Iterate backwards through messages
@@ -364,8 +364,8 @@ class CompactionResult:
         original_token_count: int = 0,
         final_token_count: int = 0,
         pruned_tool_outputs: int = 0,
-        summary: Optional[str] = None,
-    ):
+        summary: str | None = None,
+    ) -> None:
         self.was_compacted = was_compacted
         self.original_token_count = original_token_count
         self.final_token_count = final_token_count
@@ -373,7 +373,7 @@ class CompactionResult:
         self.summary = summary
         self.tokens_saved = original_token_count - final_token_count
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "was_compacted": self.was_compacted,

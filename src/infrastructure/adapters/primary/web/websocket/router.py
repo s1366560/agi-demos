@@ -14,8 +14,8 @@ Features:
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import orjson
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
@@ -47,11 +47,11 @@ def get_container_from_app(websocket: WebSocket) -> DIContainer:
 async def agent_websocket_endpoint(
     websocket: WebSocket,
     token: str = Query(..., description="API key for authentication"),
-    session_id: Optional[str] = Query(
+    session_id: str | None = Query(
         None, description="Client session ID for multi-tab support"
     ),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     """
     WebSocket endpoint for agent chat.
 
@@ -153,7 +153,7 @@ async def agent_websocket_endpoint(
                 "data": {
                     "user_id": user_id,
                     "session_id": session_id,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 },
             }
         )
@@ -191,7 +191,7 @@ async def agent_websocket_endpoint(
 
 
 @router.get("/dispatcher-stats")
-async def get_dispatcher_stats() -> Dict[str, Any]:
+async def get_dispatcher_stats() -> dict[str, Any]:
     """
     Get event dispatcher statistics.
 

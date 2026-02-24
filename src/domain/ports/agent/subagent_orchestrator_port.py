@@ -7,7 +7,7 @@ domains or tasks with their own tool sets and system prompts.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class SubAgentType(str, Enum):
@@ -34,9 +34,9 @@ class SubAgentMatchRequest:
 
     message: str
     project_id: str
-    conversation_context: Optional[List[Dict[str, Any]]] = None
-    available_subagents: Optional[List[Dict[str, Any]]] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    conversation_context: list[dict[str, Any]] | None = None
+    available_subagents: list[dict[str, Any]] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -54,12 +54,12 @@ class SubAgentMatchResult:
     """
 
     matched: bool
-    subagent_name: Optional[str] = None
-    subagent_type: Optional[SubAgentType] = None
+    subagent_name: str | None = None
+    subagent_type: SubAgentType | None = None
     confidence: float = 0.0
-    system_prompt: Optional[str] = None
-    tools: List[str] = field(default_factory=list)
-    config: Dict[str, Any] = field(default_factory=dict)
+    system_prompt: str | None = None
+    tools: list[str] = field(default_factory=list)
+    config: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -75,10 +75,10 @@ class SubAgentExecutionConfig:
     """
 
     max_steps: int = 10
-    timeout: Optional[float] = None
-    model: Optional[str] = None
+    timeout: float | None = None
+    model: str | None = None
     temperature: float = 0.7
-    tool_filter: Optional[Dict[str, Any]] = None
+    tool_filter: dict[str, Any] | None = None
 
 
 @runtime_checkable
@@ -133,9 +133,9 @@ class SubAgentOrchestratorPort(Protocol):
 
     def filter_tools(
         self,
-        tools: List[Dict[str, Any]],
+        tools: list[dict[str, Any]],
         subagent_name: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Filter tools for a specific sub-agent.
 
@@ -148,7 +148,7 @@ class SubAgentOrchestratorPort(Protocol):
         """
         ...
 
-    def get_available_subagents(self, project_id: str) -> List[Dict[str, Any]]:
+    def get_available_subagents(self, project_id: str) -> list[dict[str, Any]]:
         """
         Get available sub-agents for a project.
 

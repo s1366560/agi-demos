@@ -13,7 +13,8 @@ Tests cover:
 """
 
 import asyncio
-from typing import Any, AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 import pytest
 
@@ -50,18 +51,18 @@ def make_thought(content: str = "Thinking...") -> AgentThoughtEvent:
 class MockLLMInvoker:
     """Mock LLM invoker."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._events_to_yield = []
         self._call_count = 0
 
-    def set_events(self, events: List[AgentDomainEvent]):
+    def set_events(self, events: list[AgentDomainEvent]):
         self._events_to_yield = events
 
     async def invoke(
         self,
-        messages: List[Dict[str, Any]],
-        tools: List[Dict[str, Any]],
-        context: Optional[Dict[str, Any]] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        context: dict[str, Any] | None = None,
     ) -> AsyncIterator[AgentDomainEvent]:
         self._call_count += 1
         for event in self._events_to_yield:
@@ -71,19 +72,19 @@ class MockLLMInvoker:
 class MockToolExecutor:
     """Mock tool executor."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._events_to_yield = []
         self._executed_tools = []
 
-    def set_events(self, events: List[AgentDomainEvent]):
+    def set_events(self, events: list[AgentDomainEvent]):
         self._events_to_yield = events
 
     async def execute(
         self,
         tool_name: str,
-        tool_args: Dict[str, Any],
+        tool_args: dict[str, Any],
         call_id: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> AsyncIterator[AgentDomainEvent]:
         self._executed_tools.append({
             "name": tool_name,
@@ -97,31 +98,31 @@ class MockToolExecutor:
 class MockWorkPlanGenerator:
     """Mock work plan generator."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._plan_to_return = None
 
-    def set_plan(self, plan: Optional[Dict[str, Any]]):
+    def set_plan(self, plan: dict[str, Any] | None):
         self._plan_to_return = plan
 
     def generate(
         self,
         query: str,
-        available_tools: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        available_tools: dict[str, Any],
+    ) -> dict[str, Any] | None:
         return self._plan_to_return
 
 
 class MockDoomLoopDetector:
     """Mock doom loop detector."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._should_detect_loop = False
         self._call_count = 0
 
     def set_detect_loop(self, detect: bool):
         self._should_detect_loop = detect
 
-    def record_call(self, tool_name: str, tool_args: Dict[str, Any]) -> bool:
+    def record_call(self, tool_name: str, tool_args: dict[str, Any]) -> bool:
         self._call_count += 1
         return self._should_detect_loop
 
@@ -132,7 +133,7 @@ class MockDoomLoopDetector:
 class MockCostTracker:
     """Mock cost tracker."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._total_cost = 0.0
 
     def add_usage(self, input_tokens: int, output_tokens: int, model: str) -> float:

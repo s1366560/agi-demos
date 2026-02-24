@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from src.infrastructure.llm.model_registry import clamp_max_tokens, get_model_context_window
 
@@ -41,7 +41,7 @@ class ContextBudgetResolver:
         *,
         model: str,
         requested_output_tokens: int,
-        requested_context_tokens: Optional[int] = None,
+        requested_context_tokens: int | None = None,
     ) -> ContextBudgetProfile:
         """Resolve context window and output budget for a model."""
         normalized_model = model.strip() if isinstance(model, str) and model.strip() else "unknown"

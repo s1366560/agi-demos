@@ -18,9 +18,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -53,7 +54,7 @@ class ChainStep:
 
     subagent: SubAgent
     task_template: str = "{input}"
-    condition: Optional[Callable[[Optional[SubAgentResult]], bool]] = None
+    condition: Callable[[SubAgentResult | None], bool] | None = None
     name: str = ""
 
     def __post_init__(self) -> None:
@@ -87,7 +88,7 @@ class ChainResult:
     total_tool_calls: int = 0
     execution_time_ms: int = 0
 
-    def to_event_data(self) -> Dict[str, Any]:
+    def to_event_data(self) -> dict[str, Any]:
         return {
             "steps_completed": self.steps_completed,
             "total_steps": self.total_steps,
@@ -107,31 +108,31 @@ class SubAgentChain:
     Steps with conditions are only executed if the condition returns True.
     """
 
-    def __init__(self, steps: List[ChainStep]) -> None:
+    def __init__(self, steps: list[ChainStep]) -> None:
         if not steps:
             raise ValueError("Chain must have at least one step")
         self._steps = steps
-        self._result: Optional[ChainResult] = None
-        self._step_results: Dict[int, SubAgentResult] = {}
+        self._result: ChainResult | None = None
+        self._step_results: dict[int, SubAgentResult] = {}
 
     @property
-    def result(self) -> Optional[ChainResult]:
+    def result(self) -> ChainResult | None:
         return self._result
 
     async def execute(
         self,
         user_message: str,
-        tools: List[Any],
+        tools: list[Any],
         base_model: str,
-        base_api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        llm_client: Optional[LLMClient] = None,
-        conversation_context: Optional[List[Dict[str, str]]] = None,
+        base_api_key: str | None = None,
+        base_url: str | None = None,
+        llm_client: LLMClient | None = None,
+        conversation_context: list[dict[str, str]] | None = None,
         main_token_budget: int = 200000,
         project_id: str = "",
         tenant_id: str = "",
-        abort_signal: Optional[asyncio.Event] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        abort_signal: asyncio.Event | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """Execute the chain sequentially.
 
         Yields SSE events from each step, plus chain lifecycle events.
@@ -151,10 +152,10 @@ class SubAgentChain:
         """
 
         start_time = time.time()
-        results: List[SubAgentResult] = []
-        skipped: List[str] = []
+        results: list[SubAgentResult] = []
+        skipped: list[str] = []
         all_success = True
-        prev_result: Optional[SubAgentResult] = None
+        prev_result: SubAgentResult | None = None
 
         yield self._make_event("chain_started", {
             "total_steps": len(self._steps),
@@ -263,7 +264,7 @@ class SubAgentChain:
         self,
         template: str,
         user_message: str,
-        prev_result: Optional[SubAgentResult],
+        prev_result: SubAgentResult | None,
         current_step: int,
     ) -> str:
         """Render a task template with variable substitution.
@@ -289,9 +290,9 @@ class SubAgentChain:
 
         return rendered
 
-    def _make_event(self, event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    def _make_event(self, event_type: str, data: dict[str, Any]) -> dict[str, Any]:
         return {
             "type": event_type,
             "data": data,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }

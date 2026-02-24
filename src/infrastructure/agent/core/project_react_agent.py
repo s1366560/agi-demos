@@ -34,11 +34,13 @@ Usage:
 """
 
 import asyncio
+import contextlib
 import logging
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from src.domain.model.agent.skill import Skill
 from src.domain.model.agent.subagent import SubAgent
@@ -47,10 +49,10 @@ logger = logging.getLogger(__name__)
 
 # Global reference to the WebSocket connection manager
 # Set by the web application on startup
-_websocket_manager: Optional[Any] = None
+_websocket_manager: Any | None = None
 
 
-def get_websocket_notifier() -> Optional[Any]:  # noqa: ANN401
+def get_websocket_notifier() -> Any | None:
     """
     Get the global WebSocket notifier.
 
@@ -70,7 +72,7 @@ def get_websocket_notifier() -> Optional[Any]:  # noqa: ANN401
     return WebSocketNotifier(_websocket_manager)
 
 
-def register_websocket_manager(manager: Any) -> None:  # noqa: ANN401
+def register_websocket_manager(manager: Any) -> None:
     """
     Register the WebSocket connection manager globally.
 
@@ -94,9 +96,9 @@ class ProjectAgentConfig:
     agent_mode: str = "default"
 
     # LLM Configuration
-    model: Optional[str] = None
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
+    model: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
     temperature: float = 0.7
     max_tokens: int = 4096
     max_steps: int = 20
@@ -135,9 +137,9 @@ class ProjectAgentStatus:
     skill_count: int = 0
     subagent_count: int = 0
 
-    created_at: Optional[str] = None
-    last_activity_at: Optional[str] = None
-    last_error: Optional[str] = None
+    created_at: str | None = None
+    last_activity_at: str | None = None
+    last_error: str | None = None
 
     # Performance metrics
     avg_execution_time_ms: float = 0.0
@@ -155,8 +157,8 @@ class ProjectAgentMetrics:
     total_tokens_used: int = 0
     total_cost_usd: float = 0.0
 
-    tool_execution_count: Dict[str, int] = field(default_factory=dict)
-    skill_invocation_count: Dict[str, int] = field(default_factory=dict)
+    tool_execution_count: dict[str, int] = field(default_factory=dict)
+    skill_invocation_count: dict[str, int] = field(default_factory=dict)
 
     # Latency percentiles (in ms)
     latency_p50: float = 0.0
@@ -198,7 +200,7 @@ class ProjectReActAgent:
         await agent.stop()
     """
 
-    def __init__(self, config: ProjectAgentConfig):
+    def __init__(self, config: ProjectAgentConfig) -> None:
         """
         Initialize project agent (not fully ready until initialize() is called).
 
@@ -210,16 +212,16 @@ class ProjectReActAgent:
             tenant_id=config.tenant_id,
             project_id=config.project_id,
             agent_mode=config.agent_mode,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
         )
         self._metrics = ProjectAgentMetrics()
 
         # Cached components (initialized in initialize())
-        self._tools: Optional[Dict[str, Any]] = None
-        self._skills: Optional[List[Skill]] = None
-        self._subagents: Optional[List[SubAgent]] = None
-        self._session_context: Optional[Any] = None
-        self._react_agent: Optional[Any] = None
+        self._tools: dict[str, Any] | None = None
+        self._skills: list[Skill] | None = None
+        self._subagents: list[SubAgent] | None = None
+        self._session_context: Any | None = None
+        self._react_agent: Any | None = None
 
         # Execution tracking
         self._execution_lock = asyncio.Lock()
@@ -227,10 +229,10 @@ class ProjectReActAgent:
         self._initialized = False
 
         # Latency tracking for percentiles
-        self._latencies: List[float] = []
+        self._latencies: list[float] = []
 
         # Optional plan repository for Plan Mode awareness
-        self._plan_repo: Optional[Any] = None
+        self._plan_repo: Any | None = None
 
     @property
     def is_initialized(self) -> bool:
@@ -463,7 +465,7 @@ class ProjectReActAgent:
                 truncate_system=app_settings.compression_truncate_system,
             )
 
-            async def _subagent_lifecycle_hook(event: Dict[str, Any]) -> None:
+            async def _subagent_lifecycle_hook(event: dict[str, Any]) -> None:
                 if not notifier:
                     return
                 await notifier.notify_subagent_lifecycle_event(
@@ -699,15 +701,15 @@ class ProjectReActAgent:
         conversation_id: str,
         user_message: str,
         user_id: str,
-        conversation_context: Optional[List[Dict[str, str]]] = None,
-        tenant_id: Optional[str] = None,
-        message_id: Optional[str] = None,
-        abort_signal: Optional[asyncio.Event] = None,
-        file_metadata: Optional[List[Dict[str, Any]]] = None,
-        forced_skill_name: Optional[str] = None,
-        context_summary_data: Optional[Dict[str, Any]] = None,
+        conversation_context: list[dict[str, str]] | None = None,
+        tenant_id: str | None = None,
+        message_id: str | None = None,
+        abort_signal: asyncio.Event | None = None,
+        file_metadata: list[dict[str, Any]] | None = None,
+        forced_skill_name: str | None = None,
+        context_summary_data: dict[str, Any] | None = None,
         plan_mode: bool = False,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute a chat request using the project agent.
 
@@ -743,7 +745,7 @@ class ProjectReActAgent:
                         "message": "Agent initialization failed",
                         "code": "AGENT_NOT_INITIALIZED",
                     },
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
                 return
 
@@ -760,7 +762,7 @@ class ProjectReActAgent:
                     "message": "Agent is shutting down",
                     "code": "AGENT_SHUTTING_DOWN",
                 },
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
             return
 
@@ -772,7 +774,7 @@ class ProjectReActAgent:
                     "message": f"Max concurrent chats ({self.config.max_concurrent_chats}) reached",
                     "code": "MAX_CONCURRENT_CHATS",
                 },
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
             return
 
@@ -783,7 +785,7 @@ class ProjectReActAgent:
         # Update status
         self._status.active_chats += 1
         self._status.is_executing = True
-        self._status.last_activity_at = datetime.now(timezone.utc).isoformat()
+        self._status.last_activity_at = datetime.now(UTC).isoformat()
 
         # Notify executing state
         if notifier:
@@ -869,7 +871,7 @@ class ProjectReActAgent:
                     "message": error_message,
                     "code": "CHAT_EXECUTION_ERROR",
                 },
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
         finally:
@@ -1056,7 +1058,7 @@ class ProjectReActAgent:
 
         return self._metrics
 
-    async def _load_subagents(self) -> List[SubAgent]:
+    async def _load_subagents(self) -> list[SubAgent]:
         """
         Load subagents for the project from both filesystem and database.
 
@@ -1077,8 +1079,8 @@ class ProjectReActAgent:
             FileSystemSubAgentLoader,
         )
 
-        db_subagents: List[SubAgent] = []
-        fs_subagents: List[SubAgent] = []
+        db_subagents: list[SubAgent] = []
+        fs_subagents: list[SubAgent] = []
 
         # Load from database
         try:
@@ -1178,11 +1180,11 @@ class ProjectAgentManager:
         await manager.stop_all()
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the project agent manager."""
-        self._agents: Dict[str, ProjectReActAgent] = {}
+        self._agents: dict[str, ProjectReActAgent] = {}
         self._lock = asyncio.Lock()
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: asyncio.Task | None = None
         self._is_running = False
 
     async def start(self) -> None:
@@ -1198,10 +1200,8 @@ class ProjectAgentManager:
         # Cancel cleanup task
         if self._cleanup_task:
             self._cleanup_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
 
         # Stop all agents
         await self.stop_all()
@@ -1212,8 +1212,8 @@ class ProjectAgentManager:
         tenant_id: str,
         project_id: str,
         agent_mode: str = "default",
-        config_override: Optional[Dict[str, Any]] = None,
-    ) -> Optional[ProjectReActAgent]:
+        config_override: dict[str, Any] | None = None,
+    ) -> ProjectReActAgent | None:
         """
         Get or create a project agent instance.
 
@@ -1270,7 +1270,7 @@ class ProjectAgentManager:
         tenant_id: str,
         project_id: str,
         agent_mode: str = "default",
-    ) -> Optional[ProjectReActAgent]:
+    ) -> ProjectReActAgent | None:
         """
         Get an existing project agent (without creating).
 
@@ -1328,7 +1328,7 @@ class ProjectAgentManager:
 
         logger.info(f"ProjectAgentManager: Stopped {len(agents_to_stop)} agents")
 
-    def list_agents(self) -> List[Dict[str, Any]]:
+    def list_agents(self) -> list[dict[str, Any]]:
         """
         List all managed agents and their status.
 
@@ -1375,7 +1375,7 @@ class ProjectAgentManager:
         Returns:
             Number of agents cleaned up
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         agents_to_stop = []
 
         async with self._lock:
@@ -1413,7 +1413,7 @@ class ProjectAgentManager:
 
 
 # Global manager instance
-_project_agent_manager: Optional[ProjectAgentManager] = None
+_project_agent_manager: ProjectAgentManager | None = None
 _manager_lock = asyncio.Lock()
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from .registry import PluginDiagnostic
 
@@ -17,11 +17,11 @@ class PluginManifestMetadata:
     """Normalized manifest metadata for one plugin."""
 
     id: str
-    manifest_path: Optional[str] = None
-    kind: Optional[str] = None
-    name: Optional[str] = None
-    description: Optional[str] = None
-    version: Optional[str] = None
+    manifest_path: str | None = None
+    kind: str | None = None
+    name: str | None = None
+    description: str | None = None
+    version: str | None = None
     channels: tuple[str, ...] = field(default_factory=tuple)
     providers: tuple[str, ...] = field(default_factory=tuple)
     skills: tuple[str, ...] = field(default_factory=tuple)
@@ -31,7 +31,7 @@ def load_local_plugin_manifest(
     plugin_dir: Path,
     *,
     plugin_name: str,
-) -> tuple[Optional[PluginManifestMetadata], list[PluginDiagnostic]]:
+) -> tuple[PluginManifestMetadata | None, list[PluginDiagnostic]]:
     """Load optional local plugin manifest metadata."""
     manifest_path = plugin_dir / LOCAL_PLUGIN_MANIFEST_FILE
     if not manifest_path.exists():
@@ -61,12 +61,12 @@ def load_local_plugin_manifest(
 
 
 def parse_plugin_manifest_payload(
-    payload: Any,  # noqa: ANN401
+    payload: Any,
     *,
     plugin_name: str,
-    manifest_path: Optional[str] = None,
+    manifest_path: str | None = None,
     source: str = "manifest",
-) -> tuple[Optional[PluginManifestMetadata], list[PluginDiagnostic]]:
+) -> tuple[PluginManifestMetadata | None, list[PluginDiagnostic]]:
     """Parse a manifest payload from local files or entrypoint metadata."""
     diagnostics: list[PluginDiagnostic] = []
     if not isinstance(payload, dict):
@@ -106,21 +106,21 @@ def parse_plugin_manifest_payload(
     return metadata, diagnostics
 
 
-def _read_json_manifest(path: Path) -> Optional[Any]:  # noqa: ANN401
+def _read_json_manifest(path: Path) -> Any | None:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         return None
 
 
-def _normalize_str(value: Any) -> Optional[str]:  # noqa: ANN401
+def _normalize_str(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     normalized = value.strip()
     return normalized or None
 
 
-def normalize_string_list(value: Any) -> tuple[str, ...]:  # noqa: ANN401
+def normalize_string_list(value: Any) -> tuple[str, ...]:
     if not isinstance(value, (list, tuple)):
         return ()
     items: list[str] = []

@@ -7,8 +7,9 @@ and enable efficient reuse.
 
 import asyncio
 import logging
+from collections.abc import Callable
 from contextlib import asynccontextmanager
-from typing import Callable, Dict, Generic, Optional, Set, TypeVar
+from typing import TypeVar
 
 from src.domain.model.sandbox.exceptions import (
     SandboxResourceError,
@@ -59,7 +60,7 @@ class PoolConfig:
         self.max_lifetime = max_lifetime
 
 
-class ResourcePool(Generic[T]):
+class ResourcePool[T]:
     """
     Generic resource pool for managing reusable resources.
 
@@ -70,9 +71,9 @@ class ResourcePool(Generic[T]):
     def __init__(
         self,
         factory: Callable[[], T],
-        config: Optional[PoolConfig] = None,
-        cleanup: Optional[Callable[[T], None]] = None,
-        validate: Optional[Callable[[T], bool]] = None,
+        config: PoolConfig | None = None,
+        cleanup: Callable[[T], None] | None = None,
+        validate: Callable[[T], bool] | None = None,
         pool_name: str = "resource",
     ) -> None:
         """Initialize the resource pool.
@@ -90,16 +91,16 @@ class ResourcePool(Generic[T]):
         self._validate = validate or (lambda r: True)
         self._pool_name = pool_name
 
-        self._resources: Dict[str, T] = {}  # All resources by ID
-        self._available: Set[str] = set()   # IDs of available resources
-        self._in_use: Set[str] = set()      # IDs of in-use resources
-        self._created_at: Dict[str, float] = {}
-        self._last_used: Dict[str, float] = {}
+        self._resources: dict[str, T] = {}  # All resources by ID
+        self._available: set[str] = set()   # IDs of available resources
+        self._in_use: set[str] = set()      # IDs of in-use resources
+        self._created_at: dict[str, float] = {}
+        self._last_used: dict[str, float] = {}
         self._lock = asyncio.Lock()
         self._cond = asyncio.Condition(self._lock)
         self._is_closed = False
 
-    async def acquire(self, resource_id: Optional[str] = None, timeout: Optional[float] = None) -> str:
+    async def acquire(self, resource_id: str | None = None, timeout: float | None = None) -> str:
         """
         Acquire a resource from the pool.
 
@@ -182,7 +183,7 @@ class ResourcePool(Generic[T]):
                         self._cond.wait(),
                         timeout=remaining,
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     raise SandboxTimeoutError(
                         f"Acquire timeout for pool '{self._pool_name}'",
                         timeout_seconds=timeout,
@@ -259,7 +260,7 @@ class ResourcePool(Generic[T]):
         finally:
             await self.release(resource_id)
 
-    def get_resource(self, resource_id: str) -> Optional[T]:
+    def get_resource(self, resource_id: str) -> T | None:
         """Get a resource by ID (doesn't acquire)."""
         return self._resources.get(resource_id)
 
@@ -283,7 +284,7 @@ class ResourcePool(Generic[T]):
         """Whether the pool is closed."""
         return self._is_closed
 
-    async def _create_resource(self, resource_id: Optional[str] = None) -> str:
+    async def _create_resource(self, resource_id: str | None = None) -> str:
         """Create a new resource and add to pool."""
         if resource_id is None:
             import uuid

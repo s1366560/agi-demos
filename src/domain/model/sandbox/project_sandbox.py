@@ -8,9 +8,9 @@ local sandboxes (running on user's machine, connected via WebSocket tunnel).
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from src.domain.shared_kernel import Entity
 
@@ -47,10 +47,10 @@ class LocalSandboxConfig:
 
     workspace_path: str = "/workspace"
     transport: SandboxTransport = SandboxTransport.WEBSOCKET
-    tunnel_url: Optional[str] = None  # For NAT traversal (ngrok/cloudflare)
+    tunnel_url: str | None = None  # For NAT traversal (ngrok/cloudflare)
     host: str = "localhost"
     port: int = 8765
-    auth_token: Optional[str] = None
+    auth_token: str | None = None
 
     def get_websocket_url(self) -> str:
         """Get the WebSocket URL for connection."""
@@ -59,7 +59,7 @@ class LocalSandboxConfig:
         protocol = "ws" if self.host in ("localhost", "127.0.0.1") else "wss"
         return f"{protocol}://{self.host}:{self.port}"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "workspace_path": self.workspace_path,
@@ -71,7 +71,7 @@ class LocalSandboxConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "LocalSandboxConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "LocalSandboxConfig":
         """Create from dictionary."""
         transport = data.get("transport", "websocket")
         if isinstance(transport, str):
@@ -147,13 +147,13 @@ class ProjectSandbox(Entity):
     sandbox_id: str
     sandbox_type: SandboxType = SandboxType.CLOUD
     status: ProjectSandboxStatus = ProjectSandboxStatus.STARTING
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    started_at: Optional[datetime] = None
-    last_accessed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    health_checked_at: Optional[datetime] = None
-    error_message: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    local_config: Optional[LocalSandboxConfig] = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    started_at: datetime | None = None
+    last_accessed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    health_checked_at: datetime | None = None
+    error_message: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    local_config: LocalSandboxConfig | None = None
 
     def __post_init__(self) -> None:
         """Validate sandbox configuration."""
@@ -163,15 +163,15 @@ class ProjectSandbox(Entity):
 
     def mark_accessed(self) -> None:
         """Update last accessed timestamp."""
-        self.last_accessed_at = datetime.now(timezone.utc)
+        self.last_accessed_at = datetime.now(UTC)
 
     def mark_healthy(self) -> None:
         """Mark sandbox as healthy and running."""
         self.status = ProjectSandboxStatus.RUNNING
-        self.health_checked_at = datetime.now(timezone.utc)
+        self.health_checked_at = datetime.now(UTC)
         self.error_message = None
 
-    def mark_unhealthy(self, reason: Optional[str] = None) -> None:
+    def mark_unhealthy(self, reason: str | None = None) -> None:
         """Mark sandbox as unhealthy (deprecated: use mark_error)."""
         self.mark_error(reason or "Unhealthy")
 
@@ -246,10 +246,10 @@ class ProjectSandbox(Entity):
         """Check if health check is needed based on last check time."""
         if self.health_checked_at is None:
             return True
-        elapsed = (datetime.now(timezone.utc) - self.health_checked_at).total_seconds()
+        elapsed = (datetime.now(UTC) - self.health_checked_at).total_seconds()
         return elapsed > max_age_seconds
 
-    def get_connection_url(self) -> Optional[str]:
+    def get_connection_url(self) -> str | None:
         """Get the connection URL for this sandbox."""
         if self.is_local() and self.local_config:
             return self.local_config.get_websocket_url()
@@ -264,7 +264,7 @@ class ProjectSandbox(Entity):
         # Store in metadata for persistence
         self.metadata["local_config"] = config.to_dict()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary representation."""
         result = {
             "id": self.id,

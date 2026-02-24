@@ -13,8 +13,9 @@ Pool Metrics Collector.
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from ..types import (
     CircuitState,
@@ -37,26 +38,26 @@ class Counter:
 
     name: str
     help: str
-    labels: List[str] = field(default_factory=list)
-    _values: Dict[tuple, float] = field(default_factory=dict)
+    labels: list[str] = field(default_factory=list)
+    _values: dict[tuple, float] = field(default_factory=dict)
 
-    def inc(self, labels: Optional[Dict[str, str]] = None, value: float = 1.0) -> None:
+    def inc(self, labels: dict[str, str] | None = None, value: float = 1.0) -> None:
         """增加计数."""
         key = self._make_key(labels)
         self._values[key] = self._values.get(key, 0.0) + value
 
-    def get(self, labels: Optional[Dict[str, str]] = None) -> float:
+    def get(self, labels: dict[str, str] | None = None) -> float:
         """获取当前值."""
         key = self._make_key(labels)
         return self._values.get(key, 0.0)
 
-    def _make_key(self, labels: Optional[Dict[str, str]]) -> tuple:
+    def _make_key(self, labels: dict[str, str] | None) -> tuple:
         """生成标签键."""
         if not labels:
             return ()
         return tuple(sorted(labels.items()))
 
-    def collect(self) -> List[Dict[str, Any]]:
+    def collect(self) -> list[dict[str, Any]]:
         """收集所有指标值."""
         results = []
         for key, value in self._values.items():
@@ -78,36 +79,36 @@ class Gauge:
 
     name: str
     help: str
-    labels: List[str] = field(default_factory=list)
-    _values: Dict[tuple, float] = field(default_factory=dict)
+    labels: list[str] = field(default_factory=list)
+    _values: dict[tuple, float] = field(default_factory=dict)
 
-    def set(self, value: float, labels: Optional[Dict[str, str]] = None) -> None:
+    def set(self, value: float, labels: dict[str, str] | None = None) -> None:
         """设置值."""
         key = self._make_key(labels)
         self._values[key] = value
 
-    def inc(self, labels: Optional[Dict[str, str]] = None, value: float = 1.0) -> None:
+    def inc(self, labels: dict[str, str] | None = None, value: float = 1.0) -> None:
         """增加值."""
         key = self._make_key(labels)
         self._values[key] = self._values.get(key, 0.0) + value
 
-    def dec(self, labels: Optional[Dict[str, str]] = None, value: float = 1.0) -> None:
+    def dec(self, labels: dict[str, str] | None = None, value: float = 1.0) -> None:
         """减少值."""
         key = self._make_key(labels)
         self._values[key] = self._values.get(key, 0.0) - value
 
-    def get(self, labels: Optional[Dict[str, str]] = None) -> float:
+    def get(self, labels: dict[str, str] | None = None) -> float:
         """获取当前值."""
         key = self._make_key(labels)
         return self._values.get(key, 0.0)
 
-    def _make_key(self, labels: Optional[Dict[str, str]]) -> tuple:
+    def _make_key(self, labels: dict[str, str] | None) -> tuple:
         """生成标签键."""
         if not labels:
             return ()
         return tuple(sorted(labels.items()))
 
-    def collect(self) -> List[Dict[str, Any]]:
+    def collect(self) -> list[dict[str, Any]]:
         """收集所有指标值."""
         results = []
         for key, value in self._values.items():
@@ -129,26 +130,26 @@ class Histogram:
 
     name: str
     help: str
-    labels: List[str] = field(default_factory=list)
-    buckets: List[float] = field(
+    labels: list[str] = field(default_factory=list)
+    buckets: list[float] = field(
         default_factory=lambda: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
     )
-    _values: Dict[tuple, List[float]] = field(default_factory=dict)
+    _values: dict[tuple, list[float]] = field(default_factory=dict)
 
-    def observe(self, value: float, labels: Optional[Dict[str, str]] = None) -> None:
+    def observe(self, value: float, labels: dict[str, str] | None = None) -> None:
         """记录观测值."""
         key = self._make_key(labels)
         if key not in self._values:
             self._values[key] = []
         self._values[key].append(value)
 
-    def _make_key(self, labels: Optional[Dict[str, str]]) -> tuple:
+    def _make_key(self, labels: dict[str, str] | None) -> tuple:
         """生成标签键."""
         if not labels:
             return ()
         return tuple(sorted(labels.items()))
 
-    def collect(self) -> List[Dict[str, Any]]:
+    def collect(self) -> list[dict[str, Any]]:
         """收集所有指标值."""
         results = []
         for key, values in self._values.items():
@@ -180,7 +181,7 @@ class PoolMetricsCollector:
     收集并暴露 Agent Pool 的各类指标，支持 Prometheus 格式导出。
     """
 
-    def __init__(self, namespace: str = "memstack_agent_pool"):
+    def __init__(self, namespace: str = "memstack_agent_pool") -> None:
         """初始化指标收集器.
 
         Args:
@@ -420,7 +421,7 @@ class PoolMetricsCollector:
     # Export Methods
     # ========================================================================
 
-    def collect_all(self) -> List[Dict[str, Any]]:
+    def collect_all(self) -> list[dict[str, Any]]:
         """收集所有指标.
 
         Returns:
@@ -469,7 +470,7 @@ class PoolMetricsCollector:
 
         return "\n".join(lines)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典格式.
 
         Returns:
@@ -504,7 +505,7 @@ class PoolMetricsCollector:
 # Global Singleton
 # ============================================================================
 
-_global_collector: Optional[PoolMetricsCollector] = None
+_global_collector: PoolMetricsCollector | None = None
 
 
 def get_metrics_collector(namespace: str = "agent_pool") -> PoolMetricsCollector:

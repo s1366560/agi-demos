@@ -4,7 +4,7 @@ CodeFormatter for generating code output (T121).
 Converts structured data into formatted code blocks in various languages.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from src.infrastructure.agent.output import OutputFormatter
 
@@ -16,7 +16,7 @@ class CodeFormatter(OutputFormatter):
     Supports multiple programming languages and automatic formatting.
     """
 
-    def __init__(self, language: str = "python", indent: int = 4):
+    def __init__(self, language: str = "python", indent: int = 4) -> None:
         """
         Initialize the code formatter.
 
@@ -27,7 +27,7 @@ class CodeFormatter(OutputFormatter):
         self._language = language
         self._indent = indent
 
-    def format(self, data: Any, metadata: Dict[str, Any] | None = None) -> str:  # noqa: ANN401
+    def format(self, data: Any, metadata: dict[str, Any] | None = None) -> str:
         """
         Format data as a code block.
 
@@ -53,14 +53,14 @@ class CodeFormatter(OutputFormatter):
             # Default: just wrap in code block
             return f"```{language}\n{data!s}\n```"
 
-    def _format_json(self, data: Any) -> str:  # noqa: ANN401
+    def _format_json(self, data: Any) -> str:
         """Format as JSON."""
         import json
 
         json_str = json.dumps(data, indent=self._indent, ensure_ascii=False)
         return f"```json\n{json_str}\n```"
 
-    def _format_yaml(self, data: Any) -> str:  # noqa: ANN401
+    def _format_yaml(self, data: Any) -> str:
         """Format as YAML."""
         # Simple YAML formatter (basic implementation)
         lines = ["```yaml"]
@@ -68,7 +68,7 @@ class CodeFormatter(OutputFormatter):
         lines.append("```")
         return "\n".join(lines)
 
-    def _yaml_format_value(self, value: Any, indent: int) -> list[str]:  # noqa: ANN401
+    def _yaml_format_value(self, value: Any, indent: int) -> list[str]:
         """Recursively format a value as YAML."""
         lines = []
         prefix = " " * indent
@@ -92,7 +92,7 @@ class CodeFormatter(OutputFormatter):
 
         return lines
 
-    def _format_python(self, data: Any) -> str:  # noqa: ANN401
+    def _format_python(self, data: Any) -> str:
         """Format as Python code."""
         lines = ["```python"]
 
@@ -115,7 +115,7 @@ class CodeFormatter(OutputFormatter):
         lines.append("```")
         return "\n".join(lines)
 
-    def _format_javascript(self, data: Any) -> str:  # noqa: ANN401
+    def _format_javascript(self, data: Any) -> str:
         """Format as JavaScript code."""
         import json
 

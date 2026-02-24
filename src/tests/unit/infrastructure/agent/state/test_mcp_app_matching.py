@@ -10,7 +10,6 @@ debugging information when matches fail.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional
 from unittest.mock import MagicMock
 
 
@@ -20,7 +19,7 @@ class MockUIMetadata:
     resource_uri: str
     permissions: list = field(default_factory=list)
     csp: dict = field(default_factory=dict)
-    title: Optional[str] = None
+    title: str | None = None
 
     def to_dict(self):
         return {
@@ -34,7 +33,7 @@ class MockUIMetadata:
 @dataclass
 class MockResource:
     """Mock resource for testing."""
-    html_content: Optional[str] = None
+    html_content: str | None = None
 
 
 @dataclass
@@ -43,11 +42,11 @@ class MockMCPApp:
     id: str
     project_id: str
     tenant_id: str
-    server_id: Optional[str]
+    server_id: str | None
     server_name: str
     tool_name: str
-    ui_metadata: Optional[MockUIMetadata] = None
-    resource: Optional[MockResource] = None
+    ui_metadata: MockUIMetadata | None = None
+    resource: MockResource | None = None
 
 
 class TestMCPAppMatchingPriority:

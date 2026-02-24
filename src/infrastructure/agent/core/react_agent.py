@@ -25,9 +25,10 @@ import logging
 import os
 import re
 import time
-from datetime import datetime, timezone
+from collections.abc import AsyncIterator, Callable, Mapping
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Mapping, Optional
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from src.domain.events.agent_events import (
@@ -120,15 +121,15 @@ class ReActAgent:
     def __init__(
         self,
         model: str,
-        tools: Optional[Dict[str, Any]] = None,  # Tool name -> Tool instance (static)
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
+        tools: dict[str, Any] | None = None,  # Tool name -> Tool instance (static)
+        api_key: str | None = None,
+        base_url: str | None = None,
         temperature: float = 0.0,
         max_tokens: int = 4096,
         max_steps: int = 20,
-        permission_manager: Optional[PermissionManager] = None,
-        skills: Optional[List[Skill]] = None,
-        subagents: Optional[List[SubAgent]] = None,
+        permission_manager: PermissionManager | None = None,
+        skills: list[Skill] | None = None,
+        subagents: list[SubAgent] | None = None,
         # Skill matching thresholds - increased to let LLM make autonomous decisions
         # LLM sees skill_loader tool with available skills list and decides when to load
         # Rule-based matching is now a fallback for very high confidence matches only
@@ -147,57 +148,57 @@ class ReActAgent:
         max_subagent_children_per_requester: int = 8,
         max_subagent_active_runs_per_lineage: int = 8,
         max_subagent_lane_concurrency: int = 8,
-        subagent_run_registry_path: Optional[str] = None,
-        subagent_run_postgres_dsn: Optional[str] = None,
-        subagent_run_sqlite_path: Optional[str] = None,
-        subagent_run_redis_cache_url: Optional[str] = None,
+        subagent_run_registry_path: str | None = None,
+        subagent_run_postgres_dsn: str | None = None,
+        subagent_run_sqlite_path: str | None = None,
+        subagent_run_redis_cache_url: str | None = None,
         subagent_run_redis_cache_ttl_seconds: int = 60,
         subagent_terminal_retention_seconds: int = 86400,
         subagent_announce_max_events: int = 20,
         subagent_announce_max_retries: int = 2,
         subagent_announce_retry_delay_ms: int = 200,
-        subagent_lifecycle_hook: Optional[Callable[[Dict[str, Any]], Any]] = None,
+        subagent_lifecycle_hook: Callable[[dict[str, Any]], Any] | None = None,
         # Context window management
-        context_window_config: Optional[ContextWindowConfig] = None,
+        context_window_config: ContextWindowConfig | None = None,
         max_context_tokens: int = 128000,
         # Agent mode for skill filtering
         agent_mode: str = "default",
         # Project root for custom rules loading
-        project_root: Optional[Path] = None,
+        project_root: Path | None = None,
         # Artifact service for rich output handling
-        artifact_service: Optional[ArtifactService] = None,
+        artifact_service: ArtifactService | None = None,
         # LLM client for unified resilience (circuit breaker + rate limiter)
-        llm_client: Optional[LLMClient] = None,
+        llm_client: LLMClient | None = None,
         # Skill resource sync service for sandbox resource injection
-        resource_sync_service: Optional[Any] = None,  # noqa: ANN401
+        resource_sync_service: Any | None = None,
         # Graph service for SubAgent memory sharing (Phase 5.1)
-        graph_service: Optional[GraphServicePort] = None,
+        graph_service: GraphServicePort | None = None,
         # ====================================================================
         # Hot-plug support: Optional tool provider function for dynamic tools
         # When provided, tools are fetched at each stream() call instead of
         # being fixed at initialization time.
         # ====================================================================
-        tool_provider: Optional[callable] = None,
+        tool_provider: callable | None = None,
         # ====================================================================
         # Agent Session Pool: Pre-cached components for performance optimization
         # These are internal parameters set by execute_react_agent_activity
         # when using the Agent Session Pool for component reuse.
         # ====================================================================
-        _cached_tool_definitions: Optional[List[Any]] = None,
-        _cached_system_prompt_manager: Optional[Any] = None,  # noqa: ANN401
-        _cached_subagent_router: Optional[Any] = None,  # noqa: ANN401
+        _cached_tool_definitions: list[Any] | None = None,
+        _cached_system_prompt_manager: Any | None = None,
+        _cached_subagent_router: Any | None = None,
         # Plan Mode detection
-        plan_detector: Optional[PlanDetector] = None,
+        plan_detector: PlanDetector | None = None,
         # Memory auto-recall / auto-capture preprocessors
-        memory_recall: Optional[Any] = None,  # noqa: ANN401
-        memory_capture: Optional[Any] = None,  # noqa: ANN401
-        memory_flush: Optional[Any] = None,  # noqa: ANN401
-        tool_selection_pipeline: Optional[Any] = None,  # noqa: ANN401
+        memory_recall: Any | None = None,
+        memory_capture: Any | None = None,
+        memory_flush: Any | None = None,
+        tool_selection_pipeline: Any | None = None,
         tool_selection_max_tools: int = 40,
         tool_selection_semantic_backend: str = "embedding_vector",
         router_mode_tool_count_threshold: int = 100,
-        tool_policy_layers: Optional[Mapping[str, Any]] = None,
-    ):
+        tool_policy_layers: Mapping[str, Any] | None = None,
+    ) -> None:
         """
         Initialize ReAct Agent.
 
@@ -403,7 +404,7 @@ class ReActAgent:
             redis_cache_ttl_seconds=subagent_run_redis_cache_ttl_seconds,
             terminal_retention_seconds=subagent_terminal_retention_seconds,
         )
-        self._subagent_session_tasks: Dict[str, asyncio.Task] = {}
+        self._subagent_session_tasks: dict[str, asyncio.Task] = {}
 
         # ====================================================================
         # Phase 3 Refactoring: Initialize orchestrators for modular components
@@ -509,7 +510,7 @@ class ReActAgent:
         def __init__(self, agent: ReActAgent) -> None:
             self._agent = agent
 
-        def match(self, query: str, context: Dict[str, Any]) -> Optional[str]:
+        def match(self, query: str, context: dict[str, Any]) -> str | None:
             matched_skill, _ = self._agent._match_skill(query)
             return matched_skill.name if matched_skill else None
 
@@ -523,13 +524,13 @@ class ReActAgent:
         def __init__(self, agent: ReActAgent) -> None:
             self._agent = agent
 
-        def match(self, query: str, context: Dict[str, Any]) -> Optional[str]:
+        def match(self, query: str, context: dict[str, Any]) -> str | None:
             if not bool(context.get("router_mode_enabled", True)):
                 return None
             match = self._agent._match_subagent(query)
             return match.subagent.name if match.subagent else None
 
-        def get_subagent(self, name: str) -> Any:  # noqa: ANN401
+        def get_subagent(self, name: str) -> Any:
             for subagent in self._agent.subagents:
                 if subagent.name == name:
                     return subagent
@@ -541,7 +542,7 @@ class ReActAgent:
         def __init__(self, detector: PlanDetector) -> None:
             self._detector = detector
 
-        def should_use_plan_mode(self, query: str, context: Dict[str, Any]) -> bool:
+        def should_use_plan_mode(self, query: str, context: dict[str, Any]) -> bool:
             return self._detector.detect(query).should_suggest
 
         def estimate_plan_complexity(self, query: str) -> float:
@@ -553,18 +554,18 @@ class ReActAgent:
         tenant_id: str,
         project_id: str,
         user_message: str,
-        conversation_context: List[Dict[str, str]],
+        conversation_context: list[dict[str, str]],
         effective_mode: str,
-        routing_metadata: Optional[Mapping[str, Any]] = None,
+        routing_metadata: Mapping[str, Any] | None = None,
     ) -> ToolSelectionContext:
         """Build selection context for context/intent/semantic/policy pipeline."""
         policy_context = PolicyContext.from_metadata(
             {"policy_layers": dict(self._tool_policy_layers)},
         )
-        deny_tools: List[str] = []
+        deny_tools: list[str] = []
         if effective_mode == "plan":
             deny_tools = ["plugin_manager", "register_mcp_server", "skill_installer", "skill_sync"]
-        metadata: Dict[str, Any] = {
+        metadata: dict[str, Any] = {
             "user_message": user_message,
             "conversation_history": conversation_context,
             "effective_mode": effective_mode,
@@ -598,8 +599,8 @@ class ReActAgent:
         self,
         *,
         message: str,
-        forced_subagent_name: Optional[str] = None,
-        forced_skill_name: Optional[str] = None,
+        forced_subagent_name: str | None = None,
+        forced_skill_name: str | None = None,
         plan_mode_requested: bool = False,
     ) -> str:
         """Infer routing lane for router-fabric diagnostics."""
@@ -620,9 +621,9 @@ class ReActAgent:
         self,
         *,
         message: str,
-        conversation_context: List[Dict[str, str]],
-        forced_subagent_name: Optional[str] = None,
-        forced_skill_name: Optional[str] = None,
+        conversation_context: list[dict[str, str]],
+        forced_subagent_name: str | None = None,
+        forced_skill_name: str | None = None,
         plan_mode_requested: bool = False,
     ) -> RoutingDecision:
         """Decide execution path via centralized ExecutionRouter."""
@@ -709,8 +710,8 @@ class ReActAgent:
 
     def _get_current_tools(
         self,
-        selection_context: Optional[ToolSelectionContext] = None,
-    ) -> tuple[Dict[str, Any], List[ToolDefinition]]:
+        selection_context: ToolSelectionContext | None = None,
+    ) -> tuple[dict[str, Any], list[ToolDefinition]]:
         """
         Get current tools - either from static tools or dynamic tool_provider.
 
@@ -747,7 +748,7 @@ class ReActAgent:
 
         return self.raw_tools, self.tool_definitions
 
-    def _match_skill(self, query: str) -> tuple[Optional[Skill], float]:
+    def _match_skill(self, query: str) -> tuple[Skill | None, float]:
         """
         Match query against available skills, filtered by agent_mode.
 
@@ -804,7 +805,7 @@ class ReActAgent:
     async def _match_subagent_async(
         self,
         query: str,
-        conversation_context: Optional[List[Dict[str, str]]] = None,
+        conversation_context: list[dict[str, str]] | None = None,
     ) -> SubAgentMatch:
         """Async match with hybrid routing (keyword + LLM semantic).
 
@@ -886,16 +887,16 @@ class ReActAgent:
     async def _build_system_prompt(
         self,
         user_query: str,
-        conversation_context: List[Dict[str, str]],
-        matched_skill: Optional[Skill] = None,
-        subagent: Optional[SubAgent] = None,
+        conversation_context: list[dict[str, str]],
+        matched_skill: Skill | None = None,
+        subagent: SubAgent | None = None,
         mode: str = "build",
         current_step: int = 1,
         project_id: str = "",
         tenant_id: str = "",
         force_execution: bool = False,
-        memory_context: Optional[str] = None,
-        selection_context: Optional[ToolSelectionContext] = None,
+        memory_context: str | None = None,
+        selection_context: ToolSelectionContext | None = None,
     ) -> str:
         """
         Build system prompt for the agent using SystemPromptManager.
@@ -1004,15 +1005,15 @@ class ReActAgent:
         project_id: str,
         user_id: str,
         tenant_id: str,
-        conversation_context: Optional[List[Dict[str, str]]] = None,
-        message_id: Optional[str] = None,
-        attachment_content: Optional[List[Dict[str, Any]]] = None,
-        attachment_metadata: Optional[List[Dict[str, Any]]] = None,
-        abort_signal: Optional[asyncio.Event] = None,
-        forced_skill_name: Optional[str] = None,
-        context_summary_data: Optional[Dict[str, Any]] = None,
+        conversation_context: list[dict[str, str]] | None = None,
+        message_id: str | None = None,
+        attachment_content: list[dict[str, Any]] | None = None,
+        attachment_metadata: list[dict[str, Any]] | None = None,
+        abort_signal: asyncio.Event | None = None,
+        forced_skill_name: str | None = None,
+        context_summary_data: dict[str, Any] | None = None,
         plan_mode: bool = False,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response with ReAct loop.
 
@@ -1062,7 +1063,7 @@ class ReActAgent:
                     "reason": suggestion.reason,
                     "confidence": suggestion.confidence,
                 },
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
             logger.info(
                 f"[ReActAgent] Plan Mode suggested (confidence={suggestion.confidence:.2f})"
@@ -1110,7 +1111,7 @@ class ReActAgent:
                 "target": routing_decision.target,
                 "metadata": routing_metadata,
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         if (
             not forced_skill_name
@@ -1152,7 +1153,7 @@ class ReActAgent:
                             "confidence": 1.0,
                             "reason": "Forced delegation via user instruction",
                         },
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     }
                 else:
                     logger.warning(
@@ -1177,7 +1178,7 @@ class ReActAgent:
                             "confidence": subagent_match.confidence,
                             "reason": subagent_match.match_reason,
                         },
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     }
 
             if active_subagent:
@@ -1278,7 +1279,7 @@ class ReActAgent:
                         "content": f"Forced skill '{forced_skill_name}' not found, "
                         f"falling back to normal matching",
                     },
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
                 matched_skill, skill_score = self._match_skill(processed_user_message)
         else:
@@ -1313,7 +1314,7 @@ class ReActAgent:
                     "match_score": skill_score,
                     "execution_mode": execution_mode,
                 },
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
         # Sync skill resources to sandbox before prompt injection
@@ -1430,7 +1431,7 @@ class ReActAgent:
             yield {
                 "type": "context_compressed",
                 "data": context_result.to_event_data(),
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
             logger.info(
                 f"Context compressed: {context_result.original_message_count} -> "
@@ -1448,7 +1449,7 @@ class ReActAgent:
                         "messages_covered_count": context_result.summarized_message_count,
                         "compression_level": context_result.compression_strategy.value,
                     },
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
 
             # Pre-compaction memory flush: extract durable memories from
@@ -1486,11 +1487,11 @@ class ReActAgent:
                     cached_summary.messages_covered_count if cached_summary else 0
                 ),
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         # Determine tools to use - hot-plug support: fetch current tools
-        current_raw_tools, current_tool_definitions = self._get_current_tools(
+        _current_raw_tools, current_tool_definitions = self._get_current_tools(
             selection_context=selection_context
         )
         if self._last_tool_selection_trace:
@@ -1538,7 +1539,7 @@ class ReActAgent:
                     "budget_exceeded_stages": budget_exceeded_stages,
                     "stages": trace_data,
                 },
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
             if removed_total > 0:
                 yield {
@@ -1552,7 +1553,7 @@ class ReActAgent:
                         "tool_budget": tool_budget,
                         "budget_exceeded_stages": budget_exceeded_stages,
                     },
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
         tools_to_use = list(current_tool_definitions)
 
@@ -1592,7 +1593,7 @@ class ReActAgent:
                 async def _delegate_callback(
                     subagent_name: str,
                     task: str,
-                    on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
+                    on_event: Callable[[dict[str, Any]], None] | None = None,
                 ) -> str:
                     target = subagent_map.get(subagent_name)
                     if not target:
@@ -1639,7 +1640,7 @@ class ReActAgent:
                     subagent_name: str,
                     task: str,
                     run_id: str,
-                    **spawn_options: Any,  # noqa: ANN401
+                    **spawn_options: Any,
                 ) -> str:
                     target = subagent_map.get(subagent_name)
                     if not target:
@@ -1879,7 +1880,7 @@ class ReActAgent:
         # This enables the processor to refresh tools after register_mcp_server
         if self._use_dynamic_tools and self._tool_provider is not None:
             # Create a wrapper that converts raw tools to ToolDefinitions
-            def _tool_provider_wrapper() -> List[ToolDefinition]:
+            def _tool_provider_wrapper() -> list[ToolDefinition]:
                 _, tool_defs = self._get_current_tools(selection_context=selection_context)
                 return list(tool_defs)
 
@@ -1989,7 +1990,7 @@ class ReActAgent:
                     "content": final_content,
                     "skill_used": matched_skill.name if matched_skill else None,
                 },
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
         except Exception as e:
@@ -2001,7 +2002,7 @@ class ReActAgent:
                     "message": str(e),
                     "code": type(e).__name__,
                 },
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
         finally:
@@ -2020,15 +2021,15 @@ class ReActAgent:
         self,
         subagent: SubAgent,
         user_message: str,
-        conversation_context: List[Dict[str, str]],
+        conversation_context: list[dict[str, str]],
         project_id: str,
         tenant_id: str,
         conversation_id: str = "",
-        abort_signal: Optional[asyncio.Event] = None,
+        abort_signal: asyncio.Event | None = None,
         delegation_depth: int = 0,
-        model_override: Optional[str] = None,
-        thinking_override: Optional[str] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        model_override: str | None = None,
+        thinking_override: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """Execute a SubAgent in an independent ReAct loop.
 
         Creates a SubAgentProcess with its own context window and processor,
@@ -2093,7 +2094,7 @@ class ReActAgent:
             filtered_tools = list(current_tool_definitions)
         existing_tool_names = {tool.name for tool in filtered_tools}
 
-        def _append_nested_tool(tool_instance: Any) -> None:  # noqa: ANN401
+        def _append_nested_tool(tool_instance: Any) -> None:
             if tool_instance.name in existing_tool_names:
                 return
             filtered_tools.append(
@@ -2139,7 +2140,7 @@ class ReActAgent:
                 async def _nested_delegate_callback(
                     subagent_name: str,
                     task: str,
-                    on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
+                    on_event: Callable[[dict[str, Any]], None] | None = None,
                 ) -> str:
                     target = nested_map.get(subagent_name)
                     if not target:
@@ -2187,7 +2188,7 @@ class ReActAgent:
                     subagent_name: str,
                     task: str,
                     run_id: str,
-                    **spawn_options: Any,  # noqa: ANN401
+                    **spawn_options: Any,
                 ) -> str:
                     target = nested_map.get(subagent_name)
                     if not target:
@@ -2321,20 +2322,20 @@ class ReActAgent:
                 "subagent_used": subagent.name,
                 "subagent_result": result.to_event_data() if result else None,
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     async def _execute_parallel(
         self,
-        subtasks: List[Any],
+        subtasks: list[Any],
         user_message: str,
-        conversation_context: List[Dict[str, str]],
+        conversation_context: list[dict[str, str]],
         project_id: str,
         tenant_id: str,
-        conversation_id: Optional[str] = None,
-        route_id: Optional[str] = None,
-        abort_signal: Optional[asyncio.Event] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        conversation_id: str | None = None,
+        route_id: str | None = None,
+        abort_signal: asyncio.Event | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """Execute multiple SubAgents in parallel via ParallelScheduler.
 
         Args:
@@ -2362,7 +2363,7 @@ class ReActAgent:
                     for st in subtasks
                 ],
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         # Build subagent name -> SubAgent mapping
@@ -2372,7 +2373,7 @@ class ReActAgent:
         _, current_tool_definitions = self._get_current_tools()
 
         scheduler = ParallelScheduler()
-        results: List[SubAgentResult] = []
+        results: list[SubAgentResult] = []
 
         async for event in scheduler.execute(
             subtasks=subtasks,
@@ -2420,7 +2421,7 @@ class ReActAgent:
                 "total_tokens": aggregated.total_tokens,
                 "failed_agents": list(aggregated.failed_agents),
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         yield {
@@ -2433,20 +2434,20 @@ class ReActAgent:
                 "route_id": route_id,
                 "trace_id": route_id,
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     async def _execute_chain(
         self,
-        subtasks: List[Any],
+        subtasks: list[Any],
         user_message: str,
-        conversation_context: List[Dict[str, str]],
+        conversation_context: list[dict[str, str]],
         project_id: str,
         tenant_id: str,
-        conversation_id: Optional[str] = None,
-        route_id: Optional[str] = None,
-        abort_signal: Optional[asyncio.Event] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        conversation_id: str | None = None,
+        route_id: str | None = None,
+        abort_signal: asyncio.Event | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """Execute SubAgents as a sequential chain (pipeline).
 
         Converts decomposed subtasks with linear dependencies into a
@@ -2529,7 +2530,7 @@ class ReActAgent:
                 "route_id": route_id,
                 "trace_id": route_id,
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     async def _execute_background(
@@ -2537,10 +2538,10 @@ class ReActAgent:
         subagent: SubAgent,
         user_message: str,
         conversation_id: str,
-        conversation_context: List[Dict[str, str]],
+        conversation_context: list[dict[str, str]],
         project_id: str,
         tenant_id: str,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Launch a SubAgent for background execution (non-blocking).
 
         The SubAgent starts running asynchronously and results are
@@ -2582,7 +2583,7 @@ class ReActAgent:
                 "subagent_name": subagent.display_name,
                 "task": user_message[:200],
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         yield {
@@ -2595,10 +2596,10 @@ class ReActAgent:
                 "orchestration_mode": "background",
                 "execution_id": execution_id,
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
-    async def _emit_subagent_lifecycle_hook(self, event: Dict[str, Any]) -> None:
+    async def _emit_subagent_lifecycle_hook(self, event: dict[str, Any]) -> None:
         """Emit detached SubAgent lifecycle hook event if callback is configured."""
         if not self._subagent_lifecycle_hook:
             return
@@ -2614,7 +2615,7 @@ class ReActAgent:
                 exc_info=True,
             )
 
-    def _get_subagent_observability_stats(self) -> Dict[str, int]:
+    def _get_subagent_observability_stats(self) -> dict[str, int]:
         """Return subagent lifecycle observability counters for overview tools."""
         return {"hook_failures": int(self._subagent_lifecycle_hook_failures)}
 
@@ -2624,12 +2625,12 @@ class ReActAgent:
         subagent: SubAgent,
         user_message: str,
         conversation_id: str,
-        conversation_context: List[Dict[str, str]],
+        conversation_context: list[dict[str, str]],
         project_id: str,
         tenant_id: str,
-        abort_signal: Optional[asyncio.Event] = None,
-        model_override: Optional[str] = None,
-        thinking_override: Optional[str] = None,
+        abort_signal: asyncio.Event | None = None,
+        model_override: str | None = None,
+        thinking_override: str | None = None,
         spawn_mode: str = "run",
         thread_requested: bool = False,
         cleanup: str = "keep",
@@ -2650,10 +2651,10 @@ class ReActAgent:
             await start_gate.wait()
             started_at = time.time()
             summary = ""
-            tokens_used: Optional[int] = None
-            execution_time_ms: Optional[int] = None
+            tokens_used: int | None = None
+            execution_time_ms: int | None = None
             result_success = True
-            result_error: Optional[str] = None
+            result_error: str | None = None
             configured_timeout = 0.0
             cancelled_by_control = False
             resolved_model_override = requested_model_override
@@ -2764,7 +2765,7 @@ class ReActAgent:
                                 SubAgentRunStatus.RUNNING,
                             ],
                         )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 current = self._subagent_run_registry.get_run(conversation_id, run_id)
                 if current and current.status in {
                     SubAgentRunStatus.PENDING,
@@ -2887,10 +2888,10 @@ class ReActAgent:
 
     def _append_capped_announce_event(
         self,
-        events: List[Dict[str, Any]],
+        events: list[dict[str, Any]],
         dropped_count: int,
-        event: Dict[str, Any],
-    ) -> tuple[List[Dict[str, Any]], int]:
+        event: dict[str, Any],
+    ) -> tuple[list[dict[str, Any]], int]:
         """Append announce event while enforcing bounded history size."""
         normalized_events = list(events)
         if len(normalized_events) >= self._subagent_announce_max_events:
@@ -2903,16 +2904,16 @@ class ReActAgent:
     def _build_subagent_completion_payload(
         cls,
         *,
-        run: Any,  # noqa: ANN401
+        run: Any,
         fallback_summary: str,
-        fallback_tokens_used: Optional[int],
-        fallback_execution_time_ms: Optional[int],
+        fallback_tokens_used: int | None,
+        fallback_execution_time_ms: int | None,
         spawn_mode: str,
         thread_requested: bool,
         cleanup: str,
-        model_override: Optional[str],
-        thinking_override: Optional[str],
-    ) -> Dict[str, Any]:
+        model_override: str | None,
+        thinking_override: str | None,
+    ) -> dict[str, Any]:
         """Build normalized completion announce payload from terminal run state."""
         outcome, status_text = cls._resolve_subagent_completion_outcome(run.status.value)
         result_text = (run.summary or fallback_summary or "").strip() or "(not available)"
@@ -2947,13 +2948,13 @@ class ReActAgent:
         conversation_id: str,
         run_id: str,
         fallback_summary: str,
-        fallback_tokens_used: Optional[int],
-        fallback_execution_time_ms: Optional[int],
+        fallback_tokens_used: int | None,
+        fallback_execution_time_ms: int | None,
         spawn_mode: str,
         thread_requested: bool,
         cleanup: str,
-        model_override: Optional[str],
-        thinking_override: Optional[str],
+        model_override: str | None,
+        thinking_override: str | None,
         max_retries: int,
     ) -> None:
         """Persist terminal announce payload with retry/backoff and bounded metadata."""
@@ -2992,7 +2993,7 @@ class ReActAgent:
 
             if attempt > 0:
                 retry_event = {
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "type": "completion_retry",
                     "attempt": attempt,
                     "run_id": run_id,
@@ -3003,7 +3004,7 @@ class ReActAgent:
                 )
 
             delivered_event = {
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "type": "completion_delivered",
                 "attempt": attempts_used,
                 "run_id": run_id,
@@ -3021,7 +3022,7 @@ class ReActAgent:
                         "announce_payload": payload,
                         "announce_status": "delivered",
                         "announce_attempt_count": attempts_used,
-                        "announce_completed_at": datetime.now(timezone.utc).isoformat(),
+                        "announce_completed_at": datetime.now(UTC).isoformat(),
                         "announce_last_error": "",
                         "announce_events": announce_events,
                         "announce_events_dropped": dropped_count,
@@ -3058,7 +3059,7 @@ class ReActAgent:
             announce_events = []
         dropped_count = int(run.metadata.get("announce_events_dropped") or 0)
         giveup_event = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "type": "completion_giveup",
             "attempt": attempts_used,
             "run_id": run_id,
@@ -3089,7 +3090,7 @@ class ReActAgent:
         return False
 
     @staticmethod
-    def _topological_sort_subtasks(subtasks: List[Any]) -> List[Any]:
+    def _topological_sort_subtasks(subtasks: list[Any]) -> list[Any]:
         """Sort subtasks by dependency order (topological sort)."""
         id_to_task = {st.id: st for st in subtasks}
         visited = set()
@@ -3116,7 +3117,7 @@ class ReActAgent:
         project_id: str,
         user_id: str,
         tenant_id: str,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute skill directly via SkillOrchestrator.
 
@@ -3143,7 +3144,7 @@ class ReActAgent:
         async for event in self._skill_orchestrator.execute_directly(skill, context):
             yield event
 
-    def _extract_sandbox_id_from_tools(self) -> Optional[str]:
+    def _extract_sandbox_id_from_tools(self) -> str | None:
         """Extract sandbox_id from any available sandbox tool wrapper."""
         current_tools, _ = self._get_current_tools()
         for tool in current_tools.values():
@@ -3152,8 +3153,8 @@ class ReActAgent:
         return None
 
     def _convert_domain_event(
-        self, domain_event: AgentDomainEvent | Dict[str, Any]
-    ) -> Optional[Dict[str, Any]]:
+        self, domain_event: AgentDomainEvent | dict[str, Any]
+    ) -> dict[str, Any] | None:
         """
         Convert AgentDomainEvent to event dictionary format.
 
@@ -3178,8 +3179,8 @@ class ReActAgent:
         user_id: str,
         tenant_id: str,
         user_query: str,
-        conversation_context: Optional[List[Dict[str, str]]] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        conversation_context: list[dict[str, str]] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream with multi-level thinking (compatibility method).
 
@@ -3211,11 +3212,11 @@ class ReActAgent:
 
 def create_react_agent(
     model: str,
-    tools: Dict[str, Any],
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
-    skills: Optional[List[Skill]] = None,
-    subagents: Optional[List[SubAgent]] = None,
+    tools: dict[str, Any],
+    api_key: str | None = None,
+    base_url: str | None = None,
+    skills: list[Skill] | None = None,
+    subagents: list[SubAgent] | None = None,
     **kwargs,
 ) -> ReActAgent:
     """

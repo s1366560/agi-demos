@@ -5,7 +5,6 @@ Persists skill version snapshots including SKILL.md content and resource files.
 """
 
 import logging
-from typing import List, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,7 +41,7 @@ class SqlSkillVersionRepository(SkillVersionRepositoryPort):
         await self._session.flush()
         return version
 
-    async def get_by_version(self, skill_id: str, version_number: int) -> Optional[SkillVersion]:
+    async def get_by_version(self, skill_id: str, version_number: int) -> SkillVersion | None:
         """Get a specific version of a skill."""
         query = (
             select(DBSkillVersion)
@@ -55,7 +54,7 @@ class SqlSkillVersionRepository(SkillVersionRepositoryPort):
 
     async def list_by_skill(
         self, skill_id: str, limit: int = 50, offset: int = 0
-    ) -> List[SkillVersion]:
+    ) -> list[SkillVersion]:
         """List all versions of a skill, ordered by version_number DESC."""
         query = (
             select(DBSkillVersion)
@@ -68,7 +67,7 @@ class SqlSkillVersionRepository(SkillVersionRepositoryPort):
         db_versions = result.scalars().all()
         return [self._to_domain(v) for v in db_versions]
 
-    async def get_latest(self, skill_id: str) -> Optional[SkillVersion]:
+    async def get_latest(self, skill_id: str) -> SkillVersion | None:
         """Get the latest version of a skill."""
         query = (
             select(DBSkillVersion)
@@ -95,7 +94,7 @@ class SqlSkillVersionRepository(SkillVersionRepositoryPort):
         result = await self._session.execute(query)
         return result.scalar() or 0
 
-    def _to_domain(self, db_version: Optional[DBSkillVersion]) -> Optional[SkillVersion]:
+    def _to_domain(self, db_version: DBSkillVersion | None) -> SkillVersion | None:
         """Convert database model to domain entity."""
         if db_version is None:
             return None

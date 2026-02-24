@@ -7,7 +7,6 @@ including CRUD operations, health checks, and tenant assignments.
 
 import logging
 from datetime import datetime
-from typing import List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -100,12 +99,12 @@ async def create_provider(
         )
 
 
-@router.get("/", response_model=List[ProviderConfigResponse])
+@router.get("/", response_model=list[ProviderConfigResponse])
 async def list_providers(
     include_inactive: bool = Query(False, description="Include inactive providers"),
     current_user: User = Depends(get_current_user_with_roles),
     service: ProviderService = Depends(get_provider_service_with_session),
-) -> List[ProviderConfigResponse]:
+) -> list[ProviderConfigResponse]:
     """
     List all LLM providers.
 
@@ -123,10 +122,10 @@ async def list_providers(
 # Static routes must be defined before dynamic /{provider_id} route
 
 
-@router.get("/types", response_model=List[str])
+@router.get("/types", response_model=list[str])
 async def list_provider_types(
     current_user: User = Depends(get_current_user),
-) -> List[str]:
+) -> list[str]:
     """
     List all supported provider types.
     """
@@ -298,7 +297,7 @@ async def delete_provider(
     provider_id: UUID,
     current_user: User = Depends(require_admin),
     service: ProviderService = Depends(get_provider_service_with_session),
-):
+) -> None:
     """
     Delete (soft delete) a provider configuration.
 
@@ -362,10 +361,10 @@ async def get_provider_health(
 # Tenant Assignment Endpoints
 
 
-@router.get("/tenants/{tenant_id}/assignments", response_model=List[TenantProviderMapping])
+@router.get("/tenants/{tenant_id}/assignments", response_model=list[TenantProviderMapping])
 async def list_tenant_assignments(
     tenant_id: str,
-    operation_type: Optional[OperationType] = Query(
+    operation_type: OperationType | None = Query(
         None, description="Filter by operation type: llm, embedding, rerank"
     ),
     current_user: User = Depends(get_current_user_with_roles),
@@ -484,9 +483,9 @@ async def unassign_provider_from_tenant(
 @router.get("/{provider_id}/usage")
 async def get_provider_usage(
     provider_id: UUID,
-    start_date: Optional[datetime] = Query(None, description="Start date filter"),
-    end_date: Optional[datetime] = Query(None, description="End date filter"),
-    operation_type: Optional[str] = Query(None, description="Filter by operation type"),
+    start_date: datetime | None = Query(None, description="Start date filter"),
+    end_date: datetime | None = Query(None, description="End date filter"),
+    operation_type: str | None = Query(None, description="Filter by operation type"),
     current_user: User = Depends(get_current_user_with_roles),
     service: ProviderService = Depends(get_provider_service_with_session),
 ):

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
@@ -48,9 +48,9 @@ class ReflexionChecker:
         self,
         llm_client: LLMClient,
         embedding_service: EmbeddingService,
-        model: Optional[str] = None,
+        model: str | None = None,
         temperature: float = 0.0,
-    ):
+    ) -> None:
         """
         Initialize reflexion checker.
 
@@ -68,14 +68,14 @@ class ReflexionChecker:
     async def check_missed_entities(
         self,
         content: str,
-        extracted_entities: List[Dict[str, Any]],
-        entity_types_context: Optional[List[Dict[str, Any]]] = None,
-        entity_type_id_to_name: Optional[Dict[int, str]] = None,
-        previous_context: Optional[str] = None,
-        project_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-    ) -> List[EntityNode]:
+        extracted_entities: list[dict[str, Any]],
+        entity_types_context: list[dict[str, Any]] | None = None,
+        entity_type_id_to_name: dict[int, str] | None = None,
+        previous_context: str | None = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> list[EntityNode]:
         """
         Check for entities that may have been missed in extraction.
 
@@ -156,13 +156,13 @@ class ReflexionChecker:
         self,
         content: str,
         entity_extractor: EntityExtractor,
-        entity_types: Optional[str] = None,
-        previous_context: Optional[str] = None,
-        project_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        user_id: Optional[str] = None,
+        entity_types: str | None = None,
+        previous_context: str | None = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
         max_iterations: int = 1,
-    ) -> List[EntityNode]:
+    ) -> list[EntityNode]:
         """
         Extract entities with reflexion to improve recall.
 
@@ -298,7 +298,7 @@ class ReflexionChecker:
     def _parse_reflexion_response(
         self,
         response: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Parse LLM response for missed entities.
 
@@ -329,7 +329,7 @@ class ReflexionChecker:
             logger.warning(f"Failed to parse reflexion response as JSON: {e}")
             return self._extract_json_from_text(response)
 
-    def _extract_json_from_text(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_json_from_text(self, text: str) -> list[dict[str, Any]]:
         """
         Try to extract JSON from text that may contain non-JSON content.
 
@@ -365,12 +365,12 @@ class ReflexionChecker:
 
     async def _create_entity_nodes(
         self,
-        entities_data: List[Dict[str, Any]],
-        entity_type_id_to_name: Optional[Dict[int, str]] = None,
-        project_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-    ) -> List[EntityNode]:
+        entities_data: list[dict[str, Any]],
+        entity_type_id_to_name: dict[int, str] | None = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> list[EntityNode]:
         """
         Create EntityNode objects with embeddings.
 
@@ -425,8 +425,8 @@ class ReflexionChecker:
 
     def _resolve_entity_type(
         self,
-        entity_data: Dict[str, Any],
-        entity_type_id_to_name: Optional[Dict[int, str]] = None,
+        entity_data: dict[str, Any],
+        entity_type_id_to_name: dict[int, str] | None = None,
     ) -> str:
         """
         Resolve entity type from entity data.

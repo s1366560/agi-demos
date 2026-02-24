@@ -5,7 +5,8 @@ and managing distributed traces.
 """
 
 import functools
-from typing import Any, Callable, Mapping, Optional
+from collections.abc import Callable, Mapping
+from typing import Any
 
 from opentelemetry.trace import (
     NonRecordingSpan,
@@ -36,7 +37,7 @@ def get_current_span() -> Span:
         return NonRecordingSpan(SpanContext())
 
 
-def get_trace_id() -> Optional[str]:
+def get_trace_id() -> str | None:
     """Get the trace ID from the current span context.
 
     Returns:
@@ -67,7 +68,7 @@ def add_span_attributes(attributes: Mapping[str, Any]) -> None:
             span.set_attribute(key, value)
 
 
-def add_span_event(name: str, attributes: Optional[Mapping[str, Any]] = None) -> None:
+def add_span_event(name: str, attributes: Mapping[str, Any] | None = None) -> None:
     """Add an event to the current span.
 
     Args:
@@ -91,7 +92,7 @@ def set_span_error(exception: Exception) -> None:
         span.set_status(Status(StatusCode.ERROR, str(exception)))
 
 
-def with_tracer(component_name: str, attributes: Optional[dict[str, Any]] = None):
+def with_tracer(component_name: str, attributes: dict[str, Any] | None = None):
     """Decorator to add tracing to synchronous functions.
 
     Args:
@@ -104,7 +105,7 @@ def with_tracer(component_name: str, attributes: Optional[dict[str, Any]] = None
 
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             tracer = get_tracer(component_name)
             if tracer is None:
                 return func(*args, **kwargs)
@@ -134,7 +135,7 @@ def with_tracer(component_name: str, attributes: Optional[dict[str, Any]] = None
     return decorator
 
 
-def async_with_tracer(component_name: str, attributes: Optional[dict[str, Any]] = None):
+def async_with_tracer(component_name: str, attributes: dict[str, Any] | None = None):
     """Decorator to add tracing to asynchronous functions.
 
     Args:
@@ -147,7 +148,7 @@ def async_with_tracer(component_name: str, attributes: Optional[dict[str, Any]] 
 
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             tracer = get_tracer(component_name)
             if tracer is None:
                 return await func(*args, **kwargs)

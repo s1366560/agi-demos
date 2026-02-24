@@ -14,7 +14,7 @@ Event Format:
     }
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .agent_events import (
     AgentDomainEvent,
@@ -32,10 +32,10 @@ class EventSerializer:
     @staticmethod
     def to_dict(
         event: AgentDomainEvent,
-        message_id: Optional[str] = None,
-        event_time_us: Optional[int] = None,
-        event_counter: Optional[int] = None,
-    ) -> Dict[str, Any]:
+        message_id: str | None = None,
+        event_time_us: int | None = None,
+        event_counter: int | None = None,
+    ) -> dict[str, Any]:
         """Convert domain event to dictionary for WebSocket/Redis transport.
 
         Args:
@@ -62,7 +62,7 @@ class EventSerializer:
         event_data = event.model_dump(exclude={"event_type", "timestamp"})
 
         # Build the transport format
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "type": event.event_type.value,
             "data": event_data,
             "timestamp": event.timestamp,
@@ -80,8 +80,8 @@ class EventSerializer:
 
     @staticmethod
     def to_dict_batch(
-        events: List[tuple[AgentDomainEvent, Optional[str], int, int]],
-    ) -> List[Dict[str, Any]]:
+        events: list[tuple[AgentDomainEvent, str | None, int, int]],
+    ) -> list[dict[str, Any]]:
         """Convert multiple domain events to transport format.
 
         Args:
@@ -113,7 +113,7 @@ class EventSerializer:
         return event_type.value
 
     @staticmethod
-    def get_all_event_types() -> List[str]:
+    def get_all_event_types() -> list[str]:
         """Get all event type values for frontend type generation.
 
         Returns:
@@ -122,7 +122,7 @@ class EventSerializer:
         return [et.value for et in AgentEventType]
 
     @staticmethod
-    def get_public_event_types() -> List[str]:
+    def get_public_event_types() -> list[str]:
         """Get event types that should be exposed to the frontend.
 
         Some events are internal-only and should not be sent to clients.
@@ -143,10 +143,10 @@ class EventSerializer:
 # Convenience function for quick serialization
 def serialize_event(
     event: AgentDomainEvent,
-    message_id: Optional[str] = None,
-    event_time_us: Optional[int] = None,
-    event_counter: Optional[int] = None,
-) -> Dict[str, Any]:
+    message_id: str | None = None,
+    event_time_us: int | None = None,
+    event_counter: int | None = None,
+) -> dict[str, Any]:
     """Quick serialization function for domain events.
 
     This is a convenience wrapper around EventSerializer.to_dict().

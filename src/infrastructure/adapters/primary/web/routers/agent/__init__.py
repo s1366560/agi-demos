@@ -55,12 +55,10 @@ router.include_router(templates.router)
 router.include_router(plans.router)
 
 __all__ = [
-    "router",
-    "get_container_with_db",
-    # Schemas
-    "ChatRequest",
     "CapabilityDomainSummary",
     "CapabilitySummaryResponse",
+    # Schemas
+    "ChatRequest",
     "ClarificationResponseRequest",
     "ConversationResponse",
     "CreateConversationRequest",
@@ -75,10 +73,10 @@ __all__ = [
     "PatternStepResponse",
     "PatternsListResponse",
     "PendingHITLResponse",
+    "PluginRuntimeCapabilitySummary",
     "RecoveryInfo",
     "ResetPatternsResponse",
     "TenantAgentConfigResponse",
-    "PluginRuntimeCapabilitySummary",
     "ToolCompositionResponse",
     "ToolCompositionsListResponse",
     "ToolInfo",
@@ -87,4 +85,6 @@ __all__ = [
     "UpdateTenantAgentConfigRequest",
     "WorkflowPatternResponse",
     "WorkflowStatusResponse",
+    "get_container_with_db",
+    "router",
 ]

@@ -14,10 +14,10 @@ Key features:
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -55,10 +55,10 @@ class PromptContext:
     mode: PromptMode = PromptMode.BUILD
 
     # Tools and capabilities
-    tool_definitions: List[Dict[str, Any]] = field(default_factory=list)
-    skills: Optional[List[Dict[str, Any]]] = None
-    subagents: Optional[List[Dict[str, Any]]] = None
-    matched_skill: Optional[Dict[str, Any]] = None
+    tool_definitions: list[dict[str, Any]] = field(default_factory=list)
+    skills: list[dict[str, Any]] | None = None
+    subagents: list[dict[str, Any]] | None = None
+    matched_skill: dict[str, Any] | None = None
 
     # Project context
     project_id: str = ""
@@ -70,7 +70,7 @@ class PromptContext:
     user_query: str = ""
 
     # Memory context (auto-recalled relevant memories)
-    memory_context: Optional[str] = None
+    memory_context: str | None = None
 
     # Execution state
     current_step: int = 1
@@ -105,9 +105,9 @@ class SystemPromptManager:
 
     def __init__(
         self,
-        prompts_dir: Optional[Path] = None,
-        project_root: Optional[Path] = None,
-    ):
+        prompts_dir: Path | None = None,
+        project_root: Path | None = None,
+    ) -> None:
         """
         Initialize the SystemPromptManager.
 
@@ -120,12 +120,12 @@ class SystemPromptManager:
         self.prompts_dir = prompts_dir or Path(__file__).parent
         # Always use sandbox workspace path, never expose host filesystem
         self.project_root = project_root or self.DEFAULT_SANDBOX_WORKSPACE
-        self._cache: Dict[str, str] = {}
+        self._cache: dict[str, str] = {}
 
     async def build_system_prompt(
         self,
         context: PromptContext,
-        subagent: Optional[Any] = None,  # noqa: ANN401
+        subagent: Any | None = None,
     ) -> str:
         """
         Build the complete system prompt for the agent.
@@ -156,7 +156,7 @@ class SystemPromptManager:
             logger.debug(f"Using SubAgent system prompt: {subagent.name}")
             return subagent.system_prompt
 
-        sections: List[str] = []
+        sections: list[str] = []
 
         # Check if we have a forced skill (highest priority injection)
         is_forced_skill = context.matched_skill and context.matched_skill.get(
@@ -275,7 +275,7 @@ Working Directory: {workspace_path}
 Project ID: {context.project_id}
 Is Git Repository: {"Yes" if is_git_repo else "No"}
 Platform: Linux (Sandbox Container)
-Current Time: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC (%A)")}
+Current Time: {datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC (%A)")}
 Conversation History: {context.conversation_history_length} messages
 Current Step: {context.current_step}/{context.max_steps}
 </env>"""
@@ -405,7 +405,7 @@ Each SubAgent runs independently with its own context and tools.
 **When to delegate**: The task clearly matches a SubAgent's specialty and can be described as a self-contained unit.
 **When NOT to delegate**: Simple questions, tasks requiring your current context, or tasks where you need intermediate results.{parallel_guidance}"""
 
-    def _build_skill_recommendation(self, skill: Dict[str, Any]) -> str:
+    def _build_skill_recommendation(self, skill: dict[str, Any]) -> str:
         """
         Build the skill injection section.
 
@@ -458,7 +458,7 @@ Use these tools in order: {tools}"""
 
         return content
 
-    async def _load_mode_reminder(self, mode: PromptMode) -> Optional[str]:
+    async def _load_mode_reminder(self, mode: PromptMode) -> str | None:
         """
         Load the mode-specific reminder.
 
@@ -490,7 +490,7 @@ Use these tools in order: {tools}"""
         Returns:
             Custom rules content with source attribution.
         """
-        rules: List[str] = []
+        rules: list[str] = []
 
         # Only search sandbox workspace - never expose host filesystem
         sandbox_workspace = self.DEFAULT_SANDBOX_WORKSPACE

@@ -1,6 +1,6 @@
 """Unit tests for LLM providers router."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
@@ -17,7 +17,7 @@ from src.domain.llm_providers.models import (
 
 
 def create_provider_response(
-    provider_id: str = None,
+    provider_id: str | None = None,
     name: str = "test-openai",
     provider_type: ProviderType = ProviderType.OPENAI,
     is_active: bool = True,
@@ -39,10 +39,10 @@ def create_provider_response(
         is_active=is_active,
         is_default=is_default,
         api_key_masked="sk-...xyz",
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
         health_status=ProviderStatus.HEALTHY,
-        health_last_check=datetime.now(timezone.utc),
+        health_last_check=datetime.now(UTC),
         response_time_ms=150,
         error_message=None,
     )
@@ -463,7 +463,7 @@ class TestLLMProvidersRouterHealthCheck:
             provider_id=provider_id,
             status=ProviderStatus.HEALTHY,
             response_time_ms=150,
-            last_check=datetime.now(timezone.utc),
+            last_check=datetime.now(UTC),
             error_message=None,
         )
         mock_provider_service.check_provider_health.return_value = mock_health

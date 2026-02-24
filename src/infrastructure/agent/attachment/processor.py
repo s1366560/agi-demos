@@ -15,7 +15,7 @@ Reference: Extracted from react_agent.py::stream() attachment handling (lines 78
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +35,9 @@ class ProcessedAttachment:
     type: str
     content: Any
     filename: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_llm_content(self) -> Dict[str, Any]:
+    def to_llm_content(self) -> dict[str, Any]:
         """Convert to LLM-compatible content format."""
         if self.type == "image_url":
             return {
@@ -70,7 +70,7 @@ class AttachmentContext:
     """
 
     context_prompt: str = ""
-    processed_attachments: List[ProcessedAttachment] = field(default_factory=list)
+    processed_attachments: list[ProcessedAttachment] = field(default_factory=list)
     file_count: int = 0
     total_size_bytes: int = 0
 
@@ -119,7 +119,7 @@ class AttachmentProcessor:
         "════════════════════════════════════════════════════════════════\n\n"
     )
 
-    def __init__(self, debug_logging: bool = False):
+    def __init__(self, debug_logging: bool = False) -> None:
         """
         Initialize the attachment processor.
 
@@ -130,8 +130,8 @@ class AttachmentProcessor:
 
     def build_context(
         self,
-        attachment_metadata: Optional[List[Dict[str, Any]]] = None,
-        attachment_content: Optional[List[Dict[str, Any]]] = None,
+        attachment_metadata: list[dict[str, Any]] | None = None,
+        attachment_content: list[dict[str, Any]] | None = None,
     ) -> AttachmentContext:
         """
         Build attachment context from metadata and content.
@@ -168,7 +168,7 @@ class AttachmentProcessor:
         return context
 
     def _build_context_prompt(
-        self, attachment_metadata: List[Dict[str, Any]]
+        self, attachment_metadata: list[dict[str, Any]]
     ) -> str:
         """
         Build human-readable context prompt from metadata.
@@ -217,8 +217,8 @@ class AttachmentProcessor:
             return f"{size_bytes / (1024 * 1024):.1f} MB"
 
     def _process_content(
-        self, attachment_content: List[Dict[str, Any]]
-    ) -> List[ProcessedAttachment]:
+        self, attachment_content: list[dict[str, Any]]
+    ) -> list[ProcessedAttachment]:
         """
         Process attachment content into LLM-compatible format.
 
@@ -281,7 +281,7 @@ class AttachmentProcessor:
         self,
         user_message: str,
         context: AttachmentContext,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Build the final user message with attachment context.
 
@@ -297,7 +297,7 @@ class AttachmentProcessor:
 
         if context.processed_attachments:
             # Build multimodal content array
-            user_content: List[Dict[str, Any]] = [
+            user_content: list[dict[str, Any]] = [
                 {"type": "text", "text": enhanced_message}
             ]
 
@@ -322,9 +322,9 @@ class AttachmentProcessor:
     def enhance_message_with_context(
         self,
         user_message: str,
-        attachment_metadata: Optional[List[Dict[str, Any]]] = None,
-        attachment_content: Optional[List[Dict[str, Any]]] = None,
-    ) -> Dict[str, Any]:
+        attachment_metadata: list[dict[str, Any]] | None = None,
+        attachment_content: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """
         Convenience method: build context and user message in one call.
 
@@ -341,7 +341,7 @@ class AttachmentProcessor:
 
 
 # Module-level singleton for convenience
-_default_processor: Optional[AttachmentProcessor] = None
+_default_processor: AttachmentProcessor | None = None
 
 
 def get_attachment_processor() -> AttachmentProcessor:

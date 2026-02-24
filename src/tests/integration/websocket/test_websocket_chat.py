@@ -74,7 +74,7 @@ async def test_websocket_chat():
                     elif event_type == "ack":
                         print(f"    Ack: {event}")
                         
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 print("\n✓ Timeout - no more events received")
             
             print(f"\n=== Total events received: {event_count} ===")

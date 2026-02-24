@@ -2,7 +2,7 @@
 Tests for V2 SqlMemoryRepository using BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,8 +42,8 @@ class TestSqlMemoryRepositoryCreate:
             status="enabled",
             processing_status="pending",
             metadata={},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         await v2_memory_repo.save(memory)
@@ -74,8 +74,8 @@ class TestSqlMemoryRepositoryCreate:
             status="enabled",
             processing_status="pending",
             metadata={},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         await v2_memory_repo.save(memory)
@@ -107,8 +107,8 @@ class TestSqlMemoryRepositoryUpdate:
             status="enabled",
             processing_status="pending",
             metadata={},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_memory_repo.save(memory)
 
@@ -130,7 +130,7 @@ class TestSqlMemoryRepositoryUpdate:
             processing_status="completed",
             metadata={"updated": True},
             created_at=memory.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
         await v2_memory_repo.save(updated)
 
@@ -162,8 +162,8 @@ class TestSqlMemoryRepositoryFind:
             status="enabled",
             processing_status="pending",
             metadata={},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_memory_repo.save(memory)
 
@@ -197,8 +197,8 @@ class TestSqlMemoryRepositoryFind:
                 status="enabled",
                 processing_status="pending",
                 metadata={},
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_memory_repo.save(memory)
 
@@ -225,8 +225,8 @@ class TestSqlMemoryRepositoryFind:
                 status="enabled",
                 processing_status="pending",
                 metadata={},
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_memory_repo.save(memory)
 
@@ -262,8 +262,8 @@ class TestSqlMemoryRepositoryDelete:
             status="enabled",
             processing_status="pending",
             metadata={},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_memory_repo.save(memory)
 
@@ -303,8 +303,8 @@ class TestSqlMemoryRepositoryToDb:
             status="enabled",
             processing_status="pending",
             metadata={},
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         db_model = v2_memory_repo._to_db(memory)

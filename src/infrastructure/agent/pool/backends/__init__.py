@@ -15,7 +15,7 @@ from .shared_pool_backend import SharedPoolBackend
 __all__ = [
     "Backend",
     "BackendType",
-    "SharedPoolBackend",
-    "OnDemandBackend",
     "ContainerBackend",
+    "OnDemandBackend",
+    "SharedPoolBackend",
 ]

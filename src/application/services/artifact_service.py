@@ -10,8 +10,9 @@ This service handles:
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from src.domain.events.agent_events import (
     AgentArtifactCreatedEvent,
@@ -59,10 +60,10 @@ class ArtifactService:
     def __init__(
         self,
         storage_service: StorageServicePort,
-        event_publisher: Optional[Callable] = None,
+        event_publisher: Callable | None = None,
         bucket_prefix: str = "artifacts",
         url_expiration_seconds: int = 7 * 24 * 3600,  # 7 days default
-    ):
+    ) -> None:
         """
         Initialize ArtifactService.
 
@@ -78,20 +79,20 @@ class ArtifactService:
         self._url_expiration = url_expiration_seconds
 
         # In-memory artifact tracking (would be DB in production)
-        self._artifacts: Dict[str, Artifact] = {}
+        self._artifacts: dict[str, Artifact] = {}
 
     def _generate_object_key(
         self,
         tenant_id: str,
         project_id: str,
         filename: str,
-        tool_execution_id: Optional[str] = None,
+        tool_execution_id: str | None = None,
     ) -> str:
         """Generate a unique storage object key for an artifact.
 
         Format: artifacts/{tenant_id}/{project_id}/{date}/{execution_id}/{uuid}_{filename}
         """
-        date_part = datetime.now(timezone.utc).strftime("%Y/%m/%d")
+        date_part = datetime.now(UTC).strftime("%Y/%m/%d")
         unique_id = uuid.uuid4().hex[:8]
 
         if tool_execution_id:
@@ -107,12 +108,12 @@ class ArtifactService:
         filename: str,
         project_id: str,
         tenant_id: str,
-        sandbox_id: Optional[str] = None,
-        tool_execution_id: Optional[str] = None,
-        conversation_id: Optional[str] = None,
-        source_tool: Optional[str] = None,
-        source_path: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        sandbox_id: str | None = None,
+        tool_execution_id: str | None = None,
+        conversation_id: str | None = None,
+        source_tool: str | None = None,
+        source_path: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> Artifact:
         """
         Create and upload a new artifact.
@@ -238,14 +239,14 @@ class ArtifactService:
 
     async def create_artifacts_batch(
         self,
-        files: List[Tuple[bytes, str]],  # List of (content, filename)
+        files: list[tuple[bytes, str]],  # List of (content, filename)
         project_id: str,
         tenant_id: str,
-        sandbox_id: Optional[str] = None,
-        tool_execution_id: Optional[str] = None,
-        conversation_id: Optional[str] = None,
-        source_tool: Optional[str] = None,
-    ) -> List[Artifact]:
+        sandbox_id: str | None = None,
+        tool_execution_id: str | None = None,
+        conversation_id: str | None = None,
+        source_tool: str | None = None,
+    ) -> list[Artifact]:
         """
         Create multiple artifacts in batch.
 
@@ -289,11 +290,11 @@ class ArtifactService:
 
         return artifacts
 
-    async def get_artifact(self, artifact_id: str) -> Optional[Artifact]:
+    async def get_artifact(self, artifact_id: str) -> Artifact | None:
         """Get an artifact by ID."""
         return self._artifacts.get(artifact_id)
 
-    async def get_artifacts_by_tool_execution(self, tool_execution_id: str) -> List[Artifact]:
+    async def get_artifacts_by_tool_execution(self, tool_execution_id: str) -> list[Artifact]:
         """Get all artifacts for a specific tool execution."""
         return [a for a in self._artifacts.values() if a.tool_execution_id == tool_execution_id]
 
@@ -301,8 +302,8 @@ class ArtifactService:
         self,
         project_id: str,
         limit: int = 100,
-        category: Optional[ArtifactCategory] = None,
-    ) -> List[Artifact]:
+        category: ArtifactCategory | None = None,
+    ) -> list[Artifact]:
         """Get artifacts for a project, optionally filtered by category."""
         artifacts = [
             a
@@ -318,7 +319,7 @@ class ArtifactService:
 
         return artifacts[:limit]
 
-    async def refresh_artifact_url(self, artifact_id: str) -> Optional[str]:
+    async def refresh_artifact_url(self, artifact_id: str) -> str | None:
         """Refresh the presigned URL for an artifact."""
         artifact = self._artifacts.get(artifact_id)
         if not artifact or artifact.status != ArtifactStatus.READY:
@@ -357,7 +358,7 @@ class ArtifactService:
 
     async def update_artifact_content(
         self, artifact_id: str, content: str
-    ) -> Optional[Artifact]:
+    ) -> Artifact | None:
         """Update the text content of an artifact (canvas save-back).
 
         Overwrites the file in storage and refreshes the presigned URL.
@@ -462,10 +463,10 @@ class ArtifactService:
 
     async def _publish_artifacts_batch(
         self,
-        artifacts: List[Artifact],
+        artifacts: list[Artifact],
         sandbox_id: str,
-        tool_execution_id: Optional[str],
-        source_tool: Optional[str],
+        tool_execution_id: str | None,
+        source_tool: str | None,
     ) -> None:
         """Publish artifacts_batch event."""
         if not self._event_publisher or not artifacts:
@@ -514,8 +515,8 @@ class SandboxArtifactDetector:
     def __init__(
         self,
         artifact_service: ArtifactService,
-        output_dirs: Optional[List[str]] = None,
-    ):
+        output_dirs: list[str] | None = None,
+    ) -> None:
         """
         Initialize detector.
 
@@ -525,7 +526,7 @@ class SandboxArtifactDetector:
         """
         self._artifact_service = artifact_service
         self._output_dirs = output_dirs or SANDBOX_OUTPUT_DIRS
-        self._tracked_files: Dict[str, set] = {}  # sandbox_id -> set of known files
+        self._tracked_files: dict[str, set] = {}  # sandbox_id -> set of known files
 
     def _should_ignore(self, path: str) -> bool:
         """Check if a file should be ignored."""
@@ -537,14 +538,14 @@ class SandboxArtifactDetector:
     async def detect_new_artifacts(
         self,
         sandbox_id: str,
-        file_list: List[str],
+        file_list: list[str],
         project_id: str,
         tenant_id: str,
-        tool_execution_id: Optional[str] = None,
-        conversation_id: Optional[str] = None,
-        source_tool: Optional[str] = None,
-        get_file_content: Optional[Callable[[str], bytes]] = None,
-    ) -> List[str]:
+        tool_execution_id: str | None = None,
+        conversation_id: str | None = None,
+        source_tool: str | None = None,
+        get_file_content: Callable[[str], bytes] | None = None,
+    ) -> list[str]:
         """
         Detect new files and identify which should become artifacts.
 

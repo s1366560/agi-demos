@@ -14,12 +14,14 @@ Scaling policies:
 """
 
 import asyncio
+import contextlib
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +87,7 @@ class ScalingMetrics:
     active_requests: int = 0
     healthy_instances: int = 0
     total_instances: int = 0
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -99,9 +101,9 @@ class ScalingEvent:
     previous_count: int
     target_count: int
     metrics: ScalingMetrics
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     success: bool = False
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 @dataclass
@@ -124,33 +126,33 @@ class AutoScalingService:
 
     def __init__(
         self,
-        pool_manager: Optional[Any] = None,  # noqa: ANN401
-        default_policy: Optional[ScalingPolicy] = None,
-    ):
+        pool_manager: Any | None = None,
+        default_policy: ScalingPolicy | None = None,
+    ) -> None:
         self._pool_manager = pool_manager
         self._default_policy = default_policy or ScalingPolicy()
 
         # Per-instance policies
-        self._policies: Dict[str, ScalingPolicy] = {}
+        self._policies: dict[str, ScalingPolicy] = {}
 
         # Metrics history for evaluation
-        self._metrics_history: Dict[str, List[ScalingMetrics]] = {}
+        self._metrics_history: dict[str, list[ScalingMetrics]] = {}
 
         # Scaling state
-        self._last_scale_up: Dict[str, datetime] = {}
-        self._last_scale_down: Dict[str, datetime] = {}
-        self._current_counts: Dict[str, int] = {}
+        self._last_scale_up: dict[str, datetime] = {}
+        self._last_scale_down: dict[str, datetime] = {}
+        self._current_counts: dict[str, int] = {}
 
         # Events
-        self._scaling_events: List[ScalingEvent] = []
+        self._scaling_events: list[ScalingEvent] = []
         self._max_events = 1000
 
         # Callbacks
-        self._on_scale_callbacks: List[Callable] = []
+        self._on_scale_callbacks: list[Callable] = []
 
         # Control
         self._is_running = False
-        self._monitor_task: Optional[asyncio.Task] = None
+        self._monitor_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
 
     async def start(self) -> None:
@@ -164,10 +166,8 @@ class AutoScalingService:
         self._is_running = False
         if self._monitor_task:
             self._monitor_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._monitor_task
-            except asyncio.CancelledError:
-                pass
         logger.info("Auto-Scaling Service stopped")
 
     def set_policy(
@@ -187,7 +187,7 @@ class AutoScalingService:
         self,
         instance_key: str,
         metrics: ScalingMetrics,
-    ) -> Optional[ScalingDecision]:
+    ) -> ScalingDecision | None:
         """
         Report metrics and get scaling decision.
 
@@ -221,7 +221,7 @@ class AutoScalingService:
         instance_key: str,
         direction: ScalingDirection,
         reason: ScalingReason = ScalingReason.MANUAL,
-        target_count: Optional[int] = None,
+        target_count: int | None = None,
     ) -> ScalingEvent:
         """
         Manually trigger scaling.
@@ -281,16 +281,16 @@ class AutoScalingService:
 
     async def get_scaling_history(
         self,
-        instance_key: Optional[str] = None,
+        instance_key: str | None = None,
         limit: int = 100,
-    ) -> List[ScalingEvent]:
+    ) -> list[ScalingEvent]:
         """Get scaling event history."""
         events = self._scaling_events
         if instance_key:
             events = [e for e in events if e.instance_key == instance_key]
         return list(reversed(events[-limit:]))
 
-    async def get_scaling_stats(self) -> Dict[str, Any]:
+    async def get_scaling_stats(self) -> dict[str, Any]:
         """Get scaling statistics."""
         scale_up_count = sum(
             1 for e in self._scaling_events if e.direction == ScalingDirection.UP
@@ -300,7 +300,7 @@ class AutoScalingService:
         )
         success_count = sum(1 for e in self._scaling_events if e.success)
 
-        by_reason: Dict[str, int] = {}
+        by_reason: dict[str, int] = {}
         for e in self._scaling_events:
             by_reason[e.reason.value] = by_reason.get(e.reason.value, 0) + 1
 
@@ -353,7 +353,7 @@ class AutoScalingService:
         self,
         instance_key: str,
         metrics: ScalingMetrics,
-    ) -> Optional[ScalingDecision]:
+    ) -> ScalingDecision | None:
         """Evaluate if scaling is needed."""
         policy = self.get_policy(instance_key)
         history = self._metrics_history.get(instance_key, [])
@@ -362,7 +362,7 @@ class AutoScalingService:
             return None  # Not enough data
 
         # Check cooldowns
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # Check scale up conditions
         scale_up_decision = self._check_scale_up(instance_key, policy, history, now)
@@ -380,9 +380,9 @@ class AutoScalingService:
         self,
         instance_key: str,
         policy: ScalingPolicy,
-        history: List[ScalingMetrics],
+        history: list[ScalingMetrics],
         now: datetime,
-    ) -> Optional[ScalingDecision]:
+    ) -> ScalingDecision | None:
         """Check if scale up is needed."""
         # Check cooldown
         last_up = self._last_scale_up.get(instance_key)
@@ -462,9 +462,9 @@ class AutoScalingService:
         self,
         instance_key: str,
         policy: ScalingPolicy,
-        history: List[ScalingMetrics],
+        history: list[ScalingMetrics],
         now: datetime,
-    ) -> Optional[ScalingDecision]:
+    ) -> ScalingDecision | None:
         """Check if scale down is needed."""
         # Check cooldown
         last_down = self._last_scale_down.get(instance_key)
@@ -524,9 +524,9 @@ class AutoScalingService:
 
         # Update state
         if event.direction == ScalingDirection.UP:
-            self._last_scale_up[instance_key] = datetime.now(timezone.utc)
+            self._last_scale_up[instance_key] = datetime.now(UTC)
         elif event.direction == ScalingDirection.DOWN:
-            self._last_scale_down[instance_key] = datetime.now(timezone.utc)
+            self._last_scale_down[instance_key] = datetime.now(UTC)
 
         self._current_counts[instance_key] = event.target_count
 

@@ -26,7 +26,7 @@ class DeleteAPIKeyCommand(BaseModel):
 class DeleteAPIKeyUseCase:
     """Use case for deleting API keys"""
 
-    def __init__(self, api_key_repository: APIKeyRepository):
+    def __init__(self, api_key_repository: APIKeyRepository) -> None:
         self._api_key_repo = api_key_repository
 
     async def execute(self, command: DeleteAPIKeyCommand) -> bool:

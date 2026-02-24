@@ -5,8 +5,8 @@ enabling event replay for reconnection and conversation switching scenarios.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import UTC, datetime
+from typing import Any
 
 from src.domain.events.agent_events import (
     AgentDomainEvent,
@@ -19,7 +19,7 @@ USER_MESSAGE = "user_message"
 ASSISTANT_MESSAGE = "assistant_message"
 
 # Re-export for backward compatibility
-__all__ = ["AgentExecutionEvent", "AgentEventType", "USER_MESSAGE", "ASSISTANT_MESSAGE"]
+__all__ = ["ASSISTANT_MESSAGE", "USER_MESSAGE", "AgentEventType", "AgentExecutionEvent"]
 
 
 @dataclass(kw_only=True)
@@ -44,12 +44,12 @@ class AgentExecutionEvent(Entity):
     conversation_id: str
     message_id: str
     event_type: AgentEventType | str
-    event_data: Dict[str, Any] = field(default_factory=dict)
+    event_data: dict[str, Any] = field(default_factory=dict)
     event_time_us: int = 0
     event_counter: int = 0
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API response."""
         return {
             "id": self.id,
@@ -62,7 +62,7 @@ class AgentExecutionEvent(Entity):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
-    def to_sse_format(self) -> Dict[str, Any]:
+    def to_sse_format(self) -> dict[str, Any]:
         """Convert to SSE event format for streaming."""
         return {
             "type": self.event_type,

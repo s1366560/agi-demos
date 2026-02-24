@@ -11,7 +11,7 @@ Architecture:
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.model.agent.hitl_types import (
     HITLRequest,
@@ -95,7 +95,7 @@ class HITLServicePort(ABC):
     async def wait_for_response(
         self,
         request_id: str,
-        timeout_seconds: Optional[float] = None,
+        timeout_seconds: float | None = None,
     ) -> HITLResponse:
         """
         Wait for user response to an HITL request.
@@ -127,7 +127,7 @@ class HITLServicePort(ABC):
     async def get_pending_requests(
         self,
         conversation_id: str,
-    ) -> List[HITLRequest]:
+    ) -> list[HITLRequest]:
         """
         Get all pending HITL requests for a conversation.
 
@@ -145,7 +145,7 @@ class HITLServicePort(ABC):
     async def get_request(
         self,
         request_id: str,
-    ) -> Optional[HITLRequest]:
+    ) -> HITLRequest | None:
         """
         Get an HITL request by ID.
 
@@ -161,7 +161,7 @@ class HITLServicePort(ABC):
     async def cancel_request(
         self,
         request_id: str,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> bool:
         """
         Cancel a pending HITL request.
@@ -182,7 +182,7 @@ class HITLServicePort(ABC):
     async def create_and_wait(
         self,
         request: HITLRequest,
-    ) -> Any:  # noqa: ANN401
+    ) -> Any:
         """
         Create request and wait for response in one call.
 
@@ -224,7 +224,7 @@ class HITLServiceError(Exception):
 class HITLRequestNotFoundError(HITLServiceError):
     """Raised when HITL request is not found."""
 
-    def __init__(self, request_id: str):
+    def __init__(self, request_id: str) -> None:
         self.request_id = request_id
         super().__init__(f"HITL request not found: {request_id}")
 
@@ -232,7 +232,7 @@ class HITLRequestNotFoundError(HITLServiceError):
 class HITLRequestExpiredError(HITLServiceError):
     """Raised when HITL request has expired."""
 
-    def __init__(self, request_id: str):
+    def __init__(self, request_id: str) -> None:
         self.request_id = request_id
         super().__init__(f"HITL request has expired: {request_id}")
 
@@ -240,7 +240,7 @@ class HITLRequestExpiredError(HITLServiceError):
 class HITLTimeoutError(HITLServiceError):
     """Raised when HITL request times out."""
 
-    def __init__(self, request_id: str, timeout_seconds: float):
+    def __init__(self, request_id: str, timeout_seconds: float) -> None:
         self.request_id = request_id
         self.timeout_seconds = timeout_seconds
         super().__init__(
@@ -251,7 +251,7 @@ class HITLTimeoutError(HITLServiceError):
 class HITLCancelledError(HITLServiceError):
     """Raised when HITL request is cancelled."""
 
-    def __init__(self, request_id: str, reason: Optional[str] = None):
+    def __init__(self, request_id: str, reason: str | None = None) -> None:
         self.request_id = request_id
         self.reason = reason
         msg = f"HITL request cancelled: {request_id}"
@@ -263,6 +263,6 @@ class HITLCancelledError(HITLServiceError):
 class HITLValidationError(HITLServiceError):
     """Raised when HITL request/response validation fails."""
 
-    def __init__(self, message: str, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
         self.details = details or {}
         super().__init__(message)

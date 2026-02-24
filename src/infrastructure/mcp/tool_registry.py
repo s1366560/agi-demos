@@ -8,7 +8,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +34,12 @@ class MCPToolRegistry:
     Value: SHA256 hash of tools list
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the tool registry."""
-        self._hashes: Dict[Tuple[str, str], str] = {}
+        self._hashes: dict[tuple[str, str], str] = {}
         self._stats = RegistryStats()
 
-    def compute_tools_hash(self, tools: List[Dict[str, Any]]) -> str:
+    def compute_tools_hash(self, tools: list[dict[str, Any]]) -> str:
         """Compute a SHA256 hash of the tools list.
 
         The hash is computed from a normalized JSON representation
@@ -95,7 +95,7 @@ class MCPToolRegistry:
         self,
         sandbox_id: str,
         server_name: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Get the stored hash for a server's tools.
 
         Args:
@@ -112,7 +112,7 @@ class MCPToolRegistry:
         self,
         sandbox_id: str,
         server_name: str,
-        current_tools: List[Dict[str, Any]],
+        current_tools: list[dict[str, Any]],
     ) -> bool:
         """Check if tools have been updated since last discovery.
 
@@ -203,7 +203,7 @@ class MCPToolRegistry:
 
         return len(keys_to_remove)
 
-    def get_stats(self) -> Dict[str, int]:
+    def get_stats(self) -> dict[str, int]:
         """Get registry statistics.
 
         Returns:
@@ -224,7 +224,7 @@ class MCPToolRegistry:
 
 
 # Global registry instance
-_registry: Optional[MCPToolRegistry] = None
+_registry: MCPToolRegistry | None = None
 
 
 def get_tool_registry() -> MCPToolRegistry:

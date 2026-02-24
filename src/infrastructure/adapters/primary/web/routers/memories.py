@@ -1,8 +1,7 @@
 """Memories API endpoints."""
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
@@ -65,14 +64,14 @@ router = APIRouter(prefix="/api/v1", tags=["memories"])
 class EntityCreate(BaseModel):
     name: str
     type: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class RelationshipCreate(BaseModel):
     source: str
     target: str
     type: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class MemoryCreate(BaseModel):
@@ -80,10 +79,10 @@ class MemoryCreate(BaseModel):
     title: str
     content: str
     content_type: str = "text"
-    tags: List[str] = []
-    entities: List[EntityCreate] = []
-    relationships: List[RelationshipCreate] = []
-    collaborators: List[str] = []
+    tags: list[str] = []
+    entities: list[EntityCreate] = []
+    relationships: list[RelationshipCreate] = []
+    collaborators: list[str] = []
     is_public: bool = False
     metadata: dict = {}
 
@@ -94,26 +93,26 @@ class MemoryResponse(BaseModel):
     title: str
     content: str
     content_type: str
-    tags: List[str]
-    entities: List[dict]
-    relationships: List[dict]
+    tags: list[str]
+    entities: list[dict]
+    relationships: list[dict]
     version: int
     author_id: str
-    collaborators: List[str]
+    collaborators: list[str]
     is_public: bool
     status: str
     processing_status: str
     meta: dict = Field(serialization_alias="metadata")
     created_at: datetime
-    updated_at: Optional[datetime]
-    task_id: Optional[str] = None  # Task ID for SSE streaming
+    updated_at: datetime | None
+    task_id: str | None = None  # Task ID for SSE streaming
 
     class Config:
         from_attributes = True
 
 
 class MemoryListResponse(BaseModel):
-    memories: List[MemoryResponse]
+    memories: list[MemoryResponse]
     total: int
     page: int
     page_size: int
@@ -122,12 +121,12 @@ class MemoryListResponse(BaseModel):
 class MemoryUpdate(BaseModel):
     """Schema for updating an existing memory."""
 
-    title: Optional[str] = None
-    content: Optional[str] = None
-    tags: Optional[List[str]] = None
-    entities: Optional[List[dict]] = None
-    relationships: Optional[List[dict]] = None
-    metadata: Optional[dict] = None
+    title: str | None = None
+    content: str | None = None
+    tags: list[str] | None = None
+    entities: list[dict] | None = None
+    relationships: list[dict] | None = None
+    metadata: dict | None = None
     version: int  # Required for optimistic locking
 
 
@@ -137,7 +136,7 @@ class MemoryShareCreate(BaseModel):
     target_type: str  # 'user' or 'project'
     target_id: str  # User ID or Project ID
     permission_level: str  # 'view' or 'edit'
-    expires_at: Optional[datetime] = None
+    expires_at: datetime | None = None
 
 
 class MemoryShareResponse(BaseModel):
@@ -145,12 +144,12 @@ class MemoryShareResponse(BaseModel):
 
     id: str
     memory_id: str
-    shared_with_user_id: Optional[str]
-    shared_with_project_id: Optional[str]
+    shared_with_user_id: str | None
+    shared_with_project_id: str | None
     permissions: dict
     shared_by: str
     created_at: datetime
-    expires_at: Optional[datetime]
+    expires_at: datetime | None
     access_count: int = 0
 
     class Config:
@@ -274,8 +273,8 @@ async def create_memory(
             version=1,
             status="ENABLED",
             processing_status="PENDING",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         db.add(memory)
@@ -336,18 +335,17 @@ async def create_memory(
             }
 
             # Create TaskLog record
-            async with async_session_factory() as task_session:
-                async with task_session.begin():
-                    task_log = TaskLog(
-                        id=task_id,
-                        group_id=project_id,
-                        task_type="add_episode",
-                        status="PENDING",
-                        payload=task_payload,
-                        entity_type="episode",
-                        created_at=datetime.now(timezone.utc),
-                    )
-                    task_session.add(task_log)
+            async with async_session_factory() as task_session, task_session.begin():
+                task_log = TaskLog(
+                    id=task_id,
+                    group_id=project_id,
+                    task_type="add_episode",
+                    status="PENDING",
+                    payload=task_payload,
+                    entity_type="episode",
+                    created_at=datetime.now(UTC),
+                )
+                task_session.add(task_log)
 
             task_payload["task_id"] = task_id
 
@@ -408,7 +406,7 @@ async def list_memories(
     project_id: str = Query(..., description="Project ID"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
-    search: Optional[str] = Query(None, description="Search query"),
+    search: str | None = Query(None, description="Search query"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -639,18 +637,17 @@ async def reprocess_memory(
         }
 
         # Create TaskLog record
-        async with async_session_factory() as task_session:
-            async with task_session.begin():
-                task_log = TaskLog(
-                    id=task_id,
-                    group_id=memory.project_id,
-                    task_type="add_episode",
-                    status="PENDING",
-                    payload=task_payload,
-                    entity_type="episode",
-                    created_at=datetime.now(timezone.utc),
-                )
-                task_session.add(task_log)
+        async with async_session_factory() as task_session, task_session.begin():
+            task_log = TaskLog(
+                id=task_id,
+                group_id=memory.project_id,
+                task_type="add_episode",
+                status="PENDING",
+                payload=task_payload,
+                entity_type="episode",
+                created_at=datetime.now(UTC),
+            )
+            task_session.add(task_log)
 
         task_payload["task_id"] = task_id
 
@@ -799,7 +796,7 @@ async def update_memory(
                             status="PENDING",
                             payload=task_payload,
                             entity_type="episode",
-                            created_at=datetime.now(timezone.utc),
+                            created_at=datetime.now(UTC),
                         )
                         task_session.add(task_log)
 
@@ -894,7 +891,7 @@ async def create_memory_share(
     elif "expires_in_days" in share_data:
         days = share_data["expires_in_days"]
         if isinstance(days, int) and days > 0:
-            expires_at = datetime.now(timezone.utc) + timedelta(days=days)
+            expires_at = datetime.now(UTC) + timedelta(days=days)
     share = MemoryShare(
         id=str(uuid4()),
         memory_id=memory_id,
@@ -906,7 +903,7 @@ async def create_memory_share(
         if permission_level
         else share_data.get("permissions", {"view": True, "edit": False}),
         shared_by=current_user.id,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         expires_at=expires_at,
         access_count=0,
     )

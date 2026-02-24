@@ -12,7 +12,7 @@ Architecture (Ray-based, Redis Streams only):
 
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -386,7 +386,7 @@ async def _publish_hitl_response_to_redis(
             "tenant_id": tenant_id,
             "project_id": project_id,
             "agent_mode": agent_mode,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         # Add to stream with maxlen to prevent unbounded growth

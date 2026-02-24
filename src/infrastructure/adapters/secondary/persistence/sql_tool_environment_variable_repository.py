@@ -3,7 +3,6 @@ V2 SQLAlchemy implementation of ToolEnvironmentVariableRepository using BaseRepo
 """
 
 import logging
-from typing import List, Optional
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -68,7 +67,7 @@ class SqlToolEnvironmentVariableRepository(
         )
         return env_var
 
-    async def get_by_id(self, env_var_id: str) -> Optional[ToolEnvironmentVariable]:
+    async def get_by_id(self, env_var_id: str) -> ToolEnvironmentVariable | None:
         """Get an environment variable by its ID."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             ToolEnvironmentVariableRecord,
@@ -88,8 +87,8 @@ class SqlToolEnvironmentVariableRepository(
         tenant_id: str,
         tool_name: str,
         variable_name: str,
-        project_id: Optional[str] = None,
-    ) -> Optional[ToolEnvironmentVariable]:
+        project_id: str | None = None,
+    ) -> ToolEnvironmentVariable | None:
         """
         Get an environment variable by tenant, tool, and name.
 
@@ -131,8 +130,8 @@ class SqlToolEnvironmentVariableRepository(
         self,
         tenant_id: str,
         tool_name: str,
-        project_id: Optional[str] = None,
-    ) -> List[ToolEnvironmentVariable]:
+        project_id: str | None = None,
+    ) -> list[ToolEnvironmentVariable]:
         """
         Get all environment variables for a tool.
 
@@ -168,8 +167,8 @@ class SqlToolEnvironmentVariableRepository(
     async def list_by_tenant(
         self,
         tenant_id: str,
-        scope: Optional[EnvVarScope] = None,
-    ) -> List[ToolEnvironmentVariable]:
+        scope: EnvVarScope | None = None,
+    ) -> list[ToolEnvironmentVariable]:
         """List all environment variables for a tenant."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             ToolEnvironmentVariableRecord,
@@ -194,7 +193,7 @@ class SqlToolEnvironmentVariableRepository(
         self,
         tenant_id: str,
         project_id: str,
-    ) -> List[ToolEnvironmentVariable]:
+    ) -> list[ToolEnvironmentVariable]:
         """List all environment variables for a project."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             ToolEnvironmentVariableRecord,
@@ -267,7 +266,7 @@ class SqlToolEnvironmentVariableRepository(
         self,
         tenant_id: str,
         tool_name: str,
-        project_id: Optional[str] = None,
+        project_id: str | None = None,
     ) -> int:
         """Delete all environment variables for a tool."""
         from src.infrastructure.adapters.secondary.persistence.models import (
@@ -315,8 +314,8 @@ class SqlToolEnvironmentVariableRepository(
 
     async def batch_upsert(
         self,
-        env_vars: List[ToolEnvironmentVariable],
-    ) -> List[ToolEnvironmentVariable]:
+        env_vars: list[ToolEnvironmentVariable],
+    ) -> list[ToolEnvironmentVariable]:
         """Batch create or update environment variables."""
         results = []
         for env_var in env_vars:
@@ -324,7 +323,7 @@ class SqlToolEnvironmentVariableRepository(
             results.append(result)
         return results
 
-    def _to_domain(self, db_record) -> Optional[ToolEnvironmentVariable]:
+    def _to_domain(self, db_record) -> ToolEnvironmentVariable | None:
         """Convert database model to domain entity."""
         if db_record is None:
             return None

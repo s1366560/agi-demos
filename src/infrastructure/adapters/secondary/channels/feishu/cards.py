@@ -1,7 +1,7 @@
 """Feishu card message builder and utilities."""
 
 import json
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 
 class CardBuilder:
@@ -10,9 +10,9 @@ class CardBuilder:
     @staticmethod
     def create_markdown_card(
         content: str,
-        title: Optional[str] = None,
+        title: str | None = None,
         wide_screen: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a simple markdown card.
         
         Args:
@@ -51,9 +51,9 @@ class CardBuilder:
     @staticmethod
     def create_info_card(
         title: str,
-        content: List[Dict[str, Any]],
-        actions: Optional[List[Dict[str, Any]]] = None
-    ) -> Dict[str, Any]:
+        content: list[dict[str, Any]],
+        actions: list[dict[str, Any]] | None = None
+    ) -> dict[str, Any]:
         """Create an info card with title and content elements.
         
         Args:
@@ -91,10 +91,10 @@ class CardBuilder:
     @staticmethod
     def create_table_card(
         title: str,
-        headers: List[str],
-        rows: List[List[str]],
-        column_widths: Optional[List[str]] = None
-    ) -> Dict[str, Any]:
+        headers: list[str],
+        rows: list[list[str]],
+        column_widths: list[str] | None = None
+    ) -> dict[str, Any]:
         """Create a card with a table.
         
         Args:
@@ -126,7 +126,7 @@ class CardBuilder:
         title: str,
         note_text: str,
         note_type: str = "default"  # default, info, warning, danger
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a note/callout card.
         
         Args:
@@ -152,10 +152,10 @@ class CardBuilder:
     @staticmethod
     def create_button(
         text: str,
-        url: Optional[str] = None,
-        value: Optional[Dict[str, Any]] = None,
+        url: str | None = None,
+        value: dict[str, Any] | None = None,
         button_type: str = "default"  # default, primary, danger
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a button element.
         
         Args:
@@ -185,7 +185,7 @@ class CardBuilder:
         return button
     
     @staticmethod
-    def create_divider() -> Dict[str, Any]:
+    def create_divider() -> dict[str, Any]:
         """Create a divider element."""
         return {"tag": "hr"}
     
@@ -194,7 +194,7 @@ class CardBuilder:
         text: str,
         text_type: str = "plain_text",
         bold: bool = False
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create a text element.
         
         Args:
@@ -221,10 +221,10 @@ class CardBuilder:
 class PostBuilder:
     """Builder for Feishu rich text posts."""
     
-    def __init__(self, title: str = ""):
+    def __init__(self, title: str = "") -> None:
         self.title = title
-        self.content: List[List[Dict[str, Any]]] = []
-        self.current_paragraph: List[Dict[str, Any]] = []
+        self.content: list[list[dict[str, Any]]] = []
+        self.current_paragraph: list[dict[str, Any]] = []
     
     def add_text(self, text: str) -> "PostBuilder":
         """Add plain text."""
@@ -267,7 +267,7 @@ class PostBuilder:
             self.current_paragraph = []
         return self
     
-    def build(self) -> Dict[str, Any]:
+    def build(self) -> dict[str, Any]:
         """Build the post content."""
         if self.current_paragraph:
             self.content.append(self.current_paragraph)
@@ -287,7 +287,7 @@ class PostBuilder:
 
 
 def build_mentioned_message(
-    mentions: List[Dict[str, str]],
+    mentions: list[dict[str, str]],
     message_text: str
 ) -> str:
     """Build message text with @mentions.
@@ -311,7 +311,7 @@ def build_mentioned_message(
     return " ".join(mention_texts) + " " + message_text
 
 
-def extract_post_text(content: Union[str, Dict[str, Any]]) -> str:
+def extract_post_text(content: str | dict[str, Any]) -> str:
     """Extract plain text from a post message.
     
     Args:

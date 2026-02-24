@@ -88,7 +88,7 @@ def mark_ray_unavailable() -> None:
     logger.warning("[Ray] Marked as unavailable due to runtime connection failure")
 
 
-async def await_ray(ref: Any) -> Any:  # noqa: ANN401
+async def await_ray(ref: Any) -> Any:
     """Await a Ray ObjectRef without blocking the event loop."""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, ray.get, ref)

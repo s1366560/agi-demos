@@ -16,7 +16,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +33,9 @@ class MCPToolSchema:
     """
 
     name: str
-    description: Optional[str] = None
-    inputSchema: Dict[str, Any] = field(default_factory=dict)
-    meta: Optional[Dict[str, Any]] = None
+    description: str | None = None
+    inputSchema: dict[str, Any] = field(default_factory=dict)
+    meta: dict[str, Any] | None = None
 
 
 @dataclass
@@ -46,10 +46,10 @@ class MCPToolResult:
     Kept for Temporal activity serialization compatibility.
     """
 
-    content: List[Dict[str, Any]] = field(default_factory=list)
+    content: list[dict[str, Any]] = field(default_factory=list)
     isError: bool = False
-    metadata: Optional[Dict[str, Any]] = None
-    artifact: Optional[Dict[str, Any]] = None  # For export_artifact tool results
+    metadata: dict[str, Any] | None = None
+    artifact: dict[str, Any] | None = None  # For export_artifact tool results
 
 
 class MCPSubprocessClient:
@@ -74,10 +74,10 @@ class MCPSubprocessClient:
     def __init__(
         self,
         command: str,
-        args: Optional[List[str]] = None,
-        env: Optional[Dict[str, str]] = None,
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
         timeout: float = DEFAULT_TIMEOUT,
-    ):
+    ) -> None:
         """
         Initialize the subprocess client.
 
@@ -91,18 +91,18 @@ class MCPSubprocessClient:
         self.args = args or []
         self.env = env
         self.timeout = timeout
-        self._proc: Optional[asyncio.subprocess.Process] = None
+        self._proc: asyncio.subprocess.Process | None = None
         self._request_id = 0
         self._lock = asyncio.Lock()
-        self.server_info: Optional[Dict[str, Any]] = None
-        self._tools: List[MCPToolSchema] = []
+        self.server_info: dict[str, Any] | None = None
+        self._tools: list[MCPToolSchema] = []
 
     @property
     def is_connected(self) -> bool:
         """Check if the client is connected."""
         return self._proc is not None and self._proc.returncode is None
 
-    async def connect(self, timeout: Optional[float] = None) -> bool:
+    async def connect(self, timeout: float | None = None) -> bool:
         """
         Start the subprocess and initialize the connection.
 
@@ -175,7 +175,7 @@ class MCPSubprocessClient:
             await self.disconnect()
             return False
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             stderr_text = await self._read_stderr()
             logger.error(
                 f"MCP connection timeout after {timeout}s for '{self.command} {' '.join(self.args)}'"
@@ -203,7 +203,7 @@ class MCPSubprocessClient:
             data = await asyncio.wait_for(self._proc.stderr.read(4096), timeout=2)
             if data:
                 return data.decode("utf-8", errors="replace")[:2000]
-        except (asyncio.TimeoutError, Exception):
+        except (TimeoutError, Exception):
             pass
         return ""
 
@@ -215,7 +215,7 @@ class MCPSubprocessClient:
                 self._proc.terminate()
                 try:
                     await asyncio.wait_for(self._proc.wait(), timeout=5)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning("MCP subprocess did not terminate, killing")
                     self._proc.kill()
                     await self._proc.wait()
@@ -226,7 +226,7 @@ class MCPSubprocessClient:
                 self._tools = []
                 self.server_info = None
 
-    async def list_tools(self, timeout: Optional[float] = None) -> List[MCPToolSchema]:
+    async def list_tools(self, timeout: float | None = None) -> list[MCPToolSchema]:
         """
         List available tools.
 
@@ -254,8 +254,8 @@ class MCPSubprocessClient:
     async def call_tool(
         self,
         name: str,
-        arguments: Dict[str, Any],
-        timeout: Optional[float] = None,
+        arguments: dict[str, Any],
+        timeout: float | None = None,
     ) -> MCPToolResult:
         """
         Call a tool.
@@ -298,7 +298,7 @@ class MCPSubprocessClient:
             isError=True,
         )
 
-    def get_cached_tools(self) -> List[MCPToolSchema]:
+    def get_cached_tools(self) -> list[MCPToolSchema]:
         """Get cached tools list (from connection time)."""
         return self._tools
 
@@ -306,7 +306,7 @@ class MCPSubprocessClient:
     # MCP Protocol Capabilities (Phase 1)
     # ========================================================================
 
-    async def ping(self, timeout: Optional[float] = None) -> bool:
+    async def ping(self, timeout: float | None = None) -> bool:
         """Send ping to check connection health.
 
         Args:
@@ -326,9 +326,9 @@ class MCPSubprocessClient:
     async def _send_request(
         self,
         method: str,
-        params: Dict[str, Any],
+        params: dict[str, Any],
         timeout: float = DEFAULT_TIMEOUT,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Send a JSON-RPC request and wait for response."""
         if not self._proc or not self._proc.stdin or not self._proc.stdout:
             logger.error("MCP subprocess not connected")
@@ -360,7 +360,7 @@ class MCPSubprocessClient:
                 if response_str:
                     return json.loads(response_str)
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 stderr_text = await self._read_stderr()
                 logger.error(
                     f"MCP request '{method}' timed out after {timeout}s"
@@ -373,7 +373,7 @@ class MCPSubprocessClient:
 
             return None
 
-    async def _send_notification(self, method: str, params: Dict[str, Any]) -> None:
+    async def _send_notification(self, method: str, params: dict[str, Any]) -> None:
         """Send a JSON-RPC notification (no response expected)."""
         if not self._proc or not self._proc.stdin:
             return

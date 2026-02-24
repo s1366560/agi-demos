@@ -4,7 +4,6 @@ Provides immutable configuration classes for LLM clients.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -22,8 +21,8 @@ class LLMConfig:
     """
 
     model: str
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
+    api_key: str | None = None
+    base_url: str | None = None
     temperature: float = 0.0
     max_tokens: int = 4096
     top_p: float = 1.0
@@ -55,7 +54,7 @@ class LLMConfig:
 
 
 # Preset configurations
-def anthropic_config(model: str = "claude-3-sonnet-20240229", api_key: Optional[str] = None) -> LLMConfig:
+def anthropic_config(model: str = "claude-3-sonnet-20240229", api_key: str | None = None) -> LLMConfig:
     """Create Anthropic Claude configuration."""
     return LLMConfig(
         model=f"anthropic/{model}",
@@ -65,7 +64,7 @@ def anthropic_config(model: str = "claude-3-sonnet-20240229", api_key: Optional[
     )
 
 
-def openai_config(model: str = "gpt-4-turbo-preview", api_key: Optional[str] = None) -> LLMConfig:
+def openai_config(model: str = "gpt-4-turbo-preview", api_key: str | None = None) -> LLMConfig:
     """Create OpenAI configuration."""
     return LLMConfig(
         model=f"openai/{model}",
@@ -75,7 +74,7 @@ def openai_config(model: str = "gpt-4-turbo-preview", api_key: Optional[str] = N
     )
 
 
-def gemini_config(model: str = "gemini-pro", api_key: Optional[str] = None) -> LLMConfig:
+def gemini_config(model: str = "gemini-pro", api_key: str | None = None) -> LLMConfig:
     """Create Google Gemini configuration."""
     return LLMConfig(
         model=f"gemini/{model}",
@@ -85,7 +84,7 @@ def gemini_config(model: str = "gemini-pro", api_key: Optional[str] = None) -> L
     )
 
 
-def deepseek_config(model: str = "deepseek-chat", api_key: Optional[str] = None) -> LLMConfig:
+def deepseek_config(model: str = "deepseek-chat", api_key: str | None = None) -> LLMConfig:
     """Create DeepSeek configuration."""
     return LLMConfig(
         model=f"deepseek/{model}",
@@ -98,7 +97,7 @@ def deepseek_config(model: str = "deepseek-chat", api_key: Optional[str] = None)
 __all__ = [
     "LLMConfig",
     "anthropic_config",
-    "openai_config",
-    "gemini_config",
     "deepseek_config",
+    "gemini_config",
+    "openai_config",
 ]

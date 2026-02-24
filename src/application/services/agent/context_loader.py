@@ -8,7 +8,7 @@ Implements the dual-layer loading strategy:
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.model.agent.conversation.context_summary import ContextSummary
 from src.domain.ports.agent.context_manager_port import ContextSummaryPort
@@ -24,9 +24,9 @@ class ContextLoadResult:
     """Result of smart context loading."""
 
     # Conversation messages for LLM context (role + content dicts)
-    messages: List[Dict[str, Any]]
+    messages: list[dict[str, Any]]
     # Cached summary (if loaded from cache)
-    summary: Optional[ContextSummary] = None
+    summary: ContextSummary | None = None
     # Whether context was loaded from cached summary
     from_cache: bool = False
     # Total messages in the conversation (for status reporting)
@@ -56,7 +56,7 @@ class ContextLoader:
     async def load_context(
         self,
         conversation_id: str,
-        exclude_event_id: Optional[str] = None,
+        exclude_event_id: str | None = None,
         fallback_limit: int = 50,
     ) -> ContextLoadResult:
         """Load conversation context with smart summary caching.
@@ -94,7 +94,7 @@ class ContextLoader:
         self,
         conversation_id: str,
         summary: ContextSummary,
-        exclude_event_id: Optional[str],
+        exclude_event_id: str | None,
         total_count: int,
     ) -> ContextLoadResult:
         """Load recent messages after summary cutoff."""
@@ -130,7 +130,7 @@ class ContextLoader:
     async def _load_without_summary(
         self,
         conversation_id: str,
-        exclude_event_id: Optional[str],
+        exclude_event_id: str | None,
         limit: int,
         total_count: int,
     ) -> ContextLoadResult:

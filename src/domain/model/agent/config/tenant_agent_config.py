@@ -18,9 +18,9 @@ Access Control (FR-021, FR-022):
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class ConfigType(Enum):
@@ -64,10 +64,10 @@ class TenantAgentConfig:
     multi_level_thinking_enabled: bool
     max_work_plan_steps: int
     tool_timeout_seconds: int
-    enabled_tools: List[str] = field(default_factory=list)
-    disabled_tools: List[str] = field(default_factory=list)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    enabled_tools: list[str] = field(default_factory=list)
+    disabled_tools: list[str] = field(default_factory=list)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     def __post_init__(self):
         """Validate the configuration."""
@@ -100,8 +100,8 @@ class TenantAgentConfig:
 
     def update_llm_settings(
         self,
-        model: Optional[str] = None,
-        temperature: Optional[float] = None,
+        model: str | None = None,
+        temperature: float | None = None,
     ) -> "TenantAgentConfig":
         """
         Update LLM settings.
@@ -129,7 +129,7 @@ class TenantAgentConfig:
             enabled_tools=list(self.enabled_tools),
             disabled_tools=list(self.disabled_tools),
             created_at=self.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
 
     def update_pattern_learning(self, enabled: bool) -> "TenantAgentConfig":
@@ -155,14 +155,14 @@ class TenantAgentConfig:
             enabled_tools=list(self.enabled_tools),
             disabled_tools=list(self.disabled_tools),
             created_at=self.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
 
     def update_tool_settings(
         self,
-        enabled_tools: Optional[List[str]] = None,
-        disabled_tools: Optional[List[str]] = None,
-        timeout_seconds: Optional[int] = None,
+        enabled_tools: list[str] | None = None,
+        disabled_tools: list[str] | None = None,
+        timeout_seconds: int | None = None,
     ) -> "TenantAgentConfig":
         """
         Update tool settings.
@@ -197,10 +197,10 @@ class TenantAgentConfig:
             if disabled_tools is not None
             else list(self.disabled_tools),
             created_at=self.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "id": self.id,
@@ -246,7 +246,7 @@ class TenantAgentConfig:
         )
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TenantAgentConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "TenantAgentConfig":
         """Create from dictionary (e.g., from database)."""
         return cls(
             id=data["id"],
@@ -262,10 +262,10 @@ class TenantAgentConfig:
             disabled_tools=data.get("disabled_tools", []),
             created_at=datetime.fromisoformat(data["created_at"])
             if "created_at" in data
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
             updated_at=datetime.fromisoformat(data["updated_at"])
             if "updated_at" in data
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
         )
 
 

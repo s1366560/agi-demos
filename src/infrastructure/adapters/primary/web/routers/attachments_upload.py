@@ -7,7 +7,6 @@ Provides REST API endpoints for:
 """
 
 import logging
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import RedirectResponse
@@ -103,7 +102,7 @@ class CompleteUploadRequest(BaseModel):
     """Request model for completing multipart upload."""
 
     attachment_id: str = Field(..., description="ID of the attachment")
-    parts: List[dict] = Field(
+    parts: list[dict] = Field(
         ...,
         description="List of uploaded parts with 'part_number' and 'etag'",
     )
@@ -120,15 +119,15 @@ class AttachmentResponse(BaseModel):
     size_bytes: int
     purpose: str
     status: str
-    sandbox_path: Optional[str] = None
+    sandbox_path: str | None = None
     created_at: str
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 class AttachmentListResponse(BaseModel):
     """Response model for attachment list."""
 
-    attachments: List[AttachmentResponse]
+    attachments: list[AttachmentResponse]
     total: int
 
 
@@ -346,7 +345,7 @@ async def upload_simple(
 @router.get("", response_model=AttachmentListResponse)
 async def list_attachments(
     conversation_id: str = Query(..., description="Conversation ID to list attachments for"),
-    status: Optional[str] = Query(None, description="Filter by status"),
+    status: str | None = Query(None, description="Filter by status"),
     current_user: User = Depends(get_current_user),
     attachment_service: AttachmentService = Depends(get_attachment_service),
 ):

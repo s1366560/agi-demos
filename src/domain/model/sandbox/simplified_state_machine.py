@@ -29,7 +29,6 @@ State Mapping (Legacy → Simplified):
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import FrozenSet, Optional, Set
 
 from src.domain.model.sandbox.project_sandbox import ProjectSandboxStatus
 
@@ -50,8 +49,8 @@ class InvalidStateTransitionError(Exception):
         self,
         from_status: SimplifiedSandboxState,
         to_status: SimplifiedSandboxState,
-        sandbox_id: Optional[str] = None,
-    ):
+        sandbox_id: str | None = None,
+    ) -> None:
         self.from_status = from_status
         self.to_status = to_status
         self.sandbox_id = sandbox_id
@@ -96,7 +95,7 @@ class SimplifiedSandboxStateMachine:
     """
 
     # Define all valid state transitions for simplified model
-    VALID_TRANSITIONS: FrozenSet[StateTransition] = frozenset(
+    VALID_TRANSITIONS: frozenset[StateTransition] = frozenset(
         [
             # STARTING → RUNNING (successful creation/connection)
             StateTransition(
@@ -138,21 +137,21 @@ class SimplifiedSandboxStateMachine:
     )
 
     # Terminal states that cannot transition to other states
-    TERMINAL_STATES: FrozenSet[SimplifiedSandboxState] = frozenset(
+    TERMINAL_STATES: frozenset[SimplifiedSandboxState] = frozenset(
         [
             SimplifiedSandboxState.TERMINATED,
         ]
     )
 
     # States that indicate the sandbox can be used
-    USABLE_STATES: FrozenSet[SimplifiedSandboxState] = frozenset(
+    USABLE_STATES: frozenset[SimplifiedSandboxState] = frozenset(
         [
             SimplifiedSandboxState.RUNNING,
         ]
     )
 
     # States that indicate an active sandbox (running or in progress)
-    ACTIVE_STATES: FrozenSet[SimplifiedSandboxState] = frozenset(
+    ACTIVE_STATES: frozenset[SimplifiedSandboxState] = frozenset(
         [
             SimplifiedSandboxState.STARTING,
             SimplifiedSandboxState.RUNNING,
@@ -160,7 +159,7 @@ class SimplifiedSandboxStateMachine:
     )
 
     # States that indicate the sandbox needs recovery
-    RECOVERABLE_STATES: FrozenSet[SimplifiedSandboxState] = frozenset(
+    RECOVERABLE_STATES: frozenset[SimplifiedSandboxState] = frozenset(
         [
             SimplifiedSandboxState.ERROR,
         ]
@@ -193,10 +192,10 @@ class SimplifiedSandboxStateMachine:
         SimplifiedSandboxState.TERMINATED: ProjectSandboxStatus.TERMINATED,
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the state machine with transition lookup table."""
         # Build a fast lookup table for valid transitions
-        self._transition_map: dict[SimplifiedSandboxState, Set[SimplifiedSandboxState]] = {}
+        self._transition_map: dict[SimplifiedSandboxState, set[SimplifiedSandboxState]] = {}
         for transition in self.VALID_TRANSITIONS:
             if transition.from_status not in self._transition_map:
                 self._transition_map[transition.from_status] = set()
@@ -233,7 +232,7 @@ class SimplifiedSandboxStateMachine:
         self,
         from_status: SimplifiedSandboxState,
         to_status: SimplifiedSandboxState,
-        sandbox_id: Optional[str] = None,
+        sandbox_id: str | None = None,
     ) -> SimplifiedSandboxState:
         """
         Validate and execute a state transition.
@@ -256,7 +255,7 @@ class SimplifiedSandboxStateMachine:
     def get_valid_transitions(
         self,
         from_status: SimplifiedSandboxState,
-    ) -> Set[SimplifiedSandboxState]:
+    ) -> set[SimplifiedSandboxState]:
         """
         Get all valid target states from a given status.
 
@@ -290,7 +289,7 @@ class SimplifiedSandboxStateMachine:
         self,
         from_status: SimplifiedSandboxState,
         to_status: SimplifiedSandboxState,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Get the description of a state transition.
 

@@ -25,7 +25,7 @@ WORKER_STATE_MODULE = "src.infrastructure.agent.state.agent_worker_state"
 class MockConnectionManager:
     """Mock ConnectionManager for testing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.broadcast_calls = []
 
     async def broadcast_to_project(

@@ -3,7 +3,6 @@
 import fnmatch
 from dataclasses import dataclass
 from enum import Enum
-from typing import List
 
 
 class PermissionAction(Enum):
@@ -67,7 +66,7 @@ class PermissionRule:
 def evaluate_rules(
     permission: str,
     pattern: str,
-    *rulesets: List[PermissionRule],
+    *rulesets: list[PermissionRule],
 ) -> PermissionRule:
     """
     Evaluate permission against multiple rulesets.
@@ -86,7 +85,7 @@ def evaluate_rules(
         The matching rule, or a default ASK rule
     """
     # Merge all rulesets
-    merged: List[PermissionRule] = []
+    merged: list[PermissionRule] = []
     for ruleset in rulesets:
         if ruleset:
             merged.extend(ruleset)
@@ -101,8 +100,8 @@ def evaluate_rules(
 
 
 def get_disabled_tools(
-    tools: List[str],
-    ruleset: List[PermissionRule],
+    tools: list[str],
+    ruleset: list[PermissionRule],
 ) -> set[str]:
     """
     Get the set of tools that are fully disabled.
@@ -139,7 +138,7 @@ def get_disabled_tools(
     return result
 
 
-def default_ruleset() -> List[PermissionRule]:
+def default_ruleset() -> list[PermissionRule]:
     """
     Get the default permission ruleset.
 
@@ -164,7 +163,7 @@ def default_ruleset() -> List[PermissionRule]:
     ]
 
 
-def explore_mode_ruleset() -> List[PermissionRule]:
+def explore_mode_ruleset() -> list[PermissionRule]:
     """
     Get the permission ruleset for Explore Mode (SubAgent).
 
@@ -290,7 +289,7 @@ def classify_sandbox_tool_permission(tool_name: str) -> str:
         return "ask"
 
 
-def sandbox_mcp_ruleset() -> List[PermissionRule]:
+def sandbox_mcp_ruleset() -> list[PermissionRule]:
     """
     Get the permission ruleset for Sandbox MCP tools.
 

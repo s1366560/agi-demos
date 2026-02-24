@@ -9,7 +9,6 @@ Provides administrative endpoints for managing the Dead Letter Queue:
 
 import logging
 from datetime import datetime
-from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -48,12 +47,12 @@ class DLQMessageResponse(BaseModel):
     routing_key: str
     error: str
     error_type: str
-    error_traceback: Optional[str] = None
+    error_traceback: str | None = None
     retry_count: int
     max_retries: int
     first_failed_at: datetime
     last_failed_at: datetime
-    next_retry_at: Optional[datetime] = None
+    next_retry_at: datetime | None = None
     status: str
     metadata: dict
     can_retry: bool
@@ -85,7 +84,7 @@ class DLQMessageResponse(BaseModel):
 class DLQListResponse(BaseModel):
     """Response model for listing DLQ messages."""
     
-    messages: List[DLQMessageResponse]
+    messages: list[DLQMessageResponse]
     total: int
     limit: int
     offset: int
@@ -108,7 +107,7 @@ class DLQStatsResponse(BaseModel):
 class RetryRequest(BaseModel):
     """Request model for retrying messages."""
     
-    message_ids: List[str] = Field(min_length=1, max_length=100)
+    message_ids: list[str] = Field(min_length=1, max_length=100)
 
 
 class RetryResponse(BaseModel):
@@ -122,7 +121,7 @@ class RetryResponse(BaseModel):
 class DiscardRequest(BaseModel):
     """Request model for discarding messages."""
     
-    message_ids: List[str] = Field(min_length=1, max_length=100)
+    message_ids: list[str] = Field(min_length=1, max_length=100)
     reason: str = Field(min_length=1, max_length=500)
 
 
@@ -180,10 +179,10 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 @router.get("/messages", response_model=DLQListResponse)
 async def list_messages(
-    filter_status: Optional[str] = Query(None, alias="status", description="Filter by status (pending, retrying, discarded, expired, resolved)"),
-    event_type: Optional[str] = Query(None, description="Filter by event type"),
-    error_type: Optional[str] = Query(None, description="Filter by error type"),
-    routing_key: Optional[str] = Query(None, description="Filter by routing key pattern"),
+    filter_status: str | None = Query(None, alias="status", description="Filter by status (pending, retrying, discarded, expired, resolved)"),
+    event_type: str | None = Query(None, description="Filter by event type"),
+    error_type: str | None = Query(None, description="Filter by error type"),
+    routing_key: str | None = Query(None, description="Filter by routing key pattern"),
     limit: int = Query(50, ge=1, le=100, description="Maximum messages to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     dlq: DeadLetterQueuePort = Depends(get_dlq),

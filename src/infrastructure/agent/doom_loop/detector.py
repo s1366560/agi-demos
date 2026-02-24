@@ -44,7 +44,7 @@ class DoomLoopDetector:
         detector.should_intervene("search", {"query": "test"})  # True
     """
 
-    def __init__(self, threshold: int = 3, window_size: int = 10):
+    def __init__(self, threshold: int = 3, window_size: int = 10) -> None:
         """
         Initialize the detector.
 
@@ -55,7 +55,7 @@ class DoomLoopDetector:
         self.threshold = threshold
         self.window: deque[ToolCallRecord] = deque(maxlen=window_size)
 
-    def _hash_input(self, input: Any) -> str:  # noqa: ANN401
+    def _hash_input(self, input: Any) -> str:
         """
         Compute a hash of the tool input for comparison.
 
@@ -70,7 +70,7 @@ class DoomLoopDetector:
         except (TypeError, ValueError):
             return str(input)
 
-    def record(self, tool: str, input: Any) -> None:  # noqa: ANN401
+    def record(self, tool: str, input: Any) -> None:
         """
         Record a tool call.
 
@@ -87,7 +87,7 @@ class DoomLoopDetector:
             )
         )
 
-    def should_intervene(self, tool: str, input: Any) -> bool:  # noqa: ANN401
+    def should_intervene(self, tool: str, input: Any) -> bool:
         """
         Check if user intervention is needed.
 

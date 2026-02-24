@@ -19,9 +19,10 @@ Thread Safety:
 
 import asyncio
 import logging
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -33,13 +34,13 @@ class HITLWaiter:
     request_id: str
     conversation_id: str
     hitl_type: str
-    registered_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    registered_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     # Callback to invoke when response arrives
-    response_callback: Optional[Callable[[Dict[str, Any]], Coroutine[Any, Any, None]]] = None
+    response_callback: Callable[[dict[str, Any]], Coroutine[Any, Any, None]] | None = None
     # Event to signal when response is ready (alternative to callback)
-    response_event: Optional[asyncio.Event] = None
+    response_event: asyncio.Event | None = None
     # Response data (set when response arrives)
-    response_data: Optional[Dict[str, Any]] = None
+    response_data: dict[str, Any] | None = None
 
 
 class AgentSessionRegistry:
@@ -77,11 +78,11 @@ class AgentSessionRegistry:
         )
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         # request_id -> HITLWaiter
-        self._waiters: Dict[str, HITLWaiter] = {}
+        self._waiters: dict[str, HITLWaiter] = {}
         # conversation_id -> List[request_id] (multiple HITL requests possible)
-        self._conversation_requests: Dict[str, List[str]] = {}
+        self._conversation_requests: dict[str, list[str]] = {}
         self._lock = asyncio.Lock()
 
         # Metrics
@@ -94,7 +95,7 @@ class AgentSessionRegistry:
         request_id: str,
         conversation_id: str,
         hitl_type: str,
-        response_callback: Optional[Callable[[Dict[str, Any]], Coroutine[Any, Any, None]]] = None,
+        response_callback: Callable[[dict[str, Any]], Coroutine[Any, Any, None]] | None = None,
     ) -> HITLWaiter:
         """
         Register a session as waiting for an HITL response.
@@ -163,7 +164,7 @@ class AgentSessionRegistry:
     async def deliver_response(
         self,
         request_id: str,
-        response_data: Dict[str, Any],
+        response_data: dict[str, Any],
     ) -> bool:
         """
         Deliver an HITL response to a waiting session.
@@ -211,7 +212,7 @@ class AgentSessionRegistry:
         self,
         request_id: str,
         timeout: float = 300.0,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Wait for an HITL response with timeout.
 
@@ -232,7 +233,7 @@ class AgentSessionRegistry:
         try:
             await asyncio.wait_for(waiter.response_event.wait(), timeout=timeout)
             return waiter.response_data
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._total_timeouts += 1
             logger.warning(f"[SessionRegistry] Wait timeout for request: {request_id}")
             return None
@@ -241,16 +242,16 @@ class AgentSessionRegistry:
         """Check if a waiter exists for the given request."""
         return request_id in self._waiters
 
-    def get_waiter(self, request_id: str) -> Optional[HITLWaiter]:
+    def get_waiter(self, request_id: str) -> HITLWaiter | None:
         """Get waiter by request ID (non-blocking)."""
         return self._waiters.get(request_id)
 
-    def get_waiters_by_conversation(self, conversation_id: str) -> List[HITLWaiter]:
+    def get_waiters_by_conversation(self, conversation_id: str) -> list[HITLWaiter]:
         """Get all waiters for a conversation."""
         request_ids = self._conversation_requests.get(conversation_id, [])
         return [self._waiters[rid] for rid in request_ids if rid in self._waiters]
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get registry statistics."""
         return {
             "active_waiters": len(self._waiters),
@@ -277,7 +278,7 @@ class AgentSessionRegistry:
         Returns:
             Number of waiters cleaned up
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expired_ids = []
 
         async with self._lock:
@@ -299,7 +300,7 @@ class AgentSessionRegistry:
 
 
 # Global singleton for the current Worker process
-_registry_instance: Optional[AgentSessionRegistry] = None
+_registry_instance: AgentSessionRegistry | None = None
 
 
 def get_session_registry() -> AgentSessionRegistry:

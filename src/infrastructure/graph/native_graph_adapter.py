@@ -11,8 +11,8 @@ This adapter provides a self-researched knowledge graph system that:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, Any
 
 from src.domain.model.memory.episode import Episode
 from src.domain.ports.services.graph_service_port import GraphServicePort
@@ -75,11 +75,11 @@ class NativeGraphAdapter(GraphServicePort):
         neo4j_client: Neo4jClient,
         llm_client: LLMClient,
         embedding_service: EmbeddingService,
-        queue_port: Optional[QueuePort] = None,
+        queue_port: QueuePort | None = None,
         enable_reflexion: bool = True,
         reflexion_max_iterations: int = 2,
         auto_clear_embeddings: bool = True,
-    ):
+    ) -> None:
         """
         Initialize native graph adapter.
 
@@ -100,21 +100,21 @@ class NativeGraphAdapter(GraphServicePort):
         self._reflexion_max_iterations = reflexion_max_iterations
         self._auto_clear_embeddings = auto_clear_embeddings
         # Optional Redis client for CachedEmbeddingService
-        self._redis_client: Optional[Any] = None
+        self._redis_client: Any | None = None
 
         # Lazily initialized components
-        self._entity_extractor: Optional[EntityExtractor] = None
-        self._relationship_extractor: Optional[RelationshipExtractor] = None
-        self._reflexion_checker: Optional[ReflexionChecker] = None
-        self._hybrid_search: Optional[HybridSearch] = None
-        self._louvain_detector: Optional[LouvainDetector] = None
-        self._community_updater: Optional[CommunityUpdater] = None
+        self._entity_extractor: EntityExtractor | None = None
+        self._relationship_extractor: RelationshipExtractor | None = None
+        self._reflexion_checker: ReflexionChecker | None = None
+        self._hybrid_search: HybridSearch | None = None
+        self._louvain_detector: LouvainDetector | None = None
+        self._community_updater: CommunityUpdater | None = None
 
         # Cache for embedding dimension checks
-        self._embedding_dim_cache: Dict[str, Any] = {"value": None, "expiry": None}
+        self._embedding_dim_cache: dict[str, Any] = {"value": None, "expiry": None}
 
         # Optional distributed transaction coordinator
-        self._transaction_coordinator: Optional[Any] = None
+        self._transaction_coordinator: Any | None = None
 
     @property
     def client(self) -> Neo4jClient:
@@ -164,7 +164,7 @@ class NativeGraphAdapter(GraphServicePort):
             "Redis client set on NativeGraphAdapter; hybrid search will use cached embeddings"
         )
 
-    def get_transaction_coordinator(self) -> Optional[DistributedTransactionCoordinator]:
+    def get_transaction_coordinator(self) -> DistributedTransactionCoordinator | None:
         """Get the current transaction coordinator."""
         return self._transaction_coordinator
 
@@ -249,7 +249,7 @@ class NativeGraphAdapter(GraphServicePort):
             current_dim = self._embedding_service.embedding_dim
 
             # Check cache first (unless forced)
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             if not force:
                 cache_value = self._embedding_dim_cache.get("value")
                 cache_expiry = self._embedding_dim_cache.get("expiry")
@@ -315,7 +315,7 @@ class NativeGraphAdapter(GraphServicePort):
         except Exception as e:
             logger.error(f"Failed to check embedding dimension: {e}", exc_info=True)
 
-    async def _get_existing_embedding_dimension(self) -> Optional[int]:
+    async def _get_existing_embedding_dimension(self) -> int | None:
         """Get the dimension of existing embeddings in Neo4j.
 
         First checks embedding_dim property, then falls back to computing
@@ -401,8 +401,8 @@ class NativeGraphAdapter(GraphServicePort):
                 content=episode.content,
                 source_description=episode.source_type.value,
                 source=EpisodeType.TEXT,
-                created_at=datetime.now(timezone.utc),
-                valid_at=episode.valid_at or datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                valid_at=episode.valid_at or datetime.now(UTC),
                 group_id=group_id,
                 tenant_id=episode.tenant_id,
                 project_id=episode.project_id,
@@ -476,10 +476,10 @@ class NativeGraphAdapter(GraphServicePort):
         self,
         episode_uuid: str,
         content: str,
-        project_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-        excluded_entity_types: Optional[List[str]] = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+        excluded_entity_types: list[str] | None = None,
     ) -> AddEpisodeResult:
         """
         Process an episode: extract entities, relationships, and update graph.
@@ -556,7 +556,7 @@ class NativeGraphAdapter(GraphServicePort):
                     )
 
             # 4. Deduplicate against existing entities
-            unique_entities, dedup_map = await extractor.extract_with_dedup(
+            unique_entities, _dedup_map = await extractor.extract_with_dedup(
                 content=content,
                 existing_entities=await self._get_existing_entities(project_id),
                 entity_types_context=entity_types_context,
@@ -570,7 +570,7 @@ class NativeGraphAdapter(GraphServicePort):
             final_entities = unique_entities if unique_entities is not None else entities
 
             # 5. Save entities to Neo4j
-            entity_edges: List[EpisodicEdge] = []
+            entity_edges: list[EpisodicEdge] = []
             for entity in final_entities:
                 # Save entity node
                 await self._neo4j_client.save_node(
@@ -659,8 +659,8 @@ class NativeGraphAdapter(GraphServicePort):
     async def _save_discovered_types(
         self,
         project_id: str,
-        entities: List[EntityNode],
-        relationships: List[EpisodicEdge],
+        entities: list[EntityNode],
+        relationships: list[EpisodicEdge],
         existing_entity_types: set,
     ) -> None:
         """
@@ -747,8 +747,8 @@ class NativeGraphAdapter(GraphServicePort):
                 logger.warning(f"Failed to save discovered types: {e}")
 
     async def _get_existing_entities(
-        self, project_id: Optional[str] = None, limit: int = 10000
-    ) -> List[EntityNode]:
+        self, project_id: str | None = None, limit: int = 10000
+    ) -> list[EntityNode]:
         """Get existing entities from Neo4j for deduplication.
 
         Args:
@@ -814,14 +814,14 @@ class NativeGraphAdapter(GraphServicePort):
         self,
         episode_uuid: str,
         status: EpisodeStatus,
-        entity_edges: Optional[List[str]] = None,
+        entity_edges: list[str] | None = None,
     ) -> None:
         """Update episode status in Neo4j."""
         query = """
             MATCH (e:Episodic {uuid: $uuid})
             SET e.status = $status
         """
-        params: Dict[str, Any] = {"uuid": episode_uuid, "status": status.value}
+        params: dict[str, Any] = {"uuid": episode_uuid, "status": status.value}
 
         if entity_edges is not None:
             query += ", e.entity_edges = $entity_edges"
@@ -830,8 +830,8 @@ class NativeGraphAdapter(GraphServicePort):
         await self._neo4j_client.execute_query(query, **params)
 
     async def search(
-        self, query: str, project_id: Optional[str] = None, limit: int = 10
-    ) -> List[Any]:
+        self, query: str, project_id: str | None = None, limit: int = 10
+    ) -> list[Any]:
         """
         Search the knowledge graph.
 
@@ -883,7 +883,7 @@ class NativeGraphAdapter(GraphServicePort):
             logger.error(f"Search failed: {e}")
             raise
 
-    async def get_graph_data(self, project_id: str, limit: int = 100) -> Dict[str, Any]:
+    async def get_graph_data(self, project_id: str, limit: int = 100) -> dict[str, Any]:
         """
         Retrieve graph data (nodes and edges) for visualization.
 
@@ -1169,7 +1169,7 @@ class NativeGraphAdapter(GraphServicePort):
         project_id: str,
         query: str,
         limit: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Search memories in the knowledge graph.
 

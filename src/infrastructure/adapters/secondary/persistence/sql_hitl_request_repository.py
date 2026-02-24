@@ -3,8 +3,7 @@ V2 SQLAlchemy implementation of HITLRequestRepository using BaseRepository.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -73,7 +72,7 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
         )
         return request
 
-    async def get_by_id(self, request_id: str) -> Optional[HITLRequest]:
+    async def get_by_id(self, request_id: str) -> HITLRequest | None:
         """Get an HITL request by its ID."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             HITLRequest as HITLRequestRecord,
@@ -89,7 +88,7 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
     async def get_by_conversation(
         self,
         conversation_id: str,
-    ) -> List[HITLRequest]:
+    ) -> list[HITLRequest]:
         """Get all HITL requests for a conversation (regardless of status)."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             HITLRequest as HITLRequestRecord,
@@ -109,7 +108,7 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
         tenant_id: str,
         project_id: str,
         exclude_expired: bool = True,
-    ) -> List[HITLRequest]:
+    ) -> list[HITLRequest]:
         """Get all pending HITL requests for a conversation.
 
         Args:
@@ -133,7 +132,7 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
 
         # Exclude expired requests if requested
         if exclude_expired:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             conditions.append(
                 (HITLRequestRecord.expires_at.is_(None)) | (HITLRequestRecord.expires_at > now)
             )
@@ -151,7 +150,7 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
         tenant_id: str,
         project_id: str,
         limit: int = 50,
-    ) -> List[HITLRequest]:
+    ) -> list[HITLRequest]:
         """Get all pending HITL requests for a project."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             HITLRequest as HITLRequestRecord,
@@ -174,14 +173,14 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
         self,
         request_id: str,
         response: str,
-        response_metadata: Optional[dict] = None,
-    ) -> Optional[HITLRequest]:
+        response_metadata: dict | None = None,
+    ) -> HITLRequest | None:
         """Update an HITL request with a response."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             HITLRequest as HITLRequestRecord,
         )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         result = await self._session.execute(
             update(HITLRequestRecord)
@@ -208,8 +207,8 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
     async def mark_timeout(
         self,
         request_id: str,
-        default_response: Optional[str] = None,
-    ) -> Optional[HITLRequest]:
+        default_response: str | None = None,
+    ) -> HITLRequest | None:
         """Mark an HITL request as timed out."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             HITLRequest as HITLRequestRecord,
@@ -238,7 +237,7 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
 
         return None
 
-    async def mark_cancelled(self, request_id: str) -> Optional[HITLRequest]:
+    async def mark_cancelled(self, request_id: str) -> HITLRequest | None:
         """Mark an HITL request as cancelled."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             HITLRequest as HITLRequestRecord,
@@ -261,7 +260,7 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
 
         return None
 
-    async def mark_completed(self, request_id: str) -> Optional[HITLRequest]:
+    async def mark_completed(self, request_id: str) -> HITLRequest | None:
         """Mark an HITL request as completed (Agent finished processing)."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             HITLRequest as HITLRequestRecord,
@@ -292,7 +291,7 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
     async def get_unprocessed_answered_requests(
         self,
         limit: int = 100,
-    ) -> List[HITLRequest]:
+    ) -> list[HITLRequest]:
         """
         Get HITL requests that have been answered but not yet processed by Agent.
 

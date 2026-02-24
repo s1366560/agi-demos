@@ -1,7 +1,7 @@
 """Configuration management for MemStack."""
 
 from functools import lru_cache
-from typing import List, Literal, Optional, Union
+from typing import Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     api_host: str = Field(default="0.0.0.0", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")
     api_workers: int = Field(default=4, alias="API_WORKERS")
-    api_allowed_origins: Union[str, List[str]] = Field(default=["*"], alias="API_ALLOWED_ORIGINS")
+    api_allowed_origins: str | list[str] = Field(default=["*"], alias="API_ALLOWED_ORIGINS")
 
     # Database Settings
     neo4j_uri: str = Field(default="bolt://localhost:7687", alias="NEO4J_URI")
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     postgres_pool_pre_ping: bool = Field(default=True, alias="POSTGRES_POOL_PRE_PING")
 
     # PostgreSQL Read Replica Settings (for read scaling)
-    postgres_read_replica_host: Optional[str] = Field(
+    postgres_read_replica_host: str | None = Field(
         default=None, alias="POSTGRES_READ_REPLICA_HOST"
     )
     postgres_read_replica_port: int = Field(default=5432, alias="POSTGRES_READ_REPLICA_PORT")
@@ -42,37 +42,37 @@ class Settings(BaseSettings):
     # Redis Settings
     redis_host: str = Field(default="localhost", alias="REDIS_HOST")
     redis_port: int = Field(default=6379, alias="REDIS_PORT")
-    redis_password: Optional[str] = Field(default=None, alias="REDIS_PASSWORD")
+    redis_password: str | None = Field(default=None, alias="REDIS_PASSWORD")
 
     # Audit Log Settings
     audit_log_backend: str = Field(
         default="database", alias="AUDIT_LOG_BACKEND"
     )  # database, file, console
-    audit_log_file: Optional[str] = Field(default=None, alias="AUDIT_LOG_FILE")
+    audit_log_file: str | None = Field(default=None, alias="AUDIT_LOG_FILE")
 
     # Alerting Settings
-    alert_slack_webhook_url: Optional[str] = Field(default=None, alias="ALERT_SLACK_WEBHOOK_URL")
-    alert_slack_channel: Optional[str] = Field(default=None, alias="ALERT_SLACK_CHANNEL")
-    alert_email_smtp_host: Optional[str] = Field(default=None, alias="ALERT_EMAIL_SMTP_HOST")
+    alert_slack_webhook_url: str | None = Field(default=None, alias="ALERT_SLACK_WEBHOOK_URL")
+    alert_slack_channel: str | None = Field(default=None, alias="ALERT_SLACK_CHANNEL")
+    alert_email_smtp_host: str | None = Field(default=None, alias="ALERT_EMAIL_SMTP_HOST")
     alert_email_smtp_port: int = Field(default=587, alias="ALERT_EMAIL_SMTP_PORT")
-    alert_email_username: Optional[str] = Field(default=None, alias="ALERT_EMAIL_USERNAME")
-    alert_email_password: Optional[str] = Field(default=None, alias="ALERT_EMAIL_PASSWORD")
-    alert_email_from: Optional[str] = Field(default=None, alias="ALERT_EMAIL_FROM")
-    alert_email_to: Optional[str] = Field(default=None, alias="ALERT_EMAIL_TO")
+    alert_email_username: str | None = Field(default=None, alias="ALERT_EMAIL_USERNAME")
+    alert_email_password: str | None = Field(default=None, alias="ALERT_EMAIL_PASSWORD")
+    alert_email_from: str | None = Field(default=None, alias="ALERT_EMAIL_FROM")
+    alert_email_to: str | None = Field(default=None, alias="ALERT_EMAIL_TO")
 
     # LLM Provider API Key Encryption
     # 32-byte (256-bit) encryption key as hex string (64 hex characters)
     # Generate with: python -c "import os; print(os.urandom(32).hex())"
-    llm_encryption_key: Optional[str] = Field(default=None, alias="LLM_ENCRYPTION_KEY")
+    llm_encryption_key: str | None = Field(default=None, alias="LLM_ENCRYPTION_KEY")
 
     # Web Search Settings (Tavily API)
-    tavily_api_key: Optional[str] = Field(default=None, alias="TAVILY_API_KEY")
+    tavily_api_key: str | None = Field(default=None, alias="TAVILY_API_KEY")
     tavily_max_results: int = Field(default=10, alias="TAVILY_MAX_RESULTS")
     tavily_search_depth: str = Field(default="basic", alias="TAVILY_SEARCH_DEPTH")
-    tavily_include_domains: Optional[List[str]] = Field(
+    tavily_include_domains: list[str] | None = Field(
         default=None, alias="TAVILY_INCLUDE_DOMAINS"
     )
-    tavily_exclude_domains: Optional[List[str]] = Field(
+    tavily_exclude_domains: list[str] | None = Field(
         default=None, alias="TAVILY_EXCLUDE_DOMAINS"
     )
 
@@ -108,7 +108,7 @@ class Settings(BaseSettings):
     auto_clear_mismatched_embeddings: bool = Field(
         default=True, alias="AUTO_CLEAR_MISMATCHED_EMBEDDINGS"
     )
-    embedding_dimension: Optional[int] = Field(
+    embedding_dimension: int | None = Field(
         default=None,
         alias="EMBEDDING_DIMENSION",
         description="Embedding vector dimension. Auto-detected from provider if None. "
@@ -249,10 +249,10 @@ class Settings(BaseSettings):
 
     # S3 Storage Settings (MinIO for local dev)
     aws_region: str = Field(default="us-east-1", alias="AWS_REGION")
-    aws_access_key_id: Optional[str] = Field(default=None, alias="AWS_ACCESS_KEY_ID")
-    aws_secret_access_key: Optional[str] = Field(default=None, alias="AWS_SECRET_ACCESS_KEY")
+    aws_access_key_id: str | None = Field(default=None, alias="AWS_ACCESS_KEY_ID")
+    aws_secret_access_key: str | None = Field(default=None, alias="AWS_SECRET_ACCESS_KEY")
     s3_bucket_name: str = Field(default="memstack-files", alias="S3_BUCKET_NAME")
-    s3_endpoint_url: Optional[str] = Field(default=None, alias="S3_ENDPOINT_URL")
+    s3_endpoint_url: str | None = Field(default=None, alias="S3_ENDPOINT_URL")
     s3_no_proxy: bool = Field(default=True, alias="S3_NO_PROXY")
     presigned_url_expiration: int = Field(default=3600, alias="PRESIGNED_URL_EXPIRATION")
 
@@ -333,12 +333,12 @@ class Settings(BaseSettings):
 
     # MCP (Model Context Protocol) Settings
     mcp_enabled: bool = Field(default=True, alias="MCP_ENABLED")
-    mcp_config_path: Optional[str] = Field(default=None, alias="MCP_CONFIG_PATH")
+    mcp_config_path: str | None = Field(default=None, alias="MCP_CONFIG_PATH")
     mcp_default_timeout: int = Field(
         default=120000, alias="MCP_DEFAULT_TIMEOUT"
     )  # ms (increased from 30000 to 120000 = 2 minutes)
     mcp_auto_connect: bool = Field(default=True, alias="MCP_AUTO_CONNECT")
-    mcp_websocket_heartbeat: Optional[int] = Field(
+    mcp_websocket_heartbeat: int | None = Field(
         default=None, alias="MCP_WEBSOCKET_HEARTBEAT"
     )  # seconds; None disables heartbeat (prevents PONG timeout killing long tool calls)
 
@@ -364,10 +364,10 @@ class Settings(BaseSettings):
     # OpenTelemetry Settings
     service_name: str = Field(default="memstack", alias="SERVICE_NAME")
     environment: str = Field(default="development", alias="ENVIRONMENT")
-    otel_exporter_otlp_endpoint: Optional[str] = Field(
+    otel_exporter_otlp_endpoint: str | None = Field(
         default=None, alias="OTEL_EXPORTER_OTLP_ENDPOINT"
     )
-    otel_exporter_otlp_headers: Optional[str] = Field(
+    otel_exporter_otlp_headers: str | None = Field(
         default=None, alias="OTEL_EXPORTER_OTLP_HEADERS"
     )
     otel_traces_sampler: str = Field(default="traceidratio", alias="OTEL_TRACES_SAMPLER")
@@ -377,8 +377,8 @@ class Settings(BaseSettings):
 
     # Langfuse LLM Observability Settings
     langfuse_enabled: bool = Field(default=False, alias="LANGFUSE_ENABLED")
-    langfuse_public_key: Optional[str] = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")
-    langfuse_secret_key: Optional[str] = Field(default=None, alias="LANGFUSE_SECRET_KEY")
+    langfuse_public_key: str | None = Field(default=None, alias="LANGFUSE_PUBLIC_KEY")
+    langfuse_secret_key: str | None = Field(default=None, alias="LANGFUSE_SECRET_KEY")
     langfuse_host: str = Field(
         default="http://localhost:3001", alias="LANGFUSE_HOST"
     )  # Default to self-hosted instance

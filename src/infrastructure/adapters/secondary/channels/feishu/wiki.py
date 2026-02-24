@@ -1,7 +1,7 @@
 """Feishu Wiki (Knowledge Base) operations."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -9,13 +9,13 @@ logger = logging.getLogger(__name__)
 class FeishuWikiClient:
     """Client for Feishu Wiki/Knowledge Base operations."""
     
-    def __init__(self, client):
+    def __init__(self, client) -> None:
         self._client = client
     
     async def list_spaces(
         self,
         page_size: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List all accessible wiki spaces.
         
         Args:
@@ -46,7 +46,7 @@ class FeishuWikiClient:
         
         return spaces
     
-    async def get_space(self, space_id: str) -> Dict[str, Any]:
+    async def get_space(self, space_id: str) -> dict[str, Any]:
         """Get wiki space details.
         
         Args:
@@ -65,9 +65,9 @@ class FeishuWikiClient:
     async def list_nodes(
         self,
         space_id: str,
-        parent_node_token: Optional[str] = None,
+        parent_node_token: str | None = None,
         page_size: int = 100
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """List wiki nodes in a space.
         
         Args:
@@ -105,7 +105,7 @@ class FeishuWikiClient:
         
         return nodes
     
-    async def get_node(self, token: str) -> Dict[str, Any]:
+    async def get_node(self, token: str) -> dict[str, Any]:
         """Get wiki node details.
         
         Args:
@@ -126,9 +126,9 @@ class FeishuWikiClient:
         space_id: str,
         title: str,
         node_type: str = "docx",  # docx, sheet, mindnote, bitable
-        parent_node_token: Optional[str] = None,
-        obj_type: Optional[str] = None,
-    ) -> Dict[str, str]:
+        parent_node_token: str | None = None,
+        obj_type: str | None = None,
+    ) -> dict[str, str]:
         """Create a new wiki node.
         
         Args:
@@ -167,8 +167,8 @@ class FeishuWikiClient:
     async def move_node(
         self,
         token: str,
-        parent_node_token: Optional[str] = None,
-        target_space_id: Optional[str] = None,
+        parent_node_token: str | None = None,
+        target_space_id: str | None = None,
     ) -> None:
         """Move a wiki node.
         
@@ -177,7 +177,7 @@ class FeishuWikiClient:
             parent_node_token: New parent node
             target_space_id: Optional target space (for cross-space move)
         """
-        data: Dict[str, Any] = {}
+        data: dict[str, Any] = {}
         
         if parent_node_token:
             data["parent_node_token"] = parent_node_token
@@ -207,7 +207,7 @@ class FeishuWikiClient:
         if response.get("code") != 0:
             raise RuntimeError(f"Failed to update node title: {response.get('msg')}")
     
-    async def get_node_permission(self, token: str) -> Dict[str, Any]:
+    async def get_node_permission(self, token: str) -> dict[str, Any]:
         """Get wiki node permissions.
         
         Args:
@@ -227,7 +227,7 @@ class FeishuWikiClient:
 class WikiSearchResult:
     """Result of a wiki search."""
     
-    def __init__(self, data: Dict[str, Any]):
+    def __init__(self, data: dict[str, Any]) -> None:
         self.total = data.get("total", 0)
         self.has_more = data.get("has_more", False)
         self.items = data.get("items", [])
@@ -235,5 +235,5 @@ class WikiSearchResult:
     def __iter__(self):
         return iter(self.items)
     
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.items)

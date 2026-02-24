@@ -5,8 +5,9 @@
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any
 
 from ..config import AgentInstanceConfig
 from ..instance import AgentInstance, ChatRequest
@@ -83,7 +84,7 @@ class Backend(ABC):
     async def get_instance(
         self,
         instance_id: str,
-    ) -> Optional[AgentInstance]:
+    ) -> AgentInstance | None:
         """获取实例.
 
         Args:
@@ -95,7 +96,7 @@ class Backend(ABC):
         pass
 
     @abstractmethod
-    async def list_instances(self) -> List[AgentInstance]:
+    async def list_instances(self) -> list[AgentInstance]:
         """列出所有实例.
 
         Returns:
@@ -108,7 +109,7 @@ class Backend(ABC):
         self,
         instance_id: str,
         request: ChatRequest,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """在实例上执行请求.
 
         Args:
@@ -136,7 +137,7 @@ class Backend(ABC):
         pass
 
     @abstractmethod
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """获取后端统计信息.
 
         Returns:

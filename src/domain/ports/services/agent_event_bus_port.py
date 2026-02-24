@@ -19,9 +19,10 @@ Note: AgentEventType is imported from types.py (Single Source of Truth).
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 # Import AgentEventType from the unified types module (Single Source of Truth)
 from src.domain.events.types import AgentEventType
@@ -47,12 +48,12 @@ class AgentEvent:
     event_time_us: int
     event_counter: int
     event_type: AgentEventType
-    data: Dict[str, Any]
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    message_id: Optional[str] = None
-    conversation_id: Optional[str] = None
+    data: dict[str, Any]
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    message_id: str | None = None
+    conversation_id: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "event_id": self.event_id,
@@ -66,7 +67,7 @@ class AgentEvent:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AgentEvent":
+    def from_dict(cls, data: dict[str, Any]) -> "AgentEvent":
         """Create from dictionary."""
         return cls(
             event_id=data.get("event_id", ""),
@@ -77,7 +78,7 @@ class AgentEvent:
             timestamp=(
                 datetime.fromisoformat(data["timestamp"])
                 if isinstance(data.get("timestamp"), str)
-                else data.get("timestamp", datetime.now(timezone.utc))
+                else data.get("timestamp", datetime.now(UTC))
             ),
             message_id=data.get("message_id"),
             conversation_id=data.get("conversation_id"),
@@ -105,7 +106,7 @@ class AgentEventBusPort(ABC):
         conversation_id: str,
         message_id: str,
         event_type: AgentEventType,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         event_time_us: int,
         event_counter: int,
     ) -> str:
@@ -132,7 +133,7 @@ class AgentEventBusPort(ABC):
         message_id: str,
         from_time_us: int = 0,
         from_counter: int = 0,
-        timeout_ms: Optional[int] = None,
+        timeout_ms: int | None = None,
     ) -> AsyncIterator[AgentEvent]:
         """
         Subscribe to events for a message.
@@ -160,10 +161,10 @@ class AgentEventBusPort(ABC):
         message_id: str,
         from_time_us: int = 0,
         from_counter: int = 0,
-        to_time_us: Optional[int] = None,
-        to_counter: Optional[int] = None,
+        to_time_us: int | None = None,
+        to_counter: int | None = None,
         limit: int = 100,
-    ) -> List[AgentEvent]:
+    ) -> list[AgentEvent]:
         """
         Get events in a range (non-blocking).
 
@@ -319,7 +320,7 @@ class AgentEventBusPort(ABC):
         message_id: str,
         event_time_us: int,
         event_counter: int,
-        final_content: Optional[str] = None,
+        final_content: str | None = None,
     ) -> str:
         """Convenience method for publishing complete events."""
         data = {}

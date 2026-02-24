@@ -13,7 +13,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Dict, List, Optional
 
 
 class ResourceEnvironment(str, Enum):
@@ -34,17 +33,17 @@ class SkillResource:
     name: str
 
     # Content of the resource (loaded on demand)
-    content: Optional[str] = None
+    content: str | None = None
 
     # Original local path (for SYSTEM environment)
-    local_path: Optional[Path] = None
+    local_path: Path | None = None
 
     # Container path (for SANDBOX environment)
-    container_path: Optional[str] = None
+    container_path: str | None = None
 
     # Resource metadata
     size_bytes: int = 0
-    content_hash: Optional[str] = None
+    content_hash: str | None = None
     is_binary: bool = False
 
     def __post_init__(self):
@@ -60,12 +59,12 @@ class SkillResourceContext:
     """Context for skill resource operations."""
 
     skill_name: str
-    skill_content: Optional[str] = None  # SKILL.md content for reference detection
-    tenant_id: Optional[str] = None
-    project_id: Optional[str] = None
-    sandbox_id: Optional[str] = None  # If present, use sandbox environment
-    project_path: Optional[Path] = None  # Project root for local resolution
-    environment_vars: Dict[str, str] = field(default_factory=dict)
+    skill_content: str | None = None  # SKILL.md content for reference detection
+    tenant_id: str | None = None
+    project_id: str | None = None
+    sandbox_id: str | None = None  # If present, use sandbox environment
+    project_path: Path | None = None  # Project root for local resolution
+    environment_vars: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -73,9 +72,9 @@ class ResourceSyncResult:
     """Result of resource synchronization."""
 
     success: bool
-    synced_resources: List[SkillResource] = field(default_factory=list)
-    failed_resources: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+    synced_resources: list[SkillResource] = field(default_factory=list)
+    failed_resources: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
 
 class SkillResourcePort(ABC):
@@ -104,7 +103,7 @@ class SkillResourcePort(ABC):
         self,
         context: SkillResourceContext,
         tier: int = 3,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Load SKILL.md content at specified tier.
 
@@ -150,7 +149,7 @@ class SkillResourcePort(ABC):
         self,
         context: SkillResourceContext,
         virtual_path: str,
-    ) -> Optional[SkillResource]:
+    ) -> SkillResource | None:
         """
         Get a resource by its virtual path.
 
@@ -167,7 +166,7 @@ class SkillResourcePort(ABC):
     async def list_resources(
         self,
         context: SkillResourceContext,
-    ) -> List[SkillResource]:
+    ) -> list[SkillResource]:
         """
         List all resources for a skill.
 
@@ -183,7 +182,7 @@ class SkillResourcePort(ABC):
     async def sync_resources(
         self,
         context: SkillResourceContext,
-        resources: Optional[List[SkillResource]] = None,
+        resources: list[SkillResource] | None = None,
     ) -> ResourceSyncResult:
         """
         Synchronize resources to the execution environment.

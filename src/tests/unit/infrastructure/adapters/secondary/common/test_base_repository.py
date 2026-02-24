@@ -6,7 +6,6 @@ These tests MUST FAIL before implementation exists.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -34,7 +33,7 @@ class TestDomainEntity:
     """Test domain entity."""
     id: str
     name: str
-    tenant_id: Optional[str] = None
+    tenant_id: str | None = None
 
 
 class TestBaseRepository:

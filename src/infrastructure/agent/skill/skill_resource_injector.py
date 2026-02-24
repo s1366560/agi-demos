@@ -6,7 +6,6 @@ Injects local SKILL resources into remote Sandbox containers via MCP tools.
 
 import logging
 from pathlib import Path
-from typing import Dict, Optional
 
 from src.domain.ports.services.sandbox_port import SandboxPort
 
@@ -25,7 +24,7 @@ class SkillResourceInjector:
     def __init__(
         self,
         resource_loader: SkillResourceLoader,
-    ):
+    ) -> None:
         """
         Initialize the injector.
 
@@ -33,15 +32,15 @@ class SkillResourceInjector:
             resource_loader: Resource loader instance
         """
         self.loader = resource_loader
-        self._injected_cache: Dict[str, Dict[str, Dict[str, str]]] = {}
+        self._injected_cache: dict[str, dict[str, dict[str, str]]] = {}
 
     async def inject_skill(
         self,
         sandbox_adapter: SandboxPort,
         sandbox_id: str,
         skill_name: str,
-        skill_content: Optional[str] = None,
-    ) -> Dict[str, str]:
+        skill_content: str | None = None,
+    ) -> dict[str, str]:
         """
         注入 SKILL 的所有资源到 Sandbox
 
@@ -60,7 +59,7 @@ class SkillResourceInjector:
             logger.debug(f"No resources found for skill: {skill_name}")
             return {}
 
-        path_mapping: Dict[str, str] = {}
+        path_mapping: dict[str, str] = {}
 
         for resource_path in resource_paths:
             try:
@@ -100,7 +99,7 @@ class SkillResourceInjector:
 
         return path_mapping
 
-    def _get_skill_dir_for_resource(self, resource_path: Path, skill_name: str) -> Optional[Path]:
+    def _get_skill_dir_for_resource(self, resource_path: Path, skill_name: str) -> Path | None:
         """
         获取资源所属的 SKILL 目录
 
@@ -160,7 +159,7 @@ export PATH="$SKILL_ROOT/scripts:$PATH"
         self,
         sandbox_id: str,
         skill_name: str,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """
         获取已注入的资源映射
 

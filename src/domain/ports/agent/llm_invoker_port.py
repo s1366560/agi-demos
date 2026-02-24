@@ -5,9 +5,10 @@ Defines the contract for invoking LLM providers with streaming support.
 Infrastructure adapters (LiteLLM, OpenAI, etc.) implement this interface.
 """
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class StreamEventType(str, Enum):
@@ -34,11 +35,11 @@ class StreamChunk:
     """
 
     event_type: StreamEventType
-    content: Optional[str] = None
-    tool_call: Optional[Dict[str, Any]] = None
-    finish_reason: Optional[str] = None
-    error: Optional[str] = None
-    raw: Optional[Dict[str, Any]] = None
+    content: str | None = None
+    tool_call: dict[str, Any] | None = None
+    finish_reason: str | None = None
+    error: str | None = None
+    raw: dict[str, Any] | None = None
 
 
 @dataclass
@@ -55,13 +56,13 @@ class LLMInvocationRequest:
         metadata: Additional provider-specific metadata
     """
 
-    messages: List[Dict[str, Any]]
-    tools: Optional[List[Dict[str, Any]]] = None
-    model: Optional[str] = None
+    messages: list[dict[str, Any]]
+    tools: list[dict[str, Any]] | None = None
+    model: str | None = None
     temperature: float = 0.7
-    max_tokens: Optional[int] = None
-    stop_sequences: Optional[List[str]] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    max_tokens: int | None = None
+    stop_sequences: list[str] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -78,11 +79,11 @@ class LLMInvocationResult:
     """
 
     content: str
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
     finish_reason: str = "stop"
-    usage: Dict[str, int] = field(default_factory=dict)
-    model: Optional[str] = None
-    raw_response: Optional[Dict[str, Any]] = None
+    usage: dict[str, int] = field(default_factory=dict)
+    model: str | None = None
+    raw_response: dict[str, Any] | None = None
 
     @property
     def has_tool_calls(self) -> bool:
@@ -150,7 +151,7 @@ class LLMInvokerPort(Protocol):
         """
         ...
 
-    def get_model_info(self, model: Optional[str] = None) -> Dict[str, Any]:
+    def get_model_info(self, model: str | None = None) -> dict[str, Any]:
         """
         Get information about a model.
 

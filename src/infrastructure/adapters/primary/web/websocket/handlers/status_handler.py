@@ -6,8 +6,8 @@ Handles subscribe_status and unsubscribe_status for agent status polling.
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import UTC, datetime
+from typing import Any
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
@@ -24,7 +24,7 @@ class SubscribeStatusHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "subscribe_status"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Handle subscribe_status: Subscribe to Agent Session status updates."""
         project_id = message.get("project_id")
         polling_interval = message.get("polling_interval", 3000)  # Default 3 seconds
@@ -62,7 +62,7 @@ class UnsubscribeStatusHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "unsubscribe_status"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Handle unsubscribe_status: Stop receiving status updates."""
         project_id = message.get("project_id")
 
@@ -156,7 +156,7 @@ async def monitor_agent_status(
                             "type": "status_update",
                             "project_id": project_id,
                             "data": status_data,
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "timestamp": datetime.now(UTC).isoformat(),
                         },
                     )
                     last_status = status_data

@@ -6,7 +6,6 @@ Provides all CRUD operations, tenant resolution, and usage tracking.
 """
 
 from datetime import datetime
-from typing import List, Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, desc, func, select
@@ -49,7 +48,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
     with proper encryption/decryption of API keys.
     """
 
-    def __init__(self, session: Optional[AsyncSession] = None):
+    def __init__(self, session: AsyncSession | None = None) -> None:
         """
         Initialize repository with database session.
 
@@ -78,16 +77,16 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
     @staticmethod
     def _build_embedding_payload(
-        embedding_model: Optional[str],
-        embedding_config: Optional[EmbeddingConfig],
-    ) -> Optional[dict]:
+        embedding_model: str | None,
+        embedding_config: EmbeddingConfig | None,
+    ) -> dict | None:
         """Build normalized embedding payload for config JSON storage."""
         payload = embedding_config.model_dump(exclude_none=True) if embedding_config else {}
         if embedding_model and not payload.get("model"):
             payload["model"] = embedding_model
         return payload or None
 
-    def _extract_embedding_config(self, orm: LLMProviderORM) -> Optional[EmbeddingConfig]:
+    def _extract_embedding_config(self, orm: LLMProviderORM) -> EmbeddingConfig | None:
         """Hydrate structured embedding config from JSON config and legacy column."""
         config_data = orm.config if isinstance(orm.config, dict) else {}
         embedding_data = config_data.get("embedding")
@@ -180,7 +179,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return await self._run_with_session(op)
 
-    async def get_by_id(self, provider_id: UUID) -> Optional[ProviderConfig]:
+    async def get_by_id(self, provider_id: UUID) -> ProviderConfig | None:
         """Get provider by ID."""
 
         async def op(session):
@@ -193,7 +192,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return await self._run_with_session(op)
 
-    async def get_by_name(self, name: str) -> Optional[ProviderConfig]:
+    async def get_by_name(self, name: str) -> ProviderConfig | None:
         """Get provider by name."""
 
         async def op(session):
@@ -205,7 +204,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return await self._run_with_session(op)
 
-    async def list_all(self, include_inactive: bool = False) -> List[ProviderConfig]:
+    async def list_all(self, include_inactive: bool = False) -> list[ProviderConfig]:
         """List all providers."""
 
         async def op(session):
@@ -219,13 +218,13 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return await self._run_with_session(op)
 
-    async def list_active(self) -> List[ProviderConfig]:
+    async def list_active(self) -> list[ProviderConfig]:
         """List all active providers."""
         return await self.list_all(include_inactive=False)
 
     async def update(
         self, provider_id: UUID, config: ProviderConfigUpdate
-    ) -> Optional[ProviderConfig]:
+    ) -> ProviderConfig | None:
         """Update provider configuration."""
         session = await self._get_session()
 
@@ -336,7 +335,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return await self._run_with_session(op)
 
-    async def find_default_provider(self) -> Optional[ProviderConfig]:
+    async def find_default_provider(self) -> ProviderConfig | None:
         """Find the default provider."""
 
         async def op(session):
@@ -350,7 +349,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
         return await self._run_with_session(op)
 
-    async def find_first_active_provider(self) -> Optional[ProviderConfig]:
+    async def find_first_active_provider(self) -> ProviderConfig | None:
         """Find the first active provider as fallback."""
 
         async def op(session):
@@ -369,7 +368,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         self,
         tenant_id: str,
         operation_type: OperationType = OperationType.LLM,
-    ) -> Optional[ProviderConfig]:
+    ) -> ProviderConfig | None:
         """Find provider assigned to specific tenant."""
 
         async def op(session):
@@ -403,7 +402,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
     async def resolve_provider(
         self,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
         operation_type: OperationType = OperationType.LLM,
     ) -> ResolvedProvider:
         """
@@ -472,7 +471,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             response_time_ms=orm.response_time_ms,
         )
 
-    async def get_latest_health(self, provider_id: UUID) -> Optional[ProviderHealth]:
+    async def get_latest_health(self, provider_id: UUID) -> ProviderHealth | None:
         """Get latest health check for provider."""
         session = await self._get_session()
 
@@ -530,12 +529,12 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
     async def get_usage_statistics(
         self,
-        provider_id: Optional[UUID] = None,
-        tenant_id: Optional[str] = None,
-        operation_type: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-    ) -> List[UsageStatistics]:
+        provider_id: UUID | None = None,
+        tenant_id: str | None = None,
+        operation_type: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> list[UsageStatistics]:
         """Get aggregated usage statistics."""
         session = await self._get_session()
 
@@ -667,8 +666,8 @@ class SQLAlchemyProviderRepository(ProviderRepository):
     async def get_tenant_providers(
         self,
         tenant_id: str,
-        operation_type: Optional[OperationType] = None,
-    ) -> List[TenantProviderMapping]:
+        operation_type: OperationType | None = None,
+    ) -> list[TenantProviderMapping]:
         """Get all providers assigned to tenant."""
         session = await self._get_session()
 

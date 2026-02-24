@@ -1,5 +1,6 @@
 """Tests for ContextCompressionEngine and AdaptiveStrategySelector."""
 
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -137,10 +138,10 @@ class TestCompressionHistory:
 
     def test_record_compression(self):
         history = CompressionHistory()
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         record = CompressionRecord(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             level="l1_prune",
             tokens_before=10000,
             tokens_after=7000,
@@ -160,11 +161,11 @@ class TestCompressionHistory:
 
     def test_max_records_eviction(self):
         history = CompressionHistory(max_records=3)
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        for i in range(5):
+        for _i in range(5):
             record = CompressionRecord(
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 level="l1_prune",
                 tokens_before=1000,
                 tokens_after=800,
@@ -178,10 +179,10 @@ class TestCompressionHistory:
 
     def test_summary_output(self):
         history = CompressionHistory()
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         record = CompressionRecord(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             level="l2_summarize",
             tokens_before=10000,
             tokens_after=5000,
@@ -198,11 +199,11 @@ class TestCompressionHistory:
 
     def test_reset(self):
         history = CompressionHistory()
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         history.record(
             CompressionRecord(
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 level="l1_prune",
                 tokens_before=1000,
                 tokens_after=800,
@@ -474,9 +475,9 @@ class TestRoleAwareCompression:
         lines = text.strip().split("\n")
 
         # User line should be longer than assistant line (800 vs 300 limit)
-        user_line = [l for l in lines if l.startswith("User:")][0]
-        assistant_line = [l for l in lines if l.startswith("Assistant:")][0]
-        tool_line = [l for l in lines if l.startswith("Tool:")][0]
+        user_line = next(l for l in lines if l.startswith("User:"))
+        assistant_line = next(l for l in lines if l.startswith("Assistant:"))
+        tool_line = next(l for l in lines if l.startswith("Tool:"))
         assert len(user_line) > len(assistant_line)
         assert len(assistant_line) > len(tool_line)
 

@@ -5,7 +5,7 @@ Tests the Redis-based state persistence for Agent pause/resume.
 """
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -102,7 +102,7 @@ class TestHITLAgentState:
             "user_id": "user-from",
             "step_count": 7,
             "timeout_seconds": 120.0,
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
         }
 
         state = HITLAgentState.from_dict(data)

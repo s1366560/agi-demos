@@ -8,9 +8,10 @@ Extended with dynamic mode-based permission management for Plan Mode support.
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any
 
 from .errors import PermissionDeniedError, PermissionRejectedError
 from .rules import (
@@ -38,10 +39,10 @@ class PermissionRequest:
 
     id: str
     permission: str
-    patterns: List[str]
+    patterns: list[str]
     session_id: str
-    metadata: Dict[str, Any]
-    always_patterns: List[str]  # Patterns to allow if user chooses "always"
+    metadata: dict[str, Any]
+    always_patterns: list[str]  # Patterns to allow if user chooses "always"
 
 
 @dataclass
@@ -50,7 +51,7 @@ class _PendingRequest:
 
     request: PermissionRequest
     event: asyncio.Event
-    result: Dict[str, Any] = field(default_factory=dict)
+    result: dict[str, Any] = field(default_factory=dict)
 
 
 class PermissionManager:
@@ -92,7 +93,7 @@ class PermissionManager:
             pass
     """
 
-    def __init__(self, ruleset: List[PermissionRule] = None):
+    def __init__(self, ruleset: list[PermissionRule] | None = None) -> None:
         """
         Initialize permission manager.
 
@@ -100,16 +101,16 @@ class PermissionManager:
             ruleset: Initial rules. If None, uses default ruleset.
         """
         self.ruleset = ruleset or default_ruleset()
-        self.approved: List[PermissionRule] = []  # Runtime-approved rules
-        self.mode_rules: List[PermissionRule] = []  # Mode-specific rules
-        self.pending: Dict[str, _PendingRequest] = {}
-        self._event_publisher: Optional[Callable[[Dict], Awaitable[None]]] = None
+        self.approved: list[PermissionRule] = []  # Runtime-approved rules
+        self.mode_rules: list[PermissionRule] = []  # Mode-specific rules
+        self.pending: dict[str, _PendingRequest] = {}
+        self._event_publisher: Callable[[dict], Awaitable[None]] | None = None
         self._request_counter = 0
         self._current_mode = AgentPermissionMode.BUILD
 
     def set_event_publisher(
         self,
-        publisher: Callable[[Dict], Awaitable[None]],
+        publisher: Callable[[dict], Awaitable[None]],
     ) -> None:
         """
         Set the SSE event publisher for permission requests.
@@ -197,10 +198,10 @@ class PermissionManager:
     async def ask(
         self,
         permission: str,
-        patterns: List[str],
+        patterns: list[str],
         session_id: str,
-        metadata: Dict[str, Any] = None,
-        always_patterns: List[str] = None,
+        metadata: dict[str, Any] | None = None,
+        always_patterns: list[str] | None = None,
     ) -> str:
         """
         Request permission for an action.
@@ -237,7 +238,7 @@ class PermissionManager:
                 self._request_counter += 1
                 request_id = f"perm_{self._request_counter}"
                 event = asyncio.Event()
-                result_holder: Dict[str, Any] = {"result": None}
+                result_holder: dict[str, Any] = {"result": None}
 
                 request = PermissionRequest(
                     id=request_id,
@@ -300,7 +301,7 @@ class PermissionManager:
         self,
         request_id: str,
         reply: str,  # "once" | "always" | "reject"
-        message: str = None,
+        message: str | None = None,
     ) -> None:
         """
         Handle user response to permission request.
@@ -412,7 +413,7 @@ class PermissionManager:
                 f"for patterns {pending.request.always_patterns}"
             )
 
-    def get_pending_requests(self, session_id: str = None) -> List[PermissionRequest]:
+    def get_pending_requests(self, session_id: str | None = None) -> list[PermissionRequest]:
         """
         Get pending permission requests.
 
@@ -467,7 +468,7 @@ class PermissionManager:
         self._request_counter = 0
         self._current_mode = AgentPermissionMode.BUILD
 
-    def get_disabled_tools(self, tools: List[str]) -> set:
+    def get_disabled_tools(self, tools: list[str]) -> set:
         """
         Get the set of tools that are disabled based on current mode and rules.
 
@@ -485,7 +486,7 @@ class PermissionManager:
         all_rules = self.ruleset + self.mode_rules + self.approved
         return get_disabled_tools(tools, all_rules)
 
-    def get_allowed_tools(self, tools: List[str]) -> List[str]:
+    def get_allowed_tools(self, tools: list[str]) -> list[str]:
         """
         Get the list of tools that are allowed in the current mode.
 

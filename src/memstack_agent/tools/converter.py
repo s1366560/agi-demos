@@ -14,14 +14,15 @@ Reference: OpenAI's function_to_schema in src/infrastructure/agent/tools
 """
 
 import inspect
+from collections.abc import Callable
 from dataclasses import is_dataclass
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional, Union, get_args, get_origin
+from typing import Any, Union, get_args, get_origin
 
 from memstack_agent.tools.protocol import ToolDefinition, ToolMetadata
 
 # Type mapping for JSON Schema
-_TYPE_MAPPING: Dict[type, Dict[str, Any]] = {
+_TYPE_MAPPING: dict[type, dict[str, Any]] = {
     str: {"type": "string"},
     int: {"type": "integer"},
     float: {"type": "number"},
@@ -29,7 +30,7 @@ _TYPE_MAPPING: Dict[type, Dict[str, Any]] = {
 }
 
 
-def infer_type_schema(type_hint: Any) -> Dict[str, Any]:  # noqa: ANN401
+def infer_type_schema(type_hint: Any) -> dict[str, Any]:
     """Infer JSON Schema from a Python type hint.
 
     Supports:
@@ -66,7 +67,7 @@ def infer_type_schema(type_hint: Any) -> Dict[str, Any]:  # noqa: ANN401
         return {"anyOf": [infer_type_schema(a) for a in args]}
 
     # Handle List[T]
-    if origin is list or origin is List:
+    if origin is list or origin is list:
         if hasattr(type_hint, "__args__"):
             # Get generic type from List[T]
             args = get_args(type_hint)
@@ -78,12 +79,12 @@ def infer_type_schema(type_hint: Any) -> Dict[str, Any]:  # noqa: ANN401
         return {"type": "array"}
 
     # Handle Dict[str, T]
-    if origin is dict or origin is Dict:
+    if origin is dict or origin is dict:
         if hasattr(type_hint, "__args__"):
             # Get generic type from Dict[str, T]
             args = get_args(type_hint)
             if args and len(args) >= 2:
-                key_type, value_type = args
+                _key_type, value_type = args
                 return {
                     "type": "object",
                     "additionalProperties": infer_type_schema(value_type),
@@ -99,7 +100,7 @@ def infer_type_schema(type_hint: Any) -> Dict[str, Any]:  # noqa: ANN401
     return {"type": "string"}
 
 
-def _parse_param_docstring(docstring: str) -> Dict[str, str]:
+def _parse_param_docstring(docstring: str) -> dict[str, str]:
     """Parse parameter descriptions from docstring.
 
     Supports Google and Sphinx style docstrings:
@@ -143,7 +144,7 @@ def _parse_param_docstring(docstring: str) -> Dict[str, str]:
     return result
 
 
-def _infer_dataclass_schema(dataclass_type: Any) -> Dict[str, Any]:  # noqa: ANN401
+def _infer_dataclass_schema(dataclass_type: Any) -> dict[str, Any]:
     """Infer JSON Schema from a dataclass type.
 
     Args:
@@ -173,7 +174,7 @@ def _infer_dataclass_schema(dataclass_type: Any) -> Dict[str, Any]:  # noqa: ANN
     }
 
 
-def _build_function_schema(func: Callable) -> Dict[str, Any]:
+def _build_function_schema(func: Callable) -> dict[str, Any]:
     """Build JSON Schema from function signature.
 
     Args:
@@ -215,7 +216,7 @@ def _build_function_schema(func: Callable) -> Dict[str, Any]:
     }
 
 
-async def _execute_wrapped(func: Callable, /, **kwargs: Any) -> Any:  # noqa: ANN401
+async def _execute_wrapped(func: Callable, /, **kwargs: Any) -> Any:
     """Wrapper to execute sync/async functions uniformly.
 
     Args:
@@ -236,9 +237,9 @@ async def _execute_wrapped(func: Callable, /, **kwargs: Any) -> Any:  # noqa: AN
 
 def function_to_tool(
     func: Callable,
-    name: Optional[str] = None,
-    description: Optional[str] = None,
-    metadata: Optional[ToolMetadata] = None,
+    name: str | None = None,
+    description: str | None = None,
+    metadata: ToolMetadata | None = None,
 ) -> ToolDefinition:
     """Convert a Python callable to a ToolDefinition.
 
@@ -292,6 +293,6 @@ def function_to_tool(
 
 
 __all__ = [
-    "infer_type_schema",
     "function_to_tool",
+    "infer_type_schema",
 ]

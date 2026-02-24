@@ -2,7 +2,7 @@
 Use case for creating a new task log.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -17,10 +17,10 @@ class CreateTaskCommand(BaseModel):
 
     group_id: str
     task_type: str
-    payload: Dict[str, Any] = Field(default_factory=dict)
-    entity_id: Optional[str] = None
-    entity_type: Optional[str] = None
-    parent_task_id: Optional[str] = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    entity_id: str | None = None
+    entity_type: str | None = None
+    parent_task_id: str | None = None
 
     @field_validator("group_id", "task_type")
     @classmethod
@@ -31,14 +31,14 @@ class CreateTaskCommand(BaseModel):
 
     @field_validator("payload", mode="before")
     @classmethod
-    def coerce_none_payload(cls, v: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def coerce_none_payload(cls, v: dict[str, Any] | None) -> dict[str, Any]:
         return v if v is not None else {}
 
 
 class CreateTaskUseCase:
     """Use case for creating task logs"""
 
-    def __init__(self, task_repository: TaskRepository):
+    def __init__(self, task_repository: TaskRepository) -> None:
         self._task_repo = task_repository
 
     async def execute(self, command: CreateTaskCommand) -> TaskLog:

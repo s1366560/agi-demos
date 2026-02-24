@@ -15,7 +15,6 @@ import logging
 import socket
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ class PortReservation:
     sandbox_id: str
     service_type: str  # 'mcp', 'desktop', 'terminal'
     reserved_at: float
-    expires_at: Optional[float] = None  # None means never expires
+    expires_at: float | None = None  # None means never expires
 
     def is_expired(self) -> bool:
         """Check if this reservation has expired."""
@@ -46,7 +45,7 @@ class PortAllocationResult:
     terminal_port: int
     reservation_id: str  # Unique ID to release all ports together
 
-    def to_list(self) -> List[int]:
+    def to_list(self) -> list[int]:
         """Return all ports as a list."""
         return [self.mcp_port, self.desktop_port, self.terminal_port]
 
@@ -78,12 +77,12 @@ class PortAllocator:
     def __init__(
         self,
         docker_client,
-        mcp_port_range: Tuple[int, int] = (18765, 19765),
-        desktop_port_range: Tuple[int, int] = (16080, 17080),
-        terminal_port_range: Tuple[int, int] = (17681, 18681),
+        mcp_port_range: tuple[int, int] = (18765, 19765),
+        desktop_port_range: tuple[int, int] = (16080, 17080),
+        terminal_port_range: tuple[int, int] = (17681, 18681),
         reservation_ttl_seconds: float = 300.0,  # 5 minutes default
         use_docker_auto_assign: bool = False,  # If True, let Docker assign ports
-    ):
+    ) -> None:
         """
         Initialize the port allocator.
 
@@ -106,10 +105,10 @@ class PortAllocator:
         self._lock = asyncio.Lock()
 
         # Active reservations keyed by reservation_id
-        self._reservations: Dict[str, List[PortReservation]] = {}
+        self._reservations: dict[str, list[PortReservation]] = {}
 
         # Quick lookup of reserved ports
-        self._reserved_ports: Set[int] = set()
+        self._reserved_ports: set[int] = set()
 
         # Port counters for round-robin allocation
         self._mcp_counter = 0
@@ -218,7 +217,7 @@ class PortAllocator:
                         reservation_id=reservation_id,
                     )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"Port allocation timeout for sandbox {sandbox_id}")
             raise
         except RuntimeError:
@@ -243,7 +242,7 @@ class PortAllocator:
                     reservation.expires_at = None  # Never expires
                 logger.debug(f"Confirmed port reservation: {reservation_id}")
 
-    async def release_ports(self, reservation_id: str) -> List[int]:
+    async def release_ports(self, reservation_id: str) -> list[int]:
         """
         Release all ports associated with a reservation.
 
@@ -256,7 +255,7 @@ class PortAllocator:
         async with self._lock:
             return self._release_ports_unsafe(reservation_id)
 
-    def _release_ports_unsafe(self, reservation_id: str) -> List[int]:
+    def _release_ports_unsafe(self, reservation_id: str) -> list[int]:
         """Release ports without lock (must be called with lock held)."""
         if reservation_id not in self._reservations:
             return []
@@ -270,7 +269,7 @@ class PortAllocator:
         logger.debug(f"Released ports for reservation {reservation_id}: {released}")
         return released
 
-    async def release_ports_by_sandbox(self, sandbox_id: str) -> List[int]:
+    async def release_ports_by_sandbox(self, sandbox_id: str) -> list[int]:
         """
         Release all ports reserved by a specific sandbox.
 
@@ -295,7 +294,7 @@ class PortAllocator:
 
     def _find_available_port_unsafe(
         self,
-        port_range: Tuple[int, int],
+        port_range: tuple[int, int],
         service_type: str,
     ) -> int:
         """
@@ -407,7 +406,7 @@ class PortAllocator:
         async with self._lock:
             return self._cleanup_expired_unsafe()
 
-    async def get_stats(self) -> Dict:
+    async def get_stats(self) -> dict:
         """Get port allocator statistics."""
         async with self._lock:
             total_mcp = self._mcp_port_range[1] - self._mcp_port_range[0]

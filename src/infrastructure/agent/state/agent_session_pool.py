@@ -18,7 +18,7 @@ import hashlib
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -48,20 +48,20 @@ class AgentSessionContext:
     agent_mode: str
 
     # Cached stateless components
-    tool_definitions: List[Any]  # List[ToolDefinition] - converted tools with closures
-    raw_tools: Dict[str, Any]  # Original tool instances for SubAgent filtering
+    tool_definitions: list[Any]  # List[ToolDefinition] - converted tools with closures
+    raw_tools: dict[str, Any]  # Original tool instances for SubAgent filtering
 
     # Cached optional components
-    subagent_router: Optional[Any] = None  # SubAgentRouter with built keyword index
-    skill_executor: Optional[Any] = None  # SkillExecutor instance
-    resource_sync_service: Optional[Any] = None  # SkillResourceSyncService instance
-    skills: List[Any] = field(default_factory=list)  # List[Skill]
+    subagent_router: Any | None = None  # SubAgentRouter with built keyword index
+    skill_executor: Any | None = None  # SkillExecutor instance
+    resource_sync_service: Any | None = None  # SkillResourceSyncService instance
+    skills: list[Any] = field(default_factory=list)  # List[Skill]
 
     # Shared singleton references
-    system_prompt_manager: Optional[Any] = None  # SystemPromptManager singleton
+    system_prompt_manager: Any | None = None  # SystemPromptManager singleton
 
     # Configuration (for validation)
-    processor_config: Optional[Any] = None  # ProcessorConfig
+    processor_config: Any | None = None  # ProcessorConfig
 
     # Cache validity detection
     tools_hash: str = ""  # Hash of tool names for change detection
@@ -125,7 +125,7 @@ class MCPToolsCacheEntry:
     configurable TTL to avoid frequent workflow calls.
     """
 
-    tools: Dict[str, Any]  # Tool instances from MCP
+    tools: dict[str, Any]  # Tool instances from MCP
     fetched_at: float  # Timestamp when fetched
     tenant_id: str
     version: int = 0  # Incremented on MCP config changes
@@ -140,26 +140,26 @@ class MCPToolsCacheEntry:
 # ============================================================================
 
 # Agent Session Pool - main cache for session contexts
-_agent_session_pool: Dict[str, AgentSessionContext] = {}
+_agent_session_pool: dict[str, AgentSessionContext] = {}
 _agent_session_pool_lock = asyncio.Lock()
 
 # Tool Definitions Cache - converted ToolDefinition objects with TTL
 # Stores (definitions, cached_at) tuples for TTL expiry
 _TOOL_DEFINITIONS_TTL_SECONDS = 300  # 5 minutes, aligned with MCP tools TTL
 _TOOL_DEFINITIONS_MAX_ENTRIES = 100  # LRU-like cap to prevent unbounded growth
-_tool_definitions_cache: Dict[str, tuple] = {}  # hash -> (List[ToolDef], float)
+_tool_definitions_cache: dict[str, tuple] = {}  # hash -> (List[ToolDef], float)
 _tool_definitions_cache_lock = asyncio.Lock()
 
 # MCP Tools Cache - tools loaded from MCP workflows with TTL
-_mcp_tools_cache: Dict[str, MCPToolsCacheEntry] = {}
+_mcp_tools_cache: dict[str, MCPToolsCacheEntry] = {}
 _mcp_tools_cache_lock = asyncio.Lock()
 
 # SubAgentRouter Cache - routers with built keyword index
-_subagent_router_cache: Dict[str, Any] = {}
+_subagent_router_cache: dict[str, Any] = {}
 _subagent_router_cache_lock = asyncio.Lock()
 
 # SystemPromptManager Singleton
-_system_prompt_manager: Optional[Any] = None
+_system_prompt_manager: Any | None = None
 _system_prompt_manager_lock = asyncio.Lock()
 
 
@@ -168,7 +168,7 @@ _system_prompt_manager_lock = asyncio.Lock()
 # ============================================================================
 
 
-def compute_tools_hash(tools: Dict[str, Any]) -> str:
+def compute_tools_hash(tools: dict[str, Any]) -> str:
     """Compute a hash of tool names for change detection.
 
     Args:
@@ -182,7 +182,7 @@ def compute_tools_hash(tools: Dict[str, Any]) -> str:
     return hashlib.md5(content.encode()).hexdigest()[:16]
 
 
-def compute_skills_hash(skills: List[Any]) -> str:
+def compute_skills_hash(skills: list[Any]) -> str:
     """Compute a hash of skill names and versions for change detection.
 
     Args:
@@ -199,7 +199,7 @@ def compute_skills_hash(skills: List[Any]) -> str:
     return hashlib.md5(content.encode()).hexdigest()[:16]
 
 
-def compute_subagents_hash(subagents: List[Any]) -> str:
+def compute_subagents_hash(subagents: list[Any]) -> str:
     """Compute a hash of subagent names for change detection.
 
     Args:
@@ -239,7 +239,7 @@ def generate_session_key(
 # ============================================================================
 
 
-async def get_system_prompt_manager() -> Any:  # noqa: ANN401
+async def get_system_prompt_manager() -> Any:
     """Get or create the global SystemPromptManager singleton.
 
     Returns:
@@ -272,9 +272,9 @@ async def get_system_prompt_manager() -> Any:  # noqa: ANN401
 
 
 async def get_or_create_tool_definitions(
-    tools: Dict[str, Any],
-    tools_hash: Optional[str] = None,
-) -> List[Any]:
+    tools: dict[str, Any],
+    tools_hash: str | None = None,
+) -> list[Any]:
     """Get or create cached tool definitions.
 
     This caches the expensive _convert_tools() operation that creates
@@ -321,7 +321,7 @@ async def get_or_create_tool_definitions(
         return definitions
 
 
-def invalidate_tool_definitions_cache(tools_hash: Optional[str] = None) -> int:
+def invalidate_tool_definitions_cache(tools_hash: str | None = None) -> int:
     """Invalidate tool definitions cache.
 
     Args:
@@ -353,7 +353,7 @@ def invalidate_tool_definitions_cache(tools_hash: Optional[str] = None) -> int:
 async def get_mcp_tools_from_cache(
     tenant_id: str,
     ttl_seconds: int = 300,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """Get MCP tools from cache if not expired.
 
     Args:
@@ -380,7 +380,7 @@ async def get_mcp_tools_from_cache(
 
 async def update_mcp_tools_cache(
     tenant_id: str,
-    tools: Dict[str, Any],
+    tools: dict[str, Any],
     version: int = 0,
 ) -> None:
     """Update MCP tools cache.
@@ -402,7 +402,7 @@ async def update_mcp_tools_cache(
         )
 
 
-def invalidate_mcp_tools_cache(tenant_id: Optional[str] = None) -> int:
+def invalidate_mcp_tools_cache(tenant_id: str | None = None) -> int:
     """Invalidate MCP tools cache and cascade to dependent caches.
 
     When MCP tools change (server create/delete/enable/disable/sync),
@@ -467,10 +467,10 @@ def invalidate_mcp_tools_cache(tenant_id: Optional[str] = None) -> int:
 
 async def get_or_create_subagent_router(
     tenant_id: str,
-    subagents: List[Any],
-    subagents_hash: Optional[str] = None,
+    subagents: list[Any],
+    subagents_hash: str | None = None,
     match_threshold: float = 0.5,
-) -> Optional[Any]:  # noqa: ANN401
+) -> Any | None:
     """Get or create cached SubAgentRouter with built keyword index.
 
     Args:
@@ -516,7 +516,7 @@ async def get_or_create_subagent_router(
         return router
 
 
-def invalidate_subagent_router_cache(tenant_id: Optional[str] = None) -> int:
+def invalidate_subagent_router_cache(tenant_id: str | None = None) -> int:
     """Invalidate SubAgentRouter cache.
 
     Args:
@@ -553,10 +553,10 @@ async def get_or_create_agent_session(
     tenant_id: str,
     project_id: str,
     agent_mode: str,
-    tools: Dict[str, Any],
-    skills: Optional[List[Any]] = None,
-    subagents: Optional[List[Any]] = None,
-    processor_config: Optional[Any] = None,  # noqa: ANN401
+    tools: dict[str, Any],
+    skills: list[Any] | None = None,
+    subagents: list[Any] | None = None,
+    processor_config: Any | None = None,
     subagent_match_threshold: float = 0.5,
 ) -> AgentSessionContext:
     """Get or create an agent session context with cached components.
@@ -721,9 +721,9 @@ async def get_or_create_agent_session(
 
 
 def invalidate_agent_session(
-    tenant_id: Optional[str] = None,
-    project_id: Optional[str] = None,
-    agent_mode: Optional[str] = None,
+    tenant_id: str | None = None,
+    project_id: str | None = None,
+    agent_mode: str | None = None,
 ) -> int:
     """Invalidate agent sessions matching the criteria.
 
@@ -773,7 +773,7 @@ def invalidate_agent_session(
     return len(keys_to_remove)
 
 
-async def cleanup_expired_sessions(ttl_seconds: Optional[int] = None) -> int:
+async def cleanup_expired_sessions(ttl_seconds: int | None = None) -> int:
     """Clean up expired session contexts.
 
     This should be called periodically (e.g., every 10 minutes) to
@@ -805,7 +805,7 @@ async def cleanup_expired_sessions(ttl_seconds: Optional[int] = None) -> int:
         return len(expired_keys)
 
 
-def get_pool_stats() -> Dict[str, Any]:
+def get_pool_stats() -> dict[str, Any]:
     """Get statistics about the agent session pool.
 
     Returns:
@@ -908,7 +908,7 @@ async def cleanup_marked_sessions() -> int:
         return len(keys_to_remove)
 
 
-def clear_all_caches() -> Dict[str, int]:
+def clear_all_caches() -> dict[str, int]:
     """Clear all caches (for shutdown or testing).
 
     Returns:
@@ -943,7 +943,7 @@ def clear_all_caches() -> Dict[str, int]:
 def get_project_session_stats(
     tenant_id: str,
     project_id: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get session statistics for a specific project.
 
     Args:
@@ -985,9 +985,9 @@ def get_project_session_stats(
 
 
 def list_project_sessions(
-    tenant_id: Optional[str] = None,
-    project_id: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+    tenant_id: str | None = None,
+    project_id: str | None = None,
+) -> list[dict[str, Any]]:
     """List all sessions matching the criteria.
 
     Args:
@@ -1027,7 +1027,7 @@ def list_project_sessions(
 async def invalidate_project_sessions(
     tenant_id: str,
     project_id: str,
-    agent_mode: Optional[str] = None,
+    agent_mode: str | None = None,
 ) -> int:
     """Invalidate all sessions for a project.
 
@@ -1054,12 +1054,12 @@ async def get_or_create_project_session(
     tenant_id: str,
     project_id: str,
     agent_mode: str,
-    tools: Dict[str, Any],
-    skills: Optional[List[Any]] = None,
-    subagents: Optional[List[Any]] = None,
-    processor_config: Optional[Any] = None,  # noqa: ANN401
+    tools: dict[str, Any],
+    skills: list[Any] | None = None,
+    subagents: list[Any] | None = None,
+    processor_config: Any | None = None,
     subagent_match_threshold: float = 0.5,
-    project_config: Optional[Dict[str, Any]] = None,
+    project_config: dict[str, Any] | None = None,
 ) -> AgentSessionContext:
     """Get or create an agent session specifically for a project.
 
@@ -1103,13 +1103,13 @@ async def get_or_create_project_session(
     )
 
 
-def get_project_isolation_info() -> Dict[str, Any]:
+def get_project_isolation_info() -> dict[str, Any]:
     """Get information about project-level cache isolation.
 
     Returns:
         Dictionary with isolation statistics
     """
-    tenant_projects: Dict[str, set] = {}
+    tenant_projects: dict[str, set] = {}
 
     for key in _agent_session_pool.keys():
         parts = key.split(":")

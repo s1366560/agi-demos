@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Set
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -42,11 +43,11 @@ class SubTaskExecution:
 
     subtask: SubTask
     subagent: SubAgent
-    process: Optional[SubAgentProcess] = None
-    result: Optional[SubAgentResult] = None
+    process: SubAgentProcess | None = None
+    result: SubAgentResult | None = None
     started: bool = False
     completed: bool = False
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class ParallelScheduler:
@@ -63,8 +64,8 @@ class ParallelScheduler:
 
     def __init__(
         self,
-        config: Optional[ParallelSchedulerConfig] = None,
-    ):
+        config: ParallelSchedulerConfig | None = None,
+    ) -> None:
         """Initialize ParallelScheduler.
 
         Args:
@@ -74,19 +75,19 @@ class ParallelScheduler:
 
     async def execute(
         self,
-        subtasks: List[SubTask],
-        subagent_map: Dict[str, SubAgent],
-        tools: List[Any],
+        subtasks: list[SubTask],
+        subagent_map: dict[str, SubAgent],
+        tools: list[Any],
         base_model: str,
-        base_api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        llm_client: Optional[LLMClient] = None,
-        conversation_context: Optional[List[Dict[str, str]]] = None,
+        base_api_key: str | None = None,
+        base_url: str | None = None,
+        llm_client: LLMClient | None = None,
+        conversation_context: list[dict[str, str]] | None = None,
         main_token_budget: int = 128000,
         project_id: str = "",
         tenant_id: str = "",
-        abort_signal: Optional[asyncio.Event] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        abort_signal: asyncio.Event | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """Execute sub-tasks with dependency-aware parallel scheduling.
 
         Yields SSE events from all SubAgents prefixed with their task ID.
@@ -112,7 +113,7 @@ class ParallelScheduler:
             return
 
         # Build execution map
-        executions: Dict[str, SubTaskExecution] = {}
+        executions: dict[str, SubTaskExecution] = {}
         for st in subtasks:
             agent = self._resolve_agent(st, subagent_map)
             if not agent:
@@ -129,12 +130,12 @@ class ParallelScheduler:
                 "task_count": len(executions),
                 "task_ids": list(executions.keys()),
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         # Track completed task IDs for dependency resolution
-        completed_ids: Set[str] = set()
-        results: List[SubAgentResult] = []
+        completed_ids: set[str] = set()
+        results: list[SubAgentResult] = []
 
         # Event queue for collecting events from parallel tasks
         event_queue: asyncio.Queue = asyncio.Queue()
@@ -157,7 +158,7 @@ class ParallelScheduler:
                         "subagent_name": execution.subagent.display_name,
                         "description": execution.subtask.description[:200],
                     },
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 })
 
                 try:
@@ -194,7 +195,7 @@ class ParallelScheduler:
                     execution.result = process.result
                     execution.completed = True
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     execution.error = f"Task {task_id} timed out"
                     logger.warning(f"[ParallelScheduler] {execution.error}")
                 except Exception as e:
@@ -212,7 +213,7 @@ class ParallelScheduler:
                             "success": execution.completed and not execution.error,
                             "error": execution.error,
                         },
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                     })
 
         # Launch all tasks concurrently
@@ -223,7 +224,7 @@ class ParallelScheduler:
         # Also launch a sentinel to detect when all tasks are done
         all_done = asyncio.Event()
 
-        async def wait_for_all():
+        async def wait_for_all() -> None:
             await asyncio.gather(*tasks, return_exceptions=True)
             all_done.set()
             await event_queue.put(None)  # Sentinel
@@ -246,13 +247,13 @@ class ParallelScheduler:
                 "failed": sum(1 for e in executions.values() if e.error),
                 "results": [r.to_event_data() for r in results],
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     @staticmethod
     async def _collect_events(
         process: SubAgentProcess, task_id: str
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Collect events from a SubAgentProcess, adding task_id context."""
         async for event in process.execute():
             event_data = dict(event)
@@ -264,8 +265,8 @@ class ParallelScheduler:
 
     @staticmethod
     def _resolve_agent(
-        subtask: SubTask, agent_map: Dict[str, SubAgent]
-    ) -> Optional[SubAgent]:
+        subtask: SubTask, agent_map: dict[str, SubAgent]
+    ) -> SubAgent | None:
         """Resolve which SubAgent to use for a sub-task."""
         if subtask.target_subagent and subtask.target_subagent in agent_map:
             return agent_map[subtask.target_subagent]

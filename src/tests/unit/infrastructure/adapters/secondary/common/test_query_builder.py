@@ -6,7 +6,6 @@ These tests MUST FAIL before implementation exists.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 from sqlalchemy import Column, String, select
 from sqlalchemy.orm import DeclarativeBase
@@ -32,9 +31,9 @@ class TestModel(Base):
 @dataclass
 class FilterOptions:
     """Filter options for testing."""
-    tenant_id: Optional[str] = None
-    status: Optional[str] = None
-    name_contains: Optional[str] = None
+    tenant_id: str | None = None
+    status: str | None = None
+    name_contains: str | None = None
 
 
 class TestQueryBuilder:

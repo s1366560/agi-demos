@@ -7,9 +7,9 @@ with an optional Redis persistence layer for cross-process visibility.
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -51,15 +51,15 @@ class SubAgentState:
     conversation_id: str
     status: SubAgentStatus = SubAgentStatus.PENDING
     task_description: str = ""
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
     progress: int = 0
     result_summary: str = ""
-    error: Optional[str] = None
+    error: str | None = None
     tokens_used: int = 0
     tool_calls_count: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize state to dictionary."""
         return {
             "execution_id": self.execution_id,
@@ -78,7 +78,7 @@ class SubAgentState:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SubAgentState":
+    def from_dict(cls, data: dict[str, Any]) -> "SubAgentState":
         """Deserialize from dictionary."""
         state = cls(
             execution_id=data["execution_id"],
@@ -115,7 +115,7 @@ class StateTracker:
 
     def __init__(self) -> None:
         # conversation_id -> {execution_id -> SubAgentState}
-        self._states: Dict[str, Dict[str, SubAgentState]] = {}
+        self._states: dict[str, dict[str, SubAgentState]] = {}
 
     def register(
         self,
@@ -158,12 +158,12 @@ class StateTracker:
         logger.debug(f"[StateTracker] Registered {execution_id} for {subagent_name}")
         return state
 
-    def start(self, execution_id: str, conversation_id: str) -> Optional[SubAgentState]:
+    def start(self, execution_id: str, conversation_id: str) -> SubAgentState | None:
         """Mark execution as started."""
         state = self._get(execution_id, conversation_id)
         if state:
             state.status = SubAgentStatus.RUNNING
-            state.started_at = datetime.now(timezone.utc)
+            state.started_at = datetime.now(UTC)
         return state
 
     def complete(
@@ -173,12 +173,12 @@ class StateTracker:
         summary: str = "",
         tokens_used: int = 0,
         tool_calls_count: int = 0,
-    ) -> Optional[SubAgentState]:
+    ) -> SubAgentState | None:
         """Mark execution as completed."""
         state = self._get(execution_id, conversation_id)
         if state:
             state.status = SubAgentStatus.COMPLETED
-            state.completed_at = datetime.now(timezone.utc)
+            state.completed_at = datetime.now(UTC)
             state.progress = 100
             state.result_summary = summary
             state.tokens_used = tokens_used
@@ -190,28 +190,28 @@ class StateTracker:
         execution_id: str,
         conversation_id: str,
         error: str = "",
-    ) -> Optional[SubAgentState]:
+    ) -> SubAgentState | None:
         """Mark execution as failed."""
         state = self._get(execution_id, conversation_id)
         if state:
             state.status = SubAgentStatus.FAILED
-            state.completed_at = datetime.now(timezone.utc)
+            state.completed_at = datetime.now(UTC)
             state.error = error
         return state
 
     def cancel(
         self, execution_id: str, conversation_id: str
-    ) -> Optional[SubAgentState]:
+    ) -> SubAgentState | None:
         """Mark execution as cancelled."""
         state = self._get(execution_id, conversation_id)
         if state:
             state.status = SubAgentStatus.CANCELLED
-            state.completed_at = datetime.now(timezone.utc)
+            state.completed_at = datetime.now(UTC)
         return state
 
     def update_progress(
         self, execution_id: str, conversation_id: str, progress: int
-    ) -> Optional[SubAgentState]:
+    ) -> SubAgentState | None:
         """Update execution progress (0-100)."""
         state = self._get(execution_id, conversation_id)
         if state:
@@ -220,11 +220,11 @@ class StateTracker:
 
     def get_state(
         self, execution_id: str, conversation_id: str
-    ) -> Optional[SubAgentState]:
+    ) -> SubAgentState | None:
         """Get state for a specific execution."""
         return self._get(execution_id, conversation_id)
 
-    def get_active(self, conversation_id: str) -> List[SubAgentState]:
+    def get_active(self, conversation_id: str) -> list[SubAgentState]:
         """Get all active (pending/running) executions for a conversation."""
         conv_states = self._states.get(conversation_id, {})
         return [
@@ -233,7 +233,7 @@ class StateTracker:
             if s.status in (SubAgentStatus.PENDING, SubAgentStatus.RUNNING)
         ]
 
-    def get_all(self, conversation_id: str) -> List[SubAgentState]:
+    def get_all(self, conversation_id: str) -> list[SubAgentState]:
         """Get all tracked executions for a conversation."""
         return list(self._states.get(conversation_id, {}).values())
 
@@ -243,7 +243,7 @@ class StateTracker:
 
     def _get(
         self, execution_id: str, conversation_id: str
-    ) -> Optional[SubAgentState]:
+    ) -> SubAgentState | None:
         """Get state by execution and conversation ID."""
         return self._states.get(conversation_id, {}).get(execution_id)
 
@@ -257,7 +257,7 @@ class StateTracker:
             in (SubAgentStatus.COMPLETED, SubAgentStatus.FAILED, SubAgentStatus.CANCELLED)
         ]
         # Sort by completion time, evict oldest
-        completed.sort(key=lambda x: x[1].completed_at or datetime.min.replace(tzinfo=timezone.utc))
+        completed.sort(key=lambda x: x[1].completed_at or datetime.min.replace(tzinfo=UTC))
         while len(conv_states) > self.MAX_TRACKED and completed:
             eid, _ = completed.pop(0)
             del conv_states[eid]

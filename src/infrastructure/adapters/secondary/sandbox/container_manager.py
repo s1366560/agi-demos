@@ -8,7 +8,7 @@ for sandbox environments. Extracted from MCPSandboxAdapter.
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import docker
 from docker.errors import ImageNotFound, NotFound
@@ -46,7 +46,7 @@ class ContainerManager:
         default_memory_limit: str = "2g",
         default_cpu_limit: str = "2",
         container_name_prefix: str = "memstack-sandbox",
-    ):
+    ) -> None:
         """
         Initialize container manager.
 
@@ -73,11 +73,11 @@ class ContainerManager:
         sandbox_id: str,
         project_path: str,
         ports: SandboxPorts,
-        memory_limit: Optional[str] = None,
-        cpu_limit: Optional[str] = None,
-        environment: Optional[Dict[str, str]] = None,
-        project_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
+        memory_limit: str | None = None,
+        cpu_limit: str | None = None,
+        environment: dict[str, str] | None = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> Container:
         """
         Create a new Docker container for sandbox.
@@ -198,7 +198,7 @@ class ContainerManager:
         except Exception as e:
             logger.warning(f"Error removing container {container.id[:12]}: {e}")
 
-    async def get_container(self, container_id: str) -> Optional[Container]:
+    async def get_container(self, container_id: str) -> Container | None:
         """Get container by ID."""
         loop = asyncio.get_event_loop()
         try:
@@ -211,7 +211,7 @@ class ContainerManager:
             logger.error(f"Error getting container {container_id}: {e}")
             return None
 
-    async def get_container_by_sandbox_id(self, sandbox_id: str) -> Optional[Container]:
+    async def get_container_by_sandbox_id(self, sandbox_id: str) -> Container | None:
         """Get container by sandbox ID label."""
         loop = asyncio.get_event_loop()
         try:
@@ -243,9 +243,9 @@ class ContainerManager:
 
     async def list_sandbox_containers(
         self,
-        project_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-    ) -> List[Container]:
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+    ) -> list[Container]:
         """List all sandbox containers with optional filtering."""
         loop = asyncio.get_event_loop()
         filters = {"label": "memstack.sandbox=true"}
@@ -294,7 +294,7 @@ class ContainerManager:
 
         return count
 
-    async def get_container_stats(self, container: Container) -> Dict[str, Any]:
+    async def get_container_stats(self, container: Container) -> dict[str, Any]:
         """Get resource usage stats for container."""
         loop = asyncio.get_event_loop()
         try:

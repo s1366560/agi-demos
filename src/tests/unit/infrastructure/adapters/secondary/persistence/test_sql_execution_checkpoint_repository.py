@@ -4,7 +4,7 @@ Tests for V2 SqlExecutionCheckpointRepository using BaseRepository.
 TDD Approach: RED -> GREEN -> REFACTOR
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +37,7 @@ class TestSqlExecutionCheckpointRepositoryCreate:
             checkpoint_type="llm_complete",
             execution_state={"step": 1, "data": "test"},
             step_number=1,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         await v2_checkpoint_repo.save(checkpoint)
@@ -61,7 +61,7 @@ class TestSqlExecutionCheckpointRepositoryCreate:
             checkpoint_type="tool_start",
             execution_state={"tool": "search"},
             step_number=None,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         await v2_checkpoint_repo.save(checkpoint)
@@ -86,7 +86,7 @@ class TestSqlExecutionCheckpointRepositoryFind:
                 checkpoint_type="test",
                 execution_state={"index": i},
                 step_number=i,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_checkpoint_repo.save(checkpoint)
 
@@ -112,7 +112,7 @@ class TestSqlExecutionCheckpointRepositoryFind:
                 checkpoint_type=checkpoint_type,
                 execution_state={"type": checkpoint_type},
                 step_number=1,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_checkpoint_repo.save(checkpoint)
 
@@ -133,7 +133,7 @@ class TestSqlExecutionCheckpointRepositoryFind:
                 checkpoint_type="test",
                 execution_state={"index": i},
                 step_number=i,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_checkpoint_repo.save(checkpoint)
 
@@ -157,7 +157,7 @@ class TestSqlExecutionCheckpointRepositoryDelete:
                 checkpoint_type="test",
                 execution_state={},
                 step_number=None,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_checkpoint_repo.save(checkpoint)
 
@@ -187,7 +187,7 @@ class TestSqlExecutionCheckpointRepositoryToDomain:
             checkpoint_type="test",
             execution_state=None,
             step_number=None,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_checkpoint_repo.save(checkpoint)
 
@@ -208,7 +208,7 @@ class TestSqlExecutionCheckpointRepositoryToDb:
             checkpoint_type="test",
             execution_state={"test": "data"},
             step_number=1,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         db_model = v2_checkpoint_repo._to_db(checkpoint)

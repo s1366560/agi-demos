@@ -6,8 +6,8 @@ for entity extraction and knowledge graph operations.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from src.domain.model.enums import ProcessingStatus
 from src.domain.model.memory.episode import Episode, SourceType
@@ -22,8 +22,8 @@ class SearchResults:
     """Container for search results with metadata"""
 
     def __init__(
-        self, memories: List[Dict[str, Any]], entities: List[Dict[str, Any]], total: int, query: str
-    ):
+        self, memories: list[dict[str, Any]], entities: list[dict[str, Any]], total: int, query: str
+    ) -> None:
         self.memories = memories
         self.entities = entities
         self.total = total
@@ -33,7 +33,7 @@ class SearchResults:
 class MemoryService:
     """Service for managing memories with graph integration"""
 
-    def __init__(self, memory_repo: MemoryRepository, graph_service: GraphServicePort):
+    def __init__(self, memory_repo: MemoryRepository, graph_service: GraphServicePort) -> None:
         self._memory_repo = memory_repo
         self._graph_service = graph_service
 
@@ -45,9 +45,9 @@ class MemoryService:
         user_id: str,
         tenant_id: str,
         content_type: str = "text",
-        tags: Optional[List[str]] = None,
+        tags: list[str] | None = None,
         is_public: bool = False,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> Memory:
         """
         Create a new memory and queue it for background processing.
@@ -84,7 +84,7 @@ class MemoryService:
             status="ENABLED",
             processing_status=ProcessingStatus.PENDING.value,
             metadata=metadata or {},
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         # Save memory to database
@@ -97,7 +97,7 @@ class MemoryService:
             name=title,
             content=content,
             source_type=SourceType.TEXT,
-            valid_at=datetime.now(timezone.utc),
+            valid_at=datetime.now(UTC),
             metadata={
                 "memory_id": memory.id,
                 "tenant_id": tenant_id,
@@ -123,7 +123,7 @@ class MemoryService:
 
         return memory
 
-    async def get_memory(self, memory_id: str) -> Optional[Memory]:
+    async def get_memory(self, memory_id: str) -> Memory | None:
         """
         Retrieve a memory by ID.
 
@@ -137,7 +137,7 @@ class MemoryService:
 
     async def list_memories(
         self, project_id: str, limit: int = 50, offset: int = 0
-    ) -> List[Memory]:
+    ) -> list[Memory]:
         """
         List memories in a project.
 
@@ -209,11 +209,11 @@ class MemoryService:
     async def update_memory(
         self,
         memory_id: str,
-        title: Optional[str] = None,
-        content: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-        is_public: Optional[bool] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        title: str | None = None,
+        content: str | None = None,
+        tags: list[str] | None = None,
+        is_public: bool | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> Memory:
         """
         Update memory properties.
@@ -255,7 +255,7 @@ class MemoryService:
         if metadata is not None:
             memory.metadata.update(metadata)
 
-        memory.updated_at = datetime.now(timezone.utc)
+        memory.updated_at = datetime.now(UTC)
 
         # If content changed, reprocess by updating processing status
         if content_changed:
@@ -272,7 +272,7 @@ class MemoryService:
                     name=memory.title,
                     content=memory.content,
                     source_type=SourceType.TEXT,
-                    valid_at=datetime.now(timezone.utc),
+                    valid_at=datetime.now(UTC),
                     metadata={
                         "memory_id": memory.id,
                         "tenant_id": memory.metadata.get("tenant_id"),
@@ -334,7 +334,7 @@ class MemoryService:
         else:
             logger.info(f"Deleted memory {memory_id}")
 
-    async def share_memory(self, memory_id: str, collaborators: List[str]) -> Memory:
+    async def share_memory(self, memory_id: str, collaborators: list[str]) -> Memory:
         """
         Share a memory with specific collaborators.
 
@@ -357,7 +357,7 @@ class MemoryService:
             if user_id not in memory.collaborators:
                 memory.collaborators.append(user_id)
 
-        memory.updated_at = datetime.now(timezone.utc)
+        memory.updated_at = datetime.now(UTC)
         await self._memory_repo.save(memory)
         logger.info(f"Shared memory {memory_id} with {len(collaborators)} collaborators")
 

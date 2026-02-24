@@ -7,8 +7,8 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from ..config import AgentInstanceConfig, PoolConfig, ResourceQuota
 from ..types import ProjectTier, ResourceUsage
@@ -34,8 +34,8 @@ class ProjectResourceAllocation:
     active_requests: int = 0
 
     # 时间戳
-    allocated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    allocated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     @property
     def allocation_key(self) -> str:
@@ -74,14 +74,14 @@ class ResourceManager:
     - 资源回收
     """
 
-    def __init__(self, config: PoolConfig):
+    def __init__(self, config: PoolConfig) -> None:
         """初始化资源管理器.
 
         Args:
             config: 池配置
         """
         self.config = config
-        self._allocations: Dict[str, ProjectResourceAllocation] = {}
+        self._allocations: dict[str, ProjectResourceAllocation] = {}
         self._lock = asyncio.Lock()
 
         # 全局资源追踪
@@ -247,7 +247,7 @@ class ResourceManager:
             allocation.active_instances += 1
             allocation.memory_used_mb += memory_mb
             allocation.cpu_used_cores += cpu_cores
-            allocation.updated_at = datetime.now(timezone.utc)
+            allocation.updated_at = datetime.now(UTC)
 
             # 更新全局追踪
             self._total_instances += 1
@@ -291,7 +291,7 @@ class ResourceManager:
             allocation.active_instances = max(0, allocation.active_instances - 1)
             allocation.memory_used_mb = max(0, allocation.memory_used_mb - memory_mb)
             allocation.cpu_used_cores = max(0, allocation.cpu_used_cores - cpu_cores)
-            allocation.updated_at = datetime.now(timezone.utc)
+            allocation.updated_at = datetime.now(UTC)
 
             # 更新全局追踪
             self._total_instances = max(0, self._total_instances - 1)
@@ -331,7 +331,7 @@ class ResourceManager:
                 return False
 
             allocation.active_requests += 1
-            allocation.updated_at = datetime.now(timezone.utc)
+            allocation.updated_at = datetime.now(UTC)
             return True
 
     async def release_request(
@@ -358,14 +358,14 @@ class ResourceManager:
                 return False
 
             allocation.active_requests = max(0, allocation.active_requests - 1)
-            allocation.updated_at = datetime.now(timezone.utc)
+            allocation.updated_at = datetime.now(UTC)
             return True
 
     async def get_usage(
         self,
         tenant_id: str,
         project_id: str,
-    ) -> Optional[ResourceUsage]:
+    ) -> ResourceUsage | None:
         """获取项目资源使用情况.
 
         Args:
@@ -418,7 +418,7 @@ class ResourceManager:
         self,
         tenant_id: str,
         project_id: str,
-    ) -> Optional[ProjectResourceAllocation]:
+    ) -> ProjectResourceAllocation | None:
         """获取项目资源分配.
 
         Args:
@@ -431,7 +431,7 @@ class ResourceManager:
         allocation_key = f"{tenant_id}:{project_id}"
         return self._allocations.get(allocation_key)
 
-    def list_allocations(self) -> Dict[str, ProjectResourceAllocation]:
+    def list_allocations(self) -> dict[str, ProjectResourceAllocation]:
         """列出所有资源分配.
 
         Returns:
@@ -480,7 +480,7 @@ class ResourceManager:
                 return False
 
             allocation.quota = quota
-            allocation.updated_at = datetime.now(timezone.utc)
+            allocation.updated_at = datetime.now(UTC)
 
             logger.info(
                 f"[ResourceManager] Quota updated: project={project_id}, "
@@ -489,7 +489,7 @@ class ResourceManager:
             )
             return True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典."""
         return {
             "global_usage": {

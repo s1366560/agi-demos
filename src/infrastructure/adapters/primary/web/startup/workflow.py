@@ -1,7 +1,6 @@
 """Workflow engine initialization for startup."""
 
 import logging
-from typing import Optional
 
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 from src.infrastructure.adapters.secondary.workflow import AsyncioWorkflowEngine
@@ -9,7 +8,7 @@ from src.infrastructure.adapters.secondary.workflow import AsyncioWorkflowEngine
 logger = logging.getLogger(__name__)
 
 
-async def initialize_workflow_engine() -> Optional[WorkflowEnginePort]:
+async def initialize_workflow_engine() -> WorkflowEnginePort | None:
     """Initialize the asyncio-based workflow engine.
 
     Returns:

@@ -5,7 +5,8 @@ React-mode agent execution with streaming support.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from src.domain.model.agent import Conversation
 
@@ -26,9 +27,9 @@ class AgentServicePort(ABC):
         project_id: str,
         user_id: str,
         tenant_id: str,
-        attachment_ids: Optional[List[str]] = None,
-        app_model_context: Optional[Dict[str, Any]] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        attachment_ids: list[str] | None = None,
+        app_model_context: dict[str, Any] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Stream agent response using self-developed ReAct core.
 
@@ -55,7 +56,7 @@ class AgentServicePort(ABC):
         pass
 
     @abstractmethod
-    async def get_available_tools(self, project_id: str, tenant_id: str) -> List[Dict[str, Any]]:
+    async def get_available_tools(self, project_id: str, tenant_id: str) -> list[dict[str, Any]]:
         """
         Get list of available tools for the agent.
 
@@ -73,7 +74,7 @@ class AgentServicePort(ABC):
         self,
         conversation_id: str,
         max_messages: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get conversation context for agent processing.
 
@@ -93,7 +94,7 @@ class AgentServicePort(ABC):
         tenant_id: str,
         user_id: str,
         title: str,
-        agent_config: Dict[str, Any] | None = None,
+        agent_config: dict[str, Any] | None = None,
     ) -> Conversation:
         """
         Create a new conversation.

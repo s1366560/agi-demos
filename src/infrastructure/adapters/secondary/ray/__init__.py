@@ -37,7 +37,7 @@ def _check_ray_reachable(address: str, timeout: int = 3) -> bool:
         sock = socket.create_connection((host, port), timeout=timeout)
         sock.close()
         return True
-    except (OSError, socket.timeout):
+    except (TimeoutError, OSError):
         return False
 
 
@@ -49,7 +49,7 @@ import ray._private.auto_init_hook as _auto_init_hook
 _original_auto_init_ray = _auto_init_hook.auto_init_ray
 
 
-def _patched_auto_init_ray():
+def _patched_auto_init_ray() -> None:
     """Patched auto_init that uses allow_multiple=True."""
     if _ray_init_failed or not _auto_init_hook.enable_auto_connect:
         return

@@ -10,7 +10,7 @@ Based on vendor/opencode/packages/opencode/src/mcp/oauth-callback.ts
 
 import asyncio
 import logging
-from typing import Awaitable, Callable, Dict, Optional, Set
+from collections.abc import Awaitable, Callable
 
 from aiohttp import web
 
@@ -70,7 +70,7 @@ class PendingAuth:
         resolve: Callable[[str], None],
         reject: Callable[[Exception], None],
         timeout_handle: asyncio.Handle,
-    ):
+    ) -> None:
         self.resolve = resolve
         self.reject = reject
         self.timeout_handle = timeout_handle
@@ -83,17 +83,17 @@ class MCPOAuthCallbackServer:
     and resolves pending authorization promises.
     """
 
-    def __init__(self, port: int = 19876):
+    def __init__(self, port: int = 19876) -> None:
         """Initialize OAuth callback server.
 
         Args:
             port: Port to listen on (default: 19876)
         """
         self._port = port
-        self._app: Optional[web.Application] = None
-        self._runner: Optional[web.AppRunner] = None
-        self._site: Optional[web.TCPSite] = None
-        self._pending_auths: Dict[str, PendingAuth] = {}
+        self._app: web.Application | None = None
+        self._runner: web.AppRunner | None = None
+        self._site: web.TCPSite | None = None
+        self._pending_auths: dict[str, PendingAuth] = {}
 
     @property
     def is_running(self) -> bool:
@@ -263,7 +263,7 @@ class MCPOAuthCallbackServer:
 
         if not future.done():
             future.set_exception(
-                asyncio.TimeoutError("OAuth callback timeout - authorization took too long")
+                TimeoutError("OAuth callback timeout - authorization took too long")
             )
 
     def cancel_pending(self, oauth_state: str) -> None:
@@ -277,7 +277,7 @@ class MCPOAuthCallbackServer:
             pending.timeout_handle.cancel()
             pending.reject(Exception("Authorization cancelled"))
 
-    def get_pending_states(self) -> Set[str]:
+    def get_pending_states(self) -> set[str]:
         """Get all pending OAuth states.
 
         Returns:
@@ -287,7 +287,7 @@ class MCPOAuthCallbackServer:
 
 
 # Global singleton instance
-_global_server: Optional[MCPOAuthCallbackServer] = None
+_global_server: MCPOAuthCallbackServer | None = None
 
 
 async def get_oauth_callback_server() -> MCPOAuthCallbackServer:

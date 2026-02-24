@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, Mapping, Sequence
+from typing import Any
 
 DEFAULT_POLICY_LAYER_ORDER: tuple[str, ...] = (
     "profile",
@@ -36,7 +37,7 @@ class PolicyContext:
         """Return ordered layer names."""
         return tuple(layer.name for layer in self.layers)
 
-    def to_mapping(self) -> Dict[str, Dict[str, Any]]:
+    def to_mapping(self) -> dict[str, dict[str, Any]]:
         """Serialize normalized layers to mutable dict mapping."""
         return {layer.name: dict(layer.values) for layer in self.layers}
 
@@ -51,7 +52,7 @@ class PolicyContext:
         ordered_names = tuple(layer_order)
         policy_layers = metadata.get("policy_layers")
 
-        raw_layers: Dict[str, Mapping[str, Any]] = {}
+        raw_layers: dict[str, Mapping[str, Any]] = {}
         if isinstance(policy_layers, Mapping):
             for key, value in policy_layers.items():
                 if isinstance(key, str) and key and isinstance(value, Mapping):
@@ -78,6 +79,6 @@ def normalize_policy_layers(
     metadata: Mapping[str, Any],
     *,
     layer_order: Sequence[str] = DEFAULT_POLICY_LAYER_ORDER,
-) -> Dict[str, Dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """Return normalized policy layers mapping from metadata."""
     return PolicyContext.from_metadata(metadata, layer_order=layer_order).to_mapping()

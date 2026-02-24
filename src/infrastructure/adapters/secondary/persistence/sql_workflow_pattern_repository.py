@@ -22,8 +22,7 @@ Key Features:
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -80,7 +79,7 @@ class SqlWorkflowPatternRepository(
 
         return pattern
 
-    async def get_by_id(self, pattern_id: str) -> Optional[WorkflowPattern]:
+    async def get_by_id(self, pattern_id: str) -> WorkflowPattern | None:
         """Get a pattern by its ID."""
         return await self.find_by_id(pattern_id)
 
@@ -127,7 +126,7 @@ class SqlWorkflowPatternRepository(
     async def list_by_tenant(
         self,
         tenant_id: str,
-    ) -> List[WorkflowPattern]:
+    ) -> list[WorkflowPattern]:
         """
         List all patterns for a tenant.
 
@@ -153,7 +152,7 @@ class SqlWorkflowPatternRepository(
         self,
         tenant_id: str,
         name: str,
-    ) -> Optional[WorkflowPattern]:
+    ) -> WorkflowPattern | None:
         """
         Find a pattern by name within a tenant.
 
@@ -202,7 +201,7 @@ class SqlWorkflowPatternRepository(
             success_rate=pattern.success_rate,
             usage_count=pattern.usage_count + 1,
             created_at=pattern.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
             metadata=pattern.metadata,
         )
 
@@ -250,7 +249,7 @@ class SqlWorkflowPatternRepository(
 
     # === Conversion methods ===
 
-    def _to_domain(self, db_pattern: Optional[DBPattern]) -> Optional[WorkflowPattern]:
+    def _to_domain(self, db_pattern: DBPattern | None) -> WorkflowPattern | None:
         """
         Convert database model to domain model.
 

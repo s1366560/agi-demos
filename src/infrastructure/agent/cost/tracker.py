@@ -6,7 +6,7 @@ Supports cache tokens, reasoning tokens, and context overflow pricing.
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 
 @dataclass
@@ -29,7 +29,7 @@ class TokenUsage:
         """Total tokens including cache operations."""
         return self.total + self.cache_read + self.cache_write
 
-    def to_dict(self) -> Dict[str, int]:
+    def to_dict(self) -> dict[str, int]:
         """Convert to dictionary."""
         return {
             "input": self.input,
@@ -48,7 +48,7 @@ class CostResult:
     cost: float
     tokens: TokenUsage
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "cost": self.cost,
@@ -63,16 +63,16 @@ class ModelCost:
 
     input: Decimal
     output: Decimal
-    cache_read: Optional[Decimal] = None
-    cache_write: Optional[Decimal] = None
-    reasoning: Optional[Decimal] = None  # If different from output
+    cache_read: Decimal | None = None
+    cache_write: Decimal | None = None
+    reasoning: Decimal | None = None  # If different from output
     context_over_200k: Optional["ModelCost"] = None  # Pricing for >200k context
 
 
 class BudgetExceededError(Exception):
     """Raised when a cost budget limit is exceeded."""
 
-    def __init__(self, message: str, current_cost: float, limit: float):
+    def __init__(self, message: str, current_cost: float, limit: float) -> None:
         super().__init__(message)
         self.current_cost = current_cost
         self.limit = limit
@@ -103,7 +103,7 @@ class CostTracker:
 
     # Model cost configurations (per million tokens in USD)
     # Updated as of January 2025
-    MODEL_COSTS: Dict[str, ModelCost] = {
+    MODEL_COSTS: dict[str, ModelCost] = {
         # OpenAI models
         "gpt-4o": ModelCost(
             input=Decimal("2.50"),
@@ -261,7 +261,7 @@ class CostTracker:
         context_limit: int = 200000,
         max_cost_per_request: float = 0,
         max_cost_per_session: float = 0,
-    ):
+    ) -> None:
         """
         Initialize cost tracker.
 
@@ -279,9 +279,9 @@ class CostTracker:
 
     def calculate(
         self,
-        usage: Dict[str, Any],
+        usage: dict[str, Any],
         model_name: str,
-        provider_metadata: Optional[Dict[str, Any]] = None,
+        provider_metadata: dict[str, Any] | None = None,
     ) -> CostResult:
         """
         Calculate cost for a single LLM call.
@@ -316,8 +316,8 @@ class CostTracker:
 
     def _parse_usage(
         self,
-        usage: Dict[str, Any],
-        provider_metadata: Optional[Dict[str, Any]] = None,
+        usage: dict[str, Any],
+        provider_metadata: dict[str, Any] | None = None,
     ) -> TokenUsage:
         """
         Parse token usage from LLM response.
@@ -496,7 +496,7 @@ class CostTracker:
         total_context = tokens.input + tokens.cache_read
         return total_context > self.context_limit * 0.8
 
-    def get_session_summary(self) -> Dict[str, Any]:
+    def get_session_summary(self) -> dict[str, Any]:
         """
         Get summary of session costs and tokens.
 
@@ -520,7 +520,7 @@ class CostTracker:
         self.call_count = 0
 
     @staticmethod
-    def _safe_int(value: Any) -> int:  # noqa: ANN401
+    def _safe_int(value: Any) -> int:
         """
         Safely convert a value to int.
 

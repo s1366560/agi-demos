@@ -15,7 +15,8 @@ Architecture (LEGACY - Redis-based, deprecated):
 """
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from src.infrastructure.agent.hitl.ray_hitl_handler import RayHITLHandler
 from src.infrastructure.agent.tools.base import AgentTool
@@ -57,9 +58,9 @@ class DecisionTool(AgentTool):
 
     def __init__(
         self,
-        hitl_handler: Optional[RayHITLHandler] = None,
-        emit_sse_callback: Optional[Callable] = None,
-    ):
+        hitl_handler: RayHITLHandler | None = None,
+        emit_sse_callback: Callable | None = None,
+    ) -> None:
         """
         Initialize the decision tool.
 
@@ -82,7 +83,7 @@ class DecisionTool(AgentTool):
         """Set the HITL handler (for late binding)."""
         self._hitl_handler = handler
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
         return {
             "type": "object",
@@ -159,7 +160,7 @@ class DecisionTool(AgentTool):
             "required": ["question", "decision_type", "options"],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         """Validate decision arguments."""
         if "question" not in kwargs:
             logger.error("Missing required argument: question")
@@ -191,10 +192,10 @@ class DecisionTool(AgentTool):
         self,
         question: str,
         decision_type: str,
-        options: List[Dict[str, Any]],
+        options: list[dict[str, Any]],
         allow_custom: bool = False,
-        context: Optional[Dict[str, Any]] = None,
-        default_option: Optional[str] = None,
+        context: dict[str, Any] | None = None,
+        default_option: str | None = None,
         timeout: float = 300.0,
     ) -> str:
         """
@@ -239,6 +240,6 @@ class DecisionTool(AgentTool):
         logger.info(f"Decision made: {decision}")
         return decision
 
-    def get_output_schema(self) -> Dict[str, Any]:
+    def get_output_schema(self) -> dict[str, Any]:
         """Get output schema for tool composition."""
         return {"type": "string", "description": "User's decision (option ID or custom text)"}

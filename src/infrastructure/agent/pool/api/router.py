@@ -16,7 +16,7 @@ Pool Status API Router.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -46,8 +46,8 @@ class PoolStatusResponse(BaseModel):
     ready_instances: int = Field(..., description="就绪实例数")
     executing_instances: int = Field(..., description="执行中实例数")
     unhealthy_instances: int = Field(..., description="不健康实例数")
-    prewarm_pool: Dict[str, int] = Field(..., description="预热池状态")
-    resource_usage: Dict[str, Any] = Field(..., description="资源使用情况")
+    prewarm_pool: dict[str, int] = Field(..., description="预热池状态")
+    resource_usage: dict[str, Any] = Field(..., description="资源使用情况")
 
 
 class InstanceInfo(BaseModel):
@@ -59,8 +59,8 @@ class InstanceInfo(BaseModel):
     agent_mode: str = Field(..., description="Agent模式")
     tier: str = Field(..., description="分级")
     status: str = Field(..., description="状态")
-    created_at: Optional[str] = Field(None, description="创建时间")
-    last_request_at: Optional[str] = Field(None, description="最后请求时间")
+    created_at: str | None = Field(None, description="创建时间")
+    last_request_at: str | None = Field(None, description="最后请求时间")
     active_requests: int = Field(0, description="活跃请求数")
     total_requests: int = Field(0, description="总请求数")
     memory_used_mb: float = Field(0.0, description="内存使用 (MB)")
@@ -70,7 +70,7 @@ class InstanceInfo(BaseModel):
 class InstanceListResponse(BaseModel):
     """实例列表响应."""
 
-    instances: List[InstanceInfo] = Field(..., description="实例列表")
+    instances: list[InstanceInfo] = Field(..., description="实例列表")
     total: int = Field(..., description="总数")
     page: int = Field(1, description="当前页")
     page_size: int = Field(20, description="每页大小")
@@ -86,7 +86,7 @@ class SetTierResponse(BaseModel):
     """设置分级响应."""
 
     project_id: str = Field(..., description="项目ID")
-    previous_tier: Optional[str] = Field(None, description="之前的分级")
+    previous_tier: str | None = Field(None, description="之前的分级")
     current_tier: str = Field(..., description="当前分级")
     message: str = Field(..., description="操作结果")
 
@@ -94,9 +94,9 @@ class SetTierResponse(BaseModel):
 class MetricsResponse(BaseModel):
     """指标响应 (JSON 格式)."""
 
-    instances: Dict[str, Any] = Field(..., description="实例指标")
-    health: Dict[str, Any] = Field(..., description="健康指标")
-    prewarm: Dict[str, Any] = Field(..., description="预热池指标")
+    instances: dict[str, Any] = Field(..., description="实例指标")
+    health: dict[str, Any] = Field(..., description="健康指标")
+    prewarm: dict[str, Any] = Field(..., description="预热池指标")
 
 
 class OperationResponse(BaseModel):
@@ -112,9 +112,9 @@ class OperationResponse(BaseModel):
 
 
 def create_pool_router(
-    pool_manager: Optional[AgentPoolManager] = None,
+    pool_manager: AgentPoolManager | None = None,
     prefix: str = "/api/v1/admin/pool",
-    tags: Optional[List[str]] = None,
+    tags: list[str] | None = None,
 ) -> APIRouter:
     """创建池管理 API 路由器.
 
@@ -131,7 +131,7 @@ def create_pool_router(
         tags=tags or ["Agent Pool Admin"],
     )
 
-    async def get_pool_manager_optional() -> Optional[AgentPoolManager]:
+    async def get_pool_manager_optional() -> AgentPoolManager | None:
         """获取池管理器 (可选，不抛出异常)."""
         if pool_manager:
             return pool_manager
@@ -245,8 +245,8 @@ def create_pool_router(
     @router.get("/instances", response_model=InstanceListResponse)
     async def list_instances(
         manager: AgentPoolManager = Depends(get_pool_manager),
-        tier: Optional[str] = Query(None, description="按分级筛选"),
-        status: Optional[str] = Query(None, description="按状态筛选"),
+        tier: str | None = Query(None, description="按分级筛选"),
+        status: str | None = Query(None, description="按状态筛选"),
         page: int = Query(1, ge=1, description="页码"),
         page_size: int = Query(20, ge=1, le=100, description="每页大小"),
     ) -> InstanceListResponse:
@@ -429,7 +429,7 @@ def create_pool_router(
         project_id: str,
         tenant_id: str = Query(..., description="租户ID"),
         manager: AgentPoolManager = Depends(get_pool_manager),
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """获取项目分级."""
         tier = await manager.classify_project(tenant_id, project_id)
         return {

@@ -162,7 +162,7 @@ async def test_connect_websocket_starts_dedicated_thread(adapter: FeishuAdapter)
             return object()
 
     class _FakeThread:
-        def __init__(self, *, target=None, kwargs=None, name=None, daemon=None):
+        def __init__(self, *, target=None, kwargs=None, name=None, daemon=None) -> None:
             self.target = target
             self.kwargs = kwargs or {}
             self.name = name
@@ -230,7 +230,7 @@ async def test_connect_websocket_cleans_up_when_wait_fails(
             return object()
 
     class _FakeThread:
-        def __init__(self, *, target=None, kwargs=None, name=None, daemon=None):
+        def __init__(self, *, target=None, kwargs=None, name=None, daemon=None) -> None:
             self.target = target
             self.kwargs = kwargs or {}
             self.name = name

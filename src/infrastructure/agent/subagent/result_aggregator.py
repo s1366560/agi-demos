@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -49,7 +49,7 @@ class ResultAggregator:
     produce a coherent unified summary.
     """
 
-    def __init__(self, llm_client: Optional[LLMClient] = None):
+    def __init__(self, llm_client: LLMClient | None = None) -> None:
         """Initialize ResultAggregator.
 
         Args:
@@ -57,7 +57,7 @@ class ResultAggregator:
         """
         self._llm_client = llm_client
 
-    def aggregate(self, results: List[SubAgentResult]) -> AggregatedResult:
+    def aggregate(self, results: list[SubAgentResult]) -> AggregatedResult:
         """Aggregate multiple SubAgent results.
 
         Args:
@@ -109,7 +109,7 @@ class ResultAggregator:
         )
 
     async def aggregate_with_llm(
-        self, results: List[SubAgentResult]
+        self, results: list[SubAgentResult]
     ) -> AggregatedResult:
         """Aggregate results using LLM for coherent summarization.
 

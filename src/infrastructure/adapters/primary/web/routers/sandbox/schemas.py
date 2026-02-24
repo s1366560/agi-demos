@@ -3,7 +3,7 @@
 Contains all request/response models for sandbox operations.
 """
 
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -16,23 +16,23 @@ class CreateSandboxRequest(BaseModel):
     project_path: str = Field(
         default="/tmp/sandbox_workspace", description="Path to mount as workspace"
     )
-    profile: Optional[str] = Field(
+    profile: str | None = Field(
         default="standard", description="Sandbox profile: lite, standard, or full"
     )
-    image: Optional[str] = Field(
+    image: str | None = Field(
         default=None, description="Docker image (default: sandbox-mcp-server)"
     )
-    memory_limit: Optional[str] = Field(
+    memory_limit: str | None = Field(
         default=None, description="Memory limit (overrides profile if set)"
     )
-    cpu_limit: Optional[str] = Field(
+    cpu_limit: str | None = Field(
         default=None, description="CPU limit (overrides profile if set)"
     )
-    timeout_seconds: Optional[int] = Field(
+    timeout_seconds: int | None = Field(
         default=None, description="Max sandbox lifetime (overrides profile if set)"
     )
     network_isolated: bool = Field(default=False, description="Network isolation")
-    environment: Dict[str, str] = Field(default_factory=dict, description="Environment variables")
+    environment: dict[str, str] = Field(default_factory=dict, description="Environment variables")
 
 
 class SandboxResponse(BaseModel):
@@ -41,22 +41,22 @@ class SandboxResponse(BaseModel):
     id: str
     status: str
     project_path: str
-    endpoint: Optional[str] = None
-    websocket_url: Optional[str] = None
+    endpoint: str | None = None
+    websocket_url: str | None = None
     created_at: str
-    tools: List[str] = Field(default_factory=list)
+    tools: list[str] = Field(default_factory=list)
     # Service ports and URLs
-    mcp_port: Optional[int] = None
-    desktop_port: Optional[int] = None
-    terminal_port: Optional[int] = None
-    desktop_url: Optional[str] = None
-    terminal_url: Optional[str] = None
+    mcp_port: int | None = None
+    desktop_port: int | None = None
+    terminal_port: int | None = None
+    desktop_url: str | None = None
+    terminal_url: str | None = None
 
 
 class ListSandboxesResponse(BaseModel):
     """List sandboxes response."""
 
-    sandboxes: List[SandboxResponse]
+    sandboxes: list[SandboxResponse]
     total: int
 
 
@@ -67,14 +67,14 @@ class ToolCallRequest(BaseModel):
     """Request to call an MCP tool."""
 
     tool_name: str = Field(..., description="Tool name (read, write, edit, glob, grep, bash)")
-    arguments: Dict[str, Any] = Field(default_factory=dict, description="Tool arguments")
+    arguments: dict[str, Any] = Field(default_factory=dict, description="Tool arguments")
     timeout: float = Field(default=30.0, description="Timeout in seconds")
 
 
 class ToolCallResponse(BaseModel):
     """Tool call response."""
 
-    content: List[Dict[str, Any]]
+    content: list[dict[str, Any]]
     is_error: bool
 
 
@@ -82,14 +82,14 @@ class ToolInfo(BaseModel):
     """Tool information."""
 
     name: str
-    description: Optional[str] = None
-    input_schema: Dict[str, Any] = Field(default_factory=dict)
+    description: str | None = None
+    input_schema: dict[str, Any] = Field(default_factory=dict)
 
 
 class ListToolsResponse(BaseModel):
     """List tools response."""
 
-    tools: List[ToolInfo]
+    tools: list[ToolInfo]
 
 
 # --- Desktop Schemas ---
@@ -106,7 +106,7 @@ class DesktopStatusResponse(BaseModel):
     """Desktop service status response."""
 
     running: bool = Field(..., description="Whether desktop service is running")
-    url: Optional[str] = Field(None, description="KasmVNC web client URL (if running)")
+    url: str | None = Field(None, description="KasmVNC web client URL (if running)")
     display: str = Field(default="", description="X11 display number (e.g., ':1')")
     resolution: str = Field(default="", description="Screen resolution (e.g., '1920x1080')")
     port: int = Field(default=0, description="KasmVNC web server port number")
@@ -135,10 +135,10 @@ class TerminalStatusResponse(BaseModel):
     """Terminal service status response."""
 
     running: bool = Field(..., description="Whether terminal service is running")
-    url: Optional[str] = Field(None, description="WebSocket URL (if running)")
+    url: str | None = Field(None, description="WebSocket URL (if running)")
     port: int = Field(default=0, description="Ttyd port number")
-    pid: Optional[int] = Field(None, description="Process ID")
-    session_id: Optional[str] = Field(None, description="Terminal session ID")
+    pid: int | None = Field(None, description="Process ID")
+    session_id: str | None = Field(None, description="Terminal session ID")
 
 
 class TerminalStopResponse(BaseModel):
@@ -184,7 +184,7 @@ class ValidateTokenRequest(BaseModel):
     """Request to validate a sandbox token."""
 
     token: str = Field(..., description="Token to validate")
-    project_id: Optional[str] = Field(
+    project_id: str | None = Field(
         default=None, description="Optional project ID to verify against"
     )
 
@@ -193,10 +193,10 @@ class ValidateTokenResponse(BaseModel):
     """Response from token validation."""
 
     valid: bool = Field(..., description="Whether the token is valid")
-    project_id: Optional[str] = Field(None, description="Project ID from token")
-    user_id: Optional[str] = Field(None, description="User ID from token")
-    sandbox_type: Optional[str] = Field(None, description="Sandbox type from token")
-    error: Optional[str] = Field(None, description="Error message if invalid")
+    project_id: str | None = Field(None, description="Project ID from token")
+    user_id: str | None = Field(None, description="User ID from token")
+    sandbox_type: str | None = Field(None, description="Sandbox type from token")
+    error: str | None = Field(None, description="Error message if invalid")
 
 
 # --- Profile Schemas ---
@@ -212,14 +212,14 @@ class ProfileInfo(BaseModel):
     memory_limit: str = Field(..., description="Memory limit (e.g., '512m', '2g', '4g')")
     cpu_limit: str = Field(..., description="CPU limit (e.g., '0.5', '2', '4')")
     timeout_seconds: int = Field(..., description="Maximum sandbox lifetime in seconds")
-    preinstalled_tools: List[str] = Field(..., description="List of preinstalled tools")
+    preinstalled_tools: list[str] = Field(..., description="List of preinstalled tools")
     max_instances: int = Field(..., description="Maximum concurrent instances")
 
 
 class ListProfilesResponse(BaseModel):
     """Response listing all available sandbox profiles."""
 
-    profiles: List[ProfileInfo]
+    profiles: list[ProfileInfo]
 
 
 # --- Health Check Schemas ---
@@ -231,7 +231,7 @@ class HealthCheckResponse(BaseModel):
     level: str = Field(..., description="Health check level performed")
     status: str = Field(..., description="Overall health status")
     healthy: bool = Field(..., description="Whether the sandbox is healthy")
-    details: Dict[str, Any] = Field(default_factory=dict, description="Detailed health information")
+    details: dict[str, Any] = Field(default_factory=dict, description="Detailed health information")
     timestamp: str = Field(..., description="ISO format timestamp")
     sandbox_id: str = Field(..., description="Sandbox ID")
-    errors: List[str] = Field(default_factory=list, description="List of errors found")
+    errors: list[str] = Field(default_factory=list, description="List of errors found")

@@ -27,7 +27,7 @@ class MockLLMClient:
     without inheriting from LLMClient to avoid abstract method requirements.
     """
 
-    def __init__(self, should_fail: bool = False, fail_count: int = 0):
+    def __init__(self, should_fail: bool = False, fail_count: int = 0) -> None:
         """Initialize mock LLM.
 
         Args:

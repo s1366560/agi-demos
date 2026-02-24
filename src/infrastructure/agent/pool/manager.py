@@ -5,8 +5,10 @@ Agent池管理器.
 """
 
 import asyncio
+import contextlib
 import logging
-from typing import Any, Callable, Dict, List, Optional, Set
+from collections.abc import Callable
+from typing import Any
 
 from .config import AgentInstanceConfig, PoolConfig
 from .health import HealthMonitor, HealthMonitorConfig
@@ -37,10 +39,10 @@ class AgentPoolManager:
 
     def __init__(
         self,
-        config: Optional[PoolConfig] = None,
-        resource_manager: Optional[ResourceManager] = None,
-        health_monitor: Optional[HealthMonitor] = None,
-    ):
+        config: PoolConfig | None = None,
+        resource_manager: ResourceManager | None = None,
+        health_monitor: HealthMonitor | None = None,
+    ) -> None:
         """初始化池管理器.
 
         Args:
@@ -62,19 +64,19 @@ class AgentPoolManager:
         )
 
         # 实例存储
-        self._instances: Dict[str, AgentInstance] = {}
+        self._instances: dict[str, AgentInstance] = {}
         self._instances_lock = asyncio.Lock()
 
         # 项目到实例的映射 (一个项目可能有多个实例)
-        self._project_instances: Dict[str, Set[str]] = {}
+        self._project_instances: dict[str, set[str]] = {}
 
         # 后台任务
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: asyncio.Task | None = None
         self._running = False
 
         # 事件回调
-        self._on_instance_created: List[Callable[[AgentInstance], None]] = []
-        self._on_instance_terminated: List[Callable[[AgentInstance], None]] = []
+        self._on_instance_created: list[Callable[[AgentInstance], None]] = []
+        self._on_instance_terminated: list[Callable[[AgentInstance], None]] = []
 
         logger.info(
             f"[AgentPoolManager] Initialized: "
@@ -104,10 +106,8 @@ class AgentPoolManager:
         # 停止清理任务
         if self._cleanup_task:
             self._cleanup_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
 
         # 停止所有健康监控
         await self._health_monitor.stop_all_monitoring()
@@ -129,7 +129,7 @@ class AgentPoolManager:
         tenant_id: str,
         project_id: str,
         agent_mode: str = "default",
-        config_override: Optional[AgentInstanceConfig] = None,
+        config_override: AgentInstanceConfig | None = None,
     ) -> AgentInstance:
         """获取或创建Agent实例.
 
@@ -170,7 +170,7 @@ class AgentPoolManager:
         tenant_id: str,
         project_id: str,
         agent_mode: str,
-        config_override: Optional[AgentInstanceConfig] = None,
+        config_override: AgentInstanceConfig | None = None,
     ) -> AgentInstance:
         """创建新实例.
 
@@ -295,7 +295,7 @@ class AgentPoolManager:
         self,
         tenant_id: str,
         project_id: str,
-        metrics: Optional[ProjectMetrics] = None,
+        metrics: ProjectMetrics | None = None,
     ) -> ProjectTier:
         """对项目进行分级.
 
@@ -361,7 +361,7 @@ class AgentPoolManager:
         tenant_id: str,
         project_id: str,
         agent_mode: str = "default",
-    ) -> Optional[AgentInstance]:
+    ) -> AgentInstance | None:
         """获取实例 (不创建).
 
         Args:
@@ -454,7 +454,7 @@ class AgentPoolManager:
         tenant_id: str,
         project_id: str,
         agent_mode: str = "default",
-    ) -> Optional[HealthCheckResult]:
+    ) -> HealthCheckResult | None:
         """对实例执行健康检查.
 
         Args:
@@ -563,7 +563,7 @@ class AgentPoolManager:
         """清理过期实例."""
         async with self._instances_lock:
             expired = []
-            for instance_key, instance in self._instances.items():
+            for _instance_key, instance in self._instances.items():
                 # 检查空闲超时
                 if instance.is_idle_expired():
                     expired.append(instance)
@@ -613,7 +613,7 @@ class AgentPoolManager:
 
         return stats
 
-    def list_instances(self) -> List[Dict[str, Any]]:
+    def list_instances(self) -> list[dict[str, Any]]:
         """列出所有实例.
 
         Returns:
@@ -672,7 +672,7 @@ class AgentPoolManager:
 
         return True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典."""
         stats = self.get_stats()
         return {

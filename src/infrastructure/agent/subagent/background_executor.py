@@ -10,8 +10,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -41,9 +42,9 @@ class BackgroundExecutor:
 
     def __init__(
         self,
-        state_tracker: Optional[StateTracker] = None,
-        on_event: Optional[Callable[[Dict[str, Any]], None]] = None,
-    ):
+        state_tracker: StateTracker | None = None,
+        on_event: Callable[[dict[str, Any]], None] | None = None,
+    ) -> None:
         """Initialize BackgroundExecutor.
 
         Args:
@@ -53,7 +54,7 @@ class BackgroundExecutor:
         """
         self._tracker = state_tracker or StateTracker()
         self._on_event = on_event
-        self._tasks: Dict[str, asyncio.Task] = {}
+        self._tasks: dict[str, asyncio.Task] = {}
 
     @property
     def tracker(self) -> StateTracker:
@@ -65,15 +66,15 @@ class BackgroundExecutor:
         subagent: SubAgent,
         user_message: str,
         conversation_id: str,
-        tools: List[Any],
+        tools: list[Any],
         base_model: str,
-        conversation_context: Optional[List[Dict[str, str]]] = None,
+        conversation_context: list[dict[str, str]] | None = None,
         main_token_budget: int = 128000,
         project_id: str = "",
         tenant_id: str = "",
-        base_api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        llm_client: Optional[LLMClient] = None,
+        base_api_key: str | None = None,
+        base_url: str | None = None,
+        llm_client: LLMClient | None = None,
     ) -> str:
         """Launch a SubAgent in the background.
 
@@ -156,7 +157,7 @@ class BackgroundExecutor:
             return True
         return False
 
-    def get_active(self, conversation_id: str) -> List[Dict[str, Any]]:
+    def get_active(self, conversation_id: str) -> list[dict[str, Any]]:
         """Get active background executions for a conversation.
 
         Args:
@@ -173,15 +174,15 @@ class BackgroundExecutor:
         subagent: SubAgent,
         user_message: str,
         conversation_id: str,
-        tools: List[Any],
+        tools: list[Any],
         base_model: str,
-        conversation_context: Optional[List[Dict[str, str]]] = None,
+        conversation_context: list[dict[str, str]] | None = None,
         main_token_budget: int = 128000,
         project_id: str = "",
         tenant_id: str = "",
-        base_api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        llm_client: Optional[LLMClient] = None,
+        base_api_key: str | None = None,
+        base_url: str | None = None,
+        llm_client: LLMClient | None = None,
     ) -> None:
         """Internal execution coroutine for background SubAgent."""
         self._tracker.start(execution_id, conversation_id)
@@ -195,7 +196,7 @@ class BackgroundExecutor:
                 "task_description": user_message[:200],
                 "conversation_id": conversation_id,
             },
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
 
         try:
@@ -250,7 +251,7 @@ class BackgroundExecutor:
                         "conversation_id": conversation_id,
                         "result": result.to_event_data() if result else None,
                     },
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 })
             else:
                 error = result.error if result else "No result produced"
@@ -264,7 +265,7 @@ class BackgroundExecutor:
                         "conversation_id": conversation_id,
                         "error": error,
                     },
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 })
 
         except asyncio.CancelledError:
@@ -282,10 +283,10 @@ class BackgroundExecutor:
                     "conversation_id": conversation_id,
                     "error": str(e),
                 },
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             })
 
-    async def _emit(self, event: Dict[str, Any]) -> None:
+    async def _emit(self, event: dict[str, Any]) -> None:
         """Emit an event via the callback."""
         if self._on_event:
             try:

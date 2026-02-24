@@ -15,7 +15,6 @@ Migration Benefits:
 """
 
 import logging
-from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,21 +49,21 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
 
     # === Interface implementation (user-specific queries) ===
 
-    async def find_by_email(self, email: str) -> Optional[User]:
+    async def find_by_email(self, email: str) -> User | None:
         """Find a user by email address."""
         query = select(DBUser).where(DBUser.email == email)
         result = await self._session.execute(query)
         db_user = result.scalar_one_or_none()
         return self._to_domain(db_user)
 
-    async def list_all(self, limit: int = 50, offset: int = 0) -> List[User]:
+    async def list_all(self, limit: int = 50, offset: int = 0) -> list[User]:
         """List all users with pagination."""
         # Use the parent class list_all method via super() to avoid recursion
         return await super().list_all(limit=limit, offset=offset)
 
     # === Conversion methods ===
 
-    def _to_domain(self, db_user: Optional[DBUser]) -> Optional[User]:
+    def _to_domain(self, db_user: DBUser | None) -> User | None:
         """
         Convert database model to domain model.
 

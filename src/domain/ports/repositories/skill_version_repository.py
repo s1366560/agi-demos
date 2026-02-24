@@ -5,7 +5,6 @@ Repository interface for persisting and retrieving skill version snapshots.
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from src.domain.model.agent.skill.skill_version import SkillVersion
 
@@ -21,19 +20,19 @@ class SkillVersionRepositoryPort(ABC):
     @abstractmethod
     async def get_by_version(
         self, skill_id: str, version_number: int
-    ) -> Optional[SkillVersion]:
+    ) -> SkillVersion | None:
         """Get a specific version of a skill."""
         pass
 
     @abstractmethod
     async def list_by_skill(
         self, skill_id: str, limit: int = 50, offset: int = 0
-    ) -> List[SkillVersion]:
+    ) -> list[SkillVersion]:
         """List all versions of a skill, ordered by version_number DESC."""
         pass
 
     @abstractmethod
-    async def get_latest(self, skill_id: str) -> Optional[SkillVersion]:
+    async def get_latest(self, skill_id: str) -> SkillVersion | None:
         """Get the latest version of a skill."""
         pass
 

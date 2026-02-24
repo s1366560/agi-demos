@@ -4,7 +4,6 @@ Publishes sandbox lifecycle and status events to Redis streams.
 """
 
 import logging
-from typing import Optional
 
 from src.domain.events.agent_events import (
     AgentDesktopStartedEvent,
@@ -25,7 +24,7 @@ logger = logging.getLogger(__name__)
 class SandboxEventPublisher:
     """Publishes sandbox events to Redis streams."""
 
-    def __init__(self, event_bus: Optional[EventBusPort] = None):
+    def __init__(self, event_bus: EventBusPort | None = None) -> None:
         """
         Initialize publisher.
 
@@ -39,8 +38,8 @@ class SandboxEventPublisher:
         project_id: str,
         sandbox_id: str,
         status: str,
-        endpoint: Optional[str] = None,
-        websocket_url: Optional[str] = None,
+        endpoint: str | None = None,
+        websocket_url: str | None = None,
     ) -> str:
         """Emit sandbox_created event."""
         event = AgentSandboxCreatedEvent(
@@ -78,7 +77,7 @@ class SandboxEventPublisher:
         self,
         project_id: str,
         sandbox_id: str,
-        url: Optional[str] = None,
+        url: str | None = None,
         display: str = ":1",
         resolution: str = "1280x720",
         port: int = 6080,
@@ -107,7 +106,7 @@ class SandboxEventPublisher:
         project_id: str,
         sandbox_id: str,
         running: bool,
-        url: Optional[str] = None,
+        url: str | None = None,
         display: str = "",
         resolution: str = "",
         port: int = 0,
@@ -127,10 +126,10 @@ class SandboxEventPublisher:
         self,
         project_id: str,
         sandbox_id: str,
-        url: Optional[str] = None,
+        url: str | None = None,
         port: int = 7681,
-        session_id: Optional[str] = None,
-        pid: Optional[int] = None,
+        session_id: str | None = None,
+        pid: int | None = None,
     ) -> str:
         """Emit terminal_started event."""
         event = AgentTerminalStartedEvent(
@@ -146,7 +145,7 @@ class SandboxEventPublisher:
         self,
         project_id: str,
         sandbox_id: str,
-        session_id: Optional[str] = None,
+        session_id: str | None = None,
     ) -> str:
         """Emit terminal_stopped event."""
         event = AgentTerminalStoppedEvent(
@@ -160,10 +159,10 @@ class SandboxEventPublisher:
         project_id: str,
         sandbox_id: str,
         running: bool,
-        url: Optional[str] = None,
+        url: str | None = None,
         port: int = 0,
-        session_id: Optional[str] = None,
-        pid: Optional[int] = None,
+        session_id: str | None = None,
+        pid: int | None = None,
     ) -> str:
         """Emit terminal_status event."""
         event = AgentTerminalStatusEvent(

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from src.infrastructure.graph.dedup import HashDeduplicator
@@ -47,10 +47,10 @@ class EntityExtractor:
         self,
         llm_client: LLMClient,
         embedding_service: EmbeddingService,
-        model: Optional[str] = None,
+        model: str | None = None,
         temperature: float = 0.0,
         use_hash_dedup: bool = True,
-    ):
+    ) -> None:
         """
         Initialize entity extractor.
 
@@ -71,15 +71,15 @@ class EntityExtractor:
     async def extract(
         self,
         content: str,
-        entity_types: Optional[str] = None,
-        entity_types_context: Optional[List[Dict[str, Any]]] = None,
-        entity_type_id_to_name: Optional[Dict[int, str]] = None,
-        previous_context: Optional[str] = None,
-        custom_instructions: Optional[str] = None,
-        project_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-    ) -> List[EntityNode]:
+        entity_types: str | None = None,
+        entity_types_context: list[dict[str, Any]] | None = None,
+        entity_type_id_to_name: dict[int, str] | None = None,
+        previous_context: str | None = None,
+        custom_instructions: str | None = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> list[EntityNode]:
         """
         Extract entities from text content.
 
@@ -142,16 +142,16 @@ class EntityExtractor:
     async def extract_with_dedup(
         self,
         content: str,
-        existing_entities: List[EntityNode],
-        entity_types: Optional[str] = None,
-        entity_types_context: Optional[List[Dict[str, Any]]] = None,
-        entity_type_id_to_name: Optional[Dict[int, str]] = None,
-        previous_context: Optional[str] = None,
-        project_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        user_id: Optional[str] = None,
+        existing_entities: list[EntityNode],
+        entity_types: str | None = None,
+        entity_types_context: list[dict[str, Any]] | None = None,
+        entity_type_id_to_name: dict[int, str] | None = None,
+        previous_context: str | None = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
         similarity_threshold: float = DEDUPE_SIMILARITY_THRESHOLD,
-    ) -> Tuple[List[EntityNode], Dict[str, str]]:
+    ) -> tuple[list[EntityNode], dict[str, str]]:
         """
         Extract entities and deduplicate against existing entities.
 
@@ -198,8 +198,8 @@ class EntityExtractor:
             return new_entities, {}
 
         # Pass 1: Hash-based exact deduplication (fast)
-        duplicate_map: Dict[str, str] = {}
-        entities_after_hash: List[EntityNode] = new_entities
+        duplicate_map: dict[str, str] = {}
+        entities_after_hash: list[EntityNode] = new_entities
 
         if self._hash_deduplicator:
             entities_after_hash, hash_duplicate_map = self._hash_deduplicator.dedupe_against(
@@ -316,7 +316,7 @@ class EntityExtractor:
     def _parse_entities_response(
         self,
         response: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Parse LLM response to extract entities.
 
@@ -352,7 +352,7 @@ class EntityExtractor:
             # Try to extract JSON from response
             return self._extract_json_from_text(response)
 
-    def _extract_json_from_text(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_json_from_text(self, text: str) -> list[dict[str, Any]]:
         """
         Try to extract JSON from text that may contain non-JSON content.
         Uses stack-based matching to support nested JSON objects.
@@ -439,12 +439,12 @@ class EntityExtractor:
 
     async def _create_entity_nodes(
         self,
-        entities_data: List[Dict[str, Any]],
-        entity_type_id_to_name: Optional[Dict[int, str]] = None,
-        project_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-    ) -> List[EntityNode]:
+        entities_data: list[dict[str, Any]],
+        entity_type_id_to_name: dict[int, str] | None = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        user_id: str | None = None,
+    ) -> list[EntityNode]:
         """
         Create EntityNode objects with embeddings.
 
@@ -499,8 +499,8 @@ class EntityExtractor:
 
     def _resolve_entity_type(
         self,
-        entity_data: Dict[str, Any],
-        entity_type_id_to_name: Optional[Dict[int, str]] = None,
+        entity_data: dict[str, Any],
+        entity_type_id_to_name: dict[int, str] | None = None,
     ) -> str:
         """
         Resolve entity type from LLM response data.
@@ -539,10 +539,10 @@ class EntityExtractor:
 
     async def _deduplicate_entities(
         self,
-        new_entities: List[EntityNode],
-        existing_entities: List[EntityNode],
+        new_entities: list[EntityNode],
+        existing_entities: list[EntityNode],
         similarity_threshold: float,
-    ) -> Tuple[List[EntityNode], Dict[str, str]]:
+    ) -> tuple[list[EntityNode], dict[str, str]]:
         """
         Deduplicate new entities against existing ones using embedding similarity.
 

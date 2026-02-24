@@ -7,7 +7,7 @@ These tests verify that the migrated repository maintains 100% compatibility
 with the original implementation while leveraging the BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,8 +41,8 @@ class TestSqlProjectRepositoryCreate:
             memory_rules={"max_memories": 100},
             graph_config={"enabled": True},
             is_public=False,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         await v2_project_repo.save(project)
@@ -72,8 +72,8 @@ class TestSqlProjectRepositoryCreate:
             memory_rules={},
             graph_config={},
             is_public=False,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         await v2_project_repo.save(project)
@@ -108,8 +108,8 @@ class TestSqlProjectRepositoryUpdate:
             memory_rules={"max": 50},
             graph_config={},
             is_public=False,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_project_repo.save(project)
 
@@ -125,7 +125,7 @@ class TestSqlProjectRepositoryUpdate:
             graph_config={"new": True},
             is_public=True,
             created_at=project.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
         await v2_project_repo.save(updated_project)
 
@@ -151,8 +151,8 @@ class TestSqlProjectRepositoryUpdate:
             memory_rules={},
             graph_config={},
             is_public=False,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_project_repo.save(project)
 
@@ -168,7 +168,7 @@ class TestSqlProjectRepositoryUpdate:
             graph_config={},
             is_public=True,
             created_at=project.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
         await v2_project_repo.save(updated)
 
@@ -193,8 +193,8 @@ class TestSqlProjectRepositoryFind:
             memory_rules={},
             graph_config={},
             is_public=False,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_project_repo.save(project)
 
@@ -228,8 +228,8 @@ class TestSqlProjectRepositoryFind:
             memory_rules={},
             graph_config={},
             is_public=False,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_project_repo.save(project)
 
@@ -264,8 +264,8 @@ class TestSqlProjectRepositoryList:
                 memory_rules={},
                 graph_config={},
                 is_public=False,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_project_repo.save(project)
 
@@ -280,8 +280,8 @@ class TestSqlProjectRepositoryList:
             memory_rules={},
             graph_config={},
             is_public=False,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_project_repo.save(other_project)
 
@@ -305,8 +305,8 @@ class TestSqlProjectRepositoryList:
                 memory_rules={},
                 graph_config={},
                 is_public=False,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_project_repo.save(project)
 
@@ -337,8 +337,8 @@ class TestSqlProjectRepositoryList:
                 memory_rules={},
                 graph_config={},
                 is_public=False,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_project_repo.save(project)
 
@@ -353,8 +353,8 @@ class TestSqlProjectRepositoryList:
             memory_rules={},
             graph_config={},
             is_public=False,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_project_repo.save(other_project)
 
@@ -378,8 +378,8 @@ class TestSqlProjectRepositoryList:
                 memory_rules={},
                 graph_config={},
                 is_public=True,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_project_repo.save(public_project)
 
@@ -393,8 +393,8 @@ class TestSqlProjectRepositoryList:
             memory_rules={},
             graph_config={},
             is_public=False,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_project_repo.save(private_project)
 
@@ -418,8 +418,8 @@ class TestSqlProjectRepositoryList:
                 memory_rules={},
                 graph_config={},
                 is_public=False,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_project_repo.save(project)
 
@@ -444,8 +444,8 @@ class TestSqlProjectRepositoryDelete:
             memory_rules={},
             graph_config={},
             is_public=False,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_project_repo.save(project)
 
@@ -492,8 +492,8 @@ class TestSqlProjectRepositoryCount:
                 memory_rules={},
                 graph_config={},
                 is_public=False,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_project_repo.save(project)
 
@@ -515,8 +515,8 @@ class TestSqlProjectRepositoryCount:
                 memory_rules={},
                 graph_config={},
                 is_public=False,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_project_repo.save(project)
 
@@ -531,8 +531,8 @@ class TestSqlProjectRepositoryCount:
                 memory_rules={},
                 graph_config={},
                 is_public=False,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_project_repo.save(project)
 
@@ -560,8 +560,8 @@ class TestSqlProjectRepositoryToDomain:
             memory_rules={"max": 100},
             graph_config={"enabled": True},
             is_public=True,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_project_repo.save(project)
 
@@ -600,8 +600,8 @@ class TestSqlProjectRepositoryToDb:
             memory_rules={},
             graph_config={},
             is_public=False,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         db_model = v2_project_repo._to_db(project)
@@ -629,8 +629,8 @@ class TestSqlProjectRepositoryTransaction:
                 memory_rules={},
                 graph_config={},
                 is_public=False,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_project_repo.save(project1)
 
@@ -644,8 +644,8 @@ class TestSqlProjectRepositoryTransaction:
                 memory_rules={},
                 graph_config={},
                 is_public=False,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_project_repo.save(project2)
 
@@ -670,8 +670,8 @@ class TestSqlProjectRepositoryTransaction:
                     memory_rules={},
                     graph_config={},
                     is_public=False,
-                    created_at=datetime.now(timezone.utc),
-                    updated_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(UTC),
+                    updated_at=datetime.now(UTC),
                 )
                 await v2_project_repo.save(project1)
 
@@ -703,8 +703,8 @@ class TestSqlProjectRepositoryBulkOperations:
                 memory_rules={},
                 graph_config={},
                 is_public=False,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             projects.append(project)
 
@@ -732,8 +732,8 @@ class TestSqlProjectRepositoryBulkOperations:
                 memory_rules={},
                 graph_config={},
                 is_public=False,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_project_repo.save(project)
 

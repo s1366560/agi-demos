@@ -6,7 +6,7 @@ Provides structured Feishu Card 2.0 JSON for:
 - Error notification with optional retry
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class RichCardBuilder:
@@ -27,11 +27,11 @@ class RichCardBuilder:
 
     def build_task_progress_card(
         self,
-        tasks: List[Dict[str, Any]],
+        tasks: list[dict[str, Any]],
         *,
         title: str = "Task Progress",
         conversation_id: str = "",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Build a task list summary card.
 
         Args:
@@ -62,7 +62,7 @@ class RichCardBuilder:
             summary += f" | {failed} failed"
 
         # Build task lines
-        lines: List[str] = []
+        lines: list[str] = []
         for task in display_tasks:
             status = task.get("status", "pending")
             icon = self._STATUS_ICONS.get(status, "⬜")
@@ -108,7 +108,7 @@ class RichCardBuilder:
         file_type: str = "",
         size: str = "",
         description: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build an artifact ready notification card.
 
         Args:
@@ -121,7 +121,7 @@ class RichCardBuilder:
         Returns:
             Feishu Card 2.0 JSON dict.
         """
-        meta_parts: List[str] = []
+        meta_parts: list[str] = []
         if file_type:
             meta_parts.append(f"Type: {file_type}")
         if size:
@@ -133,7 +133,7 @@ class RichCardBuilder:
         if meta_parts:
             content += f"\n{' | '.join(meta_parts)}"
 
-        elements: List[Dict[str, Any]] = [
+        elements: list[dict[str, Any]] = [
             {"tag": "markdown", "content": content},
         ]
 
@@ -171,7 +171,7 @@ class RichCardBuilder:
         error_code: str = "",
         conversation_id: str = "",
         retryable: bool = False,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build an error notification card.
 
         Args:
@@ -187,7 +187,7 @@ class RichCardBuilder:
         if error_code:
             content += f"\nCode: `{error_code}`"
 
-        elements: List[Dict[str, Any]] = [
+        elements: list[dict[str, Any]] = [
             {"tag": "markdown", "content": content},
         ]
 

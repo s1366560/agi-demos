@@ -15,9 +15,9 @@ Attributes:
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.model.agent.subagent_source import SubAgentSource
 
@@ -49,8 +49,8 @@ class AgentTrigger:
     """
 
     description: str
-    examples: List[str] = field(default_factory=list)
-    keywords: List[str] = field(default_factory=list)
+    examples: list[str] = field(default_factory=list)
+    keywords: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         """Validate the trigger."""
@@ -64,7 +64,7 @@ class AgentTrigger:
         query_lower = query.lower()
         return any(kw.lower() in query_lower for kw in self.keywords)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "description": self.description,
@@ -73,7 +73,7 @@ class AgentTrigger:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "AgentTrigger":
+    def from_dict(cls, data: dict[str, Any]) -> "AgentTrigger":
         """Create from dictionary."""
         return cls(
             description=data.get("description", ""),
@@ -129,9 +129,9 @@ class SubAgent:
     trigger: AgentTrigger
     model: AgentModel = AgentModel.INHERIT
     color: str = "blue"
-    allowed_tools: List[str] = field(default_factory=lambda: ["*"])
-    allowed_skills: List[str] = field(default_factory=list)
-    allowed_mcp_servers: List[str] = field(default_factory=list)
+    allowed_tools: list[str] = field(default_factory=lambda: ["*"])
+    allowed_skills: list[str] = field(default_factory=list)
+    allowed_mcp_servers: list[str] = field(default_factory=list)
     max_tokens: int = 4096
     temperature: float = 0.7
     max_iterations: int = 10
@@ -139,12 +139,12 @@ class SubAgent:
     total_invocations: int = 0
     avg_execution_time_ms: float = 0.0
     success_rate: float = 1.0
-    project_id: Optional[str] = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    metadata: Optional[Dict[str, Any]] = None
+    project_id: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    metadata: dict[str, Any] | None = None
     source: SubAgentSource = SubAgentSource.DATABASE
-    file_path: Optional[str] = None
+    file_path: str | None = None
 
     def __post_init__(self):
         """Validate the subagent."""
@@ -213,7 +213,7 @@ class SubAgent:
             return True
         return server_name in self.allowed_mcp_servers
 
-    def get_filtered_tools(self, available_tools: List[str]) -> List[str]:
+    def get_filtered_tools(self, available_tools: list[str]) -> list[str]:
         """
         Get tools filtered by this subagent's allowed tools.
 
@@ -278,13 +278,13 @@ class SubAgent:
             avg_execution_time_ms=new_avg_time,
             success_rate=new_success_rate,
             created_at=self.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
             metadata=self.metadata,
             source=self.source,
             file_path=self.file_path,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "id": self.id,
@@ -314,7 +314,7 @@ class SubAgent:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SubAgent":
+    def from_dict(cls, data: dict[str, Any]) -> "SubAgent":
         """Create from dictionary (e.g., from database)."""
         trigger_data = data.get("trigger", {})
         if isinstance(trigger_data, dict):
@@ -344,10 +344,10 @@ class SubAgent:
             success_rate=data.get("success_rate", 1.0),
             created_at=datetime.fromisoformat(data["created_at"])
             if "created_at" in data
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
             updated_at=datetime.fromisoformat(data["updated_at"])
             if "updated_at" in data
-            else datetime.now(timezone.utc),
+            else datetime.now(UTC),
             metadata=data.get("metadata"),
             source=SubAgentSource(data["source"]) if "source" in data else SubAgentSource.DATABASE,
             file_path=data.get("file_path"),
@@ -361,18 +361,18 @@ class SubAgent:
         display_name: str,
         system_prompt: str,
         trigger_description: str,
-        trigger_examples: Optional[List[str]] = None,
-        trigger_keywords: Optional[List[str]] = None,
+        trigger_examples: list[str] | None = None,
+        trigger_keywords: list[str] | None = None,
         model: AgentModel = AgentModel.INHERIT,
         color: str = "blue",
-        allowed_tools: Optional[List[str]] = None,
-        allowed_skills: Optional[List[str]] = None,
-        allowed_mcp_servers: Optional[List[str]] = None,
+        allowed_tools: list[str] | None = None,
+        allowed_skills: list[str] | None = None,
+        allowed_mcp_servers: list[str] | None = None,
         max_tokens: int = 4096,
         temperature: float = 0.7,
         max_iterations: int = 10,
-        project_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        project_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> "SubAgent":
         """
         Create a new subagent.

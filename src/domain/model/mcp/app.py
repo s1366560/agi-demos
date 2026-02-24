@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class MCPAppSource(str, Enum):
@@ -47,16 +47,16 @@ class MCPAppUIMetadata:
 
     resource_uri: str
     permissions: Any = field(default_factory=dict)
-    csp: Dict[str, List[str]] = field(default_factory=dict)
-    title: Optional[str] = None
-    visibility: List[str] = field(default_factory=lambda: ["model", "app"])
-    prefers_border: Optional[bool] = None
-    domain: Optional[str] = None
-    display_mode: Optional[str] = None  # "inline" | "fullscreen" | "pip"
+    csp: dict[str, list[str]] = field(default_factory=dict)
+    title: str | None = None
+    visibility: list[str] = field(default_factory=lambda: ["model", "app"])
+    prefers_border: bool | None = None
+    domain: str | None = None
+    display_mode: str | None = None  # "inline" | "fullscreen" | "pip"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
-        result: Dict[str, Any] = {"resourceUri": self.resource_uri}
+        result: dict[str, Any] = {"resourceUri": self.resource_uri}
         if self.permissions:
             result["permissions"] = self.permissions
         if self.csp:
@@ -74,7 +74,7 @@ class MCPAppUIMetadata:
         return result
 
     @classmethod
-    def _normalize_permissions(cls, raw: Any) -> Dict[str, Any]:  # noqa: ANN401
+    def _normalize_permissions(cls, raw: Any) -> dict[str, Any]:
         """Normalize permissions to spec format {camera: {}, microphone: {}, ...}.
 
         Accepts both legacy array format ["camera", "microphone"] and
@@ -94,7 +94,7 @@ class MCPAppUIMetadata:
         return {}
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MCPAppUIMetadata":
+    def from_dict(cls, data: dict[str, Any]) -> "MCPAppUIMetadata":
         """Create from dictionary (MCP protocol format)."""
         return cls(
             resource_uri=data.get("resourceUri", ""),
@@ -126,7 +126,7 @@ class MCPAppResource:
     resolved_at: datetime = field(default_factory=datetime.utcnow)
     size_bytes: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "uri": self.uri,
@@ -164,19 +164,19 @@ class MCPApp:
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     project_id: str
     tenant_id: str
-    server_id: Optional[str] = None
+    server_id: str | None = None
     server_name: str
     tool_name: str
     ui_metadata: MCPAppUIMetadata
-    resource: Optional[MCPAppResource] = None
+    resource: MCPAppResource | None = None
     source: MCPAppSource = MCPAppSource.USER_ADDED
     status: MCPAppStatus = MCPAppStatus.DISCOVERED
-    error_message: Optional[str] = None
-    lifecycle_metadata: Dict[str, Any] = field(default_factory=dict)
+    error_message: str | None = None
+    lifecycle_metadata: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
 
-    def _record_lifecycle(self, status: MCPAppStatus, **metadata: Any) -> None:  # noqa: ANN401
+    def _record_lifecycle(self, status: MCPAppStatus, **metadata: Any) -> None:
         """Record lifecycle transition metadata for persistence/audit."""
         now = datetime.utcnow()
         self.lifecycle_metadata["last_status"] = status.value
@@ -237,7 +237,7 @@ class MCPApp:
         """Get display title (from metadata or tool name)."""
         return self.ui_metadata.title or self.tool_name
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "id": self.id,

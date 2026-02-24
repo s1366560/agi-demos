@@ -6,7 +6,6 @@ with deduplication (DB overrides FS by name).
 """
 
 import logging
-from typing import List, Optional
 
 from src.domain.model.agent.subagent import SubAgent
 from src.infrastructure.agent.subagent.filesystem_loader import (
@@ -26,11 +25,11 @@ class SubAgentService:
 
     def __init__(
         self,
-        filesystem_loader: Optional[FileSystemSubAgentLoader] = None,
-    ):
+        filesystem_loader: FileSystemSubAgentLoader | None = None,
+    ) -> None:
         self._filesystem_loader = filesystem_loader
 
-    async def load_filesystem_subagents(self) -> List[SubAgent]:
+    async def load_filesystem_subagents(self) -> list[SubAgent]:
         """Load SubAgents from filesystem only."""
         if not self._filesystem_loader:
             return []
@@ -47,9 +46,9 @@ class SubAgentService:
 
     def merge(
         self,
-        db_subagents: List[SubAgent],
-        fs_subagents: List[SubAgent],
-    ) -> List[SubAgent]:
+        db_subagents: list[SubAgent],
+        fs_subagents: list[SubAgent],
+    ) -> list[SubAgent]:
         """
         Merge filesystem and database SubAgents with deduplication.
 

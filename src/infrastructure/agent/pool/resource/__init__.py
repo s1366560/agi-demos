@@ -10,8 +10,8 @@ from .manager import (
 )
 
 __all__ = [
-    "ResourceManager",
     "ProjectResourceAllocation",
-    "ResourceAllocationError",
     "QuotaExceededError",
+    "ResourceAllocationError",
+    "ResourceManager",
 ]

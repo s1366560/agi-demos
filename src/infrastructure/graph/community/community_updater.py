@@ -10,7 +10,7 @@ This module provides:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
@@ -65,8 +65,8 @@ class CommunityUpdater:
         neo4j_client: Neo4jClient,
         llm_client: LLMClient,
         louvain_detector: LouvainDetector,
-        model: Optional[str] = None,
-    ):
+        model: str | None = None,
+    ) -> None:
         """
         Initialize community updater.
 
@@ -83,11 +83,11 @@ class CommunityUpdater:
 
     async def update_communities_for_entities(
         self,
-        entities: List[EntityNode],
+        entities: list[EntityNode],
         project_id: str,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
         regenerate_all: bool = False,
-    ) -> List[CommunityNode]:
+    ) -> list[CommunityNode]:
         """
         Update communities after new entities are added.
 
@@ -171,7 +171,7 @@ class CommunityUpdater:
     async def update_single_community(
         self,
         community_uuid: str,
-    ) -> Optional[CommunityNode]:
+    ) -> CommunityNode | None:
         """
         Update a single community's summary.
 
@@ -236,8 +236,8 @@ class CommunityUpdater:
 
     async def _generate_community_summary(
         self,
-        member_entities: List[Dict[str, Any]],
-    ) -> Dict[str, str]:
+        member_entities: list[dict[str, Any]],
+    ) -> dict[str, str]:
         """
         Generate summary for a community using LLM with structured output.
 
@@ -381,7 +381,7 @@ class CommunityUpdater:
     async def _get_existing_communities(
         self,
         project_id: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get existing communities for a project.
 
@@ -406,7 +406,7 @@ class CommunityUpdater:
         self,
         community: CommunityNode,
         project_id: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get entities that should belong to a community.
 

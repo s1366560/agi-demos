@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from time import perf_counter
-from typing import Any, Callable, Dict, Mapping, Optional, Sequence
+from typing import Any
 
 from src.infrastructure.agent.core.tool_selector import (
     CORE_TOOLS,
@@ -21,13 +22,13 @@ from src.infrastructure.agent.plugins.policy_context import (
 class ToolSelectionContext:
     """Context passed to tool selection pipeline stages."""
 
-    tenant_id: Optional[str] = None
-    project_id: Optional[str] = None
+    tenant_id: str | None = None
+    project_id: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
-    policy_context: Optional[PolicyContext] = None
+    policy_context: PolicyContext | None = None
 
 
-SelectionStage = Callable[[Dict[str, Any], ToolSelectionContext], Dict[str, Any]]
+SelectionStage = Callable[[dict[str, Any], ToolSelectionContext], dict[str, Any]]
 
 
 @dataclass(frozen=True)
@@ -47,20 +48,20 @@ class ToolSelectionTraceStep:
 class ToolSelectionResult:
     """Selected tools and per-stage trace."""
 
-    tools: Dict[str, Any]
+    tools: dict[str, Any]
     trace: tuple[ToolSelectionTraceStep, ...] = ()
 
 
 class ToolSelectionPipeline:
     """Apply ordered tool-selection stages and expose stage-level traces."""
 
-    def __init__(self, stages: Optional[list[SelectionStage]] = None) -> None:
+    def __init__(self, stages: list[SelectionStage] | None = None) -> None:
         self._stages = list(stages or [])
 
     def select_with_trace(
         self,
-        tools: Dict[str, Any],
-        context: Optional[ToolSelectionContext] = None,
+        tools: dict[str, Any],
+        context: ToolSelectionContext | None = None,
     ) -> ToolSelectionResult:
         """Run stages and return selected tools plus trace metadata."""
         current_tools = dict(tools)
@@ -122,24 +123,24 @@ class ToolSelectionPipeline:
 
     def select(
         self,
-        tools: Dict[str, Any],
-        context: Optional[ToolSelectionContext] = None,
-    ) -> Dict[str, Any]:
+        tools: dict[str, Any],
+        context: ToolSelectionContext | None = None,
+    ) -> dict[str, Any]:
         """Run all stages in order and return the filtered tool set."""
         return self.select_with_trace(tools, context).tools
 
 
 def context_filter_stage(
-    tools: Dict[str, Any],
+    tools: dict[str, Any],
     context: ToolSelectionContext,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Filter tools by explicit allowlists provided in metadata."""
     allow_names = set(_read_str_list(context.metadata, "tool_names_allowlist"))
     allow_prefixes = tuple(_read_str_list(context.metadata, "tool_prefix_allowlist"))
     if not allow_names and not allow_prefixes:
         return dict(tools)
 
-    filtered: Dict[str, Any] = {}
+    filtered: dict[str, Any] = {}
     for name, tool in tools.items():
         if name in CORE_TOOLS:
             filtered[name] = tool
@@ -154,9 +155,9 @@ def context_filter_stage(
 
 
 def intent_router_stage(
-    tools: Dict[str, Any],
+    tools: dict[str, Any],
     context: ToolSelectionContext,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Optional rule-based intent filter (disabled unless explicitly enabled)."""
     if not bool(context.metadata.get("enable_intent_filter", False)):
         return dict(tools)
@@ -176,7 +177,7 @@ def intent_router_stage(
         "mcp": ("mcp__", "register_mcp_server", "sandbox_"),
     }
     matched_prefixes = prefixes_map.get(intent, ())
-    filtered: Dict[str, Any] = {}
+    filtered: dict[str, Any] = {}
     for name, tool in tools.items():
         if name in CORE_TOOLS:
             filtered[name] = tool
@@ -187,9 +188,9 @@ def intent_router_stage(
 
 
 def semantic_ranker_stage(
-    tools: Dict[str, Any],
+    tools: dict[str, Any],
     context: ToolSelectionContext,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Rank tools by conversation relevance and enforce max_tools budget."""
     max_tools = _resolve_max_tools_budget(
         context.metadata,
@@ -228,9 +229,9 @@ def semantic_ranker_stage(
 
 
 def policy_stage(
-    tools: Dict[str, Any],
+    tools: dict[str, Any],
     context: ToolSelectionContext,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Apply allow/deny policy lists provided by upstream policy engines."""
     policy_context = _resolve_policy_context(
         context.metadata,
@@ -242,7 +243,7 @@ def policy_stage(
         policy_context=policy_context,
     )
 
-    filtered: Dict[str, Any] = {}
+    filtered: dict[str, Any] = {}
     for name, tool in tools.items():
         if name in CORE_TOOLS:
             filtered[name] = tool
@@ -283,7 +284,7 @@ def _build_stage_explain(
 ) -> Mapping[str, Any]:
     removed = tuple(sorted(before_names - after_names))
     added = tuple(sorted(after_names - before_names))
-    explain: Dict[str, Any] = {
+    explain: dict[str, Any] = {
         "removed_count": len(removed),
         "added_count": len(added),
     }
@@ -341,7 +342,7 @@ def _build_stage_explain(
     return explain
 
 
-def _detect_intent(query: str) -> Optional[str]:
+def _detect_intent(query: str) -> str | None:
     if any(token in query for token in ("search", "web", "scrape", "crawl")):
         return "web"
     if any(token in query for token in ("memory", "recall", "knowledge", "entity")):
@@ -357,7 +358,7 @@ def _resolve_max_tools_budget(
     metadata: Mapping[str, Any],
     *,
     default: int,
-    policy_context: Optional[PolicyContext] = None,
+    policy_context: PolicyContext | None = None,
 ) -> int:
     budgets: list[int] = []
     top_level_budget = _parse_positive_int(metadata.get("max_tools"))
@@ -380,8 +381,8 @@ def _resolve_max_tools_budget(
 def _resolve_policy_lists(
     metadata: Mapping[str, Any],
     *,
-    known_tool_names: Optional[set[str]] = None,
-    policy_context: Optional[PolicyContext] = None,
+    known_tool_names: set[str] | None = None,
+    policy_context: PolicyContext | None = None,
 ) -> tuple[set[str], set[str], Mapping[str, Any]]:
     allow_tools = set(_read_str_list(metadata, "allow_tools"))
     deny_tools = set(_read_str_list(metadata, "deny_tools"))
@@ -421,7 +422,7 @@ def _resolve_policy_lists(
 def _iter_policy_layers(
     metadata: Mapping[str, Any],
     *,
-    policy_context: Optional[PolicyContext] = None,
+    policy_context: PolicyContext | None = None,
 ) -> Sequence[tuple[str, Mapping[str, Any]]]:
     resolved = _resolve_policy_context(metadata, explicit=policy_context)
     return tuple((layer.name, layer.values) for layer in resolved.layers)
@@ -430,14 +431,14 @@ def _iter_policy_layers(
 def _resolve_policy_context(
     metadata: Mapping[str, Any],
     *,
-    explicit: Optional[PolicyContext],
+    explicit: PolicyContext | None,
 ) -> PolicyContext:
     if explicit is not None:
         return explicit
     return PolicyContext.from_metadata(metadata, layer_order=DEFAULT_POLICY_LAYER_ORDER)
 
 
-def _parse_positive_int(value: Any) -> Optional[int]:  # noqa: ANN401
+def _parse_positive_int(value: Any) -> int | None:
     try:
         parsed = int(value)
     except (TypeError, ValueError):
@@ -451,7 +452,7 @@ def _resolve_stage_latency_budget_ms(
     stage_name: str,
     *,
     metadata: Mapping[str, Any],
-) -> Optional[float]:
+) -> float | None:
     stage_map = metadata.get("stage_latency_budget_ms")
     if isinstance(stage_map, Mapping):
         stage_budget = _parse_positive_float(stage_map.get(stage_name))
@@ -468,7 +469,7 @@ def _resolve_stage_budget_fallback(metadata: Mapping[str, Any]) -> str:
     return fallback
 
 
-def _parse_positive_float(value: Any) -> Optional[float]:  # noqa: ANN401
+def _parse_positive_float(value: Any) -> float | None:
     try:
         parsed = float(value)
     except (TypeError, ValueError):

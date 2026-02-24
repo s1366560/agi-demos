@@ -1,8 +1,7 @@
 """Recall API routes for short-term memory retrieval."""
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -25,15 +24,15 @@ router = APIRouter(prefix="/api/v1/recall", tags=["recall"])
 class ShortTermRecallQuery(BaseModel):
     window_minutes: int = 1440  # Default 24 hours
     limit: int = 100
-    tenant_id: Optional[str] = None
+    tenant_id: str | None = None
 
 
 class MemoryItem(BaseModel):
     uuid: str
     name: str
     content: str
-    created_at: Optional[str] = None
-    metadata: Optional[dict] = None
+    created_at: str | None = None
+    metadata: dict | None = None
 
 
 class ShortTermRecallResponse(BaseModel):
@@ -61,7 +60,7 @@ async def short_term_recall(
         )
 
         # Calculate time window
-        since_date = datetime.now(timezone.utc) - timedelta(minutes=payload.window_minutes)
+        since_date = datetime.now(UTC) - timedelta(minutes=payload.window_minutes)
 
         # Build query
         conditions = ["e.created_at >= datetime($since_date)"]

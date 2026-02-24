@@ -2,7 +2,7 @@
 Tests for V2 SqlMCPServerRepository using BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -251,7 +251,7 @@ class TestSqlMCPServerRepositoryUpdate:
             {"name": "tool1", "description": "First tool"},
             {"name": "tool2", "description": "Second tool"},
         ]
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         result = await v2_mcp_repo.update_discovered_tools(server_id, tools, timestamp)
 
         assert result is True

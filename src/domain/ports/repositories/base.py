@@ -16,12 +16,12 @@ Usage:
 """
 
 from abc import ABC, abstractmethod
-from typing import Generic, Optional, TypeVar
+from typing import TypeVar
 
 T = TypeVar("T")
 
 
-class ReadRepositoryPort(ABC, Generic[T]):
+class ReadRepositoryPort[T](ABC):
     """Base interface for read-only repository operations.
 
     Implementations should use read replicas or optimized query paths
@@ -29,7 +29,7 @@ class ReadRepositoryPort(ABC, Generic[T]):
     """
 
     @abstractmethod
-    async def find_by_id(self, entity_id: str) -> Optional[T]:
+    async def find_by_id(self, entity_id: str) -> T | None:
         """Find entity by ID."""
         ...
 
@@ -39,7 +39,7 @@ class ReadRepositoryPort(ABC, Generic[T]):
         ...
 
 
-class WriteRepositoryPort(ABC, Generic[T]):
+class WriteRepositoryPort[T](ABC):
     """Base interface for write repository operations.
 
     Implementations should target the primary database for all writes.
@@ -56,7 +56,7 @@ class WriteRepositoryPort(ABC, Generic[T]):
         ...
 
 
-class ListableReadRepositoryPort(ReadRepositoryPort[T], Generic[T]):
+class ListableReadRepositoryPort[T](ReadRepositoryPort[T]):
     """Extended read port for entities that support listing/pagination."""
 
     @abstractmethod

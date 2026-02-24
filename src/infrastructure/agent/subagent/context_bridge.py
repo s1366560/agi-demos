@@ -10,7 +10,7 @@ Optionally injects relevant memories from the knowledge graph.
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -35,9 +35,9 @@ class SubAgentContext:
 
     task_description: str
     system_prompt: str
-    context_messages: List[Dict[str, str]] = field(default_factory=list)
+    context_messages: list[dict[str, str]] = field(default_factory=list)
     token_budget: int = 60000
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     memory_context: str = ""
 
 
@@ -64,7 +64,7 @@ class ContextBridge:
         self,
         user_message: str,
         subagent_system_prompt: str,
-        conversation_context: Optional[List[Dict[str, str]]] = None,
+        conversation_context: list[dict[str, str]] | None = None,
         main_token_budget: int = 200000,
         project_id: str = "",
         tenant_id: str = "",
@@ -99,7 +99,7 @@ class ContextBridge:
             memory_context=memory_context,
         )
 
-    def build_messages(self, context: SubAgentContext) -> List[Dict[str, Any]]:
+    def build_messages(self, context: SubAgentContext) -> list[dict[str, Any]]:
         """Build the initial message list for a SubAgent's processor.
 
         Constructs: [system, ...condensed_context, (memory), user_task]
@@ -113,7 +113,7 @@ class ContextBridge:
         Returns:
             Message list ready for SessionProcessor.process().
         """
-        messages: List[Dict[str, Any]] = []
+        messages: list[dict[str, Any]] = []
 
         # System prompt
         messages.append({
@@ -145,8 +145,8 @@ class ContextBridge:
 
     def _condense_context(
         self,
-        conversation_context: Optional[List[Dict[str, str]]],
-    ) -> List[Dict[str, str]]:
+        conversation_context: list[dict[str, str]] | None,
+    ) -> list[dict[str, str]]:
         """Condense conversation context to fit SubAgent budget.
 
         Takes the most recent messages up to limits, truncating
@@ -164,7 +164,7 @@ class ContextBridge:
         # Take the most recent N messages
         recent = conversation_context[-self._max_context_messages:]
 
-        condensed: List[Dict[str, str]] = []
+        condensed: list[dict[str, str]] = []
         total_chars = 0
 
         for msg in recent:

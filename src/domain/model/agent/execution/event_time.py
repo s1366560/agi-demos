@@ -5,7 +5,7 @@ event_time_us is a microsecond-precision UTC timestamp, and event_counter
 is a monotonically increasing counter within the same microsecond.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 
 class EventTimeGenerator:
@@ -34,7 +34,7 @@ class EventTimeGenerator:
             Tuple of (event_time_us, event_counter) guaranteed to be
             monotonically increasing relative to previous calls.
         """
-        now_us = int(datetime.now(timezone.utc).timestamp() * 1_000_000)
+        now_us = int(datetime.now(UTC).timestamp() * 1_000_000)
 
         if now_us <= self._last_time_us:
             # Same microsecond or clock drift backward: increment counter

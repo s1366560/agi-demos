@@ -1,6 +1,5 @@
 """DI sub-container for authentication and authorization domain."""
 
-from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,7 +23,7 @@ class AuthContainer:
     Provides factory methods for user, API key, and tenant repositories.
     """
 
-    def __init__(self, db: Optional[AsyncSession] = None) -> None:
+    def __init__(self, db: AsyncSession | None = None) -> None:
         self._db = db
 
     def user_repository(self) -> UserRepository:

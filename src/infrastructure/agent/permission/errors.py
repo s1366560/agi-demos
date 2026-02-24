@@ -10,7 +10,7 @@ class PermissionError(Exception):
 class PermissionDeniedError(PermissionError):
     """Raised when a permission is denied by rule."""
 
-    def __init__(self, permission: str, pattern: str, message: str = None):
+    def __init__(self, permission: str, pattern: str, message: str | None = None) -> None:
         self.permission = permission
         self.pattern = pattern
         super().__init__(message or f"Permission denied: {permission} for pattern '{pattern}'")
@@ -19,7 +19,7 @@ class PermissionDeniedError(PermissionError):
 class PermissionRejectedError(PermissionError):
     """Raised when a user rejects a permission request."""
 
-    def __init__(self, permission: str, patterns: list[str], message: str = None):
+    def __init__(self, permission: str, patterns: list[str], message: str | None = None) -> None:
         self.permission = permission
         self.patterns = patterns
         super().__init__(

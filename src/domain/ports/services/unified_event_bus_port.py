@@ -22,9 +22,9 @@ Usage:
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import AsyncIterator, List, Optional
+from datetime import UTC, datetime
 
 from src.domain.events.envelope import EventEnvelope
 
@@ -43,7 +43,7 @@ class RoutingKey:
 
     namespace: str
     entity_id: str
-    sub_id: Optional[str] = None
+    sub_id: str | None = None
 
     def __str__(self) -> str:
         """Convert to string representation."""
@@ -104,8 +104,8 @@ class SubscriptionOptions:
         ack_immediately: Whether to acknowledge events immediately
     """
 
-    consumer_group: Optional[str] = None
-    consumer_name: Optional[str] = None
+    consumer_group: str | None = None
+    consumer_name: str | None = None
     from_time_us: int = 0
     from_counter: int = 0
     batch_size: int = 100
@@ -125,7 +125,7 @@ class PublishResult:
 
     sequence_id: str
     stream_key: str
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 @dataclass
@@ -142,7 +142,7 @@ class EventWithMetadata:
     envelope: EventEnvelope
     routing_key: str
     sequence_id: str
-    delivered_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    delivered_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 class UnifiedEventBusPort(ABC):
@@ -181,8 +181,8 @@ class UnifiedEventBusPort(ABC):
     @abstractmethod
     async def publish_batch(
         self,
-        events: List[tuple[EventEnvelope, str | RoutingKey]],
-    ) -> List[PublishResult]:
+        events: list[tuple[EventEnvelope, str | RoutingKey]],
+    ) -> list[PublishResult]:
         """Publish multiple events atomically.
 
         Args:
@@ -200,7 +200,7 @@ class UnifiedEventBusPort(ABC):
     async def subscribe(
         self,
         pattern: str,
-        options: Optional[SubscriptionOptions] = None,
+        options: SubscriptionOptions | None = None,
     ) -> AsyncIterator[EventWithMetadata]:
         """Subscribe to events matching a pattern.
 
@@ -227,9 +227,9 @@ class UnifiedEventBusPort(ABC):
         self,
         routing_key: str | RoutingKey,
         from_sequence: str = "0",
-        to_sequence: Optional[str] = None,
+        to_sequence: str | None = None,
         max_count: int = 1000,
-    ) -> List[EventWithMetadata]:
+    ) -> list[EventWithMetadata]:
         """Get events from a specific stream.
 
         Args:
@@ -247,7 +247,7 @@ class UnifiedEventBusPort(ABC):
     async def get_latest_event(
         self,
         routing_key: str | RoutingKey,
-    ) -> Optional[EventWithMetadata]:
+    ) -> EventWithMetadata | None:
         """Get the most recent event from a stream.
 
         Args:
@@ -262,7 +262,7 @@ class UnifiedEventBusPort(ABC):
     async def acknowledge(
         self,
         routing_key: str | RoutingKey,
-        sequence_ids: List[str],
+        sequence_ids: list[str],
         consumer_group: str,
     ) -> int:
         """Acknowledge processed events.
@@ -358,9 +358,9 @@ class EventPublishError(Exception):
     def __init__(
         self,
         message: str,
-        routing_key: Optional[str] = None,
-        event_type: Optional[str] = None,
-    ):
+        routing_key: str | None = None,
+        event_type: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.routing_key = routing_key
         self.event_type = event_type
@@ -369,6 +369,6 @@ class EventPublishError(Exception):
 class EventSubscribeError(Exception):
     """Error subscribing to events."""
 
-    def __init__(self, message: str, pattern: Optional[str] = None):
+    def __init__(self, message: str, pattern: str | None = None) -> None:
         super().__init__(message)
         self.pattern = pattern

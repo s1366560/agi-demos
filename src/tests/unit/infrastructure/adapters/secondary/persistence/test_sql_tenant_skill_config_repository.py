@@ -2,7 +2,7 @@
 Tests for V2 SqlTenantSkillConfigRepository using BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,8 +34,8 @@ class TestSqlTenantSkillConfigRepositoryCreate:
             system_skill_name="test_skill",
             action=TenantSkillAction.DISABLE,
             override_skill_id=None,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         result = await v2_skill_config_repo.create(config)
@@ -56,8 +56,8 @@ class TestSqlTenantSkillConfigRepositoryFind:
             system_skill_name="find_skill",
             action=TenantSkillAction.DISABLE,
             override_skill_id=None,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_skill_config_repo.create(config)
 
@@ -80,8 +80,8 @@ class TestSqlTenantSkillConfigRepositoryFind:
             system_skill_name="ts_skill",
             action=TenantSkillAction.OVERRIDE,
             override_skill_id="override-1",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_skill_config_repo.create(config)
 
@@ -102,8 +102,8 @@ class TestSqlTenantSkillConfigRepositoryUpdate:
             system_skill_name="update_skill",
             action=TenantSkillAction.DISABLE,
             override_skill_id=None,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_skill_config_repo.create(config)
 
@@ -122,8 +122,8 @@ class TestSqlTenantSkillConfigRepositoryUpdate:
             system_skill_name="skill",
             action=TenantSkillAction.DISABLE,
             override_skill_id=None,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         with pytest.raises(ValueError):
@@ -142,8 +142,8 @@ class TestSqlTenantSkillConfigRepositoryDelete:
             system_skill_name="delete_skill",
             action=TenantSkillAction.DISABLE,
             override_skill_id=None,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_skill_config_repo.create(config)
 
@@ -161,8 +161,8 @@ class TestSqlTenantSkillConfigRepositoryDelete:
             system_skill_name="del_skill",
             action=TenantSkillAction.DISABLE,
             override_skill_id=None,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_skill_config_repo.create(config)
 
@@ -185,8 +185,8 @@ class TestSqlTenantSkillConfigRepositoryList:
                 system_skill_name=f"skill-{i}",
                 action=TenantSkillAction.DISABLE,
                 override_skill_id=None,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_skill_config_repo.create(config)
 
@@ -202,8 +202,8 @@ class TestSqlTenantSkillConfigRepositoryList:
             system_skill_name="skill1",
             action=TenantSkillAction.DISABLE,
             override_skill_id=None,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         config2 = TenantSkillConfig(
             id="config-map-2",
@@ -211,8 +211,8 @@ class TestSqlTenantSkillConfigRepositoryList:
             system_skill_name="skill2",
             action=TenantSkillAction.OVERRIDE,
             override_skill_id="override-1",
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_skill_config_repo.create(config1)
         await v2_skill_config_repo.create(config2)
@@ -232,8 +232,8 @@ class TestSqlTenantSkillConfigRepositoryList:
                 system_skill_name=f"skill-{i}",
                 action=TenantSkillAction.DISABLE,
                 override_skill_id=None,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_skill_config_repo.create(config)
 

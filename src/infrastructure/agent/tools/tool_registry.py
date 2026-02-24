@@ -7,9 +7,9 @@ import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -29,12 +29,12 @@ class ToolExecutionResult:
     tool_name: str
     success: bool
     result: Any
-    error: Optional[str] = None
+    error: str | None = None
     duration_ms: float = 0.0
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "tool_name": self.tool_name,
@@ -54,7 +54,7 @@ class ToolMetadata:
     name: str
     description: str
     category: str
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
     requires_permission: bool = True
     dangerous: bool = False
     safe: bool = False
@@ -78,7 +78,7 @@ class Tool(ABC):
         ...
 
     @abstractmethod
-    async def execute(self, **kwargs) -> Any:  # noqa: ANN401
+    async def execute(self, **kwargs) -> Any:
         """Execute the tool.
 
         Args:
@@ -111,12 +111,12 @@ class ToolRegistry:
 
     def __init__(self) -> None:
         """Initialize the tool registry."""
-        self._tools: Dict[str, Tool] = {}
-        self._metadata: Dict[str, ToolMetadata] = {}
-        self._status: Dict[str, ToolStatus] = {}
-        self._execution_stats: Dict[str, Dict[str, Any]] = {}
+        self._tools: dict[str, Tool] = {}
+        self._metadata: dict[str, ToolMetadata] = {}
+        self._status: dict[str, ToolStatus] = {}
+        self._execution_stats: dict[str, dict[str, Any]] = {}
 
-    def register(self, tool: Tool, metadata: Optional[ToolMetadata] = None) -> None:
+    def register(self, tool: Tool, metadata: ToolMetadata | None = None) -> None:
         """Register a tool.
 
         Args:
@@ -157,7 +157,7 @@ class ToolRegistry:
             del self._status[name]
             logger.info(f"Unregistered tool: {name}")
 
-    def get_tool(self, name: str) -> Optional[Tool]:
+    def get_tool(self, name: str) -> Tool | None:
         """Get a tool by name.
 
         Args:
@@ -170,9 +170,9 @@ class ToolRegistry:
 
     def list_tools(
         self,
-        category: Optional[str] = None,
-        status: Optional[ToolStatus] = None,
-    ) -> List[str]:
+        category: str | None = None,
+        status: ToolStatus | None = None,
+    ) -> list[str]:
         """List registered tools.
 
         Args:
@@ -193,7 +193,7 @@ class ToolRegistry:
 
         return sorted(tools)
 
-    def get_metadata(self, name: str) -> Optional[ToolMetadata]:
+    def get_metadata(self, name: str) -> ToolMetadata | None:
         """Get tool metadata.
 
         Args:
@@ -204,7 +204,7 @@ class ToolRegistry:
         """
         return self._metadata.get(name)
 
-    def get_stats(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_stats(self, name: str) -> dict[str, Any] | None:
         """Get execution statistics for a tool.
 
         Args:
@@ -236,9 +236,9 @@ class ToolRegistry:
         stats["avg_duration_ms"] = total_duration / calls if calls else 0.0
         stats["success_rate"] = successes / calls if calls else 0.0
 
-    def get_quality_scores(self) -> Dict[str, float]:
+    def get_quality_scores(self) -> dict[str, float]:
         """Return normalized quality scores (0.0-1.0) for ranking feedback."""
-        quality_scores: Dict[str, float] = {}
+        quality_scores: dict[str, float] = {}
         for name, stats in self._execution_stats.items():
             calls = int(stats.get("calls", 0))
             if calls <= 0:
@@ -299,9 +299,9 @@ class ToolExecutor:
     async def execute(
         self,
         tool_name: str,
-        parameters: Dict[str, Any],
-        timeout_seconds: Optional[float] = None,
-        context: Optional[Dict[str, Any]] = None,
+        parameters: dict[str, Any],
+        timeout_seconds: float | None = None,
+        context: dict[str, Any] | None = None,
     ) -> ToolExecutionResult:
         """Execute a tool with monitoring.
 
@@ -354,7 +354,7 @@ class ToolExecutor:
                 duration_ms=duration_ms,
             )
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             duration_ms = (asyncio.get_event_loop().time() - start_time) * 1000
 
             self._registry.record_execution(
@@ -390,9 +390,9 @@ class ToolExecutor:
 
     async def execute_batch(
         self,
-        requests: List[Dict[str, Any]],
-        context: Optional[Dict[str, Any]] = None,
-    ) -> List[ToolExecutionResult]:
+        requests: list[dict[str, Any]],
+        context: dict[str, Any] | None = None,
+    ) -> list[ToolExecutionResult]:
         """Execute multiple tools in parallel.
 
         Args:
@@ -402,7 +402,7 @@ class ToolExecutor:
         Returns:
             List of execution results
         """
-        normalized_requests: List[Dict[str, Any]] = []
+        normalized_requests: list[dict[str, Any]] = []
         for req in requests:
             raw_tool_name = req.get("tool_name")
             tool_name = raw_tool_name.strip() if isinstance(raw_tool_name, str) else ""
@@ -441,7 +441,7 @@ class ToolExecutor:
 
 
 # Global tool registry
-_global_registry: Optional[ToolRegistry] = None
+_global_registry: ToolRegistry | None = None
 
 
 def get_tool_registry() -> ToolRegistry:

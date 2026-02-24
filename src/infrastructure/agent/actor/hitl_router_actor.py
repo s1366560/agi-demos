@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
-from typing import Any, Dict, Optional, Set, Tuple
+from typing import Any
 
 import ray
 import redis.asyncio as aioredis
@@ -30,10 +31,10 @@ class HITLStreamRouterActor:
     DEFAULT_BATCH_SIZE = 10
 
     def __init__(self) -> None:
-        self._redis: Optional[aioredis.Redis] = None
-        self._projects: Set[Tuple[str, str]] = set()
+        self._redis: aioredis.Redis | None = None
+        self._projects: set[tuple[str, str]] = set()
         self._running = False
-        self._listen_task: Optional[asyncio.Task] = None
+        self._listen_task: asyncio.Task | None = None
         self._worker_id = f"router-{os.getpid()}"
 
     async def start(self) -> None:
@@ -48,10 +49,8 @@ class HITLStreamRouterActor:
         self._running = False
         if self._listen_task:
             self._listen_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._listen_task
-            except asyncio.CancelledError:
-                pass
             self._listen_task = None
 
     async def add_project(self, tenant_id: str, project_id: str) -> None:
@@ -110,7 +109,7 @@ class HITLStreamRouterActor:
                 logger.error(f"[HITLRouter] Error in loop: {e}", exc_info=True)
                 await asyncio.sleep(1)
 
-    async def _handle_message(self, stream_key: str, msg_id: str, fields: Dict[str, Any]) -> None:
+    async def _handle_message(self, stream_key: str, msg_id: str, fields: dict[str, Any]) -> None:
         try:
             raw = fields.get("data") or fields.get(b"data")
             if not raw:
@@ -149,7 +148,7 @@ class HITLStreamRouterActor:
         tenant_id: str,
         project_id: str,
         agent_mode: str,
-    ) -> Any:  # noqa: ANN401
+    ) -> Any:
         settings = get_settings()
         ray_settings = get_ray_settings()
         actor_id = ProjectAgentActor.actor_id(tenant_id, project_id, agent_mode)
@@ -191,7 +190,7 @@ class HITLStreamRouterActor:
         return self.STREAM_KEY_PATTERN.format(tenant_id=tenant_id, project_id=project_id)
 
     @staticmethod
-    def _parse_stream_key(stream_key: str) -> Tuple[str, str]:
+    def _parse_stream_key(stream_key: str) -> tuple[str, str]:
         if isinstance(stream_key, bytes):
             stream_key = stream_key.decode("utf-8")
         parts = stream_key.split(":")

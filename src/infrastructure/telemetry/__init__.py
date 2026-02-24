@@ -38,31 +38,31 @@ from src.infrastructure.telemetry.tracing import (
 )
 
 __all__ = [
-    # Config
-    "configure_telemetry",
-    "get_tracer",
-    "get_meter",
-    "shutdown_telemetry",
-    # Decorators
-    "with_tracer",
-    "async_with_tracer",
-    # Instrumentation
-    "instrument_httpx",
-    "instrument_sqlalchemy",
-    "instrument_redis",
-    "instrument_fastapi",
-    "instrument_all",
-    # Metrics
-    "create_counter",
-    "create_histogram",
-    "create_gauge",
-    "increment_counter",
-    "record_histogram_value",
-    "set_gauge",
     # Tracing
     "add_span_attributes",
     "add_span_event",
-    "set_span_error",
+    "async_with_tracer",
+    # Config
+    "configure_telemetry",
+    # Metrics
+    "create_counter",
+    "create_gauge",
+    "create_histogram",
     "get_current_span",
+    "get_meter",
     "get_trace_id",
+    "get_tracer",
+    "increment_counter",
+    "instrument_all",
+    "instrument_fastapi",
+    # Instrumentation
+    "instrument_httpx",
+    "instrument_redis",
+    "instrument_sqlalchemy",
+    "record_histogram_value",
+    "set_gauge",
+    "set_span_error",
+    "shutdown_telemetry",
+    # Decorators
+    "with_tracer",
 ]

@@ -8,4 +8,4 @@ from src.infrastructure.telemetry.tracing import (
     with_tracer,
 )
 
-__all__ = ["with_tracer", "async_with_tracer"]
+__all__ = ["async_with_tracer", "with_tracer"]

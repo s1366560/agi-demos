@@ -18,7 +18,7 @@ import logging
 import re
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -106,7 +106,7 @@ class ContextWindowResult:
     """Result of context window building."""
 
     # Messages to send to LLM
-    messages: List[Dict[str, Any]]
+    messages: list[dict[str, Any]]
 
     # Compression info
     was_compressed: bool = False
@@ -120,13 +120,13 @@ class ContextWindowResult:
     budget_utilization_pct: float = 0.0
 
     # Summary (if generated)
-    summary: Optional[str] = None
+    summary: str | None = None
     summarized_message_count: int = 0
 
     # Metadata
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_event_data(self) -> Dict[str, Any]:
+    def to_event_data(self) -> dict[str, Any]:
         """Convert to event data for SSE/WebSocket."""
         return {
             "was_compressed": self.was_compressed,
@@ -160,7 +160,7 @@ class ContextWindowManager:
         # Use result.messages for LLM call
     """
 
-    def __init__(self, config: Optional[ContextWindowConfig] = None):
+    def __init__(self, config: ContextWindowConfig | None = None) -> None:
         """
         Initialize context window manager.
 
@@ -168,7 +168,7 @@ class ContextWindowManager:
             config: Configuration options. Uses defaults if None.
         """
         self.config = config or ContextWindowConfig()
-        self._token_cache: Dict[str, int] = {}
+        self._token_cache: dict[str, int] = {}
 
         # Initialize adaptive compression engine
         self._compression_engine = ContextCompressionEngine(
@@ -247,7 +247,7 @@ class ContextWindowManager:
         self._token_cache[cache_key] = tokens
         return tokens
 
-    def estimate_message_tokens(self, message: Dict[str, Any]) -> int:
+    def estimate_message_tokens(self, message: dict[str, Any]) -> int:
         """
         Estimate token count for a message.
 
@@ -287,7 +287,7 @@ class ContextWindowManager:
 
         return tokens
 
-    def estimate_messages_tokens(self, messages: List[Dict[str, Any]]) -> int:
+    def estimate_messages_tokens(self, messages: list[dict[str, Any]]) -> int:
         """
         Estimate total token count for messages.
 
@@ -299,7 +299,7 @@ class ContextWindowManager:
         """
         return sum(self.estimate_message_tokens(msg) for msg in messages)
 
-    def calculate_budgets(self) -> Dict[str, int]:
+    def calculate_budgets(self) -> dict[str, int]:
         """
         Calculate token budgets for each category.
 
@@ -319,8 +319,8 @@ class ContextWindowManager:
     async def build_context_window(
         self,
         system_prompt: str,
-        messages: List[Dict[str, Any]],
-        llm_client: Optional[LLMClient] = None,
+        messages: list[dict[str, Any]],
+        llm_client: LLMClient | None = None,
     ) -> ContextWindowResult:
         """
         Build context window with dynamic compression.
@@ -416,8 +416,8 @@ class ContextWindowManager:
     def _build_messages_with_system(
         self,
         system_prompt: str,
-        messages: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """Build messages list with system prompt."""
         result = []
 
@@ -429,10 +429,10 @@ class ContextWindowManager:
 
     def _split_messages_by_budget(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         history_budget: int,
         recent_budget: int,
-    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         """
         Split messages into history (for summarization) and recent (keep as-is).
 
@@ -473,7 +473,7 @@ class ContextWindowManager:
 
     async def _generate_summary(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         llm_client: LLMClient,
     ) -> str:
         """
@@ -525,7 +525,7 @@ Summary:"""
 
     def _format_messages_for_summary(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
     ) -> str:
         """Format messages as text for summarization."""
         lines = []
@@ -554,9 +554,9 @@ Summary:"""
     def _build_compressed_messages(
         self,
         system_prompt: str,
-        summary: Optional[str],
-        recent_messages: List[Dict[str, Any]],
-    ) -> List[Dict[str, Any]]:
+        summary: str | None,
+        recent_messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """
         Build compressed message list with summary.
 
@@ -591,8 +591,8 @@ Summary:"""
 
     def update_config(
         self,
-        max_context_tokens: Optional[int] = None,
-        max_output_tokens: Optional[int] = None,
+        max_context_tokens: int | None = None,
+        max_output_tokens: int | None = None,
     ) -> None:
         """
         Update configuration with new model limits.
@@ -617,7 +617,7 @@ Summary:"""
         """Clear token estimation cache."""
         self._token_cache.clear()
 
-    def get_token_count(self, messages: List[Dict[str, Any]]) -> TokenCount:
+    def get_token_count(self, messages: list[dict[str, Any]]) -> TokenCount:
         """
         Get detailed token count for messages.
 
@@ -647,8 +647,8 @@ Summary:"""
 
     def is_overflow(
         self,
-        messages: List[Dict[str, Any]],
-        model_limits: Optional[ModelLimits] = None,
+        messages: list[dict[str, Any]],
+        model_limits: ModelLimits | None = None,
         auto_compaction_enabled: bool = True,
     ) -> bool:
         """
@@ -676,7 +676,7 @@ Summary:"""
 
     def should_compact(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         threshold: float = 0.8,
     ) -> bool:
         """
@@ -700,7 +700,7 @@ Summary:"""
 
     def get_usable_context(
         self,
-        model_limits: Optional[ModelLimits] = None,
+        model_limits: ModelLimits | None = None,
     ) -> int:
         """
         Calculate usable context tokens for input.
@@ -723,9 +723,9 @@ Summary:"""
     async def build_adaptive_context(
         self,
         system_prompt: str,
-        messages: List[Dict[str, Any]],
-        llm_client: Optional[LLMClient] = None,
-        model_limits: Optional[ModelLimits] = None,
+        messages: list[dict[str, Any]],
+        llm_client: LLMClient | None = None,
+        model_limits: ModelLimits | None = None,
     ) -> ContextWindowResult:
         """
         Build context window using adaptive multi-level compression.

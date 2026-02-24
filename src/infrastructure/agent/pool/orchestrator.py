@@ -22,9 +22,10 @@ Usage:
 """
 
 import asyncio
+import contextlib
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.ports.services.alert_service_port import (
     Alert,
@@ -70,7 +71,7 @@ class OrchestratorConfig:
     health_check_timeout_seconds: int = 10
 
     # State recovery settings
-    redis_url: Optional[str] = None
+    redis_url: str | None = None
     checkpoint_interval_seconds: int = 60
     checkpoint_ttl_seconds: int = 86400  # 24 hours
 
@@ -79,7 +80,7 @@ class OrchestratorConfig:
     pattern_detection_window_minutes: int = 60
 
     # Auto scaling settings
-    scaling_policy: Optional[ScalingPolicy] = None
+    scaling_policy: ScalingPolicy | None = None
     scaling_evaluation_interval_seconds: int = 30
 
 
@@ -91,21 +92,21 @@ class PoolOrchestrator:
     between them for seamless operation.
     """
 
-    def __init__(self, config: Optional[OrchestratorConfig] = None):
+    def __init__(self, config: OrchestratorConfig | None = None) -> None:
         self.config = config or OrchestratorConfig()
 
         # Core services
-        self._pool_manager: Optional[AgentPoolManager] = None
-        self._health_monitor: Optional[HealthMonitor] = None
-        self._failure_recovery: Optional[FailureRecoveryService] = None
-        self._auto_scaling: Optional[AutoScalingService] = None
-        self._state_recovery: Optional[StateRecoveryService] = None
-        self._metrics_collector: Optional[PoolMetricsCollector] = None
+        self._pool_manager: AgentPoolManager | None = None
+        self._health_monitor: HealthMonitor | None = None
+        self._failure_recovery: FailureRecoveryService | None = None
+        self._auto_scaling: AutoScalingService | None = None
+        self._state_recovery: StateRecoveryService | None = None
+        self._metrics_collector: PoolMetricsCollector | None = None
         self._alert_service: AlertServicePort = NullAlertService()
 
         # State
         self._is_running = False
-        self._background_tasks: List[asyncio.Task] = []
+        self._background_tasks: list[asyncio.Task] = []
         self._lock = asyncio.Lock()
 
     @property
@@ -114,7 +115,7 @@ class PoolOrchestrator:
         return self._is_running
 
     @property
-    def pool_manager(self) -> Optional[AgentPoolManager]:
+    def pool_manager(self) -> AgentPoolManager | None:
         """Get pool manager instance."""
         return self._pool_manager
 
@@ -214,10 +215,8 @@ class PoolOrchestrator:
         # Cancel background tasks
         for task in self._background_tasks:
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
         self._background_tasks.clear()
 
         # Stop services in reverse order
@@ -348,7 +347,7 @@ class PoolOrchestrator:
             return True
         return False
 
-    async def get_status(self) -> Dict[str, Any]:
+    async def get_status(self) -> dict[str, Any]:
         """Get orchestrator status."""
         status = {
             "running": self._is_running,
@@ -420,12 +419,12 @@ class PoolOrchestrator:
                 error_message=f"Health status changed to {new_status.value}",
             )
 
-    async def _on_failure(self, event: Any) -> None:  # noqa: ANN401
+    async def _on_failure(self, event: Any) -> None:
         """Handle failure event."""
         logger.warning(f"Failure detected: {event.instance_key} - {event.failure_type}")
         # Metrics tracked via record_recovery_attempt
 
-    async def _on_recovery(self, instance_key: str, event: Any) -> None:  # noqa: ANN401
+    async def _on_recovery(self, instance_key: str, event: Any) -> None:
         """Handle recovery success."""
         logger.info(f"Recovery successful: {instance_key}")
 
@@ -435,7 +434,7 @@ class PoolOrchestrator:
     async def _on_escalation(
         self,
         instance_key: str,
-        event: Any,  # noqa: ANN401
+        event: Any,
         reason: str,
     ) -> None:
         """Handle escalation (human intervention needed)."""
@@ -461,7 +460,7 @@ class PoolOrchestrator:
         except Exception as e:
             logger.error(f"Failed to send escalation alert: {e}")
 
-    async def _on_scale(self, instance_key: str, event: Any) -> None:  # noqa: ANN401
+    async def _on_scale(self, instance_key: str, event: Any) -> None:
         """Handle scaling event."""
         logger.info(
             f"Scaling: {instance_key} {event.direction.value} "
@@ -564,8 +563,8 @@ class PoolOrchestrator:
 
 
 def create_orchestrator(
-    pool_config: Optional[PoolConfig] = None,
-    redis_url: Optional[str] = None,
+    pool_config: PoolConfig | None = None,
+    redis_url: str | None = None,
     enable_ha: bool = True,
     enable_scaling: bool = False,
 ) -> PoolOrchestrator:
@@ -593,7 +592,7 @@ def create_orchestrator(
 
 
 # Global orchestrator instance
-_global_orchestrator: Optional[PoolOrchestrator] = None
+_global_orchestrator: PoolOrchestrator | None = None
 
 
 async def get_global_orchestrator() -> PoolOrchestrator:

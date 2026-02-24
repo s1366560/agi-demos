@@ -8,7 +8,6 @@ Provides CRUD operations for workflow patterns:
 """
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,7 +37,7 @@ async def list_patterns(
     tenant_id: str = Query(..., description="Tenant ID to filter patterns"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
-    min_success_rate: Optional[float] = Query(
+    min_success_rate: float | None = Query(
         None, ge=0, le=1, description="Minimum success rate filter"
     ),
     current_user: User = Depends(get_current_user),

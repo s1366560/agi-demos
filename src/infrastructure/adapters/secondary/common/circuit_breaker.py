@@ -9,10 +9,11 @@ Prevents cascading failures by:
 
 import asyncio
 import logging
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Any, Callable, Coroutine, Optional, Tuple, TypeVar
+from typing import Any, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class CircuitBreakerConfig:
     success_threshold: int = 2
     timeout: timedelta = timedelta(seconds=60)
     half_open_max_calls: int = 3
-    exceptions: Optional[Tuple[type[Exception], ...]] = None
+    exceptions: tuple[type[Exception], ...] | None = None
 
 
 class CircuitBreakerOpenError(Exception):
@@ -60,11 +61,11 @@ class CircuitBreakerOpenError(Exception):
     def __init__(
         self,
         breaker_name: str = "unknown",
-        opened_at: Optional[datetime] = None,
-        timeout: Optional[timedelta] = None,
-    ):
+        opened_at: datetime | None = None,
+        timeout: timedelta | None = None,
+    ) -> None:
         self.breaker_name = breaker_name
-        self.opened_at = opened_at or datetime.now(timezone.utc)
+        self.opened_at = opened_at or datetime.now(UTC)
         self.timeout = timeout or timedelta(seconds=60)
         super().__init__(
             f"Circuit breaker '{breaker_name}' is open. "
@@ -74,7 +75,7 @@ class CircuitBreakerOpenError(Exception):
 
     def retry_after(self) -> float:
         """Calculate seconds until retry should be attempted."""
-        elapsed = datetime.now(timezone.utc) - self.opened_at
+        elapsed = datetime.now(UTC) - self.opened_at
         remaining = self.timeout.total_seconds() - elapsed.total_seconds()
         return max(0, remaining)
 
@@ -96,8 +97,8 @@ class CircuitBreakerState:
     state: CircuitState = CircuitState.CLOSED
     failure_count: int = 0
     success_count: int = 0
-    opened_at: Optional[datetime] = None
-    last_failure_time: Optional[datetime] = None
+    opened_at: datetime | None = None
+    last_failure_time: datetime | None = None
     half_open_call_count: int = 0
 
 
@@ -145,7 +146,7 @@ class CircuitBreaker:
     def __init__(
         self,
         name: str,
-        config: Optional[CircuitBreakerConfig] = None,
+        config: CircuitBreakerConfig | None = None,
     ) -> None:
         """
         Initialize circuit breaker.
@@ -188,8 +189,8 @@ class CircuitBreaker:
     async def call(
         self,
         func: Callable[[], Coroutine[Any, Any, T]],
-        fallback: Optional[Callable[[], Coroutine[Any, Any, T]]] = None,
-        fallback_on_exception: Optional[type[Exception]] = None,
+        fallback: Callable[[], Coroutine[Any, Any, T]] | None = None,
+        fallback_on_exception: type[Exception] | None = None,
     ) -> T:
         """
         Execute function with circuit breaker protection.
@@ -271,7 +272,7 @@ class CircuitBreaker:
         """Handle failed function execution."""
         async with self._lock:
             self._stats.failed_calls += 1
-            self._state.last_failure_time = datetime.now(timezone.utc)
+            self._state.last_failure_time = datetime.now(UTC)
 
             # Check if error should be tracked
             if self._config.exceptions and not isinstance(error, self._config.exceptions):
@@ -294,13 +295,13 @@ class CircuitBreaker:
         if self._state.opened_at is None:
             return True
 
-        elapsed = datetime.now(timezone.utc) - self._state.opened_at
+        elapsed = datetime.now(UTC) - self._state.opened_at
         return elapsed >= self._config.timeout
 
     def _transition_to_open(self) -> None:
         """Transition circuit to OPEN state."""
         self._state.state = CircuitState.OPEN
-        self._state.opened_at = datetime.now(timezone.utc)
+        self._state.opened_at = datetime.now(UTC)
         self._state.half_open_call_count = 0
         self._stats.open_count += 1
         logger.warning(
@@ -393,7 +394,7 @@ class CircuitBreakerRegistry:
     async def get_or_create(
         self,
         name: str,
-        config: Optional[CircuitBreakerConfig] = None,
+        config: CircuitBreakerConfig | None = None,
     ) -> CircuitBreaker:
         """
         Get existing circuit breaker or create new one.
@@ -410,7 +411,7 @@ class CircuitBreakerRegistry:
                 self._breakers[name] = CircuitBreaker(name, config)
             return self._breakers[name]
 
-    async def get(self, name: str) -> Optional[CircuitBreaker]:
+    async def get(self, name: str) -> CircuitBreaker | None:
         """
         Get circuit breaker by name.
 
@@ -441,7 +442,7 @@ _global_registry = CircuitBreakerRegistry()
 
 async def get_circuit_breaker(
     name: str,
-    config: Optional[CircuitBreakerConfig] = None,
+    config: CircuitBreakerConfig | None = None,
 ) -> CircuitBreaker:
     """Get or create circuit breaker from global registry."""
     return await _global_registry.get_or_create(name, config)

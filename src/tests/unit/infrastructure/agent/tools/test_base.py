@@ -10,7 +10,7 @@ from src.infrastructure.agent.tools.base import AgentTool
 class ConcreteAgentTool(AgentTool):
     """Concrete implementation of AgentTool for testing."""
 
-    def __init__(self, name: str = "test_tool", description: str = "A test tool"):
+    def __init__(self, name: str = "test_tool", description: str = "A test tool") -> None:
         super().__init__(name=name, description=description)
         self._should_raise = False
         self._return_value = "test result"
@@ -24,7 +24,7 @@ class ConcreteAgentTool(AgentTool):
         """Set the return value for execute."""
         self._return_value = value
 
-    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str:
         if self._should_raise:
             raise Exception(self._error_msg)
         return self._return_value
@@ -33,15 +33,15 @@ class ConcreteAgentTool(AgentTool):
 class ConcreteToolWithValidation(AgentTool):
     """Concrete tool with custom validation."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(name="validated_tool", description="Tool with validation")
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         """Require 'query' argument to be a non-empty string."""
         query = kwargs.get("query")
         return isinstance(query, str) and len(query.strip()) > 0
 
-    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str:
         return f"Executed with query: {kwargs.get('query')}"
 
 
@@ -143,7 +143,7 @@ class TestAgentToolSafeExecute:
         received_kwargs = {}
 
         class KwargsCaptureTool(AgentTool):
-            def __init__(self):
+            def __init__(self) -> None:
                 super().__init__(name="capture", description="Capture kwargs")
 
             async def execute(self, **kwargs):

@@ -7,9 +7,10 @@
 import asyncio
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, TypeVar
+from datetime import UTC, datetime
+from typing import Any, TypeVar
 
 from ..types import CircuitState
 
@@ -21,7 +22,7 @@ T = TypeVar("T")
 class CircuitOpenError(Exception):
     """熔断器打开错误."""
 
-    def __init__(self, circuit_name: str, message: str = "Circuit is open"):
+    def __init__(self, circuit_name: str, message: str = "Circuit is open") -> None:
         self.circuit_name = circuit_name
         super().__init__(f"{circuit_name}: {message}")
 
@@ -46,7 +47,7 @@ class CircuitBreakerConfig:
     window_seconds: int = 60
 
     # 排除的异常类型 (这些异常不计入失败)
-    excluded_exceptions: List[type] = field(default_factory=list)
+    excluded_exceptions: list[type] = field(default_factory=list)
 
 
 @dataclass
@@ -63,7 +64,7 @@ class CircuitBreakerStats:
     window_successes: int = 0
 
     # 状态变更历史
-    state_changes: List[Dict[str, Any]] = field(default_factory=list)
+    state_changes: list[dict[str, Any]] = field(default_factory=list)
 
     def failure_rate(self) -> float:
         """计算失败率."""
@@ -90,9 +91,9 @@ class CircuitBreaker:
     def __init__(
         self,
         name: str,
-        config: Optional[CircuitBreakerConfig] = None,
-        on_state_change: Optional[Callable[[CircuitState, CircuitState], None]] = None,
-    ):
+        config: CircuitBreakerConfig | None = None,
+        on_state_change: Callable[[CircuitState, CircuitState], None] | None = None,
+    ) -> None:
         """初始化熔断器.
 
         Args:
@@ -111,9 +112,9 @@ class CircuitBreaker:
         self._half_open_calls = 0
 
         # 时间戳
-        self._last_failure_time: Optional[float] = None
+        self._last_failure_time: float | None = None
         self._last_state_change_time = time.time()
-        self._opened_at: Optional[float] = None
+        self._opened_at: float | None = None
 
         # 统计
         self._stats = CircuitBreakerStats()
@@ -122,7 +123,7 @@ class CircuitBreaker:
         self._lock = asyncio.Lock()
 
         # 失败时间窗口追踪
-        self._failure_timestamps: List[float] = []
+        self._failure_timestamps: list[float] = []
 
         logger.info(
             f"[CircuitBreaker] Initialized: name={name}, "
@@ -158,8 +159,8 @@ class CircuitBreaker:
     async def call(
         self,
         func: Callable[..., T],
-        *args: Any,  # noqa: ANN401
-        **kwargs: Any,  # noqa: ANN401
+        *args: Any,
+        **kwargs: Any,
     ) -> T:
         """执行受保护的调用.
 
@@ -284,7 +285,7 @@ class CircuitBreaker:
             {
                 "from": old_state.value,
                 "to": new_state.value,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
         )
 
@@ -318,7 +319,7 @@ class CircuitBreaker:
                 self._transition_to(CircuitState.OPEN)
                 logger.info(f"[CircuitBreaker] Manually tripped: name={self.name}")
 
-    def get_time_until_reset(self) -> Optional[float]:
+    def get_time_until_reset(self) -> float | None:
         """获取距离尝试恢复的时间 (秒)."""
         if self._state != CircuitState.OPEN or self._opened_at is None:
             return None
@@ -326,7 +327,7 @@ class CircuitBreaker:
         remaining = self.config.recovery_timeout_seconds - elapsed
         return max(0, remaining)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典."""
         return {
             "name": self.name,
@@ -356,20 +357,20 @@ class CircuitBreakerRegistry:
     管理多个熔断器实例。
     """
 
-    def __init__(self, default_config: Optional[CircuitBreakerConfig] = None):
+    def __init__(self, default_config: CircuitBreakerConfig | None = None) -> None:
         """初始化注册表.
 
         Args:
             default_config: 默认配置
         """
         self.default_config = default_config or CircuitBreakerConfig()
-        self._breakers: Dict[str, CircuitBreaker] = {}
+        self._breakers: dict[str, CircuitBreaker] = {}
         self._lock = asyncio.Lock()
 
     async def get_or_create(
         self,
         name: str,
-        config: Optional[CircuitBreakerConfig] = None,
+        config: CircuitBreakerConfig | None = None,
     ) -> CircuitBreaker:
         """获取或创建熔断器.
 
@@ -388,7 +389,7 @@ class CircuitBreakerRegistry:
                 )
             return self._breakers[name]
 
-    def get(self, name: str) -> Optional[CircuitBreaker]:
+    def get(self, name: str) -> CircuitBreaker | None:
         """获取熔断器.
 
         Args:
@@ -411,7 +412,7 @@ class CircuitBreakerRegistry:
         async with self._lock:
             return self._breakers.pop(name, None) is not None
 
-    def list_all(self) -> List[Dict[str, Any]]:
+    def list_all(self) -> list[dict[str, Any]]:
         """列出所有熔断器.
 
         Returns:

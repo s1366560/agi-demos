@@ -6,7 +6,7 @@ including CRUD operations and status queries.
 """
 
 from abc import abstractmethod
-from typing import List, Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from src.domain.model.mcp.server import MCPServer, MCPServerConfig, MCPServerStatus
 from src.domain.model.mcp.tool import MCPTool
@@ -63,7 +63,7 @@ class MCPRegistryPort(Protocol):
         self,
         server_id: str,
         tenant_id: str,
-    ) -> Optional[MCPServer]:
+    ) -> MCPServer | None:
         """
         Get a server by ID.
 
@@ -81,7 +81,7 @@ class MCPRegistryPort(Protocol):
         self,
         name: str,
         tenant_id: str,
-    ) -> Optional[MCPServer]:
+    ) -> MCPServer | None:
         """
         Get a server by name within a tenant.
 
@@ -99,7 +99,7 @@ class MCPRegistryPort(Protocol):
         self,
         tenant_id: str,
         connected_only: bool = False,
-    ) -> List[MCPServer]:
+    ) -> list[MCPServer]:
         """
         List all servers for a tenant.
 
@@ -136,7 +136,7 @@ class MCPRegistryPort(Protocol):
     async def get_all_tools(
         self,
         tenant_id: str,
-    ) -> List[MCPTool]:
+    ) -> list[MCPTool]:
         """
         Get all tools from all connected servers for a tenant.
 
@@ -153,7 +153,7 @@ class MCPRegistryPort(Protocol):
         self,
         full_name: str,
         tenant_id: str,
-    ) -> Optional[MCPTool]:
+    ) -> MCPTool | None:
         """
         Get a specific tool by its full name.
 
@@ -171,7 +171,7 @@ class MCPRegistryPort(Protocol):
         self,
         tool_name: str,
         tenant_id: str,
-    ) -> Optional[MCPServer]:
+    ) -> MCPServer | None:
         """
         Find the server that provides a specific tool.
 
@@ -209,7 +209,7 @@ class MCPServerRepositoryPort(Protocol):
         self,
         server_id: str,
         tenant_id: str,
-    ) -> Optional[MCPServer]:
+    ) -> MCPServer | None:
         """Find a server by ID."""
         ...
 
@@ -218,7 +218,7 @@ class MCPServerRepositoryPort(Protocol):
         self,
         name: str,
         tenant_id: str,
-    ) -> Optional[MCPServer]:
+    ) -> MCPServer | None:
         """Find a server by name."""
         ...
 
@@ -226,6 +226,6 @@ class MCPServerRepositoryPort(Protocol):
     async def find_all(
         self,
         tenant_id: str,
-    ) -> List[MCPServer]:
+    ) -> list[MCPServer]:
         """Find all servers for a tenant."""
         ...

@@ -1,7 +1,6 @@
 """Repository port for PromptTemplate."""
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from src.domain.model.agent.prompt_template import PromptTemplate
 
@@ -15,7 +14,7 @@ class PromptTemplateRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(self, template_id: str) -> Optional[PromptTemplate]:
+    async def find_by_id(self, template_id: str) -> PromptTemplate | None:
         """Find a template by ID."""
         pass
 
@@ -23,7 +22,7 @@ class PromptTemplateRepository(ABC):
     async def list_by_tenant(
         self,
         tenant_id: str,
-        category: Optional[str] = None,
+        category: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[PromptTemplate]:

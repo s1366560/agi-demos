@@ -6,8 +6,9 @@ Docker container interactive shells via docker exec.
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 import docker
 from docker.errors import NotFound
@@ -55,11 +56,11 @@ class TerminalProxy:
         await proxy.close_session(session.session_id)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize terminal proxy."""
         self._docker = docker.from_env()
-        self._sessions: Dict[str, TerminalSession] = {}
-        self._output_callbacks: Dict[str, Callable[[str], None]] = {}
+        self._sessions: dict[str, TerminalSession] = {}
+        self._output_callbacks: dict[str, Callable[[str], None]] = {}
 
     async def create_session(
         self,
@@ -67,7 +68,7 @@ class TerminalProxy:
         shell: str = "/bin/bash",
         cols: int = 80,
         rows: int = 24,
-        env: Optional[Dict[str, str]] = None,
+        env: dict[str, str] | None = None,
     ) -> TerminalSession:
         """
         Create a new interactive terminal session.
@@ -166,7 +167,7 @@ class TerminalProxy:
             session.is_active = False
             return False
 
-    async def read_output(self, session_id: str, chunk_size: int = 4096) -> Optional[str]:
+    async def read_output(self, session_id: str, chunk_size: int = 4096) -> str | None:
         """
         Read output from terminal session (single read).
 
@@ -254,7 +255,7 @@ class TerminalProxy:
             logger.error(f"Error closing session {session_id}: {e}")
             return False
 
-    def get_session(self, session_id: str) -> Optional[TerminalSession]:
+    def get_session(self, session_id: str) -> TerminalSession | None:
         """Get terminal session by ID."""
         return self._sessions.get(session_id)
 
@@ -277,7 +278,7 @@ class TerminalProxy:
 
 
 # Global singleton instance
-_terminal_proxy: Optional[TerminalProxy] = None
+_terminal_proxy: TerminalProxy | None = None
 
 
 def get_terminal_proxy() -> TerminalProxy:

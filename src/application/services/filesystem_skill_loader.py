@@ -5,11 +5,11 @@ Loads skills from the file system by scanning directories and parsing
 SKILL.md files. Combines scanning and parsing functionality.
 """
 
+import contextlib
 import logging
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from src.domain.model.agent.skill import Skill, SkillScope, SkillStatus, TriggerPattern, TriggerType
 from src.domain.model.agent.skill_source import SkillSource
@@ -54,15 +54,15 @@ class LoadResult:
         errors: Errors encountered during loading
     """
 
-    skills: List[LoadedSkill]
-    errors: List[str]
+    skills: list[LoadedSkill]
+    errors: list[str]
 
     @property
     def count(self) -> int:
         """Return number of successfully loaded skills."""
         return len(self.skills)
 
-    def get_skill_by_name(self, name: str) -> Optional[LoadedSkill]:
+    def get_skill_by_name(self, name: str) -> LoadedSkill | None:
         """Find a skill by name."""
         for loaded in self.skills:
             if loaded.skill.name == name:
@@ -91,12 +91,12 @@ class FileSystemSkillLoader:
         self,
         base_path: Path,
         tenant_id: str,
-        project_id: Optional[str] = None,
-        scanner: Optional[FileSystemSkillScanner] = None,
-        parser: Optional[MarkdownParser] = None,
+        project_id: str | None = None,
+        scanner: FileSystemSkillScanner | None = None,
+        parser: MarkdownParser | None = None,
         include_system: bool = True,
         strict_mode: bool = False,
-    ):
+    ) -> None:
         """
         Initialize the loader.
 
@@ -119,11 +119,11 @@ class FileSystemSkillLoader:
         self.validator = AgentSkillsValidator(strict=strict_mode)
 
         # Cache for loaded skills (by scope)
-        self._cache: Dict[str, LoadedSkill] = {}
-        self._system_cache: Dict[str, LoadedSkill] = {}  # Separate cache for system skills
+        self._cache: dict[str, LoadedSkill] = {}
+        self._system_cache: dict[str, LoadedSkill] = {}  # Separate cache for system skills
         self._cache_valid = False
         self._system_cache_valid = False
-        self._loaded_tenant_id: Optional[str] = None  # Track which tenant_id was used for caching
+        self._loaded_tenant_id: str | None = None  # Track which tenant_id was used for caching
 
     def set_tenant_id(self, tenant_id: str) -> None:
         """
@@ -139,7 +139,7 @@ class FileSystemSkillLoader:
             self._cache_valid = False  # Invalidate cache when tenant changes
 
     async def load_all(
-        self, force_reload: bool = False, include_system: Optional[bool] = None
+        self, force_reload: bool = False, include_system: bool | None = None
     ) -> LoadResult:
         """
         Load all skills from the file system.
@@ -265,7 +265,7 @@ class FileSystemSkillLoader:
 
         return LoadResult(skills=filtered_skills, errors=all_result.errors)
 
-    def _load_skill_file(self, file_info: SkillFileInfo) -> Optional[LoadedSkill]:
+    def _load_skill_file(self, file_info: SkillFileInfo) -> LoadedSkill | None:
         """
         Load a single skill from a file.
 
@@ -326,10 +326,8 @@ class FileSystemSkillLoader:
         # Determine trigger type
         trigger_type = TriggerType.HYBRID
         if markdown.frontmatter.get("trigger_type"):
-            try:
+            with contextlib.suppress(ValueError):
                 trigger_type = TriggerType(markdown.frontmatter["trigger_type"])
-            except ValueError:
-                pass
 
         # Use tools from frontmatter, or allowed-tools as fallback
         tools = markdown.tools or markdown.allowed_tools or ["*"]
@@ -382,7 +380,7 @@ class FileSystemSkillLoader:
             allowed_tools_parsed=allowed_tools_parsed,
         )
 
-    async def load_skill_content(self, skill_name: str) -> Optional[str]:
+    async def load_skill_content(self, skill_name: str) -> str | None:
         """
         Load the full content of a specific skill.
 
@@ -419,7 +417,7 @@ class FileSystemSkillLoader:
 
         return None
 
-    async def get_skill_metadata(self, skill_name: str) -> Optional[Skill]:
+    async def get_skill_metadata(self, skill_name: str) -> Skill | None:
         """
         Get skill metadata (Tier 1/2) without full content.
 
@@ -475,7 +473,7 @@ class FileSystemSkillLoader:
             is_system_skill=skill.is_system_skill,
         )
 
-    def invalidate_cache(self, scope: Optional[SkillScope] = None) -> None:
+    def invalidate_cache(self, scope: SkillScope | None = None) -> None:
         """
         Invalidate the skill cache, forcing reload on next access.
 
@@ -494,7 +492,7 @@ class FileSystemSkillLoader:
             self._cache.clear()
             self._cache_valid = False
 
-    def get_cached_skills(self, include_system: bool = True) -> List[Skill]:
+    def get_cached_skills(self, include_system: bool = True) -> list[Skill]:
         """
         Return list of cached skills (Tier 1 metadata only).
 
@@ -509,7 +507,7 @@ class FileSystemSkillLoader:
             skills.extend([loaded.skill for loaded in self._system_cache.values()])
         return skills
 
-    def get_cached_system_skills(self) -> List[Skill]:
+    def get_cached_system_skills(self) -> list[Skill]:
         """Return list of cached system skills only."""
         return [loaded.skill for loaded in self._system_cache.values()]
 

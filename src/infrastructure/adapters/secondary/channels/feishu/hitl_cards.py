@@ -5,7 +5,7 @@ clarification, decision, environment variable, and permission requests.
 """
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class HITLCardBuilder:
@@ -32,11 +32,11 @@ class HITLCardBuilder:
         self,
         hitl_type: str,
         request_id: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         *,
         tenant_id: str = "",
         project_id: str = "",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Build a card for the given HITL type.
 
         Args:
@@ -69,18 +69,18 @@ class HITLCardBuilder:
         self,
         request_id: str,
         hitl_type: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         *,
         tenant_id: str = "",
         project_id: str = "",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Card with question text + option buttons."""
         question = data.get("question", "")
         if not question:
             return None
 
         options = data.get("options") or []
-        elements: List[Dict[str, Any]] = [
+        elements: list[dict[str, Any]] = [
             {"tag": "markdown", "content": question},
         ]
 
@@ -104,11 +104,11 @@ class HITLCardBuilder:
         self,
         request_id: str,
         hitl_type: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         *,
         tenant_id: str = "",
         project_id: str = "",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Card with options as buttons + risk indicator."""
         question = data.get("question", "")
         if not question:
@@ -123,7 +123,7 @@ class HITLCardBuilder:
             if risk_icon:
                 content = f"{risk_icon} **Risk: {risk_level}**\n\n{question}"
 
-        elements: List[Dict[str, Any]] = [
+        elements: list[dict[str, Any]] = [
             {"tag": "markdown", "content": content},
         ]
 
@@ -147,11 +147,11 @@ class HITLCardBuilder:
         self,
         request_id: str,
         hitl_type: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         *,
         tenant_id: str = "",
         project_id: str = "",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Card with Allow/Deny buttons + tool description."""
         tool_name = data.get("tool_name", "unknown tool")
         description = data.get("description") or data.get("message") or ""
@@ -160,7 +160,7 @@ class HITLCardBuilder:
         if description:
             content += f"\n\n{description}"
 
-        elements: List[Dict[str, Any]] = [
+        elements: list[dict[str, Any]] = [
             {"tag": "markdown", "content": content},
             {
                 "tag": "action",
@@ -203,11 +203,11 @@ class HITLCardBuilder:
         self,
         request_id: str,
         hitl_type: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         *,
         tenant_id: str = "",
         project_id: str = "",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Card with form inputs for environment variable collection."""
         tool_name = data.get("tool_name", "")
         fields = data.get("fields") or []
@@ -222,12 +222,12 @@ class HITLCardBuilder:
         if message:
             content += message
 
-        elements: List[Dict[str, Any]] = []
+        elements: list[dict[str, Any]] = []
         if content.strip():
             elements.append({"tag": "markdown", "content": content})
 
         # Build form with input fields
-        form_elements: List[Dict[str, Any]] = []
+        form_elements: list[dict[str, Any]] = []
         for field in fields:
             if isinstance(field, dict):
                 name = field.get("name", "")
@@ -243,7 +243,7 @@ class HITLCardBuilder:
                 input_type = "text"
 
             feishu_input_type = "password" if input_type == "password" else "text"
-            input_el: Dict[str, Any] = {
+            input_el: dict[str, Any] = {
                 "tag": "input",
                 "name": name,
                 "required": required,
@@ -299,14 +299,14 @@ class HITLCardBuilder:
         self,
         request_id: str,
         hitl_type: str,
-        options: List[Any],
+        options: list[Any],
         max_buttons: int = 5,
         *,
         tenant_id: str = "",
         project_id: str = "",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Build button elements from option list."""
-        actions: List[Dict[str, Any]] = []
+        actions: list[dict[str, Any]] = []
         for i, opt in enumerate(options[:max_buttons]):
             if isinstance(opt, dict):
                 label = str(opt.get("label", opt.get("text", opt.get("value", ""))))
@@ -335,8 +335,8 @@ class HITLCardBuilder:
         self,
         title: str,
         template: str,
-        elements: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        elements: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """Wrap elements in a Feishu Card JSON 2.0 envelope."""
         return {
             "schema": "2.0",
@@ -354,7 +354,7 @@ class HITLCardBuilder:
         self,
         hitl_type: str,
         selected_label: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build a confirmation card after the user has responded.
 
         This card replaces the original interactive card (with buttons)
@@ -395,8 +395,8 @@ class HITLCardBuilder:
         self,
         hitl_type: str,
         request_id: str,
-        data: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        data: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """Build a card entity structure (JSON 2.0) with question text only.
 
         This creates the base card (header + question/description) without
@@ -431,11 +431,11 @@ class HITLCardBuilder:
         self,
         hitl_type: str,
         request_id: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         *,
         tenant_id: str = "",
         project_id: str = "",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Build interactive button elements for the CardKit Add Elements API.
 
         Returns a flat list of button element dicts (card JSON 2.0 format)
@@ -493,8 +493,8 @@ class HITLCardBuilder:
         self,
         request_id: str,
         hitl_type: str,
-        data: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        data: dict[str, Any],
+    ) -> dict[str, Any] | None:
         question = data.get("question", "")
         if not question:
             return None
@@ -514,8 +514,8 @@ class HITLCardBuilder:
         self,
         request_id: str,
         hitl_type: str,
-        data: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        data: dict[str, Any],
+    ) -> dict[str, Any] | None:
         question = data.get("question", "")
         if not question:
             return None
@@ -541,8 +541,8 @@ class HITLCardBuilder:
         self,
         request_id: str,
         hitl_type: str,
-        data: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        data: dict[str, Any],
+    ) -> dict[str, Any] | None:
         tool_name = data.get("tool_name", "unknown tool")
         description = data.get("description") or data.get("message") or ""
         content = f"The agent wants to use **{tool_name}**."
@@ -564,8 +564,8 @@ class HITLCardBuilder:
         self,
         request_id: str,
         hitl_type: str,
-        data: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        data: dict[str, Any],
+    ) -> dict[str, Any] | None:
         tool_name = data.get("tool_name", "")
         message = data.get("message") or ""
 
@@ -597,14 +597,14 @@ class HITLCardBuilder:
         self,
         request_id: str,
         hitl_type: str,
-        options: List[Any],
+        options: list[Any],
         max_buttons: int = 5,
         *,
         tenant_id: str = "",
         project_id: str = "",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Build button elements (JSON 2.0) for option selection."""
-        buttons: List[Dict[str, Any]] = []
+        buttons: list[dict[str, Any]] = []
         for i, opt in enumerate(options[:max_buttons]):
             if isinstance(opt, dict):
                 label = str(opt.get("label", opt.get("text", opt.get("value", ""))))
@@ -639,7 +639,7 @@ class HITLCardBuilder:
         *,
         tenant_id: str = "",
         project_id: str = "",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Build Allow/Deny button elements (JSON 2.0) for permission requests."""
         return [
             {
@@ -678,17 +678,17 @@ class HITLCardBuilder:
         self,
         request_id: str,
         hitl_type: str,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         *,
         tenant_id: str = "",
         project_id: str = "",
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Build a form container with input fields (JSON 2.0) for env var collection."""
         fields = data.get("fields") or []
         if not fields:
             return []
 
-        form_elements: List[Dict[str, Any]] = []
+        form_elements: list[dict[str, Any]] = []
         for i, field in enumerate(fields):
             if isinstance(field, dict):
                 name = field.get("name", f"var_{i}")
@@ -704,7 +704,7 @@ class HITLCardBuilder:
                 input_type = "text"
 
             feishu_input_type = "password" if input_type == "password" else "text"
-            input_el: Dict[str, Any] = {
+            input_el: dict[str, Any] = {
                 "tag": "input",
                 "element_id": f"hitl_input_{request_id[:8]}_{i}",
                 "name": name,
@@ -756,8 +756,8 @@ class HITLCardBuilder:
         self,
         title: str,
         template: str,
-        elements: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        elements: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         """Wrap elements in a Feishu Card JSON 2.0 envelope.
 
         Card JSON 2.0 uses ``schema: "2.0"``, ``body`` instead of top-level

@@ -7,7 +7,7 @@ Defines the MCPServer entity, configuration, and status value objects.
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.model.mcp.transport import TransportConfig, TransportType
 
@@ -35,15 +35,15 @@ class MCPServerStatus:
     status: MCPServerStatusType
     connected: bool = False
     tool_count: int = 0
-    server_info: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
-    last_check_at: Optional[datetime] = None
+    server_info: dict[str, Any] | None = None
+    error: str | None = None
+    last_check_at: datetime | None = None
 
     @classmethod
     def connected_status(
         cls,
         tool_count: int = 0,
-        server_info: Optional[Dict[str, Any]] = None,
+        server_info: dict[str, Any] | None = None,
     ) -> "MCPServerStatus":
         """Create a connected status."""
         return cls(
@@ -98,12 +98,12 @@ class MCPServerConfig:
     enabled: bool = True
 
     # Local (stdio) transport config
-    command: Optional[List[str]] = None
-    environment: Optional[Dict[str, str]] = None
+    command: list[str] | None = None
+    environment: dict[str, str] | None = None
 
     # Remote transport config (HTTP/SSE/WebSocket)
-    url: Optional[str] = None
-    headers: Optional[Dict[str, str]] = None
+    url: str | None = None
+    headers: dict[str, str] | None = None
 
     # WebSocket specific config
     heartbeat_interval: int = 30  # seconds
@@ -138,7 +138,7 @@ class MCPServerConfig:
             reconnect_attempts=self.reconnect_attempts,
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "server_name": self.server_name,
@@ -167,25 +167,25 @@ class MCPServer:
     id: str
     tenant_id: str
     name: str
-    project_id: Optional[str] = None
-    description: Optional[str] = None
+    project_id: str | None = None
+    description: str | None = None
 
     # Flat DB-column fields used by repository and routers
-    server_type: Optional[str] = None
-    transport_config: Optional[Dict[str, Any]] = None
+    server_type: str | None = None
+    transport_config: dict[str, Any] | None = None
     enabled: bool = True
-    discovered_tools: List[Any] = field(default_factory=list)
+    discovered_tools: list[Any] = field(default_factory=list)
     runtime_status: str = "unknown"
-    runtime_metadata: Dict[str, Any] = field(default_factory=dict)
-    sync_error: Optional[str] = None
-    last_sync_at: Optional[datetime] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    runtime_metadata: dict[str, Any] = field(default_factory=dict)
+    sync_error: str | None = None
+    last_sync_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
     # Rich typed fields (optional, for higher-level consumers)
-    config: Optional[MCPServerConfig] = None
+    config: MCPServerConfig | None = None
     status: MCPServerStatus = field(default_factory=MCPServerStatus.disconnected_status)
-    workflow_id: Optional[str] = None  # Temporal workflow ID if managed by Temporal
+    workflow_id: str | None = None  # Temporal workflow ID if managed by Temporal
 
     def update_status(self, new_status: MCPServerStatus) -> None:
         """Update server status."""
@@ -193,8 +193,8 @@ class MCPServer:
 
     def update_tools(
         self,
-        tools: List[Any],
-        sync_time: Optional[datetime] = None,
+        tools: list[Any],
+        sync_time: datetime | None = None,
     ) -> None:
         """Update discovered tools and sync timestamp."""
         self.discovered_tools = tools
@@ -203,7 +203,7 @@ class MCPServer:
     def update_runtime(
         self,
         status: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Update runtime status and metadata snapshot."""
         self.runtime_status = status
@@ -220,7 +220,7 @@ class MCPServer:
         """Get number of discovered tools."""
         return len(self.discovered_tools)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "id": self.id,

@@ -77,87 +77,87 @@ from .types import (
 )
 
 __all__ = [
-    # Core
-    "AgentPoolManager",
+    "AdapterConfig",
     "AgentInstance",
-    "ChatRequest",
-    "ChatResult",
     # Config
     "AgentInstanceConfig",
-    "PoolConfig",
-    "ResourceQuota",
-    # Types
-    "ProjectTier",
     "AgentInstanceStatus",
-    "HealthStatus",
-    "HealthCheckResult",
-    "CircuitState",
-    "RecoveryAction",
-    "InstanceMetrics",
-    "ResourceUsage",
-    "PoolStats",
-    "ProjectMetrics",
-    "TierMigration",
-    "LifecycleEvent",
-    # Lifecycle
-    "LifecycleStateMachine",
-    "InvalidStateTransitionError",
-    # Resource
-    "ResourceManager",
-    "QuotaExceededError",
-    # Health
-    "HealthMonitor",
-    "HealthMonitorConfig",
+    # Core
+    "AgentPoolManager",
+    "AutoScalingService",
+    # Backends
+    "Backend",
+    "BackendType",
+    "ChatRequest",
+    "ChatResult",
+    "CheckpointType",
     # Circuit Breaker
     "CircuitBreaker",
     "CircuitBreakerConfig",
     "CircuitOpenError",
-    # Backends
-    "Backend",
-    "BackendType",
-    "SharedPoolBackend",
-    "SharedPoolConfig",
-    "OnDemandBackend",
-    "OnDemandConfig",
+    "CircuitState",
+    "ClassificationResult",
     "ContainerBackend",
     "ContainerConfig",
-    # Prewarm
-    "PrewarmPool",
-    "PrewarmConfig",
-    # Classification
-    "ProjectClassifier",
-    "ClassificationResult",
-    # Integration
-    "PooledAgentSessionAdapter",
-    "AdapterConfig",
-    "SessionRequest",
-    "create_pooled_adapter",
-    "get_global_adapter",
-    "shutdown_global_adapter",
-    # High Availability
-    "StateRecoveryService",
-    "StateCheckpoint",
-    "CheckpointType",
-    "RecoveryResult",
-    "FailureRecoveryService",
     "FailureEvent",
+    "FailureRecoveryService",
     "FailureType",
-    "AutoScalingService",
-    "ScalingPolicy",
-    "ScalingMetrics",
-    "ScalingDecision",
-    "ScalingDirection",
-    # Orchestrator
-    "PoolOrchestrator",
-    "OrchestratorConfig",
-    "create_orchestrator",
-    "get_global_orchestrator",
-    "shutdown_global_orchestrator",
+    "FeatureFlagConfig",
     # Feature Flags
     "FeatureFlags",
-    "FeatureFlagConfig",
+    "HealthCheckResult",
+    # Health
+    "HealthMonitor",
+    "HealthMonitorConfig",
+    "HealthStatus",
+    "InstanceMetrics",
+    "InvalidStateTransitionError",
+    "LifecycleEvent",
+    # Lifecycle
+    "LifecycleStateMachine",
+    "OnDemandBackend",
+    "OnDemandConfig",
+    "OrchestratorConfig",
+    "PoolConfig",
+    # Orchestrator
+    "PoolOrchestrator",
+    "PoolStats",
+    # Integration
+    "PooledAgentSessionAdapter",
+    "PrewarmConfig",
+    # Prewarm
+    "PrewarmPool",
+    # Classification
+    "ProjectClassifier",
+    "ProjectMetrics",
+    # Types
+    "ProjectTier",
+    "QuotaExceededError",
+    "RecoveryAction",
+    "RecoveryResult",
+    # Resource
+    "ResourceManager",
+    "ResourceQuota",
+    "ResourceUsage",
     "RolloutStrategy",
+    "ScalingDecision",
+    "ScalingDirection",
+    "ScalingMetrics",
+    "ScalingPolicy",
+    "SessionRequest",
+    "SharedPoolBackend",
+    "SharedPoolConfig",
+    "StateCheckpoint",
+    # High Availability
+    "StateRecoveryService",
+    "TierMigration",
+    "create_orchestrator",
+    "create_pooled_adapter",
     "get_feature_flags",
+    "get_global_adapter",
+    "get_global_orchestrator",
+    "shutdown_global_adapter",
+    "shutdown_global_orchestrator",
 ]
 
 # Integration (lazy import to avoid circular dependencies)
@@ -194,6 +194,6 @@ from .orchestrator import (
 
 __all__ += [
     "PoolMetricsCollector",
-    "get_metrics_collector",
     "create_pool_router",
+    "get_metrics_collector",
 ]

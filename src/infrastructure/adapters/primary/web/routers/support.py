@@ -1,6 +1,6 @@
 """Support ticket management router."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -50,8 +50,8 @@ async def create_support_ticket(
 
 @router.get("/tickets")
 async def list_support_tickets(
-    tenant_id: str = None,
-    status: str = None,
+    tenant_id: str | None = None,
+    status: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -180,7 +180,7 @@ async def close_support_ticket(
         raise HTTPException(status_code=404, detail="Ticket not found")
 
     ticket.status = "closed"
-    ticket.resolved_at = datetime.now(timezone.utc)
+    ticket.resolved_at = datetime.now(UTC)
 
     await db.commit()
     await db.refresh(ticket)

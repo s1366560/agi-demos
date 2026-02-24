@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from src.domain.model.agent.hitl_request import HITLRequest as HITLRequestEntity, HITLRequestType
 from src.domain.model.agent.hitl_types import (
@@ -31,7 +32,7 @@ logger = logging.getLogger(__name__)
 class RayHITLHandler:
     """HITL handler that persists requests and raises HITLPendingException."""
 
-    _strategies: Dict[HITLType, HITLTypeStrategy] = {
+    _strategies: dict[HITLType, HITLTypeStrategy] = {
         HITLType.CLARIFICATION: ClarificationStrategy(),
         HITLType.DECISION: DecisionStrategy(),
         HITLType.ENV_VAR: EnvVarStrategy(),
@@ -43,11 +44,11 @@ class RayHITLHandler:
         conversation_id: str,
         tenant_id: str,
         project_id: str,
-        message_id: Optional[str] = None,
+        message_id: str | None = None,
         default_timeout: float = 300.0,
-        emit_sse_callback: Optional[Callable[[str, Dict[str, Any]], Any]] = None,
-        preinjected_response: Optional[Dict[str, Any]] = None,
-    ):
+        emit_sse_callback: Callable[[str, dict[str, Any]], Any] | None = None,
+        preinjected_response: dict[str, Any] | None = None,
+    ) -> None:
         self.conversation_id = conversation_id
         self.tenant_id = tenant_id
         self.project_id = project_id
@@ -55,9 +56,9 @@ class RayHITLHandler:
         self.default_timeout = default_timeout
         self._emit_sse_callback = emit_sse_callback
         self._preinjected_response = preinjected_response
-        self._pending_requests: Dict[str, HITLRequest] = {}
+        self._pending_requests: dict[str, HITLRequest] = {}
 
-    def peek_preinjected_response(self, hitl_type: HITLType) -> Optional[Dict[str, Any]]:
+    def peek_preinjected_response(self, hitl_type: HITLType) -> dict[str, Any] | None:
         """Return preinjected response if it matches the HITL type (non-consuming)."""
         if not self._preinjected_response:
             return None
@@ -74,13 +75,13 @@ class RayHITLHandler:
     async def request_clarification(
         self,
         question: str,
-        options: Optional[List[Any]] = None,
+        options: list[Any] | None = None,
         clarification_type: str = "custom",
         allow_custom: bool = True,
-        timeout_seconds: Optional[float] = None,
-        context: Optional[Dict[str, Any]] = None,
-        default_value: Optional[str] = None,
-        request_id: Optional[str] = None,
+        timeout_seconds: float | None = None,
+        context: dict[str, Any] | None = None,
+        default_value: str | None = None,
+        request_id: str | None = None,
     ) -> str:
         request_data = {
             "question": question,
@@ -102,13 +103,13 @@ class RayHITLHandler:
     async def request_decision(
         self,
         question: str,
-        options: List[Any],
+        options: list[Any],
         decision_type: str = "single_choice",
         allow_custom: bool = False,
-        timeout_seconds: Optional[float] = None,
-        context: Optional[Dict[str, Any]] = None,
-        default_option: Optional[str] = None,
-        request_id: Optional[str] = None,
+        timeout_seconds: float | None = None,
+        context: dict[str, Any] | None = None,
+        default_option: str | None = None,
+        request_id: str | None = None,
     ) -> str:
         request_data = {
             "question": question,
@@ -130,12 +131,12 @@ class RayHITLHandler:
     async def request_env_vars(
         self,
         tool_name: str,
-        fields: List[Dict[str, Any]],
-        message: Optional[str] = None,
-        timeout_seconds: Optional[float] = None,
+        fields: list[dict[str, Any]],
+        message: str | None = None,
+        timeout_seconds: float | None = None,
         allow_save: bool = True,
-        request_id: Optional[str] = None,
-    ) -> Dict[str, str]:
+        request_id: str | None = None,
+    ) -> dict[str, str]:
         request_data = {
             "tool_name": tool_name,
             "fields": fields,
@@ -156,9 +157,9 @@ class RayHITLHandler:
         tool_name: str,
         action: str,
         risk_level: str = "medium",
-        description: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        timeout_seconds: Optional[float] = None,
+        description: str | None = None,
+        details: dict[str, Any] | None = None,
+        timeout_seconds: float | None = None,
         allow_remember: bool = True,
     ) -> bool:
         request_data = {
@@ -179,9 +180,9 @@ class RayHITLHandler:
     async def _execute_hitl_request(
         self,
         hitl_type: HITLType,
-        request_data: Dict[str, Any],
+        request_data: dict[str, Any],
         timeout_seconds: float,
-    ) -> Any:  # noqa: ANN401
+    ) -> Any:
         strategy = self._get_strategy(hitl_type)
 
         if self._preinjected_response:
@@ -235,7 +236,7 @@ class RayHITLHandler:
                 message_id=request.message_id,
                 timeout_seconds=timeout_seconds,
                 type_data=request.type_specific_data,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
 
             await _emit_hitl_sse_event(
@@ -260,10 +261,10 @@ class RayHITLHandler:
         finally:
             self._pending_requests.pop(request.request_id, None)
 
-    def get_pending_requests(self) -> List[HITLRequest]:
+    def get_pending_requests(self) -> list[HITLRequest]:
         return list(self._pending_requests.values())
 
-    async def cancel_request(self, request_id: str, reason: Optional[str] = None) -> bool:
+    async def cancel_request(self, request_id: str, reason: str | None = None) -> bool:
         if request_id not in self._pending_requests:
             return False
 
@@ -286,9 +287,9 @@ async def _persist_hitl_request(
     conversation_id: str,
     tenant_id: str,
     project_id: str,
-    message_id: Optional[str],
+    message_id: str | None,
     timeout_seconds: float,
-    type_data: Dict[str, Any],
+    type_data: dict[str, Any],
     created_at: datetime,
 ) -> None:
     type_mapping = {
@@ -332,7 +333,7 @@ async def _emit_hitl_sse_event(
     conversation_id: str,
     tenant_id: str,
     project_id: str,
-    type_data: Dict[str, Any],
+    type_data: dict[str, Any],
     timeout_seconds: float,
 ) -> None:
     event_type_mapping = {
@@ -359,7 +360,7 @@ async def _emit_hitl_sse_event(
 async def _publish_to_unified_event_bus(
     event_type: str,
     conversation_id: str,
-    data: Dict[str, Any],
+    data: dict[str, Any],
 ) -> None:
     try:
         from src.domain.events.envelope import EventEnvelope

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from .manager import PluginRuntimeManager, get_plugin_runtime_manager
@@ -17,7 +18,7 @@ class PluginControlPlaneResult:
 
     success: bool
     message: str
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
 
 class PluginControlPlaneService:
@@ -26,11 +27,9 @@ class PluginControlPlaneService:
     def __init__(
         self,
         *,
-        runtime_manager: Optional[PluginRuntimeManager] = None,
-        registry: Optional[AgentPluginRegistry] = None,
-        reconcile_channel_runtime: Optional[
-            Callable[[], Awaitable[Optional[Dict[str, int]]]]
-        ] = None,
+        runtime_manager: PluginRuntimeManager | None = None,
+        registry: AgentPluginRegistry | None = None,
+        reconcile_channel_runtime: Callable[[], Awaitable[dict[str, int] | None]] | None = None,
     ) -> None:
         self._runtime_manager = runtime_manager or get_plugin_runtime_manager()
         self._registry = registry or get_plugin_registry()
@@ -39,14 +38,14 @@ class PluginControlPlaneService:
     async def list_runtime_plugins(
         self,
         *,
-        tenant_id: Optional[str] = None,
-    ) -> tuple[List[Dict[str, Any]], List[Dict[str, str]], Dict[str, List[str]]]:
+        tenant_id: str | None = None,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, str]], dict[str, list[str]]]:
         """Load runtime plugins enriched with channel adapter ownership."""
         await self._runtime_manager.ensure_loaded()
         plugin_records, diagnostics = self._runtime_manager.list_plugins(tenant_id=tenant_id)
         channel_factories = self._registry.list_channel_adapter_factories()
 
-        channel_types_by_plugin: Dict[str, List[str]] = {}
+        channel_types_by_plugin: dict[str, list[str]] = {}
         for channel_type, (plugin_name, _factory) in channel_factories.items():
             channel_types_by_plugin.setdefault(plugin_name, []).append(channel_type)
 
@@ -89,7 +88,7 @@ class PluginControlPlaneService:
         plugin_name: str,
         *,
         enabled: bool,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
     ) -> PluginControlPlaneResult:
         """Enable or disable plugin and reconcile channel runtime."""
         action = "enable" if enabled else "disable"
@@ -103,7 +102,7 @@ class PluginControlPlaneService:
             enabled=enabled,
             tenant_id=tenant_id,
         )
-        details: Dict[str, Any] = {
+        details: dict[str, Any] = {
             "diagnostics": self._serialize_diagnostics(diagnostics),
             "control_plane_trace": action_trace,
         }
@@ -138,7 +137,7 @@ class PluginControlPlaneService:
         """Reload plugin runtime and reconcile channel runtime."""
         action_trace = self._build_action_trace(action="reload")
         diagnostics = await self._runtime_manager.reload()
-        details: Dict[str, Any] = {
+        details: dict[str, Any] = {
             "diagnostics": self._serialize_diagnostics(diagnostics),
             "control_plane_trace": action_trace,
         }
@@ -149,7 +148,7 @@ class PluginControlPlaneService:
             details=details,
         )
 
-    async def _attach_channel_runtime_reconcile(self, details: Dict[str, Any]) -> None:
+    async def _attach_channel_runtime_reconcile(self, details: dict[str, Any]) -> None:
         if self._reconcile_channel_runtime is None:
             return
         channel_reload_plan = await self._reconcile_channel_runtime()
@@ -160,17 +159,17 @@ class PluginControlPlaneService:
         self,
         *,
         action: str,
-        plugin_name: Optional[str] = None,
-        requirement: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        plugin_name: str | None = None,
+        requirement: str | None = None,
+        tenant_id: str | None = None,
+    ) -> dict[str, Any]:
         return {
             "trace_id": f"plugin-control-plane:{uuid4().hex}",
             "action": action,
             "plugin_name": plugin_name,
             "requirement": requirement,
             "tenant_id": tenant_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "capability_counts": {
                 "channel_types": len(self._registry.list_channel_type_metadata()),
                 "tool_factories": len(self._registry.list_tool_factories()),
@@ -182,7 +181,7 @@ class PluginControlPlaneService:
         }
 
     @staticmethod
-    def _serialize_diagnostics(diagnostics: List[PluginDiagnostic]) -> List[Dict[str, str]]:
+    def _serialize_diagnostics(diagnostics: list[PluginDiagnostic]) -> list[dict[str, str]]:
         return [
             {
                 "plugin_name": diagnostic.plugin_name,

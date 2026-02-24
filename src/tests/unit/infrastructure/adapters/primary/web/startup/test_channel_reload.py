@@ -1,6 +1,6 @@
 """Unit tests for channel reload planning."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -21,7 +21,7 @@ def _connection(last_heartbeat: datetime | None) -> SimpleNamespace:
 @pytest.mark.unit
 def test_build_channel_reload_plan_add_remove_restart_and_unchanged() -> None:
     """Plan should identify add/remove/restart/unchanged connection sets."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     plan = build_channel_reload_plan(
         enabled_configs=[
@@ -46,7 +46,7 @@ def test_build_channel_reload_plan_add_remove_restart_and_unchanged() -> None:
 @pytest.mark.unit
 def test_build_channel_reload_plan_skips_restart_when_no_heartbeat() -> None:
     """Connections without heartbeat should remain unchanged in planning mode."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     plan = build_channel_reload_plan(
         enabled_configs=[_config("cfg-1", updated_at=now)],

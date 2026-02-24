@@ -11,8 +11,8 @@ import math
 import re
 import time
 import uuid
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from src.domain.model.channels.message import ChannelAdapter, ChatType, Message, MessageType
 
@@ -33,7 +33,7 @@ class _SlidingWindowRateLimiter:
     def __init__(self, default_limit: int = 60, window_seconds: int = 60) -> None:
         self._default_limit = default_limit
         self._window = window_seconds
-        self._buckets: Dict[str, List[float]] = {}
+        self._buckets: dict[str, list[float]] = {}
 
     def is_allowed(self, key: str, limit: int = 0) -> bool:
         effective_limit = limit if limit > 0 else self._default_limit
@@ -78,7 +78,7 @@ class ChannelMessageRouter:
         # 3. Trigger agent processing
     """
 
-    def __init__(self, media_import_service: Optional[MediaImportService] = None) -> None:
+    def __init__(self, media_import_service: MediaImportService | None = None) -> None:
         self._chat_to_conversation: collections.OrderedDict[str, str] = collections.OrderedDict()
         self._rate_limiter = _SlidingWindowRateLimiter()
         self._media_import_service = media_import_service
@@ -280,7 +280,7 @@ class ChannelMessageRouter:
                         f"cannot import media message {message.id}"
                     )
 
-            inbound_event_time_us = int(datetime.now(timezone.utc).timestamp() * 1_000_000)
+            inbound_event_time_us = int(datetime.now(UTC).timestamp() * 1_000_000)
             inbound_message_id = self._extract_channel_message_id(message) or (
                 f"channel-{uuid.uuid4().hex}"
             )
@@ -314,7 +314,7 @@ class ChannelMessageRouter:
                     "id": inbound_message_id,
                     "role": "user",
                     "content": event_content,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "created_at": datetime.now(UTC).isoformat(),
                     "event_time_us": inbound_event_time_us,
                     "event_counter": 0,
                     "metadata": event_metadata,
@@ -347,7 +347,7 @@ class ChannelMessageRouter:
         except Exception as e:
             logger.error(f"[MessageRouter] Error routing message: {e}", exc_info=True)
 
-    async def _get_or_create_conversation(self, message: Message) -> Optional[str]:
+    async def _get_or_create_conversation(self, message: Message) -> str | None:
         """Get or create an agent conversation for the channel chat.
 
         For channel messages, we use a composite key based on:
@@ -410,8 +410,8 @@ class ChannelMessageRouter:
         session: AsyncSession,
         message: Message,
         session_key: str,
-        channel_config_id: Optional[str],
-    ) -> Optional[str]:
+        channel_config_id: str | None,
+    ) -> str | None:
         """Find or create conversation in database.
 
         Args:
@@ -634,7 +634,7 @@ class ChannelMessageRouter:
         except Exception as e:
             logger.warning(f"[MessageRouter] Failed to store message history: {e}")
 
-    def _to_json_safe(self, value: Any, *, _depth: int = 0) -> Any:  # noqa: ANN401
+    def _to_json_safe(self, value: Any, *, _depth: int = 0) -> Any:
         """Convert payload value into JSON-serializable primitives."""
         if _depth > 8:
             return str(value)
@@ -680,7 +680,7 @@ class ChannelMessageRouter:
         self,
         message: Message,
         conversation_id: str,
-        file_metadata: Optional[List[Dict[str, Any]]] = None,
+        file_metadata: list[dict[str, Any]] | None = None,
     ) -> None:
         """Invoke the agent and send the final response to the channel.
 
@@ -735,7 +735,7 @@ class ChannelMessageRouter:
                 _accumulated_text = ""  # accumulated text across all steps (never reset)
                 _card_status = ""  # tool-execution status line
                 _final_content = ""  # authoritative answer from complete
-                error_message: Optional[str] = None
+                error_message: str | None = None
                 _stream_done = False
 
                 _SKIP_BROADCAST = {"assistant_message"}
@@ -743,8 +743,8 @@ class ChannelMessageRouter:
 
                 # --- Background card updater (Feishu streaming) --------------
                 streaming_adapter = self._get_streaming_adapter(message)
-                _card_msg_id: Optional[str] = None
-                _card_updater_task: Optional[asyncio.Task] = None
+                _card_msg_id: str | None = None
+                _card_updater_task: asyncio.Task | None = None
                 _card_stream_state: Any = None  # CardStreamState when using CardKit
 
                 if streaming_adapter:
@@ -909,7 +909,7 @@ class ChannelMessageRouter:
                             elif event_type == "error":
                                 error_message = event_data.get("message") or "Unknown agent error"
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning(
                         f"[MessageRouter] Stream timeout ({_STREAM_TIMEOUT}s) "
                         f"for conversation {conversation_id}"
@@ -922,7 +922,7 @@ class ChannelMessageRouter:
                 if _card_updater_task:
                     try:
                         await asyncio.wait_for(_card_updater_task, timeout=15.0)
-                    except (asyncio.TimeoutError, Exception) as e:
+                    except (TimeoutError, Exception) as e:
                         logger.warning(f"[MessageRouter] Card updater error: {e}")
                         _card_updater_task.cancel()
 
@@ -972,7 +972,7 @@ class ChannelMessageRouter:
         content: str,
         *,
         content_type: str = "text",
-        card: Optional[Dict[str, Any]] = None,
+        card: dict[str, Any] | None = None,
     ) -> bool:
         """Send a message to the channel bound to a conversation.
 
@@ -1070,12 +1070,12 @@ class ChannelMessageRouter:
     async def _broadcast_workspace_event(
         self,
         conversation_id: str,
-        event_type: Optional[str],
-        event_data: Dict[str, Any],
-        raw_event: Dict[str, Any],
+        event_type: str | None,
+        event_data: dict[str, Any],
+        raw_event: dict[str, Any],
         *,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
     ) -> None:
         """Forward agent stream events to subscribed workspace WebSocket sessions."""
         if not event_type:
@@ -1090,11 +1090,11 @@ class ChannelMessageRouter:
             if not isinstance(safe_data, dict):
                 safe_data = {"value": safe_data}
 
-            ws_event: Dict[str, Any] = {
+            ws_event: dict[str, Any] = {
                 "type": event_type,
                 "data": safe_data,
                 "conversation_id": conversation_id,
-                "timestamp": raw_event.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+                "timestamp": raw_event.get("timestamp") or datetime.now(UTC).isoformat(),
             }
             if "event_time_us" in raw_event:
                 ws_event["event_time_us"] = raw_event["event_time_us"]
@@ -1131,7 +1131,7 @@ class ChannelMessageRouter:
             conversation_id: The associated conversation ID.
             response: The agent's response text.
         """
-        outbox_id: Optional[str] = None
+        outbox_id: str | None = None
         try:
             from src.infrastructure.adapters.primary.web.startup import get_channel_manager
 
@@ -1212,8 +1212,8 @@ class ChannelMessageRouter:
         adapter: ChannelAdapter,
         chat_id: str,
         text: str,
-        reply_to: Optional[str] = None,
-    ) -> Optional[str]:
+        reply_to: str | None = None,
+    ) -> str | None:
         """Send response as card when it contains rich markdown, otherwise as text."""
         if self._contains_rich_markdown(text) and hasattr(adapter, "send_markdown_card"):
             try:
@@ -1230,7 +1230,7 @@ class ChannelMessageRouter:
     # Streaming card helpers
     # ------------------------------------------------------------------
 
-    def _get_streaming_adapter(self, message: Message) -> Optional[ChannelAdapter]:
+    def _get_streaming_adapter(self, message: Message) -> ChannelAdapter | None:
         """Return the channel adapter if it supports streaming card updates."""
         try:
             from src.infrastructure.adapters.primary.web.startup import get_channel_manager
@@ -1267,7 +1267,7 @@ class ChannelMessageRouter:
             and hasattr(adapter, "send_card_entity_message")
         )
 
-    async def _send_initial_streaming_card(self, adapter: ChannelAdapter, message: Message) -> Optional[str]:
+    async def _send_initial_streaming_card(self, adapter: ChannelAdapter, message: Message) -> str | None:
         """Send the initial 'Thinking...' card and return its message_id."""
         try:
             reply_to = self._extract_channel_message_id(message)
@@ -1341,7 +1341,7 @@ class ChannelMessageRouter:
         conversation_id: str,
         response: str,
         channel_config_id: str,
-        outbound_message_id: Optional[str],
+        outbound_message_id: str | None,
     ) -> None:
         """Persist outbound agent response for traceability."""
         try:
@@ -1392,8 +1392,8 @@ class ChannelMessageRouter:
         conversation_id: str,
         channel_config_id: str,
         response: str,
-        reply_to: Optional[str],
-    ) -> Optional[str]:
+        reply_to: str | None,
+    ) -> str | None:
         """Create pending outbox record for outbound channel response."""
         try:
             from src.infrastructure.adapters.secondary.persistence.channel_models import (
@@ -1431,7 +1431,7 @@ class ChannelMessageRouter:
     async def _mark_outbox_sent(
         self,
         outbox_id: str,
-        sent_channel_message_id: Optional[str],
+        sent_channel_message_id: str | None,
     ) -> None:
         """Mark outbox record as sent."""
         try:
@@ -1472,7 +1472,7 @@ class ChannelMessageRouter:
         self,
         session: AsyncSession,
         message: Message,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Resolve channel config ID strictly from trusted routing metadata."""
 
         from src.infrastructure.adapters.secondary.persistence.channel_models import (
@@ -1493,7 +1493,7 @@ class ChannelMessageRouter:
         )
         return None
 
-    def _extract_channel_config_id(self, message: Message) -> Optional[str]:
+    def _extract_channel_config_id(self, message: Message) -> str | None:
         """Extract channel config ID from message routing metadata."""
         if not isinstance(message.raw_data, dict):
             return None
@@ -1505,7 +1505,7 @@ class ChannelMessageRouter:
                 return config_id
         return None
 
-    def _extract_channel_message_id(self, message: Message) -> Optional[str]:
+    def _extract_channel_message_id(self, message: Message) -> str | None:
         """Extract source channel message ID from message payload."""
         if not isinstance(message.raw_data, dict):
             return None
@@ -1541,7 +1541,7 @@ class ChannelMessageRouter:
             return False
         return sender_type.lower() in {"app", "bot"}
 
-    def _build_app_model_context(self, message: Message) -> Dict[str, Any]:
+    def _build_app_model_context(self, message: Message) -> dict[str, Any]:
         """Build structured channel context for Agent runtime."""
         return {
             "source": "channel",
@@ -1558,7 +1558,7 @@ class ChannelMessageRouter:
             "topic_id": self._extract_topic_id(message),
         }
 
-    async def _get_conversation_channel_config_id(self, conversation_id: str) -> Optional[str]:
+    async def _get_conversation_channel_config_id(self, conversation_id: str) -> str | None:
         """Load channel_config_id from conversation metadata as fallback."""
         try:
             from src.infrastructure.adapters.secondary.persistence.channel_repository import (
@@ -1585,7 +1585,7 @@ class ChannelMessageRouter:
             )
         return None
 
-    async def _check_access_control(self, message: Message) -> Optional[str]:
+    async def _check_access_control(self, message: Message) -> str | None:
         """Check access control policies for the incoming message.
 
         Returns a denial reason string if access is denied, or None if allowed.
@@ -1681,7 +1681,7 @@ class ChannelMessageRouter:
             session_key = f"{session_key}:thread:{thread_id}"
         return session_key
 
-    def _extract_thread_id(self, message: Message) -> Optional[str]:
+    def _extract_thread_id(self, message: Message) -> str | None:
         """Extract thread identifier from channel message payload."""
         if not isinstance(message.raw_data, dict):
             return None
@@ -1700,7 +1700,7 @@ class ChannelMessageRouter:
                         return value
         return None
 
-    def _extract_topic_id(self, message: Message) -> Optional[str]:
+    def _extract_topic_id(self, message: Message) -> str | None:
         """Extract topic identifier from channel message payload."""
         if not isinstance(message.raw_data, dict):
             return None
@@ -1773,7 +1773,7 @@ class ChannelMessageRouter:
     async def _resolve_channel_config_id_from_message(
         self,
         message: Message,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Resolve channel config ID from message raw_data.
 
         Args:
@@ -1811,7 +1811,7 @@ class ChannelMessageRouter:
 
 
 # Singleton instance
-_router_instance: Optional[ChannelMessageRouter] = None
+_router_instance: ChannelMessageRouter | None = None
 
 
 def get_channel_message_router() -> ChannelMessageRouter:

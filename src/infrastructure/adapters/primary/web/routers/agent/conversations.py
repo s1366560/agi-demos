@@ -5,8 +5,7 @@ CRUD operations for Agent conversations.
 
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
@@ -98,7 +97,7 @@ async def create_conversation(
 @router.get("/conversations", response_model=PaginatedConversationsResponse)
 async def list_conversations(
     project_id: str = Query(..., description="Project ID to filter by"),
-    status: Optional[str] = Query(None, description="Filter by status"),
+    status: str | None = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=100, description="Maximum number to return"),
     offset: int = Query(0, ge=0, description="Number of results to skip"),
     current_user: User = Depends(get_current_user),
@@ -498,9 +497,9 @@ async def generate_summary(
             summary = summary[:497] + "..."
 
         conversation.summary = summary
-        from datetime import datetime, timezone
+        from datetime import datetime
 
-        conversation.updated_at = datetime.now(timezone.utc)
+        conversation.updated_at = datetime.now(UTC)
         await agent_service._conversation_repo.save_and_commit(conversation)
 
         return ConversationResponse.from_domain(conversation)
@@ -614,7 +613,7 @@ async def edit_message(
             msg.original_content = msg.content
         msg.content = data.get("content", msg.content)
         msg.version = (msg.version or 1) + 1
-        msg.edited_at = datetime.now(timezone.utc)
+        msg.edited_at = datetime.now(UTC)
 
         await db.commit()
         return {
@@ -663,7 +662,7 @@ async def request_tool_undo(
                 f"Please undo the previous tool execution: {exec_record.tool_name}. "
                 "Revert any changes made."
             ),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         db.add(undo_msg)
         await db.commit()

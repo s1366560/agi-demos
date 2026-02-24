@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import inspect
-from typing import Iterable, Protocol
+from collections.abc import Iterable
+from typing import Protocol
 
 from .registry import AgentPluginRegistry, PluginDiagnostic, get_plugin_registry
 from .runtime_api import PluginRuntimeApi

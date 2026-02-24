@@ -4,7 +4,7 @@ Unit tests for HITL (Human-in-the-Loop) unified types.
 Tests the domain model types in src/domain/model/agent/hitl_types.py
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -464,7 +464,7 @@ class TestHelperFunctions:
 
     def test_is_request_expired_not_expired(self):
         """Test is_request_expired for non-expired request."""
-        future = datetime.now(timezone.utc) + timedelta(minutes=5)
+        future = datetime.now(UTC) + timedelta(minutes=5)
         request = HITLRequest(
             request_id="req-1",
             hitl_type=HITLType.CLARIFICATION,
@@ -479,7 +479,7 @@ class TestHelperFunctions:
 
     def test_is_request_expired_expired(self):
         """Test is_request_expired for expired request."""
-        past = datetime.now(timezone.utc) - timedelta(minutes=5)
+        past = datetime.now(UTC) - timedelta(minutes=5)
         request = HITLRequest(
             request_id="req-2",
             hitl_type=HITLType.CLARIFICATION,
@@ -508,7 +508,7 @@ class TestHelperFunctions:
 
     def test_get_remaining_time_seconds(self):
         """Test get_remaining_time_seconds."""
-        future = datetime.now(timezone.utc) + timedelta(seconds=120)
+        future = datetime.now(UTC) + timedelta(seconds=120)
         request = HITLRequest(
             request_id="req-4",
             hitl_type=HITLType.CLARIFICATION,
@@ -524,7 +524,7 @@ class TestHelperFunctions:
 
     def test_get_remaining_time_expired(self):
         """Test get_remaining_time_seconds for expired request."""
-        past = datetime.now(timezone.utc) - timedelta(seconds=60)
+        past = datetime.now(UTC) - timedelta(seconds=60)
         request = HITLRequest(
             request_id="req-5",
             hitl_type=HITLType.CLARIFICATION,

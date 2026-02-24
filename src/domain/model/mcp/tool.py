@@ -6,7 +6,7 @@ Defines the MCPTool entity, schema, and result value objects.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -19,9 +19,9 @@ class MCPToolSchema:
     """
 
     name: str
-    description: Optional[str] = None
-    input_schema: Dict[str, Any] = field(default_factory=dict)
-    ui_metadata: Optional[Dict[str, Any]] = None
+    description: str | None = None
+    input_schema: dict[str, Any] = field(default_factory=dict)
+    ui_metadata: dict[str, Any] | None = None
 
     @property
     def has_ui(self) -> bool:
@@ -35,14 +35,14 @@ class MCPToolSchema:
         )
 
     @property
-    def resource_uri(self) -> Optional[str]:
+    def resource_uri(self) -> str | None:
         """Get the resource URI if present (any scheme: ui://, mcp-app://, etc.)."""
         if self.ui_metadata:
             return self.ui_metadata.get("resourceUri")
         return None
 
     @property
-    def visibility(self) -> List[str]:
+    def visibility(self) -> list[str]:
         """Get visibility from _meta.ui.visibility (SEP-1865).
 
         Returns ["model", "app"] if not specified (default per spec).
@@ -58,7 +58,7 @@ class MCPToolSchema:
         """Whether this tool should be included in the LLM's tool list."""
         return "model" in self.visibility
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         result = {
             "name": self.name,
@@ -70,7 +70,7 @@ class MCPToolSchema:
         return result
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MCPToolSchema":
+    def from_dict(cls, data: dict[str, Any]) -> "MCPToolSchema":
         """Create from dictionary (MCP protocol format)."""
         ui_metadata = None
         meta = data.get("_meta")
@@ -98,19 +98,19 @@ class MCPToolResult:
     error status, and optional metadata/artifacts.
     """
 
-    content: List[Dict[str, Any]] = field(default_factory=list)
+    content: list[dict[str, Any]] = field(default_factory=list)
     is_error: bool = False
-    error_message: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
-    artifact: Optional[Dict[str, Any]] = None  # For export_artifact tool results
-    execution_time_ms: Optional[int] = None
+    error_message: str | None = None
+    metadata: dict[str, Any] | None = None
+    artifact: dict[str, Any] | None = None  # For export_artifact tool results
+    execution_time_ms: int | None = None
 
     @classmethod
     def success(
         cls,
-        content: List[Dict[str, Any]],
-        execution_time_ms: Optional[int] = None,
-        artifact: Optional[Dict[str, Any]] = None,
+        content: list[dict[str, Any]],
+        execution_time_ms: int | None = None,
+        artifact: dict[str, Any] | None = None,
     ) -> "MCPToolResult":
         """Create a successful result."""
         return cls(
@@ -124,8 +124,8 @@ class MCPToolResult:
     def error(
         cls,
         error_message: str,
-        content: Optional[List[Dict[str, Any]]] = None,
-        execution_time_ms: Optional[int] = None,
+        content: list[dict[str, Any]] | None = None,
+        execution_time_ms: int | None = None,
     ) -> "MCPToolResult":
         """Create an error result."""
         return cls(
@@ -136,7 +136,7 @@ class MCPToolResult:
         )
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "MCPToolResult":
+    def from_dict(cls, data: dict[str, Any]) -> "MCPToolResult":
         """Create from dictionary (MCP protocol format)."""
         return cls(
             content=data.get("content", []),
@@ -146,7 +146,7 @@ class MCPToolResult:
             artifact=data.get("artifact"),
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         result = {
             "content": self.content,
@@ -207,11 +207,11 @@ class MCPTool:
         return self.schema.description or f"MCP tool {self.name} from {self.server_name}"
 
     @property
-    def input_schema(self) -> Dict[str, Any]:
+    def input_schema(self) -> dict[str, Any]:
         """Get tool input schema."""
         return self.schema.input_schema
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         result = {
             "server_id": self.server_id,
@@ -236,12 +236,12 @@ class MCPToolCallRequest:
     """
 
     tool_name: str
-    arguments: Dict[str, Any] = field(default_factory=dict)
-    timeout: Optional[int] = None  # milliseconds
-    request_id: Optional[str] = None
+    arguments: dict[str, Any] = field(default_factory=dict)
+    timeout: int | None = None  # milliseconds
+    request_id: str | None = None
     timestamp: datetime = field(default_factory=datetime.now)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for logging/serialization."""
         return {
             "tool_name": self.tool_name,

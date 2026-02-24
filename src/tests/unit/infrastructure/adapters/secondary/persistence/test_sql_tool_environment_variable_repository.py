@@ -2,7 +2,7 @@
 Tests for V2 SqlToolEnvironmentVariableRepository using BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,8 +40,8 @@ def make_env_var(
         is_required=False,
         is_secret=True,
         scope=EnvVarScope.TENANT,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 

@@ -42,7 +42,7 @@ class TokenEstimator:
         # tokens2 == tokens1, no LiteLLM call
     """
     
-    def __init__(self, maxsize: int = DEFAULT_TOKEN_CACHE_MAXSIZE):
+    def __init__(self, maxsize: int = DEFAULT_TOKEN_CACHE_MAXSIZE) -> None:
         """
         Initialize token estimator.
         
@@ -162,7 +162,7 @@ class TokenEstimator:
         
         # Check manual cache with TTL
         if key in self._manual_cache:
-            tokens, timestamp = self._manual_cache[key]
+            tokens, _timestamp = self._manual_cache[key]
             # Simple TTL check (could use time.time() in production)
             return tokens
         

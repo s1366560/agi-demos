@@ -4,7 +4,6 @@ V2 SQLAlchemy implementation of TenantRepository using BaseRepository.
 
 import logging
 import re
-from typing import List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,21 +36,21 @@ class SqlTenantRepository(BaseRepository[Tenant, DBTenant], TenantRepository):
 
     # === Interface implementation ===
 
-    async def find_by_owner(self, owner_id: str, limit: int = 50, offset: int = 0) -> List[Tenant]:
+    async def find_by_owner(self, owner_id: str, limit: int = 50, offset: int = 0) -> list[Tenant]:
         """List all tenants owned by a user."""
         query = select(DBTenant).where(DBTenant.owner_id == owner_id).offset(offset).limit(limit)
         result = await self._session.execute(query)
         db_tenants = result.scalars().all()
         return [self._to_domain(t) for t in db_tenants]
 
-    async def find_by_name(self, name: str) -> Optional[Tenant]:
+    async def find_by_name(self, name: str) -> Tenant | None:
         """Find a tenant by name."""
         query = select(DBTenant).where(DBTenant.name == name)
         result = await self._session.execute(query)
         db_tenant = result.scalar_one_or_none()
         return self._to_domain(db_tenant)
 
-    async def list_all(self, limit: int = 50, offset: int = 0) -> List[Tenant]:
+    async def list_all(self, limit: int = 50, offset: int = 0) -> list[Tenant]:
         """List all tenants with pagination."""
         return await super().list_all(limit=limit, offset=offset)
 
@@ -64,7 +63,7 @@ class SqlTenantRepository(BaseRepository[Tenant, DBTenant], TenantRepository):
 
     # === Conversion methods ===
 
-    def _to_domain(self, db_tenant: Optional[DBTenant]) -> Optional[Tenant]:
+    def _to_domain(self, db_tenant: DBTenant | None) -> Tenant | None:
         """Convert database model to domain model."""
         if db_tenant is None:
             return None

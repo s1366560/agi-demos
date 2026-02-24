@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 
 class SelfModifyingLifecycleOrchestrator:
@@ -13,16 +13,16 @@ class SelfModifyingLifecycleOrchestrator:
     def run_post_change(
         *,
         source: str,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
         clear_tool_definitions: bool = True,
-        expected_tool_names: Optional[List[str]] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        expected_tool_names: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Run post-change lifecycle steps and return structured summary."""
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "source": source,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "cache_invalidation": {},
             "probe": {},
             "metadata": metadata or {},

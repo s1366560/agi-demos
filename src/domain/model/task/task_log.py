@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from src.domain.shared_kernel import Entity
 
@@ -23,14 +23,14 @@ class TaskLog(Entity):
     group_id: str
     task_type: str
     status: TaskLogStatus
-    payload: Dict[str, Any] = field(default_factory=dict)
-    entity_id: Optional[str] = None
-    entity_type: Optional[str] = None
-    parent_task_id: Optional[str] = None
-    worker_id: Optional[str] = None
+    payload: dict[str, Any] = field(default_factory=dict)
+    entity_id: str | None = None
+    entity_type: str | None = None
+    parent_task_id: str | None = None
+    worker_id: str | None = None
     retry_count: int = 0
-    error_message: Optional[str] = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    stopped_at: Optional[datetime] = None
+    error_message: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    stopped_at: datetime | None = None

@@ -4,9 +4,9 @@ Agent实例生命周期状态机.
 管理 Agent 实例的状态转换，确保状态变更的合法性和一致性。
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Callable, Dict, List, Optional, Set
+from datetime import UTC, datetime
 
 from ..types import AgentInstanceStatus, LifecycleEvent
 
@@ -18,12 +18,12 @@ class StateTransition:
     from_status: AgentInstanceStatus
     to_status: AgentInstanceStatus
     trigger: str  # 触发事件名称
-    guard: Optional[Callable[[], bool]] = None  # 守卫条件
-    action: Optional[Callable[[], None]] = None  # 转换动作
+    guard: Callable[[], bool] | None = None  # 守卫条件
+    action: Callable[[], None] | None = None  # 转换动作
 
 
 # 定义所有合法的状态转换
-VALID_TRANSITIONS: List[StateTransition] = [
+VALID_TRANSITIONS: list[StateTransition] = [
     # 初始化阶段
     StateTransition(AgentInstanceStatus.CREATED, AgentInstanceStatus.INITIALIZING, "initialize"),
     StateTransition(
@@ -84,7 +84,7 @@ class InvalidStateTransitionError(Exception):
 
     def __init__(
         self, from_status: AgentInstanceStatus, to_status: AgentInstanceStatus, trigger: str
-    ):
+    ) -> None:
         self.from_status = from_status
         self.to_status = to_status
         self.trigger = trigger
@@ -107,7 +107,7 @@ class LifecycleStateMachine:
         self,
         instance_id: str,
         initial_status: AgentInstanceStatus = AgentInstanceStatus.CREATED,
-    ):
+    ) -> None:
         """初始化状态机.
 
         Args:
@@ -116,16 +116,16 @@ class LifecycleStateMachine:
         """
         self.instance_id = instance_id
         self._status = initial_status
-        self._history: List[LifecycleEvent] = []
+        self._history: list[LifecycleEvent] = []
         self._transition_map = self._build_transition_map()
-        self._listeners: List[Callable[[LifecycleEvent], None]] = []
+        self._listeners: list[Callable[[LifecycleEvent], None]] = []
 
         # 记录初始状态
         self._record_event("created", None, initial_status)
 
-    def _build_transition_map(self) -> Dict[AgentInstanceStatus, Dict[str, StateTransition]]:
+    def _build_transition_map(self) -> dict[AgentInstanceStatus, dict[str, StateTransition]]:
         """构建状态转换映射."""
-        transition_map: Dict[AgentInstanceStatus, Dict[str, StateTransition]] = {}
+        transition_map: dict[AgentInstanceStatus, dict[str, StateTransition]] = {}
         for transition in VALID_TRANSITIONS:
             if transition.from_status not in transition_map:
                 transition_map[transition.from_status] = {}
@@ -138,7 +138,7 @@ class LifecycleStateMachine:
         return self._status
 
     @property
-    def history(self) -> List[LifecycleEvent]:
+    def history(self) -> list[LifecycleEvent]:
         """状态变更历史."""
         return self._history.copy()
 
@@ -155,11 +155,9 @@ class LifecycleStateMachine:
         transition = transitions.get(trigger)
         if not transition:
             return False
-        if transition.guard and not transition.guard():
-            return False
-        return True
+        return not (transition.guard and not transition.guard())
 
-    def get_allowed_triggers(self) -> Set[str]:
+    def get_allowed_triggers(self) -> set[str]:
         """获取当前状态允许的所有触发事件.
 
         Returns:
@@ -171,8 +169,8 @@ class LifecycleStateMachine:
     def transition(
         self,
         trigger: str,
-        details: Optional[Dict] = None,
-        error_message: Optional[str] = None,
+        details: dict | None = None,
+        error_message: str | None = None,
     ) -> AgentInstanceStatus:
         """执行状态转换.
 
@@ -215,10 +213,10 @@ class LifecycleStateMachine:
     def _record_event(
         self,
         event_type: str,
-        from_status: Optional[AgentInstanceStatus],
+        from_status: AgentInstanceStatus | None,
         to_status: AgentInstanceStatus,
-        details: Optional[Dict] = None,
-        error_message: Optional[str] = None,
+        details: dict | None = None,
+        error_message: str | None = None,
     ) -> None:
         """记录生命周期事件."""
         event = LifecycleEvent(
@@ -226,7 +224,7 @@ class LifecycleStateMachine:
             event_type=event_type,
             from_status=from_status,
             to_status=to_status,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             details=details or {},
             error_message=error_message,
         )
@@ -284,13 +282,13 @@ class LifecycleStateMachine:
         if not self._history:
             return 0.0
         first_event = self._history[0]
-        return (datetime.now(timezone.utc) - first_event.timestamp).total_seconds()
+        return (datetime.now(UTC) - first_event.timestamp).total_seconds()
 
-    def get_last_event(self) -> Optional[LifecycleEvent]:
+    def get_last_event(self) -> LifecycleEvent | None:
         """获取最后一个事件."""
         return self._history[-1] if self._history else None
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """转换为字典."""
         return {
             "instance_id": self.instance_id,

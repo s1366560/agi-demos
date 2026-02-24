@@ -13,7 +13,6 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -45,15 +44,15 @@ class SubAgentScanResult:
         scanned_dirs: Set of directories that were scanned
     """
 
-    agents: List[SubAgentFileInfo] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
-    scanned_dirs: Set[str] = field(default_factory=set)
+    agents: list[SubAgentFileInfo] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+    scanned_dirs: set[str] = field(default_factory=set)
 
     @property
     def count(self) -> int:
         return len(self.agents)
 
-    def get_agent_names(self) -> List[str]:
+    def get_agent_names(self) -> list[str]:
         return [a.name for a in self.agents]
 
 
@@ -81,9 +80,9 @@ class FileSystemSubAgentScanner:
 
     def __init__(
         self,
-        agent_dirs: Optional[List[str]] = None,
+        agent_dirs: list[str] | None = None,
         include_global: bool = True,
-    ):
+    ) -> None:
         """
         Initialize the scanner.
 
@@ -99,7 +98,7 @@ class FileSystemSubAgentScanner:
     def scan(
         self,
         base_path: Path,
-        include_global: Optional[bool] = None,
+        include_global: bool | None = None,
     ) -> SubAgentScanResult:
         """
         Scan for SubAgent .md files starting from base path.

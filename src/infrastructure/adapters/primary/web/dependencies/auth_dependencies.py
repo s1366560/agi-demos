@@ -7,7 +7,6 @@ Business logic is delegated to AuthService in the application layer.
 """
 
 import logging
-from typing import Optional, Tuple
 from uuid import uuid4
 
 from fastapi import Depends, Header, HTTPException, Query, Request, status
@@ -75,7 +74,7 @@ def get_password_hash(password: str) -> str:
 
 
 async def get_api_key_from_header(
-    authorization: Optional[str] = Header(None),
+    authorization: str | None = Header(None),
 ) -> str:
     """Extract API key from Authorization header."""
     if not authorization:
@@ -102,8 +101,8 @@ async def get_api_key_from_header(
 
 
 async def get_api_key_from_header_or_query(
-    authorization: Optional[str] = Header(None),
-    token: Optional[str] = Query(None, description="API key for SSE/WebSocket authentication"),
+    authorization: str | None = Header(None),
+    token: str | None = Query(None, description="API key for SSE/WebSocket authentication"),
 ) -> str:
     """Extract API key from Authorization header or query parameter.
 
@@ -140,8 +139,8 @@ async def get_api_key_from_header_or_query(
 
 async def get_api_key_from_header_query_or_cookie(
     request: Request,
-    authorization: Optional[str] = Header(None),
-    token: Optional[str] = Query(None, description="API key for authentication"),
+    authorization: str | None = Header(None),
+    token: str | None = Query(None, description="API key for authentication"),
 ) -> str:
     """Extract API key from Authorization header, query parameter, or cookie.
 
@@ -404,8 +403,8 @@ async def create_api_key(
     user_id: str,
     name: str,
     permissions: list[str],
-    expires_in_days: Optional[int] = None,
-) -> Tuple[str, DBAPIKey]:
+    expires_in_days: int | None = None,
+) -> tuple[str, DBAPIKey]:
     """
     Create a new API key for a user.
 
@@ -460,7 +459,7 @@ async def create_user(db: AsyncSession, email: str, name: str, password: str) ->
 # ============================================================================
 
 
-async def initialize_default_credentials():
+async def initialize_default_credentials() -> None:
     """Initialize default user and API key for development."""
     async with async_session_factory() as db:
         try:

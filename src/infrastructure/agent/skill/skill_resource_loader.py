@@ -8,7 +8,6 @@ into remote Sandbox containers.
 import logging
 import re
 from pathlib import Path
-from typing import List, Optional, Set
 
 from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
@@ -35,8 +34,8 @@ class SkillResourceLoader:
     def __init__(
         self,
         project_path: Path,
-        scanner: Optional[FileSystemSkillScanner] = None,
-    ):
+        scanner: FileSystemSkillScanner | None = None,
+    ) -> None:
         """
         Initialize the resource loader.
 
@@ -50,7 +49,7 @@ class SkillResourceLoader:
     async def get_skill_resources(
         self,
         skill_name: str,
-    ) -> List[Path]:
+    ) -> list[Path]:
         """
         获取 SKILL 的所有资源文件
 
@@ -82,7 +81,7 @@ class SkillResourceLoader:
 
         return resources
 
-    def _scan_directory(self, directory: Path) -> List[Path]:
+    def _scan_directory(self, directory: Path) -> list[Path]:
         """
         递归扫描目录中的所有文件
 
@@ -106,7 +105,7 @@ class SkillResourceLoader:
         self,
         skill_name: str,
         skill_content: str,
-    ) -> Set[str]:
+    ) -> set[str]:
         """
         从 SKILL.md 内容中检测引用的资源路径
 
@@ -129,7 +128,7 @@ class SkillResourceLoader:
         self,
         skill_name: str,
         resource_path: Path,
-        skill_dir: Optional[Path] = None,
+        skill_dir: Path | None = None,
     ) -> str:
         """
         资源在 Sandbox 容器内的路径

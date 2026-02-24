@@ -1,7 +1,6 @@
 """Factory functions for creating channel-related services."""
 
 import logging
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,7 +18,7 @@ def create_media_import_service(
     app_id: str,
     app_secret: str,
     domain: str = "feishu",
-) -> Optional[MediaImportService]:
+) -> MediaImportService | None:
     """Create a MediaImportService instance with FeishuMediaDownloader.
 
     This factory function creates the lightweight media import service
@@ -56,8 +55,8 @@ def create_media_import_service(
 
 async def create_media_import_service_from_config(
     db_session: AsyncSession,
-    channel_config_id: Optional[str] = None,
-) -> Optional[MediaImportService]:
+    channel_config_id: str | None = None,
+) -> MediaImportService | None:
     """Create MediaImportService from database channel configuration.
 
     This function loads the channel config from database and creates

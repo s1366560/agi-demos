@@ -19,7 +19,7 @@ existing database records and API contracts.
 """
 
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union
+from typing import Any, Literal, Union
 
 from pydantic import BaseModel, Field
 
@@ -39,8 +39,8 @@ class McpLocalConfig(BaseModel):
     """
 
     type: Literal["local"] = "local"
-    command: List[str] = Field(..., description="Command and arguments to run the MCP server")
-    environment: Optional[Dict[str, str]] = Field(
+    command: list[str] = Field(..., description="Command and arguments to run the MCP server")
+    environment: dict[str, str] | None = Field(
         default=None, description="Environment variables to set when running the MCP server"
     )
     enabled: bool = Field(default=True, description="Enable or disable the MCP server on startup")
@@ -56,14 +56,14 @@ class McpOAuthConfig(BaseModel):
     Supports RFC 7591 dynamic client registration when client_id is not provided.
     """
 
-    client_id: Optional[str] = Field(
+    client_id: str | None = Field(
         default=None,
         description="OAuth client ID. If not provided, dynamic client registration will be attempted",
     )
-    client_secret: Optional[str] = Field(
+    client_secret: str | None = Field(
         default=None, description="OAuth client secret (if required by the authorization server)"
     )
-    scope: Optional[str] = Field(
+    scope: str | None = Field(
         default=None, description="OAuth scopes to request during authorization"
     )
 
@@ -85,10 +85,10 @@ class McpRemoteConfig(BaseModel):
 
     type: Literal["remote"] = "remote"
     url: str = Field(..., description="URL of the remote MCP server")
-    headers: Optional[Dict[str, str]] = Field(
+    headers: dict[str, str] | None = Field(
         default=None, description="Headers to send with the request"
     )
-    oauth: Optional[Union[McpOAuthConfig, Literal[False]]] = Field(
+    oauth: McpOAuthConfig | Literal[False] | None = Field(
         default=None,
         description="OAuth authentication configuration. Set to false to disable OAuth auto-detection",
     )
@@ -119,12 +119,12 @@ class McpWebSocketConfig(BaseModel):
 
     type: Literal["websocket"] = "websocket"
     url: str = Field(..., description="WebSocket URL (ws:// or wss://)")
-    headers: Optional[Dict[str, str]] = Field(
+    headers: dict[str, str] | None = Field(
         default=None, description="HTTP headers for WebSocket connection upgrade"
     )
     enabled: bool = Field(default=True, description="Enable or disable the MCP server on startup")
     timeout: int = Field(default=30000, description="Request timeout in ms (default: 30s)")
-    heartbeat_interval: Optional[int] = Field(
+    heartbeat_interval: int | None = Field(
         default=None,
         description="WebSocket ping interval in seconds. None disables heartbeat "
         "(recommended to prevent PONG timeout killing long-running tool calls)",
@@ -157,7 +157,7 @@ class MCPStatus(BaseModel):
     """
 
     status: MCPStatusType
-    error: Optional[str] = None
+    error: str | None = None
 
     @classmethod
     def connected(cls) -> "MCPStatus":
@@ -195,8 +195,8 @@ class MCPToolDefinition(BaseModel):
     """
 
     name: str
-    description: Optional[str] = None
-    inputSchema: Dict[str, Any] = Field(default_factory=dict)
+    description: str | None = None
+    inputSchema: dict[str, Any] = Field(default_factory=dict)
 
 
 class MCPToolResult(BaseModel):
@@ -209,6 +209,6 @@ class MCPToolResult(BaseModel):
     Kept for backward compatibility with existing API contracts.
     """
 
-    content: List[Dict[str, Any]] = Field(default_factory=list)
+    content: list[dict[str, Any]] = Field(default_factory=list)
     isError: bool = False
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None

@@ -34,7 +34,7 @@ class MCPConnectionPool:
         pool_size: int = 3,
         timeout: float = 30.0,
         connect_timeout: float = 10.0,
-    ):
+    ) -> None:
         """Initialize the connection pool.
 
         Args:

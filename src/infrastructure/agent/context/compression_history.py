@@ -8,7 +8,7 @@ adaptive strategy tuning.
 import logging
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class CompressionRecord:
             return 0.0
         return (self.tokens_saved / self.tokens_before) * 100
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "timestamp": self.timestamp.isoformat(),
             "level": self.level,
@@ -68,7 +68,7 @@ class CompressionHistory:
     """
 
     def __init__(self, max_records: int = 100) -> None:
-        self._records: List[CompressionRecord] = []
+        self._records: list[CompressionRecord] = []
         self._max_records = max_records
         self._total_tokens_saved: int = 0
         self._total_compressions: int = 0
@@ -90,7 +90,7 @@ class CompressionHistory:
         )
 
     @property
-    def records(self) -> List[CompressionRecord]:
+    def records(self) -> list[CompressionRecord]:
         return list(self._records)
 
     @property
@@ -102,7 +102,7 @@ class CompressionHistory:
         return self._total_compressions
 
     @property
-    def last_compression(self) -> Optional[CompressionRecord]:
+    def last_compression(self) -> CompressionRecord | None:
         return self._records[-1] if self._records else None
 
     def average_compression_ratio(self) -> float:
@@ -119,7 +119,7 @@ class CompressionHistory:
         total = sum(r.savings_pct for r in self._records)
         return total / len(self._records)
 
-    def to_summary(self) -> Dict[str, Any]:
+    def to_summary(self) -> dict[str, Any]:
         """Summary for SSE events and frontend display."""
         return {
             "total_compressions": self._total_compressions,

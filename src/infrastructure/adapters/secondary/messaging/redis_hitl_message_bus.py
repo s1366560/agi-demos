@@ -21,8 +21,9 @@ Consumer group naming convention:
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from typing import Any
 
 import redis.asyncio as redis
 
@@ -54,9 +55,9 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
     def __init__(
         self,
         redis_client: redis.Redis,
-        stream_prefix: Optional[str] = None,
-        default_max_len: Optional[int] = None,
-    ):
+        stream_prefix: str | None = None,
+        default_max_len: int | None = None,
+    ) -> None:
         """
         Initialize the Redis HITL message bus adapter.
 
@@ -77,8 +78,8 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
         self,
         request_id: str,
         response_key: str,
-        response_value: Any,  # noqa: ANN401
-        metadata: Optional[Dict[str, Any]] = None,
+        response_value: Any,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """
         Publish a response to an HITL request stream.
@@ -99,7 +100,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
             "request_id": request_id,
             "message_type": HITLMessageType.RESPONSE.value,
             "payload": {response_key: response_value},
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "metadata": metadata or {},
         }
 
@@ -134,7 +135,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
         request_id: str,
         consumer_group: str,
         consumer_name: str,
-        timeout_ms: Optional[int] = None,
+        timeout_ms: int | None = None,
     ) -> AsyncIterator[HITLMessage]:
         """
         Subscribe to receive responses for an HITL request.
@@ -171,7 +172,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
             )
 
             if pending:
-                for stream_name, messages in pending:
+                for _stream_name, messages in pending:
                     for msg_id, fields in messages:
                         message = self._parse_stream_message(msg_id, fields)
                         if message:
@@ -195,7 +196,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                     # Timeout with no new messages
                     continue
 
-                for stream_name, messages in streams:
+                for _stream_name, messages in streams:
                     for msg_id, fields in messages:
                         message = self._parse_stream_message(msg_id, fields)
                         if message:
@@ -209,7 +210,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                 logger.error(f"[HITLMessageBus] Error reading from {stream_key}: {e}")
                 raise
 
-    def _parse_stream_message(self, msg_id: Any, fields: Dict[Any, Any]) -> Optional[HITLMessage]:  # noqa: ANN401
+    def _parse_stream_message(self, msg_id: Any, fields: dict[Any, Any]) -> HITLMessage | None:
         """Parse a raw Redis stream message into HITLMessage."""
         try:
             # Decode message ID
@@ -237,7 +238,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                 timestamp=(
                     datetime.fromisoformat(data["timestamp"])
                     if isinstance(data.get("timestamp"), str)
-                    else datetime.now(timezone.utc)
+                    else datetime.now(UTC)
                 ),
                 metadata=data.get("metadata"),
             )
@@ -250,7 +251,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
         self,
         request_id: str,
         consumer_group: str,
-        message_ids: List[str],
+        message_ids: list[str],
     ) -> int:
         """
         Acknowledge receipt of messages.
@@ -320,7 +321,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
         request_id: str,
         consumer_group: str,
         count: int = 10,
-    ) -> List[HITLMessage]:
+    ) -> list[HITLMessage]:
         """
         Get pending messages that haven't been acknowledged.
 
@@ -375,8 +376,8 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
         consumer_group: str,
         consumer_name: str,
         min_idle_ms: int,
-        message_ids: List[str],
-    ) -> List[HITLMessage]:
+        message_ids: list[str],
+    ) -> list[HITLMessage]:
         """
         Claim pending messages from another consumer.
 
@@ -418,7 +419,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
     async def cleanup_stream(
         self,
         request_id: str,
-        max_len: Optional[int] = None,
+        max_len: int | None = None,
     ) -> int:
         """
         Clean up a stream (trim old messages or delete entirely).
@@ -470,7 +471,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
     # Additional utility methods
     # =========================================================================
 
-    async def get_stream_info(self, request_id: str) -> Optional[Dict[str, Any]]:
+    async def get_stream_info(self, request_id: str) -> dict[str, Any] | None:
         """
         Get stream information (length, groups, etc.).
 
@@ -497,7 +498,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
         consumer_name: str,
         timeout_ms: int,
         auto_ack: bool = True,
-    ) -> Optional[HITLMessage]:
+    ) -> HITLMessage | None:
         """
         Convenience method to wait for a single response with timeout.
 
@@ -544,7 +545,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
 # Factory function for creating the adapter
 def create_redis_hitl_message_bus(
     redis_client: redis.Redis,
-    stream_prefix: Optional[str] = None,
+    stream_prefix: str | None = None,
 ) -> RedisHITLMessageBusAdapter:
     """
     Create a RedisHITLMessageBusAdapter instance.

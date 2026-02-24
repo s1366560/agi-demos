@@ -22,12 +22,13 @@ Example:
 import logging
 import time
 from collections import defaultdict
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
 from threading import Lock
-from typing import Any, Generator, Optional
+from typing import Any
 
 from src.domain.llm_providers.models import ProviderType
 
@@ -54,9 +55,9 @@ class RequestMetrics:
     provider: ProviderType
     model: str
     start_time: float
-    end_time: Optional[float] = None
+    end_time: float | None = None
     success: bool = False
-    error_type: Optional[str] = None
+    error_type: str | None = None
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cost_usd: float = 0.0
@@ -88,8 +89,8 @@ class AggregatedMetrics:
     completion_tokens: int = 0
     total_cost_usd: float = 0.0
     error_types: dict[str, int] = field(default_factory=dict)
-    start_time: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    end_time: Optional[datetime] = None
+    start_time: datetime = field(default_factory=lambda: datetime.now(UTC))
+    end_time: datetime | None = None
 
     @property
     def avg_latency_ms(self) -> float:
@@ -160,7 +161,7 @@ class RequestTracker:
         collector: "MetricsCollector",
         provider: ProviderType,
         model: str,
-    ):
+    ) -> None:
         self._collector = collector
         self._metrics = RequestMetrics(
             provider=provider,
@@ -270,7 +271,7 @@ class MetricsCollector:
         self,
         retention_hours: int = 24,
         aggregation_interval_minutes: int = 5,
-    ):
+    ) -> None:
         """
         Initialize the metrics collector.
 
@@ -290,7 +291,7 @@ class MetricsCollector:
         self._recent_requests: list[RequestMetrics] = []
 
         self._lock = Lock()
-        self._start_time = datetime.now(timezone.utc)
+        self._start_time = datetime.now(UTC)
 
     @contextmanager
     def track_request(
@@ -358,7 +359,7 @@ class MetricsCollector:
         prompt_tokens: int = 0,
         completion_tokens: int = 0,
         cost_usd: float = 0.0,
-        error_type: Optional[str] = None,
+        error_type: str | None = None,
     ) -> None:
         """
         Manually record request metrics.
@@ -431,7 +432,7 @@ class MetricsCollector:
 
     def get_latency_percentiles(
         self,
-        provider: Optional[ProviderType] = None,
+        provider: ProviderType | None = None,
     ) -> dict[str, float]:
         """
         Calculate latency percentiles.
@@ -469,12 +470,12 @@ class MetricsCollector:
             self._by_model.clear()
             self._overall = AggregatedMetrics()
             self._recent_requests.clear()
-            self._start_time = datetime.now(timezone.utc)
+            self._start_time = datetime.now(UTC)
             logger.info("Metrics collector reset")
 
 
 # Global collector instance
-_metrics_collector: Optional[MetricsCollector] = None
+_metrics_collector: MetricsCollector | None = None
 
 
 def get_metrics_collector() -> MetricsCollector:

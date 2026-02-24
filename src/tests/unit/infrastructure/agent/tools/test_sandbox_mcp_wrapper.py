@@ -12,7 +12,7 @@ from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWr
 class MockSandboxAdapter:
     """Mock sandbox adapter for testing."""
 
-    def __init__(self, fail_count=0, error_message="Test error"):
+    def __init__(self, fail_count=0, error_message="Test error") -> None:
         """Initialize mock with failure simulation.
 
         Args:

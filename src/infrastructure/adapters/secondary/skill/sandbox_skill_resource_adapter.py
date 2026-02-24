@@ -8,7 +8,6 @@ Injects SKILL resources into containers via MCP WebSocket tools.
 import hashlib
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from src.domain.ports.services.sandbox_port import SandboxPort
 from src.domain.ports.services.skill_resource_port import (
@@ -40,9 +39,9 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
     def __init__(
         self,
         sandbox_adapter: SandboxPort,
-        default_project_path: Optional[Path] = None,
-        scanner: Optional[FileSystemSkillScanner] = None,
-    ):
+        default_project_path: Path | None = None,
+        scanner: FileSystemSkillScanner | None = None,
+    ) -> None:
         """
         Initialize the sandbox adapter.
 
@@ -56,13 +55,13 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
         self._scanner = scanner or FileSystemSkillScanner()
 
         # Cache: skill_name -> skill_dir (local)
-        self._skill_dir_cache: Dict[str, Path] = {}
+        self._skill_dir_cache: dict[str, Path] = {}
 
         # Cache: (sandbox_id, skill_name) -> {virtual_path: container_path}
-        self._injection_cache: Dict[tuple[str, str], Dict[str, str]] = {}
+        self._injection_cache: dict[tuple[str, str], dict[str, str]] = {}
 
         # Cache: (sandbox_id, skill_name) -> content_hash for version tracking
-        self._version_cache: Dict[tuple[str, str], str] = {}
+        self._version_cache: dict[tuple[str, str], str] = {}
 
     @property
     def environment(self) -> ResourceEnvironment:
@@ -73,7 +72,7 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
         self,
         context: SkillResourceContext,
         tier: int = 3,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Load SKILL.md content.
 
@@ -114,7 +113,7 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
         self,
         context: SkillResourceContext,
         virtual_path: str,
-    ) -> Optional[SkillResource]:
+    ) -> SkillResource | None:
         """
         Get resource by virtual path.
 
@@ -173,7 +172,7 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
     async def list_resources(
         self,
         context: SkillResourceContext,
-    ) -> List[SkillResource]:
+    ) -> list[SkillResource]:
         """List all resources for a skill from local file system.
 
         Scans the entire skill directory recursively, excluding SKILL.md
@@ -222,7 +221,7 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
     async def sync_resources(
         self,
         context: SkillResourceContext,
-        resources: Optional[List[SkillResource]] = None,
+        resources: list[SkillResource] | None = None,
     ) -> ResourceSyncResult:
         """
         Synchronize resources to sandbox container via MCP.
@@ -383,8 +382,8 @@ export PATH="$SKILL_ROOT/scripts:$PATH"
 
     def clear_cache(
         self,
-        sandbox_id: Optional[str] = None,
-        skill_name: Optional[str] = None,
+        sandbox_id: str | None = None,
+        skill_name: str | None = None,
     ) -> None:
         """
         Clear injection caches.
@@ -412,7 +411,7 @@ export PATH="$SKILL_ROOT/scripts:$PATH"
         self,
         sandbox_id: str,
         skill_name: str,
-    ) -> Dict[str, str]:
+    ) -> dict[str, str]:
         """
         Get map of injected resources for a skill in a sandbox.
 
@@ -424,7 +423,7 @@ export PATH="$SKILL_ROOT/scripts:$PATH"
 
     # Private helper methods
 
-    async def _get_local_skill_dir(self, context: SkillResourceContext) -> Optional[Path]:
+    async def _get_local_skill_dir(self, context: SkillResourceContext) -> Path | None:
         """Get local skill directory."""
         cache_key = f"{context.skill_name}:{context.project_path or self._default_project_path}"
 
@@ -451,7 +450,7 @@ export PATH="$SKILL_ROOT/scripts:$PATH"
         normalized = relative_path.replace("\\", "/").lstrip("/")
         return f"{self.CONTAINER_SKILL_BASE}/{skill_name}/{normalized}"
 
-    def _compute_resources_hash(self, resources: List[SkillResource]) -> str:
+    def _compute_resources_hash(self, resources: list[SkillResource]) -> str:
         """Compute hash for resource list for version tracking."""
         content_parts = []
         for r in sorted(resources, key=lambda x: x.virtual_path):

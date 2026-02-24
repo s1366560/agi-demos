@@ -15,7 +15,6 @@ Migration Benefits:
 """
 
 import logging
-from typing import List, Optional
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -114,7 +113,7 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
         conversation_id: str,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[Message]:
+    ) -> list[Message]:
         """List messages for a conversation in chronological order."""
         result = await self._session.execute(
             select(DBMessage)
@@ -130,7 +129,7 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
         self,
         project_id: str,
         limit: int = 10,
-    ) -> List[Message]:
+    ) -> list[Message]:
         """List recent messages across all conversations in a project."""
         result = await self._session.execute(
             select(DBMessage)
@@ -160,7 +159,7 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
 
     # === Conversion methods ===
 
-    def _to_domain(self, db_message: Optional[DBMessage]) -> Optional[Message]:
+    def _to_domain(self, db_message: DBMessage | None) -> Message | None:
         """
         Convert database model to domain model.
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from src.infrastructure.graph.extraction.prompts import (
@@ -48,9 +48,9 @@ class RelationshipExtractor:
     def __init__(
         self,
         llm_client: LLMClient,
-        model: Optional[str] = None,
+        model: str | None = None,
         temperature: float = 0.0,
-    ):
+    ) -> None:
         """
         Initialize relationship extractor.
 
@@ -66,13 +66,13 @@ class RelationshipExtractor:
     async def extract(
         self,
         content: str,
-        entities: List[Dict[str, Any]],
-        relationship_types: Optional[str] = None,
-        edge_type_map: Optional[Dict[Tuple[str, str], List[str]]] = None,
-        previous_context: Optional[str] = None,
-        custom_instructions: Optional[str] = None,
-        episode_uuid: Optional[str] = None,
-    ) -> List[EntityEdge]:
+        entities: list[dict[str, Any]],
+        relationship_types: str | None = None,
+        edge_type_map: dict[tuple[str, str], list[str]] | None = None,
+        previous_context: str | None = None,
+        custom_instructions: str | None = None,
+        episode_uuid: str | None = None,
+    ) -> list[EntityEdge]:
         """
         Extract relationships between entities from text content.
 
@@ -143,13 +143,13 @@ class RelationshipExtractor:
     async def extract_from_entity_nodes(
         self,
         content: str,
-        entity_nodes: List[EntityNode],
-        relationship_types: Optional[str] = None,
-        edge_type_map: Optional[Dict[Tuple[str, str], List[str]]] = None,
-        previous_context: Optional[str] = None,
-        custom_instructions: Optional[str] = None,
-        episode_uuid: Optional[str] = None,
-    ) -> List[EntityEdge]:
+        entity_nodes: list[EntityNode],
+        relationship_types: str | None = None,
+        edge_type_map: dict[tuple[str, str], list[str]] | None = None,
+        previous_context: str | None = None,
+        custom_instructions: str | None = None,
+        episode_uuid: str | None = None,
+    ) -> list[EntityEdge]:
         """
         Extract relationships between EntityNode objects.
 
@@ -255,7 +255,7 @@ class RelationshipExtractor:
     def _parse_relationships_response(
         self,
         response: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Parse LLM response to extract relationships.
 
@@ -289,7 +289,7 @@ class RelationshipExtractor:
             logger.warning(f"Failed to parse relationship response as JSON: {e}")
             return self._extract_json_from_text(response)
 
-    def _extract_json_from_text(self, text: str) -> List[Dict[str, Any]]:
+    def _extract_json_from_text(self, text: str) -> list[dict[str, Any]]:
         """
         Try to extract JSON from text that may contain non-JSON content.
 
@@ -325,12 +325,12 @@ class RelationshipExtractor:
 
     def _create_entity_edges(
         self,
-        relationships_data: List[Dict[str, Any]],
-        entity_map: Dict[str, str],
-        entity_type_map: Optional[Dict[str, str]] = None,
-        edge_type_map: Optional[Dict[Tuple[str, str], List[str]]] = None,
-        episode_uuid: Optional[str] = None,
-    ) -> List[EntityEdge]:
+        relationships_data: list[dict[str, Any]],
+        entity_map: dict[str, str],
+        entity_type_map: dict[str, str] | None = None,
+        edge_type_map: dict[tuple[str, str], list[str]] | None = None,
+        episode_uuid: str | None = None,
+    ) -> list[EntityEdge]:
         """
         Create EntityEdge objects from relationship data.
 
@@ -423,7 +423,7 @@ class RelationshipExtractor:
 
         return edges
 
-    def _parse_datetime(self, dt_str: Optional[str]) -> Optional[datetime]:
+    def _parse_datetime(self, dt_str: str | None) -> datetime | None:
         """
         Parse ISO 8601 datetime string.
 
@@ -448,8 +448,8 @@ class RelationshipExtractor:
     def _find_entity_uuid(
         self,
         entity_name: str,
-        entity_map: Dict[str, str],
-    ) -> Optional[str]:
+        entity_map: dict[str, str],
+    ) -> str | None:
         """
         Find entity UUID with fuzzy matching.
 
@@ -501,7 +501,7 @@ class RelationshipExtractor:
         relationship_type: str,
         source_entity_type: str,
         target_entity_type: str,
-        edge_type_map: Dict[Tuple[str, str], List[str]],
+        edge_type_map: dict[tuple[str, str], list[str]],
     ) -> str:
         """
         Validate edge type against schema constraints (Graphiti-compatible).
@@ -562,7 +562,7 @@ class RelationshipDeduplicator:
     Deduplicator for relationships to avoid duplicate edges in the graph.
     """
 
-    def __init__(self, neo4j_client: Neo4jClient):
+    def __init__(self, neo4j_client: Neo4jClient) -> None:
         """
         Initialize deduplicator.
 
@@ -573,9 +573,9 @@ class RelationshipDeduplicator:
 
     async def deduplicate(
         self,
-        new_edges: List[EntityEdge],
+        new_edges: list[EntityEdge],
         project_id: str,
-    ) -> Tuple[List[EntityEdge], List[EntityEdge]]:
+    ) -> tuple[list[EntityEdge], list[EntityEdge]]:
         """
         Deduplicate new edges against existing relationships in the graph.
 
@@ -627,7 +627,7 @@ class RelationshipDeduplicator:
     async def _get_existing_edges(
         self,
         project_id: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Get existing RELATES_TO edges for a project.
 

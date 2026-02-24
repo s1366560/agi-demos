@@ -25,7 +25,7 @@ Usage:
         pass
 """
 
-from typing import Any, Optional
+from typing import Any
 
 
 class RepositoryError(Exception):
@@ -44,8 +44,8 @@ class RepositoryError(Exception):
     def __init__(
         self,
         message: str,
-        original_error: Optional[Exception] = None,
-        details: Optional[dict[str, Any]] = None,
+        original_error: Exception | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.message = message
@@ -71,7 +71,7 @@ class EntityNotFoundError(RepositoryError):
         self,
         entity_type: str,
         entity_id: str,
-        message: Optional[str] = None,
+        message: str | None = None,
     ) -> None:
         self.entity_type = entity_type
         self.entity_id = entity_id
@@ -97,8 +97,8 @@ class DuplicateEntityError(RepositoryError):
         self,
         entity_type: str,
         field_name: str,
-        field_value: Any,  # noqa: ANN401
-        message: Optional[str] = None,
+        field_value: Any,
+        message: str | None = None,
     ) -> None:
         self.entity_type = entity_type
         self.field_name = field_name
@@ -130,8 +130,8 @@ class TransactionError(RepositoryError):
     def __init__(
         self,
         operation: str,
-        message: Optional[str] = None,
-        original_error: Optional[Exception] = None,
+        message: str | None = None,
+        original_error: Exception | None = None,
     ) -> None:
         self.operation = operation
         msg = message or f"Transaction {operation} failed"
@@ -156,9 +156,9 @@ class ConnectionError(RepositoryError):
     def __init__(
         self,
         database: str,
-        host: Optional[str] = None,
-        message: Optional[str] = None,
-        original_error: Optional[Exception] = None,
+        host: str | None = None,
+        message: str | None = None,
+        original_error: Exception | None = None,
     ) -> None:
         self.database = database
         self.host = host
@@ -191,9 +191,9 @@ class OptimisticLockError(RepositoryError):
         self,
         entity_type: str,
         entity_id: str,
-        expected_version: Optional[int] = None,
-        actual_version: Optional[int] = None,
-        message: Optional[str] = None,
+        expected_version: int | None = None,
+        actual_version: int | None = None,
+        message: str | None = None,
     ) -> None:
         self.entity_type = entity_type
         self.entity_id = entity_id

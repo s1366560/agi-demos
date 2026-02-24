@@ -7,7 +7,7 @@ This module provides automatic tracing for HTTP clients and databases.
 from src.infrastructure.telemetry.config import _TRACER_PROVIDER
 
 
-def instrument_httpx():
+def instrument_httpx() -> bool | None:
     """Instrument httpx for automatic tracing.
 
     This function should be called once during application startup.
@@ -27,7 +27,7 @@ def instrument_httpx():
         return False
 
 
-def instrument_sqlalchemy():
+def instrument_sqlalchemy() -> bool | None:
     """Instrument SQLAlchemy for automatic tracing.
 
     This function should be called once during application startup.
@@ -54,7 +54,7 @@ def instrument_sqlalchemy():
         return False
 
 
-def instrument_redis():
+def instrument_redis() -> bool | None:
     """Instrument Redis for automatic tracing.
 
     This function should be called once during application startup.
@@ -79,7 +79,7 @@ def instrument_redis():
         return False
 
 
-def instrument_fastapi(app):
+def instrument_fastapi(app) -> bool | None:
     """Instrument FastAPI for automatic tracing.
 
     Args:

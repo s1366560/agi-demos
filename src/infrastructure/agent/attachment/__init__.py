@@ -7,7 +7,7 @@ from src.infrastructure.agent.attachment.processor import (
 )
 
 __all__ = [
-    "AttachmentProcessor",
     "AttachmentContext",
+    "AttachmentProcessor",
     "ProcessedAttachment",
 ]

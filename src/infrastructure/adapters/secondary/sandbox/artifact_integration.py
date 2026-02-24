@@ -6,7 +6,8 @@ automatically detecting new files produced by tool executions and uploading them
 
 import asyncio
 import logging
-from typing import Any, Callable, Dict, List, Optional, Set
+from collections.abc import Callable
+from typing import Any
 
 from src.application.services.artifact_service import ArtifactService
 from src.domain.model.artifact.artifact import get_category_from_mime
@@ -51,9 +52,9 @@ class SandboxArtifactIntegration:
     def __init__(
         self,
         artifact_service: ArtifactService,
-        output_dirs: Optional[List[str]] = None,
+        output_dirs: list[str] | None = None,
         max_file_size: int = MAX_AUTO_UPLOAD_SIZE,
-    ):
+    ) -> None:
         """
         Initialize integration.
 
@@ -68,7 +69,7 @@ class SandboxArtifactIntegration:
 
         # Track known files per sandbox to detect new ones
         # sandbox_id -> set of known file paths
-        self._known_files: Dict[str, Set[str]] = {}
+        self._known_files: dict[str, set[str]] = {}
 
     def _should_ignore(self, path: str) -> bool:
         """Check if a file path should be ignored."""
@@ -84,14 +85,14 @@ class SandboxArtifactIntegration:
     async def scan_for_new_artifacts(
         self,
         sandbox_id: str,
-        list_files_fn: Callable[[str], List[str]],
+        list_files_fn: Callable[[str], list[str]],
         read_file_fn: Callable[[str], bytes],
         project_id: str,
         tenant_id: str,
-        tool_execution_id: Optional[str] = None,
-        conversation_id: Optional[str] = None,
-        source_tool: Optional[str] = None,
-    ) -> List[str]:
+        tool_execution_id: str | None = None,
+        conversation_id: str | None = None,
+        source_tool: str | None = None,
+    ) -> list[str]:
         """
         Scan sandbox for new files and upload them as artifacts.
 
@@ -114,7 +115,7 @@ class SandboxArtifactIntegration:
         known = self._known_files.get(sandbox_id, set())
 
         # Scan each output directory
-        new_files: List[str] = []
+        new_files: list[str] = []
         for output_dir in self._output_dirs:
             try:
                 files = await asyncio.get_event_loop().run_in_executor(
@@ -189,13 +190,13 @@ class SandboxArtifactIntegration:
         self,
         sandbox_id: str,
         tool_name: str,
-        tool_result: Dict[str, Any],
+        tool_result: dict[str, Any],
         call_tool_fn: Callable,
         project_id: str,
         tenant_id: str,
-        tool_execution_id: Optional[str] = None,
-        conversation_id: Optional[str] = None,
-    ) -> List[str]:
+        tool_execution_id: str | None = None,
+        conversation_id: str | None = None,
+    ) -> list[str]:
         """
         Process a tool result and extract any artifacts.
 
@@ -237,7 +238,7 @@ class SandboxArtifactIntegration:
             return []
 
         # Define functions to interact with sandbox
-        async def list_files(directory: str) -> List[str]:
+        async def list_files(directory: str) -> list[str]:
             try:
                 result = await call_tool_fn(
                     sandbox_id,
@@ -256,7 +257,7 @@ class SandboxArtifactIntegration:
             except Exception:
                 return []
 
-        async def read_file(path: str) -> Optional[bytes]:
+        async def read_file(path: str) -> bytes | None:
             """Read file using export_artifact tool for proper binary support."""
             try:
                 # Use export_artifact tool which supports binary files
@@ -325,7 +326,7 @@ class SandboxArtifactIntegration:
         if sandbox_id in self._known_files:
             del self._known_files[sandbox_id]
 
-    def get_known_files(self, sandbox_id: str) -> Set[str]:
+    def get_known_files(self, sandbox_id: str) -> set[str]:
         """Get the set of known files for a sandbox."""
         return self._known_files.get(sandbox_id, set()).copy()
 
@@ -334,8 +335,8 @@ async def extract_artifacts_from_text(
     text: str,
     project_id: str,
     tenant_id: str,
-    tool_execution_id: Optional[str] = None,
-) -> List[Dict[str, Any]]:
+    tool_execution_id: str | None = None,
+) -> list[dict[str, Any]]:
     """
     Extract embedded artifacts from tool output text.
 
@@ -395,9 +396,9 @@ async def extract_artifacts_from_text(
 
 
 def extract_artifacts_from_mcp_result(
-    result: Dict[str, Any],
+    result: dict[str, Any],
     tool_name: str,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Extract artifacts from MCP tool result content.
 

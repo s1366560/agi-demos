@@ -1,7 +1,6 @@
 """Attachment Repository Port - Interface for attachment persistence."""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from src.domain.model.agent.attachment import Attachment, AttachmentStatus
 
@@ -28,7 +27,7 @@ class AttachmentRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get(self, attachment_id: str) -> Optional[Attachment]:
+    async def get(self, attachment_id: str) -> Attachment | None:
         """
         Get an attachment by ID.
 
@@ -44,8 +43,8 @@ class AttachmentRepositoryPort(ABC):
     async def get_by_conversation(
         self,
         conversation_id: str,
-        status: Optional[AttachmentStatus] = None,
-    ) -> List[Attachment]:
+        status: AttachmentStatus | None = None,
+    ) -> list[Attachment]:
         """
         Get all attachments for a conversation.
 
@@ -59,7 +58,7 @@ class AttachmentRepositoryPort(ABC):
         pass
 
     @abstractmethod
-    async def get_by_ids(self, attachment_ids: List[str]) -> List[Attachment]:
+    async def get_by_ids(self, attachment_ids: list[str]) -> list[Attachment]:
         """
         Get multiple attachments by their IDs.
 
@@ -99,7 +98,7 @@ class AttachmentRepositoryPort(ABC):
         self,
         attachment_id: str,
         status: AttachmentStatus,
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
     ) -> bool:
         """
         Update the status of an attachment.

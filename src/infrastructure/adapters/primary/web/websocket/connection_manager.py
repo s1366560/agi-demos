@@ -11,8 +11,8 @@ Manages WebSocket connections for agent chat with support for:
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Set
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import WebSocket
 
@@ -36,27 +36,27 @@ class ConnectionManager:
     - Project-scoped lifecycle state subscriptions
     """
 
-    def __init__(self, dispatcher_manager: Optional[DispatcherManager] = None):
+    def __init__(self, dispatcher_manager: DispatcherManager | None = None) -> None:
         # session_id -> WebSocket connection (supports multiple connections per user)
-        self.active_connections: Dict[str, WebSocket] = {}
+        self.active_connections: dict[str, WebSocket] = {}
         # session_id -> user_id (reverse lookup)
-        self.session_users: Dict[str, str] = {}
+        self.session_users: dict[str, str] = {}
         # user_id -> set of session_ids (for sending to all user's sessions)
-        self.user_sessions: Dict[str, Set[str]] = {}
+        self.user_sessions: dict[str, set[str]] = {}
         # session_id -> set of subscribed conversation_ids
-        self.subscriptions: Dict[str, Set[str]] = {}
+        self.subscriptions: dict[str, set[str]] = {}
         # conversation_id -> set of session_ids (reverse index for broadcasting)
-        self.conversation_subscribers: Dict[str, Set[str]] = {}
+        self.conversation_subscribers: dict[str, set[str]] = {}
         # session_id -> {conversation_id -> asyncio.Task} (bridge tasks)
-        self.bridge_tasks: Dict[str, Dict[str, asyncio.Task]] = {}
+        self.bridge_tasks: dict[str, dict[str, asyncio.Task]] = {}
         # session_id -> {project_id -> asyncio.Task} (status monitoring tasks)
-        self.status_tasks: Dict[str, Dict[str, asyncio.Task]] = {}
+        self.status_tasks: dict[str, dict[str, asyncio.Task]] = {}
         # session_id -> set of subscribed project_ids for status updates
-        self.status_subscriptions: Dict[str, Set[str]] = {}
+        self.status_subscriptions: dict[str, set[str]] = {}
         # tenant_id -> project_id -> set of session_ids (lifecycle state subscriptions)
-        self.project_subscriptions: Dict[str, Dict[str, Set[str]]] = {}
+        self.project_subscriptions: dict[str, dict[str, set[str]]] = {}
         # session_id -> set of subscribed project_ids for lifecycle state
-        self.session_project_subscriptions: Dict[str, Set[str]] = {}
+        self.session_project_subscriptions: dict[str, set[str]] = {}
         # Lock for thread-safe operations
         self._lock = asyncio.Lock()
         # Event dispatcher manager for async event delivery
@@ -191,7 +191,7 @@ class ConnectionManager:
     # Message Sending
     # ==========================================================================
 
-    async def send_to_session(self, session_id: str, message: Dict[str, Any]) -> bool:
+    async def send_to_session(self, session_id: str, message: dict[str, Any]) -> bool:
         """Send a message to a specific session."""
         ws = self.active_connections.get(session_id)
         if ws:
@@ -203,7 +203,7 @@ class ConnectionManager:
                 return False
         return False
 
-    async def send_to_user(self, user_id: str, message: Dict[str, Any]) -> int:
+    async def send_to_user(self, user_id: str, message: dict[str, Any]) -> int:
         """Send a message to all sessions of a specific user."""
         session_ids = self.user_sessions.get(user_id, set())
         sent_count = 0
@@ -212,7 +212,7 @@ class ConnectionManager:
                 sent_count += 1
         return sent_count
 
-    async def broadcast_to_conversation(self, conversation_id: str, message: Dict[str, Any]) -> int:
+    async def broadcast_to_conversation(self, conversation_id: str, message: dict[str, Any]) -> int:
         """
         Broadcast a message to all sessions subscribed to a conversation.
 
@@ -291,7 +291,7 @@ class ConnectionManager:
         )
 
     async def broadcast_to_project(
-        self, tenant_id: str, project_id: str, message: Dict[str, Any]
+        self, tenant_id: str, project_id: str, message: dict[str, Any]
     ) -> int:
         """Broadcast a message to all sessions subscribed to a project's lifecycle state."""
         async with self._lock:
@@ -307,26 +307,26 @@ class ConnectionManager:
         return sent_count
 
     async def broadcast_lifecycle_state(
-        self, tenant_id: str, project_id: str, state: Dict[str, Any]
+        self, tenant_id: str, project_id: str, state: dict[str, Any]
     ) -> int:
         """Broadcast lifecycle state change to all sessions subscribed to a project."""
         message = {
             "type": "lifecycle_state_change",
             "project_id": project_id,
             "data": state,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         return await self.broadcast_to_project(tenant_id, project_id, message)
 
     async def broadcast_sandbox_state(
-        self, tenant_id: str, project_id: str, state: Dict[str, Any]
+        self, tenant_id: str, project_id: str, state: dict[str, Any]
     ) -> int:
         """Broadcast sandbox state change to all sessions subscribed to a project."""
         message = {
             "type": "sandbox_state_change",
             "project_id": project_id,
             "data": state,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
         return await self.broadcast_to_project(tenant_id, project_id, message)
 
@@ -367,7 +367,7 @@ class ConnectionManager:
     # Bridge Task Management
     # ==========================================================================
 
-    def get_connection(self, session_id: str) -> Optional[WebSocket]:
+    def get_connection(self, session_id: str) -> WebSocket | None:
         """Get the WebSocket connection for a session."""
         return self.active_connections.get(session_id)
 
@@ -387,13 +387,13 @@ class ConnectionManager:
 
         self.bridge_tasks[session_id][conversation_id] = task
 
-    def get_user_id(self, session_id: str) -> Optional[str]:
+    def get_user_id(self, session_id: str) -> str | None:
         """Get the user_id for a session."""
         return self.session_users.get(session_id)
 
 
 # Global connection manager instance
-_connection_manager: Optional[ConnectionManager] = None
+_connection_manager: ConnectionManager | None = None
 
 
 def get_connection_manager() -> ConnectionManager:

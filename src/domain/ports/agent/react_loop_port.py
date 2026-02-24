@@ -5,9 +5,10 @@ The ReAct (Reasoning + Acting) loop is the core execution pattern
 where the agent thinks, acts (uses tools), and observes in a cycle.
 """
 
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class ReActStepType(str, Enum):
@@ -46,8 +47,8 @@ class ReActLoopConfig:
     """
 
     max_steps: int = 20
-    timeout: Optional[float] = None
-    step_timeout: Optional[float] = 60.0
+    timeout: float | None = None
+    step_timeout: float | None = 60.0
     enable_doom_loop_detection: bool = True
     doom_loop_threshold: int = 5
     enable_work_plan: bool = True
@@ -71,12 +72,12 @@ class ReActLoopContext:
 
     conversation_id: str
     project_id: str
-    user_id: Optional[str] = None
-    messages: List[Dict[str, Any]] = field(default_factory=list)
-    tools: List[Dict[str, Any]] = field(default_factory=list)
-    system_prompt: Optional[str] = None
-    variables: Dict[str, Any] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    user_id: str | None = None
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    tools: list[dict[str, Any]] = field(default_factory=list)
+    system_prompt: str | None = None
+    variables: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -97,11 +98,11 @@ class ReActStep:
     step_type: ReActStepType
     step_number: int
     content: str = ""
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
-    tool_results: List[Dict[str, Any]] = field(default_factory=list)
-    tokens: Dict[str, int] = field(default_factory=dict)
-    duration_ms: Optional[float] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    tool_results: list[dict[str, Any]] = field(default_factory=list)
+    tokens: dict[str, int] = field(default_factory=dict)
+    duration_ms: float | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -120,13 +121,13 @@ class ReActLoopResult:
     """
 
     success: bool
-    answer: Optional[str] = None
+    answer: str | None = None
     termination_reason: LoopTerminationReason = LoopTerminationReason.COMPLETE
-    steps: List[ReActStep] = field(default_factory=list)
-    total_tokens: Dict[str, int] = field(default_factory=dict)
+    steps: list[ReActStep] = field(default_factory=list)
+    total_tokens: dict[str, int] = field(default_factory=dict)
     total_cost: float = 0.0
-    duration_ms: Optional[float] = None
-    error: Optional[str] = None
+    duration_ms: float | None = None
+    error: str | None = None
 
     @property
     def step_count(self) -> int:
@@ -168,8 +169,8 @@ class ReActLoopPort(Protocol):
     async def run(
         self,
         context: ReActLoopContext,
-        config: Optional[ReActLoopConfig] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        config: ReActLoopConfig | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Run the ReAct loop, yielding events.
 
@@ -204,9 +205,9 @@ class ReActLoopPort(Protocol):
 
     def should_terminate(
         self,
-        steps: List[ReActStep],
+        steps: list[ReActStep],
         config: ReActLoopConfig,
-    ) -> Optional[LoopTerminationReason]:
+    ) -> LoopTerminationReason | None:
         """
         Check if loop should terminate.
 

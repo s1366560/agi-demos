@@ -15,8 +15,8 @@ class MockTool:
         name: str = "test_tool",
         description: str = "A test tool",
         is_model_visible: bool = True,
-        permission: str = None,
-    ):
+        permission: str | None = None,
+    ) -> None:
         self._name = name
         self.description = description
         self.permission = permission
@@ -42,7 +42,7 @@ class MockTool:
 class AsyncMockTool:
     """Mock async tool for testing."""
 
-    def __init__(self, name: str = "async_tool"):
+    def __init__(self, name: str = "async_tool") -> None:
         self._name = name
         self.description = "An async tool"
         self._tool_schema = MagicMock()
@@ -56,7 +56,7 @@ class AsyncMockTool:
 class AppOnlyTool:
     """Mock app-only tool (not visible to model)."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.description = "App only tool"
         self._tool_schema = MagicMock()
         self._tool_schema.is_model_visible = False
@@ -68,7 +68,7 @@ class AppOnlyTool:
 class ToolWithSchemaDict:
     """Tool with raw schema dict."""
 
-    def __init__(self, visibility: list):
+    def __init__(self, visibility: list) -> None:
         self.description = "Tool with schema dict"
         self._schema = {
             "_meta": {

@@ -22,8 +22,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -68,92 +68,92 @@ __all__ = [
     # Session Pool
     "AgentSessionContext",
     "MCPToolsCacheEntry",
-    "get_or_create_agent_session",
-    "invalidate_agent_session",
     "cleanup_expired_sessions",
-    "get_pool_stats",
     "clear_all_caches",
-    # Tool Definitions
-    "get_or_create_tool_definitions",
-    "invalidate_tool_definitions_cache",
-    "compute_tools_hash",
-    # MCP Tools
-    "get_mcp_tools_from_cache",
-    "update_mcp_tools_cache",
-    "invalidate_mcp_tools_cache",
-    # MCP Sandbox Adapter
-    "set_mcp_sandbox_adapter",
-    "get_mcp_sandbox_adapter",
-    "sync_mcp_sandbox_adapter_from_docker",
-    # SubAgentRouter
-    "get_or_create_subagent_router",
-    "invalidate_subagent_router_cache",
-    "compute_subagents_hash",
-    # SystemPromptManager
-    "get_system_prompt_manager",
     # Skills
     "compute_skills_hash",
-    # Provider config
-    "get_or_create_provider_config",
-    # Graph service
-    "get_or_create_agent_graph_service",
-    "get_agent_graph_service",
-    "set_agent_graph_service",
-    # Prewarm
-    "prewarm_agent_session",
+    "compute_subagents_hash",
+    "compute_tools_hash",
+    # Tool Discovery with Retry
+    "discover_tools_with_retry",
     # Utilities
     "generate_session_key",
+    "get_agent_graph_service",
     # Tools cache access (hot-plug support)
     "get_cached_tools",
     "get_cached_tools_for_project",
-    "invalidate_tools_cache",
-    "invalidate_all_caches_for_project",
+    "get_hitl_response_listener",
+    "get_mcp_sandbox_adapter",
+    # MCP Tools
+    "get_mcp_tools_from_cache",
+    # Graph service
+    "get_or_create_agent_graph_service",
+    "get_or_create_agent_session",
+    # Provider config
+    "get_or_create_provider_config",
+    # SubAgentRouter
+    "get_or_create_subagent_router",
+    # Tool Definitions
+    "get_or_create_tool_definitions",
     "get_or_create_tools",
-    # Pool Manager (new 3-tier architecture)
-    "set_pool_adapter",
     "get_pool_adapter",
+    "get_pool_stats",
+    "get_session_registry",
+    # SystemPromptManager
+    "get_system_prompt_manager",
+    "invalidate_agent_session",
+    "invalidate_all_caches_for_project",
+    "invalidate_mcp_tools_cache",
+    "invalidate_subagent_router_cache",
+    "invalidate_tool_definitions_cache",
+    "invalidate_tools_cache",
     "is_pool_enabled",
+    # Prewarm
+    "prewarm_agent_session",
+    "set_agent_graph_service",
     # HITL Response Listener (real-time delivery)
     "set_hitl_response_listener",
-    "get_hitl_response_listener",
-    "get_session_registry",
-    # Tool Discovery with Retry
-    "discover_tools_with_retry",
+    # MCP Sandbox Adapter
+    "set_mcp_sandbox_adapter",
+    # Pool Manager (new 3-tier architecture)
+    "set_pool_adapter",
+    "sync_mcp_sandbox_adapter_from_docker",
+    "update_mcp_tools_cache",
 ]
 
 # Global state for agent worker
-_agent_graph_service: Optional[Any] = None
-_tenant_graph_services: Dict[str, Any] = {}
+_agent_graph_service: Any | None = None
+_tenant_graph_services: dict[str, Any] = {}
 _tenant_graph_service_lock = asyncio.Lock()
-_redis_pool: Optional[redis.ConnectionPool] = None
-_mcp_sandbox_adapter: Optional[Any] = None
-_pool_adapter: Optional[Any] = None  # PooledAgentSessionAdapter (when enabled)
-_hitl_response_listener: Optional[Any] = None  # HITLResponseListener (real-time)
+_redis_pool: redis.ConnectionPool | None = None
+_mcp_sandbox_adapter: Any | None = None
+_pool_adapter: Any | None = None  # PooledAgentSessionAdapter (when enabled)
+_hitl_response_listener: Any | None = None  # HITLResponseListener (real-time)
 
 # LLM client cache (by provider:model key)
-_llm_client_cache: Dict[str, Any] = {}
+_llm_client_cache: dict[str, Any] = {}
 _llm_cache_lock = asyncio.Lock()
 
 # Tool set cache (by project_id key)
-_tools_cache: Dict[str, Dict[str, Any]] = {}
+_tools_cache: dict[str, dict[str, Any]] = {}
 _tools_cache_lock = asyncio.Lock()
 
 # Skills cache (by tenant_id:project_id key)
-_skills_cache: Dict[str, list] = {}
+_skills_cache: dict[str, list] = {}
 _skills_cache_lock = asyncio.Lock()
 
 # SkillLoaderTool cache (by tenant_id:project_id:agent_mode key)
-_skill_loader_cache: Dict[str, Any] = {}
+_skill_loader_cache: dict[str, Any] = {}
 _skill_loader_cache_lock = asyncio.Lock()
 
 # Provider config cache
-_provider_config_cache: Optional[Any] = None
+_provider_config_cache: Any | None = None
 _provider_config_cached_at: float = 0.0
 _provider_config_cache_lock = asyncio.Lock()
 _provider_config_cache_ttl_seconds = int(os.getenv("PROVIDER_CONFIG_CACHE_TTL_SECONDS", "60"))
 
 
-def set_agent_graph_service(service: Any) -> None:  # noqa: ANN401
+def set_agent_graph_service(service: Any) -> None:
     """Set the global graph service instance for agent worker.
 
     Called during Agent Worker initialization to make graph_service
@@ -168,7 +168,7 @@ def set_agent_graph_service(service: Any) -> None:  # noqa: ANN401
     logger.info("Agent Worker: Graph service registered for Activities")
 
 
-def get_agent_graph_service() -> Optional[Any]:  # noqa: ANN401
+def get_agent_graph_service() -> Any | None:
     """Get the global graph service instance for agent worker.
 
     Returns:
@@ -177,7 +177,7 @@ def get_agent_graph_service() -> Optional[Any]:  # noqa: ANN401
     return _agent_graph_service
 
 
-async def get_or_create_agent_graph_service(tenant_id: Optional[str] = None) -> Any:  # noqa: ANN401
+async def get_or_create_agent_graph_service(tenant_id: str | None = None) -> Any:
     """Get tenant-scoped graph service, creating and caching when needed."""
     cache_key = tenant_id or "default"
     if cache_key in _tenant_graph_services:
@@ -201,7 +201,7 @@ async def get_or_create_agent_graph_service(tenant_id: Optional[str] = None) -> 
         return graph_service
 
 
-def set_mcp_sandbox_adapter(adapter: Any) -> None:  # noqa: ANN401
+def set_mcp_sandbox_adapter(adapter: Any) -> None:
     """Set the global MCP Sandbox Adapter instance for agent worker.
 
     Called during Agent Worker initialization to make MCPSandboxAdapter
@@ -238,7 +238,7 @@ async def sync_mcp_sandbox_adapter_from_docker() -> int:
         return 0
 
 
-def get_mcp_sandbox_adapter() -> Optional[Any]:  # noqa: ANN401
+def get_mcp_sandbox_adapter() -> Any | None:
     """Get the global MCP Sandbox Adapter instance for agent worker.
 
     Returns:
@@ -252,7 +252,7 @@ def get_mcp_sandbox_adapter() -> Optional[Any]:  # noqa: ANN401
 # ============================================================================
 
 
-def set_pool_adapter(adapter: Any) -> None:  # noqa: ANN401
+def set_pool_adapter(adapter: Any) -> None:
     """Set the global Pool Adapter instance for agent worker.
 
     Called during Agent Worker initialization when AGENT_POOL_ENABLED=true.
@@ -266,7 +266,7 @@ def set_pool_adapter(adapter: Any) -> None:  # noqa: ANN401
     logger.info("Agent Worker: Pool Adapter registered for Activities")
 
 
-def get_pool_adapter() -> Optional[Any]:  # noqa: ANN401
+def get_pool_adapter() -> Any | None:
     """Get the global Pool Adapter instance for agent worker.
 
     Returns:
@@ -363,7 +363,7 @@ def clear_state() -> None:
 # ============================================================================
 
 
-def get_cached_llm_clients() -> Dict[str, Any]:
+def get_cached_llm_clients() -> dict[str, Any]:
     """Get all cached LLM clients (for debugging/monitoring)."""
     return dict(_llm_client_cache)
 
@@ -376,12 +376,12 @@ def get_cached_llm_clients() -> Dict[str, Any]:
 async def get_or_create_tools(
     project_id: str,
     tenant_id: str,
-    graph_service: Any,  # noqa: ANN401
-    redis_client: Any,  # noqa: ANN401
-    llm: Any = None,  # noqa: ANN401
+    graph_service: Any,
+    redis_client: Any,
+    llm: Any = None,
     agent_mode: str = "default",
-    **kwargs: Any,  # noqa: ANN401
-) -> Dict[str, Any]:
+    **kwargs: Any,
+) -> dict[str, Any]:
     """Get or create a cached tool set for a project, including sandbox tools and skills.
 
     This function caches built-in tool instances by project_id to avoid
@@ -691,8 +691,8 @@ def _log_plugin_diagnostic(diagnostic: PluginDiagnostic, *, context: str) -> Non
 async def _load_project_sandbox_tools(
     project_id: str,
     tenant_id: str,
-    redis_client: Optional[redis.Redis] = None,
-) -> Dict[str, Any]:
+    redis_client: redis.Redis | None = None,
+) -> dict[str, Any]:
     """Load MCP tools from project's sandbox.
 
     This function first queries the database for existing sandbox associations,
@@ -718,7 +718,7 @@ async def _load_project_sandbox_tools(
 
     from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
 
-    tools: Dict[str, Any] = {}
+    tools: dict[str, Any] = {}
 
     if _mcp_sandbox_adapter is None:
         return tools
@@ -938,7 +938,7 @@ async def _discover_single_server_tools(
     sandbox_adapter: SandboxPort,
     sandbox_id: str,
     server_name: str,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Discover tools from a single MCP server.
 
     This is a helper function for parallel discovery. It handles errors
@@ -974,9 +974,9 @@ async def _discover_single_server_tools(
 async def _discover_tools_for_servers_parallel(
     sandbox_adapter: SandboxPort,
     sandbox_id: str,
-    servers: List[Dict[str, Any]],
-    overall_timeout_seconds: Optional[float] = None,
-) -> List[List[Dict[str, Any]]]:
+    servers: list[dict[str, Any]],
+    overall_timeout_seconds: float | None = None,
+) -> list[list[dict[str, Any]]]:
     """Discover tools from multiple MCP servers in parallel.
 
     Uses asyncio.gather with return_exceptions=True to ensure that
@@ -1022,7 +1022,7 @@ async def _discover_tools_for_servers_parallel(
                 asyncio.gather(*discovery_tasks, return_exceptions=True),
                 timeout=overall_timeout_seconds,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 f"[AgentWorker] Parallel discovery timed out after {overall_timeout_seconds}s "
                 f"for {len(running_servers)} servers, returning empty results"
@@ -1050,8 +1050,8 @@ async def _load_user_mcp_server_tools(
     sandbox_adapter: SandboxPort,
     sandbox_id: str,
     project_id: str,
-    redis_client: Optional[redis.Redis] = None,
-) -> Dict[str, Any]:
+    redis_client: redis.Redis | None = None,
+) -> dict[str, Any]:
     """Load user-configured MCP server tools running inside the sandbox.
 
     Calls mcp_server_list to discover running servers, then mcp_server_discover_tools
@@ -1072,7 +1072,7 @@ async def _load_user_mcp_server_tools(
 
     from src.infrastructure.mcp.sandbox_tool_adapter import SandboxMCPServerToolAdapter
 
-    tools: Dict[str, Any] = {}
+    tools: dict[str, Any] = {}
 
     try:
         # List running user MCP servers
@@ -1146,7 +1146,7 @@ async def _auto_restore_mcp_servers(
     sandbox_id: str,
     project_id: str,
     running_names: set,
-    redis_client: Optional[redis.Redis] = None,
+    redis_client: redis.Redis | None = None,
 ) -> None:
     """Auto-restore enabled MCP servers from DB that aren't running in sandbox.
 
@@ -1302,7 +1302,7 @@ async def _restore_single_server(
     server_name: str,
     server_type: str,
     transport_config: dict,
-) -> tuple[bool, Optional[str]]:
+) -> tuple[bool, str | None]:
     """Restore a single MCP server by installing and starting it.
 
     Args:
@@ -1371,7 +1371,7 @@ async def _persist_restore_lifecycle_result(
     project_id: str,
     server_id: str,
     restored: bool,
-    error_message: Optional[str],
+    error_message: str | None,
 ) -> None:
     """Persist auto-restore metadata and audit event."""
     import uuid
@@ -1391,7 +1391,7 @@ async def _persist_restore_lifecycle_result(
                 server_id=server_id,
                 runtime_status="running" if restored else "error",
                 runtime_metadata={
-                    "last_auto_restore_at": datetime.now(timezone.utc).isoformat(),
+                    "last_auto_restore_at": datetime.now(UTC).isoformat(),
                     "last_auto_restore_status": "success" if restored else "failed",
                     "last_error": error_message if error_message else "",
                 },
@@ -1454,7 +1454,7 @@ def _parse_discovered_tools(content: list) -> list:
     return []
 
 
-def _match_adapter_to_app(adapter: Any, apps: list) -> Any:  # noqa: ANN401
+def _match_adapter_to_app(adapter: Any, apps: list) -> Any:
     """Match a SandboxMCPServerToolAdapter to an MCPApp from DB.
 
     Matching strategy (in priority order):
@@ -1475,7 +1475,7 @@ def _match_adapter_to_app(adapter: Any, apps: list) -> Any:  # noqa: ANN401
     return matched_app
 
 
-def _match_adapter_to_app_with_score(adapter: Any, apps: list) -> tuple:  # noqa: ANN401
+def _match_adapter_to_app_with_score(adapter: Any, apps: list) -> tuple:
     """Match a SandboxMCPServerToolAdapter to an MCPApp from DB with confidence score.
 
     This function returns both the matched app and a confidence score,
@@ -1566,12 +1566,12 @@ def _match_adapter_to_app_with_score(adapter: Any, apps: list) -> tuple:  # noqa
     return None, 0.0
 
 
-def get_cached_tools() -> Dict[str, Dict[str, Any]]:
+def get_cached_tools() -> dict[str, dict[str, Any]]:
     """Get all cached tool sets (for debugging/monitoring)."""
     return dict(_tools_cache)
 
 
-def get_cached_tools_for_project(project_id: str) -> Optional[Dict[str, Any]]:
+def get_cached_tools_for_project(project_id: str) -> dict[str, Any] | None:
     """Get cached tools for a specific project (synchronous, for hot-plug support).
 
     This is used by ReActAgent's tool_provider to get current tools without
@@ -1587,7 +1587,7 @@ def get_cached_tools_for_project(project_id: str) -> Optional[Dict[str, Any]]:
     return _tools_cache.get(project_id)
 
 
-def invalidate_tools_cache(project_id: Optional[str] = None) -> None:
+def invalidate_tools_cache(project_id: str | None = None) -> None:
     """Invalidate tool cache for a project or all projects.
 
     Args:
@@ -1604,9 +1604,9 @@ def invalidate_tools_cache(project_id: Optional[str] = None) -> None:
 
 def invalidate_all_caches_for_project(
     project_id: str,
-    tenant_id: Optional[str] = None,
+    tenant_id: str | None = None,
     clear_tool_definitions: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Invalidate all caches related to a project.
 
     This unified function clears all caches that may contain stale data after
@@ -1693,7 +1693,7 @@ def invalidate_all_caches_for_project(
 
 async def get_or_create_skills(
     tenant_id: str,
-    project_id: Optional[str] = None,
+    project_id: str | None = None,
 ) -> list:
     """Get or create a cached skills list for a tenant/project.
 
@@ -1751,9 +1751,9 @@ async def get_or_create_skills(
 
 
 async def get_or_create_provider_config(
-    tenant_id: Optional[str] = None,
+    tenant_id: str | None = None,
     force_refresh: bool = False,
-) -> Any:  # noqa: ANN401
+) -> Any:
     """Get or create cached default LLM provider config.
 
     Delegates to AIServiceFactory which handles caching and provider resolution.
@@ -1777,9 +1777,9 @@ async def get_or_create_provider_config(
 
 
 async def get_or_create_llm_client(
-    provider_config: Any = None,  # noqa: ANN401
-    tenant_id: Optional[str] = None,
-) -> Any:  # noqa: ANN401
+    provider_config: Any = None,
+    tenant_id: str | None = None,
+) -> Any:
     """Get or create a cached LLM client using AIServiceFactory.
 
     Delegates to AIServiceFactory which handles caching and provider resolution.
@@ -1810,12 +1810,12 @@ async def get_or_create_llm_client(
     return factory.create_llm_client(resolved_config)
 
 
-def get_cached_skills() -> Dict[str, list]:
+def get_cached_skills() -> dict[str, list]:
     """Get all cached skill lists (for debugging/monitoring)."""
     return dict(_skills_cache)
 
 
-def invalidate_skills_cache(tenant_id: Optional[str] = None) -> None:
+def invalidate_skills_cache(tenant_id: str | None = None) -> None:
     """Invalidate skills cache for a tenant or all tenants.
 
     Args:
@@ -1839,9 +1839,9 @@ def invalidate_skills_cache(tenant_id: Optional[str] = None) -> None:
 
 async def get_or_create_skill_loader_tool(
     tenant_id: str,
-    project_id: Optional[str] = None,
+    project_id: str | None = None,
     agent_mode: str = "default",
-) -> Any:  # noqa: ANN401
+) -> Any:
     """Get or create a cached and initialized SkillLoaderTool.
 
     This function caches SkillLoaderTool instances by tenant_id:project_id:agent_mode
@@ -1860,7 +1860,6 @@ async def get_or_create_skill_loader_tool(
         Initialized SkillLoaderTool instance with dynamic description
     """
     from pathlib import Path
-    from typing import Optional as Opt
 
     from src.application.services.filesystem_skill_loader import FileSystemSkillLoader
     from src.application.services.skill_service import SkillService
@@ -1877,20 +1876,20 @@ async def get_or_create_skill_loader_tool(
         async def create(self, skill: Skill) -> Skill:
             return skill
 
-        async def get_by_id(self, skill_id: str) -> Opt[Skill]:
+        async def get_by_id(self, skill_id: str) -> Skill | None:
             return None
 
-        async def get_by_name(self, tenant_id: str, name: str) -> Opt[Skill]:
+        async def get_by_name(self, tenant_id: str, name: str) -> Skill | None:
             return None
 
         async def list_by_tenant(
-            self, tenant_id: str, status: Opt[SkillStatus] = None
-        ) -> List[Skill]:
+            self, tenant_id: str, status: SkillStatus | None = None
+        ) -> list[Skill]:
             return []
 
         async def list_by_project(
-            self, project_id: str, status: Opt[SkillStatus] = None
-        ) -> List[Skill]:
+            self, project_id: str, status: SkillStatus | None = None
+        ) -> list[Skill]:
             return []
 
         async def update(self, skill: Skill) -> Skill:
@@ -1905,13 +1904,13 @@ async def get_or_create_skill_loader_tool(
             query: str,
             threshold: float = 0.5,
             limit: int = 5,
-        ) -> List[Skill]:
+        ) -> list[Skill]:
             return []
 
         async def increment_usage(self, skill_id: str, success: bool = True) -> None:
             pass
 
-        async def count_by_tenant(self, tenant_id: str, status: Opt[SkillStatus] = None) -> int:
+        async def count_by_tenant(self, tenant_id: str, status: SkillStatus | None = None) -> int:
             return 0
 
     cache_key = f"{tenant_id}:{project_id or 'global'}:{agent_mode}"
@@ -1970,12 +1969,12 @@ async def get_or_create_skill_loader_tool(
         return _skill_loader_cache[cache_key]
 
 
-def get_cached_skill_loaders() -> Dict[str, Any]:
+def get_cached_skill_loaders() -> dict[str, Any]:
     """Get all cached SkillLoaderTool instances (for debugging/monitoring)."""
     return dict(_skill_loader_cache)
 
 
-def invalidate_skill_loader_cache(tenant_id: Optional[str] = None) -> None:
+def invalidate_skill_loader_cache(tenant_id: str | None = None) -> None:
     """Invalidate SkillLoaderTool cache for a tenant or all tenants.
 
     Args:
@@ -2066,7 +2065,7 @@ async def prewarm_agent_session(
 # ============================================================================
 
 
-def set_hitl_response_listener(listener: Any) -> None:  # noqa: ANN401
+def set_hitl_response_listener(listener: Any) -> None:
     """Set the global HITL Response Listener instance for agent worker.
 
     Called during Agent Worker initialization to enable real-time
@@ -2080,7 +2079,7 @@ def set_hitl_response_listener(listener: Any) -> None:  # noqa: ANN401
     logger.info("Agent Worker: HITL Response Listener registered for Activities")
 
 
-def get_hitl_response_listener() -> Optional[Any]:  # noqa: ANN401
+def get_hitl_response_listener() -> Any | None:
     """Get the global HITL Response Listener instance for agent worker.
 
     Returns:
@@ -2159,7 +2158,7 @@ async def unregister_hitl_waiter(request_id: str) -> bool:
 async def wait_for_hitl_response_realtime(
     request_id: str,
     timeout: float = 5.0,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Wait for HITL response via real-time Redis Stream delivery.
 
@@ -2190,7 +2189,7 @@ async def discover_tools_with_retry(
     base_delay_ms: int = 1000,
     max_delay_ms: int = 30000,
     timeout: float = 30.0,
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Discover MCP server tools with exponential backoff retry.
 
@@ -2280,7 +2279,7 @@ async def discover_tools_with_retry(
     return None
 
 
-def _extract_error_text(result: Dict[str, Any]) -> str:
+def _extract_error_text(result: dict[str, Any]) -> str:
     """Extract error text from MCP tool result."""
     content = result.get("content", [])
     for item in content:

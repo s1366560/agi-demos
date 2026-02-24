@@ -8,7 +8,6 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional
 
 
 # Metric name constants for SandboxMetrics
@@ -55,7 +54,7 @@ class Metric:
     name: str
     type: MetricType
     value: float
-    labels: List[MetricLabel] = field(default_factory=list)
+    labels: list[MetricLabel] = field(default_factory=list)
     timestamp: float = field(default_factory=time.time)
     help_text: str = ""
 
@@ -70,7 +69,7 @@ class HistogramBucket:
 @dataclass
 class HistogramMetric(Metric):
     """A histogram metric with buckets."""
-    buckets: List[HistogramBucket] = field(default_factory=list)
+    buckets: list[HistogramBucket] = field(default_factory=list)
     sum: float = 0.0
     count: int = 0
 
@@ -79,7 +78,7 @@ class MetricsExporter(ABC):
     """Abstract base for metrics exporters."""
 
     @abstractmethod
-    def export(self, metrics: List[Metric]) -> str:
+    def export(self, metrics: list[Metric]) -> str:
         """Export metrics to a specific format."""
         pass
 
@@ -90,7 +89,7 @@ class PrometheusExporter(MetricsExporter):
     # Default histogram buckets for latency metrics
     DEFAULT_BUCKETS = DEFAULT_LATENCY_BUCKETS
 
-    def export(self, metrics: List[Metric]) -> str:
+    def export(self, metrics: list[Metric]) -> str:
         """Export metrics in Prometheus format."""
         lines = []
         processed_names = set()
@@ -131,7 +130,7 @@ class PrometheusExporter(MetricsExporter):
 
         return "\n".join(lines) + "\n"
 
-    def _format_labels(self, labels: List[MetricLabel]) -> str:
+    def _format_labels(self, labels: list[MetricLabel]) -> str:
         """Format labels for Prometheus format."""
         if not labels:
             return ""
@@ -142,7 +141,7 @@ class PrometheusExporter(MetricsExporter):
 class StatsDExporter(MetricsExporter):
     """Export metrics in StatsD format."""
 
-    def export(self, metrics: List[Metric]) -> str:
+    def export(self, metrics: list[Metric]) -> str:
         """Export metrics in StatsD format."""
         lines = []
 
@@ -177,27 +176,27 @@ class MetricsCollector:
 
     def __init__(self) -> None:
         """Initialize the metrics collector."""
-        self._metrics: Dict[str, Metric] = {}
-        self._histograms: Dict[str, HistogramMetric] = {}
-        self._histogram_buckets: Dict[str, List[float]] = {
+        self._metrics: dict[str, Metric] = {}
+        self._histograms: dict[str, HistogramMetric] = {}
+        self._histogram_buckets: dict[str, list[float]] = {
             "default": DEFAULT_LATENCY_BUCKETS,
             "latency_ms": LATENCY_MS_BUCKETS,
         }
 
-    def _make_key(self, name: str, labels: Optional[Dict[str, str]]) -> str:
+    def _make_key(self, name: str, labels: dict[str, str] | None) -> str:
         """Create a unique key for a metric with labels."""
         if not labels:
             return name
         label_str = ",".join(f"{k}={v}" for k, v in sorted(labels.items()))
         return f"{name}{{{label_str}}}"
 
-    def _labels_to_list(self, labels: Optional[Dict[str, str]]) -> List[MetricLabel]:
+    def _labels_to_list(self, labels: dict[str, str] | None) -> list[MetricLabel]:
         """Convert label dict to list of MetricLabel objects."""
         if not labels:
             return []
         return [MetricLabel(k, v) for k, v in sorted(labels.items())]
 
-    def increment(self, name: str, value: float = 1.0, labels: Optional[Dict[str, str]] = None) -> None:
+    def increment(self, name: str, value: float = 1.0, labels: dict[str, str] | None = None) -> None:
         """Increment a counter metric."""
         key = self._make_key(name, labels)
         current = self._metrics.get(key)
@@ -212,7 +211,7 @@ class MetricsCollector:
                 labels=self._labels_to_list(labels),
             )
 
-    def gauge(self, name: str, value: float, labels: Optional[Dict[str, str]] = None) -> None:
+    def gauge(self, name: str, value: float, labels: dict[str, str] | None = None) -> None:
         """Set a gauge metric value."""
         key = self._make_key(name, labels)
 
@@ -223,7 +222,7 @@ class MetricsCollector:
             labels=self._labels_to_list(labels),
         )
 
-    def observe(self, name: str, value: float, labels: Optional[Dict[str, str]] = None) -> None:
+    def observe(self, name: str, value: float, labels: dict[str, str] | None = None) -> None:
         """Observe a value for a histogram/summary."""
         key = self._make_key(name, labels)
         histogram = self._histograms.get(key)
@@ -251,11 +250,11 @@ class MetricsCollector:
             if value <= bucket.upper_bound:
                 bucket.count += 1
 
-    def timing(self, name: str, duration_ms: float, labels: Optional[Dict[str, str]] = None) -> None:
+    def timing(self, name: str, duration_ms: float, labels: dict[str, str] | None = None) -> None:
         """Record a timing observation."""
         self.observe(name, duration_ms, labels)
 
-    def get_metric(self, name: str, labels: Optional[Dict[str, str]] = None) -> Optional[Metric]:
+    def get_metric(self, name: str, labels: dict[str, str] | None = None) -> Metric | None:
         """Get a metric by name."""
         key = self._make_key(name, labels)
 
@@ -270,18 +269,18 @@ class MetricsCollector:
         # If no labels specified, try to find any metric with this name
         if labels is None:
             # Check regular metrics
-            for metric_key, metric in self._metrics.items():
+            for _metric_key, metric in self._metrics.items():
                 if metric.name == name:
                     return metric
 
             # Check histograms
-            for metric_key, histogram in self._histograms.items():
+            for _metric_key, histogram in self._histograms.items():
                 if histogram.name == name:
                     return histogram
 
         return None
 
-    def get_all_metrics(self) -> List[Metric]:
+    def get_all_metrics(self) -> list[Metric]:
         """Get all collected metrics."""
         all_metrics = list(self._metrics.values())
 
@@ -300,7 +299,7 @@ class MetricsCollector:
 class SandboxMetrics:
     """Pre-defined metrics for sandbox operations."""
 
-    def __init__(self, collector: Optional[MetricsCollector] = None) -> None:
+    def __init__(self, collector: MetricsCollector | None = None) -> None:
         """Initialize sandbox metrics with a collector."""
         self._collector = collector or MetricsCollector()
 

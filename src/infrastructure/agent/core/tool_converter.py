@@ -4,12 +4,12 @@ Tool conversion utilities for ReAct Agent.
 Converts tool instances to ToolDefinition format used by SessionProcessor.
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 from .processor import ToolDefinition
 
 
-def convert_tools(tools: Dict[str, Any]) -> List[ToolDefinition]:
+def convert_tools(tools: dict[str, Any]) -> list[ToolDefinition]:
     """
     Convert tool instances to ToolDefinition format.
 

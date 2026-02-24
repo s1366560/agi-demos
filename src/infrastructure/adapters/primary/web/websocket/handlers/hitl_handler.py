@@ -8,8 +8,8 @@ message types. Uses Redis Streams to communicate with the running Ray Actor.
 import asyncio
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import UTC, datetime
+from typing import Any
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
@@ -58,7 +58,7 @@ async def _publish_hitl_response_to_redis(
             "tenant_id": tenant_id,
             "project_id": project_id,
             "agent_mode": agent_mode,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         await redis.xadd(stream_key, {"data": json.dumps(message_data)}, maxlen=1000)
@@ -128,7 +128,7 @@ async def _handle_hitl_response(
                     options=[],
                     context={},
                     metadata=row.request_metadata or {},
-                    created_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(UTC),
                     status=HITLRequestStatus(row.status.lower())
                     if row.status
                     else HITLRequestStatus.PENDING,
@@ -225,7 +225,7 @@ class ClarificationRespondHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "clarification_respond"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Handle clarification response."""
         request_id = message.get("request_id")
         answer = message.get("answer")
@@ -254,7 +254,7 @@ class DecisionRespondHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "decision_respond"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Handle decision response."""
         request_id = message.get("request_id")
         decision = message.get("decision")
@@ -283,7 +283,7 @@ class EnvVarRespondHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "env_var_respond"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Handle environment variable response."""
         request_id = message.get("request_id")
         values = message.get("values")
@@ -312,7 +312,7 @@ class PermissionRespondHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "permission_respond"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Handle permission response."""
         request_id = message.get("request_id")
         granted = message.get("granted")

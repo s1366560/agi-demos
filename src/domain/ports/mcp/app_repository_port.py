@@ -6,7 +6,7 @@ following hexagonal architecture principles.
 """
 
 from abc import abstractmethod
-from typing import List, Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from src.domain.model.mcp.app import MCPApp
 
@@ -28,7 +28,7 @@ class MCPAppRepositoryPort(Protocol):
         ...
 
     @abstractmethod
-    async def find_by_id(self, app_id: str) -> Optional[MCPApp]:
+    async def find_by_id(self, app_id: str) -> MCPApp | None:
         """Find an MCP App by its ID.
 
         Args:
@@ -40,7 +40,7 @@ class MCPAppRepositoryPort(Protocol):
         ...
 
     @abstractmethod
-    async def find_by_server_and_tool(self, server_id: str, tool_name: str) -> Optional[MCPApp]:
+    async def find_by_server_and_tool(self, server_id: str, tool_name: str) -> MCPApp | None:
         """Find an MCP App by its server and tool name combination.
 
         Args:
@@ -55,7 +55,7 @@ class MCPAppRepositoryPort(Protocol):
     @abstractmethod
     async def find_by_project(
         self, project_id: str, include_disabled: bool = False
-    ) -> List[MCPApp]:
+    ) -> list[MCPApp]:
         """Find all MCP Apps for a project.
 
         Args:
@@ -68,7 +68,7 @@ class MCPAppRepositoryPort(Protocol):
         ...
 
     @abstractmethod
-    async def find_ready_by_project(self, project_id: str) -> List[MCPApp]:
+    async def find_ready_by_project(self, project_id: str) -> list[MCPApp]:
         """Find all ready-to-render MCP Apps for a project.
 
         Args:

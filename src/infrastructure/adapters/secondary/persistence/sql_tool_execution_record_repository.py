@@ -3,8 +3,7 @@ V2 SQLAlchemy implementation of ToolExecutionRecordRepository using BaseReposito
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,7 +69,7 @@ class SqlToolExecutionRecordRepository(
         await self.save(record)
         await self._session.commit()
 
-    async def find_by_id(self, record_id: str) -> Optional[ToolExecutionRecord]:
+    async def find_by_id(self, record_id: str) -> ToolExecutionRecord | None:
         """Find a tool execution record by its ID."""
         result = await self._session.execute(
             select(DBToolExecutionRecord).where(DBToolExecutionRecord.id == record_id)
@@ -78,7 +77,7 @@ class SqlToolExecutionRecordRepository(
         db_record = result.scalar_one_or_none()
         return self._to_domain(db_record) if db_record else None
 
-    async def find_by_call_id(self, call_id: str) -> Optional[ToolExecutionRecord]:
+    async def find_by_call_id(self, call_id: str) -> ToolExecutionRecord | None:
         """Find a tool execution record by its call ID."""
         result = await self._session.execute(
             select(DBToolExecutionRecord).where(DBToolExecutionRecord.call_id == call_id)
@@ -90,7 +89,7 @@ class SqlToolExecutionRecordRepository(
         self,
         message_id: str,
         limit: int = 100,
-    ) -> List[ToolExecutionRecord]:
+    ) -> list[ToolExecutionRecord]:
         """List tool executions for a message."""
         result = await self._session.execute(
             select(DBToolExecutionRecord)
@@ -105,7 +104,7 @@ class SqlToolExecutionRecordRepository(
         self,
         conversation_id: str,
         limit: int = 100,
-    ) -> List[ToolExecutionRecord]:
+    ) -> list[ToolExecutionRecord]:
         """List tool executions for a conversation."""
         result = await self._session.execute(
             select(DBToolExecutionRecord)
@@ -129,14 +128,14 @@ class SqlToolExecutionRecordRepository(
         self,
         call_id: str,
         status: str,
-        output: Optional[str] = None,
-        error: Optional[str] = None,
-        duration_ms: Optional[int] = None,
+        output: str | None = None,
+        error: str | None = None,
+        duration_ms: int | None = None,
     ) -> None:
         """Update the status of a tool execution record."""
         update_values = {
             "status": status,
-            "completed_at": datetime.now(timezone.utc),
+            "completed_at": datetime.now(UTC),
         }
         if output is not None:
             update_values["tool_output"] = output

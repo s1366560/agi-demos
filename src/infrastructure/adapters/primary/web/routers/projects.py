@@ -2,8 +2,7 @@
 
 import logging
 import re
-from datetime import datetime
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -41,7 +40,7 @@ logger = logging.getLogger(__name__)
 
 class AddProjectMemberRequest(BaseModel):
     user_id: str
-    role: Optional[str] = "member"
+    role: str | None = "member"
 
 
 @router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -116,10 +115,10 @@ async def create_project(
 
 @router.get("/", response_model=ProjectListResponse)
 async def list_projects(
-    tenant_id: Optional[str] = Query(None, description="Filter by tenant ID"),
+    tenant_id: str | None = Query(None, description="Filter by tenant ID"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Page size"),
-    search: Optional[str] = Query(None, description="Search query"),
+    search: str | None = Query(None, description="Search query"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     graphiti_client=Depends(get_graphiti_client),
@@ -628,12 +627,12 @@ async def get_project_stats(
 
         # Get active nodes (from Graphiti)
         # Active nodes are those with last_active timestamp within last 7 days
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
         active_nodes = 0
         try:
             # Calculate threshold date (7 days ago)
-            threshold_date = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+            threshold_date = (datetime.now(UTC) - timedelta(days=7)).isoformat()
 
             # Query Graphiti for active nodes in this project
             query = """
@@ -681,9 +680,9 @@ async def get_project_stats(
         activities = []
         for memory, user in recent_memories_result.fetchall():
             # Calculate relative time string
-            from datetime import datetime, timezone
+            from datetime import datetime
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             diff = now - memory.created_at
             if diff.days > 0:
                 time_str = f"{diff.days}d ago"
@@ -722,7 +721,7 @@ async def get_project_stats(
             active_nodes=active_nodes,  # Add active_nodes field for frontend
             collaborators=member_count,
             recent_activity=activities,
-            last_active=datetime.now(timezone.utc),  # Add logic for last_active if needed
+            last_active=datetime.now(UTC),  # Add logic for last_active if needed
             system_status={
                 "status": "operational",
                 "indexing_active": True,
@@ -744,7 +743,7 @@ class TrendingEntity(BaseModel):
     name: str
     entity_type: str
     mention_count: int
-    summary: Optional[str] = None
+    summary: str | None = None
 
 
 class TrendingResponse(BaseModel):

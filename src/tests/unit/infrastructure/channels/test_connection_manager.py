@@ -328,6 +328,5 @@ async def test_create_adapter_raises_when_plugin_adapter_missing() -> None:
     with patch(
         "src.infrastructure.agent.plugins.registry.get_plugin_registry",
         return_value=plugin_registry,
-    ):
-        with pytest.raises(ValueError, match="Unsupported channel type"):
-            await manager._create_adapter(config)
+    ), pytest.raises(ValueError, match="Unsupported channel type"):
+        await manager._create_adapter(config)

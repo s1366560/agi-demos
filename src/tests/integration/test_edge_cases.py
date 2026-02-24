@@ -2,7 +2,7 @@
 Integration tests for edge cases and boundary conditions.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -85,7 +85,7 @@ class TestEdgeCases:
                 "content": "Test content",
                 "metadata": {
                     "source": "api",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "nested": {"key": "value", "array": [1, 2, 3]},
                 },
             },
@@ -117,7 +117,7 @@ class TestEdgeCases:
         from sqlalchemy import select
 
         # Key expiring in 1 second
-        expires_soon = datetime.now(timezone.utc) + timedelta(seconds=1)
+        expires_soon = datetime.now(UTC) + timedelta(seconds=1)
         key1 = APIKey(
             id="key_expiring_soon",
             user_id="user_boundary",
@@ -127,7 +127,7 @@ class TestEdgeCases:
         )
 
         # Key that just expired
-        just_expired = datetime.now(timezone.utc) - timedelta(seconds=1)
+        just_expired = datetime.now(UTC) - timedelta(seconds=1)
         key2 = APIKey(
             id="key_just_expired",
             user_id="user_boundary",
@@ -196,7 +196,7 @@ class TestEdgeCases:
         result = await test_db.execute(select(TaskLog).where(TaskLog.id == "task_workflow"))
         task = result.scalar_one()
         task.status = "PROCESSING"
-        task.started_at = datetime.now(timezone.utc)
+        task.started_at = datetime.now(UTC)
         await test_db.commit()
 
         # Verify transition
@@ -207,7 +207,7 @@ class TestEdgeCases:
 
         # Transition to COMPLETED
         task.status = "COMPLETED"
-        task.completed_at = datetime.now(timezone.utc)
+        task.completed_at = datetime.now(UTC)
         await test_db.commit()
 
         # Verify final state

@@ -8,7 +8,8 @@ Tests the circuit breaker with:
 - Timeout for automatic state transitions
 """
 
-from datetime import datetime, timedelta, timezone
+import contextlib
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -153,10 +154,8 @@ class TestCircuitBreaker:
         """Test that open circuit blocks calls immediately."""
         # Open the circuit
         for _ in range(3):
-            try:
+            with contextlib.suppress(ConnectionError):
                 await breaker.call(failing_func)
-            except ConnectionError:
-                pass
 
         assert breaker.state == CircuitState.OPEN
 
@@ -171,10 +170,8 @@ class TestCircuitBreaker:
         """Test transition to HALF_OPEN after timeout by directly forcing state."""
         # Open the circuit
         for _ in range(3):
-            try:
+            with contextlib.suppress(ConnectionError):
                 await breaker.call(failing_func)
-            except ConnectionError:
-                pass
 
         assert breaker.state == CircuitState.OPEN
 
@@ -187,10 +184,8 @@ class TestCircuitBreaker:
         """Test that successes close circuit from HALF_OPEN."""
         # Open the circuit
         for _ in range(3):
-            try:
+            with contextlib.suppress(ConnectionError):
                 await breaker.call(failing_func)
-            except ConnectionError:
-                pass
 
         assert breaker.state == CircuitState.OPEN
 
@@ -215,10 +210,8 @@ class TestCircuitBreaker:
         """Test that failure in HALF_OPEN reopens circuit."""
         # Open the circuit
         for _ in range(3):
-            try:
+            with contextlib.suppress(ConnectionError):
                 await breaker.call(failing_func)
-            except ConnectionError:
-                pass
 
         # Manually transition to HALF_OPEN for testing
         breaker._transition_to_half_open()
@@ -241,10 +234,8 @@ class TestCircuitBreaker:
 
         # Open the circuit
         for _ in range(3):
-            try:
+            with contextlib.suppress(ConnectionError):
                 await test_breaker.call(failing_func)
-            except ConnectionError:
-                pass
 
         # Manually transition to HALF_OPEN for testing
         test_breaker._transition_to_half_open()
@@ -266,10 +257,8 @@ class TestCircuitBreaker:
         """Test manual reset of circuit breaker."""
         # Open the circuit
         for _ in range(3):
-            try:
+            with contextlib.suppress(ConnectionError):
                 await breaker.call(failing_func)
-            except ConnectionError:
-                pass
 
         assert breaker.state == CircuitState.OPEN
 
@@ -311,10 +300,8 @@ class TestCircuitBreaker:
         """Test context manager with open circuit."""
         # Open the circuit
         for _ in range(3):
-            try:
+            with contextlib.suppress(ConnectionError):
                 await breaker.call(failing_func)
-            except ConnectionError:
-                pass
 
         # Verify circuit is open
         assert breaker.state == CircuitState.OPEN
@@ -342,10 +329,8 @@ class TestCircuitBreaker:
             raise ConnectionError("Not tracked")
 
         for _ in range(5):
-            try:
+            with contextlib.suppress(ConnectionError):
                 await breaker.call(raise_connection_error)
-            except ConnectionError:
-                pass
 
         # Circuit should remain CLOSED
         assert breaker.state == CircuitState.CLOSED
@@ -356,10 +341,8 @@ class TestCircuitBreaker:
             raise ValueError("Tracked error")
 
         for _ in range(2):
-            try:
+            with contextlib.suppress(ValueError):
                 await breaker.call(raise_value_error)
-            except ValueError:
-                pass
 
         assert breaker.state == CircuitState.OPEN
 
@@ -367,10 +350,8 @@ class TestCircuitBreaker:
         """Test fallback function when circuit is open."""
         # Open the circuit
         for _ in range(3):
-            try:
+            with contextlib.suppress(ConnectionError):
                 await breaker.call(failing_func)
-            except ConnectionError:
-                pass
 
         async def fallback():
             return "fallback_value"
@@ -405,10 +386,8 @@ class TestCircuitBreaker:
 
         # Make some failing calls to open circuit
         for _ in range(3):
-            try:
+            with contextlib.suppress(ConnectionError):
                 await breaker.call(failing_func)
-            except ConnectionError:
-                pass
 
         stats_after = breaker.get_statistics()
 
@@ -442,7 +421,7 @@ class TestCircuitBreakerOpenError:
         """Test creating a CircuitBreakerOpenError."""
         error = CircuitBreakerOpenError(
             breaker_name="test_breaker",
-            opened_at=datetime.now(timezone.utc),
+            opened_at=datetime.now(UTC),
         )
 
         assert "test_breaker" in str(error)
@@ -451,7 +430,7 @@ class TestCircuitBreakerOpenError:
 
     def test_error_retry_after(self):
         """Test retry_after calculation."""
-        opened_at = datetime.now(timezone.utc)
+        opened_at = datetime.now(UTC)
         error = CircuitBreakerOpenError(
             breaker_name="test_breaker",
             opened_at=opened_at,

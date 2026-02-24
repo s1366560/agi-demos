@@ -1,9 +1,9 @@
 """Conversation entity for multi-turn agent interactions."""
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from src.domain.model.agent.agent_mode import AgentMode  # stays in agent/
 from src.domain.shared_kernel import Entity
@@ -32,10 +32,10 @@ class Conversation(Entity):
     user_id: str
     title: str
     status: ConversationStatus = ConversationStatus.ACTIVE
-    agent_config: Dict[str, Any] = field(default_factory=dict)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    agent_config: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     message_count: int = 0
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime | None = None
 
     # Multi-level thinking support (work plan is stored in WorkPlan table)
@@ -43,27 +43,27 @@ class Conversation(Entity):
 
     # Plan Mode support
     current_mode: AgentMode = AgentMode.BUILD  # Current agent mode (BUILD/PLAN/EXPLORE)
-    current_plan_id: Optional[str] = None  # Reference to active Plan in Plan Mode
-    parent_conversation_id: Optional[str] = None  # Parent conversation for SubAgent sessions
-    branch_point_message_id: Optional[str] = None  # Message ID where branch was forked
-    summary: Optional[str] = None  # Auto-generated conversation summary
+    current_plan_id: str | None = None  # Reference to active Plan in Plan Mode
+    parent_conversation_id: str | None = None  # Parent conversation for SubAgent sessions
+    branch_point_message_id: str | None = None  # Message ID where branch was forked
+    summary: str | None = None  # Auto-generated conversation summary
 
     def archive(self) -> None:
         """Archive this conversation."""
         self.status = ConversationStatus.ARCHIVED
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
 
     def delete(self) -> None:
         """Mark this conversation as deleted."""
         self.status = ConversationStatus.DELETED
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
 
     def increment_message_count(self) -> None:
         """Increment the message counter."""
         self.message_count += 1
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
 
-    def update_agent_config(self, config: Dict[str, Any]) -> None:
+    def update_agent_config(self, config: dict[str, Any]) -> None:
         """
         Update the agent configuration for this conversation.
 
@@ -71,7 +71,7 @@ class Conversation(Entity):
             config: New agent configuration dictionary
         """
         self.agent_config.update(config)
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
 
     def update_title(self, new_title: str) -> None:
         """
@@ -81,11 +81,11 @@ class Conversation(Entity):
             new_title: New title for the conversation
         """
         self.title = new_title
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
 
     # Plan Mode methods
 
-    def enter_plan_mode(self, plan_id: Optional[str] = None) -> None:
+    def enter_plan_mode(self, plan_id: str | None = None) -> None:
         """
         Switch to Plan Mode (read-only analysis mode).
 
@@ -100,13 +100,13 @@ class Conversation(Entity):
 
         self.current_mode = AgentMode.PLAN
         self.current_plan_id = plan_id
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
 
     def exit_plan_mode(self) -> None:
         """Exit Plan Mode and return to Build Mode."""
         self.current_mode = AgentMode.BUILD
         self.current_plan_id = None
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
 
     def set_explore_mode(self) -> None:
         """
@@ -116,7 +116,7 @@ class Conversation(Entity):
         code exploration during Plan Mode.
         """
         self.current_mode = AgentMode.EXPLORE
-        self.updated_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(UTC)
 
     @property
     def is_in_plan_mode(self) -> bool:
@@ -133,7 +133,7 @@ class Conversation(Entity):
         """Check if this is a SubAgent session."""
         return self.parent_conversation_id is not None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary for caching."""
         return {
             "id": self.id,
@@ -149,7 +149,7 @@ class Conversation(Entity):
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Conversation":
+    def from_dict(cls, data: dict[str, Any]) -> "Conversation":
         """Deserialize from dictionary."""
         return cls(
             id=data["id"],

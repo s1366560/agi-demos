@@ -1,8 +1,7 @@
 """SQL implementation of AgentTaskRepository."""
 
 import logging
-from datetime import datetime, timezone
-from typing import List, Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,13 +27,13 @@ class SqlAgentTaskRepository(AgentTaskRepository):
             existing.status = task.status.value
             existing.priority = task.priority.value
             existing.order_index = task.order_index
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
         else:
             model = self._to_model(task)
             self._session.add(model)
         await self._session.flush()
 
-    async def save_all(self, conversation_id: str, tasks: List[AgentTask]) -> None:
+    async def save_all(self, conversation_id: str, tasks: list[AgentTask]) -> None:
         """Replace all tasks for a conversation (atomic)."""
         # Delete existing
         await self._session.execute(
@@ -49,8 +48,8 @@ class SqlAgentTaskRepository(AgentTaskRepository):
         await self._session.flush()
 
     async def find_by_conversation(
-        self, conversation_id: str, status: Optional[str] = None
-    ) -> List[AgentTask]:
+        self, conversation_id: str, status: str | None = None
+    ) -> list[AgentTask]:
         """Find all tasks for a conversation."""
         query = (
             select(AgentTaskModel)
@@ -64,12 +63,12 @@ class SqlAgentTaskRepository(AgentTaskRepository):
         rows = result.scalars().all()
         return [self._to_domain(r) for r in rows]
 
-    async def find_by_id(self, task_id: str) -> Optional[AgentTask]:
+    async def find_by_id(self, task_id: str) -> AgentTask | None:
         """Find a task by ID."""
         model = await self._session.get(AgentTaskModel, task_id)
         return self._to_domain(model) if model else None
 
-    async def update(self, task_id: str, **fields) -> Optional[AgentTask]:
+    async def update(self, task_id: str, **fields) -> AgentTask | None:
         """Update specific fields on a task."""
         model = await self._session.get(AgentTaskModel, task_id)
         if not model:
@@ -78,7 +77,7 @@ class SqlAgentTaskRepository(AgentTaskRepository):
         for key, value in fields.items():
             if hasattr(model, key):
                 setattr(model, key, value)
-        model.updated_at = datetime.now(timezone.utc)
+        model.updated_at = datetime.now(UTC)
         await self._session.flush()
         return self._to_domain(model)
 
@@ -113,6 +112,6 @@ class SqlAgentTaskRepository(AgentTaskRepository):
             status=TaskStatus(model.status),
             priority=TaskPriority(model.priority),
             order_index=model.order_index,
-            created_at=model.created_at or datetime.now(timezone.utc),
-            updated_at=model.updated_at or model.created_at or datetime.now(timezone.utc),
+            created_at=model.created_at or datetime.now(UTC),
+            updated_at=model.updated_at or model.created_at or datetime.now(UTC),
         )

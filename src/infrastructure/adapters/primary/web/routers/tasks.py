@@ -3,8 +3,7 @@
 import asyncio
 import json
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -44,17 +43,17 @@ class TaskLogResponse(BaseModel):
     name: str
     status: str
     created_at: datetime
-    started_at: Optional[datetime]
-    completed_at: Optional[datetime]
-    error: Optional[str]
-    worker_id: Optional[str]
+    started_at: datetime | None
+    completed_at: datetime | None
+    error: str | None
+    worker_id: str | None
     retries: int
-    duration: Optional[str]
-    entity_id: Optional[str]
-    entity_type: Optional[str]
+    duration: str | None
+    entity_id: str | None
+    entity_type: str | None
     progress: int = 0
-    result: Optional[dict] = None
-    message: Optional[str] = None
+    result: dict | None = None
+    message: str | None = None
 
 
 class QueueDepthPoint(BaseModel):
@@ -114,7 +113,7 @@ def task_to_response(task) -> TaskLogResponse:
 @router.get("/stats", response_model=TaskStatsResponse)
 async def get_task_stats(db: AsyncSession = Depends(get_db)):
     """Get task statistics."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     one_day_ago = now - timedelta(days=1)
     one_hour_ago = now - timedelta(hours=1)
 
@@ -188,10 +187,10 @@ async def get_task_stats(db: AsyncSession = Depends(get_db)):
     )
 
 
-@router.get("/queue-depth", response_model=List[QueueDepthPoint])
+@router.get("/queue-depth", response_model=list[QueueDepthPoint])
 async def get_queue_depth(db: AsyncSession = Depends(get_db)):
     """Get queue depth over time."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     points = []
 
     # Generate points every 3 hours for the last 24 hours
@@ -217,13 +216,13 @@ async def get_queue_depth(db: AsyncSession = Depends(get_db)):
     return points
 
 
-@router.get("/recent", response_model=List[TaskLogResponse])
+@router.get("/recent", response_model=list[TaskLogResponse])
 async def get_recent_tasks(
-    status: Optional[str] = None,
-    task_type: Optional[str] = None,
-    search: Optional[str] = None,
-    entity_id: Optional[str] = None,
-    entity_type: Optional[str] = None,
+    status: str | None = None,
+    task_type: str | None = None,
+    search: str | None = None,
+    entity_id: str | None = None,
+    entity_type: str | None = None,
     limit: int = 50,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
@@ -292,7 +291,7 @@ async def get_recent_tasks(
 @router.get("/status-breakdown")
 async def get_status_breakdown(db: AsyncSession = Depends(get_db)):
     """Get task status breakdown."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     one_day_ago = now - timedelta(days=1)
 
     query = (
@@ -369,7 +368,7 @@ async def stop_task_endpoint(
         )
 
     # Mark task as stopped
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     await update_use_case.execute(
         UpdateTaskCommand(
             task_id=task_id,

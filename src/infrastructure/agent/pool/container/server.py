@@ -21,10 +21,11 @@ import os
 import signal
 import sys
 import time
+from collections.abc import AsyncIterator
 from concurrent import futures
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 # gRPC imports will be generated from proto
 # For now, we'll use a simple HTTP/JSON-based approach as fallback
@@ -99,40 +100,38 @@ class AgentContainerServer:
     all agent operations via gRPC.
     """
 
-    def __init__(self, config: AgentContainerConfig):
+    def __init__(self, config: AgentContainerConfig) -> None:
         self.config = config
-        self._agent: Optional[Any] = None  # Will be ProjectReActAgent
+        self._agent: Any | None = None  # Will be ProjectReActAgent
         self._lifecycle_state = "created"
         self._is_initialized = False
         self._is_paused = False
-        self._start_time: Optional[datetime] = None
-        self._last_request_time: Optional[datetime] = None
-        self._error_message: Optional[str] = None
-        self._semaphore: Optional[asyncio.Semaphore] = None
+        self._start_time: datetime | None = None
+        self._last_request_time: datetime | None = None
+        self._error_message: str | None = None
+        self._semaphore: asyncio.Semaphore | None = None
         self._active_requests = 0
         self._metrics = ExecutionMetrics()
         self._shutdown_event = asyncio.Event()
-        self._grpc_server: Optional[Any] = None
-        self._health_server: Optional[Any] = None
+        self._grpc_server: Any | None = None
+        self._health_server: Any | None = None
 
     @property
     def uptime_seconds(self) -> int:
         if self._start_time is None:
             return 0
-        return int((datetime.now(timezone.utc) - self._start_time).total_seconds())
+        return int((datetime.now(UTC) - self._start_time).total_seconds())
 
     @property
     def is_healthy(self) -> bool:
         """Check if agent is healthy."""
         if self._lifecycle_state == "error":
             return False
-        if self._lifecycle_state not in ("ready", "executing", "paused"):
-            return False
-        return True
+        return self._lifecycle_state in ("ready", "executing", "paused")
 
     async def start(self) -> None:
         """Start the gRPC server."""
-        self._start_time = datetime.now(timezone.utc)
+        self._start_time = datetime.now(UTC)
         self._semaphore = asyncio.Semaphore(self.config.max_concurrent_requests)
         self._lifecycle_state = "initializing"
 
@@ -238,7 +237,7 @@ class AgentContainerServer:
             await self._health_server.cleanup()
             logger.info("Health server stopped")
 
-    async def _handle_health(self, request) -> Any:  # noqa: ANN401
+    async def _handle_health(self, request) -> Any:
         """Handle health check request."""
         from aiohttp import web
 
@@ -252,13 +251,13 @@ class AgentContainerServer:
             }
         )
 
-    async def _handle_status(self, request) -> Any:  # noqa: ANN401
+    async def _handle_status(self, request) -> Any:
         """Handle status request."""
         from aiohttp import web
 
         return web.json_response(self._get_status_dict())
 
-    async def _handle_metrics(self, request) -> Any:  # noqa: ANN401
+    async def _handle_metrics(self, request) -> Any:
         """Handle metrics request."""
         from aiohttp import web
 
@@ -301,7 +300,7 @@ class AgentContainerServer:
             logger.error(f"Failed to initialize agent: {e}", exc_info=True)
             raise
 
-    def _get_status_dict(self) -> Dict[str, Any]:
+    def _get_status_dict(self) -> dict[str, Any]:
         """Get status as dictionary."""
         return {
             "instance_id": self.config.instance_id,
@@ -334,8 +333,8 @@ class AgentContainerServer:
         tenant_id: str,
         project_id: str,
         agent_mode: str,
-        config: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        config: dict[str, Any],
+    ) -> dict[str, Any]:
         """Initialize the agent with configuration."""
         self.config.instance_id = instance_id
         self.config.tenant_id = tenant_id
@@ -360,9 +359,9 @@ class AgentContainerServer:
         self,
         conversation_id: str,
         message: str,
-        context: Optional[Dict[str, str]] = None,
-        options: Optional[Dict[str, Any]] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        context: dict[str, str] | None = None,
+        options: dict[str, Any] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """Execute a chat request with streaming response."""
         if not self._is_initialized:
             yield {"event_type": "error", "error": {"message": "Agent not initialized"}}
@@ -378,7 +377,7 @@ class AgentContainerServer:
         start_time = time.time()
         self._metrics.total_requests += 1
         self._active_requests += 1
-        self._last_request_time = datetime.now(timezone.utc)
+        self._last_request_time = datetime.now(UTC)
         self._lifecycle_state = "executing"
 
         try:
@@ -415,7 +414,7 @@ class AgentContainerServer:
 
     async def Pause(
         self, drain_requests: bool = True, timeout_seconds: int = 30
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Pause the agent."""
         self._is_paused = True
         self._lifecycle_state = "paused"
@@ -431,7 +430,7 @@ class AgentContainerServer:
             "pending_requests": self._active_requests,
         }
 
-    async def Resume(self) -> Dict[str, Any]:
+    async def Resume(self) -> dict[str, Any]:
         """Resume the agent."""
         self._is_paused = False
         self._lifecycle_state = "ready" if self._active_requests == 0 else "executing"
@@ -439,16 +438,16 @@ class AgentContainerServer:
 
     async def Shutdown(
         self, graceful: bool = True, timeout_seconds: int = 30
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Shutdown the agent."""
         await self.stop(graceful=graceful)
         return {"success": True, "message": "Agent shutdown"}
 
-    async def GetStatus(self) -> Dict[str, Any]:
+    async def GetStatus(self) -> dict[str, Any]:
         """Get current status."""
         return self._get_status_dict()
 
-    async def HealthCheck(self, include_details: bool = False) -> Dict[str, Any]:
+    async def HealthCheck(self, include_details: bool = False) -> dict[str, Any]:
         """Health check."""
         status = "healthy" if self.is_healthy else "unhealthy"
         response = {
@@ -481,7 +480,7 @@ class AgentContainerServer:
 # =============================================================================
 
 
-async def main():
+async def main() -> None:
     """Main entry point for the agent container server."""
     # Configure logging
     config = AgentContainerConfig.from_env()
@@ -498,7 +497,7 @@ async def main():
     # Handle shutdown signals
     loop = asyncio.get_event_loop()
 
-    def handle_signal(sig):
+    def handle_signal(sig) -> None:
         logger.info(f"Received signal {sig}, shutting down...")
         asyncio.create_task(server.stop(graceful=True))
 

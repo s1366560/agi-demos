@@ -4,7 +4,7 @@ TableFormatter for generating table output (T120).
 Converts structured data into formatted tables (markdown, CSV, HTML).
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from src.infrastructure.agent.output import OutputFormatter
 
@@ -19,7 +19,7 @@ class TableFormatter(OutputFormatter):
     - HTML tables
     """
 
-    def __init__(self, table_format: str = "markdown"):
+    def __init__(self, table_format: str = "markdown") -> None:
         """
         Initialize the table formatter.
 
@@ -28,7 +28,7 @@ class TableFormatter(OutputFormatter):
         """
         self._table_format = table_format
 
-    def format(self, data: Any, metadata: Dict[str, Any] | None = None) -> str:  # noqa: ANN401
+    def format(self, data: Any, metadata: dict[str, Any] | None = None) -> str:
         """
         Format data as a table.
 
@@ -54,7 +54,7 @@ class TableFormatter(OutputFormatter):
         else:
             return self._format_markdown(rows, columns)
 
-    def _normalize_data(self, data: Any) -> tuple[list[dict], list[str]]:  # noqa: ANN401
+    def _normalize_data(self, data: Any) -> tuple[list[dict], list[str]]:
         """
         Normalize data to list of dicts and extract columns.
 
@@ -80,7 +80,7 @@ class TableFormatter(OutputFormatter):
             # Dict of lists
             if all(isinstance(v, list) for v in data.values()):
                 columns = list(data.keys())
-                rows = [dict(zip(columns, values)) for values in zip(*data.values())]
+                rows = [dict(zip(columns, values, strict=False)) for values in zip(*data.values(), strict=False)]
                 return rows, columns
             else:
                 # Single dict - convert to single row

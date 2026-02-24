@@ -6,9 +6,10 @@ providing efficient tool lookup and server health monitoring.
 """
 
 import asyncio
+import contextlib
 import logging
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from src.infrastructure.agent.mcp.client import MCPClient
 
@@ -38,7 +39,7 @@ class MCPServerRegistry:
         cache_ttl_seconds: int = 300,
         health_check_interval_seconds: int = 60,
         max_reconnect_attempts: int = 3,
-    ):
+    ) -> None:
         """
         Initialize MCP server registry.
 
@@ -64,10 +65,10 @@ class MCPServerRegistry:
         self._roots: list[dict[str, str]] = []
 
         # Elicitation handler: async callback for elicitation requests
-        self._elicitation_handler: Optional[callable] = None
+        self._elicitation_handler: callable | None = None
 
         # Background tasks
-        self._health_check_task: Optional[asyncio.Task] = None
+        self._health_check_task: asyncio.Task | None = None
         self._running = False
 
     async def start(self) -> None:
@@ -89,10 +90,8 @@ class MCPServerRegistry:
         # Cancel health check task
         if self._health_check_task:
             self._health_check_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._health_check_task
-            except asyncio.CancelledError:
-                pass
 
         # Disconnect all clients
         for server_id, client in self._clients.items():
@@ -127,7 +126,7 @@ class MCPServerRegistry:
         try:
             await client.connect()
             self._clients[server_id] = client
-            self._health_status[server_id] = (True, datetime.now(timezone.utc))
+            self._health_status[server_id] = (True, datetime.now(UTC))
             logger.info(f"Registered MCP server: {server_id}")
 
             # Initial tool discovery
@@ -168,7 +167,7 @@ class MCPServerRegistry:
         # Check cache
         if not force and server_id in self._tool_cache:
             tools, last_sync = self._tool_cache[server_id]
-            age = datetime.now(timezone.utc) - last_sync
+            age = datetime.now(UTC) - last_sync
             if age.total_seconds() < self.cache_ttl_seconds:
                 logger.debug(f"Using cached tools for server {server_id}")
                 return tools
@@ -180,7 +179,7 @@ class MCPServerRegistry:
 
         try:
             tools = await client.list_tools()
-            self._tool_cache[server_id] = (tools, datetime.now(timezone.utc))
+            self._tool_cache[server_id] = (tools, datetime.now(UTC))
             logger.info(f"Synced {len(tools)} tools from server {server_id}")
             return tools
         except Exception as e:
@@ -219,7 +218,7 @@ class MCPServerRegistry:
                 result[server_id] = []
         return result
 
-    async def call_tool(self, server_id: str, tool_name: str, arguments: dict) -> Any:  # noqa: ANN401
+    async def call_tool(self, server_id: str, tool_name: str, arguments: dict) -> Any:
         """
         Call a tool on a registered MCP server.
 
@@ -263,14 +262,14 @@ class MCPServerRegistry:
         try:
             # Use ping() for lightweight health check
             is_healthy = await client.ping()
-            self._health_status[server_id] = (is_healthy, datetime.now(timezone.utc))
+            self._health_status[server_id] = (is_healthy, datetime.now(UTC))
             return is_healthy
         except Exception as e:
             logger.error(f"Health check failed for server {server_id}: {e}")
-            self._health_status[server_id] = (False, datetime.now(timezone.utc))
+            self._health_status[server_id] = (False, datetime.now(UTC))
             return False
 
-    def get_health_status(self, server_id: str) -> Optional[tuple[bool, datetime]]:
+    def get_health_status(self, server_id: str) -> tuple[bool, datetime] | None:
         """
         Get cached health status for a server.
 
@@ -328,7 +327,7 @@ class MCPServerRegistry:
                 # Verify connection with health check using ping
                 if await client.ping():
                     logger.info(f"Successfully reconnected to server {server_id}")
-                    self._health_status[server_id] = (True, datetime.now(timezone.utc))
+                    self._health_status[server_id] = (True, datetime.now(UTC))
                     return
             except Exception as e:
                 logger.error(f"Reconnect attempt {attempt + 1} failed for {server_id}: {e}")
@@ -337,7 +336,7 @@ class MCPServerRegistry:
         logger.error(
             f"Failed to reconnect to server {server_id} after {self.max_reconnect_attempts} attempts"
         )
-        self._health_status[server_id] = (False, datetime.now(timezone.utc))
+        self._health_status[server_id] = (False, datetime.now(UTC))
 
     # =========================================================================
     # Logging Level Control (Priority 1)
@@ -377,7 +376,7 @@ class MCPServerRegistry:
     # Roots Management (Priority 1)
     # =========================================================================
 
-    async def add_root(self, uri: str, name: Optional[str] = None) -> None:
+    async def add_root(self, uri: str, name: str | None = None) -> None:
         """
         Add a root directory that servers can access.
 
@@ -460,7 +459,7 @@ class MCPServerRegistry:
         message: str,
         requested_schema: dict,
         timeout_seconds: float = 300.0,
-    ) -> Optional[dict]:
+    ) -> dict | None:
         """
         Handle an elicitation request from an MCP server.
 
@@ -495,7 +494,7 @@ class MCPServerRegistry:
             logger.info(f"Elicitation request from {server_id} fulfilled")
             return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"Elicitation request from {server_id} timed out")
             return None
         except Exception as e:
@@ -540,7 +539,7 @@ class MCPServerRegistry:
         self,
         server_id: str,
         prompt_name: str,
-        arguments: Optional[dict] = None,
+        arguments: dict | None = None,
     ) -> dict:
         """
         Get a specific prompt from a registered MCP server.

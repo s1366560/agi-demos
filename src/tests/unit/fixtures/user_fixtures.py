@@ -5,8 +5,8 @@ Provides builder pattern for creating test User instances with sensible defaults
 and the ability to customize specific fields.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict
+from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from src.domain.model.auth import User
@@ -20,7 +20,7 @@ class UserTestDataBuilder:
         email: str = "test@example.com",
         name: str = "Test User",
         password_hash: str = "hashed_password_123",
-    ):
+    ) -> None:
         """Initialize builder with default values."""
         self._email = email
         self._name = name
@@ -53,12 +53,12 @@ class UserTestDataBuilder:
         self._is_active = False
         return self
 
-    def with_profile(self, profile: Dict[str, Any]) -> "UserTestDataBuilder":
+    def with_profile(self, profile: dict[str, Any]) -> "UserTestDataBuilder":
         """Set custom profile data."""
         self._profile = profile
         return self
 
-    def add_profile_field(self, key: str, value: Any) -> "UserTestDataBuilder":  # noqa: ANN401
+    def add_profile_field(self, key: str, value: Any) -> "UserTestDataBuilder":
         """Add a single profile field."""
         self._profile[key] = value
         return self
@@ -72,7 +72,7 @@ class UserTestDataBuilder:
             password_hash=self._password_hash,
             is_active=self._is_active,
             profile=self._profile.copy(),
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
 

@@ -5,7 +5,6 @@ avoiding the need for a new database table or Alembic migration.
 """
 
 import logging
-from typing import Optional
 
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,7 +26,7 @@ class SqlContextSummaryAdapter(ContextSummaryPort):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    async def get_summary(self, conversation_id: str) -> Optional[ContextSummary]:
+    async def get_summary(self, conversation_id: str) -> ContextSummary | None:
         """Load cached context summary from conversation metadata."""
         from sqlalchemy import select
 

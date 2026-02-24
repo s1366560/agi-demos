@@ -6,9 +6,10 @@
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from ..config import AgentInstanceConfig
 from ..instance import AgentInstance, ChatRequest
@@ -26,12 +27,12 @@ class WorkerSlot:
     """
 
     slot_id: int
-    instance: Optional[AgentInstance] = None
-    project_key: Optional[str] = None  # tenant_id:project_id:agent_mode
+    instance: AgentInstance | None = None
+    project_key: str | None = None  # tenant_id:project_id:agent_mode
 
     # 使用统计
-    assigned_at: Optional[datetime] = None
-    last_used_at: Optional[datetime] = None
+    assigned_at: datetime | None = None
+    last_used_at: datetime | None = None
     request_count: int = 0
 
     def is_free(self) -> bool:
@@ -42,11 +43,11 @@ class WorkerSlot:
         """分配实例到槽位."""
         self.instance = instance
         self.project_key = instance.config.instance_key
-        self.assigned_at = datetime.now(timezone.utc)
-        self.last_used_at = datetime.now(timezone.utc)
+        self.assigned_at = datetime.now(UTC)
+        self.last_used_at = datetime.now(UTC)
         self.request_count = 0
 
-    def release(self) -> Optional[AgentInstance]:
+    def release(self) -> AgentInstance | None:
         """释放槽位."""
         instance = self.instance
         self.instance = None
@@ -56,7 +57,7 @@ class WorkerSlot:
 
     def touch(self) -> None:
         """更新使用时间."""
-        self.last_used_at = datetime.now(timezone.utc)
+        self.last_used_at = datetime.now(UTC)
         self.request_count += 1
 
 
@@ -85,7 +86,7 @@ class SharedPoolBackend(Backend):
     - 负载均衡分配新请求
     """
 
-    def __init__(self, config: Optional[SharedPoolConfig] = None):
+    def __init__(self, config: SharedPoolConfig | None = None) -> None:
         """初始化共享池后端.
 
         Args:
@@ -94,12 +95,12 @@ class SharedPoolBackend(Backend):
         self.config = config or SharedPoolConfig()
 
         # Worker槽位
-        self._slots: List[WorkerSlot] = [
+        self._slots: list[WorkerSlot] = [
             WorkerSlot(slot_id=i) for i in range(self.config.pool_size)
         ]
 
         # 项目到槽位的映射
-        self._project_slots: Dict[str, int] = {}
+        self._project_slots: dict[str, int] = {}
 
         # 锁
         self._lock = asyncio.Lock()
@@ -304,7 +305,7 @@ class SharedPoolBackend(Backend):
     async def get_instance(
         self,
         instance_id: str,
-    ) -> Optional[AgentInstance]:
+    ) -> AgentInstance | None:
         """获取实例.
 
         Args:
@@ -323,7 +324,7 @@ class SharedPoolBackend(Backend):
         tenant_id: str,
         project_id: str,
         agent_mode: str = "default",
-    ) -> Optional[AgentInstance]:
+    ) -> AgentInstance | None:
         """按项目获取实例.
 
         Args:
@@ -341,7 +342,7 @@ class SharedPoolBackend(Backend):
             return slot.instance
         return None
 
-    async def list_instances(self) -> List[AgentInstance]:
+    async def list_instances(self) -> list[AgentInstance]:
         """列出所有实例.
 
         Returns:
@@ -353,7 +354,7 @@ class SharedPoolBackend(Backend):
         self,
         instance_id: str,
         request: ChatRequest,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """在实例上执行请求.
 
         Args:
@@ -398,7 +399,7 @@ class SharedPoolBackend(Backend):
 
         return await instance.health_check()
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """获取后端统计信息.
 
         Returns:

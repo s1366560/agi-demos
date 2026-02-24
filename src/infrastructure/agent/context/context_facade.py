@@ -14,7 +14,7 @@ Follows Facade pattern to reduce coupling with infrastructure details.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.ports.agent.context_manager_port import (
     CompressionStrategy,
@@ -44,13 +44,13 @@ class ContextFacadeConfig:
     """Configuration for context facade."""
 
     # Message builder config
-    message_builder: Optional[MessageBuilderConfig] = None
+    message_builder: MessageBuilderConfig | None = None
 
     # Attachment injector config
-    attachment_injector: Optional[AttachmentInjectorConfig] = None
+    attachment_injector: AttachmentInjectorConfig | None = None
 
     # Context window config
-    context_window: Optional[ContextWindowConfig] = None
+    context_window: ContextWindowConfig | None = None
 
     # Debug logging
     debug_logging: bool = False
@@ -80,11 +80,11 @@ class ContextFacade(ContextManagerPort):
 
     def __init__(
         self,
-        config: Optional[ContextFacadeConfig] = None,
-        message_builder: Optional[MessageBuilder] = None,
-        attachment_injector: Optional[AttachmentInjector] = None,
-        window_manager: Optional[ContextWindowManager] = None,
-    ):
+        config: ContextFacadeConfig | None = None,
+        message_builder: MessageBuilder | None = None,
+        attachment_injector: AttachmentInjector | None = None,
+        window_manager: ContextWindowManager | None = None,
+    ) -> None:
         """
         Initialize context facade.
 
@@ -260,7 +260,7 @@ class ContextFacade(ContextManagerPort):
         """
         return self._window_manager.estimate_tokens(text)
 
-    def estimate_message_tokens(self, message: Dict[str, Any]) -> int:
+    def estimate_message_tokens(self, message: dict[str, Any]) -> int:
         """
         Estimate token count for a message.
 
@@ -272,7 +272,7 @@ class ContextFacade(ContextManagerPort):
         """
         return self._window_manager.estimate_message_tokens(message)
 
-    def estimate_messages_tokens(self, messages: List[Dict[str, Any]]) -> int:
+    def estimate_messages_tokens(self, messages: list[dict[str, Any]]) -> int:
         """
         Estimate total tokens for messages.
 
@@ -287,9 +287,9 @@ class ContextFacade(ContextManagerPort):
     def build_simple_context(
         self,
         system_prompt: str,
-        conversation: List[Dict[str, Any]],
+        conversation: list[dict[str, Any]],
         user_message: str,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Build context without compression (synchronous).
 
@@ -317,8 +317,8 @@ class ContextFacade(ContextManagerPort):
 
     def update_config(
         self,
-        max_context_tokens: Optional[int] = None,
-        max_output_tokens: Optional[int] = None,
+        max_context_tokens: int | None = None,
+        max_output_tokens: int | None = None,
     ) -> None:
         """
         Update context window configuration.

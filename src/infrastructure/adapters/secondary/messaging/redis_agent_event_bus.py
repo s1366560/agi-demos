@@ -14,8 +14,9 @@ Features:
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from typing import Any
 
 import redis.asyncio as redis
 
@@ -50,9 +51,9 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
     def __init__(
         self,
         redis_client: redis.Redis,
-        stream_prefix: Optional[str] = None,
-        default_max_len: Optional[int] = None,
-    ):
+        stream_prefix: str | None = None,
+        default_max_len: int | None = None,
+    ) -> None:
         """
         Initialize the Redis Agent Event Bus adapter.
 
@@ -78,7 +79,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
         conversation_id: str,
         message_id: str,
         event_type: AgentEventType,
-        data: Dict[str, Any],
+        data: dict[str, Any],
         event_time_us: int,
         event_counter: int,
     ) -> str:
@@ -91,7 +92,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
             "event_counter": event_counter,
             "event_type": event_type.value,
             "data": json.dumps(data, default=str),
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "conversation_id": conversation_id,
             "message_id": message_id,
         }
@@ -126,7 +127,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
         message_id: str,
         from_time_us: int = 0,
         from_counter: int = 0,
-        timeout_ms: Optional[int] = None,
+        timeout_ms: int | None = None,
     ) -> AsyncIterator[AgentEvent]:
         """Subscribe to events for a message."""
         stream_key = self._get_stream_key(conversation_id, message_id)
@@ -159,7 +160,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                         return
                     continue
 
-                for stream_name, messages in streams:
+                for _stream_name, messages in streams:
                     for msg_id, fields in messages:
                         event = self._parse_stream_message(msg_id, fields)
                         if event and (
@@ -197,10 +198,10 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
         message_id: str,
         from_time_us: int = 0,
         from_counter: int = 0,
-        to_time_us: Optional[int] = None,
-        to_counter: Optional[int] = None,
+        to_time_us: int | None = None,
+        to_counter: int | None = None,
         limit: int = 100,
-    ) -> List[AgentEvent]:
+    ) -> list[AgentEvent]:
         """Get events in a range (non-blocking)."""
         stream_key = self._get_stream_key(conversation_id, message_id)
         events = []
@@ -251,7 +252,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
             if not result:
                 return (0, 0)
 
-            msg_id, fields = result[0]
+            _msg_id, fields = result[0]
             time_us = fields.get(b"event_time_us") or fields.get("event_time_us")
             counter = fields.get(b"event_counter") or fields.get("event_counter")
             return (int(time_us) if time_us else 0, int(counter) if counter else 0)
@@ -278,7 +279,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 json.dumps(
                     {
                         "status": "complete",
-                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                        "completed_at": datetime.now(UTC).isoformat(),
                     }
                 ),
             )
@@ -324,7 +325,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
     # Private helper methods
     # =========================================================================
 
-    def _parse_stream_message(self, msg_id: Any, fields: Dict[Any, Any]) -> Optional[AgentEvent]:  # noqa: ANN401
+    def _parse_stream_message(self, msg_id: Any, fields: dict[Any, Any]) -> AgentEvent | None:
         """Parse a raw Redis stream message into AgentEvent."""
         try:
             # Decode message ID
@@ -332,7 +333,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 msg_id = msg_id.decode("utf-8")
 
             # Helper to get field value
-            def get_field(key: str) -> Any:  # noqa: ANN401
+            def get_field(key: str) -> Any:
                 return fields.get(key.encode()) if key.encode() in fields else fields.get(key)
 
             sequence = get_field("event_time_us")
@@ -384,7 +385,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 event_counter=counter,
                 event_type=AgentEventType(event_type) if event_type else AgentEventType.THOUGHT,
                 data=data,
-                timestamp=(datetime.fromisoformat(timestamp) if timestamp else datetime.now(timezone.utc)),
+                timestamp=(datetime.fromisoformat(timestamp) if timestamp else datetime.now(UTC)),
                 message_id=message_id,
                 conversation_id=conversation_id,
             )
@@ -414,7 +415,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
 
     async def get_stream_info(
         self, conversation_id: str, message_id: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get stream information for debugging."""
         stream_key = self._get_stream_key(conversation_id, message_id)
 
@@ -430,7 +431,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
 # Factory function
 def create_redis_agent_event_bus(
     redis_client: redis.Redis,
-    stream_prefix: Optional[str] = None,
+    stream_prefix: str | None = None,
 ) -> RedisAgentEventBusAdapter:
     """
     Create a RedisAgentEventBusAdapter instance.

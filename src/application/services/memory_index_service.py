@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from src.infrastructure.memory.chunker import TextChunk, chunk_text
 
@@ -32,7 +32,7 @@ class MemoryIndexService:
         self,
         chunk_repo: SqlChunkRepository,
         embedding_service: EmbeddingService,
-    ):
+    ) -> None:
         self._chunk_repo = chunk_repo
         self._embedding = embedding_service
 
@@ -165,7 +165,7 @@ class MemoryIndexService:
 
         # Batch embedding
         texts = [c.text for c in new_chunks]
-        embeddings: list[Optional[list[float]]] = [None] * len(texts)
+        embeddings: list[list[float] | None] = [None] * len(texts)
         try:
             if hasattr(self._embedding, "embed_batch"):
                 embeddings = await self._embedding.embed_batch(texts)

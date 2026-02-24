@@ -10,9 +10,10 @@ uniform handling of both System (local) and Sandbox (container) environments.
 
 import logging
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from src.domain.events.agent_events import (
     AgentActEvent,
@@ -43,9 +44,9 @@ class SkillExecutionResult:
     skill_name: str
     success: bool
     result: Any
-    tool_results: List[Dict[str, Any]]
+    tool_results: list[dict[str, Any]]
     execution_time_ms: int
-    error: Optional[str] = None
+    error: str | None = None
 
 
 class SkillExecutor:
@@ -62,16 +63,16 @@ class SkillExecutor:
 
     def __init__(
         self,
-        tools: Dict[str, Any],  # Tool name -> Tool definition with execute method
-        skill_resource_port: Optional[SkillResourcePort] = None,
+        tools: dict[str, Any],  # Tool name -> Tool definition with execute method
+        skill_resource_port: SkillResourcePort | None = None,
         # Legacy support - will be removed in future version
         resource_injector: Optional["SkillResourceInjector"] = None,
         sandbox_adapter: Optional["SandboxPort"] = None,
         # Context for resource operations
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-        project_path: Optional[Path] = None,
-    ):
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+        project_path: Path | None = None,
+    ) -> None:
         """
         Initialize skill executor.
 
@@ -98,8 +99,8 @@ class SkillExecutor:
         self,
         skill: Skill,
         query: str,
-        context: Optional[Dict[str, Any]] = None,
-        sandbox_id: Optional[str] = None,
+        context: dict[str, Any] | None = None,
+        sandbox_id: str | None = None,
     ) -> AsyncIterator[AgentDomainEvent]:
         """
         Execute a skill by running its tool composition.
@@ -233,7 +234,7 @@ class SkillExecutor:
     async def _sync_skill_resources(
         self,
         skill: Skill,
-        sandbox_id: Optional[str] = None,
+        sandbox_id: str | None = None,
     ) -> None:
         """
         Synchronize SKILL resources to execution environment.
@@ -332,12 +333,12 @@ class SkillExecutor:
 
         return "\n".join(tool_descs)
 
-    def get_resource_port(self) -> Optional[SkillResourcePort]:
+    def get_resource_port(self) -> SkillResourcePort | None:
         """Get the configured SkillResourcePort."""
         return self._skill_resource_port
 
     @property
-    def environment(self) -> Optional[ResourceEnvironment]:
+    def environment(self) -> ResourceEnvironment | None:
         """Get the current resource environment type."""
         if self._skill_resource_port:
             return self._skill_resource_port.environment

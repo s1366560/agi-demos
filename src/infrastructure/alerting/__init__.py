@@ -14,8 +14,8 @@ from src.infrastructure.alerting.slack_alert_service import SlackAlertService
 
 __all__ = [
     "Alert",
-    "AlertSeverity",
     "AlertServicePort",
+    "AlertSeverity",
     "CompositeAlertServicePort",
     "NullAlertService",
     "SlackAlertService",

@@ -1,6 +1,6 @@
 """DI sub-container for project domain."""
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,9 +24,9 @@ class ProjectContainer:
 
     def __init__(
         self,
-        db: Optional[AsyncSession] = None,
-        user_repository_factory: Optional[Callable[[], UserRepository]] = None,
-        tenant_repository_factory: Optional[Callable[[], TenantRepository]] = None,
+        db: AsyncSession | None = None,
+        user_repository_factory: Callable[[], UserRepository] | None = None,
+        tenant_repository_factory: Callable[[], TenantRepository] | None = None,
     ) -> None:
         self._db = db
         self._user_repository_factory = user_repository_factory

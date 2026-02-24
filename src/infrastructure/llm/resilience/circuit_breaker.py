@@ -27,10 +27,10 @@ Example:
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ class CircuitBreakerConfig:
     half_open_max_requests: int = 3
 
     # Optional callback when state changes
-    on_state_change: Optional[Callable[[str, CircuitState, CircuitState], None]] = None
+    on_state_change: Callable[[str, CircuitState, CircuitState], None] | None = None
 
 
 @dataclass
@@ -72,9 +72,9 @@ class CircuitBreakerStats:
     failed_requests: int = 0
     rejected_requests: int = 0
     state_changes: int = 0
-    last_failure_time: Optional[datetime] = None
-    last_success_time: Optional[datetime] = None
-    last_state_change: Optional[datetime] = None
+    last_failure_time: datetime | None = None
+    last_success_time: datetime | None = None
+    last_state_change: datetime | None = None
 
 
 class CircuitBreaker:
@@ -88,8 +88,8 @@ class CircuitBreaker:
     def __init__(
         self,
         provider_id: str,
-        config: Optional[CircuitBreakerConfig] = None,
-    ):
+        config: CircuitBreakerConfig | None = None,
+    ) -> None:
         """
         Initialize circuit breaker for a provider.
 
@@ -104,8 +104,8 @@ class CircuitBreaker:
         self._failure_count = 0
         self._success_count = 0
         self._half_open_requests = 0
-        self._last_failure_time: Optional[datetime] = None
-        self._last_state_change = datetime.now(timezone.utc)
+        self._last_failure_time: datetime | None = None
+        self._last_state_change = datetime.now(UTC)
         self._stats = CircuitBreakerStats()
         self._lock = asyncio.Lock()
 
@@ -151,7 +151,7 @@ class CircuitBreaker:
         """Record a successful request."""
         self._stats.total_requests += 1
         self._stats.successful_requests += 1
-        self._stats.last_success_time = datetime.now(timezone.utc)
+        self._stats.last_success_time = datetime.now(UTC)
 
         if self._state == CircuitState.HALF_OPEN:
             self._success_count += 1
@@ -166,7 +166,7 @@ class CircuitBreaker:
         async with self._lock:
             self.record_success()
 
-    def record_failure(self, error: Optional[Exception] = None) -> None:
+    def record_failure(self, error: Exception | None = None) -> None:
         """
         Record a failed request.
 
@@ -175,8 +175,8 @@ class CircuitBreaker:
         """
         self._stats.total_requests += 1
         self._stats.failed_requests += 1
-        self._stats.last_failure_time = datetime.now(timezone.utc)
-        self._last_failure_time = datetime.now(timezone.utc)
+        self._stats.last_failure_time = datetime.now(UTC)
+        self._last_failure_time = datetime.now(UTC)
 
         if self._state == CircuitState.HALF_OPEN:
             # Any failure in half-open immediately opens circuit
@@ -190,7 +190,7 @@ class CircuitBreaker:
                     f"after {self._failure_count} consecutive failures"
                 )
 
-    async def record_failure_async(self, error: Optional[Exception] = None) -> None:
+    async def record_failure_async(self, error: Exception | None = None) -> None:
         """Thread-safe version of record_failure."""
         async with self._lock:
             self.record_failure(error)
@@ -212,7 +212,7 @@ class CircuitBreaker:
         """Check if state should transition based on timeouts."""
         if self._state == CircuitState.OPEN:
             if self._last_failure_time:
-                time_since_failure = datetime.now(timezone.utc) - self._last_failure_time
+                time_since_failure = datetime.now(UTC) - self._last_failure_time
                 if time_since_failure >= self.config.recovery_timeout:
                     self._transition_to(CircuitState.HALF_OPEN)
                     logger.info(
@@ -227,7 +227,7 @@ class CircuitBreaker:
             return
 
         self._state = new_state
-        self._last_state_change = datetime.now(timezone.utc)
+        self._last_state_change = datetime.now(UTC)
         self._stats.state_changes += 1
         self._stats.last_state_change = self._last_state_change
 
@@ -284,7 +284,7 @@ class CircuitBreakerRegistry:
     Provides a centralized way to get/create circuit breakers for providers.
     """
 
-    def __init__(self, default_config: Optional[CircuitBreakerConfig] = None):
+    def __init__(self, default_config: CircuitBreakerConfig | None = None) -> None:
         """
         Initialize the registry.
 
@@ -298,7 +298,7 @@ class CircuitBreakerRegistry:
     def get(
         self,
         provider_type,
-        config: Optional[CircuitBreakerConfig] = None,
+        config: CircuitBreakerConfig | None = None,
     ) -> CircuitBreaker:
         """
         Get or create a circuit breaker for a provider type.
@@ -320,7 +320,7 @@ class CircuitBreakerRegistry:
     def get_breaker(
         self,
         provider_id: str,
-        config: Optional[CircuitBreakerConfig] = None,
+        config: CircuitBreakerConfig | None = None,
     ) -> CircuitBreaker:
         """
         Get or create a circuit breaker for a provider.
@@ -342,7 +342,7 @@ class CircuitBreakerRegistry:
     async def get_breaker_async(
         self,
         provider_id: str,
-        config: Optional[CircuitBreakerConfig] = None,
+        config: CircuitBreakerConfig | None = None,
     ) -> CircuitBreaker:
         """Thread-safe version of get_breaker."""
         async with self._lock:
@@ -359,7 +359,7 @@ class CircuitBreakerRegistry:
 
 
 # Global registry instance
-_circuit_breaker_registry: Optional[CircuitBreakerRegistry] = None
+_circuit_breaker_registry: CircuitBreakerRegistry | None = None
 
 
 def get_circuit_breaker_registry() -> CircuitBreakerRegistry:

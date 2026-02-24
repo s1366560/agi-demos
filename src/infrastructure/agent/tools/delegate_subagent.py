@@ -18,7 +18,8 @@ import inspect
 import json
 import logging
 import time
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
 from src.infrastructure.agent.tools.base import AgentTool
@@ -56,14 +57,14 @@ class DelegateSubAgentTool(AgentTool):
 
     def __init__(
         self,
-        subagent_names: List[str],
-        subagent_descriptions: Dict[str, str],
+        subagent_names: list[str],
+        subagent_descriptions: dict[str, str],
         execute_callback: Callable[..., Coroutine[Any, Any, str]],
-        run_registry: Optional[SubAgentRunRegistry] = None,
-        conversation_id: Optional[str] = None,
+        run_registry: SubAgentRunRegistry | None = None,
+        conversation_id: str | None = None,
         delegation_depth: int = 0,
-        max_active_runs: Optional[int] = None,
-    ):
+        max_active_runs: int | None = None,
+    ) -> None:
         """Initialize delegation tool.
 
         Args:
@@ -85,19 +86,19 @@ class DelegateSubAgentTool(AgentTool):
         self._subagent_descriptions = subagent_descriptions
         self._execute_fn = execute_callback
         self._supports_on_event = _supports_on_event_arg(execute_callback)
-        self._pending_events: List[Dict[str, Any]] = []
+        self._pending_events: list[dict[str, Any]] = []
         self._run_registry = run_registry
         self._conversation_id = conversation_id
         self._delegation_depth = delegation_depth
         self._max_active_runs = max_active_runs if max_active_runs and max_active_runs > 0 else None
 
-    def consume_pending_events(self) -> List[Dict[str, Any]]:
+    def consume_pending_events(self) -> list[dict[str, Any]]:
         """Consume and return pending streaming events from last execute()."""
         events = list(self._pending_events)
         self._pending_events.clear()
         return events
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get parameters schema for LLM function calling."""
         return {
             "type": "object",
@@ -145,7 +146,7 @@ class DelegateSubAgentTool(AgentTool):
         self._pending_events.clear()
         started_at = time.time()
 
-        run_id: Optional[str] = None
+        run_id: str | None = None
         if self._run_registry and self._conversation_id:
             active_runs = self._run_registry.count_active_runs(self._conversation_id)
             if self._max_active_runs is not None and active_runs >= self._max_active_runs:
@@ -220,15 +221,15 @@ class ParallelDelegateSubAgentTool(AgentTool):
 
     def __init__(
         self,
-        subagent_names: List[str],
-        subagent_descriptions: Dict[str, str],
+        subagent_names: list[str],
+        subagent_descriptions: dict[str, str],
         execute_callback: Callable[..., Coroutine[Any, Any, str]],
         max_concurrency: int = 5,
-        run_registry: Optional[SubAgentRunRegistry] = None,
-        conversation_id: Optional[str] = None,
+        run_registry: SubAgentRunRegistry | None = None,
+        conversation_id: str | None = None,
         delegation_depth: int = 0,
-        max_active_runs: Optional[int] = None,
-    ):
+        max_active_runs: int | None = None,
+    ) -> None:
         """Initialize parallel delegation tool.
 
         Args:
@@ -253,19 +254,19 @@ class ParallelDelegateSubAgentTool(AgentTool):
         self._execute_fn = execute_callback
         self._supports_on_event = _supports_on_event_arg(execute_callback)
         self._max_concurrency = max_concurrency
-        self._pending_events: List[Dict[str, Any]] = []
+        self._pending_events: list[dict[str, Any]] = []
         self._run_registry = run_registry
         self._conversation_id = conversation_id
         self._delegation_depth = delegation_depth
         self._max_active_runs = max_active_runs if max_active_runs and max_active_runs > 0 else None
 
-    def consume_pending_events(self) -> List[Dict[str, Any]]:
+    def consume_pending_events(self) -> list[dict[str, Any]]:
         """Consume and return pending streaming events from last execute()."""
         events = list(self._pending_events)
         self._pending_events.clear()
         return events
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get parameters schema for LLM function calling."""
         return {
             "type": "object",
@@ -297,7 +298,7 @@ class ParallelDelegateSubAgentTool(AgentTool):
             "required": ["tasks"],
         }
 
-    async def execute(self, tasks: Any = None, **kwargs) -> str:  # noqa: ANN401
+    async def execute(self, tasks: Any = None, **kwargs) -> str:
         """Execute parallel delegation to multiple SubAgents.
 
         Args:
@@ -336,7 +337,7 @@ class ParallelDelegateSubAgentTool(AgentTool):
                 return f"Error: task[{i}] is missing 'task' description"
 
         task_count = len(tasks)
-        run_ids_by_index: Dict[int, str] = {}
+        run_ids_by_index: dict[int, str] = {}
 
         if self._run_registry and self._conversation_id:
             active_runs = self._run_registry.count_active_runs(self._conversation_id)
@@ -372,7 +373,7 @@ class ParallelDelegateSubAgentTool(AgentTool):
         # Create semaphore for concurrency control
         semaphore = asyncio.Semaphore(self._max_concurrency)
 
-        async def _run_one(index: int, item: Dict[str, Any]) -> Dict[str, Any]:
+        async def _run_one(index: int, item: dict[str, Any]) -> dict[str, Any]:
             name = item["subagent_name"]
             task_desc = item["task"]
             subtask_start = time.time()

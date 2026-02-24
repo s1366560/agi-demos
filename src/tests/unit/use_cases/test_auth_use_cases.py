@@ -2,7 +2,7 @@
 Unit tests for Auth use cases.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -70,7 +70,7 @@ class TestCreateAPIKeyUseCase:
         assert plain_key == "ms_sk_test_key_123"
         assert api_key.expires_at is not None
         # Check expiration is approximately 30 days from now
-        expected_expiration = datetime.now(timezone.utc) + timedelta(days=30)
+        expected_expiration = datetime.now(UTC) + timedelta(days=30)
         assert (
             abs((api_key.expires_at - expected_expiration).total_seconds()) < 5
         )  # 5 seconds tolerance

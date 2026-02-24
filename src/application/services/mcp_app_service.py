@@ -5,7 +5,7 @@ resource resolution, tool call proxying, and status management.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.model.mcp.app import (
     MCPApp,
@@ -37,8 +37,8 @@ class MCPAppService:
         server_id: str,
         server_name: str,
         tenant_id: str,
-        tools: List[Dict[str, Any]],
-    ) -> List[MCPApp]:
+        tools: list[dict[str, Any]],
+    ) -> list[MCPApp]:
         """Sync discovered tools to MCPApps.
 
         Wrapper around detect_apps_from_tools for use by MCPRuntimeService.
@@ -58,9 +58,9 @@ class MCPAppService:
         project_id: str,
         tenant_id: str,
         server_name: str,
-        tools: List[Dict[str, Any]],
+        tools: list[dict[str, Any]],
         source: MCPAppSource = MCPAppSource.USER_ADDED,
-    ) -> List[MCPApp]:
+    ) -> list[MCPApp]:
         """Scan discovered tools for _meta.ui.resourceUri and register as MCPApps.
 
         This is called after SandboxMCPServerManager.discover_tools() to
@@ -195,11 +195,11 @@ class MCPAppService:
             await self._app_repo.save(app)
             raise
 
-    async def get_app(self, app_id: str) -> Optional[MCPApp]:
+    async def get_app(self, app_id: str) -> MCPApp | None:
         """Get an MCP App by ID."""
         return await self._app_repo.find_by_id(app_id)
 
-    async def get_app_by_server_and_tool(self, server_id: str, tool_name: str) -> Optional[MCPApp]:
+    async def get_app_by_server_and_tool(self, server_id: str, tool_name: str) -> MCPApp | None:
         """Get an MCP App by server and tool name."""
         return await self._app_repo.find_by_server_and_tool(server_id, tool_name)
 
@@ -207,7 +207,7 @@ class MCPAppService:
         self,
         project_id: str,
         include_disabled: bool = False,
-    ) -> List[MCPApp]:
+    ) -> list[MCPApp]:
         """List all MCP Apps for a project."""
         return await self._app_repo.find_by_project(project_id, include_disabled)
 
@@ -215,11 +215,11 @@ class MCPAppService:
         self,
         tenant_id: str,
         include_disabled: bool = False,
-    ) -> List[MCPApp]:
+    ) -> list[MCPApp]:
         """List all MCP Apps for a tenant (across all projects)."""
         return await self._app_repo.find_by_tenant(tenant_id, include_disabled)
 
-    async def list_ready_apps(self, project_id: str) -> List[MCPApp]:
+    async def list_ready_apps(self, project_id: str) -> list[MCPApp]:
         """List all ready-to-render MCP Apps for a project."""
         return await self._app_repo.find_ready_by_project(project_id)
 
@@ -242,7 +242,7 @@ class MCPAppService:
             logger.info("Disabled %d apps for server %s", count, server_id)
         return count
 
-    async def disable_app(self, app_id: str) -> Optional[MCPApp]:
+    async def disable_app(self, app_id: str) -> MCPApp | None:
         """Disable an MCP App."""
         app = await self._app_repo.find_by_id(app_id)
         if not app:
@@ -267,7 +267,7 @@ class MCPAppService:
         app_id: str,
         resource_uri: str,
         html_content: str,
-    ) -> Optional[MCPApp]:
+    ) -> MCPApp | None:
         """Persist agent-generated HTML to an MCPApp record, marking it READY.
 
         Called from the agent execution layer when the agent emits

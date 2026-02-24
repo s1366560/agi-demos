@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.agent.tools.base import AgentTool
 
@@ -36,9 +36,9 @@ class SandboxMCPServerToolAdapter(AgentTool):
         sandbox_adapter: MCPSandboxAdapter,
         sandbox_id: str,
         server_name: str,
-        tool_info: Dict[str, Any],
+        tool_info: dict[str, Any],
         cache_ttl_seconds: float = 60.0,
-    ):
+    ) -> None:
         """Initialize the adapter.
 
         Args:
@@ -76,8 +76,8 @@ class SandboxMCPServerToolAdapter(AgentTool):
 
         # Resource HTML caching
         self._cache_ttl_seconds = cache_ttl_seconds
-        self._cached_html: Optional[str] = None
-        self._cache_fetched_at: Optional[float] = None
+        self._cached_html: str | None = None
+        self._cache_fetched_at: float | None = None
         self._cache_stats = {
             "hits": 0,
             "misses": 0,
@@ -103,11 +103,11 @@ class SandboxMCPServerToolAdapter(AgentTool):
         )
 
     @property
-    def parameters(self) -> Dict[str, Any]:
+    def parameters(self) -> dict[str, Any]:
         return self._input_schema
 
     @property
-    def ui_metadata(self) -> Optional[Dict[str, Any]]:
+    def ui_metadata(self) -> dict[str, Any] | None:
         """Get MCP App UI metadata if this tool declares an interactive UI."""
         return self._ui_metadata
 
@@ -187,7 +187,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
         """
         import asyncio
 
-        async def _prefetch():
+        async def _prefetch() -> None:
             try:
                 await self.fetch_resource_html()
                 logger.debug("Prefetched resource HTML for %s", self.resource_uri)
@@ -201,7 +201,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
             # No event loop available, skip prefetch
             pass
 
-    def get_cache_stats(self) -> Dict[str, Any]:
+    def get_cache_stats(self) -> dict[str, Any]:
         """Get cache statistics.
 
         Returns:
@@ -209,7 +209,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
         """
         return dict(self._cache_stats)
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         if not self._input_schema:
             return {"type": "object", "properties": {}, "required": []}
 
@@ -222,7 +222,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
             schema["required"] = []
         return schema
 
-    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str:
         """Execute the tool by proxying through sandbox's mcp_server_call_tool."""
         logger.info("Executing sandbox MCP tool: %s", self._name)
 

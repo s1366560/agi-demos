@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import inspect
 import logging
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from threading import RLock
-from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-PluginToolFactory = Callable[["PluginToolBuildContext"], Dict[str, Any] | Awaitable[Dict[str, Any]]]
+PluginToolFactory = Callable[["PluginToolBuildContext"], dict[str, Any] | Awaitable[dict[str, Any]]]
 ChannelReloadHook = Callable[["ChannelReloadContext"], None | Awaitable[None]]
 ChannelAdapterFactory = Callable[["ChannelAdapterBuildContext"], Any | Awaitable[Any]]
 PluginHookHandler = Callable[[Mapping[str, Any]], None | Awaitable[None]]
@@ -23,14 +24,14 @@ class PluginToolBuildContext:
 
     tenant_id: str
     project_id: str
-    base_tools: Dict[str, Any]
+    base_tools: dict[str, Any]
 
 
 @dataclass(frozen=True)
 class ChannelReloadContext:
     """Reload context passed to plugin channel reload hooks."""
 
-    plan_summary: Dict[str, int]
+    plan_summary: dict[str, int]
     dry_run: bool
 
 
@@ -49,10 +50,10 @@ class ChannelTypeConfigMetadata:
 
     plugin_name: str
     channel_type: str
-    config_schema: Optional[Dict[str, Any]] = None
-    config_ui_hints: Optional[Dict[str, Any]] = None
-    defaults: Optional[Dict[str, Any]] = None
-    secret_paths: List[str] = field(default_factory=list)
+    config_schema: dict[str, Any] | None = None
+    config_ui_hints: dict[str, Any] | None = None
+    defaults: dict[str, Any] | None = None
+    secret_paths: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -69,14 +70,14 @@ class AgentPluginRegistry:
     """Registry for plugin-provided capabilities."""
 
     def __init__(self) -> None:
-        self._tool_factories: Dict[str, PluginToolFactory] = {}
-        self._channel_reload_hooks: Dict[str, ChannelReloadHook] = {}
-        self._channel_adapter_factories: Dict[str, tuple[str, ChannelAdapterFactory]] = {}
-        self._channel_type_metadata: Dict[str, ChannelTypeConfigMetadata] = {}
-        self._hook_handlers: Dict[str, Dict[str, PluginHookHandler]] = {}
-        self._commands: Dict[str, tuple[str, PluginCommandHandler]] = {}
-        self._services: Dict[str, tuple[str, Any]] = {}
-        self._providers: Dict[str, tuple[str, Any]] = {}
+        self._tool_factories: dict[str, PluginToolFactory] = {}
+        self._channel_reload_hooks: dict[str, ChannelReloadHook] = {}
+        self._channel_adapter_factories: dict[str, tuple[str, ChannelAdapterFactory]] = {}
+        self._channel_type_metadata: dict[str, ChannelTypeConfigMetadata] = {}
+        self._hook_handlers: dict[str, dict[str, PluginHookHandler]] = {}
+        self._commands: dict[str, tuple[str, PluginCommandHandler]] = {}
+        self._services: dict[str, tuple[str, Any]] = {}
+        self._providers: dict[str, tuple[str, Any]] = {}
         self._lock = RLock()
 
     def register_tool_factory(
@@ -113,10 +114,10 @@ class AgentPluginRegistry:
         channel_type: str,
         factory: ChannelAdapterFactory,
         *,
-        config_schema: Optional[Dict[str, Any]] = None,
-        config_ui_hints: Optional[Dict[str, Any]] = None,
-        defaults: Optional[Dict[str, Any]] = None,
-        secret_paths: Optional[List[str]] = None,
+        config_schema: dict[str, Any] | None = None,
+        config_ui_hints: dict[str, Any] | None = None,
+        defaults: dict[str, Any] | None = None,
+        secret_paths: list[str] | None = None,
         overwrite: bool = False,
     ) -> None:
         """Register a plugin-provided channel adapter factory."""
@@ -188,7 +189,7 @@ class AgentPluginRegistry:
         self,
         plugin_name: str,
         service_name: str,
-        service: Any,  # noqa: ANN401
+        service: Any,
         *,
         overwrite: bool = False,
     ) -> None:
@@ -209,7 +210,7 @@ class AgentPluginRegistry:
         self,
         plugin_name: str,
         provider_name: str,
-        provider: Any,  # noqa: ANN401
+        provider: Any,
         *,
         overwrite: bool = False,
     ) -> None:
@@ -226,39 +227,39 @@ class AgentPluginRegistry:
                 )
             self._providers[normalized_name] = (plugin_name, provider)
 
-    def list_tool_factories(self) -> Dict[str, PluginToolFactory]:
+    def list_tool_factories(self) -> dict[str, PluginToolFactory]:
         """Return a snapshot of registered tool factories."""
         with self._lock:
             return dict(self._tool_factories)
 
-    def list_channel_adapter_factories(self) -> Dict[str, tuple[str, ChannelAdapterFactory]]:
+    def list_channel_adapter_factories(self) -> dict[str, tuple[str, ChannelAdapterFactory]]:
         """Return a snapshot of channel adapter factories keyed by channel_type."""
         with self._lock:
             return dict(self._channel_adapter_factories)
 
-    def list_channel_type_metadata(self) -> Dict[str, ChannelTypeConfigMetadata]:
+    def list_channel_type_metadata(self) -> dict[str, ChannelTypeConfigMetadata]:
         """Return channel configuration metadata keyed by channel_type."""
         with self._lock:
             return dict(self._channel_type_metadata)
 
-    def list_hooks(self) -> Dict[str, Dict[str, PluginHookHandler]]:
+    def list_hooks(self) -> dict[str, dict[str, PluginHookHandler]]:
         """Return registered hook handlers grouped by hook name."""
         with self._lock:
             return {
                 hook_name: dict(handlers) for hook_name, handlers in self._hook_handlers.items()
             }
 
-    def list_commands(self) -> Dict[str, tuple[str, PluginCommandHandler]]:
+    def list_commands(self) -> dict[str, tuple[str, PluginCommandHandler]]:
         """Return command handlers keyed by command name."""
         with self._lock:
             return dict(self._commands)
 
-    def list_services(self) -> Dict[str, tuple[str, Any]]:
+    def list_services(self) -> dict[str, tuple[str, Any]]:
         """Return registered services keyed by service name."""
         with self._lock:
             return dict(self._services)
 
-    def list_providers(self) -> Dict[str, tuple[str, Any]]:
+    def list_providers(self) -> dict[str, tuple[str, Any]]:
         """Return registered providers keyed by provider name."""
         with self._lock:
             return dict(self._providers)
@@ -267,8 +268,8 @@ class AgentPluginRegistry:
         self,
         hook_name: str,
         *,
-        payload: Optional[Mapping[str, Any]] = None,
-    ) -> List[PluginDiagnostic]:
+        payload: Mapping[str, Any] | None = None,
+    ) -> list[PluginDiagnostic]:
         """Invoke named hook handlers and collect diagnostics."""
         normalized_name = (hook_name or "").strip().lower()
         if not normalized_name:
@@ -277,7 +278,7 @@ class AgentPluginRegistry:
         with self._lock:
             handlers = dict(self._hook_handlers.get(normalized_name, {}))
 
-        diagnostics: List[PluginDiagnostic] = []
+        diagnostics: list[PluginDiagnostic] = []
         for plugin_name, handler in handlers.items():
             try:
                 result = handler(dict(payload or {}))
@@ -298,8 +299,8 @@ class AgentPluginRegistry:
         self,
         command_name: str,
         *,
-        payload: Optional[Mapping[str, Any]] = None,
-    ) -> tuple[Any, List[PluginDiagnostic]]:
+        payload: Mapping[str, Any] | None = None,
+    ) -> tuple[Any, list[PluginDiagnostic]]:
         """Execute one registered plugin command."""
         normalized_name = (command_name or "").strip().lower()
         if not normalized_name:
@@ -311,7 +312,7 @@ class AgentPluginRegistry:
             return None, []
 
         plugin_name, handler = command_entry
-        diagnostics: List[PluginDiagnostic] = []
+        diagnostics: list[PluginDiagnostic] = []
         try:
             result = handler(dict(payload or {}))
             if inspect.isawaitable(result):
@@ -328,7 +329,7 @@ class AgentPluginRegistry:
             )
             return None, diagnostics
 
-    def get_service(self, service_name: str) -> Any:  # noqa: ANN401
+    def get_service(self, service_name: str) -> Any:
         """Get a service by name if registered."""
         normalized_name = (service_name or "").strip().lower()
         if not normalized_name:
@@ -339,7 +340,7 @@ class AgentPluginRegistry:
             return None
         return service_entry[1]
 
-    def get_provider(self, provider_name: str) -> Any:  # noqa: ANN401
+    def get_provider(self, provider_name: str) -> Any:
         """Get a provider by name if registered."""
         normalized_name = (provider_name or "").strip().lower()
         if not normalized_name:
@@ -353,11 +354,11 @@ class AgentPluginRegistry:
     async def build_tools(
         self,
         context: PluginToolBuildContext,
-    ) -> tuple[Dict[str, Any], List[PluginDiagnostic]]:
+    ) -> tuple[dict[str, Any], list[PluginDiagnostic]]:
         """Build plugin-provided tools for the given context."""
         tool_factories = self.list_tool_factories()
-        diagnostics: List[PluginDiagnostic] = []
-        plugin_tools: Dict[str, Any] = {}
+        diagnostics: list[PluginDiagnostic] = []
+        plugin_tools: dict[str, Any] = {}
 
         for plugin_name, factory in tool_factories.items():
             try:
@@ -409,14 +410,14 @@ class AgentPluginRegistry:
     async def notify_channel_reload(
         self,
         *,
-        plan_summary: Dict[str, int],
+        plan_summary: dict[str, int],
         dry_run: bool,
-    ) -> List[PluginDiagnostic]:
+    ) -> list[PluginDiagnostic]:
         """Notify registered plugins about channel reload planning/execution."""
         with self._lock:
             hooks = dict(self._channel_reload_hooks)
 
-        diagnostics: List[PluginDiagnostic] = []
+        diagnostics: list[PluginDiagnostic] = []
         context = ChannelReloadContext(plan_summary=dict(plan_summary), dry_run=dry_run)
         for plugin_name, hook in hooks.items():
             try:
@@ -438,7 +439,7 @@ class AgentPluginRegistry:
     async def build_channel_adapter(
         self,
         context: ChannelAdapterBuildContext,
-    ) -> tuple[Any | None, List[PluginDiagnostic]]:
+    ) -> tuple[Any | None, list[PluginDiagnostic]]:
         """Build a channel adapter from plugin factory for the requested channel_type."""
         channel_type = (context.channel_type or "").strip().lower()
         if not channel_type:
@@ -451,7 +452,7 @@ class AgentPluginRegistry:
             return None, []
 
         plugin_name, factory = factory_entry
-        diagnostics: List[PluginDiagnostic] = []
+        diagnostics: list[PluginDiagnostic] = []
         try:
             adapter = factory(context)
             if inspect.isawaitable(adapter):

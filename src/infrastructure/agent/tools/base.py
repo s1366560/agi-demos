@@ -33,7 +33,7 @@ class AgentTool(AgentToolBase):
         name: str,
         description: str,
         max_output_bytes: int = MAX_OUTPUT_BYTES,
-    ):
+    ) -> None:
         """Initialize the tool.
 
         Args:
@@ -56,7 +56,7 @@ class AgentTool(AgentToolBase):
         """Get the tool description."""
         return self._description
 
-    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str:
         """Execute the tool with the given arguments.
 
         Args:

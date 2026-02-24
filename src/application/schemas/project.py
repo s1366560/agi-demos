@@ -1,7 +1,7 @@
 """Project data models."""
 
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -40,7 +40,7 @@ class LocalSandboxConfigSchema(BaseModel):
         default="/workspace",
         description="Path to workspace directory on user's local machine",
     )
-    tunnel_url: Optional[str] = Field(
+    tunnel_url: str | None = Field(
         default=None,
         description="WebSocket tunnel URL for NAT traversal (e.g., wss://xxx.ngrok.io)",
     )
@@ -66,7 +66,7 @@ class SandboxConfigSchema(BaseModel):
         default="cloud",
         description="Type of sandbox: 'cloud' for server-managed Docker, 'local' for user's machine",
     )
-    local_config: Optional[LocalSandboxConfigSchema] = Field(
+    local_config: LocalSandboxConfigSchema | None = Field(
         default=None,
         description="Configuration for local sandbox (required when sandbox_type is 'local')",
     )
@@ -88,7 +88,7 @@ class ProjectCreate(BaseModel):
     """Request model for creating a project."""
 
     name: str = Field(..., description="Project name", min_length=1, max_length=255)
-    description: Optional[str] = Field(
+    description: str | None = Field(
         default=None, description="Project description", max_length=1000
     )
     tenant_id: str = Field(..., description="Tenant ID")
@@ -133,18 +133,18 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     """Request model for updating a project."""
 
-    name: Optional[str] = Field(
+    name: str | None = Field(
         default=None, description="Project name", min_length=1, max_length=255
     )
-    description: Optional[str] = Field(
+    description: str | None = Field(
         default=None, description="Project description", max_length=1000
     )
-    memory_rules: Optional[MemoryRulesConfig] = Field(default=None, description="Memory rules")
-    graph_config: Optional[GraphConfig] = Field(default=None, description="Graph configuration")
-    sandbox_config: Optional[SandboxConfigSchema] = Field(
+    memory_rules: MemoryRulesConfig | None = Field(default=None, description="Memory rules")
+    graph_config: GraphConfig | None = Field(default=None, description="Graph configuration")
+    sandbox_config: SandboxConfigSchema | None = Field(
         default=None, description="Sandbox configuration"
     )
-    is_public: Optional[bool] = Field(default=None, description="Whether the project is public")
+    is_public: bool | None = Field(default=None, description="Whether the project is public")
 
     model_config = ConfigDict(
         json_schema_extra={
@@ -205,11 +205,11 @@ class ProjectStats(BaseModel):
         default=0, description="Number of collaborators (alias for member_count)"
     )
     active_nodes: int = Field(default=0, description="Number of active nodes in last 7 days")
-    last_active: Optional[datetime] = Field(default=None, description="Last activity timestamp")
-    system_status: Optional[SystemStatus] = Field(
+    last_active: datetime | None = Field(default=None, description="Last activity timestamp")
+    system_status: SystemStatus | None = Field(
         default=None, description="System status information"
     )
-    recent_activity: Optional[List[dict]] = Field(
+    recent_activity: list[dict] | None = Field(
         default_factory=list, description="Recent activity feed"
     )
 
@@ -220,9 +220,9 @@ class ProjectResponse(BaseModel):
     id: str = Field(..., description="Project unique identifier")
     tenant_id: str = Field(..., description="Tenant ID")
     name: str = Field(..., description="Project name")
-    description: Optional[str] = Field(default=None, description="Project description")
+    description: str | None = Field(default=None, description="Project description")
     owner_id: str = Field(..., description="Owner user ID")
-    member_ids: List[str] = Field(default_factory=list, description="Member user IDs")
+    member_ids: list[str] = Field(default_factory=list, description="Member user IDs")
     memory_rules: MemoryRulesConfig = Field(
         default_factory=MemoryRulesConfig, description="Memory rules"
     )
@@ -234,8 +234,8 @@ class ProjectResponse(BaseModel):
     )
     is_public: bool = Field(default=False, description="Whether the project is public")
     created_at: datetime = Field(..., description="Creation timestamp")
-    updated_at: Optional[datetime] = Field(default=None, description="Last update timestamp")
-    stats: Optional[ProjectStats] = Field(default=None, description="Project statistics")
+    updated_at: datetime | None = Field(default=None, description="Last update timestamp")
+    stats: ProjectStats | None = Field(default=None, description="Project statistics")
 
     model_config = ConfigDict(
         from_attributes=True,

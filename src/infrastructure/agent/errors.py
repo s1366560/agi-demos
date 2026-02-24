@@ -5,9 +5,9 @@ enabling consistent error handling and better error reporting.
 """
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class ErrorSeverity(Enum):
@@ -34,13 +34,13 @@ class ErrorCategory(Enum):
 class ErrorContext:
     """Context information for an error."""
     operation: str
-    sandbox_id: Optional[str] = None
-    conversation_id: Optional[str] = None
-    user_id: Optional[str] = None
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    details: Dict[str, Any] = field(default_factory=dict)
+    sandbox_id: str | None = None
+    conversation_id: str | None = None
+    user_id: str | None = None
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    details: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert context to dictionary."""
         return {
             "operation": self.operation,
@@ -63,8 +63,8 @@ class AgentError(Exception):
         message: str,
         category: ErrorCategory = ErrorCategory.INTERNAL,
         severity: ErrorSeverity = ErrorSeverity.ERROR,
-        context: Optional[ErrorContext] = None,
-        cause: Optional[Exception] = None,
+        context: ErrorContext | None = None,
+        cause: Exception | None = None,
     ) -> None:
         """Initialize the agent error.
 
@@ -82,7 +82,7 @@ class AgentError(Exception):
         self.context = context or ErrorContext(operation="unknown")
         self.cause = cause
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert error to dictionary for API responses."""
         return {
             "error_type": self.__class__.__name__,
@@ -108,9 +108,9 @@ class AgentValidationError(AgentError):
     def __init__(
         self,
         message: str,
-        field: Optional[str] = None,
-        value: Optional[Any] = None,  # noqa: ANN401
-        context: Optional[ErrorContext] = None,
+        field: str | None = None,
+        value: Any | None = None,
+        context: ErrorContext | None = None,
     ) -> None:
         super().__init__(
             message=message,
@@ -121,7 +121,7 @@ class AgentValidationError(AgentError):
         self.field = field
         self.value = value
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary with field info."""
         data = super().to_dict()
         if self.field:
@@ -137,10 +137,10 @@ class AgentExecutionError(AgentError):
     def __init__(
         self,
         message: str,
-        step: Optional[str] = None,
-        tool_name: Optional[str] = None,
-        context: Optional[ErrorContext] = None,
-        cause: Optional[Exception] = None,
+        step: str | None = None,
+        tool_name: str | None = None,
+        context: ErrorContext | None = None,
+        cause: Exception | None = None,
     ) -> None:
         super().__init__(
             message=message,
@@ -159,9 +159,9 @@ class AgentPermissionError(AgentError):
     def __init__(
         self,
         message: str,
-        action: Optional[str] = None,
-        resource: Optional[str] = None,
-        context: Optional[ErrorContext] = None,
+        action: str | None = None,
+        resource: str | None = None,
+        context: ErrorContext | None = None,
     ) -> None:
         super().__init__(
             message=message,
@@ -179,9 +179,9 @@ class AgentResourceError(AgentError):
     def __init__(
         self,
         message: str,
-        resource_type: Optional[str] = None,
+        resource_type: str | None = None,
         retryable: bool = True,
-        context: Optional[ErrorContext] = None,
+        context: ErrorContext | None = None,
     ) -> None:
         super().__init__(
             message=message,
@@ -199,10 +199,10 @@ class AgentCommunicationError(AgentError):
     def __init__(
         self,
         message: str,
-        service: Optional[str] = None,
-        status_code: Optional[int] = None,
-        context: Optional[ErrorContext] = None,
-        cause: Optional[Exception] = None,
+        service: str | None = None,
+        status_code: int | None = None,
+        context: ErrorContext | None = None,
+        cause: Exception | None = None,
     ) -> None:
         super().__init__(
             message=message,
@@ -221,9 +221,9 @@ class AgentTimeoutError(AgentError):
     def __init__(
         self,
         message: str,
-        timeout_seconds: Optional[float] = None,
-        operation: Optional[str] = None,
-        context: Optional[ErrorContext] = None,
+        timeout_seconds: float | None = None,
+        operation: str | None = None,
+        context: ErrorContext | None = None,
     ) -> None:
         super().__init__(
             message=message,
@@ -241,9 +241,9 @@ class AgentInternalError(AgentError):
     def __init__(
         self,
         message: str,
-        component: Optional[str] = None,
-        context: Optional[ErrorContext] = None,
-        cause: Optional[Exception] = None,
+        component: str | None = None,
+        context: ErrorContext | None = None,
+        cause: Exception | None = None,
     ) -> None:
         super().__init__(
             message=message,
@@ -255,16 +255,16 @@ class AgentInternalError(AgentError):
         self._component = component
 
     @property
-    def component(self) -> Optional[str]:
+    def component(self) -> str | None:
         """Get the component name."""
         return self._component
 
 
 def wrap_error(
     error: Exception,
-    message: Optional[str] = None,
-    category: Optional[ErrorCategory] = None,
-    context: Optional[ErrorContext] = None,
+    message: str | None = None,
+    category: ErrorCategory | None = None,
+    context: ErrorContext | None = None,
 ) -> AgentError:
     """Wrap a generic exception into an AgentError.
 

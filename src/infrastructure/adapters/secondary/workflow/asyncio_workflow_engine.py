@@ -7,8 +7,8 @@ using the existing TaskManager for lifecycle tracking.
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from src.domain.ports.services.workflow_engine_port import (
     WorkflowEnginePort,
@@ -45,12 +45,12 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
 
     def __init__(
         self,
-        manager: Optional[TaskManager] = None,
+        manager: TaskManager | None = None,
         max_concurrent: int = 50,
     ) -> None:
         self._manager = manager or task_manager
         self._semaphore = asyncio.Semaphore(max_concurrent)
-        self._workflow_handlers: Dict[str, Any] = {}
+        self._workflow_handlers: dict[str, Any] = {}
 
     def register_handler(self, workflow_name: str, handler) -> None:
         """Register an async handler function for a workflow name."""
@@ -60,10 +60,10 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
         self,
         workflow_name: str,
         workflow_id: str,
-        input_data: Dict[str, Any],
+        input_data: dict[str, Any],
         task_queue: str,
         timeout_seconds: int = 3600,
-        metadata: Optional[Dict[str, str]] = None,
+        metadata: dict[str, str] | None = None,
     ) -> WorkflowExecution:
         run_id = str(uuid.uuid4())
 
@@ -93,7 +93,7 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
             workflow_id=workflow_id,
             run_id=run_id,
             status=WorkflowStatus.RUNNING,
-            started_at=datetime.now(timezone.utc),
+            started_at=datetime.now(UTC),
         )
 
     async def get_workflow_status(self, workflow_id: str) -> WorkflowExecution:
@@ -109,7 +109,7 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
 
     async def get_workflow_result(
         self, workflow_id: str, timeout_seconds: int = 30
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         task = self._manager.get_task(workflow_id)
         if not task:
             return {"status": "not_found"}
@@ -122,17 +122,17 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
         return {"result": task.result, "error": task.error}
 
     async def cancel_workflow(
-        self, workflow_id: str, reason: Optional[str] = None
+        self, workflow_id: str, reason: str | None = None
     ) -> bool:
         return await self._manager.cancel_task(workflow_id)
 
     async def terminate_workflow(
-        self, workflow_id: str, reason: Optional[str] = None
+        self, workflow_id: str, reason: str | None = None
     ) -> bool:
         return await self._manager.cancel_task(workflow_id)
 
     async def signal_workflow(
-        self, workflow_id: str, signal_name: str, payload: Dict[str, Any]
+        self, workflow_id: str, signal_name: str, payload: dict[str, Any]
     ) -> bool:
         logger.debug(
             f"Signal '{signal_name}' to workflow {workflow_id} "
@@ -142,8 +142,8 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
 
     async def list_workflows(
         self,
-        task_queue: Optional[str] = None,
-        status: Optional[WorkflowStatus] = None,
+        task_queue: str | None = None,
+        status: WorkflowStatus | None = None,
         limit: int = 100,
     ) -> list[WorkflowExecution]:
         results = []

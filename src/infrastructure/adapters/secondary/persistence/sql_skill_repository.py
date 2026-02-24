@@ -22,7 +22,6 @@ Key Features:
 """
 
 import logging
-from typing import List, Optional
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,7 +87,7 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
 
         return skill
 
-    async def get_by_id(self, skill_id: str) -> Optional[Skill]:
+    async def get_by_id(self, skill_id: str) -> Skill | None:
         """Get a skill by its ID."""
         return await self.find_by_id(skill_id)
 
@@ -96,8 +95,8 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
         self,
         tenant_id: str,
         name: str,
-        scope: Optional[SkillScope] = None,
-    ) -> Optional[Skill]:
+        scope: SkillScope | None = None,
+    ) -> Skill | None:
         """Get a skill by name within a tenant."""
         query = select(DBSkill).where(DBSkill.tenant_id == tenant_id).where(DBSkill.name == name)
 
@@ -150,11 +149,11 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
     async def list_by_tenant(
         self,
         tenant_id: str,
-        status: Optional[SkillStatus] = None,
-        scope: Optional[SkillScope] = None,
+        status: SkillStatus | None = None,
+        scope: SkillScope | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> List[Skill]:
+    ) -> list[Skill]:
         """List all skills for a tenant."""
         query = select(DBSkill).where(DBSkill.tenant_id == tenant_id)
 
@@ -174,9 +173,9 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
     async def list_by_project(
         self,
         project_id: str,
-        status: Optional[SkillStatus] = None,
-        scope: Optional[SkillScope] = None,
-    ) -> List[Skill]:
+        status: SkillStatus | None = None,
+        scope: SkillScope | None = None,
+    ) -> list[Skill]:
         """List all skills for a specific project."""
         query = select(DBSkill).where(DBSkill.project_id == project_id)
 
@@ -199,7 +198,7 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
         query: str,
         threshold: float = 0.5,
         limit: int = 5,
-    ) -> List[Skill]:
+    ) -> list[Skill]:
         """Find skills that match a query."""
         # Get all active skills for the tenant
         skills = await self.list_by_tenant(tenant_id, status=SkillStatus.ACTIVE, limit=100)
@@ -231,8 +230,8 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
     async def count_by_tenant(
         self,
         tenant_id: str,
-        status: Optional[SkillStatus] = None,
-        scope: Optional[SkillScope] = None,
+        status: SkillStatus | None = None,
+        scope: SkillScope | None = None,
     ) -> int:
         """Count skills for a tenant."""
         query = select(func.count(DBSkill.id)).where(DBSkill.tenant_id == tenant_id)
@@ -248,7 +247,7 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
 
     # === Conversion methods ===
 
-    def _to_domain(self, db_skill: Optional[DBSkill]) -> Optional[Skill]:
+    def _to_domain(self, db_skill: DBSkill | None) -> Skill | None:
         """Convert database model to domain entity."""
         if db_skill is None:
             return None

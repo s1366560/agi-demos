@@ -1,7 +1,7 @@
 """Tests for ReActAgent execution-path and selection integration."""
 
 from types import SimpleNamespace
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -14,10 +14,10 @@ class _MockTool:
         self.name = name
         self.description = description
 
-    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str:
         return "ok"
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {"type": "object", "properties": {}}
 
 

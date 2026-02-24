@@ -101,7 +101,7 @@ class TestMCPServerRegistryPingHealthCheck:
         # Verify health status was updated
         status = registry.get_health_status("test-server")
         assert status is not None
-        is_healthy, last_check = status
+        is_healthy, _last_check = status
         assert is_healthy is True
 
     async def test_health_check_status_updated_on_failure(self, registry, mock_client_with_ping):
@@ -118,7 +118,7 @@ class TestMCPServerRegistryPingHealthCheck:
         # Verify health status was updated to unhealthy
         status = registry.get_health_status("test-server")
         assert status is not None
-        is_healthy, last_check = status
+        is_healthy, _last_check = status
         assert is_healthy is False
 
 

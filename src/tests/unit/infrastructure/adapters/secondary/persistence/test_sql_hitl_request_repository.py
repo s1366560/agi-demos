@@ -2,7 +2,7 @@
 Tests for V2 SqlHITLRequestRepository using BaseRepository.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,8 +44,8 @@ def make_hitl_request(
         status=HITLRequestStatus.PENDING,
         response=None,
         response_metadata=None,
-        created_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        created_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
         answered_at=None,
     )
 
@@ -99,7 +99,7 @@ class TestSqlHITLRequestRepositoryFind:
         """Test getting pending HITL requests excludes expired ones."""
         # Create expired request
         expired_request = make_hitl_request("hitl-exp-1", "conv-exp-1")
-        expired_request.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        expired_request.expires_at = datetime.now(UTC) - timedelta(minutes=1)
         await v2_hitl_repo.create(expired_request)
 
         # Create valid request
@@ -194,10 +194,10 @@ class TestSqlHITLRequestRepositoryUtility:
         """Test marking expired requests."""
         # Create expired request
         request = make_hitl_request("hitl-mark-exp-1", "conv-1")
-        request.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        request.expires_at = datetime.now(UTC) - timedelta(minutes=1)
         await v2_hitl_repo.create(request)
 
-        count = await v2_hitl_repo.mark_expired_requests(datetime.now(timezone.utc))
+        count = await v2_hitl_repo.mark_expired_requests(datetime.now(UTC))
         assert count >= 1
 
 

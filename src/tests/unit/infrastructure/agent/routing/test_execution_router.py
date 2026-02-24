@@ -3,7 +3,7 @@
 Tests the routing logic for determining execution paths.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.infrastructure.agent.config import ExecutionConfig
 from src.infrastructure.agent.routing.execution_router import (
@@ -17,11 +17,11 @@ from src.infrastructure.agent.routing.execution_router import (
 class MockSkillMatcher:
     """Mock skill matcher for testing."""
 
-    def __init__(self, skills: Dict[str, bool]) -> None:
+    def __init__(self, skills: dict[str, bool]) -> None:
         """Initialize with skills and their direct execution capability."""
         self.skills = skills
 
-    def match(self, query: str, context: dict) -> Optional[str]:
+    def match(self, query: str, context: dict) -> str | None:
         """Match query to skill."""
         query_lower = query.lower()
         # Simple keyword matching for common tasks
@@ -45,11 +45,11 @@ class MockSkillMatcher:
 class MockSubAgentMatcher:
     """Mock sub-agent matcher for testing."""
 
-    def __init__(self, subagents: List[str]) -> None:
+    def __init__(self, subagents: list[str]) -> None:
         """Initialize with available sub-agents."""
         self.subagents = subagents
 
-    def match(self, query: str, context: dict) -> Optional[str]:
+    def match(self, query: str, context: dict) -> str | None:
         """Match query to sub-agent."""
         query_lower = query.lower()
         for subagent in self.subagents:
@@ -61,7 +61,7 @@ class MockSubAgentMatcher:
                 return subagent
         return None
 
-    def get_subagent(self, name: str) -> Any:  # noqa: ANN401
+    def get_subagent(self, name: str) -> Any:
         """Get sub-agent by name."""
         return f"SubAgent({name})"
 
@@ -69,7 +69,7 @@ class MockSubAgentMatcher:
 class MockPlanEvaluator:
     """Mock plan evaluator for testing."""
 
-    def __init__(self, plan_keywords: List[str] = None) -> None:
+    def __init__(self, plan_keywords: list[str] | None = None) -> None:
         """Initialize with keywords that trigger plan mode."""
         self.plan_keywords = plan_keywords or ["plan", "design", "architecture", "complex"]
 

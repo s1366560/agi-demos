@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from src.domain.model.auth.user import User
 
@@ -13,17 +12,17 @@ class UserRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_by_id(self, user_id: str) -> Optional[User]:
+    async def find_by_id(self, user_id: str) -> User | None:
         """Find a user by ID"""
         pass
 
     @abstractmethod
-    async def find_by_email(self, email: str) -> Optional[User]:
+    async def find_by_email(self, email: str) -> User | None:
         """Find a user by email address"""
         pass
 
     @abstractmethod
-    async def list_all(self, limit: int = 50, offset: int = 0) -> List[User]:
+    async def list_all(self, limit: int = 50, offset: int = 0) -> list[User]:
         """List all users with pagination"""
         pass
 

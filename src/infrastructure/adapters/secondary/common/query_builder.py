@@ -9,7 +9,8 @@ Provides a fluent interface for building SQLAlchemy queries with:
 - Type-safe query building
 """
 
-from typing import Any, Callable, Optional, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import DeclarativeBase
@@ -37,7 +38,7 @@ class QueryBuilder:
     def __init__(
         self,
         model_class: type[T],
-        query: Optional[Select[tuple[T]]] = None,
+        query: Select[tuple[T]] | None = None,
     ) -> None:
         """
         Initialize the query builder.
@@ -50,8 +51,8 @@ class QueryBuilder:
         self._query: Select[tuple[T]] = query if query is not None else select(model_class)
         self._where_conditions: list[ColumnElement] = []
         self._order_by_clauses: list = []
-        self._limit_value: Optional[int] = None
-        self._offset_value: Optional[int] = None
+        self._limit_value: int | None = None
+        self._offset_value: int | None = None
 
     @property
     def model_class(self) -> type[T]:
@@ -63,7 +64,7 @@ class QueryBuilder:
     def where_eq(
         self,
         column: str,
-        value: Any,  # noqa: ANN401
+        value: Any,
     ) -> "QueryBuilder[T]":
         """
         Add equality condition.
@@ -82,7 +83,7 @@ class QueryBuilder:
     def where_ne(
         self,
         column: str,
-        value: Any,  # noqa: ANN401
+        value: Any,
     ) -> "QueryBuilder[T]":
         """
         Add inequality condition.
@@ -177,7 +178,7 @@ class QueryBuilder:
     def where_gt(
         self,
         column: str,
-        value: Any,  # noqa: ANN401
+        value: Any,
     ) -> "QueryBuilder[T]":
         """
         Add greater than condition.
@@ -196,7 +197,7 @@ class QueryBuilder:
     def where_gte(
         self,
         column: str,
-        value: Any,  # noqa: ANN401
+        value: Any,
     ) -> "QueryBuilder[T]":
         """
         Add greater than or equal condition.
@@ -215,7 +216,7 @@ class QueryBuilder:
     def where_lt(
         self,
         column: str,
-        value: Any,  # noqa: ANN401
+        value: Any,
     ) -> "QueryBuilder[T]":
         """
         Add less than condition.
@@ -234,7 +235,7 @@ class QueryBuilder:
     def where_lte(
         self,
         column: str,
-        value: Any,  # noqa: ANN401
+        value: Any,
     ) -> "QueryBuilder[T]":
         """
         Add less than or equal condition.
@@ -253,8 +254,8 @@ class QueryBuilder:
     def where_between(
         self,
         column: str,
-        lower: Any,  # noqa: ANN401
-        upper: Any,  # noqa: ANN401
+        lower: Any,
+        upper: Any,
     ) -> "QueryBuilder[T]":
         """
         Add BETWEEN condition.
@@ -410,7 +411,7 @@ class QueryBuilder:
     def join(
         self,
         other_model: type,
-        on_clause: Any,  # noqa: ANN401
+        on_clause: Any,
         is_outer: bool = False,
     ) -> "QueryBuilder[T]":
         """

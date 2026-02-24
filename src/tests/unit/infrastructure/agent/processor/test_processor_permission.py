@@ -16,6 +16,7 @@ Fix:
 """
 
 import asyncio
+import contextlib
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -39,7 +40,7 @@ async def async_execute(name: str, **kwargs) -> str:
 def create_tool_def(
     name: str,
     description: str = "Test tool",
-    permission: str = None,
+    permission: str | None = None,
 ) -> ToolDefinition:
     """Helper to create a ToolDefinition."""
     return ToolDefinition(
@@ -223,10 +224,8 @@ class TestProcessorPermissionUsesHITLCoordinator:
 
             assert resolved is True
 
-            try:
+            with contextlib.suppress(StopAsyncIteration):
                 await execution_task
-            except StopAsyncIteration:
-                pass
 
     @pytest.mark.asyncio
     async def test_permission_denied_when_user_responds_deny(self):
@@ -304,7 +303,7 @@ class TestProcessorPermissionUsesHITLCoordinator:
         mock_coordinator.conversation_id = "conv-timeout"
         mock_coordinator.prepare_request = AsyncMock(return_value="perm_timeout")
         mock_coordinator.wait_for_response = AsyncMock(
-            side_effect=asyncio.TimeoutError("Permission timeout")
+            side_effect=TimeoutError("Permission timeout")
         )
 
         processor._hitl_coordinator = mock_coordinator

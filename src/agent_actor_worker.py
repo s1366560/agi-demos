@@ -1,6 +1,7 @@
 """Ray Actor worker entry point for Agent execution."""
 
 import asyncio
+import contextlib
 import logging
 
 from src.infrastructure.adapters.secondary.ray.client import init_ray_if_needed
@@ -35,7 +36,5 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    try:
+    with contextlib.suppress(KeyboardInterrupt):
         asyncio.run(main())
-    except KeyboardInterrupt:
-        pass

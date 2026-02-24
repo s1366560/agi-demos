@@ -5,10 +5,11 @@
 """
 
 import asyncio
+import contextlib
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from ..config import AgentInstanceConfig, ResourceQuota
 from ..instance import AgentInstance
@@ -47,12 +48,12 @@ class PrewarmedInstance:
     instance: AgentInstance
     tier: ProjectTier
     level: int  # 1, 2, or 3
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     ttl_seconds: int = 3600
 
     def is_expired(self) -> bool:
         """是否过期."""
-        elapsed = (datetime.now(timezone.utc) - self.created_at).total_seconds()
+        elapsed = (datetime.now(UTC) - self.created_at).total_seconds()
         return elapsed > self.ttl_seconds
 
 
@@ -62,8 +63,8 @@ class InstanceTemplate:
 
     tier: ProjectTier
     quota: ResourceQuota
-    config_template: Dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    config_template: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 class PrewarmPool:
@@ -77,7 +78,7 @@ class PrewarmPool:
     获取优先级: L1 > L2 > L3 > 新建
     """
 
-    def __init__(self, config: Optional[PrewarmConfig] = None):
+    def __init__(self, config: PrewarmConfig | None = None) -> None:
         """初始化预热池.
 
         Args:
@@ -86,28 +87,28 @@ class PrewarmPool:
         self.config = config or PrewarmConfig()
 
         # L1 池: 完整预热实例
-        self._l1_pool: Dict[ProjectTier, List[PrewarmedInstance]] = {
+        self._l1_pool: dict[ProjectTier, list[PrewarmedInstance]] = {
             ProjectTier.HOT: [],
             ProjectTier.WARM: [],
             ProjectTier.COLD: [],
         }
 
         # L2 池: 部分预热实例
-        self._l2_pool: Dict[ProjectTier, List[PrewarmedInstance]] = {
+        self._l2_pool: dict[ProjectTier, list[PrewarmedInstance]] = {
             ProjectTier.HOT: [],
             ProjectTier.WARM: [],
             ProjectTier.COLD: [],
         }
 
         # L3 池: 实例模板
-        self._l3_pool: List[InstanceTemplate] = []
+        self._l3_pool: list[InstanceTemplate] = []
 
         # 锁
         self._lock = asyncio.Lock()
 
         # 运行状态
         self._running = False
-        self._maintenance_task: Optional[asyncio.Task] = None
+        self._maintenance_task: asyncio.Task | None = None
 
         # 统计
         self._stats = {
@@ -142,27 +143,21 @@ class PrewarmPool:
         # 停止维护任务
         if self._maintenance_task:
             self._maintenance_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._maintenance_task
-            except asyncio.CancelledError:
-                pass
 
         # 清理所有预热实例
         async with self._lock:
             for tier_pool in self._l1_pool.values():
                 for prewarmed in tier_pool:
-                    try:
+                    with contextlib.suppress(Exception):
                         await prewarmed.instance.stop(graceful=False)
-                    except Exception:
-                        pass
                 tier_pool.clear()
 
             for tier_pool in self._l2_pool.values():
                 for prewarmed in tier_pool:
-                    try:
+                    with contextlib.suppress(Exception):
                         await prewarmed.instance.stop(graceful=False)
-                    except Exception:
-                        pass
                 tier_pool.clear()
 
             self._l3_pool.clear()
@@ -172,7 +167,7 @@ class PrewarmPool:
     async def get_prewarmed_instance(
         self,
         config: AgentInstanceConfig,
-    ) -> Optional[AgentInstance]:
+    ) -> AgentInstance | None:
         """获取预热实例.
 
         按优先级尝试: L1 > L2 > L3
@@ -214,7 +209,7 @@ class PrewarmPool:
         self,
         tier: ProjectTier,
         config: AgentInstanceConfig,
-    ) -> Optional[AgentInstance]:
+    ) -> AgentInstance | None:
         """从 L1 池获取.
 
         Args:
@@ -244,7 +239,7 @@ class PrewarmPool:
         self,
         tier: ProjectTier,
         config: AgentInstanceConfig,
-    ) -> Optional[AgentInstance]:
+    ) -> AgentInstance | None:
         """从 L2 池获取.
 
         Args:
@@ -270,7 +265,7 @@ class PrewarmPool:
         self,
         tier: ProjectTier,
         config: AgentInstanceConfig,
-    ) -> Optional[AgentInstance]:
+    ) -> AgentInstance | None:
         """从 L3 池获取模板并创建实例.
 
         Args:
@@ -373,10 +368,8 @@ class PrewarmPool:
                 expired = [p for p in pool if p.is_expired()]
                 for p in expired:
                     pool.remove(p)
-                    try:
+                    with contextlib.suppress(Exception):
                         await p.instance.stop(graceful=False)
-                    except Exception:
-                        pass
                     self._stats["total_expired"] += 1
 
                 # 清理 L2
@@ -384,10 +377,8 @@ class PrewarmPool:
                 expired = [p for p in pool if p.is_expired()]
                 for p in expired:
                     pool.remove(p)
-                    try:
+                    with contextlib.suppress(Exception):
                         await p.instance.stop(graceful=False)
-                    except Exception:
-                        pass
                     self._stats["total_expired"] += 1
 
     async def _replenish_pools(self) -> None:
@@ -406,7 +397,7 @@ class PrewarmPool:
                 )
                 # TODO: 触发预热创建
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """获取统计信息.
 
         Returns:

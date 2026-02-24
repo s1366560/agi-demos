@@ -15,7 +15,7 @@ Example:
         logger.error(f"Provider error: {e}")
 """
 
-from typing import Any, Optional
+from typing import Any
 
 
 class LLMError(Exception):
@@ -28,11 +28,11 @@ class LLMError(Exception):
     def __init__(
         self,
         message: str,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        request_id: Optional[str] = None,
-        **kwargs: Any,  # noqa: ANN401
-    ):
+        provider: str | None = None,
+        model: str | None = None,
+        request_id: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(message)
         self.message = message
         self.provider = provider
@@ -65,9 +65,9 @@ class ProviderError(LLMError):
     def __init__(
         self,
         message: str,
-        provider: Optional[str] = None,
-        **kwargs: Any,  # noqa: ANN401
-    ):
+        provider: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(message=message, provider=provider, **kwargs)
 
 
@@ -97,10 +97,10 @@ class RateLimitError(ProviderError):
     def __init__(
         self,
         message: str,
-        provider: Optional[str] = None,
-        retry_after: Optional[int] = None,
-        **kwargs: Any,  # noqa: ANN401
-    ):
+        provider: str | None = None,
+        retry_after: int | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(message=message, provider=provider, **kwargs)
         self.retry_after = retry_after  # Seconds to wait before retry
 
@@ -118,10 +118,10 @@ class CircuitBreakerOpenError(ProviderError):
     def __init__(
         self,
         message: str,
-        provider: Optional[str] = None,
-        reopen_after: Optional[float] = None,
-        **kwargs: Any,  # noqa: ANN401
-    ):
+        provider: str | None = None,
+        reopen_after: float | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(message=message, provider=provider, **kwargs)
         self.reopen_after = reopen_after  # Seconds until circuit breaker half-opens
 
@@ -153,10 +153,10 @@ class ModelError(LLMError):
     def __init__(
         self,
         message: str,
-        model: Optional[str] = None,
-        response: Optional[Any] = None,  # noqa: ANN401
-        **kwargs: Any,  # noqa: ANN401
-    ):
+        model: str | None = None,
+        response: Any | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(message=message, model=model, **kwargs)
         self.response = response
 
@@ -187,10 +187,10 @@ class JSONParseError(ModelError):
     def __init__(
         self,
         message: str,
-        raw_response: Optional[str] = None,
-        expected_schema: Optional[str] = None,
-        **kwargs: Any,  # noqa: ANN401
-    ):
+        raw_response: str | None = None,
+        expected_schema: str | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(message=message, **kwargs)
         self.raw_response = raw_response
         self.expected_schema = expected_schema
@@ -221,11 +221,11 @@ class ContextLengthExceededError(ModelError):
     def __init__(
         self,
         message: str,
-        model: Optional[str] = None,
-        input_tokens: Optional[int] = None,
-        max_tokens: Optional[int] = None,
-        **kwargs: Any,  # noqa: ANN401
-    ):
+        model: str | None = None,
+        input_tokens: int | None = None,
+        max_tokens: int | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(message=message, model=model, **kwargs)
         self.input_tokens = input_tokens
         self.max_tokens = max_tokens

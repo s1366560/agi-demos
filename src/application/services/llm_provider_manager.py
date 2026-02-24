@@ -76,7 +76,7 @@ class LLMProviderManager:
         circuit_breaker_registry: CircuitBreakerRegistry | None = None,
         rate_limiter: ProviderRateLimiter | None = None,
         health_checker: HealthChecker | None = None,
-    ):
+    ) -> None:
         """
         Initialize the provider manager.
 
@@ -165,7 +165,7 @@ class LLMProviderManager:
         preferred_provider: ProviderType | None = None,
         llm_config: LLMConfig | None = None,
         allow_fallback: bool = True,
-        **kwargs: Any,  # noqa: ANN401
+        **kwargs: Any,
     ) -> LLMClient:
         """
         Get an LLM client with automatic health checking and fallback.

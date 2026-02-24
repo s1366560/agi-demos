@@ -7,7 +7,8 @@ isolated tool access and custom system prompts.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from datetime import UTC
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -46,38 +47,38 @@ class SubAgentCreate(BaseModel):
     display_name: str = Field(..., min_length=1, max_length=200, description="Display name")
     system_prompt: str = Field(..., min_length=1, description="System prompt")
     trigger_description: str = Field(..., min_length=1, description="Trigger description")
-    trigger_examples: List[str] = Field(default_factory=list, description="Trigger examples")
-    trigger_keywords: List[str] = Field(default_factory=list, description="Trigger keywords")
+    trigger_examples: list[str] = Field(default_factory=list, description="Trigger examples")
+    trigger_keywords: list[str] = Field(default_factory=list, description="Trigger keywords")
     model: str = Field("inherit", description="LLM model: inherit, qwen-max, gpt-4, etc.")
     color: str = Field("blue", description="UI display color")
-    allowed_tools: List[str] = Field(default_factory=lambda: ["*"], description="Allowed tools")
-    allowed_skills: List[str] = Field(default_factory=list, description="Allowed skill IDs")
-    allowed_mcp_servers: List[str] = Field(default_factory=list, description="Allowed MCP servers")
+    allowed_tools: list[str] = Field(default_factory=lambda: ["*"], description="Allowed tools")
+    allowed_skills: list[str] = Field(default_factory=list, description="Allowed skill IDs")
+    allowed_mcp_servers: list[str] = Field(default_factory=list, description="Allowed MCP servers")
     max_tokens: int = Field(4096, ge=1, le=32768, description="Max tokens")
     temperature: float = Field(0.7, ge=0.0, le=2.0, description="Temperature")
     max_iterations: int = Field(10, ge=1, le=50, description="Max ReAct iterations")
-    project_id: Optional[str] = Field(None, description="Optional project ID")
-    metadata: Optional[Dict[str, Any]] = Field(None, description="Optional metadata")
+    project_id: str | None = Field(None, description="Optional project ID")
+    metadata: dict[str, Any] | None = Field(None, description="Optional metadata")
 
 
 class SubAgentUpdate(BaseModel):
     """Schema for updating a subagent."""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=100)
-    display_name: Optional[str] = Field(None, min_length=1, max_length=200)
-    system_prompt: Optional[str] = Field(None, min_length=1)
-    trigger_description: Optional[str] = Field(None)
-    trigger_examples: Optional[List[str]] = Field(None)
-    trigger_keywords: Optional[List[str]] = Field(None)
-    model: Optional[str] = Field(None)
-    color: Optional[str] = Field(None)
-    allowed_tools: Optional[List[str]] = Field(None)
-    allowed_skills: Optional[List[str]] = Field(None)
-    allowed_mcp_servers: Optional[List[str]] = Field(None)
-    max_tokens: Optional[int] = Field(None, ge=1, le=32768)
-    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
-    max_iterations: Optional[int] = Field(None, ge=1, le=50)
-    metadata: Optional[Dict[str, Any]] = Field(None)
+    name: str | None = Field(None, min_length=1, max_length=100)
+    display_name: str | None = Field(None, min_length=1, max_length=200)
+    system_prompt: str | None = Field(None, min_length=1)
+    trigger_description: str | None = Field(None)
+    trigger_examples: list[str] | None = Field(None)
+    trigger_keywords: list[str] | None = Field(None)
+    model: str | None = Field(None)
+    color: str | None = Field(None)
+    allowed_tools: list[str] | None = Field(None)
+    allowed_skills: list[str] | None = Field(None)
+    allowed_mcp_servers: list[str] | None = Field(None)
+    max_tokens: int | None = Field(None, ge=1, le=32768)
+    temperature: float | None = Field(None, ge=0.0, le=2.0)
+    max_iterations: int | None = Field(None, ge=1, le=50)
+    metadata: dict[str, Any] | None = Field(None)
 
 
 class SubAgentResponse(BaseModel):
@@ -85,16 +86,16 @@ class SubAgentResponse(BaseModel):
 
     id: str
     tenant_id: str
-    project_id: Optional[str]
+    project_id: str | None
     name: str
     display_name: str
     system_prompt: str
-    trigger: Dict[str, Any]
+    trigger: dict[str, Any]
     model: str
     color: str
-    allowed_tools: List[str]
-    allowed_skills: List[str]
-    allowed_mcp_servers: List[str]
+    allowed_tools: list[str]
+    allowed_skills: list[str]
+    allowed_mcp_servers: list[str]
     max_tokens: int
     temperature: float
     max_iterations: int
@@ -104,15 +105,15 @@ class SubAgentResponse(BaseModel):
     success_rate: float
     created_at: str
     updated_at: str
-    metadata: Optional[Dict[str, Any]]
+    metadata: dict[str, Any] | None
     source: str = "database"
-    file_path: Optional[str] = None
+    file_path: str | None = None
 
 
 class SubAgentListResponse(BaseModel):
     """Schema for subagent list response."""
 
-    subagents: List[SubAgentResponse]
+    subagents: list[SubAgentResponse]
     total: int
 
 
@@ -125,7 +126,7 @@ class SubAgentMatchRequest(BaseModel):
 class SubAgentMatchResponse(BaseModel):
     """Schema for subagent match response."""
 
-    subagent: Optional[SubAgentResponse]
+    subagent: SubAgentResponse | None
     confidence: float
 
 
@@ -134,44 +135,44 @@ class TemplateCreate(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=200)
     version: str = Field("1.0.0", max_length=20)
-    display_name: Optional[str] = Field(None, max_length=200)
-    description: Optional[str] = None
+    display_name: str | None = Field(None, max_length=200)
+    description: str | None = None
     category: str = Field("general", max_length=100)
-    tags: List[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
     system_prompt: str = Field(..., min_length=1)
-    trigger_description: Optional[str] = None
-    trigger_keywords: List[str] = Field(default_factory=list)
-    trigger_examples: List[str] = Field(default_factory=list)
+    trigger_description: str | None = None
+    trigger_keywords: list[str] = Field(default_factory=list)
+    trigger_examples: list[str] = Field(default_factory=list)
     model: str = Field("inherit")
     max_tokens: int = Field(4096, ge=1, le=32768)
     temperature: float = Field(0.7, ge=0.0, le=2.0)
     max_iterations: int = Field(10, ge=1, le=50)
-    allowed_tools: List[str] = Field(default_factory=lambda: ["*"])
-    author: Optional[str] = None
+    allowed_tools: list[str] = Field(default_factory=lambda: ["*"])
+    author: str | None = None
     is_published: bool = True
-    metadata: Optional[Dict[str, Any]] = None
+    metadata: dict[str, Any] | None = None
 
 
 class TemplateUpdate(BaseModel):
     """Schema for updating a template."""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
-    display_name: Optional[str] = Field(None, max_length=200)
-    description: Optional[str] = None
-    category: Optional[str] = Field(None, max_length=100)
-    tags: Optional[List[str]] = None
-    system_prompt: Optional[str] = None
-    trigger_description: Optional[str] = None
-    trigger_keywords: Optional[List[str]] = None
-    trigger_examples: Optional[List[str]] = None
-    model: Optional[str] = None
-    max_tokens: Optional[int] = Field(None, ge=1, le=32768)
-    temperature: Optional[float] = Field(None, ge=0.0, le=2.0)
-    max_iterations: Optional[int] = Field(None, ge=1, le=50)
-    allowed_tools: Optional[List[str]] = None
-    author: Optional[str] = None
-    is_published: Optional[bool] = None
-    metadata: Optional[Dict[str, Any]] = None
+    name: str | None = Field(None, min_length=1, max_length=200)
+    display_name: str | None = Field(None, max_length=200)
+    description: str | None = None
+    category: str | None = Field(None, max_length=100)
+    tags: list[str] | None = None
+    system_prompt: str | None = None
+    trigger_description: str | None = None
+    trigger_keywords: list[str] | None = None
+    trigger_examples: list[str] | None = None
+    model: str | None = None
+    max_tokens: int | None = Field(None, ge=1, le=32768)
+    temperature: float | None = Field(None, ge=0.0, le=2.0)
+    max_iterations: int | None = Field(None, ge=1, le=50)
+    allowed_tools: list[str] | None = None
+    author: str | None = None
+    is_published: bool | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class TemplateResponse(BaseModel):
@@ -181,33 +182,33 @@ class TemplateResponse(BaseModel):
     tenant_id: str
     name: str
     version: str
-    display_name: Optional[str]
-    description: Optional[str]
+    display_name: str | None
+    description: str | None
     category: str
-    tags: List[str]
+    tags: list[str]
     system_prompt: str
-    trigger_description: Optional[str]
-    trigger_keywords: List[str]
-    trigger_examples: List[str]
+    trigger_description: str | None
+    trigger_keywords: list[str]
+    trigger_examples: list[str]
     model: str
     max_tokens: int
     temperature: float
     max_iterations: int
-    allowed_tools: List[str]
-    author: Optional[str]
+    allowed_tools: list[str]
+    author: str | None
     is_builtin: bool
     is_published: bool
     install_count: int
     rating: float
-    metadata: Optional[Dict[str, Any]]
-    created_at: Optional[str]
-    updated_at: Optional[str]
+    metadata: dict[str, Any] | None
+    created_at: str | None
+    updated_at: str | None
 
 
 class TemplateListResponse(BaseModel):
     """Schema for template list response."""
 
-    templates: List[TemplateResponse]
+    templates: list[TemplateResponse]
     total: int
 
 
@@ -321,7 +322,7 @@ async def create_subagent(
 async def list_subagents(
     request: Request,
     enabled_only: bool = Query(False, description="Only return enabled subagents"),
-    source: Optional[str] = Query(
+    source: str | None = Query(
         None, description="Filter by source: 'filesystem', 'database', or None for all"
     ),
     include_filesystem: bool = Query(True, description="Include filesystem SubAgents in results"),
@@ -386,7 +387,7 @@ class FilesystemSubAgentResponse(BaseModel):
     display_name: str
     description: str
     model: str
-    tools: List[str]
+    tools: list[str]
     file_path: str
     source_type: str
     enabled: bool = True
@@ -395,10 +396,10 @@ class FilesystemSubAgentResponse(BaseModel):
 class FilesystemSubAgentListResponse(BaseModel):
     """Schema for filesystem subagent list response."""
 
-    subagents: List[FilesystemSubAgentResponse]
+    subagents: list[FilesystemSubAgentResponse]
     total: int
-    scanned_dirs: List[str]
-    errors: List[str]
+    scanned_dirs: list[str]
+    errors: list[str]
 
 
 @router.get("/filesystem", response_model=FilesystemSubAgentListResponse)
@@ -456,7 +457,7 @@ async def list_filesystem_subagents(
 async def import_filesystem_subagent(
     request: Request,
     name: str,
-    project_id: Optional[str] = Query(None, description="Optional project to scope to"),
+    project_id: str | None = Query(None, description="Optional project to scope to"),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
 ):
@@ -530,8 +531,8 @@ async def import_filesystem_subagent(
 @router.get("/templates/list", response_model=TemplateListResponse)
 async def list_subagent_templates(
     request: Request,
-    category: Optional[str] = Query(None, description="Filter by category"),
-    query: Optional[str] = Query(None, description="Search query"),
+    category: str | None = Query(None, description="Filter by category"),
+    query: str | None = Query(None, description="Search query"),
     limit: int = Query(50, ge=1, le=100, description="Maximum results"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     tenant_id: str = Depends(get_current_user_tenant),
@@ -671,7 +672,7 @@ async def delete_template(
     template_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     """
     Delete a template.
     """
@@ -872,7 +873,7 @@ async def update_subagent(
             )
 
     # Update fields
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     trigger = AgentTrigger(
         description=data.trigger_description
@@ -913,7 +914,7 @@ async def update_subagent(
         avg_execution_time_ms=subagent.avg_execution_time_ms,
         success_rate=subagent.success_rate,
         created_at=subagent.created_at,
-        updated_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(UTC),
         metadata=data.metadata if data.metadata is not None else subagent.metadata,
     )
 
@@ -930,7 +931,7 @@ async def delete_subagent(
     subagent_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     """
     Delete a subagent.
     """

@@ -1,7 +1,6 @@
 """Repository interface for AgentTask persistence."""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 from src.domain.model.agent.task import AgentTask
 
@@ -19,24 +18,24 @@ class AgentTaskRepository(ABC):
         ...
 
     @abstractmethod
-    async def save_all(self, conversation_id: str, tasks: List[AgentTask]) -> None:
+    async def save_all(self, conversation_id: str, tasks: list[AgentTask]) -> None:
         """Replace all tasks for a conversation (atomic)."""
         ...
 
     @abstractmethod
     async def find_by_conversation(
-        self, conversation_id: str, status: Optional[str] = None
-    ) -> List[AgentTask]:
+        self, conversation_id: str, status: str | None = None
+    ) -> list[AgentTask]:
         """Find all tasks for a conversation, optionally filtered by status."""
         ...
 
     @abstractmethod
-    async def find_by_id(self, task_id: str) -> Optional[AgentTask]:
+    async def find_by_id(self, task_id: str) -> AgentTask | None:
         """Find a task by ID."""
         ...
 
     @abstractmethod
-    async def update(self, task_id: str, **fields) -> Optional[AgentTask]:
+    async def update(self, task_id: str, **fields) -> AgentTask | None:
         """Update specific fields on a task. Returns updated task or None."""
         ...
 

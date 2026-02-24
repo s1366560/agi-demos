@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 from uuid import uuid4
 
 
@@ -27,13 +27,13 @@ class MutationTransaction:
     source: str
     action: str
     trace_id: str
-    tenant_id: Optional[str] = None
-    project_id: Optional[str] = None
-    plugin_name: Optional[str] = None
-    requirement: Optional[str] = None
+    tenant_id: str | None = None
+    project_id: str | None = None
+    plugin_name: str | None = None
+    requirement: str | None = None
     transaction_id: str = field(default_factory=lambda: f"mutation:{uuid4().hex}")
     status: MutationTransactionStatus = MutationTransactionStatus.PLAN
-    timeline: list[Dict[str, Any]] = field(default_factory=list)
+    timeline: list[dict[str, Any]] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.add_phase(self.status, details={})
@@ -42,19 +42,19 @@ class MutationTransaction:
         self,
         status: MutationTransactionStatus,
         *,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         """Append one lifecycle phase and update current status."""
         self.status = status
         self.timeline.append(
             {
                 "phase": status.value,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "details": details or {},
             }
         )
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize transaction for metadata/event payloads."""
         return {
             "transaction_id": self.transaction_id,

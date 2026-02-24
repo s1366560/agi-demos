@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from typing import Dict, List
+from datetime import UTC, datetime
 
 from src.infrastructure.adapters.secondary.persistence.channel_models import ChannelConfigModel
 from src.infrastructure.adapters.secondary.persistence.channel_repository import (
@@ -34,7 +33,7 @@ class ChannelReloadPlan:
         """Whether plan contains add/remove/restart operations."""
         return bool(self.to_add or self.to_remove or self.to_restart)
 
-    def summary(self) -> Dict[str, int]:
+    def summary(self) -> dict[str, int]:
         """Summarize plan counts for logging and plugin hooks."""
         return {
             "add": len(self.to_add),
@@ -45,8 +44,8 @@ class ChannelReloadPlan:
 
 
 def build_channel_reload_plan(
-    enabled_configs: List[ChannelConfigModel],
-    current_connections: Dict[str, ManagedConnection],
+    enabled_configs: list[ChannelConfigModel],
+    current_connections: dict[str, ManagedConnection],
 ) -> ChannelReloadPlan:
     """Build a deterministic reload plan from DB enabled configs and active connections."""
     enabled_by_id = {config.id: config for config in enabled_configs}
@@ -78,7 +77,7 @@ def build_channel_reload_plan(
 async def collect_channel_reload_plan(
     manager: ChannelConnectionManager,
     session_factory,
-) -> tuple[ChannelReloadPlan, Dict[str, ChannelConfigModel]]:
+) -> tuple[ChannelReloadPlan, dict[str, ChannelConfigModel]]:
     """Collect current reload plan and enabled config snapshot from DB."""
     async with session_factory() as session:
         repo = ChannelConfigRepository(session)
@@ -135,8 +134,8 @@ def _should_restart_connection(config: ChannelConfigModel, connection: ManagedCo
 def _ensure_utc(dt: datetime) -> datetime:
     """Normalize datetime to UTC-aware value."""
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 async def _notify_plugin_reload_hooks(*, plan: ChannelReloadPlan, dry_run: bool) -> None:

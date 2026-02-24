@@ -3,7 +3,7 @@ Unit tests for MemoryService.
 Tests memory CRUD operations, version handling, and share functionality.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -32,7 +32,7 @@ class TestMemoryService:
             content="Test content",
             project_id="project-1",
             author_id="user-1",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         # Act - call with individual parameters, not a dict
@@ -65,7 +65,7 @@ class TestMemoryService:
             version=1,
             project_id="project-1",
             author_id="user-1",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         mock_memory_repo.find_by_id.return_value = existing_memory
@@ -76,7 +76,7 @@ class TestMemoryService:
             version=2,  # Version incremented
             project_id="project-1",
             author_id="user-1",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         # Act - use kwargs for individual parameters
@@ -104,7 +104,7 @@ class TestMemoryService:
             version=2,  # Current version is 2
             project_id="project-1",
             author_id="user-1",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         mock_memory_repo.find_by_id.return_value = existing_memory
@@ -130,7 +130,7 @@ class TestMemoryService:
             version=1,
             project_id="project-1",
             author_id="user-1",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         # Mock the remove_episode method (new proper cleanup method)
@@ -159,7 +159,7 @@ class TestMemoryService:
             version=1,
             project_id="project-1",
             author_id="user-1",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         # Mock remove_episode to raise an error
@@ -198,7 +198,7 @@ class TestMemoryService:
             version=1,
             project_id="project-1",
             author_id="user-1",
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         mock_memory_repo.find_by_id.return_value = expected_memory
@@ -250,7 +250,7 @@ class TestMemoryService:
             project_id="project-1",
             author_id="user-1",
             collaborators=[],  # Initialize collaborators
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         # Act - signature is (memory_id, collaborators)
@@ -274,7 +274,7 @@ class TestMemoryService:
             project_id="project-1",
             author_id="user-1",
             collaborators=[],  # Initialize collaborators
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         # Act - signature is (memory_id, collaborators)

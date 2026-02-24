@@ -5,9 +5,9 @@ interactive shells via terminal proxy.
 """
 
 import asyncio
+import contextlib
 import logging
 import re
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
@@ -28,8 +28,8 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/terminal", tags=["terminal"])
 
 # Global adapter instance (reuse from sandbox module)
-_sandbox_adapter: Optional[MCPSandboxAdapter] = None
-_event_publisher: Optional[SandboxEventPublisher] = None
+_sandbox_adapter: MCPSandboxAdapter | None = None
+_event_publisher: SandboxEventPublisher | None = None
 
 
 def get_sandbox_adapter() -> MCPSandboxAdapter:
@@ -40,7 +40,7 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
     return _sandbox_adapter
 
 
-def get_event_publisher(request: Request) -> Optional[SandboxEventPublisher]:
+def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
     """Get the sandbox event publisher from app container.
 
     Uses the properly initialized container from app.state which has
@@ -58,7 +58,7 @@ def get_event_publisher(request: Request) -> Optional[SandboxEventPublisher]:
     return _event_publisher
 
 
-async def get_project_id_from_sandbox(sandbox_id: str) -> Optional[str]:
+async def get_project_id_from_sandbox(sandbox_id: str) -> str | None:
     """
     Extract project_id from sandbox by inspecting its project_path.
 
@@ -110,7 +110,7 @@ async def create_terminal_session(
     sandbox_id: str,
     request: CreateTerminalRequest,
     _user: User = Depends(get_current_user),
-    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
 ) -> TerminalSessionResponse:
     """
     Create a new terminal session for a sandbox.
@@ -201,7 +201,7 @@ async def close_terminal_session(
     sandbox_id: str,
     session_id: str,
     _user: User = Depends(get_current_user),
-    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
 ) -> dict:
     """Close a terminal session."""
     proxy = get_terminal_proxy()
@@ -235,8 +235,8 @@ async def close_terminal_session(
 async def terminal_websocket(
     websocket: WebSocket,
     sandbox_id: str,
-    session_id: Optional[str] = None,
-):
+    session_id: str | None = None,
+) -> None:
     """
     WebSocket endpoint for terminal interaction.
 
@@ -255,7 +255,7 @@ async def terminal_websocket(
     await websocket.accept()
 
     proxy = get_terminal_proxy()
-    session: Optional[TerminalSession] = None
+    session: TerminalSession | None = None
 
     try:
         # Create or get session
@@ -285,7 +285,7 @@ async def terminal_websocket(
         )
 
         # Start output reader task
-        async def read_output():
+        async def read_output() -> None:
             """Background task to read and forward output."""
             while session and session.is_active:
                 try:
@@ -324,23 +324,17 @@ async def terminal_websocket(
 
     except Exception as e:
         logger.error(f"Terminal WebSocket error: {e}")
-        try:
+        with contextlib.suppress(Exception):
             await websocket.send_json({"type": "error", "message": str(e)})
-        except Exception:
-            pass
 
     finally:
         # Cleanup
         if "output_task" in locals():
             output_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await output_task
-            except asyncio.CancelledError:
-                pass
 
         # Don't close session on disconnect - allow reconnection
         # Session will be cleaned up by cleanup task or explicit close
-        try:
+        with contextlib.suppress(Exception):
             await websocket.close()
-        except Exception:
-            pass

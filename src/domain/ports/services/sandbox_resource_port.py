@@ -14,7 +14,7 @@ Key Design Principles:
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -30,24 +30,24 @@ class SandboxInfo:
     project_id: str
     tenant_id: str
     status: str
-    endpoint: Optional[str] = None
-    websocket_url: Optional[str] = None
-    mcp_port: Optional[int] = None
-    desktop_port: Optional[int] = None
-    terminal_port: Optional[int] = None
-    desktop_url: Optional[str] = None
-    terminal_url: Optional[str] = None
-    created_at: Optional[datetime] = None
-    last_accessed_at: Optional[datetime] = None
+    endpoint: str | None = None
+    websocket_url: str | None = None
+    mcp_port: int | None = None
+    desktop_port: int | None = None
+    terminal_port: int | None = None
+    desktop_url: str | None = None
+    terminal_url: str | None = None
+    created_at: datetime | None = None
+    last_accessed_at: datetime | None = None
     is_healthy: bool = False
-    error_message: Optional[str] = None
-    available_tools: List[str] = None
+    error_message: str | None = None
+    available_tools: list[str] = None
 
     def __post_init__(self) -> None:
         if self.available_tools is None:
             self.available_tools = []
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "sandbox_id": self.sandbox_id,
@@ -90,7 +90,7 @@ class SandboxResourcePort(ABC):
         self,
         project_id: str,
         tenant_id: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Get the sandbox ID for a project without creating one.
 
         This is a read-only operation that will not trigger sandbox creation.
@@ -131,9 +131,9 @@ class SandboxResourcePort(ABC):
         self,
         project_id: str,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         timeout: float = 30.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Execute a tool in the project's sandbox.
 
         Args:
@@ -176,7 +176,7 @@ class SandboxResourcePort(ABC):
     async def get_sandbox_info(
         self,
         project_id: str,
-    ) -> Optional[SandboxInfo]:
+    ) -> SandboxInfo | None:
         """Get information about the project's sandbox.
 
         Args:

@@ -15,11 +15,13 @@ Features:
 """
 
 import asyncio
+import contextlib
 import logging
 import time
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from ..config import AgentInstanceConfig
 from ..instance import AgentInstance, ChatRequest
@@ -46,10 +48,10 @@ class ContainerInfo:
     grpc_endpoint: str
     health_endpoint: str
     status: str  # created, running, paused, stopped, error
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    started_at: Optional[datetime] = None
-    error_message: Optional[str] = None
-    resource_limits: Dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    started_at: datetime | None = None
+    error_message: str | None = None
+    resource_limits: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -87,16 +89,16 @@ class ContainerBackend(Backend):
     resources and gRPC communication.
     """
 
-    def __init__(self, config: Optional[ContainerConfig] = None):
+    def __init__(self, config: ContainerConfig | None = None) -> None:
         self._config = config or ContainerConfig()
-        self._docker_client: Optional[Any] = None
-        self._containers: Dict[str, ContainerInfo] = {}
-        self._grpc_clients: Dict[str, Any] = {}
-        self._port_allocator: Dict[str, int] = {}
+        self._docker_client: Any | None = None
+        self._containers: dict[str, ContainerInfo] = {}
+        self._grpc_clients: dict[str, Any] = {}
+        self._port_allocator: dict[str, int] = {}
         self._next_grpc_port = self._config.grpc_port_start
         self._next_health_port = self._config.health_port_start
         self._is_running = False
-        self._health_task: Optional[asyncio.Task] = None
+        self._health_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
 
     @property
@@ -139,10 +141,8 @@ class ContainerBackend(Backend):
         # Stop health monitoring
         if self._health_task:
             self._health_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._health_task
-            except asyncio.CancelledError:
-                pass
 
         # Stop all containers
         for instance_key in list(self._containers.keys()):
@@ -153,10 +153,8 @@ class ContainerBackend(Backend):
 
         # Close gRPC clients
         for client in self._grpc_clients.values():
-            try:
+            with contextlib.suppress(Exception):
                 await client.close()
-            except Exception:
-                pass
         self._grpc_clients.clear()
 
         logger.info("Container Backend stopped")
@@ -222,10 +220,8 @@ class ContainerBackend(Backend):
                 logger.error(f"Failed to create container: {e}")
                 # Cleanup on failure
                 if instance_key in self._containers:
-                    try:
+                    with contextlib.suppress(Exception):
                         await self._remove_container(self._containers[instance_key])
-                    except Exception:
-                        pass
                     del self._containers[instance_key]
                 raise
 
@@ -271,7 +267,7 @@ class ContainerBackend(Backend):
     async def get_instance(
         self,
         instance_id: str,
-    ) -> Optional[AgentInstance]:
+    ) -> AgentInstance | None:
         """Get an instance by ID."""
         if instance_id not in self._containers:
             return None
@@ -303,7 +299,7 @@ class ContainerBackend(Backend):
 
         return instance
 
-    async def list_instances(self) -> List[AgentInstance]:
+    async def list_instances(self) -> list[AgentInstance]:
         """List all container instances."""
         instances = []
         for instance_id in self._containers:
@@ -316,7 +312,7 @@ class ContainerBackend(Backend):
         self,
         instance_id: str,
         request: ChatRequest,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Execute a request on a container instance."""
         if instance_id not in self._containers:
             yield {"event_type": "error", "error": {"message": "Instance not found"}}
@@ -385,7 +381,7 @@ class ContainerBackend(Backend):
                 message=str(e),
             )
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get backend statistics."""
         running = sum(
             1 for c in self._containers.values() if c.status == "running"
@@ -485,7 +481,7 @@ class ContainerBackend(Backend):
         container = self._docker_client.containers.get(container_info.container_id)
         container.start()
         container_info.status = "running"
-        container_info.started_at = datetime.now(timezone.utc)
+        container_info.started_at = datetime.now(UTC)
         logger.info(f"Started container: {container_info.container_id[:12]}")
 
     async def _remove_container(self, container_info: ContainerInfo) -> None:
@@ -577,11 +573,11 @@ class ContainerBackend(Backend):
 class _HttpFallbackClient:
     """HTTP fallback client when gRPC is not available."""
 
-    def __init__(self, health_endpoint: str, grpc_endpoint: str):
+    def __init__(self, health_endpoint: str, grpc_endpoint: str) -> None:
         self.health_endpoint = health_endpoint
         self.grpc_endpoint = grpc_endpoint
 
-    async def Shutdown(self, graceful: bool, timeout_seconds: int) -> Dict[str, Any]:
+    async def Shutdown(self, graceful: bool, timeout_seconds: int) -> dict[str, Any]:
         """Send shutdown via HTTP."""
         import aiohttp
 
@@ -597,8 +593,8 @@ class _HttpFallbackClient:
         self,
         conversation_id: str,
         message: str,
-        context: Optional[Dict[str, str]] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        context: dict[str, str] | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """Execute via HTTP streaming."""
         import aiohttp
 

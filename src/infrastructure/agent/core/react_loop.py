@@ -22,9 +22,10 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, AsyncIterator, Dict, List, Optional, Protocol
+from typing import Any, Protocol
 
 from src.domain.events.agent_events import (
     AgentCompleteEvent,
@@ -49,9 +50,9 @@ class LLMInvokerProtocol(Protocol):
 
     async def invoke(
         self,
-        messages: List[Dict[str, Any]],
-        tools: List[Dict[str, Any]],
-        context: Optional[Dict[str, Any]] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]],
+        context: dict[str, Any] | None = None,
     ) -> AsyncIterator[AgentDomainEvent]:
         """Invoke LLM and yield events."""
         ...
@@ -63,9 +64,9 @@ class ToolExecutorProtocol(Protocol):
     async def execute(
         self,
         tool_name: str,
-        tool_args: Dict[str, Any],
+        tool_args: dict[str, Any],
         call_id: str,
-        context: Optional[Dict[str, Any]] = None,
+        context: dict[str, Any] | None = None,
     ) -> AsyncIterator[AgentDomainEvent]:
         """Execute tool and yield events."""
         ...
@@ -77,8 +78,8 @@ class WorkPlanGeneratorProtocol(Protocol):
     def generate(
         self,
         query: str,
-        available_tools: Dict[str, Any],
-    ) -> Optional[Dict[str, Any]]:
+        available_tools: dict[str, Any],
+    ) -> dict[str, Any] | None:
         """Generate work plan from query."""
         ...
 
@@ -86,7 +87,7 @@ class WorkPlanGeneratorProtocol(Protocol):
 class DoomLoopDetectorProtocol(Protocol):
     """Protocol for doom loop detection."""
 
-    def record_call(self, tool_name: str, tool_args: Dict[str, Any]) -> bool:
+    def record_call(self, tool_name: str, tool_args: dict[str, Any]) -> bool:
         """Record call and check for loop. Returns True if loop detected."""
         ...
 
@@ -151,11 +152,11 @@ class LoopContext:
     """Context for loop execution."""
 
     session_id: str
-    project_id: Optional[str] = None
-    user_id: Optional[str] = None
-    tenant_id: Optional[str] = None
-    sandbox_id: Optional[str] = None
-    extra: Dict[str, Any] = field(default_factory=dict)
+    project_id: str | None = None
+    user_id: str | None = None
+    tenant_id: str | None = None
+    sandbox_id: str | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -163,12 +164,12 @@ class StepResult:
     """Result of a single step."""
 
     result: LoopResult
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
     text_output: str = ""
     reasoning: str = ""
     tokens_used: int = 0
     cost: float = 0.0
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass
@@ -204,14 +205,14 @@ class ReActLoop:
 
     def __init__(
         self,
-        llm_invoker: Optional[LLMInvokerProtocol] = None,
-        tool_executor: Optional[ToolExecutorProtocol] = None,
-        work_plan_generator: Optional[WorkPlanGeneratorProtocol] = None,
-        doom_loop_detector: Optional[DoomLoopDetectorProtocol] = None,
-        cost_tracker: Optional[CostTrackerProtocol] = None,
-        config: Optional[LoopConfig] = None,
+        llm_invoker: LLMInvokerProtocol | None = None,
+        tool_executor: ToolExecutorProtocol | None = None,
+        work_plan_generator: WorkPlanGeneratorProtocol | None = None,
+        doom_loop_detector: DoomLoopDetectorProtocol | None = None,
+        cost_tracker: CostTrackerProtocol | None = None,
+        config: LoopConfig | None = None,
         debug_logging: bool = False,
-    ):
+    ) -> None:
         """
         Initialize ReAct loop coordinator.
 
@@ -235,12 +236,12 @@ class ReActLoop:
         # Loop state
         self._state = LoopState.IDLE
         self._step_count = 0
-        self._abort_event: Optional[asyncio.Event] = None
+        self._abort_event: asyncio.Event | None = None
 
         # Work plan tracking
-        self._work_plan: Optional[Dict[str, Any]] = None
+        self._work_plan: dict[str, Any] | None = None
         self._current_plan_step: int = 0
-        self._task_statuses: Dict[str, str] = {}
+        self._task_statuses: dict[str, str] = {}
         self._no_progress_steps: int = 0
 
     @property
@@ -259,8 +260,8 @@ class ReActLoop:
 
     async def run(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Dict[str, Any],
+        messages: list[dict[str, Any]],
+        tools: dict[str, Any],
         context: LoopContext,
     ) -> AsyncIterator[AgentDomainEvent]:
         """
@@ -431,7 +432,7 @@ class ReActLoop:
             return task_goal
         return self._evaluate_thought_goal(thought_text)
 
-    def _evaluate_task_goal(self) -> Optional[LoopGoalCheck]:
+    def _evaluate_task_goal(self) -> LoopGoalCheck | None:
         """Evaluate completion from cached task statuses."""
         if not self._task_statuses:
             return None
@@ -487,7 +488,7 @@ class ReActLoop:
             source="thought_self_check",
         )
 
-    def _extract_goal_json(self, text: str) -> Optional[Dict[str, Any]]:
+    def _extract_goal_json(self, text: str) -> dict[str, Any] | None:
         """Extract a JSON object from thought text."""
         stripped = text.strip()
         if not stripped:
@@ -563,8 +564,8 @@ class ReActLoop:
 
     async def _process_step(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Dict[str, Any],
+        messages: list[dict[str, Any]],
+        tools: dict[str, Any],
         context: LoopContext,
     ) -> AsyncIterator[AgentDomainEvent]:
         """
@@ -647,11 +648,9 @@ class ReActLoop:
             return False
         # If the text contains a goal_achieved JSON signal, it's a goal-check
         # response, not conversational text.
-        if "goal_achieved" in stripped:
-            return False
-        return True
+        return "goal_achieved" not in stripped
 
-    def _extract_user_query(self, messages: List[Dict[str, Any]]) -> Optional[str]:
+    def _extract_user_query(self, messages: list[dict[str, Any]]) -> str | None:
         """Extract user query from messages."""
         for msg in reversed(messages):
             if msg.get("role") == "user":
@@ -669,7 +668,7 @@ class ReActLoop:
 # Singleton Management
 # ============================================================================
 
-_loop: Optional[ReActLoop] = None
+_loop: ReActLoop | None = None
 
 
 def get_react_loop() -> ReActLoop:
@@ -695,12 +694,12 @@ def set_react_loop(loop: ReActLoop) -> None:
 
 
 def create_react_loop(
-    llm_invoker: Optional[LLMInvokerProtocol] = None,
-    tool_executor: Optional[ToolExecutorProtocol] = None,
-    work_plan_generator: Optional[WorkPlanGeneratorProtocol] = None,
-    doom_loop_detector: Optional[DoomLoopDetectorProtocol] = None,
-    cost_tracker: Optional[CostTrackerProtocol] = None,
-    config: Optional[LoopConfig] = None,
+    llm_invoker: LLMInvokerProtocol | None = None,
+    tool_executor: ToolExecutorProtocol | None = None,
+    work_plan_generator: WorkPlanGeneratorProtocol | None = None,
+    doom_loop_detector: DoomLoopDetectorProtocol | None = None,
+    cost_tracker: CostTrackerProtocol | None = None,
+    config: LoopConfig | None = None,
     debug_logging: bool = False,
 ) -> ReActLoop:
     """

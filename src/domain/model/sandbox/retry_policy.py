@@ -6,7 +6,8 @@ for transient sandbox operations.
 
 import asyncio
 import logging
-from typing import Awaitable, Callable, Optional, TypeVar
+from collections.abc import Awaitable, Callable
+from typing import TypeVar
 
 from src.domain.model.sandbox.exceptions import (
     SandboxConnectionError,
@@ -39,7 +40,7 @@ class RetryPolicy:
         base_delay: float = 1.0,
         max_delay: float = 30.0,
         backoff_factor: float = 2.0,
-        should_retry: Optional[Callable[[Exception], bool]] = None,
+        should_retry: Callable[[Exception], bool] | None = None,
     ) -> None:
         """Initialize the retry policy.
 
@@ -101,7 +102,7 @@ class RetryPolicy:
     async def execute(
         self,
         operation: Callable[[], Awaitable[T]],
-        on_retry: Optional[Callable[[Exception, int, float], None]] = None,
+        on_retry: Callable[[Exception, int, float], None] | None = None,
     ) -> T:
         """
         Execute an operation with retry logic.
@@ -117,7 +118,7 @@ class RetryPolicy:
         Raises:
             Exception: The last exception if all attempts fail
         """
-        last_exception: Optional[Exception] = None
+        last_exception: Exception | None = None
 
         for attempt in range(self.max_attempts):
             try:
@@ -201,7 +202,7 @@ def RetryableError(
     base_delay: float = 1.0,
     max_delay: float = 30.0,
     backoff_factor: float = 2.0,
-    should_retry: Optional[Callable[[Exception], bool]] = None,
+    should_retry: Callable[[Exception], bool] | None = None,
 ) -> Callable:
     """
     Decorator to add retry logic to async functions.

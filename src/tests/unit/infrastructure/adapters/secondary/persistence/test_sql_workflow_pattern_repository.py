@@ -14,7 +14,7 @@ Key features tested:
 - Optional caching support
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,8 +60,8 @@ def create_test_pattern(
         ],
         success_rate=0.8,
         usage_count=usage_count,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
         metadata={"key": "value"},
     )
 
@@ -162,7 +162,7 @@ class TestSqlWorkflowPatternRepositoryUpdate:
             success_rate=0.9,
             usage_count=10,
             created_at=pattern.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
             metadata={"updated": True},
         )
 

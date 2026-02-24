@@ -30,7 +30,7 @@ def _make_result(
     summary: str = "Done",
     success: bool = True,
     final_content: str = "Full output",
-    error: str = None,
+    error: str | None = None,
 ) -> SubAgentResult:
     return SubAgentResult(
         subagent_id="sa-1",

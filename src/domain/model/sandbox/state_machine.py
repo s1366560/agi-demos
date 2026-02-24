@@ -31,7 +31,6 @@ State Diagram:
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import FrozenSet, Optional, Set
 
 
 class ProjectSandboxStatus(Enum):
@@ -61,8 +60,8 @@ class InvalidStateTransitionError(Exception):
         self,
         from_status: ProjectSandboxStatus,
         to_status: ProjectSandboxStatus,
-        sandbox_id: Optional[str] = None,
-    ):
+        sandbox_id: str | None = None,
+    ) -> None:
         self.from_status = from_status
         self.to_status = to_status
         self.sandbox_id = sandbox_id
@@ -104,7 +103,7 @@ class SandboxStateMachine:
     """
 
     # Define all valid state transitions
-    VALID_TRANSITIONS: FrozenSet[StateTransition] = frozenset(
+    VALID_TRANSITIONS: frozenset[StateTransition] = frozenset(
         [
             # Cloud sandbox lifecycle - normal flow
             StateTransition(
@@ -244,21 +243,21 @@ class SandboxStateMachine:
     )
 
     # Terminal states that cannot transition to other states
-    TERMINAL_STATES: FrozenSet[ProjectSandboxStatus] = frozenset(
+    TERMINAL_STATES: frozenset[ProjectSandboxStatus] = frozenset(
         [
             ProjectSandboxStatus.TERMINATED,
         ]
     )
 
     # States that indicate the sandbox can be used
-    USABLE_STATES: FrozenSet[ProjectSandboxStatus] = frozenset(
+    USABLE_STATES: frozenset[ProjectSandboxStatus] = frozenset(
         [
             ProjectSandboxStatus.RUNNING,
         ]
     )
 
     # States that indicate an active sandbox (running or in progress)
-    ACTIVE_STATES: FrozenSet[ProjectSandboxStatus] = frozenset(
+    ACTIVE_STATES: frozenset[ProjectSandboxStatus] = frozenset(
         [
             ProjectSandboxStatus.RUNNING,
             ProjectSandboxStatus.CREATING,
@@ -268,7 +267,7 @@ class SandboxStateMachine:
     )
 
     # States that indicate the sandbox needs recovery
-    RECOVERABLE_STATES: FrozenSet[ProjectSandboxStatus] = frozenset(
+    RECOVERABLE_STATES: frozenset[ProjectSandboxStatus] = frozenset(
         [
             ProjectSandboxStatus.UNHEALTHY,
             ProjectSandboxStatus.STOPPED,
@@ -277,10 +276,10 @@ class SandboxStateMachine:
         ]
     )
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize the state machine with transition lookup table."""
         # Build a fast lookup table for valid transitions
-        self._transition_map: dict[ProjectSandboxStatus, Set[ProjectSandboxStatus]] = {}
+        self._transition_map: dict[ProjectSandboxStatus, set[ProjectSandboxStatus]] = {}
         for transition in self.VALID_TRANSITIONS:
             if transition.from_status not in self._transition_map:
                 self._transition_map[transition.from_status] = set()
@@ -317,7 +316,7 @@ class SandboxStateMachine:
         self,
         from_status: ProjectSandboxStatus,
         to_status: ProjectSandboxStatus,
-        sandbox_id: Optional[str] = None,
+        sandbox_id: str | None = None,
     ) -> ProjectSandboxStatus:
         """
         Validate and execute a state transition.
@@ -340,7 +339,7 @@ class SandboxStateMachine:
     def get_valid_transitions(
         self,
         from_status: ProjectSandboxStatus,
-    ) -> Set[ProjectSandboxStatus]:
+    ) -> set[ProjectSandboxStatus]:
         """
         Get all valid target states from a given status.
 
@@ -374,7 +373,7 @@ class SandboxStateMachine:
         self,
         from_status: ProjectSandboxStatus,
         to_status: ProjectSandboxStatus,
-    ) -> Optional[str]:
+    ) -> str | None:
         """
         Get the description of a state transition.
 
@@ -403,7 +402,7 @@ def get_state_machine() -> SandboxStateMachine:
 def validate_transition(
     from_status: ProjectSandboxStatus,
     to_status: ProjectSandboxStatus,
-    sandbox_id: Optional[str] = None,
+    sandbox_id: str | None = None,
 ) -> ProjectSandboxStatus:
     """
     Convenience function to validate a state transition.

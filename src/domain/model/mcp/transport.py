@@ -9,7 +9,7 @@ Consolidates definitions from:
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class TransportType(str, Enum):
@@ -42,12 +42,12 @@ class TransportConfig:
     transport_type: TransportType
 
     # Local (stdio) transport config
-    command: Optional[List[str]] = None
-    environment: Optional[Dict[str, str]] = None
+    command: list[str] | None = None
+    environment: dict[str, str] | None = None
 
     # Remote transport config (HTTP/SSE/WebSocket)
-    url: Optional[str] = None
-    headers: Optional[Dict[str, str]] = None
+    url: str | None = None
+    headers: dict[str, str] | None = None
 
     # Common config
     timeout: int = 30000  # milliseconds
@@ -75,7 +75,7 @@ class TransportConfig:
         """Get timeout in seconds."""
         return self.timeout / 1000.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "type": self.transport_type.value,
@@ -90,7 +90,7 @@ class TransportConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "TransportConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "TransportConfig":
         """Create from dictionary."""
         transport_type = TransportType.normalize(data.get("type", "local"))
         return cls(
@@ -108,8 +108,8 @@ class TransportConfig:
     @classmethod
     def local(
         cls,
-        command: List[str],
-        environment: Optional[Dict[str, str]] = None,
+        command: list[str],
+        environment: dict[str, str] | None = None,
         timeout: int = 30000,
     ) -> "TransportConfig":
         """Create local (stdio) transport config."""
@@ -124,7 +124,7 @@ class TransportConfig:
     def http(
         cls,
         url: str,
-        headers: Optional[Dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
         timeout: int = 30000,
     ) -> "TransportConfig":
         """Create HTTP transport config."""
@@ -139,7 +139,7 @@ class TransportConfig:
     def sse(
         cls,
         url: str,
-        headers: Optional[Dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
         timeout: int = 30000,
     ) -> "TransportConfig":
         """Create SSE transport config."""
@@ -154,7 +154,7 @@ class TransportConfig:
     def websocket(
         cls,
         url: str,
-        headers: Optional[Dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
         timeout: int = 30000,
         heartbeat_interval: int = 30,
         reconnect_attempts: int = 3,

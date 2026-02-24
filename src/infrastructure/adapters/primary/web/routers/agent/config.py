@@ -6,7 +6,7 @@ Provides read/write operations for tenant-level agent configuration:
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
@@ -202,7 +202,7 @@ async def update_tenant_agent_config(
             enabled_tools=enabled_tools,
             disabled_tools=disabled_tools,
             created_at=config.created_at,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
 
         # Save updated config

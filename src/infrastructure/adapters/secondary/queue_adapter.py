@@ -1,7 +1,6 @@
 import json
 import logging
 import time
-from typing import Optional
 from uuid import uuid4
 
 import redis.asyncio as redis
@@ -13,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class RedisQueueAdapter(QueuePort):
-    def __init__(self, redis_client: Optional[redis.Redis] = None):
+    def __init__(self, redis_client: redis.Redis | None = None) -> None:
         self._settings = get_settings()
         self._redis = redis_client or redis.from_url(
             self._settings.redis_url, encoding="utf-8", decode_responses=True
@@ -27,10 +26,10 @@ class RedisQueueAdapter(QueuePort):
         source_description: str,
         episode_type: str,
         uuid: str,
-        tenant_id: str = None,
-        project_id: str = None,
-        user_id: str = None,
-        memory_id: str = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+        user_id: str | None = None,
+        memory_id: str | None = None,
     ) -> None:
         try:
             # Replicate the payload structure expected by existing workers
@@ -75,5 +74,5 @@ class RedisQueueAdapter(QueuePort):
             logger.error(f"Failed to add episode to queue via adapter: {e}")
             raise
 
-    async def close(self):
+    async def close(self) -> None:
         await self._redis.close()

@@ -6,7 +6,7 @@ All events are immutable (frozen dataclass) and include timestamps.
 
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any
 
 from memstack_agent.core.types import EventType, get_event_category
 
@@ -25,9 +25,9 @@ class AgentEvent:
 
     event_type: EventType
     timestamp: float = field(default_factory=time.time)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert event to dictionary representation.
 
         This format is suitable for:
@@ -64,7 +64,7 @@ class StatusEvent(AgentEvent):
 
     event_type: EventType = EventType.STATUS
     status: str
-    message: Optional[str] = None
+    message: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -86,9 +86,9 @@ class CompleteEvent(AgentEvent):
 
     event_type: EventType = EventType.COMPLETE
     conversation_id: str
-    result: Optional[Any] = None
-    trace_url: Optional[str] = None
-    tokens: Dict[str, int] = field(default_factory=dict)
+    result: Any | None = None
+    trace_url: str | None = None
+    tokens: dict[str, int] = field(default_factory=dict)
     cost: float = 0.0
 
 
@@ -102,8 +102,8 @@ class ErrorEvent(AgentEvent):
     event_type: EventType = EventType.ERROR
     conversation_id: str
     message: str
-    code: Optional[str] = None
-    details: Dict[str, Any] = field(default_factory=dict)
+    code: str | None = None
+    details: dict[str, Any] = field(default_factory=dict)
 
 
 # ============================================================================
@@ -121,7 +121,7 @@ class ThoughtEvent(AgentEvent):
     event_type: EventType = EventType.THOUGHT
     conversation_id: str
     content: str
-    step_index: Optional[int] = None
+    step_index: int | None = None
     thought_level: str = "task"  # task, subtask, plan
 
 
@@ -135,7 +135,7 @@ class ThoughtDeltaEvent(AgentEvent):
     event_type: EventType = EventType.THOUGHT_DELTA
     conversation_id: str
     delta: str
-    step_index: Optional[int] = None
+    step_index: int | None = None
 
 
 # ============================================================================
@@ -154,10 +154,10 @@ class ActEvent(AgentEvent):
     event_type: EventType = EventType.ACT
     conversation_id: str
     tool_name: str
-    tool_input: Dict[str, Any]
-    call_id: Optional[str] = None
+    tool_input: dict[str, Any]
+    call_id: str | None = None
     status: str = "running"
-    tool_execution_id: Optional[str] = None
+    tool_execution_id: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -171,7 +171,7 @@ class ActDeltaEvent(AgentEvent):
     event_type: EventType = EventType.ACT_DELTA
     conversation_id: str
     tool_name: str
-    call_id: Optional[str] = None
+    call_id: str | None = None
     arguments_fragment: str = ""
     accumulated_arguments: str = ""
     status: str = "preparing"
@@ -188,12 +188,12 @@ class ObserveEvent(AgentEvent):
     event_type: EventType = EventType.OBSERVE
     conversation_id: str
     tool_name: str
-    result: Optional[Any] = None
-    error: Optional[str] = None
-    duration_ms: Optional[int] = None
-    call_id: Optional[str] = None
+    result: Any | None = None
+    error: str | None = None
+    duration_ms: int | None = None
+    call_id: str | None = None
     status: str = "completed"
-    tool_execution_id: Optional[str] = None
+    tool_execution_id: str | None = None
 
 
 # ============================================================================
@@ -230,7 +230,7 @@ class TextEndEvent(AgentEvent):
 
     event_type: EventType = EventType.TEXT_END
     conversation_id: str
-    full_text: Optional[str] = None
+    full_text: str | None = None
 
 
 # ============================================================================
@@ -249,9 +249,9 @@ class MessageEvent(AgentEvent):
     conversation_id: str
     role: str  # user, assistant, system
     content: str
-    message_id: Optional[str] = None
-    attachment_ids: Optional[list[str]] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    message_id: str | None = None
+    attachment_ids: list[str] | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 # ============================================================================
@@ -268,7 +268,7 @@ class PermissionAskedEvent(AgentEvent):
     request_id: str
     permission: str
     patterns: list[str]
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -293,7 +293,7 @@ class DoomLoopDetectedEvent(AgentEvent):
     event_type: EventType = EventType.DOOM_LOOP_DETECTED
     conversation_id: str
     tool: str
-    input: Dict[str, Any]
+    input: dict[str, Any]
     occurrences: int
 
 
@@ -321,9 +321,9 @@ class ClarificationAskedEvent(AgentEvent):
     request_id: str
     question: str
     clarification_type: str
-    options: list[Dict[str, Any]]
+    options: list[dict[str, Any]]
     allow_custom: bool = True
-    context: Dict[str, Any] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -345,10 +345,10 @@ class DecisionAskedEvent(AgentEvent):
     request_id: str
     question: str
     decision_type: str
-    options: list[Dict[str, Any]]
+    options: list[dict[str, Any]]
     allow_custom: bool = False
-    default_option: Optional[str] = None
-    context: Dict[str, Any] = field(default_factory=dict)
+    default_option: str | None = None
+    context: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -373,7 +373,7 @@ class CostUpdateEvent(AgentEvent):
     event_type: EventType = EventType.COST_UPDATE
     conversation_id: str
     cost: float
-    tokens: Dict[str, int]
+    tokens: dict[str, int]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -435,36 +435,36 @@ class ContextStatusEvent(AgentEvent):
     token_budget: int
     occupancy_pct: float
     compression_level: str
-    token_distribution: Dict[str, int] = field(default_factory=dict)
+    token_distribution: dict[str, int] = field(default_factory=dict)
 
 
 # Re-export commonly used event types for convenience
 __all__ = [
-    "AgentEvent",
-    "StatusEvent",
-    "StartEvent",
-    "CompleteEvent",
-    "ErrorEvent",
-    "ThoughtEvent",
-    "ThoughtDeltaEvent",
-    "ActEvent",
     "ActDeltaEvent",
-    "ObserveEvent",
-    "TextStartEvent",
-    "TextDeltaEvent",
-    "TextEndEvent",
-    "MessageEvent",
-    "PermissionAskedEvent",
-    "PermissionRepliedEvent",
-    "DoomLoopDetectedEvent",
-    "DoomLoopIntervenedEvent",
-    "ClarificationAskedEvent",
+    "ActEvent",
+    "AgentEvent",
     "ClarificationAnsweredEvent",
-    "DecisionAskedEvent",
-    "DecisionAnsweredEvent",
-    "CostUpdateEvent",
-    "RetryEvent",
+    "ClarificationAskedEvent",
     "CompactNeededEvent",
+    "CompleteEvent",
     "ContextCompressedEvent",
     "ContextStatusEvent",
+    "CostUpdateEvent",
+    "DecisionAnsweredEvent",
+    "DecisionAskedEvent",
+    "DoomLoopDetectedEvent",
+    "DoomLoopIntervenedEvent",
+    "ErrorEvent",
+    "MessageEvent",
+    "ObserveEvent",
+    "PermissionAskedEvent",
+    "PermissionRepliedEvent",
+    "RetryEvent",
+    "StartEvent",
+    "StatusEvent",
+    "TextDeltaEvent",
+    "TextEndEvent",
+    "TextStartEvent",
+    "ThoughtDeltaEvent",
+    "ThoughtEvent",
 ]

@@ -108,7 +108,7 @@ def validate_all(skills_dir: Path, strict: bool = False) -> tuple[int, int, int]
     return passed, failed, skipped
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Validate skills against AgentSkills.io specification",
         formatter_class=argparse.RawDescriptionHelpFormatter,

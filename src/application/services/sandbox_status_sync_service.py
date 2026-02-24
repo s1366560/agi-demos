@@ -5,7 +5,6 @@ and publishes SSE events for real-time frontend updates.
 """
 
 import logging
-from typing import Optional
 
 from src.application.services.sandbox_event_service import SandboxEventPublisher
 from src.domain.model.sandbox.project_sandbox import ProjectSandboxStatus
@@ -34,8 +33,8 @@ class SandboxStatusSyncService:
     def __init__(
         self,
         repository_factory,
-        event_publisher: Optional[SandboxEventPublisher] = None,
-    ):
+        event_publisher: SandboxEventPublisher | None = None,
+    ) -> None:
         """Initialize the service.
         
         Args:

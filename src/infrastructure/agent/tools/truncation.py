@@ -14,7 +14,6 @@ Reference: vendor/opencode/packages/opencode/src/tool/read.ts
 
 import logging
 from dataclasses import dataclass
-from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +29,10 @@ class TruncationResult:
 
     truncated: bool = False
     output: str = ""
-    truncated_bytes: Optional[int] = None
-    truncated_lines: Optional[int] = None
-    total_lines: Optional[int] = None
-    last_read_line: Optional[int] = None
+    truncated_bytes: int | None = None
+    truncated_lines: int | None = None
+    total_lines: int | None = None
+    last_read_line: int | None = None
     has_more: bool = False
 
     def to_dict(self) -> dict:
@@ -90,9 +89,9 @@ def truncate_by_bytes(
 
 
 def truncate_lines_by_bytes(
-    lines: List[str],
+    lines: list[str],
     offset: int = 0,
-    limit: Optional[int] = None,
+    limit: int | None = None,
     max_bytes: int = MAX_OUTPUT_BYTES,
     max_line_length: int = MAX_LINE_LENGTH,
 ) -> TruncationResult:
@@ -118,7 +117,7 @@ def truncate_lines_by_bytes(
     total_lines = len(lines)
 
     # Process lines with truncation
-    processed_lines: List[str] = []
+    processed_lines: list[str] = []
     bytes_count = 0
     truncated_by_bytes = False
 
@@ -203,10 +202,10 @@ def truncate_output(
 
 
 def format_file_output(
-    lines: List[str],
+    lines: list[str],
     file_path: str,
     offset: int = 0,
-    limit: Optional[int] = None,
+    limit: int | None = None,
     max_bytes: int = MAX_OUTPUT_BYTES,
 ) -> str:
     """
@@ -246,7 +245,7 @@ class OutputTruncator:
         self,
         max_bytes: int = MAX_OUTPUT_BYTES,
         max_line_length: int = MAX_LINE_LENGTH,
-    ):
+    ) -> None:
         """
         Initialize output truncator.
 
@@ -263,9 +262,9 @@ class OutputTruncator:
 
     def truncate_lines(
         self,
-        lines: List[str],
+        lines: list[str],
         offset: int = 0,
-        limit: Optional[int] = None,
+        limit: int | None = None,
     ) -> TruncationResult:
         """Truncate lines by byte and line count limits."""
         return truncate_lines_by_bytes(
@@ -278,10 +277,10 @@ class OutputTruncator:
 
     def format_file(
         self,
-        lines: List[str],
+        lines: list[str],
         file_path: str,
         offset: int = 0,
-        limit: Optional[int] = None,
+        limit: int | None = None,
     ) -> str:
         """Format file output with truncation."""
         return format_file_output(
@@ -295,13 +294,13 @@ class OutputTruncator:
 
 # Convenience exports
 __all__ = [
-    "MAX_OUTPUT_BYTES",
-    "MAX_LINE_LENGTH",
     "DEFAULT_READ_LIMIT",
+    "MAX_LINE_LENGTH",
+    "MAX_OUTPUT_BYTES",
+    "OutputTruncator",
     "TruncationResult",
+    "format_file_output",
     "truncate_by_bytes",
     "truncate_lines_by_bytes",
     "truncate_output",
-    "format_file_output",
-    "OutputTruncator",
 ]

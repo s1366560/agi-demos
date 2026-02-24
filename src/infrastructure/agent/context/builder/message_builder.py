@@ -12,7 +12,7 @@ Extracted from react_agent.py to follow Single Responsibility Principle.
 
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.domain.ports.agent.context_manager_port import (
     AttachmentContent,
@@ -58,7 +58,7 @@ class MessageBuilder(MessageBuilderPort):
         user_msg = builder.build_user_message("Hello", attachments=[...])
     """
 
-    def __init__(self, config: Optional[MessageBuilderConfig] = None):
+    def __init__(self, config: MessageBuilderConfig | None = None) -> None:
         """
         Initialize message builder.
 
@@ -69,8 +69,8 @@ class MessageBuilder(MessageBuilderPort):
         self._debug = self.config.debug_logging
 
     def convert_to_openai_format(
-        self, messages: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, messages: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         Convert conversation messages to OpenAI message format.
 
@@ -99,7 +99,7 @@ class MessageBuilder(MessageBuilderPort):
 
         return result
 
-    def _convert_single_message(self, msg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _convert_single_message(self, msg: dict[str, Any]) -> dict[str, Any] | None:
         """
         Convert a single message to OpenAI format.
 
@@ -164,8 +164,8 @@ class MessageBuilder(MessageBuilderPort):
     def build_user_message(
         self,
         text: str,
-        attachments: Optional[List[AttachmentContent]] = None,
-    ) -> Dict[str, Any]:
+        attachments: list[AttachmentContent] | None = None,
+    ) -> dict[str, Any]:
         """
         Build a user message with optional multimodal content.
 
@@ -195,8 +195,8 @@ class MessageBuilder(MessageBuilderPort):
     def _build_multimodal_content(
         self,
         text: str,
-        attachments: List[AttachmentContent],
-    ) -> List[Dict[str, Any]]:
+        attachments: list[AttachmentContent],
+    ) -> list[dict[str, Any]]:
         """
         Build multimodal content array for LLM.
 
@@ -207,7 +207,7 @@ class MessageBuilder(MessageBuilderPort):
         Returns:
             Content array in OpenAI multimodal format
         """
-        content: List[Dict[str, Any]] = []
+        content: list[dict[str, Any]] = []
 
         # Add text part first
         if text:
@@ -223,7 +223,7 @@ class MessageBuilder(MessageBuilderPort):
 
     def _convert_attachment_to_content_part(
         self, attachment: AttachmentContent
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """
         Convert attachment to OpenAI content part.
 
@@ -271,7 +271,7 @@ class MessageBuilder(MessageBuilderPort):
 
         return None
 
-    def build_system_message(self, prompt: str) -> Dict[str, Any]:
+    def build_system_message(self, prompt: str) -> dict[str, Any]:
         """
         Build a system message.
 
@@ -286,8 +286,8 @@ class MessageBuilder(MessageBuilderPort):
     def build_assistant_message(
         self,
         content: str,
-        tool_calls: Optional[List[Dict[str, Any]]] = None,
-    ) -> Dict[str, Any]:
+        tool_calls: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """
         Build an assistant message with optional tool calls.
 
@@ -298,7 +298,7 @@ class MessageBuilder(MessageBuilderPort):
         Returns:
             Assistant message in OpenAI format
         """
-        message: Dict[str, Any] = {"role": "assistant", "content": content}
+        message: dict[str, Any] = {"role": "assistant", "content": content}
         if tool_calls:
             message["tool_calls"] = tool_calls
         return message
@@ -308,7 +308,7 @@ class MessageBuilder(MessageBuilderPort):
         tool_call_id: str,
         name: str,
         content: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Build a tool response message.
 
@@ -327,7 +327,7 @@ class MessageBuilder(MessageBuilderPort):
             "content": content,
         }
 
-    def validate_messages(self, messages: List[Dict[str, Any]]) -> List[str]:
+    def validate_messages(self, messages: list[dict[str, Any]]) -> list[str]:
         """
         Validate messages for common issues.
 
@@ -363,8 +363,8 @@ class MessageBuilder(MessageBuilderPort):
         return warnings
 
     def count_messages_by_role(
-        self, messages: List[Dict[str, Any]]
-    ) -> Dict[str, int]:
+        self, messages: list[dict[str, Any]]
+    ) -> dict[str, int]:
         """
         Count messages by role.
 
@@ -374,7 +374,7 @@ class MessageBuilder(MessageBuilderPort):
         Returns:
             Dict mapping role to count
         """
-        counts: Dict[str, int] = {}
+        counts: dict[str, int] = {}
         for msg in messages:
             role = msg.get("role", "unknown")
             counts[role] = counts.get(role, 0) + 1

@@ -11,7 +11,7 @@ import fnmatch
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.infrastructure.skill.markdown_parser import MarkdownParseError, MarkdownParser
 
@@ -34,7 +34,7 @@ class AllowedTool:
     """
 
     name: str
-    args_pattern: Optional[str] = None
+    args_pattern: str | None = None
 
     # Pattern to parse tool declaration: ToolName or ToolName(args)
     _TOOL_PATTERN = re.compile(r"^(\w+)(?:\(([^)]+)\))?$")
@@ -58,7 +58,7 @@ class AllowedTool:
         return cls(name=raw)
 
     @classmethod
-    def parse_many(cls, allowed_tools_raw: str) -> List["AllowedTool"]:
+    def parse_many(cls, allowed_tools_raw: str) -> list["AllowedTool"]:
         """
         Parse space-separated allowed-tools string.
 
@@ -79,7 +79,7 @@ class AllowedTool:
                 tools.append(cls.parse(part))
         return tools
 
-    def matches(self, tool_name: str, args: Optional[Dict[str, Any]] = None) -> bool:
+    def matches(self, tool_name: str, args: dict[str, Any] | None = None) -> bool:
         """
         Check if a tool call matches this permission.
 
@@ -103,7 +103,7 @@ class AllowedTool:
         args_str = str(args)
         return fnmatch.fnmatch(args_str, f"*{self.args_pattern}*")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "name": self.name,
@@ -126,9 +126,9 @@ class ValidationError:
     severity: str  # "error" | "warning"
     field: str
     message: str
-    suggestion: Optional[str] = None
+    suggestion: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "severity": self.severity,
@@ -151,9 +151,9 @@ class ValidationResult:
     """
 
     is_valid: bool
-    errors: List[ValidationError] = field(default_factory=list)
-    warnings: List[ValidationError] = field(default_factory=list)
-    skill_name: Optional[str] = None
+    errors: list[ValidationError] = field(default_factory=list)
+    warnings: list[ValidationError] = field(default_factory=list)
+    skill_name: str | None = None
 
     @property
     def has_errors(self) -> bool:
@@ -202,7 +202,7 @@ class ValidationResult:
 
         return "\n".join(lines)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "is_valid": self.is_valid,
@@ -223,7 +223,7 @@ class SkillValidationError(Exception):
         errors: List of validation errors
     """
 
-    def __init__(self, skill_id: str, errors: List[ValidationError]):
+    def __init__(self, skill_id: str, errors: list[ValidationError]) -> None:
         self.skill_id = skill_id
         self.errors = errors
         error_messages = [f"[{e.field}] {e.message}" for e in errors]
@@ -272,7 +272,7 @@ class AgentSkillsValidator:
         "trigger_type": "Not part of AgentSkills.io spec",
     }
 
-    def __init__(self, strict: bool = False):
+    def __init__(self, strict: bool = False) -> None:
         """
         Initialize the validator.
 
@@ -292,9 +292,9 @@ class AgentSkillsValidator:
         Returns:
             ValidationResult with errors and warnings
         """
-        errors: List[ValidationError] = []
-        warnings: List[ValidationError] = []
-        skill_name: Optional[str] = None
+        errors: list[ValidationError] = []
+        warnings: list[ValidationError] = []
+        skill_name: str | None = None
 
         # Check SKILL.md exists
         skill_md = skill_path / "SKILL.md"
@@ -360,7 +360,7 @@ class AgentSkillsValidator:
             skill_name=skill_name,
         )
 
-    def validate_content(self, content: str, skill_name: Optional[str] = None) -> ValidationResult:
+    def validate_content(self, content: str, skill_name: str | None = None) -> ValidationResult:
         """
         Validate SKILL.md content directly (without file).
 
@@ -371,8 +371,8 @@ class AgentSkillsValidator:
         Returns:
             ValidationResult
         """
-        errors: List[ValidationError] = []
-        warnings: List[ValidationError] = []
+        errors: list[ValidationError] = []
+        warnings: list[ValidationError] = []
 
         # Parse content
         try:
@@ -422,7 +422,7 @@ class AgentSkillsValidator:
             skill_name=skill_name,
         )
 
-    def _validate_name(self, name: str, errors: List[ValidationError]) -> None:
+    def _validate_name(self, name: str, errors: list[ValidationError]) -> None:
         """Validate the name field."""
         if not name:
             errors.append(
@@ -457,7 +457,7 @@ class AgentSkillsValidator:
                 )
             )
 
-    def _validate_description(self, description: str, errors: List[ValidationError]) -> None:
+    def _validate_description(self, description: str, errors: list[ValidationError]) -> None:
         """Validate the description field."""
         if not description or not description.strip():
             errors.append(
@@ -482,7 +482,7 @@ class AgentSkillsValidator:
                 )
             )
 
-    def _validate_compatibility(self, compatibility: str, errors: List[ValidationError]) -> None:
+    def _validate_compatibility(self, compatibility: str, errors: list[ValidationError]) -> None:
         """Validate the compatibility field."""
         if len(compatibility) > self.COMPATIBILITY_MAX_LENGTH:
             errors.append(
@@ -495,7 +495,7 @@ class AgentSkillsValidator:
                 )
             )
 
-    def _validate_allowed_tools(self, allowed_tools: Any, errors: List[ValidationError]) -> None:  # noqa: ANN401
+    def _validate_allowed_tools(self, allowed_tools: Any, errors: list[ValidationError]) -> None:
         """Validate the allowed-tools field format."""
         if not isinstance(allowed_tools, str):
             errors.append(
@@ -530,7 +530,7 @@ class AgentSkillsValidator:
             )
 
     def _validate_directory_structure(
-        self, skill_path: Path, warnings: List[ValidationError]
+        self, skill_path: Path, warnings: list[ValidationError]
     ) -> None:
         """Validate the skill directory structure."""
         # Check for deprecated directory names
@@ -545,7 +545,7 @@ class AgentSkillsValidator:
             )
 
     def _check_deprecated_fields(
-        self, frontmatter: Dict[str, Any], warnings: List[ValidationError]
+        self, frontmatter: dict[str, Any], warnings: list[ValidationError]
     ) -> None:
         """Check for deprecated/non-spec fields in frontmatter."""
         for field_name, suggestion in self.DEPRECATED_FIELDS.items():

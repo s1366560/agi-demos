@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from src.domain.model.agent import Conversation
 
@@ -21,8 +21,8 @@ class AgentRuntimeBootstrapper:
     _local_bootstrapped = False
     _local_bootstrap_lock = asyncio.Lock()
     _local_chat_lock = asyncio.Lock()
-    _local_chat_tasks: Dict[str, asyncio.Task[Any]] = {}
-    _local_chat_abort_signals: Dict[str, asyncio.Event] = {}
+    _local_chat_tasks: dict[str, asyncio.Task[Any]] = {}
+    _local_chat_abort_signals: dict[str, asyncio.Event] = {}
 
     @staticmethod
     def _normalize_runtime_mode(mode: str | None) -> str:
@@ -37,13 +37,13 @@ class AgentRuntimeBootstrapper:
         conversation: Conversation,
         message_id: str,
         user_message: str,
-        conversation_context: list[Dict[str, Any]],
-        attachment_ids: Optional[List[str]] = None,
-        file_metadata: Optional[list] = None,
-        correlation_id: Optional[str] = None,
-        forced_skill_name: Optional[str] = None,
-        context_summary_data: Optional[Dict[str, Any]] = None,
-        app_model_context: Optional[Dict[str, Any]] = None,
+        conversation_context: list[dict[str, Any]],
+        attachment_ids: list[str] | None = None,
+        file_metadata: list | None = None,
+        correlation_id: str | None = None,
+        forced_skill_name: str | None = None,
+        context_summary_data: dict[str, Any] | None = None,
+        app_model_context: dict[str, Any] | None = None,
     ) -> str:
         """Start agent execution using configured runtime mode."""
         from src.configuration.config import get_settings
@@ -249,7 +249,7 @@ class AgentRuntimeBootstrapper:
         self,
         config: ProjectAgentActorConfig,
         request: ProjectChatRequest,
-        abort_signal: Optional[asyncio.Event] = None,
+        abort_signal: asyncio.Event | None = None,
     ) -> None:
         """Run agent chat locally in-process when Ray is unavailable."""
         from src.infrastructure.agent.actor.execution import execute_project_chat
@@ -393,14 +393,14 @@ class AgentRuntimeBootstrapper:
 
             AgentRuntimeBootstrapper._local_bootstrapped = True
 
-    def _get_api_key(self, settings):
+    def _get_api_key(self, settings) -> None:
         # Deprecated: Using ProviderResolutionService now
         return None
 
-    def _get_base_url(self, settings):
+    def _get_base_url(self, settings) -> None:
         # Deprecated: Using ProviderResolutionService now
         return None
 
-    def _get_model(self, settings):
+    def _get_model(self, settings) -> str:
         # Deprecated: Using ProviderResolutionService now
         return "qwen-plus"

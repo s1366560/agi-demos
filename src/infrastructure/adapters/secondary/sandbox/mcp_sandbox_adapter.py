@@ -10,15 +10,18 @@ import asyncio
 import logging
 import socket
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional, Set
+from typing import TYPE_CHECKING, Any
 
 import docker
 from docker.errors import ImageNotFound, NotFound
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+import contextlib
 
 from src.domain.ports.services.sandbox_port import (
     CodeExecutionRequest,
@@ -50,24 +53,24 @@ logger = logging.getLogger(__name__)
 class MCPSandboxInstance(SandboxInstance):
     """Extended sandbox instance with MCP client and service ports."""
 
-    mcp_client: Optional[MCPWebSocketClient] = None
-    websocket_url: Optional[str] = None
+    mcp_client: MCPWebSocketClient | None = None
+    websocket_url: str | None = None
     # Service ports on host
-    mcp_port: Optional[int] = None
-    desktop_port: Optional[int] = None
-    terminal_port: Optional[int] = None
+    mcp_port: int | None = None
+    desktop_port: int | None = None
+    terminal_port: int | None = None
     # Service URLs
-    desktop_url: Optional[str] = None
-    terminal_url: Optional[str] = None
+    desktop_url: str | None = None
+    terminal_url: str | None = None
     # Labels for identification
-    labels: Dict[str, str] = None
+    labels: dict[str, str] = None
 
     def __post_init__(self):
         if self.labels is None:
             self.labels = {}
 
     @property
-    def project_id(self) -> Optional[str]:
+    def project_id(self) -> str | None:
         """Get project ID from labels."""
         return self.labels.get("memstack.project_id") or self.labels.get("memstack.project.id")
 
@@ -116,7 +119,7 @@ class MCPSandboxAdapter(SandboxPort):
         max_memory_mb: int = 16384,  # 16GB default
         max_cpu_cores: int = 16,
         workspace_base: str = "/workspace",
-    ):
+    ) -> None:
         """
         Initialize MCP sandbox adapter.
 
@@ -160,17 +163,17 @@ class MCPSandboxAdapter(SandboxPort):
         self._lock = self._instance_lock
 
         # Track active sandboxes and port allocation
-        self._active_sandboxes: Dict[str, MCPSandboxInstance] = {}
+        self._active_sandboxes: dict[str, MCPSandboxInstance] = {}
         self._port_counter = 0
         self._desktop_port_counter = 0
         self._terminal_port_counter = 0
-        self._used_ports: Set[int] = set()
+        self._used_ports: set[int] = set()
 
         # Pending queue for sandbox creation requests
-        self._pending_queue: List[Dict[str, Any]] = []
+        self._pending_queue: list[dict[str, Any]] = []
 
         # Track cleanup state to prevent double cleanup
-        self._cleanup_in_progress: Set[str] = set()
+        self._cleanup_in_progress: set[str] = set()
 
         # Track rebuild timestamps using TTL cache to prevent memory leaks
         # Old entries auto-expire after rebuild_ttl_seconds
@@ -192,7 +195,7 @@ class MCPSandboxAdapter(SandboxPort):
         )
 
         # Periodic cleanup task management
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: asyncio.Task | None = None
         self._cleanup_interval_seconds = 300.0  # Default: 5 minutes
 
         # Cleanup statistics
@@ -204,7 +207,7 @@ class MCPSandboxAdapter(SandboxPort):
         }
 
         # MCP Server health check task management
-        self._health_check_task: Optional[asyncio.Task] = None
+        self._health_check_task: asyncio.Task | None = None
         self._health_check_interval_seconds = 60.0  # Default: 1 minute
 
         # Health check statistics
@@ -216,7 +219,7 @@ class MCPSandboxAdapter(SandboxPort):
         }
 
         # MCP server configs for restart (key: (sandbox_id, server_name))
-        self._mcp_server_configs: Dict[tuple, Dict[str, Any]] = {}
+        self._mcp_server_configs: dict[tuple, dict[str, Any]] = {}
 
         # URL service for building service URLs
         self._url_service = SandboxUrlService(default_host="localhost", api_base="/api/v1")
@@ -292,7 +295,7 @@ class MCPSandboxAdapter(SandboxPort):
                 return port
         raise RuntimeError("No available ports for terminal")
 
-    def _release_ports_unsafe(self, ports: List[int]) -> None:
+    def _release_ports_unsafe(self, ports: list[int]) -> None:
         """Release ports when sandbox is terminated (must be called with lock held)."""
         for port in ports:
             self._used_ports.discard(port)
@@ -300,10 +303,10 @@ class MCPSandboxAdapter(SandboxPort):
     async def create_sandbox(
         self,
         project_path: str,
-        config: Optional[SandboxConfig] = None,
-        project_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
-        sandbox_id: Optional[str] = None,
+        config: SandboxConfig | None = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
+        sandbox_id: str | None = None,
     ) -> MCPSandboxInstance:
         """
         Create a new MCP sandbox container.
@@ -594,7 +597,7 @@ class MCPSandboxAdapter(SandboxPort):
             instance.mcp_client = None
             logger.info(f"MCP client disconnected: {sandbox_id}")
 
-    async def list_tools(self, sandbox_id: str) -> List[Dict[str, Any]]:
+    async def list_tools(self, sandbox_id: str) -> list[dict[str, Any]]:
         """
         List available MCP tools.
 
@@ -631,7 +634,7 @@ class MCPSandboxAdapter(SandboxPort):
             result.append(tool_info)
         return result
 
-    async def read_resource(self, sandbox_id: str, uri: str) -> Optional[str]:
+    async def read_resource(self, sandbox_id: str, uri: str) -> str | None:
         """Read a resource from a sandbox MCP server via resources/read.
 
         Args:
@@ -716,7 +719,7 @@ class MCPSandboxAdapter(SandboxPort):
 
     # === SandboxPort interface implementation ===
 
-    async def get_sandbox(self, sandbox_id: str) -> Optional[MCPSandboxInstance]:
+    async def get_sandbox(self, sandbox_id: str) -> MCPSandboxInstance | None:
         """Get sandbox instance by ID.
 
         If the sandbox is not in memory but exists in Docker, attempt to recover it.
@@ -893,7 +896,7 @@ class MCPSandboxAdapter(SandboxPort):
                         loop.run_in_executor(None, lambda: container.stop(timeout=5)),
                         timeout=15.0,  # Overall timeout for stop operation
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning(f"Container stop timed out for {sandbox_id}, forcing kill")
                     try:
                         await loop.run_in_executor(None, container.kill)
@@ -906,10 +909,8 @@ class MCPSandboxAdapter(SandboxPort):
                 except Exception as rm_err:
                     logger.warning(f"Container remove failed for {sandbox_id}: {rm_err}")
                     # Try force remove
-                    try:
+                    with contextlib.suppress(Exception):
                         await loop.run_in_executor(None, lambda: container.remove(force=True))
-                    except Exception:
-                        pass
 
             except NotFound:
                 logger.warning(f"Container not found for termination: {sandbox_id}")
@@ -983,7 +984,7 @@ class MCPSandboxAdapter(SandboxPort):
             logger.warning(f"Error checking container existence for {sandbox_id}: {e}")
             return False
 
-    async def get_sandbox_id_by_project(self, project_id: str) -> Optional[str]:
+    async def get_sandbox_id_by_project(self, project_id: str) -> str | None:
         """Get sandbox ID for a specific project.
 
         Searches active sandboxes for one associated with the given project ID.
@@ -1110,7 +1111,7 @@ class MCPSandboxAdapter(SandboxPort):
                                 loop.run_in_executor(None, lambda c=container: c.stop(timeout=5)),
                                 timeout=10.0,
                             )
-                        except asyncio.TimeoutError:
+                        except TimeoutError:
                             logger.warning(
                                 f"Stop timed out for container {container_name}, forcing kill"
                             )
@@ -1204,7 +1205,7 @@ class MCPSandboxAdapter(SandboxPort):
     async def stream_execute(
         self,
         request: CodeExecutionRequest,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Stream code execution output."""
         result = await self.execute_code(request)
 
@@ -1224,8 +1225,8 @@ class MCPSandboxAdapter(SandboxPort):
 
     async def list_sandboxes(
         self,
-        status: Optional[SandboxStatus] = None,
-    ) -> List[MCPSandboxInstance]:
+        status: SandboxStatus | None = None,
+    ) -> list[MCPSandboxInstance]:
         """List all sandbox instances (thread-safe)."""
         async with self._instance_lock:
             result = []
@@ -1234,7 +1235,7 @@ class MCPSandboxAdapter(SandboxPort):
                     result.append(instance)
             return result
 
-    async def sync_sandbox_from_docker(self, sandbox_id: str) -> Optional[MCPSandboxInstance]:
+    async def sync_sandbox_from_docker(self, sandbox_id: str) -> MCPSandboxInstance | None:
         """
         Sync a specific sandbox from Docker by container name/ID.
 
@@ -1496,7 +1497,7 @@ class MCPSandboxAdapter(SandboxPort):
         self,
         sandbox_id: str,
         output_dir: str = "/output",
-    ) -> Dict[str, bytes]:
+    ) -> dict[str, bytes]:
         """Retrieve output files using MCP tools."""
         try:
             # Use glob to list files
@@ -1564,7 +1565,7 @@ class MCPSandboxAdapter(SandboxPort):
 
         return count
 
-    async def get_sandbox_stats(self, sandbox_id: str, project_id: str = None) -> Dict[str, Any]:
+    async def get_sandbox_stats(self, sandbox_id: str, project_id: str | None = None) -> dict[str, Any]:
         """
         Get container resource usage statistics.
 
@@ -1771,7 +1772,7 @@ class MCPSandboxAdapter(SandboxPort):
 
     def queue_sandbox_request(
         self,
-        request: Dict[str, Any],
+        request: dict[str, Any],
     ) -> bool:
         """
         Add a sandbox creation request to the pending queue with size limit.
@@ -1938,7 +1939,7 @@ class MCPSandboxAdapter(SandboxPort):
     def validate_resource_config(
         self,
         config: SandboxConfig,
-    ) -> tuple[bool, List[str]]:
+    ) -> tuple[bool, list[str]]:
         """
         Validate a sandbox configuration against resource limits.
 
@@ -1990,7 +1991,7 @@ class MCPSandboxAdapter(SandboxPort):
 
     # === Resource Monitoring ===
 
-    async def get_total_resource_usage(self) -> Dict[str, Any]:
+    async def get_total_resource_usage(self) -> dict[str, Any]:
         """
         Get total resource usage across all active sandboxes.
 
@@ -2019,7 +2020,7 @@ class MCPSandboxAdapter(SandboxPort):
             "sandbox_count": count,
         }
 
-    async def get_resource_summary(self) -> Dict[str, Any]:
+    async def get_resource_summary(self) -> dict[str, Any]:
         """
         Get comprehensive resource summary.
 
@@ -2039,7 +2040,7 @@ class MCPSandboxAdapter(SandboxPort):
             "max_cpu_cores": self._max_cpu_cores,
         }
 
-    async def health_check_all(self) -> Dict[str, int]:
+    async def health_check_all(self) -> dict[str, int]:
         """
         Perform health check on all running sandboxes.
 
@@ -2077,7 +2078,7 @@ class MCPSandboxAdapter(SandboxPort):
     async def _rebuild_sandbox(
         self,
         old_instance: MCPSandboxInstance,
-    ) -> Optional[MCPSandboxInstance]:
+    ) -> MCPSandboxInstance | None:
         """
         Rebuild a sandbox container with the same ID.
 
@@ -2206,7 +2207,7 @@ class MCPSandboxAdapter(SandboxPort):
                         loop.run_in_executor(None, new_container.reload),
                         timeout=5.0,
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning(
                         f"Container reload timed out for {original_sandbox_id} "
                         f"(attempt {wait_attempt + 1}/{max_wait})"
@@ -2398,10 +2399,10 @@ class MCPSandboxAdapter(SandboxPort):
         self,
         sandbox_id: str,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         timeout: float = 60.0,
         max_retries: int = 2,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Call an MCP tool on the sandbox with retry on connection errors.
 
@@ -2509,7 +2510,7 @@ class MCPSandboxAdapter(SandboxPort):
         self,
         check_db: bool = False,
         remove_exited: bool = True,
-        max_age_hours: Optional[int] = None,
+        max_age_hours: int | None = None,
     ) -> int:
         """
         Clean up orphan sandbox containers with enhanced filtering.
@@ -2657,7 +2658,7 @@ class MCPSandboxAdapter(SandboxPort):
 
         self._cleanup_interval_seconds = interval_seconds
 
-        async def cleanup_loop():
+        async def cleanup_loop() -> None:
             while True:
                 try:
                     await asyncio.sleep(self._cleanup_interval_seconds)
@@ -2676,10 +2677,8 @@ class MCPSandboxAdapter(SandboxPort):
         """Stop the periodic cleanup background task."""
         if self._cleanup_task is not None:
             self._cleanup_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._cleanup_task
-            except asyncio.CancelledError:
-                pass
             self._cleanup_task = None
             logger.info("Stopped periodic cleanup task")
 
@@ -2710,7 +2709,7 @@ class MCPSandboxAdapter(SandboxPort):
 
         return count
 
-    def get_cleanup_stats(self) -> Dict[str, Any]:
+    def get_cleanup_stats(self) -> dict[str, Any]:
         """
         Get cleanup statistics.
 
@@ -2736,7 +2735,7 @@ class MCPSandboxAdapter(SandboxPort):
 
         self._health_check_interval_seconds = interval_seconds
 
-        async def health_check_loop():
+        async def health_check_loop() -> None:
             while True:
                 try:
                     await asyncio.sleep(self._health_check_interval_seconds)
@@ -2755,10 +2754,8 @@ class MCPSandboxAdapter(SandboxPort):
         """Stop the MCP server health check background task."""
         if self._health_check_task is not None:
             self._health_check_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._health_check_task
-            except asyncio.CancelledError:
-                pass
             self._health_check_task = None
             logger.info("Stopped MCP server health check task")
 
@@ -2767,7 +2764,7 @@ class MCPSandboxAdapter(SandboxPort):
         self._health_check_stats["total_checks"] += 1
         self._health_check_stats["last_check_at"] = datetime.now().isoformat()
 
-        for sandbox_id, instance in list(self._active_sandboxes.items()):
+        for sandbox_id, _instance in list(self._active_sandboxes.items()):
             try:
                 await self._check_mcp_servers_health(sandbox_id, auto_restart=True)
             except Exception as e:
@@ -2777,7 +2774,7 @@ class MCPSandboxAdapter(SandboxPort):
         self,
         sandbox_id: str,
         auto_restart: bool = False,
-    ) -> Dict[str, List[str]]:
+    ) -> dict[str, list[str]]:
         """
         Check health of MCP servers running in a sandbox.
 
@@ -2896,7 +2893,7 @@ class MCPSandboxAdapter(SandboxPort):
         }
         logger.debug(f"Stored config for MCP server {server_name}")
 
-    def _parse_mcp_server_list(self, result: Dict[str, Any]) -> List[Dict]:
+    def _parse_mcp_server_list(self, result: dict[str, Any]) -> list[dict]:
         """Parse server list from mcp_server_list result."""
         import json
 
@@ -2914,7 +2911,7 @@ class MCPSandboxAdapter(SandboxPort):
                     pass
         return []
 
-    def get_health_check_stats(self) -> Dict[str, Any]:
+    def get_health_check_stats(self) -> dict[str, Any]:
         """
         Get health check statistics.
 
@@ -2926,8 +2923,8 @@ class MCPSandboxAdapter(SandboxPort):
     async def get_or_create_sandbox(
         self,
         project_id: str,
-        db_session: Optional[AsyncSession] = None,
-    ) -> Optional[MCPSandboxInstance]:
+        db_session: AsyncSession | None = None,
+    ) -> MCPSandboxInstance | None:
         """Get existing active sandbox or create new one for project.
 
         This method implements project-level sandbox reuse strategy.

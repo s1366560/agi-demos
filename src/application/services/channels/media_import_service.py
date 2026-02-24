@@ -7,7 +7,7 @@ import logging
 import os
 import re
 import uuid
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,7 +43,7 @@ class MediaImportService:
     are passed as parameters to each method call.
     """
 
-    def __init__(self, feishu_downloader: FeishuMediaDownloader):
+    def __init__(self, feishu_downloader: FeishuMediaDownloader) -> None:
         """Initialize the media import service.
 
         Args:
@@ -60,7 +60,7 @@ class MediaImportService:
         mcp_adapter: MCPSandboxAdapter,  # MCPSandboxAdapter - avoid circular import
         artifact_service: ArtifactService,  # ArtifactService - avoid circular import
         db_session: AsyncSession,
-    ) -> Optional[str]:
+    ) -> str | None:
         """Import media from channel message to workspace.
 
         This method:
@@ -164,7 +164,7 @@ class MediaImportService:
             # Graceful degradation - return None instead of raising
             return None
 
-    def _extract_media_info(self, message: Message) -> tuple[str, Optional[str], Optional[str]]:
+    def _extract_media_info(self, message: Message) -> tuple[str, str | None, str | None]:
         """Extract media type, file key, and message_id from message.
 
         Args:
@@ -176,7 +176,7 @@ class MediaImportService:
         content = message.content
         media_type = content.type.value
 
-        message_id: Optional[str] = None
+        message_id: str | None = None
         if message.raw_data:
             event = message.raw_data.get("event")
             if isinstance(event, dict):
@@ -209,8 +209,8 @@ class MediaImportService:
         self,
         media_type: str,
         file_key: str,
-        original_filename: Optional[str],
-        mime_type: Optional[str] = None,
+        original_filename: str | None,
+        mime_type: str | None = None,
     ) -> str:
         """Generate filename for imported file.
 
@@ -376,13 +376,13 @@ class MediaImportService:
         self,
         content: bytes,
         filename: str,
-        metadata: Dict[str, Any],
+        metadata: dict[str, Any],
         project_id: str,
         tenant_id: str,
         conversation_id: str,
         sandbox_path: str,
         artifact_service: ArtifactService,
-    ) -> Optional[Artifact]:
+    ) -> Artifact | None:
         """Create Artifact record for imported media.
 
         Args:

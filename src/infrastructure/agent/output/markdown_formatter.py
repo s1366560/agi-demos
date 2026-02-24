@@ -4,7 +4,7 @@ MarkdownFormatter for generating markdown output (T119).
 Converts structured data into formatted markdown documents.
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from src.infrastructure.agent.output import OutputFormatter
 
@@ -21,7 +21,7 @@ class MarkdownFormatter(OutputFormatter):
     - Links and images
     """
 
-    def format(self, data: Any, metadata: Dict[str, Any] | None = None) -> str:  # noqa: ANN401
+    def format(self, data: Any, metadata: dict[str, Any] | None = None) -> str:
         """
         Format data as markdown.
 

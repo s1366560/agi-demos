@@ -8,8 +8,7 @@ CRITICAL: The 'slug' field is required in the database schema but not in the dom
 This builder ensures tests include proper slug values to prevent constraint violations.
 """
 
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from src.domain.model.tenant import Tenant
@@ -22,8 +21,8 @@ class TenantTestDataBuilder:
         self,
         name: str = "Test Tenant",
         owner_id: str = "test-user-123",
-        slug: Optional[str] = None,
-    ):
+        slug: str | None = None,
+    ) -> None:
         """Initialize builder with default values.
 
         Args:
@@ -115,14 +114,14 @@ class TenantTestDataBuilder:
             max_projects=self._max_projects,
             max_users=self._max_users,
             max_storage=self._max_storage,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
             updated_at=None,
         )
 
 
 # Convenience function for quick test data creation
 def create_test_tenant(
-    name: str = "Test Tenant", owner_id: str = "test-user-123", slug: Optional[str] = None, **kwargs
+    name: str = "Test Tenant", owner_id: str = "test-user-123", slug: str | None = None, **kwargs
 ) -> Tenant:
     """
     Create a test Tenant with sensible defaults.

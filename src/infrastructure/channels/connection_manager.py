@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from concurrent.futures import Future
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +31,8 @@ from src.infrastructure.adapters.secondary.persistence.channel_repository import
 
 if TYPE_CHECKING:
     from src.infrastructure.agent.plugins.registry import PluginDiagnostic
+
+import contextlib
 
 from src.infrastructure.channels.outbox_worker import OutboxRetryWorker
 
@@ -75,14 +78,14 @@ class ManagedConnection:
     project_id: str
     channel_type: str
     adapter: Any  # ChannelAdapter instance
-    task: Optional[asyncio.Task] = None
+    task: asyncio.Task | None = None
     status: ConnectionStatus = ConnectionStatus.DISCONNECTED
-    last_heartbeat: Optional[datetime] = None
-    last_error: Optional[str] = None
+    last_heartbeat: datetime | None = None
+    last_error: str | None = None
     reconnect_attempts: int = 0
     _stop_event: asyncio.Event = field(default_factory=asyncio.Event)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API responses."""
         return {
             "config_id": self.config_id,
@@ -120,8 +123,8 @@ class ChannelConnectionManager:
 
     def __init__(
         self,
-        message_router: Optional[Callable[[Message], None]] = None,
-        session_factory: Optional[Callable[[], AsyncSession]] = None,
+        message_router: Callable[[Message], None] | None = None,
+        session_factory: Callable[[], AsyncSession] | None = None,
     ) -> None:
         """Initialize the connection manager.
 
@@ -129,22 +132,22 @@ class ChannelConnectionManager:
             message_router: Optional callback to route incoming messages.
             session_factory: Factory function to create database sessions.
         """
-        self._connections: Dict[str, ManagedConnection] = {}
+        self._connections: dict[str, ManagedConnection] = {}
         self._message_router = message_router
         self._session_factory = session_factory
-        self._health_check_task: Optional[asyncio.Task] = None
-        self._outbox_worker: Optional[OutboxRetryWorker] = None
-        self._main_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._health_check_task: asyncio.Task | None = None
+        self._outbox_worker: OutboxRetryWorker | None = None
+        self._main_loop: asyncio.AbstractEventLoop | None = None
         self._started = False
 
     @property
-    def connections(self) -> Dict[str, ManagedConnection]:
+    def connections(self) -> dict[str, ManagedConnection]:
         """Get all managed connections."""
         return self._connections
 
     async def start_all(
         self,
-        session_factory: Optional[Callable[[], AsyncSession]] = None,
+        session_factory: Callable[[], AsyncSession] | None = None,
     ) -> int:
         """Load all enabled configurations and establish connections.
 
@@ -200,7 +203,7 @@ class ChannelConnectionManager:
         logger.info(f"[ChannelManager] Started {started}/{len(configs)} connections")
         return started
 
-    async def _list_all_enabled(self, repo: ChannelConfigRepository) -> List[ChannelConfigModel]:
+    async def _list_all_enabled(self, repo: ChannelConfigRepository) -> list[ChannelConfigModel]:
         """List all enabled configurations."""
         from sqlalchemy import select
 
@@ -255,7 +258,7 @@ class ChannelConnectionManager:
 
         return connection
 
-    async def _create_adapter(self, config: ChannelConfigModel) -> Any:  # noqa: ANN401
+    async def _create_adapter(self, config: ChannelConfigModel) -> Any:
         """Create a channel adapter based on configuration.
 
         Args:
@@ -283,7 +286,7 @@ class ChannelConnectionManager:
         )
         encryption_service = get_encryption_service()
 
-        def _decrypt_if_needed(value: Optional[str]) -> Optional[str]:
+        def _decrypt_if_needed(value: str | None) -> str | None:
             if not value:
                 return value
             try:
@@ -408,7 +411,7 @@ class ChannelConnectionManager:
                 await connection.adapter.connect()
 
                 connection.status = ConnectionStatus.CONNECTED
-                connection.last_heartbeat = datetime.now(timezone.utc)
+                connection.last_heartbeat = datetime.now(UTC)
                 connection.reconnect_attempts = 0
                 connection.last_error = None
 
@@ -530,7 +533,7 @@ class ChannelConnectionManager:
         self,
         config_id: str,
         status: str,
-        error: Optional[str] = None,
+        error: str | None = None,
     ) -> None:
         """Update connection status in database."""
         if not self._session_factory:
@@ -566,7 +569,7 @@ class ChannelConnectionManager:
         if connection.task and not connection.task.done():
             try:
                 await asyncio.wait_for(connection.task, timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 connection.task.cancel()
 
         del self._connections[config_id]
@@ -629,10 +632,8 @@ class ChannelConnectionManager:
         # Stop health check
         if self._health_check_task and not self._health_check_task.done():
             self._health_check_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._health_check_task
-            except asyncio.CancelledError:
-                pass
 
         # Stop all connections
         stop_tasks = []
@@ -668,7 +669,7 @@ class ChannelConnectionManager:
                                     )
                                     connection.status = ConnectionStatus.DISCONNECTED
                                     continue
-                            connection.last_heartbeat = datetime.now(timezone.utc)
+                            connection.last_heartbeat = datetime.now(UTC)
                         else:
                             # Connection lost, will be handled by connection loop
                             logger.warning(
@@ -680,7 +681,7 @@ class ChannelConnectionManager:
             except Exception as e:
                 logger.error(f"[ChannelManager] Health check error: {e}")
 
-    def get_status(self, config_id: str) -> Optional[Dict[str, Any]]:
+    def get_status(self, config_id: str) -> dict[str, Any] | None:
         """Get the status of a specific connection.
 
         Args:
@@ -694,7 +695,7 @@ class ChannelConnectionManager:
             return connection.to_dict()
         return None
 
-    def get_all_status(self) -> List[Dict[str, Any]]:
+    def get_all_status(self) -> list[dict[str, Any]]:
         """Get the status of all connections.
 
         Returns:

@@ -3,7 +3,6 @@ V2 SQLAlchemy implementation of TenantSkillConfigRepository using BaseRepository
 """
 
 import logging
-from typing import Dict, List, Optional
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,7 +52,7 @@ class SqlTenantSkillConfigRepository(
 
         return config
 
-    async def get_by_id(self, config_id: str) -> Optional[TenantSkillConfig]:
+    async def get_by_id(self, config_id: str) -> TenantSkillConfig | None:
         """Get a config by its ID."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             TenantSkillConfig as DBConfig,
@@ -68,7 +67,7 @@ class SqlTenantSkillConfigRepository(
         self,
         tenant_id: str,
         system_skill_name: str,
-    ) -> Optional[TenantSkillConfig]:
+    ) -> TenantSkillConfig | None:
         """Get a config by tenant and system skill name."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             TenantSkillConfig as DBConfig,
@@ -135,7 +134,7 @@ class SqlTenantSkillConfigRepository(
     async def list_by_tenant(
         self,
         tenant_id: str,
-    ) -> List[TenantSkillConfig]:
+    ) -> list[TenantSkillConfig]:
         """List all configs for a tenant."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             TenantSkillConfig as DBConfig,
@@ -155,7 +154,7 @@ class SqlTenantSkillConfigRepository(
     async def get_configs_map(
         self,
         tenant_id: str,
-    ) -> Dict[str, TenantSkillConfig]:
+    ) -> dict[str, TenantSkillConfig]:
         """Get all configs for a tenant as a map keyed by system_skill_name."""
         configs = await self.list_by_tenant(tenant_id)
         return {c.system_skill_name: c for c in configs}
@@ -174,7 +173,7 @@ class SqlTenantSkillConfigRepository(
         result = await self._session.execute(query)
         return result.scalar() or 0
 
-    def _to_domain(self, db_config) -> Optional[TenantSkillConfig]:
+    def _to_domain(self, db_config) -> TenantSkillConfig | None:
         """Convert database model to domain entity."""
         if db_config is None:
             return None

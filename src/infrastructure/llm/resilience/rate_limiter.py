@@ -21,7 +21,6 @@ import asyncio
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 from src.domain.llm_providers.models import ProviderType
 
@@ -63,7 +62,7 @@ class RateLimitStats:
 class RateLimitExceededError(Exception):
     """Raised when rate limit is exceeded and cannot be waited for."""
 
-    def __init__(self, provider_type: ProviderType, message: str = ""):
+    def __init__(self, provider_type: ProviderType, message: str = "") -> None:
         self.provider_type = provider_type
         super().__init__(message or f"Rate limit exceeded for {provider_type.value}")
 
@@ -151,8 +150,8 @@ class ProviderRateLimiter:
 
     def __init__(
         self,
-        configs: Optional[dict[ProviderType, RateLimitConfig]] = None,
-    ):
+        configs: dict[ProviderType, RateLimitConfig] | None = None,
+    ) -> None:
         """
         Initialize the rate limiter.
 
@@ -330,7 +329,7 @@ class RateLimitContext:
         semaphore: asyncio.Semaphore,
         provider_type: ProviderType,
         limiter: ProviderRateLimiter,
-    ):
+    ) -> None:
         self._semaphore = semaphore
         self._provider_type = provider_type
         self._limiter = limiter
@@ -352,7 +351,7 @@ class RateLimitContext:
 
 
 # Global rate limiter instance
-_provider_rate_limiter: Optional[ProviderRateLimiter] = None
+_provider_rate_limiter: ProviderRateLimiter | None = None
 
 
 def get_provider_rate_limiter() -> ProviderRateLimiter:

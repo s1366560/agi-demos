@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 from src.domain.shared_kernel import Entity
 
@@ -19,10 +19,10 @@ class Episode(Entity):
     content: str
     source_type: SourceType
     valid_at: datetime
-    name: Optional[str] = None
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    tenant_id: Optional[str] = None
-    project_id: Optional[str] = None
-    user_id: Optional[str] = None
+    name: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    tenant_id: str | None = None
+    project_id: str | None = None
+    user_id: str | None = None
     status: str = "PENDING"

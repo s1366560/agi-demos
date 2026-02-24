@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 _MUTATING_TOOL_NAMES = {
     "write",
@@ -40,7 +41,7 @@ _PLUGIN_MANAGER_MUTATING_ACTIONS = {
 }
 
 
-def is_mutating_tool_call(tool_name: str, args: Optional[Mapping[str, Any]] = None) -> bool:
+def is_mutating_tool_call(tool_name: str, args: Mapping[str, Any] | None = None) -> bool:
     """Return True when a tool invocation can mutate runtime or persisted state."""
     normalized_tool = (tool_name or "").strip().lower()
     if not normalized_tool:
@@ -60,10 +61,10 @@ def is_mutating_tool_call(tool_name: str, args: Optional[Mapping[str, Any]] = No
 
 def build_mutation_fingerprint(
     tool_name: str,
-    args: Optional[Mapping[str, Any]] = None,
+    args: Mapping[str, Any] | None = None,
     *,
-    meta: Optional[str] = None,
-) -> Optional[str]:
+    meta: str | None = None,
+) -> str | None:
     """Build a stable fingerprint for mutation deduplication and audit logs."""
     payload = dict(args or {})
     if not is_mutating_tool_call(tool_name, payload):
@@ -97,14 +98,14 @@ def build_mutation_fingerprint(
     return "|".join(parts)
 
 
-def _normalize_action(value: Any) -> Optional[str]:  # noqa: ANN401
+def _normalize_action(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     normalized = value.strip().lower().replace("-", "_")
     return normalized or None
 
 
-def _normalize_fingerprint_value(value: Any) -> Optional[str]:  # noqa: ANN401
+def _normalize_fingerprint_value(value: Any) -> str | None:
     if isinstance(value, str):
         normalized = value.strip()
         return normalized.lower() if normalized else None

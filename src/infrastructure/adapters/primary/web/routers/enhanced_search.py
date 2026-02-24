@@ -2,7 +2,6 @@
 
 import logging
 from datetime import datetime
-from typing import List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 
@@ -33,14 +32,14 @@ hybrid_router = APIRouter(prefix="/api/v1/hybrid", tags=["hybrid-search"])
 async def search_advanced(
     query: str = Body(..., description="Search query"),
     strategy: str = Body("COMBINED_HYBRID_SEARCH_RRF", description="Search strategy recipe name"),
-    focal_node_uuid: Optional[str] = Body(
+    focal_node_uuid: str | None = Body(
         None, description="Focal node UUID for Node Distance Reranking"
     ),
-    reranker: Optional[str] = Body(None, description="Reranker client (openai, gemini, bge)"),
+    reranker: str | None = Body(None, description="Reranker client (openai, gemini, bge)"),
     limit: int = Body(50, ge=1, le=200, description="Maximum results"),
-    tenant_id: Optional[str] = Body(None, description="Tenant filter"),
-    project_id: Optional[str] = Body(None, description="Project filter"),
-    since: Optional[str] = Body(None, description="Filter by creation date (ISO format)"),
+    tenant_id: str | None = Body(None, description="Tenant filter"),
+    project_id: str | None = Body(None, description="Project filter"),
+    since: str | None = Body(None, description="Filter by creation date (ISO format)"),
     current_user: User = Depends(get_current_user),
     graph_service=Depends(get_graph_service),
 ):
@@ -114,11 +113,11 @@ async def search_advanced(
 async def search_by_graph_traversal(
     start_entity_uuid: str = Body(..., description="Starting entity UUID"),
     max_depth: int = Body(2, ge=1, le=5, description="Maximum traversal depth"),
-    relationship_types: Optional[List[str]] = Body(
+    relationship_types: list[str] | None = Body(
         None, description="Relationship types to follow"
     ),
     limit: int = Body(50, ge=1, le=200, description="Maximum results"),
-    tenant_id: Optional[str] = Body(None, description="Tenant filter"),
+    tenant_id: str | None = Body(None, description="Tenant filter"),
     current_user: User = Depends(get_current_user),
     neo4j_client=Depends(get_neo4j_client),
 ):
@@ -272,10 +271,10 @@ async def search_by_community(
 @router.post("/temporal")
 async def search_temporal(
     query: str = Body(..., description="Search query"),
-    since: Optional[str] = Body(None, description="Start of time range (ISO format)"),
-    until: Optional[str] = Body(None, description="End of time range (ISO format)"),
+    since: str | None = Body(None, description="Start of time range (ISO format)"),
+    until: str | None = Body(None, description="End of time range (ISO format)"),
     limit: int = Body(50, ge=1, le=200, description="Maximum results"),
-    tenant_id: Optional[str] = Body(None, description="Tenant filter"),
+    tenant_id: str | None = Body(None, description="Tenant filter"),
     current_user: User = Depends(get_current_user),
     neo4j_client=Depends(get_neo4j_client),
 ):
@@ -362,12 +361,12 @@ async def search_temporal(
 @router.post("/faceted")
 async def search_with_facets(
     query: str = Body(..., description="Search query"),
-    entity_types: Optional[List[str]] = Body(None, description="Filter by entity types"),
-    tags: Optional[List[str]] = Body(None, description="Filter by tags"),
-    since: Optional[str] = Body(None, description="Filter by creation date (ISO format)"),
+    entity_types: list[str] | None = Body(None, description="Filter by entity types"),
+    tags: list[str] | None = Body(None, description="Filter by tags"),
+    since: str | None = Body(None, description="Filter by creation date (ISO format)"),
     limit: int = Body(50, ge=1, le=200, description="Maximum results"),
     offset: int = Body(0, ge=0, description="Pagination offset"),
-    tenant_id: Optional[str] = Body(None, description="Tenant filter"),
+    tenant_id: str | None = Body(None, description="Tenant filter"),
     current_user: User = Depends(get_current_user),
     neo4j_client=Depends(get_neo4j_client),
 ):

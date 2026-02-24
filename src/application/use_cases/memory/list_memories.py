@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import List, Optional
 
 from src.domain.model.memory.memory import Memory
 from src.domain.ports.repositories.memory_repository import MemoryRepository
@@ -12,16 +11,16 @@ class ListMemoriesQuery:
     project_id: str
     limit: int = 50
     offset: int = 0
-    search: Optional[str] = None
+    search: str | None = None
 
 
 class ListMemoriesUseCase:
     """Use case to list memories for a project"""
 
-    def __init__(self, memory_repository: MemoryRepository):
+    def __init__(self, memory_repository: MemoryRepository) -> None:
         self._memory_repo = memory_repository
 
-    async def execute(self, query: ListMemoriesQuery) -> List[Memory]:
+    async def execute(self, query: ListMemoriesQuery) -> list[Memory]:
         """
         List memories for a project.
 

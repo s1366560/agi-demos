@@ -5,7 +5,6 @@ Called during database initialization to ensure builtin templates exist.
 """
 
 import logging
-from typing import List
 
 from src.domain.ports.repositories.subagent_template_repository import (
     SubAgentTemplateRepositoryPort,
@@ -13,7 +12,7 @@ from src.domain.ports.repositories.subagent_template_repository import (
 
 logger = logging.getLogger(__name__)
 
-BUILTIN_TEMPLATES: List[dict] = [
+BUILTIN_TEMPLATES: list[dict] = [
     {
         "name": "researcher",
         "display_name": "Research Assistant",

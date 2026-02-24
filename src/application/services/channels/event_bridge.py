@@ -13,7 +13,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Optional
+from collections.abc import Callable, Coroutine
+from typing import TYPE_CHECKING, Any
 
 from src.configuration.config import get_settings
 from src.domain.model.channels.message import ChannelAdapter
@@ -28,7 +29,7 @@ if TYPE_CHECKING:
 
 # Type alias for event handler coroutines
 EventHandler = Callable[
-    [ChannelAdapter, str, Dict[str, Any]],
+    [ChannelAdapter, str, dict[str, Any]],
     Coroutine[Any, Any, None],
 ]
 
@@ -71,12 +72,12 @@ class ChannelEventBridge:
 
     def __init__(
         self,
-        channel_manager: Optional[ChannelConnectionManager] = None,
+        channel_manager: ChannelConnectionManager | None = None,
         *,
-        subagent_focus_ttl_seconds: Optional[float] = None,
+        subagent_focus_ttl_seconds: float | None = None,
     ) -> None:
         self._channel_manager = channel_manager
-        self._handlers: Dict[str, EventHandler] = {
+        self._handlers: dict[str, EventHandler] = {
             "clarification_asked": self._handle_hitl_event,
             "decision_asked": self._handle_hitl_event,
             "env_var_requested": self._handle_hitl_event,
@@ -94,12 +95,12 @@ class ChannelEventBridge:
             "subagent_killed": self._handle_subagent_focus_event,
         }
         # card_id → CardStreamState for unified HITL (set by streaming flow)
-        self._card_states: Dict[str, Any] = {}  # conversation_id → CardStreamState
+        self._card_states: dict[str, Any] = {}  # conversation_id → CardStreamState
         # conversation_id → task progress card message_id (for patch updates)
-        self._task_card_states: Dict[str, str] = {}
+        self._task_card_states: dict[str, str] = {}
         # conversation_id -> detached subagent thread focus state
-        self._subagent_focus: Dict[str, Dict[str, Any]] = {}
-        self._subagent_focus_timeout_tasks: Dict[str, asyncio.Task] = {}
+        self._subagent_focus: dict[str, dict[str, Any]] = {}
+        self._subagent_focus_timeout_tasks: dict[str, asyncio.Task] = {}
         configured_focus_ttl_seconds = (
             self._DEFAULT_SUBAGENT_FOCUS_TTL_SECONDS
             if subagent_focus_ttl_seconds is None
@@ -110,10 +111,10 @@ class ChannelEventBridge:
     async def on_agent_event(
         self,
         conversation_id: str,
-        event: Dict[str, Any],
+        event: dict[str, Any],
         *,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
     ) -> None:
         """Route an agent event to the bound channel (if any).
 
@@ -171,7 +172,7 @@ class ChannelEventBridge:
                 f"for conversation {conversation_id}: {e}"
             )
 
-    async def _lookup_binding(self, conversation_id: str) -> Any:  # noqa: ANN401
+    async def _lookup_binding(self, conversation_id: str) -> Any:
         """Reverse-lookup channel binding from conversation_id."""
         try:
             from src.infrastructure.adapters.secondary.persistence.channel_repository import (
@@ -188,7 +189,7 @@ class ChannelEventBridge:
             logger.info(f"[EventBridge] Binding lookup failed: {e}")
             return None
 
-    def _get_adapter(self, channel_config_id: str) -> Optional[ChannelAdapter]:
+    def _get_adapter(self, channel_config_id: str) -> ChannelAdapter | None:
         """Get the channel adapter for a config ID."""
         if not self._channel_manager:
             try:
@@ -224,7 +225,7 @@ class ChannelEventBridge:
         """Remove card state tracking for a conversation."""
         self._card_states.pop(conversation_id, None)
 
-    def get_card_state(self, conversation_id: str) -> Optional[CardStreamState]:
+    def get_card_state(self, conversation_id: str) -> CardStreamState | None:
         """Get the active CardStreamState for a conversation (or None)."""
         return self._card_states.get(conversation_id)
 
@@ -236,7 +237,7 @@ class ChannelEventBridge:
         self,
         adapter: ChannelAdapter,
         chat_id: str,
-        event_data: Dict[str, Any],
+        event_data: dict[str, Any],
     ) -> None:
         """Forward HITL request to channel as an interactive card.
 
@@ -331,7 +332,7 @@ class ChannelEventBridge:
         card_state: CardStreamState,
         event_type: str,
         request_id: str,
-        event_data: Dict[str, Any],
+        event_data: dict[str, Any],
         *,
         tenant_id: str = "",
         project_id: str = "",
@@ -370,7 +371,7 @@ class ChannelEventBridge:
         self,
         adapter: ChannelAdapter,
         chat_id: str,
-        event_data: Dict[str, Any],
+        event_data: dict[str, Any],
     ) -> None:
         """Forward task list update to channel as a rich card.
 
@@ -439,10 +440,10 @@ class ChannelEventBridge:
         self,
         adapter: ChannelAdapter,
         chat_id: str,
-        tasks: List[Dict[str, Any]],
+        tasks: list[dict[str, Any]],
     ) -> None:
         """Send task update as plain text fallback."""
-        lines: List[str] = []
+        lines: list[str] = []
         for task in tasks[:10]:
             status = task.get("status", "pending")
             title = task.get("content") or task.get("title", "Untitled")
@@ -466,7 +467,7 @@ class ChannelEventBridge:
         self,
         adapter: ChannelAdapter,
         chat_id: str,
-        event_data: Dict[str, Any],
+        event_data: dict[str, Any],
     ) -> None:
         """Forward task_start/task_complete timeline events as status messages."""
         event_type = event_data.get("_event_type", "")
@@ -511,7 +512,7 @@ class ChannelEventBridge:
         self,
         adapter: ChannelAdapter,
         chat_id: str,
-        event_data: Dict[str, Any],
+        event_data: dict[str, Any],
     ) -> None:
         """Forward artifact availability notification as a rich card."""
         name = event_data.get("name") or event_data.get("filename") or "Artifact"
@@ -543,7 +544,7 @@ class ChannelEventBridge:
         self,
         adapter: ChannelAdapter,
         chat_id: str,
-        event_data: Dict[str, Any],
+        event_data: dict[str, Any],
     ) -> None:
         """Forward error notification as a rich card."""
         message = event_data.get("message") or "An error occurred"
@@ -575,7 +576,7 @@ class ChannelEventBridge:
         self,
         adapter: ChannelAdapter,
         chat_id: str,
-        event_data: Dict[str, Any],
+        event_data: dict[str, Any],
     ) -> None:
         """Forward detached subagent lifecycle updates with thread focus + TTL unfocus."""
         event_type_raw = event_data.get("_event_type")
@@ -666,7 +667,7 @@ class ChannelEventBridge:
         adapter: ChannelAdapter,
         chat_id: str,
         text: str,
-        reply_to: Optional[str],
+        reply_to: str | None,
     ) -> None:
         """Send markdown card in thread when possible, with text fallback."""
         if hasattr(adapter, "send_markdown_card"):
@@ -714,7 +715,7 @@ class ChannelEventBridge:
         subagent_name: str,
         adapter: ChannelAdapter,
         chat_id: str,
-        reply_to: Optional[str],
+        reply_to: str | None,
     ) -> None:
         """Arm (or refresh) auto-unfocus timeout for an active detached subagent."""
         self._cancel_subagent_focus_timeout(conversation_id)
@@ -754,7 +755,7 @@ class ChannelEventBridge:
     # Card builders
     # ------------------------------------------------------------------
 
-    def _build_hitl_card(self, event_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _build_hitl_card(self, event_data: dict[str, Any]) -> dict[str, Any] | None:
         """Build an interactive card for HITL requests.
 
         Returns a Feishu-compatible card dict or None if not possible.
@@ -766,7 +767,7 @@ class ChannelEventBridge:
         if not question:
             return None
 
-        elements: List[Dict[str, Any]] = [
+        elements: list[dict[str, Any]] = [
             {
                 "tag": "markdown",
                 "content": f"**Agent Question**\n\n{question}",
@@ -774,7 +775,7 @@ class ChannelEventBridge:
         ]
 
         if options:
-            actions: List[Dict[str, Any]] = []
+            actions: list[dict[str, Any]] = []
             for opt in options[:5]:  # Limit to 5 buttons
                 opt_text = opt if isinstance(opt, str) else str(opt.get("label", opt))
                 opt_value = opt if isinstance(opt, str) else str(opt.get("value", opt))
@@ -800,7 +801,7 @@ class ChannelEventBridge:
             "elements": elements,
         }
 
-    def _format_hitl_text(self, question: str, options: List[Any]) -> str:
+    def _format_hitl_text(self, question: str, options: list[Any]) -> str:
         """Format HITL request as plain text (fallback)."""
         if not question:
             return ""
@@ -817,7 +818,7 @@ class ChannelEventBridge:
 # Singleton
 # ---------------------------------------------------------------------------
 
-_bridge: Optional[ChannelEventBridge] = None
+_bridge: ChannelEventBridge | None = None
 
 
 def get_channel_event_bridge() -> ChannelEventBridge:

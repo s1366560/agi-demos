@@ -12,8 +12,8 @@ This service orchestrates the pattern learning process:
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from src.application.use_cases.agent.find_similar_pattern import (
     FindSimilarPattern,
@@ -39,7 +39,7 @@ class ExecutionStep:
     tool_name: str
     expected_output_format: str = "text"
     similarity_threshold: float = 0.8
-    tool_parameters: Optional[Dict[str, Any]] = None
+    tool_parameters: dict[str, Any] | None = None
 
 
 @dataclass
@@ -54,14 +54,14 @@ class ExecutionAnalysis:
     execution_id: str
     tenant_id: str
     query: str
-    steps: List[ExecutionStep]
+    steps: list[ExecutionStep]
     was_successful: bool
-    execution_metadata: Dict[str, Any] = field(default_factory=dict)
+    execution_metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_learn_request(
         self,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
+        name: str | None = None,
+        description: str | None = None,
     ) -> LearnPatternRequest:
         """
         Convert this analysis to a LearnPatternRequest.
@@ -107,9 +107,9 @@ class LearningResult:
     """
 
     action: str  # "created", "updated", "skipped"
-    pattern: Optional[WorkflowPattern]
-    similarity_score: Optional[float] = None  # If updated, similarity to existing
-    reason: Optional[str] = None  # If skipped, why
+    pattern: WorkflowPattern | None
+    similarity_score: float | None = None  # If updated, similarity to existing
+    reason: str | None = None  # If skipped, why
 
 
 class WorkflowLearner:
@@ -131,7 +131,7 @@ class WorkflowLearner:
         learn_pattern: LearnPattern,
         find_similar_pattern: FindSimilarPattern,
         repository: WorkflowPatternRepositoryPort,
-    ):
+    ) -> None:
         self._learn_pattern = learn_pattern
         self._find_similar_pattern = find_similar_pattern
         self._repository = repository
@@ -198,7 +198,7 @@ class WorkflowLearner:
         self,
         tenant_id: str,
         query: str,
-    ) -> Optional[WorkflowPattern]:
+    ) -> WorkflowPattern | None:
         """
         Find the best pattern for a given query.
 
@@ -218,7 +218,7 @@ class WorkflowLearner:
     async def get_all_tenant_patterns(
         self,
         tenant_id: str,
-    ) -> List[WorkflowPattern]:
+    ) -> list[WorkflowPattern]:
         """
         Get all patterns for a tenant.
 
@@ -236,7 +236,7 @@ class WorkflowLearner:
         execution_id: str,
         tenant_id: str,
         query: str,
-        execution_trace: List[Dict[str, Any]],
+        execution_trace: list[dict[str, Any]],
         was_successful: bool,
     ) -> ExecutionAnalysis:
         """
@@ -280,7 +280,7 @@ class WorkflowLearner:
             was_successful=was_successful,
             execution_metadata={
                 "trace_length": len(execution_trace),
-                "analyzed_at": datetime.now(timezone.utc).isoformat(),
+                "analyzed_at": datetime.now(UTC).isoformat(),
             },
         )
 
@@ -288,7 +288,7 @@ class WorkflowLearner:
         self,
         pattern_id: str,
         success: bool,
-    ) -> Optional[WorkflowPattern]:
+    ) -> WorkflowPattern | None:
         """
         Record the result of a pattern execution.
 

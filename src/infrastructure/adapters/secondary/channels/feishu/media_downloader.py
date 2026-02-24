@@ -5,7 +5,7 @@ import logging
 import mimetypes
 import re
 import time
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 import aiohttp
 
@@ -35,7 +35,7 @@ class FeishuMediaDownloader:
         app_id: str,
         app_secret: str,
         domain: str = "feishu",
-    ):
+    ) -> None:
         """Initialize the media downloader.
 
         Args:
@@ -46,9 +46,9 @@ class FeishuMediaDownloader:
         self._app_id = app_id
         self._app_secret = app_secret
         self._domain = domain
-        self._tenant_access_token: Optional[str] = None
+        self._tenant_access_token: str | None = None
         self._token_expires_at: float = 0
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
         self._token_lock = asyncio.Lock()
 
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -119,7 +119,7 @@ class FeishuMediaDownloader:
                     self._token_expires_at = time.time() + data.get("expire", 7200)
                     return self._tenant_access_token
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 raise FeishuMediaDownloadError("Timeout getting tenant access token")
             except Exception as e:
                 raise FeishuMediaDownloadError(f"Error getting tenant access token: {e}")
@@ -131,7 +131,7 @@ class FeishuMediaDownloader:
     async def download_image(
         self,
         image_key: str,
-    ) -> Tuple[bytes, Dict[str, Any]]:
+    ) -> tuple[bytes, dict[str, Any]]:
         """Download an image from Feishu.
 
         Args:
@@ -152,9 +152,9 @@ class FeishuMediaDownloader:
         self,
         file_key: str,
         message_id: str,
-        file_name: Optional[str] = None,
+        file_name: str | None = None,
         media_type: str = "file",
-    ) -> Tuple[bytes, Dict[str, Any]]:
+    ) -> tuple[bytes, dict[str, Any]]:
         """Download a file from Feishu IM message resources.
 
         Uses the correct API endpoint for downloading files from chat messages:
@@ -182,9 +182,9 @@ class FeishuMediaDownloader:
         self,
         file_key: str,
         media_type: str,
-        message_id: Optional[str] = None,
-        file_name: Optional[str] = None,
-    ) -> Tuple[bytes, Dict[str, Any]]:
+        message_id: str | None = None,
+        file_name: str | None = None,
+    ) -> tuple[bytes, dict[str, Any]]:
         """Download media file from Feishu based on type.
 
         This is a unified method that routes to the appropriate download method
@@ -220,7 +220,7 @@ class FeishuMediaDownloader:
         self,
         url: str,
         default_filename: str,
-    ) -> Tuple[bytes, Dict[str, Any]]:
+    ) -> tuple[bytes, dict[str, Any]]:
         """Download file with retry logic.
 
         Args:
@@ -233,7 +233,7 @@ class FeishuMediaDownloader:
         Raises:
             FeishuMediaDownloadError: If all retries fail
         """
-        last_error: Optional[Exception] = None
+        last_error: Exception | None = None
 
         for attempt in range(self._MAX_RETRIES):
             try:
@@ -250,7 +250,7 @@ class FeishuMediaDownloader:
         self,
         url: str,
         default_filename: str,
-    ) -> Tuple[bytes, Dict[str, Any]]:
+    ) -> tuple[bytes, dict[str, Any]]:
         """Download file once (single attempt).
 
         Args:
@@ -330,7 +330,7 @@ class FeishuMediaDownloader:
 
                 return content, metadata
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise FeishuMediaDownloadError(f"Download timeout after {self._TIMEOUT_SECONDS}s")
         except aiohttp.ClientError as e:
             raise FeishuMediaDownloadError(f"HTTP client error: {e}")

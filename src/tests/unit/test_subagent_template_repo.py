@@ -8,8 +8,7 @@ Tests cover:
 """
 
 import uuid
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from datetime import UTC, datetime
 
 import pytest
 
@@ -27,12 +26,12 @@ from src.infrastructure.adapters.secondary.persistence.seed_templates import (
 class FakeTemplateRepository(SubAgentTemplateRepositoryPort):
     """In-memory fake repository for testing."""
 
-    def __init__(self):
-        self._templates: Dict[str, dict] = {}
+    def __init__(self) -> None:
+        self._templates: dict[str, dict] = {}
 
     async def create(self, template: dict) -> dict:
         template_id = template.get("id") or str(uuid.uuid4())
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         stored = {
             "id": template_id,
             "tenant_id": template["tenant_id"],
@@ -63,24 +62,24 @@ class FakeTemplateRepository(SubAgentTemplateRepositoryPort):
         self._templates[template_id] = stored
         return stored
 
-    async def get_by_id(self, template_id: str) -> Optional[dict]:
+    async def get_by_id(self, template_id: str) -> dict | None:
         return self._templates.get(template_id)
 
     async def get_by_name(
-        self, tenant_id: str, name: str, version: Optional[str] = None
-    ) -> Optional[dict]:
+        self, tenant_id: str, name: str, version: str | None = None
+    ) -> dict | None:
         for t in self._templates.values():
             if t["tenant_id"] == tenant_id and t["name"] == name:
                 if version is None or t["version"] == version:
                     return t
         return None
 
-    async def update(self, template_id: str, data: dict) -> Optional[dict]:
+    async def update(self, template_id: str, data: dict) -> dict | None:
         if template_id not in self._templates:
             return None
         self._templates[template_id].update(data)
         self._templates[template_id]["updated_at"] = (
-            datetime.now(timezone.utc).isoformat()
+            datetime.now(UTC).isoformat()
         )
         return self._templates[template_id]
 
@@ -93,13 +92,13 @@ class FakeTemplateRepository(SubAgentTemplateRepositoryPort):
     async def list_templates(
         self,
         tenant_id: str,
-        category: Optional[str] = None,
-        tags: Optional[List[str]] = None,
-        query: Optional[str] = None,
+        category: str | None = None,
+        tags: list[str] | None = None,
+        query: str | None = None,
         published_only: bool = True,
         limit: int = 50,
         offset: int = 0,
-    ) -> List[dict]:
+    ) -> list[dict]:
         results = []
         for t in self._templates.values():
             if t["tenant_id"] != tenant_id:
@@ -116,7 +115,7 @@ class FakeTemplateRepository(SubAgentTemplateRepositoryPort):
     async def count_templates(
         self,
         tenant_id: str,
-        category: Optional[str] = None,
+        category: str | None = None,
         published_only: bool = True,
     ) -> int:
         count = 0
@@ -130,7 +129,7 @@ class FakeTemplateRepository(SubAgentTemplateRepositoryPort):
             count += 1
         return count
 
-    async def list_categories(self, tenant_id: str) -> List[str]:
+    async def list_categories(self, tenant_id: str) -> list[str]:
         categories = set()
         for t in self._templates.values():
             if t["tenant_id"] == tenant_id and t["is_published"]:

@@ -7,7 +7,6 @@ from environment variables when no providers are configured in the database.
 
 import logging
 import os
-from typing import Dict, Optional
 
 from sqlalchemy.exc import IntegrityError
 
@@ -18,7 +17,7 @@ from src.infrastructure.llm.provider_credentials import should_require_api_key
 logger = logging.getLogger(__name__)
 
 # Provider type mapping from config name to ProviderType enum
-PROVIDER_TYPE_MAP: Dict[str, ProviderType] = {
+PROVIDER_TYPE_MAP: dict[str, ProviderType] = {
     "gemini": ProviderType.GEMINI,
     "dashscope": ProviderType.DASHSCOPE,
     "openai": ProviderType.OPENAI,
@@ -170,7 +169,7 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
 
 def _build_provider_config(
     provider_name: str,
-) -> Optional[ProviderConfigCreate]:
+) -> ProviderConfigCreate | None:
     """
     Build a ProviderConfigCreate from environment variables.
 

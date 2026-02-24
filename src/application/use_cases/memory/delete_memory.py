@@ -1,4 +1,3 @@
-from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
@@ -12,7 +11,7 @@ class DeleteMemoryCommand(BaseModel):
     model_config = {"frozen": True}
 
     memory_id: str
-    project_id: Optional[str] = None  # For validation if needed
+    project_id: str | None = None  # For validation if needed
 
     @field_validator("memory_id")
     @classmethod
@@ -23,7 +22,7 @@ class DeleteMemoryCommand(BaseModel):
 
 
 class DeleteMemoryUseCase:
-    def __init__(self, memory_repository: MemoryRepository, graph_service: GraphServicePort):
+    def __init__(self, memory_repository: MemoryRepository, graph_service: GraphServicePort) -> None:
         self._memory_repo = memory_repository
         self._graph_service = graph_service
 

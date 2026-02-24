@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.adapters.primary.web.websocket.handlers.base_handler import (
     WebSocketMessageHandler,
@@ -29,7 +29,7 @@ class SendMessageHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "send_message"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Handle send_message: Start agent execution."""
         conversation_id = message.get("conversation_id")
         user_message = message.get("message")
@@ -136,7 +136,7 @@ class StopSessionHandler(WebSocketMessageHandler):
     def message_type(self) -> str:
         return "stop_session"
 
-    async def handle(self, context: MessageContext, message: Dict[str, Any]) -> None:
+    async def handle(self, context: MessageContext, message: dict[str, Any]) -> None:
         """Handle stop_session: Cancel ongoing agent execution."""
         conversation_id = message.get("conversation_id")
 
@@ -242,10 +242,10 @@ async def stream_agent_to_websocket(
     conversation_id: str,
     user_message: str,
     project_id: str,
-    attachment_ids: Optional[list] = None,
-    file_metadata: Optional[list] = None,
-    forced_skill_name: Optional[str] = None,
-    app_model_context: Optional[dict] = None,
+    attachment_ids: list | None = None,
+    file_metadata: list | None = None,
+    forced_skill_name: str | None = None,
+    app_model_context: dict | None = None,
 ) -> None:
     """
     Stream agent events to WebSocket.
@@ -289,7 +289,7 @@ async def stream_agent_to_websocket(
                 "conversation_id": conversation_id,
                 "data": event_data,
                 "seq": event.get("id"),
-                "timestamp": event.get("timestamp", datetime.now(timezone.utc).isoformat()),
+                "timestamp": event.get("timestamp", datetime.now(UTC).isoformat()),
                 "event_time_us": event.get("event_time_us"),
                 "event_counter": event.get("event_counter"),
             }
@@ -316,7 +316,7 @@ async def stream_hitl_response_to_websocket(
     agent_service: AgentService,
     session_id: str,
     conversation_id: str,
-    message_id: Optional[str] = None,
+    message_id: str | None = None,
 ) -> None:
     """
     Stream agent events after HITL response to WebSocket.
@@ -363,7 +363,7 @@ async def stream_hitl_response_to_websocket(
                 "conversation_id": conversation_id,
                 "data": event_data,
                 "seq": event.get("id"),
-                "timestamp": event.get("timestamp", datetime.now(timezone.utc).isoformat()),
+                "timestamp": event.get("timestamp", datetime.now(UTC).isoformat()),
                 "event_time_us": event.get("event_time_us"),
                 "event_counter": event.get("event_counter"),
             }

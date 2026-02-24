@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -11,9 +11,9 @@ class ProjectAgentActorConfig:
     tenant_id: str
     project_id: str
     agent_mode: str = "default"
-    model: Optional[str] = None
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
+    model: str | None = None
+    api_key: str | None = None
+    base_url: str | None = None
     temperature: float = 0.7
     max_tokens: int = 4096
     max_steps: int = 20
@@ -31,20 +31,20 @@ class ProjectChatRequest:
     message_id: str
     user_message: str
     user_id: str
-    conversation_context: List[Dict[str, Any]] = field(default_factory=list)
-    attachment_ids: Optional[List[str]] = None
-    file_metadata: Optional[List[Dict[str, Any]]] = None
-    correlation_id: Optional[str] = None
-    forced_skill_name: Optional[str] = None
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
-    max_steps: Optional[int] = None
+    conversation_context: list[dict[str, Any]] = field(default_factory=list)
+    attachment_ids: list[str] | None = None
+    file_metadata: list[dict[str, Any]] | None = None
+    correlation_id: str | None = None
+    forced_skill_name: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+    max_steps: int | None = None
     # Cached context summary from previous turns (serialized dict)
-    context_summary_data: Optional[Dict[str, Any]] = None
+    context_summary_data: dict[str, Any] | None = None
     # Whether conversation is in Plan Mode (read-only analysis)
     plan_mode: bool = False
     # Context injected by MCP Apps via ui/update-model-context (SEP-1865)
-    app_model_context: Optional[Dict[str, Any]] = None
+    app_model_context: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -55,11 +55,11 @@ class ProjectChatResult:
     last_event_time_us: int = 0
     last_event_counter: int = 0
     is_error: bool = False
-    error_message: Optional[str] = None
+    error_message: str | None = None
     execution_time_ms: float = 0.0
     event_count: int = 0
     hitl_pending: bool = False
-    hitl_request_id: Optional[str] = None
+    hitl_request_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -77,8 +77,8 @@ class ProjectAgentStatus:
     tool_count: int = 0
     skill_count: int = 0
     subagent_count: int = 0
-    created_at: Optional[str] = None
-    last_activity_at: Optional[str] = None
+    created_at: str | None = None
+    last_activity_at: str | None = None
     uptime_seconds: float = 0.0
-    current_conversation_id: Optional[str] = None
-    current_message_id: Optional[str] = None
+    current_conversation_id: str | None = None
+    current_message_id: str | None = None

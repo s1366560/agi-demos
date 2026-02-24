@@ -22,7 +22,7 @@ Features:
 
 import asyncio
 import logging
-from typing import AsyncIterator, Dict, List, Optional, Union
+from collections.abc import AsyncIterator
 
 import redis.asyncio as redis
 
@@ -59,11 +59,11 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
     def __init__(
         self,
         redis_client: redis.Redis,
-        stream_prefix: Optional[str] = None,
-        default_max_len: Optional[int] = None,
-        default_ttl_seconds: Optional[int] = None,
-        serializer: Optional[EventSerializer] = None,
-    ):
+        stream_prefix: str | None = None,
+        default_max_len: int | None = None,
+        default_ttl_seconds: int | None = None,
+        serializer: EventSerializer | None = None,
+    ) -> None:
         """Initialize the Redis Unified Event Bus adapter.
 
         Args:
@@ -78,9 +78,9 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
         self._max_len = default_max_len or self.DEFAULT_MAX_LEN
         self._ttl = default_ttl_seconds or self.DEFAULT_TTL_SECONDS
         self._serializer = serializer or EventSerializer(auto_migrate=True)
-        self._active_subscriptions: Dict[str, bool] = {}
+        self._active_subscriptions: dict[str, bool] = {}
 
-    def _get_stream_key(self, routing_key: Union[str, RoutingKey]) -> str:
+    def _get_stream_key(self, routing_key: str | RoutingKey) -> str:
         """Convert routing key to stream key."""
         key_str = str(routing_key) if isinstance(routing_key, RoutingKey) else routing_key
         return f"{self._stream_prefix}{key_str}"
@@ -94,7 +94,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
     async def publish(
         self,
         event: EventEnvelope,
-        routing_key: Union[str, RoutingKey],
+        routing_key: str | RoutingKey,
     ) -> PublishResult:
         """Publish an event to the bus."""
         stream_key = self._get_stream_key(routing_key)
@@ -154,8 +154,8 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
 
     async def publish_batch(
         self,
-        events: List[tuple[EventEnvelope, Union[str, RoutingKey]]],
-    ) -> List[PublishResult]:
+        events: list[tuple[EventEnvelope, str | RoutingKey]],
+    ) -> list[PublishResult]:
         """Publish multiple events atomically using pipeline."""
         if not events:
             return []
@@ -204,7 +204,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
     async def subscribe(
         self,
         pattern: str,
-        options: Optional[SubscriptionOptions] = None,
+        options: SubscriptionOptions | None = None,
     ) -> AsyncIterator[EventWithMetadata]:
         """Subscribe to events matching a pattern."""
         opts = options or SubscriptionOptions()
@@ -239,7 +239,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
             return
 
         # Build stream dict with last_id tracking
-        last_ids: Dict[str, str] = dict.fromkeys(stream_keys, "$")
+        last_ids: dict[str, str] = dict.fromkeys(stream_keys, "$")
 
         while self._active_subscriptions.get(subscription_id, False):
             try:
@@ -340,7 +340,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                 logger.error(f"[UnifiedEventBus] Connection error: {e}")
                 await asyncio.sleep(1)
 
-    async def _get_matching_streams(self, pattern: str) -> List[str]:
+    async def _get_matching_streams(self, pattern: str) -> list[str]:
         """Get stream keys matching a pattern."""
         # Convert routing pattern to Redis SCAN pattern
         redis_pattern = f"{self._stream_prefix}{pattern.replace('.', ':')}"
@@ -384,9 +384,9 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
     def _parse_message(
         self,
         msg_id: str,
-        fields: Dict[bytes, bytes],
+        fields: dict[bytes, bytes],
         stream_key: str,
-    ) -> Optional[EventWithMetadata]:
+    ) -> EventWithMetadata | None:
         """Parse a stream message to EventWithMetadata."""
         try:
             # Decode fields
@@ -421,11 +421,11 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
 
     async def get_events(
         self,
-        routing_key: Union[str, RoutingKey],
+        routing_key: str | RoutingKey,
         from_sequence: str = "0",
-        to_sequence: Optional[str] = None,
+        to_sequence: str | None = None,
         max_count: int = 1000,
-    ) -> List[EventWithMetadata]:
+    ) -> list[EventWithMetadata]:
         """Get events from a specific stream."""
         stream_key = self._get_stream_key(routing_key)
         events = []
@@ -454,8 +454,8 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
 
     async def get_latest_event(
         self,
-        routing_key: Union[str, RoutingKey],
-    ) -> Optional[EventWithMetadata]:
+        routing_key: str | RoutingKey,
+    ) -> EventWithMetadata | None:
         """Get the most recent event from a stream."""
         stream_key = self._get_stream_key(routing_key)
 
@@ -474,8 +474,8 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
 
     async def acknowledge(
         self,
-        routing_key: Union[str, RoutingKey],
-        sequence_ids: List[str],
+        routing_key: str | RoutingKey,
+        sequence_ids: list[str],
         consumer_group: str,
     ) -> int:
         """Acknowledge processed events."""
@@ -487,12 +487,12 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
             logger.error(f"Failed to ack events: {e}")
             return 0
 
-    async def stream_exists(self, routing_key: Union[str, RoutingKey]) -> bool:
+    async def stream_exists(self, routing_key: str | RoutingKey) -> bool:
         """Check if a stream exists."""
         stream_key = self._get_stream_key(routing_key)
         return await self._redis.exists(stream_key) > 0
 
-    async def get_stream_length(self, routing_key: Union[str, RoutingKey]) -> int:
+    async def get_stream_length(self, routing_key: str | RoutingKey) -> int:
         """Get the number of events in a stream."""
         stream_key = self._get_stream_key(routing_key)
 
@@ -503,7 +503,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
 
     async def trim_stream(
         self,
-        routing_key: Union[str, RoutingKey],
+        routing_key: str | RoutingKey,
         max_length: int,
         approximate: bool = True,
     ) -> int:
@@ -520,7 +520,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
             logger.error(f"Failed to trim stream {stream_key}: {e}")
             return 0
 
-    async def delete_stream(self, routing_key: Union[str, RoutingKey]) -> bool:
+    async def delete_stream(self, routing_key: str | RoutingKey) -> bool:
         """Delete a stream entirely."""
         stream_key = self._get_stream_key(routing_key)
 
@@ -533,7 +533,7 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
 
     async def create_consumer_group(
         self,
-        routing_key: Union[str, RoutingKey],
+        routing_key: str | RoutingKey,
         group_name: str,
         start_id: str = "0",
     ) -> bool:

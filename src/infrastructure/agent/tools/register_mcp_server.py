@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.ports.services.sandbox_port import SandboxPort
@@ -50,9 +50,9 @@ class RegisterMCPServerTool(AgentTool):
         self,
         tenant_id: str,
         project_id: str,
-        sandbox_adapter: Optional[SandboxPort] = None,
-        sandbox_id: Optional[str] = None,
-        session_factory: Optional[Any] = None,  # noqa: ANN401
+        sandbox_adapter: SandboxPort | None = None,
+        sandbox_id: str | None = None,
+        session_factory: Any | None = None,
     ) -> None:
         super().__init__(name=TOOL_NAME, description=TOOL_DESCRIPTION)
         self._tenant_id = tenant_id
@@ -60,19 +60,19 @@ class RegisterMCPServerTool(AgentTool):
         self._sandbox_adapter = sandbox_adapter
         self._sandbox_id = sandbox_id
         self._session_factory = session_factory
-        self._pending_events: List[Any] = []
+        self._pending_events: list[Any] = []
 
     def set_sandbox_id(self, sandbox_id: str) -> None:
         """Set sandbox ID (called when sandbox becomes available)."""
         self._sandbox_id = sandbox_id
 
-    def consume_pending_events(self) -> List[Any]:
+    def consume_pending_events(self) -> list[Any]:
         """Consume pending SSE events (called by processor after execute)."""
         events = list(self._pending_events)
         self._pending_events.clear()
         return events
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -124,9 +124,7 @@ class RegisterMCPServerTool(AgentTool):
             return False
         if server_type == "stdio" and not kwargs.get("command"):
             return False
-        if server_type in ("sse", "http", "websocket") and not kwargs.get("url"):
-            return False
-        return True
+        return not (server_type in ("sse", "http", "websocket") and not kwargs.get("url"))
 
     async def execute(self, **kwargs) -> str:
         """Register, start, and discover tools from an MCP server."""
@@ -269,7 +267,7 @@ class RegisterMCPServerTool(AgentTool):
                         "tool_names": namespaced_tool_names,
                         "lifecycle": lifecycle_result,
                     },
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
             )
 
@@ -296,8 +294,8 @@ class RegisterMCPServerTool(AgentTool):
             return f"Error: Failed to register MCP server '{server_name}':\n{e}"
 
     async def _detect_and_persist_apps(
-        self, server_name: str, tools: List[Dict]
-    ) -> List[str]:
+        self, server_name: str, tools: list[dict]
+    ) -> list[str]:
         """Detect tools with UI metadata and persist as MCP Apps."""
         app_tools = []
         for t in tools:
@@ -339,7 +337,7 @@ class RegisterMCPServerTool(AgentTool):
         server_name: str,
         tool_name: str,
         resource_uri: str,
-        ui_metadata: Dict,
+        ui_metadata: dict,
     ) -> str:
         """Persist an auto-detected MCP App to the database. Returns app ID."""
         from src.domain.model.mcp.app import (
@@ -406,7 +404,7 @@ class RegisterMCPServerTool(AgentTool):
         return app.id
 
     @staticmethod
-    def _extract_error_text(result: Dict[str, Any]) -> str:
+    def _extract_error_text(result: dict[str, Any]) -> str:
         """Extract human-readable error text from an MCP result."""
         content = result.get("content", [])
         for item in content:
@@ -418,7 +416,7 @@ class RegisterMCPServerTool(AgentTool):
         return result.get("error_message", "Unknown error")
 
     @staticmethod
-    def _parse_result(result: Dict[str, Any]) -> Any:  # noqa: ANN401
+    def _parse_result(result: dict[str, Any]) -> Any:
         """Parse MCP tool call result, extracting text content."""
         if not result:
             return {}

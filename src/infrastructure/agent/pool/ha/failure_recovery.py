@@ -16,12 +16,14 @@ Recovery strategies:
 """
 
 import asyncio
+import contextlib
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -65,12 +67,12 @@ class FailureEvent:
     event_id: str
     instance_key: str
     failure_type: FailureType
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    error_message: Optional[str] = None
-    error_details: Dict[str, Any] = field(default_factory=dict)
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
+    error_message: str | None = None
+    error_details: dict[str, Any] = field(default_factory=dict)
     recovery_attempted: bool = False
-    recovery_strategy: Optional[RecoveryStrategy] = None
-    recovery_status: Optional[RecoveryStatus] = None
+    recovery_strategy: RecoveryStrategy | None = None
+    recovery_status: RecoveryStatus | None = None
 
 
 @dataclass
@@ -83,7 +85,7 @@ class RecoveryAction:
     retry_delay_seconds: int = 5
     backoff_multiplier: float = 2.0
     max_delay_seconds: int = 300
-    conditions: Dict[str, Any] = field(default_factory=dict)
+    conditions: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -92,7 +94,7 @@ class FailurePattern:
 
     pattern_id: str
     instance_key: str
-    failure_types: List[FailureType]
+    failure_types: list[FailureType]
     occurrence_count: int
     first_occurrence: datetime
     last_occurrence: datetime
@@ -108,21 +110,21 @@ class FailureRecoveryService:
 
     def __init__(
         self,
-        state_recovery_service: Optional[Any] = None,  # noqa: ANN401
-        pool_manager: Optional[Any] = None,  # noqa: ANN401
+        state_recovery_service: Any | None = None,
+        pool_manager: Any | None = None,
         max_failures_per_hour: int = 10,
         pattern_detection_window_minutes: int = 60,
-    ):
+    ) -> None:
         self._state_recovery = state_recovery_service
         self._pool_manager = pool_manager
         self._max_failures_per_hour = max_failures_per_hour
         self._pattern_window = timedelta(minutes=pattern_detection_window_minutes)
 
         # Failure history
-        self._failure_history: Dict[str, List[FailureEvent]] = {}
+        self._failure_history: dict[str, list[FailureEvent]] = {}
 
         # Recovery actions configuration
-        self._recovery_actions: Dict[FailureType, RecoveryAction] = {
+        self._recovery_actions: dict[FailureType, RecoveryAction] = {
             FailureType.HEALTH_CHECK_FAILED: RecoveryAction(
                 failure_type=FailureType.HEALTH_CHECK_FAILED,
                 strategy=RecoveryStrategy.RESTART,
@@ -174,13 +176,13 @@ class FailureRecoveryService:
         }
 
         # Callbacks
-        self._on_failure_callbacks: List[Callable] = []
-        self._on_recovery_callbacks: List[Callable] = []
-        self._on_escalation_callbacks: List[Callable] = []
+        self._on_failure_callbacks: list[Callable] = []
+        self._on_recovery_callbacks: list[Callable] = []
+        self._on_escalation_callbacks: list[Callable] = []
 
         # Recovery state
-        self._active_recoveries: Dict[str, asyncio.Task] = {}
-        self._recovery_attempts: Dict[str, int] = {}
+        self._active_recoveries: dict[str, asyncio.Task] = {}
+        self._recovery_attempts: dict[str, int] = {}
 
         self._is_running = False
         self._lock = asyncio.Lock()
@@ -197,10 +199,8 @@ class FailureRecoveryService:
         # Cancel active recoveries
         for task in self._active_recoveries.values():
             task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
 
         self._active_recoveries.clear()
         logger.info("Failure Recovery Service stopped")
@@ -209,8 +209,8 @@ class FailureRecoveryService:
         self,
         instance_key: str,
         failure_type: FailureType,
-        error_message: Optional[str] = None,
-        error_details: Optional[Dict[str, Any]] = None,
+        error_message: str | None = None,
+        error_details: dict[str, Any] | None = None,
         auto_recover: bool = True,
     ) -> FailureEvent:
         """
@@ -266,9 +266,9 @@ class FailureRecoveryService:
 
     async def get_failure_history(
         self,
-        instance_key: Optional[str] = None,
+        instance_key: str | None = None,
         limit: int = 100,
-    ) -> List[FailureEvent]:
+    ) -> list[FailureEvent]:
         """Get failure history."""
         if instance_key:
             return list(
@@ -281,11 +281,11 @@ class FailureRecoveryService:
             all_failures.extend(failures)
         return sorted(all_failures, key=lambda f: f.timestamp, reverse=True)[:limit]
 
-    async def get_failure_stats(self) -> Dict[str, Any]:
+    async def get_failure_stats(self) -> dict[str, Any]:
         """Get failure statistics."""
         total = 0
-        by_type: Dict[str, int] = {}
-        by_instance: Dict[str, int] = {}
+        by_type: dict[str, int] = {}
+        by_instance: dict[str, int] = {}
         recovered = 0
         failed_recovery = 0
 
@@ -496,12 +496,12 @@ class FailureRecoveryService:
         if instance_key not in self._failure_history:
             return
 
-        cutoff = datetime.now(timezone.utc) - self._pattern_window
+        cutoff = datetime.now(UTC) - self._pattern_window
         self._failure_history[instance_key] = [
             f for f in self._failure_history[instance_key] if f.timestamp > cutoff
         ]
 
-    def _detect_pattern(self, instance_key: str) -> Optional[FailurePattern]:
+    def _detect_pattern(self, instance_key: str) -> FailurePattern | None:
         """Detect failure patterns."""
         failures = self._failure_history.get(instance_key, [])
         if len(failures) < 3:

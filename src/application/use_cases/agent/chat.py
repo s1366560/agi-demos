@@ -4,7 +4,8 @@ This use case handles streaming chat interactions with the agent.
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict
+from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.application.services.agent_service import AgentService
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 class ChatUseCase:
     """Use case for streaming chat with the agent."""
 
-    def __init__(self, agent_service: "AgentService"):
+    def __init__(self, agent_service: "AgentService") -> None:
         """
         Initialize the use case.
 
@@ -32,7 +33,7 @@ class ChatUseCase:
         user_id: str,
         tenant_id: str,
         app_model_context: dict | None = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute the use case.
 

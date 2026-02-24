@@ -2,7 +2,7 @@
 Tests for V2 SqlProjectSandboxRepository using BaseRepository.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -34,10 +34,10 @@ def make_sandbox(
         tenant_id="tenant-1",
         sandbox_id=f"sandbox-{project_id}",
         status=status,
-        created_at=datetime.now(timezone.utc),
-        started_at=datetime.now(timezone.utc),
-        last_accessed_at=datetime.now(timezone.utc),
-        health_checked_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        started_at=datetime.now(UTC),
+        last_accessed_at=datetime.now(UTC),
+        health_checked_at=datetime.now(UTC),
         error_message=None,
         metadata={},
     )
@@ -223,7 +223,7 @@ class TestSqlProjectSandboxRepositoryStale:
     async def test_find_stale(self, v2_sandbox_repo: SqlProjectSandboxRepository):
         """Test finding stale sandboxes."""
         # Create a sandbox with old last_accessed_at
-        old_time = datetime.now(timezone.utc) - timedelta(seconds=100)
+        old_time = datetime.now(UTC) - timedelta(seconds=100)
         stale_sandbox = make_sandbox("sb-stale-1", "project-stale-1")
         stale_sandbox.last_accessed_at = old_time
         await v2_sandbox_repo.save(stale_sandbox)

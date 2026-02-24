@@ -10,9 +10,10 @@ import asyncio
 import logging
 import time
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 
 from .config import AgentInstanceConfig
 from .lifecycle import LifecycleStateMachine
@@ -37,11 +38,11 @@ class ChatRequest:
     message_id: str
     user_message: str
     user_id: str
-    conversation_context: List[Dict[str, Any]] = field(default_factory=list)
-    attachment_ids: Optional[List[str]] = None
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
-    max_steps: Optional[int] = None
+    conversation_context: list[dict[str, Any]] = field(default_factory=list)
+    attachment_ids: list[str] | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+    max_steps: int | None = None
 
 
 @dataclass
@@ -52,10 +53,10 @@ class ChatResult:
     last_event_time_us: int = 0
     last_event_counter: int = 0
     is_error: bool = False
-    error_message: Optional[str] = None
+    error_message: str | None = None
     execution_time_ms: float = 0.0
     event_count: int = 0
-    tool_calls: List[Dict[str, Any]] = field(default_factory=list)
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
 
 
 class AgentInstance:
@@ -71,9 +72,9 @@ class AgentInstance:
     def __init__(
         self,
         config: AgentInstanceConfig,
-        react_agent: Optional[ReActAgent] = None,
-        instance_id: Optional[str] = None,
-    ):
+        react_agent: ReActAgent | None = None,
+        instance_id: str | None = None,
+    ) -> None:
         """初始化Agent实例.
 
         Args:
@@ -97,17 +98,17 @@ class AgentInstance:
         self._request_lock = asyncio.Lock()
 
         # 指标
-        self._metrics = InstanceMetrics(created_at=datetime.now(timezone.utc))
-        self._latencies: List[float] = []  # 最近N次请求延迟
+        self._metrics = InstanceMetrics(created_at=datetime.now(UTC))
+        self._latencies: list[float] = []  # 最近N次请求延迟
 
         # 时间戳
-        self._created_at = datetime.now(timezone.utc)
-        self._last_activity_at = datetime.now(timezone.utc)
-        self._initialized_at: Optional[datetime] = None
+        self._created_at = datetime.now(UTC)
+        self._last_activity_at = datetime.now(UTC)
+        self._initialized_at: datetime | None = None
 
         # 健康检查
         self._consecutive_failures = 0
-        self._last_health_check: Optional[HealthCheckResult] = None
+        self._last_health_check: HealthCheckResult | None = None
 
         logger.info(
             f"[AgentInstance] Created: id={self.id}, "
@@ -164,7 +165,7 @@ class AgentInstance:
 
             # 初始化完成
             self._lifecycle.transition("initialization_complete")
-            self._initialized_at = datetime.now(timezone.utc)
+            self._initialized_at = datetime.now(UTC)
 
             logger.info(f"[AgentInstance] Initialized successfully: id={self.id}")
             return True
@@ -199,7 +200,7 @@ class AgentInstance:
     async def execute(
         self,
         request: ChatRequest,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """执行聊天请求.
 
         带并发控制和指标收集。
@@ -227,7 +228,7 @@ class AgentInstance:
 
             try:
                 # 更新活动时间
-                self._last_activity_at = datetime.now(timezone.utc)
+                self._last_activity_at = datetime.now(UTC)
 
                 # 执行请求
                 event_count = 0
@@ -271,9 +272,9 @@ class AgentInstance:
             self._metrics.successful_requests += 1
         else:
             self._metrics.failed_requests += 1
-            self._metrics.last_error_at = datetime.now(timezone.utc)
+            self._metrics.last_error_at = datetime.now(UTC)
 
-        self._metrics.last_request_at = datetime.now(timezone.utc)
+        self._metrics.last_request_at = datetime.now(UTC)
 
         # 更新延迟统计
         self._latencies.append(latency_ms)
@@ -302,7 +303,7 @@ class AgentInstance:
                 return HealthCheckResult(
                     status=HealthStatus.UNHEALTHY,
                     error_message="Instance is terminated",
-                    last_check_at=datetime.now(timezone.utc),
+                    last_check_at=datetime.now(UTC),
                 )
 
             # 检查agent是否可用
@@ -310,7 +311,7 @@ class AgentInstance:
                 return HealthCheckResult(
                     status=HealthStatus.UNHEALTHY,
                     error_message="Agent not initialized",
-                    last_check_at=datetime.now(timezone.utc),
+                    last_check_at=datetime.now(UTC),
                 )
 
             # 检查错误率
@@ -329,7 +330,7 @@ class AgentInstance:
                 latency_ms=latency_ms,
                 error_rate=error_rate,
                 active_requests=self._active_requests,
-                last_check_at=datetime.now(timezone.utc),
+                last_check_at=datetime.now(UTC),
                 details={
                     "total_requests": self._metrics.total_requests,
                     "failed_requests": self._metrics.failed_requests,
@@ -347,7 +348,7 @@ class AgentInstance:
                 status=HealthStatus.UNHEALTHY,
                 latency_ms=latency_ms,
                 error_message=str(e),
-                last_check_at=datetime.now(timezone.utc),
+                last_check_at=datetime.now(UTC),
             )
             self._last_health_check = result
             return result
@@ -414,7 +415,7 @@ class AgentInstance:
 
         self._agent = None
 
-    def mark_unhealthy(self, error_message: Optional[str] = None) -> None:
+    def mark_unhealthy(self, error_message: str | None = None) -> None:
         """标记为不健康."""
         if self._lifecycle.can_transition("health_check_failed"):
             self._lifecycle.transition(
@@ -429,13 +430,13 @@ class AgentInstance:
 
     def get_idle_seconds(self) -> float:
         """获取空闲时间 (秒)."""
-        return (datetime.now(timezone.utc) - self._last_activity_at).total_seconds()
+        return (datetime.now(UTC) - self._last_activity_at).total_seconds()
 
     def is_idle_expired(self) -> bool:
         """是否空闲超时."""
         return self.get_idle_seconds() > self.config.idle_timeout_seconds
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典."""
         return {
             "id": self.id,

@@ -1,6 +1,6 @@
 """Tests for ContextSummary value object, ContextLoader, and SqlContextSummaryAdapter."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -40,7 +40,7 @@ class TestContextSummary:
             summary.summary_text = "modified"
 
     def test_to_dict(self):
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         summary = ContextSummary(
             summary_text="Summary text",
             summary_tokens=100,

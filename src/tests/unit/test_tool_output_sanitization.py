@@ -149,7 +149,7 @@ class TestProcessResultExecutor:
                 "data": fake_b64,
             },
         }
-        output_str, sse_result = executor._process_result(result)
+        output_str, _sse_result = executor._process_result(result)
         assert fake_b64 not in output_str
         assert "image.png" in output_str
         assert "image/png" in output_str

@@ -1,6 +1,6 @@
 """Shared fixtures for V2 repository tests."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,7 +42,7 @@ def make_agent_execution(
         tool_input=tool_input or {},
         tool_output=tool_output,
         metadata=metadata or {},
-        started_at=started_at or datetime.now(timezone.utc),
+        started_at=started_at or datetime.now(UTC),
         completed_at=completed_at,
     )
 
@@ -83,7 +83,7 @@ def make_attachment(
         uploaded_parts=0,
         sandbox_path=None,
         metadata=AttachmentMetadata.empty(),
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         expires_at=None,
         error_message=None,
     )
@@ -107,7 +107,7 @@ def make_execution_checkpoint(
         checkpoint_type=checkpoint_type,
         execution_state=execution_state or {},
         step_number=step_number,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
 
@@ -146,8 +146,8 @@ def make_hitl_request(
         status=HITLRequestStatus(status),
         response=None,
         response_metadata=None,
-        created_at=datetime.now(timezone.utc),
-        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        created_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
         answered_at=None,
     )
 
@@ -179,8 +179,8 @@ def make_memory(
         status="enabled",
         processing_status="pending",
         metadata={},
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
@@ -206,7 +206,7 @@ def make_message_execution_status(
         tenant_id=tenant_id,
         project_id=project_id,
         last_event_sequence=0,
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         completed_at=None,
         error_message=None,
     )
@@ -231,9 +231,9 @@ def make_project_sandbox(
         tenant_id=tenant_id,
         sandbox_id=sandbox_id,
         status=ProjectSandboxStatus(status),
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         started_at=None,
-        last_accessed_at=datetime.now(timezone.utc),
+        last_accessed_at=datetime.now(UTC),
         health_checked_at=None,
         error_message=None,
         metadata={},
@@ -279,8 +279,8 @@ def make_subagent(
         avg_execution_time_ms=0.0,
         success_rate=1.0,
         metadata={},
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
@@ -305,7 +305,7 @@ def make_task_log(
         worker_id=None,
         retry_count=0,
         error_message=None,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         started_at=None,
         completed_at=None,
         stopped_at=None,
@@ -337,8 +337,8 @@ def make_tenant_agent_config(
         tool_timeout_seconds=30,
         enabled_tools=[],
         disabled_tools=[],
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
@@ -360,8 +360,8 @@ def make_tenant_skill_config(
         system_skill_name=system_skill_name,
         action=TenantSkillAction(action),
         override_skill_id=None,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
@@ -382,8 +382,8 @@ def make_tool_composition(
         success_count=0,
         failure_count=0,
         usage_count=0,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )
 
 
@@ -410,7 +410,7 @@ def make_tool_execution_record(
         error=None,
         step_number=None,
         sequence_number=1,
-        started_at=datetime.now(timezone.utc),
+        started_at=datetime.now(UTC),
         completed_at=None,
         duration_ms=None,
     )
@@ -441,6 +441,6 @@ def make_tool_environment_variable(
         is_required=True,
         is_secret=True,
         scope=EnvVarScope.TENANT,
-        created_at=datetime.now(timezone.utc),
-        updated_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
     )

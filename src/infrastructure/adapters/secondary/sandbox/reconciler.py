@@ -12,9 +12,9 @@ This fixes the issue where API restarts leave containers without tracking.
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,15 +34,15 @@ class OrphanContainer:
     container_id: str
     container_name: str
     sandbox_id: str
-    project_id: Optional[str]
-    tenant_id: Optional[str]
+    project_id: str | None
+    tenant_id: str | None
     status: str  # Docker status: running, stopped, etc.
-    ports: Dict[str, int]  # service_type -> port
-    labels: Dict[str, str]
+    ports: dict[str, int]  # service_type -> port
+    labels: dict[str, str]
     created_at: datetime
-    discovered_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    action_taken: Optional[OrphanAction] = None
-    error_message: Optional[str] = None
+    discovered_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    action_taken: OrphanAction | None = None
+    error_message: str | None = None
 
 
 @dataclass
@@ -53,7 +53,7 @@ class ReconciliationResult:
     adopted: int
     terminated: int
     errors: int
-    orphan_containers: List[OrphanContainer]
+    orphan_containers: list[OrphanContainer]
     duration_seconds: float
 
 
@@ -91,7 +91,7 @@ class SandboxReconciler:
         repository=None,
         default_action: OrphanAction = OrphanAction.ADOPT,
         max_orphan_age_hours: int = 24,  # Terminate orphans older than this
-    ):
+    ) -> None:
         """
         Initialize the reconciler.
 
@@ -110,7 +110,7 @@ class SandboxReconciler:
 
     async def reconcile(
         self,
-        action_override: Optional[OrphanAction] = None,
+        action_override: OrphanAction | None = None,
     ) -> ReconciliationResult:
         """
         Perform full reconciliation of sandbox state.
@@ -142,7 +142,7 @@ class SandboxReconciler:
         for orphan in orphans:
             try:
                 # Check age - very old orphans should always be terminated
-                age_hours = (datetime.now(timezone.utc) - orphan.created_at).total_seconds() / 3600
+                age_hours = (datetime.now(UTC) - orphan.created_at).total_seconds() / 3600
                 effective_action = (
                     OrphanAction.TERMINATE if age_hours > self._max_orphan_age_hours else action
                 )
@@ -190,7 +190,7 @@ class SandboxReconciler:
 
         return result
 
-    async def discover_orphans(self) -> List[OrphanContainer]:
+    async def discover_orphans(self) -> list[OrphanContainer]:
         """
         Discover orphan containers that are not tracked in memory.
 
@@ -236,7 +236,7 @@ class SandboxReconciler:
 
         return orphans
 
-    async def _get_tracked_sandbox_ids(self) -> Set[str]:
+    async def _get_tracked_sandbox_ids(self) -> set[str]:
         """Get set of sandbox IDs currently tracked in memory."""
         # Access the adapter's internal tracking
         if hasattr(self._adapter, "_active_sandboxes"):
@@ -258,7 +258,7 @@ class SandboxReconciler:
                 tzinfo=None
             )
         except Exception:
-            created_at = datetime.now(timezone.utc)
+            created_at = datetime.now(UTC)
 
         # Extract port information
         ports = {}
@@ -347,7 +347,7 @@ class SandboxReconciler:
                         loop.run_in_executor(None, lambda: container.stop(timeout=5)),
                         timeout=15.0,
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning(f"Stop timeout for orphan {orphan.sandbox_id}, killing")
                     await loop.run_in_executor(None, container.kill)
 
@@ -401,7 +401,7 @@ class SandboxReconciler:
         except Exception as e:
             logger.warning(f"Failed to create DB association for orphan {orphan.sandbox_id}: {e}")
 
-    async def list_orphans(self) -> List[Dict[str, Any]]:
+    async def list_orphans(self) -> list[dict[str, Any]]:
         """
         List all current orphan containers for API/UI display.
 
@@ -427,8 +427,8 @@ class SandboxReconciler:
     async def adopt_orphan_by_id(
         self,
         container_id: str,
-        project_id: Optional[str] = None,
-        tenant_id: Optional[str] = None,
+        project_id: str | None = None,
+        tenant_id: str | None = None,
     ) -> bool:
         """
         Manually adopt a specific orphan container.

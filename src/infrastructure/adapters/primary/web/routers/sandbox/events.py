@@ -6,7 +6,8 @@ Provides Server-Sent Events for sandbox lifecycle and service events.
 import asyncio
 import json
 import logging
-from typing import Any, AsyncIterator, Dict, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -27,8 +28,8 @@ router = APIRouter()
 async def sandbox_event_stream(
     project_id: str,
     last_id: str = "0",
-    event_publisher: Optional[SandboxEventPublisher] = None,
-) -> AsyncIterator[Dict[str, Any]]:
+    event_publisher: SandboxEventPublisher | None = None,
+) -> AsyncIterator[dict[str, Any]]:
     """
     Stream sandbox events from Redis Stream.
 
@@ -70,7 +71,7 @@ async def sandbox_event_stream(
 async def sse_generator(
     project_id: str,
     last_id: str = "0",
-    event_publisher: Optional[SandboxEventPublisher] = None,
+    event_publisher: SandboxEventPublisher | None = None,
 ) -> AsyncIterator[str]:
     """
     SSE response generator.
@@ -102,7 +103,7 @@ async def subscribe_sandbox_events(
     project_id: str,
     last_id: str = Query("0", description="Last event ID for resuming stream"),
     _current_user: User = Depends(get_current_user_from_header_or_query),
-    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
 ):
     """
     SSE endpoint for sandbox events.

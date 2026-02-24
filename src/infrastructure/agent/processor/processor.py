@@ -24,9 +24,10 @@ import logging
 import re
 import time
 import uuid
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from src.domain.events.agent_events import (
     AgentActDeltaEvent,
@@ -83,7 +84,7 @@ from .message_utils import classify_tool_by_description, extract_user_query
 logger = logging.getLogger(__name__)
 
 
-def _strip_artifact_binary_data(result: Dict[str, Any]) -> Dict[str, Any]:
+def _strip_artifact_binary_data(result: dict[str, Any]) -> dict[str, Any]:
     """Return a shallow copy of an artifact result with binary/base64 data removed.
 
     The artifact binary content is handled separately by ``_process_tool_artifacts``
@@ -110,7 +111,7 @@ def _strip_artifact_binary_data(result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # Canvas-displayable MIME type mapping
-_CANVAS_MIME_MAP: Dict[str, str] = {
+_CANVAS_MIME_MAP: dict[str, str] = {
     "text/html": "preview",
     "text/markdown": "markdown",
     "text/csv": "data",
@@ -120,7 +121,7 @@ _CANVAS_MIME_MAP: Dict[str, str] = {
 }
 
 
-def _get_canvas_content_type(mime_type: str, filename: str) -> Optional[str]:
+def _get_canvas_content_type(mime_type: str, filename: str) -> str | None:
     """Determine canvas content type for a given MIME type and filename."""
     if mime_type in _CANVAS_MIME_MAP:
         return _CANVAS_MIME_MAP[mime_type]
@@ -161,7 +162,7 @@ def _get_canvas_content_type(mime_type: str, filename: str) -> Optional[str]:
     return None
 
 
-_LANG_EXT_MAP: Dict[str, str] = {
+_LANG_EXT_MAP: dict[str, str] = {
     ".py": "python",
     ".js": "javascript",
     ".ts": "typescript",
@@ -187,7 +188,7 @@ _LANG_EXT_MAP: Dict[str, str] = {
 }
 
 
-def _get_language_from_filename(filename: str) -> Optional[str]:
+def _get_language_from_filename(filename: str) -> str | None:
     """Get language identifier from filename extension."""
     ext = "." + filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
     return _LANG_EXT_MAP.get(ext)
@@ -224,8 +225,8 @@ class ProcessorConfig:
 
     # Model configuration
     model: str
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
+    api_key: str | None = None
+    base_url: str | None = None
     temperature: float = 0.0
     max_tokens: int = 4096
 
@@ -249,11 +250,11 @@ class ProcessorConfig:
     max_cost_per_session: float = 0  # Per-session cost limit (0 = unlimited)
 
     # LLM Client (optional, provides circuit breaker + rate limiter)
-    llm_client: Optional[Any] = None
+    llm_client: Any | None = None
 
     # Tool refresh callback (optional, enables dynamic tool loading)
     # When provided, _refresh_tools() can fetch updated tools at runtime
-    tool_provider: Optional[Callable[[], List["ToolDefinition"]]] = None
+    tool_provider: Callable[[], list["ToolDefinition"]] | None = None
 
 
 @dataclass
@@ -273,12 +274,12 @@ class ToolDefinition:
 
     name: str
     description: str
-    parameters: Dict[str, Any]
+    parameters: dict[str, Any]
     execute: Callable[..., Any]  # Async callable
-    permission: Optional[str] = None  # Permission required
+    permission: str | None = None  # Permission required
     _tool_instance: Any = field(default=None, repr=False)  # Original tool object
 
-    def to_openai_format(self) -> Dict[str, Any]:
+    def to_openai_format(self) -> dict[str, Any]:
         """Convert to OpenAI tool format."""
         return {
             "type": "function",
@@ -290,7 +291,7 @@ class ToolDefinition:
         }
 
 
-ProcessorEvent = AgentDomainEvent | Dict[str, Any]
+ProcessorEvent = AgentDomainEvent | dict[str, Any]
 
 
 class SessionProcessor:
@@ -315,10 +316,10 @@ class SessionProcessor:
     def __init__(
         self,
         config: ProcessorConfig,
-        tools: List[ToolDefinition],
-        permission_manager: Optional[PermissionManager] = None,
+        tools: list[ToolDefinition],
+        permission_manager: PermissionManager | None = None,
         artifact_service: Optional["ArtifactService"] = None,
-    ):
+    ) -> None:
         """
         Initialize session processor.
 
@@ -354,23 +355,23 @@ class SessionProcessor:
         self._state = ProcessorState.IDLE
         self._step_count = 0
         self._no_progress_steps = 0
-        self._current_message: Optional[Message] = None
-        self._pending_tool_calls: Dict[str, ToolPart] = {}
-        self._pending_tool_args: Dict[str, str] = {}  # call_id -> accumulated raw args
-        self._abort_event: Optional[asyncio.Event] = None
+        self._current_message: Message | None = None
+        self._pending_tool_calls: dict[str, ToolPart] = {}
+        self._pending_tool_args: dict[str, str] = {}  # call_id -> accumulated raw args
+        self._abort_event: asyncio.Event | None = None
 
         # Task tracking for timeline integration
-        self._current_task: Optional[Dict[str, Any]] = None
+        self._current_task: dict[str, Any] | None = None
 
         # Langfuse observability context
-        self._langfuse_context: Optional[Dict[str, Any]] = None
+        self._langfuse_context: dict[str, Any] | None = None
 
         # HITL handler (created lazily when context is available)
-        self._hitl_coordinator: Optional[HITLCoordinator] = None
+        self._hitl_coordinator: HITLCoordinator | None = None
 
         # Tool provider callback for dynamic tool refresh
         # When set, _refresh_tools() can update self.tools at runtime
-        self._tool_provider: Optional[Callable[[], List[ToolDefinition]]] = config.tool_provider
+        self._tool_provider: Callable[[], list[ToolDefinition]] | None = config.tool_provider
 
     @property
     def state(self) -> ProcessorState:
@@ -401,7 +402,7 @@ class SessionProcessor:
 
         return self._hitl_coordinator
 
-    def _refresh_tools(self) -> Optional[int]:
+    def _refresh_tools(self) -> int | None:
         """Refresh tools from the tool_provider callback.
 
         Called after register_mcp_server succeeds to load newly registered
@@ -432,14 +433,14 @@ class SessionProcessor:
             return None
 
     @staticmethod
-    def _extract_mcp_resource_uri(ui_metadata: Optional[Dict[str, Any]]) -> str:
+    def _extract_mcp_resource_uri(ui_metadata: dict[str, Any] | None) -> str:
         """Extract MCP resource URI from either camelCase or snake_case metadata."""
         if not isinstance(ui_metadata, dict):
             return ""
         uri = ui_metadata.get("resourceUri") or ui_metadata.get("resource_uri")
         return str(uri) if uri else ""
 
-    async def _load_mcp_app_ui_metadata(self, app_id: str) -> Dict[str, Any]:
+    async def _load_mcp_app_ui_metadata(self, app_id: str) -> dict[str, Any]:
         """Load MCP App UI metadata from DB by app id."""
         if not app_id or app_id.startswith("_synthetic_"):
             return {}
@@ -468,8 +469,8 @@ class SessionProcessor:
             return {}
 
     async def _hydrate_mcp_ui_metadata(
-        self, tool_instance: Any, app_id: str, tool_name: str  # noqa: ANN401
-    ) -> Dict[str, Any]:
+        self, tool_instance: Any, app_id: str, tool_name: str
+    ) -> dict[str, Any]:
         """Ensure MCP tool has usable UI metadata for app rendering."""
         ui_metadata = getattr(tool_instance, "ui_metadata", None) or {}
         if not isinstance(ui_metadata, dict):
@@ -495,9 +496,9 @@ class SessionProcessor:
     async def process(
         self,
         session_id: str,
-        messages: List[Dict[str, Any]],
-        abort_signal: Optional[asyncio.Event] = None,
-        langfuse_context: Optional[Dict[str, Any]] = None,
+        messages: list[dict[str, Any]],
+        abort_signal: asyncio.Event | None = None,
+        langfuse_context: dict[str, Any] | None = None,
     ) -> AsyncIterator[ProcessorEvent]:
         """
         Process a conversation turn.
@@ -670,7 +671,7 @@ class SessionProcessor:
             yield AgentErrorEvent(message=str(e), code=type(e).__name__)
             self._state = ProcessorState.ERROR
 
-    def _extract_user_query(self, messages: List[Dict[str, Any]]) -> Optional[str]:
+    def _extract_user_query(self, messages: list[dict[str, Any]]) -> str | None:
         """Extract the latest user query from messages."""
         return extract_user_query(messages)
 
@@ -690,14 +691,12 @@ class SessionProcessor:
             return False
         # If the text contains a goal_achieved JSON signal, it's a structured
         # goal-check response, not conversational text.
-        if "goal_achieved" in full_text:
-            return False
-        return True
+        return "goal_achieved" not in full_text
 
     async def _evaluate_goal_completion(
         self,
         session_id: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
     ) -> GoalCheckResult:
         """Evaluate whether the current goal is complete."""
         tasks = await self._load_session_tasks(session_id)
@@ -705,7 +704,7 @@ class SessionProcessor:
             return self._evaluate_task_goal(tasks)
         return await self._evaluate_llm_goal(messages)
 
-    async def _load_session_tasks(self, session_id: str) -> List[Dict[str, Any]]:
+    async def _load_session_tasks(self, session_id: str) -> list[dict[str, Any]]:
         """Load tasks for the session via todoread when available."""
         todoread_tool = self.tools.get("todoread")
         if todoread_tool is None:
@@ -717,7 +716,7 @@ class SessionProcessor:
             logger.warning(f"[Processor] Failed to load tasks via todoread: {exc}")
             return []
 
-        payload: Dict[str, Any]
+        payload: dict[str, Any]
         if isinstance(raw_result, str):
             try:
                 payload = json.loads(raw_result)
@@ -739,7 +738,7 @@ class SessionProcessor:
 
         return [t for t in tasks if isinstance(t, dict)]
 
-    def _evaluate_task_goal(self, tasks: List[Dict[str, Any]]) -> GoalCheckResult:
+    def _evaluate_task_goal(self, tasks: list[dict[str, Any]]) -> GoalCheckResult:
         """Evaluate completion from persisted task state."""
         pending_count = 0
         failed_count = 0
@@ -773,7 +772,7 @@ class SessionProcessor:
             source="tasks",
         )
 
-    async def _evaluate_llm_goal(self, messages: List[Dict[str, Any]]) -> GoalCheckResult:
+    async def _evaluate_llm_goal(self, messages: list[dict[str, Any]]) -> GoalCheckResult:
         """Evaluate completion using explicit LLM self-check in no-task mode."""
         fallback = self._evaluate_goal_from_latest_text()
         if self._llm_client is None:
@@ -841,7 +840,7 @@ class SessionProcessor:
             source="llm_self_check",
         )
 
-    def _extract_goal_from_plain_text(self, text: str) -> Optional[Dict[str, Any]]:
+    def _extract_goal_from_plain_text(self, text: str) -> dict[str, Any] | None:
         """Parse non-JSON goal-check payloads from plain text."""
         normalized = text.strip()
         if not normalized:
@@ -915,9 +914,9 @@ class SessionProcessor:
             source="assistant_text",
         )
 
-    def _build_goal_check_context(self, messages: List[Dict[str, Any]]) -> str:
+    def _build_goal_check_context(self, messages: list[dict[str, Any]]) -> str:
         """Build a compact context summary for goal self-check."""
-        summary_lines: List[str] = []
+        summary_lines: list[str] = []
         recent_messages = messages[-8:] if len(messages) > 8 else messages
         for msg in recent_messages:
             role = str(msg.get("role", "unknown"))
@@ -944,7 +943,7 @@ class SessionProcessor:
 
         return "\n".join(summary_lines)
 
-    def _extract_goal_json(self, text: str) -> Optional[Dict[str, Any]]:
+    def _extract_goal_json(self, text: str) -> dict[str, Any] | None:
         """Extract goal-check JSON object from model text."""
         stripped = text.strip()
         if not stripped:
@@ -1019,8 +1018,8 @@ class SessionProcessor:
         return has_positive and not has_negative
 
     async def _generate_suggestions(
-        self, messages: List[Dict[str, Any]]
-    ) -> Optional[AgentSuggestionsEvent]:
+        self, messages: list[dict[str, Any]]
+    ) -> AgentSuggestionsEvent | None:
         """Generate follow-up suggestions based on conversation context.
 
         Uses a lightweight LLM call to produce 2-3 contextually relevant
@@ -1090,7 +1089,7 @@ class SessionProcessor:
     async def _process_step(
         self,
         session_id: str,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
     ) -> AsyncIterator[ProcessorEvent]:
         """
         Process a single step in the ReAct loop.
@@ -1416,7 +1415,7 @@ class SessionProcessor:
         session_id: str,
         call_id: str,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
     ) -> AsyncIterator[ProcessorEvent]:
         """
         Execute a tool call with permission checking and doom loop detection.
@@ -1493,7 +1492,7 @@ class SessionProcessor:
                     )
                     return
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 tool_part.status = ToolState.ERROR
                 tool_part.error = "Permission request timed out"
                 tool_part.end_time = time.time()
@@ -1607,7 +1606,7 @@ class SessionProcessor:
                         )
                         return
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     tool_part.status = ToolState.ERROR
                     tool_part.error = "Permission request timed out"
                     tool_part.end_time = time.time()
@@ -1787,7 +1786,7 @@ class SessionProcessor:
 
             # Build observe-level ui_metadata for MCP tools with UI
             _observe_ui_meta: dict | None = None
-            _hydrated_ui_meta: Dict[str, Any] = {}
+            _hydrated_ui_meta: dict[str, Any] = {}
             if tool_instance and has_ui:
                 _o_app_id = (
                     getattr(tool_instance, "_last_app_id", "")
@@ -1983,7 +1982,7 @@ class SessionProcessor:
                     logger.error(f"Task event emission failed: {task_err}", exc_info=True)
 
             # Emit pending SSE events from tools that support event buffering
-            refresh_count: Optional[int] = None
+            refresh_count: int | None = None
             refresh_status = "not_applicable"
             if tool_name in {"plugin_manager", "register_mcp_server"}:
                 if isinstance(output_str, str) and not output_str.startswith("Error:"):
@@ -2079,8 +2078,8 @@ class SessionProcessor:
     async def _process_tool_artifacts(
         self,
         tool_name: str,
-        result: Any,  # noqa: ANN401
-        tool_execution_id: Optional[str] = None,
+        result: Any,
+        tool_execution_id: str | None = None,
     ) -> AsyncIterator[AgentDomainEvent]:
         """
         Process tool result and extract any artifacts (images, files, etc.).
@@ -2314,7 +2313,7 @@ class SessionProcessor:
                     art_id: str,
                     mime: str,
                     cat: str,
-                ):
+                ) -> None:
                     """Run sync upload in thread, then publish result to Redis and DB."""
                     import time as _time
 
@@ -2508,7 +2507,7 @@ class SessionProcessor:
         session_id: str,
         call_id: str,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         tool_part: ToolPart,
     ) -> AsyncIterator[AgentDomainEvent]:
         """Handle clarification tool — delegates to hitl_tool_handler."""
@@ -2529,7 +2528,7 @@ class SessionProcessor:
         session_id: str,
         call_id: str,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         tool_part: ToolPart,
     ) -> AsyncIterator[AgentDomainEvent]:
         """Handle decision tool — delegates to hitl_tool_handler."""
@@ -2550,7 +2549,7 @@ class SessionProcessor:
         session_id: str,
         call_id: str,
         tool_name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
         tool_part: ToolPart,
     ) -> AsyncIterator[AgentDomainEvent]:
         """Handle env var request tool — delegates to hitl_tool_handler."""
@@ -2572,16 +2571,16 @@ class SessionProcessor:
         if self._abort_event:
             self._abort_event.set()
 
-    def get_session_summary(self) -> Dict[str, Any]:
+    def get_session_summary(self) -> dict[str, Any]:
         """Get summary of session costs and tokens."""
         return self.cost_tracker.get_session_summary()
 
 
 def create_processor(
     model: str,
-    tools: List[ToolDefinition],
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
+    tools: list[ToolDefinition],
+    api_key: str | None = None,
+    base_url: str | None = None,
     **kwargs,
 ) -> SessionProcessor:
     """

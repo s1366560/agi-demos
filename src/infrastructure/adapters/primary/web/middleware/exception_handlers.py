@@ -14,7 +14,7 @@ Usage:
 import logging
 import traceback
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -57,10 +57,10 @@ class ErrorResponse:
         status_code: int,
         error_type: str,
         message: str,
-        error_id: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        error_id: str | None = None,
+        details: dict[str, Any] | None = None,
         retryable: bool = False,
-    ):
+    ) -> None:
         self.status_code = status_code
         self.error_type = error_type
         self.message = message
@@ -68,7 +68,7 @@ class ErrorResponse:
         self.details = details or {}
         self.retryable = retryable
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON response."""
         response = {
             "error": {

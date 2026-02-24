@@ -23,7 +23,7 @@ from src.infrastructure.agent.sandbox_resource_provider import (
 class MockSandboxResource(SandboxResourcePort):
     """Mock implementation for testing."""
 
-    def __init__(self, sandbox_id: str = "sb-test"):
+    def __init__(self, sandbox_id: str = "sb-test") -> None:
         self._sandbox_id = sandbox_id
 
     async def get_sandbox_id(self, project_id: str, tenant_id: str):

@@ -1,7 +1,7 @@
 """Tool discovery service extracted from AgentService."""
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.agent.tools import (
     SkillInstallerTool,
@@ -22,15 +22,15 @@ class ToolDiscoveryService:
     def __init__(
         self,
         redis_client=None,
-        skill_service: "Optional[SkillService]" = None,
+        skill_service: "SkillService | None" = None,
     ) -> None:
         self._redis_client = redis_client
         self._skill_service = skill_service
-        self._tool_definitions_cache: Dict[str, list[Dict[str, Any]]] | None = None
+        self._tool_definitions_cache: dict[str, list[dict[str, Any]]] | None = None
 
     async def get_available_tools(
         self, project_id: str, tenant_id: str, agent_mode: str = "default"
-    ) -> list[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get list of available tools for the agent."""
         if self._tool_definitions_cache is None:
             self._tool_definitions_cache = self._build_base_tool_definitions()
@@ -54,7 +54,7 @@ class ToolDiscoveryService:
 
         return tools_list
 
-    def _build_base_tool_definitions(self) -> list[Dict[str, Any]]:
+    def _build_base_tool_definitions(self) -> list[dict[str, Any]]:
         """Build and cache base tool definitions (static tools only)."""
         from src.infrastructure.agent.tools import ClarificationTool, DecisionTool
 

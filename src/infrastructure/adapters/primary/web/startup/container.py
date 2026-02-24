@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
@@ -14,18 +14,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_app_container: Optional[DIContainer] = None
+_app_container: DIContainer | None = None
 
 
-def get_app_container() -> Optional[DIContainer]:
+def get_app_container() -> DIContainer | None:
     """Get the initialized application DI container."""
     return _app_container
 
 
 def initialize_container(
     graph_service: GraphServicePort,
-    redis_client: Optional[object],
-    workflow_engine: Optional[WorkflowEnginePort],
+    redis_client: object | None,
+    workflow_engine: WorkflowEnginePort | None,
 ) -> DIContainer:
     """
     Initialize the DI container with all services.

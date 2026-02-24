@@ -7,7 +7,7 @@ newly registered MCP tools without session restart.
 TDD Task: Fix ReAct Agent not refreshing tools after register_mcp_server
 """
 
-from typing import Any, Dict
+from typing import Any
 
 import pytest
 
@@ -21,14 +21,14 @@ from src.infrastructure.agent.processor.processor import (
 class MockTool:
     """Simple mock tool for testing."""
 
-    def __init__(self, name: str, description: str = "A mock tool"):
+    def __init__(self, name: str, description: str = "A mock tool") -> None:
         self.name = name
         self.description = description
 
     async def execute(self, **kwargs) -> str:
         return f"Executed {self.name}"
 
-    def get_parameters_schema(self) -> Dict[str, Any]:
+    def get_parameters_schema(self) -> dict[str, Any]:
         return {"type": "object", "properties": {}, "required": []}
 
 

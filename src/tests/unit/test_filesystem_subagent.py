@@ -385,7 +385,7 @@ model: {model}
         agents_dir = tmp_path / ".memstack" / "agents"
         agents_dir.mkdir(parents=True)
 
-        for model_name, expected_enum in [
+        for model_name, _expected_enum in [
             ("opus", AgentModel.CLAUDE_SONNET),
             ("sonnet", AgentModel.CLAUDE_SONNET),
             ("gpt-4", AgentModel.GPT4),

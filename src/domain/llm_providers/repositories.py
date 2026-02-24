@@ -6,7 +6,6 @@ Domain repository interface following DDD principles.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import List, Optional
 from uuid import UUID
 
 from src.domain.llm_providers.models import (
@@ -37,29 +36,29 @@ class ProviderRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_by_id(self, provider_id: UUID) -> Optional[ProviderConfig]:
+    async def get_by_id(self, provider_id: UUID) -> ProviderConfig | None:
         """Get provider by ID."""
         pass
 
     @abstractmethod
-    async def get_by_name(self, name: str) -> Optional[ProviderConfig]:
+    async def get_by_name(self, name: str) -> ProviderConfig | None:
         """Get provider by name."""
         pass
 
     @abstractmethod
-    async def list_all(self, include_inactive: bool = False) -> List[ProviderConfig]:
+    async def list_all(self, include_inactive: bool = False) -> list[ProviderConfig]:
         """List all providers, optionally including inactive ones."""
         pass
 
     @abstractmethod
-    async def list_active(self) -> List[ProviderConfig]:
+    async def list_active(self) -> list[ProviderConfig]:
         """List all active providers."""
         pass
 
     @abstractmethod
     async def update(
         self, provider_id: UUID, config: ProviderConfigUpdate
-    ) -> Optional[ProviderConfig]:
+    ) -> ProviderConfig | None:
         """Update provider configuration."""
         pass
 
@@ -69,12 +68,12 @@ class ProviderRepository(ABC):
         pass
 
     @abstractmethod
-    async def find_default_provider(self) -> Optional[ProviderConfig]:
+    async def find_default_provider(self) -> ProviderConfig | None:
         """Find the default provider."""
         pass
 
     @abstractmethod
-    async def find_first_active_provider(self) -> Optional[ProviderConfig]:
+    async def find_first_active_provider(self) -> ProviderConfig | None:
         """Find the first active provider as fallback."""
         pass
 
@@ -83,14 +82,14 @@ class ProviderRepository(ABC):
         self,
         tenant_id: str,
         operation_type: OperationType = OperationType.LLM,
-    ) -> Optional[ProviderConfig]:
+    ) -> ProviderConfig | None:
         """Find provider assigned to specific tenant."""
         pass
 
     @abstractmethod
     async def resolve_provider(
         self,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
         operation_type: OperationType = OperationType.LLM,
     ) -> ResolvedProvider:
         """
@@ -112,7 +111,7 @@ class ProviderRepository(ABC):
         pass
 
     @abstractmethod
-    async def get_latest_health(self, provider_id: UUID) -> Optional[ProviderHealth]:
+    async def get_latest_health(self, provider_id: UUID) -> ProviderHealth | None:
         """Get latest health check for provider."""
         pass
 
@@ -124,12 +123,12 @@ class ProviderRepository(ABC):
     @abstractmethod
     async def get_usage_statistics(
         self,
-        provider_id: Optional[UUID] = None,
-        tenant_id: Optional[str] = None,
-        operation_type: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-    ) -> List[UsageStatistics]:
+        provider_id: UUID | None = None,
+        tenant_id: str | None = None,
+        operation_type: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> list[UsageStatistics]:
         """Get aggregated usage statistics."""
         pass
 
@@ -158,7 +157,7 @@ class ProviderRepository(ABC):
     async def get_tenant_providers(
         self,
         tenant_id: str,
-        operation_type: Optional[OperationType] = None,
-    ) -> List[TenantProviderMapping]:
+        operation_type: OperationType | None = None,
+    ) -> list[TenantProviderMapping]:
         """Get all providers assigned to tenant."""
         pass

@@ -9,10 +9,11 @@ Supports multiple transport protocols:
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any
 
 import aiohttp
 import httpx
@@ -34,7 +35,7 @@ class MCPTransport(ABC):
         pass
 
     @abstractmethod
-    async def send_request(self, method: str, params: Optional[dict] = None) -> dict:
+    async def send_request(self, method: str, params: dict | None = None) -> dict:
         """
         Send a request to the MCP server.
 
@@ -99,7 +100,7 @@ class MCPTransport(ABC):
         # Default implementation - subclasses can override
         return []
 
-    async def get_prompt(self, prompt_name: str, arguments: dict = None) -> dict:
+    async def get_prompt(self, prompt_name: str, arguments: dict | None = None) -> dict:
         """
         Get a specific prompt from the MCP server.
 
@@ -117,11 +118,11 @@ class MCPTransport(ABC):
 class StdioTransport(MCPTransport):
     """MCP transport using stdio (subprocess communication)."""
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict) -> None:
         import os
 
         self.config = config
-        self.process: Optional[asyncio.subprocess.Process] = None
+        self.process: asyncio.subprocess.Process | None = None
         self.command = config.get("command")
         self.args = config.get("args", [])
         # Merge custom env with system env, or use None to inherit system env
@@ -202,7 +203,7 @@ class StdioTransport(MCPTransport):
             self._initialized = False
             logger.info("MCP server process terminated")
 
-    async def send_request(self, method: str, params: Optional[dict] = None) -> dict:
+    async def send_request(self, method: str, params: dict | None = None) -> dict:
         """Send JSON-RPC request via stdin and read response from stdout."""
         if not self.process or not self.process.stdin or not self.process.stdout:
             raise RuntimeError("MCP server process not started")
@@ -225,7 +226,7 @@ class StdioTransport(MCPTransport):
         try:
             logger.debug("Waiting for MCP response (timeout=30s)...")
             response_line = await asyncio.wait_for(self.process.stdout.readline(), timeout=30.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             # Check if process is still running
             if self.process.returncode is not None:
                 stderr = await self.process.stderr.read()
@@ -280,7 +281,7 @@ class StdioTransport(MCPTransport):
         result = await self.send_request("prompts/list")
         return result.get("prompts", [])
 
-    async def get_prompt(self, prompt_name: str, arguments: dict = None) -> dict:
+    async def get_prompt(self, prompt_name: str, arguments: dict | None = None) -> dict:
         """Get a specific prompt from the MCP server."""
         params = {"name": prompt_name}
         if arguments:
@@ -291,12 +292,12 @@ class StdioTransport(MCPTransport):
 class HTTPTransport(MCPTransport):
     """MCP transport using HTTP request/response."""
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict) -> None:
         self.config = config
         self.base_url = config.get("url")
         self.headers = config.get("headers", {})
         self.timeout = config.get("timeout", 30)
-        self.client: Optional[httpx.AsyncClient] = None
+        self.client: httpx.AsyncClient | None = None
 
     async def connect(self) -> None:
         """Initialize HTTP client."""
@@ -312,7 +313,7 @@ class HTTPTransport(MCPTransport):
             self.client = None
             logger.info("HTTP client closed")
 
-    async def send_request(self, method: str, params: Optional[dict] = None) -> dict:
+    async def send_request(self, method: str, params: dict | None = None) -> dict:
         """Send HTTP POST request with JSON-RPC payload."""
         if not self.client:
             raise RuntimeError("HTTP client not initialized")
@@ -365,7 +366,7 @@ class HTTPTransport(MCPTransport):
         result = await self.send_request("prompts/list")
         return result.get("prompts", [])
 
-    async def get_prompt(self, prompt_name: str, arguments: dict = None) -> dict:
+    async def get_prompt(self, prompt_name: str, arguments: dict | None = None) -> dict:
         """Get a specific prompt from the MCP server."""
         params = {"name": prompt_name}
         if arguments:
@@ -376,7 +377,7 @@ class HTTPTransport(MCPTransport):
 class SSETransport(MCPTransport):
     """MCP transport using Streamable HTTP (MCP SDK)."""
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict) -> None:
         self.config = config
         self.url = config.get("url")
         self.headers = config.get("headers", {})
@@ -473,7 +474,7 @@ class SSETransport(MCPTransport):
         try:
             result = await asyncio.wait_for(future, timeout=30.0)
             logger.info(f"MCP server initialized: {result}")
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._pending_requests.pop(request_id, None)
             raise RuntimeError("Timeout waiting for initialize response")
 
@@ -522,10 +523,8 @@ class SSETransport(MCPTransport):
         """Close streamable HTTP client."""
         if self._reader_task:
             self._reader_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._reader_task
-            except asyncio.CancelledError:
-                pass
             self._reader_task = None
 
         if hasattr(self, "_exit_stack") and self._exit_stack:
@@ -537,7 +536,7 @@ class SSETransport(MCPTransport):
         self._pending_requests.clear()
         logger.info("Streamable HTTP client closed")
 
-    async def send_request(self, method: str, params: Optional[dict] = None) -> dict:
+    async def send_request(self, method: str, params: dict | None = None) -> dict:
         """Send request via streamable HTTP."""
         if not self._write_stream:
             raise RuntimeError("Streamable HTTP client not initialized")
@@ -571,7 +570,7 @@ class SSETransport(MCPTransport):
                 return result
             else:
                 return {"result": result}
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._pending_requests.pop(request_id, None)
             raise RuntimeError(f"Timeout waiting for response to {method}")
 
@@ -612,7 +611,7 @@ class SSETransport(MCPTransport):
         # Convert Pydantic models to dicts if needed
         return [p.model_dump() if hasattr(p, "model_dump") else p for p in prompts]
 
-    async def get_prompt(self, prompt_name: str, arguments: dict = None) -> dict:
+    async def get_prompt(self, prompt_name: str, arguments: dict | None = None) -> dict:
         """Get a specific prompt from the MCP server."""
         params = {"name": prompt_name}
         if arguments:
@@ -630,7 +629,7 @@ class WebSocketTransport(MCPTransport):
     - Real-time streaming for long-running operations
     """
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict) -> None:
         """
         Initialize WebSocket transport.
 
@@ -651,11 +650,11 @@ class WebSocketTransport(MCPTransport):
         self.heartbeat_interval = config.get("heartbeat_interval", 30)
         self.reconnect_attempts = config.get("reconnect_attempts", 3)
 
-        self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._ws: aiohttp.ClientWebSocketResponse | None = None
+        self._session: aiohttp.ClientSession | None = None
         self._request_id = 0
-        self._pending_requests: Dict[int, asyncio.Future] = {}
-        self._receive_task: Optional[asyncio.Task] = None
+        self._pending_requests: dict[int, asyncio.Future] = {}
+        self._receive_task: asyncio.Task | None = None
         self._initialized = False
         self._closed = False
 
@@ -758,7 +757,7 @@ class WebSocketTransport(MCPTransport):
             logger.error(f"Error in WebSocket receive loop: {e}", exc_info=True)
         finally:
             # Fail all pending requests
-            for request_id, future in list(self._pending_requests.items()):
+            for _request_id, future in list(self._pending_requests.items()):
                 if not future.done():
                     future.set_exception(RuntimeError("WebSocket connection closed"))
             self._pending_requests.clear()
@@ -805,10 +804,8 @@ class WebSocketTransport(MCPTransport):
         # Cancel receive task
         if self._receive_task and not self._receive_task.done():
             self._receive_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._receive_task
-            except asyncio.CancelledError:
-                pass
             self._receive_task = None
 
         # Close WebSocket
@@ -827,7 +824,7 @@ class WebSocketTransport(MCPTransport):
                 future.set_exception(RuntimeError("WebSocket connection closed"))
         self._pending_requests.clear()
 
-    async def send_request(self, method: str, params: Optional[dict] = None) -> dict:
+    async def send_request(self, method: str, params: dict | None = None) -> dict:
         """
         Send JSON-RPC request and wait for response.
 
@@ -867,7 +864,7 @@ class WebSocketTransport(MCPTransport):
             result = await asyncio.wait_for(future, timeout=self.timeout)
             return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._pending_requests.pop(request_id, None)
             raise RuntimeError(f"Timeout waiting for response to {method}")
 
@@ -917,7 +914,7 @@ class WebSocketTransport(MCPTransport):
         result = await self.send_request("prompts/list")
         return result.get("prompts", [])
 
-    async def get_prompt(self, prompt_name: str, arguments: dict = None) -> dict:
+    async def get_prompt(self, prompt_name: str, arguments: dict | None = None) -> dict:
         """Get a specific prompt from the MCP server."""
         params = {"name": prompt_name}
         if arguments:
@@ -933,7 +930,7 @@ class MCPClient:
     for tool discovery and execution.
     """
 
-    def __init__(self, server_type: str, transport_config: dict):
+    def __init__(self, server_type: str, transport_config: dict) -> None:
         """
         Initialize MCP client.
 
@@ -943,9 +940,9 @@ class MCPClient:
         """
         self.server_type = server_type
         self.transport_config = transport_config
-        self.transport: Optional[MCPTransport] = None
+        self.transport: MCPTransport | None = None
         self._connected = False
-        self._progress_callback: Optional[callable] = None
+        self._progress_callback: callable | None = None
 
     def register_progress_callback(self, callback: callable) -> None:
         """
@@ -1016,7 +1013,7 @@ class MCPClient:
 
         return await self.transport.list_tools()
 
-    async def call_tool(self, tool_name: str, arguments: dict) -> Any:  # noqa: ANN401
+    async def call_tool(self, tool_name: str, arguments: dict) -> Any:
         """
         Call a tool on the MCP server.
 
@@ -1094,7 +1091,7 @@ class MCPClient:
 
         return await self.transport.list_prompts()
 
-    async def get_prompt(self, prompt_name: str, arguments: dict = None) -> dict:
+    async def get_prompt(self, prompt_name: str, arguments: dict | None = None) -> dict:
         """
         Get a specific prompt from the MCP server.
 

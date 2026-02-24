@@ -1,6 +1,6 @@
 """Integration tests for channel observability endpoints."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
@@ -207,7 +207,7 @@ class TestChannelObservabilityEndpoints:
             user_id=test_user.id,
         )
 
-        base = datetime.now(timezone.utc)
+        base = datetime.now(UTC)
         latest_by_update = ChannelOutboxModel(
             id=str(uuid4()),
             project_id=test_project_db.id,
@@ -262,7 +262,7 @@ class TestChannelObservabilityEndpoints:
             user_id=test_user.id,
         )
 
-        base = datetime.now(timezone.utc)
+        base = datetime.now(UTC)
         null_updated = ChannelOutboxModel(
             id=str(uuid4()),
             project_id=test_project_db.id,

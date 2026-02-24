@@ -7,7 +7,7 @@ learned workflow patterns from successful agent executions.
 TDD: Tests written first, entity will be implemented to make these pass.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from src.domain.model.agent.workflow_pattern import PatternStep, WorkflowPattern
 
@@ -89,7 +89,7 @@ class TestWorkflowPattern:
 
     def test_workflow_pattern_creation(self):
         """Test creating a valid workflow pattern."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         steps = [
             PatternStep(
                 step_number=1,
@@ -128,7 +128,7 @@ class TestWorkflowPattern:
 
     def test_workflow_pattern_with_metadata(self):
         """Test workflow pattern with optional metadata."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         steps = [
             PatternStep(
                 step_number=1,
@@ -164,8 +164,8 @@ class TestWorkflowPattern:
             steps=[],
             success_rate=1.0,
             usage_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         # Pattern should be scoped to tenant
@@ -205,8 +205,8 @@ class TestWorkflowPattern:
             steps=steps,
             success_rate=1.0,
             usage_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         # Steps should be in the order provided (not sorted by step_number)
@@ -232,8 +232,8 @@ class TestWorkflowPattern:
             ],
             success_rate=0.9,
             usage_count=5,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         # Similar pattern should have high similarity score
@@ -260,8 +260,8 @@ class TestWorkflowPattern:
             ],
             success_rate=0.9,
             usage_count=5,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         # Dissimilar query should have low similarity score
@@ -280,8 +280,8 @@ class TestWorkflowPattern:
             steps=[],
             success_rate=0.8,
             usage_count=10,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         # Update with successful execution

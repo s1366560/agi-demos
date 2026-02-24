@@ -2,7 +2,7 @@
 Tests for V2 SqlAPIKeyRepository using BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,7 +48,7 @@ class TestSqlAPIKeyRepositorySave:
             name="Test Key",
             is_active=True,
             permissions=["read", "write"],
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         await v2_api_key_repo.save(api_key)
@@ -70,7 +70,7 @@ class TestSqlAPIKeyRepositorySave:
             name="Original Name",
             is_active=True,
             permissions=["read"],
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_api_key_repo.save(api_key)
 
@@ -83,7 +83,7 @@ class TestSqlAPIKeyRepositorySave:
             is_active=False,
             permissions=["read", "write", "delete"],
             created_at=api_key.created_at,
-            last_used_at=datetime.now(timezone.utc),
+            last_used_at=datetime.now(UTC),
         )
         await v2_api_key_repo.save(updated_key)
 
@@ -107,7 +107,7 @@ class TestSqlAPIKeyRepositoryFind:
             name="Find Me",
             is_active=True,
             permissions=["read"],
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_api_key_repo.save(api_key)
 
@@ -131,7 +131,7 @@ class TestSqlAPIKeyRepositoryFind:
             name="Hash Test",
             is_active=True,
             permissions=["read"],
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_api_key_repo.save(api_key)
 
@@ -161,7 +161,7 @@ class TestSqlAPIKeyRepositoryList:
                 name=f"Key {i}",
                 is_active=True,
                 permissions=["read"],
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_api_key_repo.save(api_key)
 
@@ -181,7 +181,7 @@ class TestSqlAPIKeyRepositoryList:
                 name=f"Page Key {i}",
                 is_active=True,
                 permissions=["read"],
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_api_key_repo.save(api_key)
 
@@ -207,7 +207,7 @@ class TestSqlAPIKeyRepositoryDelete:
             name="Delete Me",
             is_active=True,
             permissions=["read"],
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_api_key_repo.save(api_key)
 
@@ -238,12 +238,12 @@ class TestSqlAPIKeyRepositoryUpdateLastUsed:
             name="Last Used Test",
             is_active=True,
             permissions=["read"],
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_api_key_repo.save(api_key)
 
         # Update last used
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         await v2_api_key_repo.update_last_used("key-lastused-1", timestamp)
 
         # Verify updated
@@ -264,8 +264,8 @@ class TestSqlAPIKeyRepositoryToDomain:
             name="Domain Test",
             is_active=True,
             permissions=["read", "write", "delete"],
-            created_at=datetime.now(timezone.utc),
-            expires_at=datetime(2025, 12, 31, 23, 59, 59, tzinfo=timezone.utc),
+            created_at=datetime.now(UTC),
+            expires_at=datetime(2025, 12, 31, 23, 59, 59, tzinfo=UTC),
         )
         await v2_api_key_repo.save(api_key)
 

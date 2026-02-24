@@ -13,7 +13,7 @@ import asyncio
 import json
 import os
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import aiohttp
 import websockets
@@ -35,17 +35,17 @@ TEST_TENANT_ID = os.environ.get("TEST_TENANT_ID", "")
 class AgentWebSocketTester:
     """Test agent WebSocket functionality."""
 
-    def __init__(self, api_key: str, project_id: str, conversation_id: str):
+    def __init__(self, api_key: str, project_id: str, conversation_id: str) -> None:
         self.api_key = api_key
         self.project_id = project_id
         self.conversation_id = conversation_id
-        self.session_id: Optional[str] = None
-        self.ws: Optional[websockets.WebSocketClientProtocol] = None
-        self.events: List[Dict[str, Any]] = []
-        self.hitl_request_id: Optional[str] = None
-        self.hitl_type: Optional[str] = None
+        self.session_id: str | None = None
+        self.ws: websockets.WebSocketClientProtocol | None = None
+        self.events: list[dict[str, Any]] = []
+        self.hitl_request_id: str | None = None
+        self.hitl_type: str | None = None
         self.test_passed = False
-        self.errors: List[str] = []
+        self.errors: list[str] = []
 
     async def connect(self) -> bool:
         """Connect to WebSocket endpoint."""
@@ -75,7 +75,7 @@ class AgentWebSocketTester:
             print(f"   ✓ Connected: session_id={self.session_id}")
             return True
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self.errors.append("Timeout waiting for connected event")
             return False
         except Exception as e:
@@ -158,7 +158,7 @@ class AgentWebSocketTester:
             self.errors.append(f"Error subscribing: {e}")
             return False
 
-    async def receive_events(self, timeout: float = 30.0, expected_event_types: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+    async def receive_events(self, timeout: float = 30.0, expected_event_types: list[str] | None = None) -> list[dict[str, Any]]:
         """Receive events until timeout or completion."""
         events = []
         start_time = asyncio.get_event_loop().time()
@@ -201,7 +201,7 @@ class AgentWebSocketTester:
                 if expected_event_types and event_type in expected_event_types:
                     break
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
         except Exception as e:
             self.errors.append(f"Error receiving events: {e}")
@@ -300,7 +300,7 @@ async def test_agent_chat_flow():
         if "complete" in event_types:
             print("   ✓ Agent completed successfully")
         elif "error" in event_types:
-            error_event = [e for e in events if e.get("type") == "error"][0]
+            error_event = next(e for e in events if e.get("type") == "error")
             print(f"   ✗ Agent error: {error_event.get('data', {})}")
             return False
         else:
@@ -377,7 +377,7 @@ async def test_hitl_clarification_flow():
             if "complete" in event_types_after:
                 print("   ✓ ReAct Agent continued and completed after HITL!")
             elif "error" in event_types_after:
-                error_event = [e for e in events_after_hitl if e.get("type") == "error"][0]
+                error_event = next(e for e in events_after_hitl if e.get("type") == "error")
                 print(f"   ✗ Error after HITL: {error_event.get('data', {})}")
                 return False
             elif not events_after_hitl:
@@ -455,7 +455,7 @@ async def test_hitl_decision_flow():
             if "complete" in event_types_after:
                 print("   ✓ ReAct Agent continued and completed after decision!")
             elif "error" in event_types_after:
-                error_event = [e for e in events_after_hitl if e.get("type") == "error"][0]
+                error_event = next(e for e in events_after_hitl if e.get("type") == "error")
                 print(f"   ✗ Error after decision: {error_event.get('data', {})}")
                 return False
             elif not events_after_hitl:

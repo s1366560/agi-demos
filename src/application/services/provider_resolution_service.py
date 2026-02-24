@@ -6,7 +6,6 @@ Implements fallback hierarchy and caching for performance.
 """
 
 import logging
-from typing import Optional
 
 from src.domain.llm_providers.models import (
     NoActiveProviderError,
@@ -36,8 +35,8 @@ class ProviderResolutionService:
     def __init__(
         self,
         repository: ProviderRepository,
-        cache: Optional[dict] = None,
-    ):
+        cache: dict | None = None,
+    ) -> None:
         """
         Initialize provider resolution service.
 
@@ -50,7 +49,7 @@ class ProviderResolutionService:
 
     async def resolve_provider(
         self,
-        tenant_id: Optional[str] = None,
+        tenant_id: str | None = None,
         operation_type: OperationType = OperationType.LLM,
     ) -> ProviderConfig:
         """
@@ -89,7 +88,7 @@ class ProviderResolutionService:
 
     async def _resolve_with_fallback(
         self,
-        tenant_id: Optional[str],
+        tenant_id: str | None,
         operation_type: OperationType,
     ) -> ResolvedProvider:
         """
@@ -138,7 +137,7 @@ class ProviderResolutionService:
             resolution_source=resolution_source,
         )
 
-    def invalidate_cache(self, tenant_id: Optional[str] = None):
+    def invalidate_cache(self, tenant_id: str | None = None) -> None:
         """
         Invalidate cached provider resolution.
 
@@ -160,7 +159,7 @@ class ProviderResolutionService:
 
 
 # Singleton instance
-_provider_resolution_service: Optional[ProviderResolutionService] = None
+_provider_resolution_service: ProviderResolutionService | None = None
 
 
 def get_provider_resolution_service() -> ProviderResolutionService:

@@ -7,8 +7,7 @@ expiring stale pending requests.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ class HITLRecoveryService:
     requests remain pending or were answered but not resumed.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._recovery_in_progress = False
         self._recovered_count = 0
 
@@ -61,7 +60,7 @@ class HITLRecoveryService:
                 repo = SqlHITLRequestRepository(session)
 
                 # Mark any old PENDING requests as expired
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 expired_count = await repo.mark_expired_requests(before=now)
                 if expired_count > 0:
                     await session.commit()
@@ -86,7 +85,7 @@ class HITLRecoveryService:
 
 
 # Global instance for use in worker startup
-_recovery_service: Optional[HITLRecoveryService] = None
+_recovery_service: HITLRecoveryService | None = None
 
 
 def get_hitl_recovery_service() -> HITLRecoveryService:

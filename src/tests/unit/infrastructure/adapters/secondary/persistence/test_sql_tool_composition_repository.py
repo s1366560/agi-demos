@@ -2,7 +2,7 @@
 Tests for V2 SqlToolCompositionRepository using BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,8 +37,8 @@ class TestSqlToolCompositionRepositoryCreate:
             success_count=0,
             failure_count=0,
             usage_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
 
         result = await v2_composition_repo.save(composition)
@@ -62,8 +62,8 @@ class TestSqlToolCompositionRepositoryCreate:
             success_count=0,
             failure_count=0,
             usage_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_composition_repo.save(composition)
 
@@ -94,8 +94,8 @@ class TestSqlToolCompositionRepositoryFind:
             success_count=5,
             failure_count=2,
             usage_count=7,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_composition_repo.save(composition)
 
@@ -125,8 +125,8 @@ class TestSqlToolCompositionRepositoryFind:
             success_count=0,
             failure_count=0,
             usage_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_composition_repo.save(composition)
 
@@ -150,8 +150,8 @@ class TestSqlToolCompositionRepositoryFind:
             success_count=0,
             failure_count=0,
             usage_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         comp2 = ToolComposition(
             id="comp-tools-2",
@@ -164,8 +164,8 @@ class TestSqlToolCompositionRepositoryFind:
             success_count=0,
             failure_count=0,
             usage_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         comp3 = ToolComposition(
             id="comp-tools-3",
@@ -178,8 +178,8 @@ class TestSqlToolCompositionRepositoryFind:
             success_count=0,
             failure_count=0,
             usage_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_composition_repo.save(comp1)
         await v2_composition_repo.save(comp2)
@@ -211,8 +211,8 @@ class TestSqlToolCompositionRepositoryFind:
                 success_count=i,
                 failure_count=0,
                 usage_count=i * 10,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
+                updated_at=datetime.now(UTC),
             )
             await v2_composition_repo.save(composition)
 
@@ -241,8 +241,8 @@ class TestSqlToolCompositionRepositoryUpdateUsage:
             success_count=5,
             failure_count=2,
             usage_count=7,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_composition_repo.save(composition)
 
@@ -267,8 +267,8 @@ class TestSqlToolCompositionRepositoryUpdateUsage:
             success_count=5,
             failure_count=2,
             usage_count=7,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_composition_repo.save(composition)
 
@@ -297,8 +297,8 @@ class TestSqlToolCompositionRepositoryDelete:
             success_count=0,
             failure_count=0,
             usage_count=0,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
         )
         await v2_composition_repo.save(composition)
 

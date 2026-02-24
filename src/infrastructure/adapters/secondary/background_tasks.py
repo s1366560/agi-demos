@@ -7,9 +7,10 @@ like community rebuilding. For production, consider using Redis or a database-ba
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
@@ -24,54 +25,54 @@ class TaskStatus(str, Enum):
 
 
 class BackgroundTask:
-    def __init__(self, task_id: str, task_type: str, func: Callable, *args, **kwargs):
+    def __init__(self, task_id: str, task_type: str, func: Callable, *args, **kwargs) -> None:
         self.task_id = task_id
         self.task_type = task_type
         self.func = func
         self.args = args
         self.kwargs = kwargs
         self.status = TaskStatus.PENDING
-        self.created_at = datetime.now(timezone.utc)
-        self.started_at: Optional[datetime] = None
-        self.completed_at: Optional[datetime] = None
+        self.created_at = datetime.now(UTC)
+        self.started_at: datetime | None = None
+        self.completed_at: datetime | None = None
         self.progress = 0
         self.message = "Task queued"
-        self.result: Optional[Any] = None
-        self.error: Optional[str] = None
-        self._task: Optional[asyncio.Task] = None
+        self.result: Any | None = None
+        self.error: str | None = None
+        self._task: asyncio.Task | None = None
 
-    async def run(self):
+    async def run(self) -> None:
         """Execute the task and update status."""
         self.status = TaskStatus.RUNNING
-        self.started_at = datetime.now(timezone.utc)
+        self.started_at = datetime.now(UTC)
         self.message = "Task started"
 
         try:
             logger.info(f"Task {self.task_id} started")
             self.result = await self.func(*self.args, **self.kwargs)
             self.status = TaskStatus.COMPLETED
-            self.completed_at = datetime.now(timezone.utc)
+            self.completed_at = datetime.now(UTC)
             self.message = "Task completed successfully"
             self.progress = 100
             logger.info(f"Task {self.task_id} completed successfully")
         except Exception as e:
             self.status = TaskStatus.FAILED
-            self.completed_at = datetime.now(timezone.utc)
+            self.completed_at = datetime.now(UTC)
             self.error = str(e)
             self.message = f"Task failed: {e!s}"
             logger.error(f"Task {self.task_id} failed: {e}")
             raise
 
-    async def cancel(self):
+    async def cancel(self) -> None:
         """Cancel the task if it's running."""
         if self._task and not self._task.done():
             self._task.cancel()
             self.status = TaskStatus.CANCELLED
-            self.completed_at = datetime.now(timezone.utc)
+            self.completed_at = datetime.now(UTC)
             self.message = "Task cancelled"
             logger.info(f"Task {self.task_id} cancelled")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert task to dictionary for JSON serialization."""
         return {
             "task_id": self.task_id,
@@ -90,17 +91,17 @@ class BackgroundTask:
 class TaskManager:
     """Simple in-memory task manager."""
 
-    def __init__(self):
-        self.tasks: Dict[str, BackgroundTask] = {}
-        self._cleanup_task: Optional[asyncio.Task] = None
+    def __init__(self) -> None:
+        self.tasks: dict[str, BackgroundTask] = {}
+        self._cleanup_task: asyncio.Task | None = None
 
-    def start_cleanup(self):
+    def start_cleanup(self) -> None:
         """Start background cleanup of completed tasks."""
 
-        async def cleanup_old_tasks():
+        async def cleanup_old_tasks() -> None:
             while True:
                 await asyncio.sleep(3600)  # Cleanup every hour
-                now = datetime.now(timezone.utc)
+                now = datetime.now(UTC)
                 to_remove = []
                 for task_id, task in self.tasks.items():
                     # Remove tasks completed more than 24 hours ago
@@ -130,7 +131,7 @@ class TaskManager:
         task._task = asyncio.create_task(task.run())
         return task.task_id
 
-    def get_task(self, task_id: str) -> Optional[BackgroundTask]:
+    def get_task(self, task_id: str) -> BackgroundTask | None:
         """Get task by ID."""
         return self.tasks.get(task_id)
 

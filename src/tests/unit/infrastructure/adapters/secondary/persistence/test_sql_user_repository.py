@@ -7,7 +7,7 @@ These tests verify that the migrated repository maintains 100% compatibility
 with the original implementation while leveraging the BaseRepository.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,7 +38,7 @@ class TestSqlUserRepositoryCreate:
             password_hash="hashed_password_123",
             is_active=True,
             profile={"bio": "Test bio"},
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         await v2_user_repo.save(user)
@@ -73,7 +73,7 @@ class TestSqlUserRepositoryUpdate:
             password_hash="original_hash",
             is_active=False,
             profile={},
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_user_repo.save(user)
 
@@ -99,7 +99,7 @@ class TestSqlUserRepositoryUpdate:
     @pytest.mark.asyncio
     async def test_update_preserves_created_at(self, v2_user_repo: SqlUserRepository):
         """Test that updates preserve created_at timestamp."""
-        original_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        original_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
         user = User(
             id="user-preserve",
             email="preserve@example.com",
@@ -129,7 +129,7 @@ class TestSqlUserRepositoryFind:
             password_hash="hash",
             is_active=True,
             profile={},
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_user_repo.save(user)
 
@@ -154,7 +154,7 @@ class TestSqlUserRepositoryFind:
             password_hash="hash",
             is_active=True,
             profile={},
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_user_repo.save(user)
 
@@ -179,7 +179,7 @@ class TestSqlUserRepositoryFind:
             password_hash="hash",
             is_active=True,
             profile={},
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_user_repo.save(user)
 
@@ -206,7 +206,7 @@ class TestSqlUserRepositoryList:
                 password_hash="hash",
                 is_active=True,
                 profile={},
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_user_repo.save(user)
 
@@ -226,7 +226,7 @@ class TestSqlUserRepositoryList:
                 password_hash="hash",
                 is_active=True,
                 profile={},
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_user_repo.save(user)
 
@@ -256,7 +256,7 @@ class TestSqlUserRepositoryDelete:
             password_hash="hash",
             is_active=True,
             profile={},
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_user_repo.save(user)
 
@@ -294,7 +294,7 @@ class TestSqlUserRepositoryCount:
                 password_hash="hash",
                 is_active=True,
                 profile={},
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_user_repo.save(user)
 
@@ -315,7 +315,7 @@ class TestSqlUserRepositoryToDomain:
             password_hash="hash",
             is_active=True,
             profile={"bio": "test bio"},
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
         await v2_user_repo.save(user)
 
@@ -346,7 +346,7 @@ class TestSqlUserRepositoryToDb:
             password_hash="hash",
             is_active=True,
             profile={},
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         db_model = v2_user_repo._to_db(user)
@@ -372,7 +372,7 @@ class TestSqlUserRepositoryTransaction:
                 password_hash="hash",
                 is_active=True,
                 profile={},
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_user_repo.save(user1)
 
@@ -383,7 +383,7 @@ class TestSqlUserRepositoryTransaction:
                 password_hash="hash",
                 is_active=True,
                 profile={},
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
             await v2_user_repo.save(user2)
 
@@ -405,7 +405,7 @@ class TestSqlUserRepositoryTransaction:
                     password_hash="hash",
                     is_active=True,
                     profile={},
-                    created_at=datetime.now(timezone.utc),
+                    created_at=datetime.now(UTC),
                 )
                 await v2_user_repo.save(user1)
 

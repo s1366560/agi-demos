@@ -10,8 +10,7 @@ message generation status.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -93,7 +92,7 @@ class SqlMessageExecutionStatusRepository(
         )
         return execution
 
-    async def get_by_id(self, execution_id: str) -> Optional[AgentExecution]:
+    async def get_by_id(self, execution_id: str) -> AgentExecution | None:
         """Get execution by ID."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             MessageExecutionStatus as MessageExecutionStatusModel,
@@ -110,8 +109,8 @@ class SqlMessageExecutionStatusRepository(
     async def get_by_message_id(
         self,
         message_id: str,
-        conversation_id: Optional[str] = None,
-    ) -> Optional[AgentExecution]:
+        conversation_id: str | None = None,
+    ) -> AgentExecution | None:
         """Get execution by message ID."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             MessageExecutionStatus as MessageExecutionStatusModel,
@@ -130,7 +129,7 @@ class SqlMessageExecutionStatusRepository(
     async def get_running_by_conversation(
         self,
         conversation_id: str,
-    ) -> Optional[AgentExecution]:
+    ) -> AgentExecution | None:
         """Get the currently running execution for a conversation."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             MessageExecutionStatus as MessageExecutionStatusModel,
@@ -150,8 +149,8 @@ class SqlMessageExecutionStatusRepository(
         self,
         execution_id: str,
         status: AgentExecutionStatus,
-        error_message: Optional[str] = None,
-    ) -> Optional[AgentExecution]:
+        error_message: str | None = None,
+    ) -> AgentExecution | None:
         """Update execution status."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             MessageExecutionStatus as MessageExecutionStatusModel,
@@ -166,7 +165,7 @@ class SqlMessageExecutionStatusRepository(
             AgentExecutionStatus.FAILED,
             AgentExecutionStatus.CANCELLED,
         ):
-            update_data["completed_at"] = datetime.now(timezone.utc)
+            update_data["completed_at"] = datetime.now(UTC)
 
         if error_message:
             update_data["error_message"] = error_message
@@ -190,7 +189,7 @@ class SqlMessageExecutionStatusRepository(
         self,
         execution_id: str,
         sequence: int,
-    ) -> Optional[AgentExecution]:
+    ) -> AgentExecution | None:
         """Update the last event sequence number."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             MessageExecutionStatus as MessageExecutionStatusModel,

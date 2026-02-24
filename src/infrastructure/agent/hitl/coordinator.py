@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from src.domain.model.agent.hitl_request import HITLRequest as HITLRequestEntity, HITLRequestType
 from src.domain.model.agent.hitl_types import HITLType
@@ -46,7 +46,7 @@ class HITLCoordinator:
     the generator naturally.
     """
 
-    _strategies: Dict[HITLType, HITLTypeStrategy] = {
+    _strategies: dict[HITLType, HITLTypeStrategy] = {
         HITLType.CLARIFICATION: ClarificationStrategy(),
         HITLType.DECISION: DecisionStrategy(),
         HITLType.ENV_VAR: EnvVarStrategy(),
@@ -58,15 +58,15 @@ class HITLCoordinator:
         conversation_id: str,
         tenant_id: str,
         project_id: str,
-        message_id: Optional[str] = None,
+        message_id: str | None = None,
         default_timeout: float = 300.0,
-    ):
+    ) -> None:
         self.conversation_id = conversation_id
         self.tenant_id = tenant_id
         self.project_id = project_id
         self.message_id = message_id
         self.default_timeout = default_timeout
-        self._pending: Dict[str, asyncio.Future] = {}
+        self._pending: dict[str, asyncio.Future] = {}
 
     def _get_strategy(self, hitl_type: HITLType) -> HITLTypeStrategy:
         strategy = self._strategies.get(hitl_type)
@@ -77,8 +77,8 @@ class HITLCoordinator:
     async def prepare_request(
         self,
         hitl_type: HITLType,
-        request_data: Dict[str, Any],
-        timeout_seconds: Optional[float] = None,
+        request_data: dict[str, Any],
+        timeout_seconds: float | None = None,
     ) -> str:
         """Create a pending HITL Future and persist to DB. Returns the request_id.
 
@@ -114,7 +114,7 @@ class HITLCoordinator:
                 message_id=self.message_id,
                 timeout_seconds=timeout,
                 type_data=hitl_request.type_specific_data,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(UTC),
             )
         except Exception:
             self._pending.pop(request_id, None)
@@ -132,8 +132,8 @@ class HITLCoordinator:
         self,
         request_id: str,
         hitl_type: HITLType,
-        timeout_seconds: Optional[float] = None,
-    ) -> Any:  # noqa: ANN401
+        timeout_seconds: float | None = None,
+    ) -> Any:
         """Await the Future for a previously prepared request.
 
         Returns the response value extracted by the type strategy.
@@ -153,7 +153,7 @@ class HITLCoordinator:
 
         try:
             response_data = await asyncio.wait_for(fut, timeout=timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 f"[HITLCoordinator] Timeout waiting for {hitl_type.value} request_id={request_id}"
             )
@@ -174,9 +174,9 @@ class HITLCoordinator:
     async def request(
         self,
         hitl_type: HITLType,
-        request_data: Dict[str, Any],
-        timeout_seconds: Optional[float] = None,
-    ) -> Any:  # noqa: ANN401
+        request_data: dict[str, Any],
+        timeout_seconds: float | None = None,
+    ) -> Any:
         """Convenience wrapper: prepare + wait in one call.
 
         Prefer ``prepare_request()`` + ``wait_for_response()`` when you need
@@ -185,7 +185,7 @@ class HITLCoordinator:
         request_id = await self.prepare_request(hitl_type, request_data, timeout_seconds)
         return await self.wait_for_response(request_id, hitl_type, timeout_seconds)
 
-    def resolve(self, request_id: str, response_data: Dict[str, Any]) -> bool:
+    def resolve(self, request_id: str, response_data: dict[str, Any]) -> bool:
         """Resolve a pending HITL Future with user response data.
 
         Returns True if the request was found and resolved, False otherwise.
@@ -206,7 +206,7 @@ class HITLCoordinator:
     def cancel_all(self, reason: str = "cancelled") -> int:
         """Cancel all pending Futures. Returns count of cancelled requests."""
         count = 0
-        for req_id, fut in list(self._pending.items()):
+        for _req_id, fut in list(self._pending.items()):
             if not fut.done():
                 fut.set_result({"cancelled": True, "reason": reason})
                 count += 1
@@ -218,10 +218,10 @@ class HITLCoordinator:
         return len(self._pending)
 
     @property
-    def pending_request_ids(self) -> List[str]:
+    def pending_request_ids(self) -> list[str]:
         return list(self._pending.keys())
 
-    def get_request_data(self, request_id: str) -> Optional[Dict[str, Any]]:
+    def get_request_data(self, request_id: str) -> dict[str, Any] | None:
         """Get the HITLRequest data for a pending request (for state saving)."""
         return {"request_id": request_id} if request_id in self._pending else None
 
@@ -230,7 +230,7 @@ class HITLCoordinator:
 # Global coordinator registry (keyed by request_id for response routing)
 # ---------------------------------------------------------------------------
 
-_coordinator_registry: Dict[str, HITLCoordinator] = {}
+_coordinator_registry: dict[str, HITLCoordinator] = {}
 
 
 def register_coordinator(request_id: str, coordinator: HITLCoordinator) -> None:
@@ -243,7 +243,7 @@ def unregister_coordinator(request_id: str) -> None:
     _coordinator_registry.pop(request_id, None)
 
 
-def resolve_by_request_id(request_id: str, response_data: Dict[str, Any]) -> bool:
+def resolve_by_request_id(request_id: str, response_data: dict[str, Any]) -> bool:
     """Resolve a pending HITL request by request_id using the global registry.
 
     Returns True if the request was found and resolved, False otherwise.
@@ -260,9 +260,9 @@ def resolve_by_request_id(request_id: str, response_data: Dict[str, Any]) -> boo
 # ---------------------------------------------------------------------------
 
 
-def _type_default(hitl_type: HITLType) -> Any:  # noqa: ANN401
+def _type_default(hitl_type: HITLType) -> Any:
     """Return a safe fallback value for timeout/cancellation without needing the request object."""
-    defaults: Dict[HITLType, Any] = {
+    defaults: dict[HITLType, Any] = {
         HITLType.CLARIFICATION: "",
         HITLType.DECISION: "",
         HITLType.ENV_VAR: {},
@@ -277,9 +277,9 @@ async def _persist_hitl_request(
     conversation_id: str,
     tenant_id: str,
     project_id: str,
-    message_id: Optional[str],
+    message_id: str | None,
     timeout_seconds: float,
-    type_data: Dict[str, Any],
+    type_data: dict[str, Any],
     created_at: datetime,
 ) -> None:
     type_mapping = {

@@ -6,8 +6,8 @@ Handles business logic and coordinates between domain and infrastructure layers.
 """
 
 import logging
-from datetime import datetime, timezone
-from typing import TYPE_CHECKING, List, Optional
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 if TYPE_CHECKING:
@@ -51,7 +51,7 @@ class ProviderService:
     LLM provider configurations with proper validation and error handling.
     """
 
-    def __init__(self, repository: Optional[ProviderRepository] = None):
+    def __init__(self, repository: ProviderRepository | None = None) -> None:
         """
         Initialize provider service.
 
@@ -101,15 +101,15 @@ class ProviderService:
         logger.info(f"Created provider: {provider.id}")
         return provider
 
-    async def list_providers(self, include_inactive: bool = False) -> List[ProviderConfig]:
+    async def list_providers(self, include_inactive: bool = False) -> list[ProviderConfig]:
         """List all providers."""
         return await self.repository.list_all(include_inactive=include_inactive)
 
-    async def get_provider(self, provider_id: UUID) -> Optional[ProviderConfig]:
+    async def get_provider(self, provider_id: UUID) -> ProviderConfig | None:
         """Get provider by ID."""
         return await self.repository.get_by_id(provider_id)
 
-    async def get_provider_response(self, provider_id: UUID) -> Optional[ProviderConfigResponse]:
+    async def get_provider_response(self, provider_id: UUID) -> ProviderConfigResponse | None:
         """
         Get provider for API response (with masked API key, health status, and resilience info).
 
@@ -157,7 +157,7 @@ class ProviderService:
 
     async def update_provider(
         self, provider_id: UUID, config: ProviderConfigUpdate
-    ) -> Optional[ProviderConfig]:
+    ) -> ProviderConfig | None:
         """Update provider configuration."""
         logger.info(f"Updating provider: {provider_id}")
 
@@ -411,7 +411,7 @@ class ProviderService:
         health = ProviderHealth(
             provider_id=provider_id,
             status=status,
-            last_check=datetime.now(timezone.utc),
+            last_check=datetime.now(UTC),
             error_message=error_message,
             response_time_ms=response_time_ms,
         )
@@ -469,15 +469,15 @@ class ProviderService:
         self,
         tenant_id: str,
         operation_type: OperationType = OperationType.LLM,
-    ) -> Optional[ProviderConfig]:
+    ) -> ProviderConfig | None:
         """Get provider for tenant."""
         return await self.repository.find_tenant_provider(tenant_id, operation_type)
 
     async def get_tenant_providers(
         self,
         tenant_id: str,
-        operation_type: Optional[OperationType] = None,
-    ) -> List[TenantProviderMapping]:
+        operation_type: OperationType | None = None,
+    ) -> list[TenantProviderMapping]:
         """Get all providers assigned to tenant."""
         return await self.repository.get_tenant_providers(tenant_id, operation_type)
 
@@ -601,18 +601,18 @@ class ProviderService:
 
     async def get_usage_statistics(
         self,
-        provider_id: Optional[UUID] = None,
-        tenant_id: Optional[str] = None,
-        operation_type: Optional[str] = None,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-    ) -> List:
+        provider_id: UUID | None = None,
+        tenant_id: str | None = None,
+        operation_type: str | None = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+    ) -> list:
         """Get usage statistics."""
         return await self.repository.get_usage_statistics(
             provider_id, tenant_id, operation_type, start_date, end_date
         )
 
-    async def _clear_default_providers(self):
+    async def _clear_default_providers(self) -> None:
         """Unset default flag from all providers."""
         providers = await self.repository.list_all()
         for provider in providers:
@@ -719,7 +719,7 @@ class ProviderService:
 
 
 # Singleton instance for dependency injection
-_provider_service: Optional[ProviderService] = None
+_provider_service: ProviderService | None = None
 
 
 def get_provider_service(session: "AsyncSession" = None) -> ProviderService:

@@ -1,7 +1,6 @@
 """Authorization port - Domain layer interface for authorization."""
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
 
 
 class AuthorizationPort(ABC):
@@ -12,8 +11,8 @@ class AuthorizationPort(ABC):
         self,
         user_id: str,
         permission: str,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
     ) -> bool:
         """Check if a user has a specific permission."""
         ...
@@ -22,9 +21,9 @@ class AuthorizationPort(ABC):
     async def get_user_permissions(
         self,
         user_id: str,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
-    ) -> List[str]:
+        tenant_id: str | None = None,
+        project_id: str | None = None,
+    ) -> list[str]:
         """Get all permissions for a user in a specific context."""
         ...
 
@@ -33,8 +32,8 @@ class AuthorizationPort(ABC):
         self,
         user_id: str,
         role_name: str,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
     ) -> None:
         """Assign a role to a user."""
         ...
@@ -44,16 +43,16 @@ class AuthorizationPort(ABC):
         self,
         user_id: str,
         role_name: str,
-        tenant_id: Optional[str] = None,
-        project_id: Optional[str] = None,
+        tenant_id: str | None = None,
+        project_id: str | None = None,
     ) -> None:
         """Remove a role from a user."""
         ...
 
     @abstractmethod
     async def get_user_roles(
-        self, user_id: str, tenant_id: Optional[str] = None
-    ) -> List[dict]:
+        self, user_id: str, tenant_id: str | None = None
+    ) -> list[dict]:
         """Get all roles assigned to a user."""
         ...
 

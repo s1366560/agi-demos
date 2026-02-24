@@ -18,7 +18,7 @@ from src.infrastructure.adapters.secondary.channels.feishu import (
 )
 
 
-async def basic_messaging_example():
+async def basic_messaging_example() -> None:
     """Basic messaging example."""
     app_id = os.getenv("FEISHU_APP_ID", "cli_xxx")
     app_secret = os.getenv("FEISHU_APP_SECRET", "xxx")
@@ -43,7 +43,7 @@ async def basic_messaging_example():
     await client.send_card_message(chat_id, post.build())
 
 
-async def media_example():
+async def media_example() -> None:
     """Media upload and send example."""
     app_id = os.getenv("FEISHU_APP_ID", "cli_xxx")
     app_secret = os.getenv("FEISHU_APP_SECRET", "xxx")
@@ -65,7 +65,7 @@ async def media_example():
     print("Media example commented out - provide actual files to test")
 
 
-async def document_example():
+async def document_example() -> None:
     """Document operations example."""
     app_id = os.getenv("FEISHU_APP_ID", "cli_xxx")
     app_secret = os.getenv("FEISHU_APP_SECRET", "xxx")
@@ -98,7 +98,7 @@ async def document_example():
     print(f"Document content length: {len(content)}")
 
 
-async def wiki_example():
+async def wiki_example() -> None:
     """Wiki operations example."""
     app_id = os.getenv("FEISHU_APP_ID", "cli_xxx")
     app_secret = os.getenv("FEISHU_APP_SECRET", "xxx")
@@ -125,7 +125,7 @@ async def wiki_example():
         print(f"Created node: {node['node_token']}")
 
 
-async def drive_example():
+async def drive_example() -> None:
     """Drive operations example."""
     app_id = os.getenv("FEISHU_APP_ID", "cli_xxx")
     app_secret = os.getenv("FEISHU_APP_SECRET", "xxx")
@@ -145,7 +145,7 @@ async def drive_example():
     print(f"Found {len(results)} matching files")
 
 
-async def bitable_example():
+async def bitable_example() -> None:
     """Bitable operations example."""
     app_id = os.getenv("FEISHU_APP_ID", "cli_xxx")
     app_secret = os.getenv("FEISHU_APP_SECRET", "xxx")
@@ -200,7 +200,7 @@ async def bitable_example():
     print(f"Found {len(records)} records")
 
 
-async def card_builder_example():
+async def card_builder_example() -> None:
     """Card builder examples."""
     chat_id = "oc_xxx"
     app_id = os.getenv("FEISHU_APP_ID", "cli_xxx")
@@ -270,7 +270,7 @@ async def card_builder_example():
     )
 
 
-async def channel_service_example():
+async def channel_service_example() -> None:
     """Channel service integration example."""
     service = ChannelService()
     
@@ -286,7 +286,7 @@ async def channel_service_example():
     service.register_adapter(feishu)
     
     # Handle incoming messages
-    async def on_message(message):
+    async def on_message(message) -> None:
         print(f"[{message.channel}] {message.sender.name}: {message.content.text}")
         
         # Auto-reply
@@ -315,7 +315,7 @@ async def channel_service_example():
     await service.disconnect_all()
 
 
-async def convenience_functions_example():
+async def convenience_functions_example() -> None:
     """Convenience functions example."""
     app_id = os.getenv("FEISHU_APP_ID", "cli_xxx")
     app_secret = os.getenv("FEISHU_APP_SECRET", "xxx")
@@ -339,7 +339,7 @@ async def convenience_functions_example():
     })
 
 
-async def main():
+async def main() -> None:
     """Run all examples."""
     print("=" * 50)
     print("Feishu Channels Examples")

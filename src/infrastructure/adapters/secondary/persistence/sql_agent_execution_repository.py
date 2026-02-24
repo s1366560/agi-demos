@@ -15,7 +15,6 @@ Migration Benefits:
 """
 
 import logging
-from typing import List, Optional
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -88,7 +87,7 @@ class SqlAgentExecutionRepository(
 
         await self._session.flush()
 
-    async def list_by_message(self, message_id: str) -> List[AgentExecution]:
+    async def list_by_message(self, message_id: str) -> list[AgentExecution]:
         """List executions for a message."""
         result = await self._session.execute(
             select(DBAgentExecution)
@@ -102,7 +101,7 @@ class SqlAgentExecutionRepository(
         self,
         conversation_id: str,
         limit: int = 100,
-    ) -> List[AgentExecution]:
+    ) -> list[AgentExecution]:
         """List executions for a conversation."""
         result = await self._session.execute(
             select(DBAgentExecution)
@@ -122,7 +121,7 @@ class SqlAgentExecutionRepository(
 
     # === Conversion methods ===
 
-    def _to_domain(self, db_execution: Optional[DBAgentExecution]) -> Optional[AgentExecution]:
+    def _to_domain(self, db_execution: DBAgentExecution | None) -> AgentExecution | None:
         """
         Convert database model to domain model.
 

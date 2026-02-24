@@ -8,7 +8,7 @@ Extracted from MCPSandboxAdapter.
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.infrastructure.adapters.secondary.sandbox.instance import MCPSandboxInstance
 from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
@@ -31,7 +31,7 @@ class MCPConnector:
         self,
         connection_timeout: float = 30.0,
         tool_cache_ttl: float = 300.0,  # 5 minutes
-    ):
+    ) -> None:
         """
         Initialize MCP connector.
 
@@ -102,7 +102,7 @@ class MCPConnector:
 
                     return True
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning(f"Connection timeout (attempt {attempt}/{max_retries})")
             except Exception as e:
                 logger.warning(f"Connection failed (attempt {attempt}/{max_retries}): {e}")
@@ -175,7 +175,7 @@ class MCPConnector:
         self,
         instance: MCPSandboxInstance,
         use_cache: bool = True,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         List available MCP tools for sandbox.
 
@@ -201,9 +201,9 @@ class MCPConnector:
         self,
         instance: MCPSandboxInstance,
         tool_name: str,
-        arguments: Dict[str, Any],
-        timeout: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        arguments: dict[str, Any],
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
         """
         Call an MCP tool on the sandbox.
 
@@ -236,7 +236,7 @@ class MCPConnector:
 
             return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             raise RuntimeError(
                 f"Tool call '{tool_name}' timed out after {timeout}s "
                 f"(sandbox={instance.id})"

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +21,9 @@ logger = logging.getLogger(__name__)
 class ModelLimits:
     """Token limits for a single model."""
 
-    max_output_tokens: Optional[int] = None
+    max_output_tokens: int | None = None
     context_window: int = 128_000
-    max_input_tokens: Optional[int] = None
+    max_input_tokens: int | None = None
 
 
 # Known max output token limits per model family.
@@ -127,7 +126,7 @@ def _strip_provider_prefix(model: str) -> str:
 
 def get_model_limits(
     model: str,
-    provider_config_overrides: Optional[dict] = None,
+    provider_config_overrides: dict | None = None,
 ) -> ModelLimits:
     """Return token limits for *model*, with optional DB overrides.
 
@@ -173,7 +172,7 @@ def get_model_context_window(model: str) -> int:
     return _MODEL_CONTEXT_WINDOW.get(bare, _DEFAULT_CONTEXT_WINDOW)
 
 
-def get_model_max_input_tokens(model: str, max_output_tokens: Optional[int] = None) -> int:
+def get_model_max_input_tokens(model: str, max_output_tokens: int | None = None) -> int:
     """Return the max INPUT token budget for *model*.
 
     Uses explicit per-model input caps when known, otherwise derives a safe input
@@ -192,7 +191,7 @@ def get_model_max_input_tokens(model: str, max_output_tokens: Optional[int] = No
     return max(1, context_window - max(0, max_output_tokens))
 
 
-def get_model_input_budget(model: str, max_output_tokens: Optional[int] = None) -> int:
+def get_model_input_budget(model: str, max_output_tokens: int | None = None) -> int:
     """Return a conservative practical input budget for *model*.
 
     This applies a model-specific safety ratio on top of hard input limits to

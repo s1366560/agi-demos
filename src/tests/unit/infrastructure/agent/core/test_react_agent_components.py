@@ -13,8 +13,8 @@ NOTE: This test file uses AgentEventType from the unified domain events types.
 EventType is now an alias for AgentEventType for backward compatibility.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -60,7 +60,7 @@ class MockTool(Tool):
         self,
         name: str = "test_tool",
         description: str = "A test tool",
-        execute_result: Any = "success",  # noqa: ANN401
+        execute_result: Any = "success",
     ) -> None:
         self._name = name
         self._description = description
@@ -74,7 +74,7 @@ class MockTool(Tool):
     def description(self) -> str:
         return self._description
 
-    async def execute(self, **kwargs) -> Any:  # noqa: ANN401
+    async def execute(self, **kwargs) -> Any:
         return self._execute_result
 
     def get_metadata(self) -> ToolMetadata:
@@ -198,7 +198,7 @@ class TestToolAndEventIntegration:
             def description(self) -> str:
                 return "A failing tool"
 
-            async def execute(self, **kwargs) -> Any:  # noqa: ANN401
+            async def execute(self, **kwargs) -> Any:
                 raise ValueError("Tool failed!")
 
         registry.register(FailingTool())
@@ -225,14 +225,14 @@ class TestRouterAndToolIntegration:
 
         # Mock skill matcher that looks for keywords
         class KeywordSkillMatcher(SkillMatcher):
-            def __init__(self, tool_names: List[str]):
+            def __init__(self, tool_names: list[str]) -> None:
                 self._tools = tool_names
 
             async def match(
                 self,
                 message: str,
-                context: Dict[str, Any],
-            ) -> Optional[str]:
+                context: dict[str, Any],
+            ) -> str | None:
                 for tool in self._tools:
                     if tool.replace("_", " ") in message.lower():
                         return tool
@@ -319,7 +319,7 @@ class TestFullIntegration:
             def description(self) -> str:
                 return "This tool is broken"
 
-            async def execute(self, **kwargs) -> Any:  # noqa: ANN401
+            async def execute(self, **kwargs) -> Any:
                 raise RuntimeError("Something went wrong!")
 
         tool_registry.register(BrokenTool())
@@ -453,7 +453,7 @@ class TestEventScenarios:
             return {
                 "action": "executing",
                 "target": tool_name,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
         mapper.register_transformer(AgentEventType.ACT, transform_act)
@@ -491,7 +491,7 @@ class TestToolScenarios:
             def description(self) -> str:
                 return "Fails"
 
-            async def execute(self, **kwargs) -> Any:  # noqa: ANN401
+            async def execute(self, **kwargs) -> Any:
                 raise ValueError("Failed!")
 
         registry.register(FailingTool())

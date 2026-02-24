@@ -21,9 +21,10 @@ import logging
 import os
 import time
 import uuid
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import TYPE_CHECKING, Any, AsyncIterator, Dict, List, Optional
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -50,7 +51,7 @@ _LLM_LOG_BUFFER_INTERVAL = float(os.environ.get("LLM_LOG_BUFFER_INTERVAL", "1.0"
 # ============================================================================
 
 # Model name prefixes that map to specific providers
-MODEL_PROVIDER_MAP: Dict[str, str] = {
+MODEL_PROVIDER_MAP: dict[str, str] = {
     # Qwen/Dashscope models
     "qwen-": "dashscope",
     "qwq-": "dashscope",
@@ -138,7 +139,7 @@ class ToolCallChunk:
     arguments: str = ""
     complete: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "id": self.id,
@@ -162,7 +163,7 @@ class StreamEvent:
     """
 
     type: StreamEventType
-    data: Dict[str, Any] = field(default_factory=dict)
+    data: dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
 
     @classmethod
@@ -232,7 +233,7 @@ class StreamEvent:
         cls,
         call_id: str,
         name: str,
-        arguments: Dict[str, Any],
+        arguments: dict[str, Any],
     ) -> StreamEvent:
         """Create tool call end event."""
         return cls(
@@ -271,7 +272,7 @@ class StreamEvent:
         return cls(StreamEventType.FINISH, {"reason": reason})
 
     @classmethod
-    def error(cls, message: str, code: str = None) -> StreamEvent:
+    def error(cls, message: str, code: str | None = None) -> StreamEvent:
         """Create error event."""
         data = {"message": message}
         if code:
@@ -288,20 +289,20 @@ class StreamConfig:
     """
 
     model: str
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
+    api_key: str | None = None
+    base_url: str | None = None
     temperature: float = 0.0
     max_tokens: int = 4096
 
     # Tool configuration
-    tools: Optional[List[Dict[str, Any]]] = None
-    tool_choice: Optional[str] = None  # "auto", "none", "required", or specific tool
+    tools: list[dict[str, Any]] | None = None
+    tool_choice: str | None = None  # "auto", "none", "required", or specific tool
 
     # Provider-specific options
-    provider_options: Dict[str, Any] = field(default_factory=dict)
+    provider_options: dict[str, Any] = field(default_factory=dict)
 
     # Provider for rate limiting (inferred from model if not set)
-    provider: Optional[str] = None
+    provider: str | None = None
 
     # Request metadata (increased from 300 to 600 seconds for long-running agents)
     timeout: int = 600  # seconds (10 minutes)
@@ -312,7 +313,7 @@ class StreamConfig:
             return self.provider
         return infer_provider_from_model(self.model)
 
-    def to_litellm_kwargs(self) -> Dict[str, Any]:
+    def to_litellm_kwargs(self) -> dict[str, Any]:
         """
         Convert to LiteLLM acompletion kwargs.
 
@@ -365,7 +366,7 @@ class LLMStream:
                 # Execute tool...
     """
 
-    def __init__(self, config: StreamConfig, llm_client: Optional[LLMClient] = None):
+    def __init__(self, config: StreamConfig, llm_client: LLMClient | None = None) -> None:
         """
         Initialize LLM stream.
 
@@ -381,13 +382,13 @@ class LLMStream:
         # Accumulated state during streaming
         self._text_buffer: str = ""
         self._reasoning_buffer: str = ""
-        self._tool_calls: Dict[int, ToolCallChunk] = {}
+        self._tool_calls: dict[int, ToolCallChunk] = {}
         self._in_text: bool = False
         self._in_reasoning: bool = False
 
         # Usage tracking
-        self._usage: Optional[Dict[str, int]] = None
-        self._finish_reason: Optional[str] = None
+        self._usage: dict[str, int] | None = None
+        self._finish_reason: str | None = None
 
         # P0-2: Batch logging and token delta sampling
         # Get configuration from environment or use defaults
@@ -403,9 +404,9 @@ class LLMStream:
 
     async def generate(
         self,
-        messages: List[Dict[str, Any]],
-        request_id: Optional[str] = None,
-        langfuse_context: Optional[Dict[str, Any]] = None,
+        messages: list[dict[str, Any]],
+        request_id: str | None = None,
+        langfuse_context: dict[str, Any] | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """
         Generate streaming response from LLM.
@@ -456,9 +457,9 @@ class LLMStream:
 
     async def _generate_with_client(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         request_id: str,
-        langfuse_context: Optional[Dict[str, Any]] = None,
+        langfuse_context: dict[str, Any] | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """
         Generate using injected LiteLLMClient (has circuit breaker + rate limiter).
@@ -520,9 +521,9 @@ class LLMStream:
 
     async def _generate_direct(
         self,
-        messages: List[Dict[str, Any]],
+        messages: list[dict[str, Any]],
         request_id: str,
-        langfuse_context: Optional[Dict[str, Any]] = None,
+        langfuse_context: dict[str, Any] | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """
         Generate using direct litellm calls with basic rate limiting.
@@ -614,7 +615,7 @@ class LLMStream:
 
     async def _process_chunk(
         self,
-        chunk: Any,  # noqa: ANN401
+        chunk: Any,
     ) -> AsyncIterator[StreamEvent]:
         """
         Process a single streaming chunk.
@@ -703,7 +704,7 @@ class LLMStream:
 
     async def _process_tool_calls(
         self,
-        tool_calls: List[Any],
+        tool_calls: list[Any],
     ) -> AsyncIterator[StreamEvent]:
         """
         Process tool call deltas.
@@ -785,7 +786,7 @@ class LLMStream:
             self._in_text = False
 
         # Complete any pending tool calls
-        for index, tracker in self._tool_calls.items():
+        for _index, tracker in self._tool_calls.items():
             if not tracker.complete:
                 tracker.complete = True
 
@@ -884,7 +885,7 @@ class LLMStream:
         # Emit finish event
         yield StreamEvent.finish(self._finish_reason or "stop")
 
-    def _extract_usage(self, usage: Any) -> Dict[str, int]:  # noqa: ANN401
+    def _extract_usage(self, usage: Any) -> dict[str, int]:
         """
         Extract token usage from response.
 
@@ -935,11 +936,11 @@ class LLMStream:
 
 def create_stream(
     model: str,
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
+    api_key: str | None = None,
+    base_url: str | None = None,
     temperature: float = 0.0,
     max_tokens: int = 4096,
-    tools: Optional[List[Dict[str, Any]]] = None,
+    tools: list[dict[str, Any]] | None = None,
     **kwargs,
 ) -> LLMStream:
     """

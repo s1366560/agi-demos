@@ -7,7 +7,7 @@ Note: AgentEventType is imported from types.py (Single Source of Truth).
 """
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -18,16 +18,16 @@ from src.domain.events.types import AgentEventType, get_frontend_event_types
 
 # Re-export for backward compatibility
 __all__ = [
-    "AgentEventType",
-    "AgentDomainEvent",
-    "AgentSuggestionsEvent",
+    "AgentArtifactCloseEvent",
     "AgentArtifactOpenEvent",
     "AgentArtifactUpdateEvent",
-    "AgentArtifactCloseEvent",
-    "AgentMCPAppResultEvent",
-    "AgentMCPAppRegisteredEvent",
-    "AgentElicitationAskedEvent",
+    "AgentDomainEvent",
     "AgentElicitationAnsweredEvent",
+    "AgentElicitationAskedEvent",
+    "AgentEventType",
+    "AgentMCPAppRegisteredEvent",
+    "AgentMCPAppResultEvent",
+    "AgentSuggestionsEvent",
     "get_frontend_event_types",
 ]
 
@@ -74,14 +74,14 @@ class AgentStartEvent(AgentDomainEvent):
 
 class AgentCompleteEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.COMPLETE
-    result: Optional[Any] = None
-    trace_url: Optional[str] = None
+    result: Any | None = None
+    trace_url: str | None = None
 
 
 class AgentErrorEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.ERROR
     message: str
-    code: Optional[str] = None
+    code: str | None = None
 
 
 # === Thinking Events ===
@@ -91,7 +91,7 @@ class AgentThoughtEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.THOUGHT
     content: str
     thought_level: str = "task"
-    step_index: Optional[int] = None
+    step_index: int | None = None
 
 
 class AgentThoughtDeltaEvent(AgentDomainEvent):
@@ -111,10 +111,10 @@ class AgentActEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.ACT
     tool_name: str
-    tool_input: Optional[Dict[str, Any]] = None
-    call_id: Optional[str] = None
+    tool_input: dict[str, Any] | None = None
+    call_id: str | None = None
     status: str = "running"
-    tool_execution_id: Optional[str] = None  # New field for act/observe matching
+    tool_execution_id: str | None = None  # New field for act/observe matching
 
 
 class AgentActDeltaEvent(AgentDomainEvent):
@@ -126,7 +126,7 @@ class AgentActDeltaEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.ACT_DELTA
     tool_name: str
-    call_id: Optional[str] = None
+    call_id: str | None = None
     arguments_fragment: str = ""
     accumulated_arguments: str = ""
     status: str = "preparing"
@@ -141,13 +141,13 @@ class AgentObserveEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.OBSERVE
     tool_name: str
-    result: Optional[Any] = None
-    error: Optional[str] = None
-    duration_ms: Optional[int] = None
-    call_id: Optional[str] = None
+    result: Any | None = None
+    error: str | None = None
+    duration_ms: int | None = None
+    call_id: str | None = None
     status: str = "completed"
-    tool_execution_id: Optional[str] = None  # New field for act/observe matching
-    ui_metadata: Optional[Dict[str, Any]] = None  # MCP App UI metadata (resourceUri, etc.)
+    tool_execution_id: str | None = None  # New field for act/observe matching
+    ui_metadata: dict[str, Any] | None = None  # MCP App UI metadata (resourceUri, etc.)
 
 
 # === Text Events ===
@@ -164,7 +164,7 @@ class AgentTextDeltaEvent(AgentDomainEvent):
 
 class AgentTextEndEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.TEXT_END
-    full_text: Optional[str] = None
+    full_text: str | None = None
 
 
 # === Message Events ===
@@ -174,11 +174,11 @@ class AgentMessageEvent(AgentDomainEvent):
     event_type: AgentEventType = Field(default=AgentEventType.MESSAGE)
     role: str
     content: str
-    attachment_ids: Optional[List[str]] = None
-    file_metadata: Optional[List[Dict[str, Any]]] = None
-    forced_skill_name: Optional[str] = None
+    attachment_ids: list[str] | None = None
+    file_metadata: list[dict[str, Any]] | None = None
+    forced_skill_name: str | None = None
 
-    def __init__(self, **data):
+    def __init__(self, **data) -> None:
         # Set event_type based on role
         if "event_type" not in data:
             role = data.get("role", "")
@@ -198,8 +198,8 @@ class AgentPermissionAskedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.PERMISSION_ASKED
     request_id: str
     permission: str
-    patterns: List[str]
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    patterns: list[str]
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentPermissionRepliedEvent(AgentDomainEvent):
@@ -214,7 +214,7 @@ class AgentPermissionRepliedEvent(AgentDomainEvent):
 class AgentDoomLoopDetectedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.DOOM_LOOP_DETECTED
     tool: str
-    input: Dict[str, Any]
+    input: dict[str, Any]
 
 
 class AgentDoomLoopIntervenedEvent(AgentDomainEvent):
@@ -231,9 +231,9 @@ class AgentClarificationAskedEvent(AgentDomainEvent):
     request_id: str
     question: str
     clarification_type: str
-    options: List[Dict[str, Any]]
+    options: list[dict[str, Any]]
     allow_custom: bool = True
-    context: Dict[str, Any] = Field(default_factory=dict)
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentClarificationAnsweredEvent(AgentDomainEvent):
@@ -247,10 +247,10 @@ class AgentDecisionAskedEvent(AgentDomainEvent):
     request_id: str
     question: str
     decision_type: str
-    options: List[Dict[str, Any]]
+    options: list[dict[str, Any]]
     allow_custom: bool = False
-    default_option: Optional[str] = None
-    context: Dict[str, Any] = Field(default_factory=dict)
+    default_option: str | None = None
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentDecisionAnsweredEvent(AgentDomainEvent):
@@ -268,8 +268,8 @@ class AgentEnvVarRequestedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.ENV_VAR_REQUESTED
     request_id: str
     tool_name: str
-    fields: List[Dict[str, Any]]  # List of EnvVarField dicts
-    context: Dict[str, Any] = Field(default_factory=dict)
+    fields: list[dict[str, Any]]  # List of EnvVarField dicts
+    context: dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentEnvVarProvidedEvent(AgentDomainEvent):
@@ -278,7 +278,7 @@ class AgentEnvVarProvidedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.ENV_VAR_PROVIDED
     request_id: str
     tool_name: str
-    saved_variables: List[str]
+    saved_variables: list[str]
 
 
 # === Cost Events ===
@@ -287,7 +287,7 @@ class AgentEnvVarProvidedEvent(AgentDomainEvent):
 class AgentCostUpdateEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.COST_UPDATE
     cost: float
-    tokens: Dict[str, int]
+    tokens: dict[str, int]
 
 
 # === Retry Events ===
@@ -326,8 +326,8 @@ class AgentContextCompressedEvent(AgentDomainEvent):
     compression_ratio: float = 0.0
     pruned_tool_outputs: int = 0
     duration_ms: float = 0.0
-    token_distribution: Dict[str, int] = {}
-    compression_history_summary: Dict[str, Any] = {}
+    token_distribution: dict[str, int] = {}
+    compression_history_summary: dict[str, Any] = {}
 
 
 class AgentContextStatusEvent(AgentDomainEvent):
@@ -338,8 +338,8 @@ class AgentContextStatusEvent(AgentDomainEvent):
     token_budget: int
     occupancy_pct: float
     compression_level: str
-    token_distribution: Dict[str, int] = {}
-    compression_history_summary: Dict[str, Any] = {}
+    token_distribution: dict[str, int] = {}
+    compression_history_summary: dict[str, Any] = {}
 
 
 # === Pattern Events ===
@@ -359,7 +359,7 @@ class AgentSkillMatchedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.SKILL_MATCHED
     skill_id: str
     skill_name: str
-    tools: List[str]
+    tools: list[str]
     match_score: float
     execution_mode: str
 
@@ -368,7 +368,7 @@ class AgentSkillExecutionStartEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.SKILL_EXECUTION_START
     skill_id: str
     skill_name: str
-    tools: List[str]
+    tools: list[str]
     query: str
 
 
@@ -377,17 +377,17 @@ class AgentSkillExecutionCompleteEvent(AgentDomainEvent):
     skill_id: str
     skill_name: str
     success: bool
-    tool_results: List[Any]
+    tool_results: list[Any]
     execution_time_ms: int
-    summary: Optional[str] = None
-    error: Optional[str] = None
+    summary: str | None = None
+    error: str | None = None
 
 
 class AgentSkillFallbackEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.SKILL_FALLBACK
     skill_name: str
     reason: str
-    error: Optional[str] = None
+    error: str | None = None
 
 
 # === Title Generation Events ===
@@ -403,7 +403,7 @@ class AgentTitleGeneratedEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.TITLE_GENERATED
     conversation_id: str
     title: str
-    message_id: Optional[str] = None
+    message_id: str | None = None
     generated_by: str = "llm"  # "llm" or "fallback"
 
 
@@ -417,8 +417,8 @@ class AgentSandboxCreatedEvent(AgentDomainEvent):
     sandbox_id: str
     project_id: str
     status: str
-    endpoint: Optional[str] = None
-    websocket_url: Optional[str] = None
+    endpoint: str | None = None
+    websocket_url: str | None = None
 
 
 class AgentSandboxTerminatedEvent(AgentDomainEvent):
@@ -441,7 +441,7 @@ class AgentDesktopStartedEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.DESKTOP_STARTED
     sandbox_id: str
-    url: Optional[str] = None
+    url: str | None = None
     display: str = ":1"
     resolution: str = "1280x720"
     port: int = 6080
@@ -460,7 +460,7 @@ class AgentDesktopStatusEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.DESKTOP_STATUS
     sandbox_id: str
     running: bool
-    url: Optional[str] = None
+    url: str | None = None
     display: str = ""
     resolution: str = ""
     port: int = 0
@@ -471,10 +471,10 @@ class AgentTerminalStartedEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.TERMINAL_STARTED
     sandbox_id: str
-    url: Optional[str] = None
+    url: str | None = None
     port: int = 7681
-    session_id: Optional[str] = None
-    pid: Optional[int] = None
+    session_id: str | None = None
+    pid: int | None = None
 
 
 class AgentTerminalStoppedEvent(AgentDomainEvent):
@@ -482,7 +482,7 @@ class AgentTerminalStoppedEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.TERMINAL_STOPPED
     sandbox_id: str
-    session_id: Optional[str] = None
+    session_id: str | None = None
 
 
 class AgentTerminalStatusEvent(AgentDomainEvent):
@@ -491,10 +491,10 @@ class AgentTerminalStatusEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.TERMINAL_STATUS
     sandbox_id: str
     running: bool
-    url: Optional[str] = None
+    url: str | None = None
     port: int = 0
-    session_id: Optional[str] = None
-    pid: Optional[int] = None
+    session_id: str | None = None
+    pid: int | None = None
 
 
 # === Artifact Events ===
@@ -504,7 +504,7 @@ class AgentSuggestionsEvent(AgentDomainEvent):
     """Event: Agent provides follow-up suggestions after completing a response."""
 
     event_type: AgentEventType = AgentEventType.SUGGESTIONS
-    suggestions: List[str]
+    suggestions: list[str]
 
 
 class ArtifactInfo(BaseModel):
@@ -515,10 +515,10 @@ class ArtifactInfo(BaseModel):
     mime_type: str
     category: str  # ArtifactCategory value
     size_bytes: int
-    url: Optional[str] = None
-    preview_url: Optional[str] = None
-    source_tool: Optional[str] = None
-    metadata: Dict[str, Any] = {}
+    url: str | None = None
+    preview_url: str | None = None
+    source_tool: str | None = None
+    metadata: dict[str, Any] = {}
 
 
 class AgentArtifactCreatedEvent(AgentDomainEvent):
@@ -530,16 +530,16 @@ class AgentArtifactCreatedEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.ARTIFACT_CREATED
     artifact_id: str
-    sandbox_id: Optional[str] = None
-    tool_execution_id: Optional[str] = None
+    sandbox_id: str | None = None
+    tool_execution_id: str | None = None
     filename: str
     mime_type: str
     category: str
     size_bytes: int
-    url: Optional[str] = None  # URL if already available
-    preview_url: Optional[str] = None
-    source_tool: Optional[str] = None
-    source_path: Optional[str] = None
+    url: str | None = None  # URL if already available
+    preview_url: str | None = None
+    source_tool: str | None = None
+    source_path: str | None = None
 
 
 class AgentArtifactReadyEvent(AgentDomainEvent):
@@ -550,16 +550,16 @@ class AgentArtifactReadyEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.ARTIFACT_READY
     artifact_id: str
-    sandbox_id: Optional[str] = None
-    tool_execution_id: Optional[str] = None
+    sandbox_id: str | None = None
+    tool_execution_id: str | None = None
     filename: str
     mime_type: str
     category: str
     size_bytes: int
     url: str
-    preview_url: Optional[str] = None
-    source_tool: Optional[str] = None
-    metadata: Dict[str, Any] = {}
+    preview_url: str | None = None
+    source_tool: str | None = None
+    metadata: dict[str, Any] = {}
 
 
 class AgentArtifactErrorEvent(AgentDomainEvent):
@@ -567,8 +567,8 @@ class AgentArtifactErrorEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.ARTIFACT_ERROR
     artifact_id: str
-    sandbox_id: Optional[str] = None
-    tool_execution_id: Optional[str] = None
+    sandbox_id: str | None = None
+    tool_execution_id: str | None = None
     filename: str
     error: str
 
@@ -581,10 +581,10 @@ class AgentArtifactsBatchEvent(AgentDomainEvent):
     """
 
     event_type: AgentEventType = AgentEventType.ARTIFACTS_BATCH
-    sandbox_id: Optional[str] = None
-    tool_execution_id: Optional[str] = None
-    artifacts: List[ArtifactInfo] = []
-    source_tool: Optional[str] = None
+    sandbox_id: str | None = None
+    tool_execution_id: str | None = None
+    artifacts: list[ArtifactInfo] = []
+    source_tool: str | None = None
 
 
 class AgentArtifactOpenEvent(AgentDomainEvent):
@@ -595,7 +595,7 @@ class AgentArtifactOpenEvent(AgentDomainEvent):
     title: str
     content: str
     content_type: str = "code"  # code, markdown, preview, data
-    language: Optional[str] = None
+    language: str | None = None
 
 
 class AgentArtifactUpdateEvent(AgentDomainEvent):
@@ -627,15 +627,15 @@ class AgentMCPAppResultEvent(AgentDomainEvent):
     event_type: AgentEventType = AgentEventType.MCP_APP_RESULT
     app_id: str
     tool_name: str
-    tool_result: Optional[Any] = None
-    tool_input: Optional[Dict[str, Any]] = None
+    tool_result: Any | None = None
+    tool_input: dict[str, Any] | None = None
     resource_html: str
     resource_uri: str
-    ui_metadata: Dict[str, Any] = Field(default_factory=dict)
-    tool_execution_id: Optional[str] = None
+    ui_metadata: dict[str, Any] = Field(default_factory=dict)
+    tool_execution_id: str | None = None
     project_id: str = ""
     server_name: str = ""
-    structured_content: Optional[Dict[str, Any]] = None
+    structured_content: dict[str, Any] | None = None
 
 
 class AgentMCPAppRegisteredEvent(AgentDomainEvent):
@@ -651,7 +651,7 @@ class AgentMCPAppRegisteredEvent(AgentDomainEvent):
     tool_name: str
     source: str  # "user_added" | "agent_developed"
     resource_uri: str
-    title: Optional[str] = None
+    title: str | None = None
 
 
 # =========================================================================
@@ -664,7 +664,7 @@ class AgentTaskListUpdatedEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.TASK_LIST_UPDATED
     conversation_id: str
-    tasks: List[Dict[str, Any]]
+    tasks: list[dict[str, Any]]
 
 
 class AgentTaskUpdatedEvent(AgentDomainEvent):
@@ -674,7 +674,7 @@ class AgentTaskUpdatedEvent(AgentDomainEvent):
     conversation_id: str
     task_id: str
     status: str
-    content: Optional[str] = None
+    content: str | None = None
 
 
 class AgentTaskStartEvent(AgentDomainEvent):
@@ -718,7 +718,7 @@ class AgentToolsUpdatedEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.TOOLS_UPDATED
     project_id: str = ""
-    tool_names: List[str] = Field(default_factory=list)
+    tool_names: list[str] = Field(default_factory=list)
     server_name: str = ""
     requires_refresh: bool = True  # Frontend should refresh tool list
 
@@ -742,8 +742,8 @@ class AgentProgressEvent(AgentDomainEvent):
     tool_name: str
     progress_token: str  # Unique identifier for tracking this progress
     progress: float  # Current progress value
-    total: Optional[float] = None  # Total value (if known)
-    message: Optional[str] = None  # Human-readable progress message
+    total: float | None = None  # Total value (if known)
+    message: str | None = None  # Human-readable progress message
 
 
 # =========================================================================
@@ -771,7 +771,7 @@ class AgentElicitationAskedEvent(AgentDomainEvent):
     server_id: str
     server_name: str
     message: str  # Human-readable message from the MCP server
-    requested_schema: Dict[str, Any]  # JSON Schema describing the requested data
+    requested_schema: dict[str, Any]  # JSON Schema describing the requested data
 
 
 class AgentElicitationAnsweredEvent(AgentDomainEvent):
@@ -783,7 +783,7 @@ class AgentElicitationAnsweredEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.ELICITATION_ANSWERED
     request_id: str
-    response: Dict[str, Any]  # User's response matching the requested schema
+    response: dict[str, Any]  # User's response matching the requested schema
 
 
 # =========================================================================
@@ -795,7 +795,7 @@ class AgentMemoryRecalledEvent(AgentDomainEvent):
     """Emitted when memories are recalled for context injection."""
 
     event_type: AgentEventType = AgentEventType.MEMORY_RECALLED
-    memories: List[Dict[str, Any]]
+    memories: list[dict[str, Any]]
     count: int
     search_ms: int
 
@@ -805,7 +805,7 @@ class AgentMemoryCapturedEvent(AgentDomainEvent):
 
     event_type: AgentEventType = AgentEventType.MEMORY_CAPTURED
     captured_count: int
-    categories: List[str]
+    categories: list[str]
 
 
 # =========================================================================

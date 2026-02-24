@@ -6,7 +6,6 @@ transport type and configuration.
 """
 
 import logging
-from typing import Dict, List, Optional
 
 from src.domain.model.mcp.transport import TransportType
 from src.infrastructure.mcp.tools.base import (
@@ -26,7 +25,7 @@ class MCPToolFactory:
     and server configuration.
     """
 
-    _adapters: Dict[str, BaseMCPToolAdapter] = {}
+    _adapters: dict[str, BaseMCPToolAdapter] = {}
 
     @classmethod
     def create_adapter(
@@ -128,7 +127,7 @@ class MCPToolFactory:
         return adapter
 
     @classmethod
-    def remove_adapter(cls, server_name: str) -> Optional[BaseMCPToolAdapter]:
+    def remove_adapter(cls, server_name: str) -> BaseMCPToolAdapter | None:
         """
         Remove adapter from cache.
 
@@ -146,6 +145,6 @@ class MCPToolFactory:
         cls._adapters.clear()
 
     @classmethod
-    def list_adapters(cls) -> List[str]:
+    def list_adapters(cls) -> list[str]:
         """List all cached adapter server names."""
         return list(cls._adapters.keys())

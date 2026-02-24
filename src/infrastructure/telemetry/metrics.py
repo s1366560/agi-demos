@@ -4,7 +4,8 @@ This module provides functions for creating and recording metrics
 using OpenTelemetry Metrics API.
 """
 
-from typing import Any, Callable, List, Mapping, Optional
+from collections.abc import Callable, Mapping
+from typing import Any
 
 from opentelemetry import metrics
 from opentelemetry.metrics import Counter, Histogram, ObservableGauge
@@ -12,7 +13,7 @@ from opentelemetry.metrics import Counter, Histogram, ObservableGauge
 from src.infrastructure.telemetry.config import get_meter as _get_meter
 
 
-def get_meter(instrumentation_name: str = "memstack-telemetry") -> Optional[metrics.Meter]:
+def get_meter(instrumentation_name: str = "memstack-telemetry") -> metrics.Meter | None:
     """Get a meter for the given instrumentation name.
 
     Args:
@@ -28,8 +29,8 @@ def create_counter(
     name: str,
     description: str,
     unit: str = "",
-    attributes: Optional[Mapping[str, Any]] = None,
-) -> Optional[Counter]:
+    attributes: Mapping[str, Any] | None = None,
+) -> Counter | None:
     """Create a counter metric.
 
     Args:
@@ -56,8 +57,8 @@ def create_histogram(
     name: str,
     description: str,
     unit: str = "",
-    boundaries: Optional[List[float]] = None,
-) -> Optional[Histogram]:
+    boundaries: list[float] | None = None,
+) -> Histogram | None:
     """Create a histogram metric.
 
     Args:
@@ -83,9 +84,9 @@ def create_histogram(
 def create_gauge(
     name: str,
     description: str,
-    callbacks: Optional[List[Callable[[metrics.CallbackOptions], metrics.Observation]]] = None,
+    callbacks: list[Callable[[metrics.CallbackOptions], metrics.Observation]] | None = None,
     unit: str = "",
-) -> Optional[ObservableGauge]:
+) -> ObservableGauge | None:
     """Create an observable gauge metric.
 
     Args:
@@ -116,7 +117,7 @@ def increment_counter(
     name: str,
     description: str,
     amount: int = 1,
-    attributes: Optional[Mapping[str, Any]] = None,
+    attributes: Mapping[str, Any] | None = None,
 ) -> None:
     """Increment a counter metric.
 
@@ -135,7 +136,7 @@ def record_histogram_value(
     name: str,
     description: str,
     value: float,
-    attributes: Optional[Mapping[str, Any]] = None,
+    attributes: Mapping[str, Any] | None = None,
 ) -> None:
     """Record a value to a histogram metric.
 

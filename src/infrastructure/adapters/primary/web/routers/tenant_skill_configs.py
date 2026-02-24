@@ -6,7 +6,7 @@ allowing tenants to disable or override system skills.
 """
 
 import logging
-from typing import List, Optional
+from datetime import UTC
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -43,7 +43,7 @@ class TenantSkillConfigResponse(BaseModel):
     tenant_id: str
     system_skill_name: str
     action: str
-    override_skill_id: Optional[str]
+    override_skill_id: str | None
     created_at: str
     updated_at: str
 
@@ -51,7 +51,7 @@ class TenantSkillConfigResponse(BaseModel):
 class TenantSkillConfigListResponse(BaseModel):
     """Schema for tenant skill config list response."""
 
-    configs: List[TenantSkillConfigResponse]
+    configs: list[TenantSkillConfigResponse]
     total: int
 
 
@@ -171,11 +171,11 @@ async def disable_system_skill(
         existing = await repo.get_by_tenant_and_skill(tenant_id, data.system_skill_name)
         if existing:
             # Update existing config
-            from datetime import datetime, timezone
+            from datetime import datetime
 
             existing.action = TenantSkillAction.DISABLE
             existing.override_skill_id = None
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             config = await repo.update(existing)
         else:
             # Create new config
@@ -233,11 +233,11 @@ async def override_system_skill(
         existing = await repo.get_by_tenant_and_skill(tenant_id, data.system_skill_name)
         if existing:
             # Update existing config
-            from datetime import datetime, timezone
+            from datetime import datetime
 
             existing.action = TenantSkillAction.OVERRIDE
             existing.override_skill_id = data.override_skill_id
-            existing.updated_at = datetime.now(timezone.utc)
+            existing.updated_at = datetime.now(UTC)
             config = await repo.update(existing)
         else:
             # Create new config
@@ -271,7 +271,7 @@ async def enable_system_skill(
     data: EnableSkillRequest,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     """
     Re-enable a previously disabled or overridden system skill.
 
@@ -300,7 +300,7 @@ async def delete_tenant_skill_config(
     system_skill_name: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     """
     Delete a tenant skill configuration.
 

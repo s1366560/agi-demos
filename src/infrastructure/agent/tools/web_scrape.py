@@ -73,7 +73,7 @@ class WebScrapeTool(AgentTool):
         "iframe",
     ]
 
-    def __init__(self):
+    def __init__(self) -> None:
         """
         Initialize the web scrape tool.
         """
@@ -107,7 +107,7 @@ class WebScrapeTool(AgentTool):
             "required": ["url"],
         }
 
-    def validate_args(self, **kwargs: Any) -> bool:  # noqa: ANN401
+    def validate_args(self, **kwargs: Any) -> bool:
         """Validate that url argument is provided and valid."""
         url = kwargs.get("url")
         if not isinstance(url, str) or not url.strip():
@@ -118,10 +118,7 @@ class WebScrapeTool(AgentTool):
             return False
 
         # Check for blocked domains
-        if self._is_blocked_domain(url):
-            return False
-
-        return True
+        return not self._is_blocked_domain(url)
 
     def _is_valid_url(self, url: str) -> bool:
         """Check if URL is valid."""
@@ -146,10 +143,7 @@ class WebScrapeTool(AgentTool):
                 return True
 
             # Check for private IP ranges (simplified)
-            if domain.startswith("192.168.") or domain.startswith("10."):
-                return True
-
-            return False
+            return bool(domain.startswith("192.168.") or domain.startswith("10."))
         except Exception:
             return True  # Block on parsing errors
 
@@ -159,7 +153,7 @@ class WebScrapeTool(AgentTool):
             return "https://" + url
         return url
 
-    async def execute(self, **kwargs: Any) -> str:  # noqa: ANN401
+    async def execute(self, **kwargs: Any) -> str:
         """
         Execute web scrape.
 

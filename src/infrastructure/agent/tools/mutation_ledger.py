@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
 from threading import RLock
-from typing import Any, Dict, Iterator, List, Mapping, Optional
+from typing import Any
 
 try:
     import fcntl
@@ -21,7 +22,7 @@ class MutationLedger:
 
     def __init__(
         self,
-        ledger_path: Optional[Path] = None,
+        ledger_path: Path | None = None,
         *,
         max_records: int = 2000,
     ) -> None:
@@ -36,17 +37,16 @@ class MutationLedger:
         """Return persisted ledger path."""
         return self._ledger_path
 
-    def append(self, record: Mapping[str, Any]) -> Dict[str, Any]:
+    def append(self, record: Mapping[str, Any]) -> dict[str, Any]:
         """Append one audit record to ledger and return normalized payload."""
-        with self._lock:
-            with self._with_file_lock(exclusive=True):
-                records = self._read_records()
-                normalized = self._normalize_record(record)
-                records.append(normalized)
-                if len(records) > self._max_records:
-                    records = records[-self._max_records :]
-                self._write_records(records)
-                return dict(normalized)
+        with self._lock, self._with_file_lock(exclusive=True):
+            records = self._read_records()
+            normalized = self._normalize_record(record)
+            records.append(normalized)
+            if len(records) > self._max_records:
+                records = records[-self._max_records :]
+            self._write_records(records)
+            return dict(normalized)
 
     def evaluate_loop_guard(
         self,
@@ -54,7 +54,7 @@ class MutationLedger:
         *,
         threshold: int,
         window_seconds: int,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Evaluate whether repeated fingerprint should be blocked."""
         normalized_fingerprint = (fingerprint or "").strip()
         safe_threshold = max(1, int(threshold))
@@ -68,13 +68,12 @@ class MutationLedger:
                 "last_seen_at": None,
             }
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         since = now - timedelta(seconds=safe_window_seconds)
-        with self._lock:
-            with self._with_file_lock(exclusive=False):
-                records = self._read_records()
+        with self._lock, self._with_file_lock(exclusive=False):
+            records = self._read_records()
 
-        matched: List[Dict[str, Any]] = []
+        matched: list[dict[str, Any]] = []
         for item in records:
             if str(item.get("mutation_fingerprint") or "") != normalized_fingerprint:
                 continue
@@ -96,7 +95,7 @@ class MutationLedger:
             "last_seen_at": last_seen_at,
         }
 
-    def _read_records(self) -> List[Dict[str, Any]]:
+    def _read_records(self) -> list[dict[str, Any]]:
         if not self._ledger_path.exists():
             return []
         try:
@@ -106,13 +105,13 @@ class MutationLedger:
             return []
         if not isinstance(data, list):
             return []
-        records: List[Dict[str, Any]] = []
+        records: list[dict[str, Any]] = []
         for item in data:
             if isinstance(item, dict):
                 records.append(dict(item))
         return records
 
-    def _write_records(self, records: List[Dict[str, Any]]) -> None:
+    def _write_records(self, records: list[dict[str, Any]]) -> None:
         self._ledger_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_path = self._ledger_path.with_suffix(f"{self._ledger_path.suffix}.tmp")
         payload = json.dumps(records, ensure_ascii=False, indent=2, sort_keys=True)
@@ -134,12 +133,12 @@ class MutationLedger:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
     @staticmethod
-    def _normalize_record(record: Mapping[str, Any]) -> Dict[str, Any]:
+    def _normalize_record(record: Mapping[str, Any]) -> dict[str, Any]:
         payload = dict(record)
         parsed_timestamp = _parse_iso_datetime(payload.get("timestamp"))
         payload["timestamp"] = (
-            parsed_timestamp or datetime.now(timezone.utc)
-        ).astimezone(timezone.utc).isoformat()
+            parsed_timestamp or datetime.now(UTC)
+        ).astimezone(UTC).isoformat()
         return payload
 
 
@@ -149,7 +148,7 @@ def get_mutation_ledger() -> MutationLedger:
     return MutationLedger()
 
 
-def _parse_iso_datetime(value: Any) -> Optional[datetime]:  # noqa: ANN401
+def _parse_iso_datetime(value: Any) -> datetime | None:
     if not isinstance(value, str) or not value.strip():
         return None
     try:
@@ -157,5 +156,5 @@ def _parse_iso_datetime(value: Any) -> Optional[datetime]:  # noqa: ANN401
     except ValueError:
         return None
     if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)

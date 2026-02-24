@@ -47,9 +47,9 @@ async def create_mcp_server_root(
     )
 
 
-@router.get("", response_model=List[MCPServerResponse], include_in_schema=False)
+@router.get("", response_model=list[MCPServerResponse], include_in_schema=False)
 async def list_mcp_servers_root(
-    project_id: Optional[str] = Query(None, description="Filter by project ID"),
+    project_id: str | None = Query(None, description="Filter by project ID"),
     enabled_only: bool = Query(False, description="Only return enabled servers"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
@@ -61,9 +61,6 @@ async def list_mcp_servers_root(
 
 
 __all__ = [
-    "router",
-    # Utilities
-    "get_container_with_db",
     # Database server schemas
     "MCPServerCreate",
     "MCPServerResponse",
@@ -73,4 +70,7 @@ __all__ = [
     "MCPToolCallRequest",
     "MCPToolCallResponse",
     "MCPToolResponse",
+    # Utilities
+    "get_container_with_db",
+    "router",
 ]

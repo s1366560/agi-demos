@@ -11,7 +11,7 @@ Following hexagonal architecture: domain layer depends only on ports.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from src.domain.model.agent.conversation.context_summary import ContextSummary
 
@@ -48,10 +48,10 @@ class AttachmentContent:
     """Content of an attachment for LLM."""
 
     type: str  # "image_url", "image", "text"
-    content: Optional[str] = None  # Base64 data URL or text content
-    filename: Optional[str] = None
+    content: str | None = None  # Base64 data URL or text content
+    filename: str | None = None
     detail: str = "auto"  # For images: "auto", "low", "high"
-    image_url: Optional[Dict[str, Any]] = None  # OpenAI image_url format
+    image_url: dict[str, Any] | None = None  # OpenAI image_url format
 
 
 @dataclass
@@ -60,9 +60,9 @@ class MessageInput:
 
     role: str  # "user", "assistant", "system", "tool"
     content: str
-    name: Optional[str] = None  # For tool messages
-    tool_call_id: Optional[str] = None  # For tool response messages
-    tool_calls: Optional[List[Dict[str, Any]]] = None  # For assistant with tool calls
+    name: str | None = None  # For tool messages
+    tool_call_id: str | None = None  # For tool response messages
+    tool_calls: list[dict[str, Any]] | None = None  # For assistant with tool calls
 
 
 @dataclass
@@ -70,25 +70,25 @@ class ContextBuildRequest:
     """Request to build context window."""
 
     system_prompt: str
-    conversation_context: List[Dict[str, Any]]  # Raw conversation messages
+    conversation_context: list[dict[str, Any]]  # Raw conversation messages
     user_message: str
-    attachment_metadata: Optional[List[Dict[str, Any]]] = None
-    attachment_content: Optional[List[Dict[str, Any]]] = None
-    max_context_tokens: Optional[int] = None
-    max_output_tokens: Optional[int] = None
+    attachment_metadata: list[dict[str, Any]] | None = None
+    attachment_content: list[dict[str, Any]] | None = None
+    max_context_tokens: int | None = None
+    max_output_tokens: int | None = None
     # HITL resume flag: when True, skip adding user_message as it's already in conversation_context
     is_hitl_resume: bool = False
     # Cached context summary from previous turns
-    context_summary: Optional[ContextSummary] = None
+    context_summary: ContextSummary | None = None
     # LLM client for compression summarization (Optional[Any] to avoid infrastructure dependency)
-    llm_client: Optional[Any] = None
+    llm_client: Any | None = None
 
 
 @dataclass
 class ContextBuildResult:
     """Result of context window building."""
 
-    messages: List[Dict[str, Any]]  # Messages ready for LLM
+    messages: list[dict[str, Any]]  # Messages ready for LLM
     was_compressed: bool = False
     compression_strategy: CompressionStrategy = CompressionStrategy.NONE
     original_message_count: int = 0
@@ -96,11 +96,11 @@ class ContextBuildResult:
     estimated_tokens: int = 0
     token_budget: int = 0
     budget_utilization_pct: float = 0.0
-    summary: Optional[str] = None
+    summary: str | None = None
     summarized_message_count: int = 0
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
-    def to_event_data(self) -> Dict[str, Any]:
+    def to_event_data(self) -> dict[str, Any]:
         """Convert to SSE event data."""
         data = {
             "was_compressed": self.was_compressed,
@@ -130,7 +130,7 @@ class MessageBuilderPort(Protocol):
     - Maintain message structure consistency
     """
 
-    def convert_to_openai_format(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def convert_to_openai_format(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
         Convert conversation messages to OpenAI message format.
 
@@ -145,8 +145,8 @@ class MessageBuilderPort(Protocol):
     def build_user_message(
         self,
         text: str,
-        attachments: Optional[List[AttachmentContent]] = None,
-    ) -> Dict[str, Any]:
+        attachments: list[AttachmentContent] | None = None,
+    ) -> dict[str, Any]:
         """
         Build a user message with optional multimodal content.
 
@@ -159,7 +159,7 @@ class MessageBuilderPort(Protocol):
         """
         ...
 
-    def build_system_message(self, prompt: str) -> Dict[str, Any]:
+    def build_system_message(self, prompt: str) -> dict[str, Any]:
         """
         Build a system message.
 
@@ -183,7 +183,7 @@ class AttachmentInjectorPort(Protocol):
     - Handle different attachment types
     """
 
-    def build_attachment_context(self, metadata_list: List[AttachmentMetadata]) -> str:
+    def build_attachment_context(self, metadata_list: list[AttachmentMetadata]) -> str:
         """
         Build attachment context prompt from metadata.
 
@@ -198,7 +198,7 @@ class AttachmentInjectorPort(Protocol):
     def inject_into_message(
         self,
         message: str,
-        metadata_list: List[AttachmentMetadata],
+        metadata_list: list[AttachmentMetadata],
     ) -> str:
         """
         Inject attachment context into user message.
@@ -215,8 +215,8 @@ class AttachmentInjectorPort(Protocol):
     def prepare_multimodal_content(
         self,
         text: str,
-        attachments: List[AttachmentContent],
-    ) -> List[Dict[str, Any]]:
+        attachments: list[AttachmentContent],
+    ) -> list[dict[str, Any]]:
         """
         Prepare multimodal content array for LLM.
 
@@ -268,7 +268,7 @@ class ContextManagerPort(Protocol):
         """
         ...
 
-    def estimate_message_tokens(self, message: Dict[str, Any]) -> int:
+    def estimate_message_tokens(self, message: dict[str, Any]) -> int:
         """
         Estimate token count for a message.
 
@@ -289,7 +289,7 @@ class ContextSummaryPort(Protocol):
     They can be regenerated if missing or stale.
     """
 
-    async def get_summary(self, conversation_id: str) -> Optional[ContextSummary]:
+    async def get_summary(self, conversation_id: str) -> ContextSummary | None:
         """Get cached context summary for a conversation."""
         ...
 

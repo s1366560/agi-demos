@@ -11,7 +11,6 @@ Provides CRUD operations for sandbox instances:
 """
 
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -117,7 +116,7 @@ async def create_sandbox(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-    event_publisher: Optional[SandboxEventPublisher] = Depends(get_event_publisher),
+    event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
 ):
     """
     Create a new MCP sandbox.
@@ -266,7 +265,7 @@ async def terminate_sandbox(
 
 @router.get("/list", response_model=ListSandboxesResponse)
 async def list_sandboxes(
-    status: Optional[str] = None,
+    status: str | None = None,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
 ):
