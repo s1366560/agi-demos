@@ -290,6 +290,17 @@ class ProviderService:
                     if response.status_code != 200:
                         error_message = f"HTTP {response.status_code}"
 
+                elif provider_type == "minimax":
+                    # MiniMax API
+                    api_base = base_url or "https://api.minimax.chat/v1"
+                    response = await client.get(
+                        f"{api_base}/models",
+                        headers={"Authorization": f"Bearer {api_key}"},
+                    )
+                    status = "healthy" if response.status_code == 200 else "unhealthy"
+                    if response.status_code != 200:
+                        error_message = f"HTTP {response.status_code}"
+
                 elif provider_type == "zai":
                     # ZhipuAI (Z.AI) API
                     api_base = base_url or "https://open.bigmodel.cn/api/paas/v4"

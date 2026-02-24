@@ -6,6 +6,7 @@ Tests the unified event conversion logic extracted from ReActAgent.
 
 import time
 from dataclasses import dataclass
+from typing import ClassVar
 from unittest.mock import MagicMock
 
 import pytest
@@ -204,7 +205,6 @@ class TestEventConverterBasic:
 # ============================================================
 # Test Work Plan and Step Events
 # ============================================================
-
 
 
 # ============================================================
@@ -500,7 +500,7 @@ class TestSkillLikeProtocol:
         class CustomSkill:
             id = "custom-001"
             name = "CustomSkill"
-            tools = ["a", "b"]
+            tools: ClassVar[list] = ["a", "b"]
 
         skill = CustomSkill()
         event = AgentActEvent(

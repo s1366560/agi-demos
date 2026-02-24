@@ -23,7 +23,7 @@ Usage:
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, TypeVar
+from typing import Any, ClassVar, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -60,16 +60,16 @@ class EventSchemaRegistry:
     """
 
     # Schemas indexed by (event_type, version)
-    _schemas: dict[tuple[str, str], SchemaInfo] = {}
+    _schemas: ClassVar[dict[tuple[str, str], SchemaInfo]] = {}
 
     # Migrations indexed by (event_type, from_version, to_version)
-    _migrations: dict[tuple[str, str, str], MigrationInfo] = {}
+    _migrations: ClassVar[dict[tuple[str, str, str], MigrationInfo]] = {}
 
     # Default versions for each event type
-    _default_versions: dict[str, str] = {}
+    _default_versions: ClassVar[dict[str, str]] = {}
 
     # Latest versions for each event type
-    _latest_versions: dict[str, str] = {}
+    _latest_versions: ClassVar[dict[str, str]] = {}
 
     @classmethod
     def register(
@@ -127,7 +127,9 @@ class EventSchemaRegistry:
         event_type: str,
         from_version: str,
         to_version: str,
-    ) -> Callable[[Callable[[dict[str, Any]], dict[str, Any]]], Callable[[dict[str, Any]], dict[str, Any]]]:
+    ) -> Callable[
+        [Callable[[dict[str, Any]], dict[str, Any]]], Callable[[dict[str, Any]], dict[str, Any]]
+    ]:
         """Decorator to register a schema migration.
 
         Args:
@@ -145,7 +147,7 @@ class EventSchemaRegistry:
         """
 
         def decorator(
-            migrator: Callable[[dict[str, Any]], dict[str, Any]]
+            migrator: Callable[[dict[str, Any]], dict[str, Any]],
         ) -> Callable[[dict[str, Any]], dict[str, Any]]:
             key = (event_type, from_version, to_version)
             cls._migrations[key] = MigrationInfo(

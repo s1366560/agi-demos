@@ -5,7 +5,7 @@ clarification, decision, environment variable, and permission requests.
 """
 
 import json
-from typing import Any
+from typing import Any, ClassVar
 
 
 class HITLCardBuilder:
@@ -17,7 +17,7 @@ class HITLCardBuilder:
     """
 
     # Normalize event type names to canonical HITL types
-    _TYPE_MAP = {
+    _TYPE_MAP: ClassVar[dict] = {
         "clarification": "clarification",
         "clarification_asked": "clarification",
         "decision": "decision",

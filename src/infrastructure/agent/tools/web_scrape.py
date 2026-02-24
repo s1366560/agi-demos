@@ -7,7 +7,7 @@ including JavaScript-rendered content.
 import contextlib
 import logging
 import re
-from typing import Any
+from typing import Any, ClassVar
 
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError, async_playwright
 
@@ -40,7 +40,7 @@ class WebScrapeTool(AgentTool):
     )
 
     # Blocked domains (security)
-    BLOCKED_DOMAINS = {
+    BLOCKED_DOMAINS: ClassVar[dict] = {
         "localhost",
         "127.0.0.1",
         "0.0.0.0",
@@ -48,7 +48,7 @@ class WebScrapeTool(AgentTool):
     }
 
     # Content selectors for main content extraction
-    CONTENT_SELECTORS = [
+    CONTENT_SELECTORS: ClassVar[list] = [
         "article",
         "main",
         '[role="main"]',
@@ -60,7 +60,7 @@ class WebScrapeTool(AgentTool):
     ]
 
     # Unwanted element selectors to remove
-    UNWANTED_SELECTORS = [
+    UNWANTED_SELECTORS: ClassVar[list] = [
         "nav",
         "header",
         "footer",

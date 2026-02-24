@@ -5,7 +5,7 @@ Sends alerts to Slack via webhook.
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, ClassVar
 
 import httpx
 
@@ -25,7 +25,7 @@ class SlackAlertService(AlertServicePort):
     """
 
     # Severity to color mapping
-    SEVERITY_COLORS = {
+    SEVERITY_COLORS: ClassVar[dict] = {
         AlertSeverity.INFO: "#36a64f",  # green
         AlertSeverity.WARNING: "#ff9900",  # orange
         AlertSeverity.ERROR: "#ff0000",  # red
@@ -33,7 +33,7 @@ class SlackAlertService(AlertServicePort):
     }
 
     # Severity to emoji mapping
-    SEVERITY_EMOJIS = {
+    SEVERITY_EMOJIS: ClassVar[dict] = {
         AlertSeverity.INFO: ":information_source:",
         AlertSeverity.WARNING: ":warning:",
         AlertSeverity.ERROR: ":x:",
@@ -104,7 +104,9 @@ class SlackAlertService(AlertServicePort):
 
             if attempt < max_retries - 1:
                 delay = retry_delay_seconds * (2**attempt)
-                logger.warning(f"Retrying Slack alert in {delay}s (attempt {attempt + 2}/{max_retries})")
+                logger.warning(
+                    f"Retrying Slack alert in {delay}s (attempt {attempt + 2}/{max_retries})"
+                )
                 await asyncio.sleep(delay)
 
         return False

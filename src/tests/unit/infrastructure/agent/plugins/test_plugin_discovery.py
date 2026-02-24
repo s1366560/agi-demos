@@ -1,6 +1,7 @@
 """Unit tests for plugin discovery helpers."""
 
 from types import SimpleNamespace
+from typing import ClassVar
 
 import pytest
 
@@ -90,12 +91,14 @@ def test_discover_plugins_loads_entrypoint_plugin(monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.unit
-def test_discover_plugins_loads_entrypoint_manifest_metadata(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_discover_plugins_loads_entrypoint_manifest_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Entry point plugin manifest metadata should be normalized into discovered plugin fields."""
 
     class _Plugin:
         name = "demo-plugin"
-        plugin_manifest = {
+        plugin_manifest: ClassVar[dict] = {
             "id": "demo-plugin",
             "kind": "channel",
             "version": "9.9.9",

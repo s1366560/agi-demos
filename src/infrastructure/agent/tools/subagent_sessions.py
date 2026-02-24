@@ -6,7 +6,7 @@ import json
 import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
 from src.infrastructure.agent.subagent.run_registry import SubAgentRunRegistry
@@ -959,7 +959,7 @@ class SessionsOverviewTool(AgentTool):
 class SessionsWaitTool(AgentTool):
     """Wait until a run reaches terminal state or timeout."""
 
-    _TERMINAL_STATUSES = {
+    _TERMINAL_STATUSES: ClassVar[set] = {
         SubAgentRunStatus.COMPLETED,
         SubAgentRunStatus.FAILED,
         SubAgentRunStatus.CANCELLED,
@@ -1049,7 +1049,7 @@ class SessionsWaitTool(AgentTool):
 class SessionsAckTool(AgentTool):
     """Acknowledge a terminal run for wait/ack workflow."""
 
-    _TERMINAL_STATUSES = {
+    _TERMINAL_STATUSES: ClassVar[set] = {
         SubAgentRunStatus.COMPLETED,
         SubAgentRunStatus.FAILED,
         SubAgentRunStatus.CANCELLED,
@@ -1427,7 +1427,7 @@ class SessionsSendTool(AgentTool):
 class SubAgentsControlTool(AgentTool):
     """List and control SubAgent runs."""
 
-    _ACTIVE_STATUSES = {SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING}
+    _ACTIVE_STATUSES: ClassVar[set] = {SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING}
 
     def __init__(
         self,

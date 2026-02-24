@@ -6,6 +6,7 @@ transport type and configuration.
 """
 
 import logging
+from typing import ClassVar
 
 from src.domain.model.mcp.transport import TransportType
 from src.infrastructure.mcp.tools.base import (
@@ -25,7 +26,7 @@ class MCPToolFactory:
     and server configuration.
     """
 
-    _adapters: dict[str, BaseMCPToolAdapter] = {}
+    _adapters: ClassVar[dict[str, BaseMCPToolAdapter]] = {}
 
     @classmethod
     def create_adapter(

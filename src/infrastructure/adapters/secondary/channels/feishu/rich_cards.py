@@ -6,14 +6,14 @@ Provides structured Feishu Card 2.0 JSON for:
 - Error notification with optional retry
 """
 
-from typing import Any
+from typing import Any, ClassVar
 
 
 class RichCardBuilder:
     """Builds Feishu interactive cards for common agent events."""
 
     # Status icon mapping
-    _STATUS_ICONS = {
+    _STATUS_ICONS: ClassVar[dict] = {
         "completed": "✅",
         "done": "✅",
         "in_progress": "🔄",

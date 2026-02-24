@@ -11,7 +11,7 @@ import fnmatch
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from src.infrastructure.skill.markdown_parser import MarkdownParseError, MarkdownParser
 
@@ -261,7 +261,7 @@ class AgentSkillsValidator:
     COMPATIBILITY_MAX_LENGTH = 500
 
     # Fields that are not part of AgentSkills.io spec (custom extensions)
-    DEPRECATED_FIELDS = {
+    DEPRECATED_FIELDS: ClassVar[dict] = {
         "trigger_patterns": "Use name/description for implicit triggering",
         "triggers": "Use name/description for implicit triggering",
         "tools": "Use 'allowed-tools' with space-separated format",

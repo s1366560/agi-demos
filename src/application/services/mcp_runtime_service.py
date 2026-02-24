@@ -13,7 +13,7 @@ import uuid
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,7 +57,7 @@ class MCPReconcileResult:
 class MCPRuntimeService:
     """Unified runtime lifecycle service for MCP servers and apps."""
 
-    _ERROR_MESSAGES: dict[str, str] = {
+    _ERROR_MESSAGES: ClassVar[dict[str, str]] = {
         "create": "Failed to bootstrap MCP server runtime",
         "enable": "Failed to enable MCP server runtime",
         "reconfigure": "Failed to reconfigure MCP server runtime",
@@ -139,7 +139,9 @@ class MCPRuntimeService:
         try:
             await self._install_start_and_sync(server, tenant_id, reason="create")
         except Exception as exc:
-            logger.exception("MCP runtime bootstrap failed during server create: server_id=%s", server.id)
+            logger.exception(
+                "MCP runtime bootstrap failed during server create: server_id=%s", server.id
+            )
             # Keep create behavior backward-compatible: create succeeds but marks runtime error.
             await self._server_repo.update_runtime_metadata(
                 server_id=server.id,
@@ -201,7 +203,8 @@ class MCPRuntimeService:
                     await self._install_start_and_sync(updated, tenant_id, reason="enable")
                 except Exception:
                     logger.exception(
-                        "MCP runtime bootstrap failed during server enable: server_id=%s", updated.id
+                        "MCP runtime bootstrap failed during server enable: server_id=%s",
+                        updated.id,
                     )
                     await self._server_repo.update_runtime_metadata(
                         server_id=updated.id,
@@ -475,7 +478,7 @@ class MCPRuntimeService:
             # Actually, let's just raise an exception or handle it gracefully.
             # If we can't lock, another process is reconciling. We can probably just return early.
             raise RuntimeError(f"Lock for {key} is busy")
-        
+
         try:
             yield
         finally:

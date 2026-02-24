@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, ClassVar
 
 from src.domain.model.agent.hitl_request import HITLRequest as HITLRequestEntity, HITLRequestType
 from src.domain.model.agent.hitl_types import (
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 class RayHITLHandler:
     """HITL handler that persists requests and raises HITLPendingException."""
 
-    _strategies: dict[HITLType, HITLTypeStrategy] = {
+    _strategies: ClassVar[dict[HITLType, HITLTypeStrategy]] = {
         HITLType.CLARIFICATION: ClarificationStrategy(),
         HITLType.DECISION: DecisionStrategy(),
         HITLType.ENV_VAR: EnvVarStrategy(),

@@ -14,7 +14,7 @@ import json
 import logging
 import traceback
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, ClassVar
 
 import redis.asyncio as redis
 
@@ -47,7 +47,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
     STATS_KEY = "dlq:stats"
 
     # Retry backoff (exponential)
-    RETRY_DELAYS = [60, 300, 900, 3600]  # 1min, 5min, 15min, 1hour
+    RETRY_DELAYS: ClassVar[list] = [60, 300, 900, 3600]  # 1min, 5min, 15min, 1hour
 
     def __init__(
         self,
@@ -101,9 +101,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
 
         # Calculate next retry time
         next_retry_delay = self.RETRY_DELAYS[min(retry_count, len(self.RETRY_DELAYS) - 1)]
-        next_retry_at = datetime.fromtimestamp(
-            now.timestamp() + next_retry_delay, tz=UTC
-        )
+        next_retry_at = datetime.fromtimestamp(now.timestamp() + next_retry_delay, tz=UTC)
 
         message = DeadLetterMessage(
             event_id=event_id,
@@ -126,9 +124,12 @@ class RedisDLQAdapter(DeadLetterQueuePort):
             async with self._redis.pipeline(transaction=True) as pipe:
                 # Store message data
                 message_key = self._message_key(message.id)
-                pipe.hset(message_key, mapping={
-                    "data": json.dumps(message.to_dict()),
-                })
+                pipe.hset(
+                    message_key,
+                    mapping={
+                        "data": json.dumps(message.to_dict()),
+                    },
+                )
                 pipe.expire(message_key, self._default_ttl)
 
                 # Add to pending index (score = timestamp)
@@ -220,6 +221,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
                         continue
                     if routing_key_pattern:
                         import fnmatch
+
                         if not fnmatch.fnmatch(message.routing_key, routing_key_pattern):
                             continue
                     messages.append(message)
@@ -285,15 +287,11 @@ class RedisDLQAdapter(DeadLetterQueuePort):
 
                     await self._update_message(message)
 
-                    logger.warning(
-                        f"[DLQ] Retry failed for {message_id}: {e}"
-                    )
+                    logger.warning(f"[DLQ] Retry failed for {message_id}: {e}")
                     return False
             else:
                 # No event bus configured
-                logger.warning(
-                    f"[DLQ] Cannot retry {message_id}: no event bus configured"
-                )
+                logger.warning(f"[DLQ] Cannot retry {message_id}: no event bus configured")
                 message.status = DLQMessageStatus.PENDING
                 await self._update_message(message)
                 return False
@@ -379,9 +377,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
                     event_counts[key[6:]] = val
 
             # Get oldest message age
-            oldest_timestamp = await self._redis.zrange(
-                self.PENDING_INDEX, 0, 0, withscores=True
-            )
+            oldest_timestamp = await self._redis.zrange(self.PENDING_INDEX, 0, 0, withscores=True)
             oldest_age = 0.0
             if oldest_timestamp:
                 _, score = oldest_timestamp[0]

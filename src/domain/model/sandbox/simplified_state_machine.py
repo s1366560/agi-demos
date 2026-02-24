@@ -29,6 +29,7 @@ State Mapping (Legacy → Simplified):
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import ClassVar
 
 from src.domain.model.sandbox.project_sandbox import ProjectSandboxStatus
 
@@ -166,7 +167,7 @@ class SimplifiedSandboxStateMachine:
     )
 
     # Mapping from legacy ProjectSandboxStatus to SimplifiedSandboxState
-    _LEGACY_TO_SIMPLIFIED_MAP: dict[ProjectSandboxStatus, SimplifiedSandboxState] = {
+    _LEGACY_TO_SIMPLIFIED_MAP: ClassVar[dict[ProjectSandboxStatus, SimplifiedSandboxState]] = {
         # STARTING states
         ProjectSandboxStatus.PENDING: SimplifiedSandboxState.STARTING,
         ProjectSandboxStatus.CREATING: SimplifiedSandboxState.STARTING,
@@ -185,7 +186,7 @@ class SimplifiedSandboxStateMachine:
     }
 
     # Mapping from SimplifiedSandboxState to most specific legacy ProjectSandboxStatus
-    _SIMPLIFIED_TO_LEGACY_MAP: dict[SimplifiedSandboxState, ProjectSandboxStatus] = {
+    _SIMPLIFIED_TO_LEGACY_MAP: ClassVar[dict[SimplifiedSandboxState, ProjectSandboxStatus]] = {
         SimplifiedSandboxState.STARTING: ProjectSandboxStatus.CREATING,
         SimplifiedSandboxState.RUNNING: ProjectSandboxStatus.RUNNING,
         SimplifiedSandboxState.ERROR: ProjectSandboxStatus.ERROR,
@@ -306,9 +307,7 @@ class SimplifiedSandboxStateMachine:
         return None
 
     @classmethod
-    def legacy_to_simplified(
-        cls, legacy_status: ProjectSandboxStatus
-    ) -> SimplifiedSandboxState:
+    def legacy_to_simplified(cls, legacy_status: ProjectSandboxStatus) -> SimplifiedSandboxState:
         """
         Convert legacy ProjectSandboxStatus to SimplifiedSandboxState.
 
@@ -324,9 +323,7 @@ class SimplifiedSandboxStateMachine:
         try:
             return cls._LEGACY_TO_SIMPLIFIED_MAP[legacy_status]
         except KeyError as e:
-            raise ValueError(
-                f"Unknown legacy status: {legacy_status}"
-            ) from e
+            raise ValueError(f"Unknown legacy status: {legacy_status}") from e
 
     @classmethod
     def simplified_to_legacy(
@@ -347,9 +344,7 @@ class SimplifiedSandboxStateMachine:
         try:
             return cls._SIMPLIFIED_TO_LEGACY_MAP[simplified_status]
         except KeyError as e:
-            raise ValueError(
-                f"Unknown simplified status: {simplified_status}"
-            ) from e
+            raise ValueError(f"Unknown simplified status: {simplified_status}") from e
 
 
 # Global state machine instance for convenience

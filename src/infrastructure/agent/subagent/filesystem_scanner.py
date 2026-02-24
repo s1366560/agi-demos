@@ -13,6 +13,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -68,11 +69,11 @@ class FileSystemSubAgentScanner:
     SubAgents use flat {name}.md files in the agents/ directory.
     """
 
-    DEFAULT_AGENT_DIRS = [
+    DEFAULT_AGENT_DIRS: ClassVar[list] = [
         ".memstack/agents",
     ]
 
-    GLOBAL_AGENT_DIRS = [
+    GLOBAL_AGENT_DIRS: ClassVar[list] = [
         "~/.memstack/agents",
     ]
 

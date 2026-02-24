@@ -33,7 +33,7 @@ class AuditLogEntry(BaseModel):
     user_agent: str | None = None
 
     class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
+        json_encoders = {datetime: lambda v: v.isoformat()}  # noqa: RUF012
 
 
 class AuditLogService:

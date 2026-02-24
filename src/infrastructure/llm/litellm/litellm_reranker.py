@@ -41,6 +41,7 @@ DEFAULT_RERANK_MODELS = {
     ProviderType.DASHSCOPE: "qwen-turbo",
     ProviderType.KIMI: "kimi-rerank-1",
     ProviderType.DEEPSEEK: "deepseek-chat",
+    ProviderType.MINIMAX: "abab6.5-chat",
     ProviderType.ZAI: "glm-4-flash",
     ProviderType.MISTRAL: "mistral-small-latest",
     ProviderType.OLLAMA: "llama3.1:8b",
@@ -358,6 +359,9 @@ class LiteLLMReranker(BaseReranker):
         elif provider_type in {"dashscope", "kimi"}:
             if not model.startswith("openai/"):
                 return f"openai/{model}"
+        elif provider_type == "minimax":
+            if not model.startswith("minimax/"):
+                return f"minimax/{model}"
         elif provider_type == "zai":
             # ZhipuAI uses 'zai/' prefix in LiteLLM
             if not model.startswith("zai/"):

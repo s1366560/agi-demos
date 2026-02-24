@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ class SystemPromptManager:
     """
 
     # File extensions for custom rules
-    RULE_FILE_NAMES = [".memstack/AGENTS.md", "CLAUDE.md"]
+    RULE_FILE_NAMES: ClassVar[list] = [".memstack/AGENTS.md", "CLAUDE.md"]
 
     # Default sandbox workspace path - Agent should only see sandbox, not host filesystem
     DEFAULT_SANDBOX_WORKSPACE = Path("/workspace")

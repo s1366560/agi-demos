@@ -8,6 +8,7 @@ Used when the ReActAgent runs in SYSTEM environment without a Sandbox.
 import hashlib
 import logging
 from pathlib import Path
+from typing import ClassVar
 
 from src.domain.ports.services.skill_resource_port import (
     ResourceEnvironment,
@@ -30,7 +31,7 @@ class LocalSkillResourceAdapter(SkillResourcePort):
     """
 
     # Resource directories to scan
-    RESOURCE_DIRS = ["scripts", "references", "assets", "templates"]
+    RESOURCE_DIRS: ClassVar[list] = ["scripts", "references", "assets", "templates"]
 
     def __init__(
         self,

@@ -7,7 +7,7 @@ for retry logic and user-friendly error messages.
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 
 class MCPToolErrorType(str, Enum):
@@ -105,7 +105,7 @@ class MCPToolErrorClassifier:
     """
 
     # Error patterns for classification
-    CONNECTION_PATTERNS = [
+    CONNECTION_PATTERNS: ClassVar[list] = [
         "connection refused",
         "connection reset",
         "connection lost",
@@ -114,13 +114,13 @@ class MCPToolErrorClassifier:
         "failed to connect",
     ]
 
-    TIMEOUT_PATTERNS = [
+    TIMEOUT_PATTERNS: ClassVar[list] = [
         "timeout",
         "timed out",
         "deadline exceeded",
     ]
 
-    PARAMETER_PATTERNS = [
+    PARAMETER_PATTERNS: ClassVar[list] = [
         "invalid parameter",
         "missing parameter",
         "required parameter",
@@ -129,7 +129,7 @@ class MCPToolErrorClassifier:
         "missing argument",
     ]
 
-    PERMISSION_PATTERNS = [
+    PERMISSION_PATTERNS: ClassVar[list] = [
         "permission denied",
         "unauthorized",
         "access denied",
@@ -140,7 +140,7 @@ class MCPToolErrorClassifier:
     ]
 
     # File not found patterns - separate from parameter errors
-    FILE_NOT_FOUND_PATTERNS = [
+    FILE_NOT_FOUND_PATTERNS: ClassVar[list] = [
         "file not found",
         "no such file",
         "enoent",
@@ -150,14 +150,14 @@ class MCPToolErrorClassifier:
         "directory not found",
     ]
 
-    SANDBOX_NOT_FOUND_PATTERNS = [
+    SANDBOX_NOT_FOUND_PATTERNS: ClassVar[list] = [
         "sandbox not found",
         "container not found",
         "no such container",
     ]
 
     # Resource errors - may be retryable
-    RESOURCE_PATTERNS = [
+    RESOURCE_PATTERNS: ClassVar[list] = [
         "too large",
         "out of memory",
         "no space left",

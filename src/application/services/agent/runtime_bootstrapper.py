@@ -1,11 +1,10 @@
 """Agent runtime bootstrapping extracted from AgentService."""
 
-
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from src.domain.model.agent import Conversation
 
@@ -21,8 +20,8 @@ class AgentRuntimeBootstrapper:
     _local_bootstrapped = False
     _local_bootstrap_lock = asyncio.Lock()
     _local_chat_lock = asyncio.Lock()
-    _local_chat_tasks: dict[str, asyncio.Task[Any]] = {}
-    _local_chat_abort_signals: dict[str, asyncio.Event] = {}
+    _local_chat_tasks: ClassVar[dict[str, asyncio.Task[Any]]] = {}
+    _local_chat_abort_signals: ClassVar[dict[str, asyncio.Event]] = {}
 
     @staticmethod
     def _normalize_runtime_mode(mode: str | None) -> str:
@@ -178,7 +177,9 @@ class AgentRuntimeBootstrapper:
 
         await register_project_local(tenant_id, project_id)
 
-    async def _start_local_chat(self, conversation_id: str, config: ProjectAgentActorConfig, request: ProjectChatRequest) -> None:
+    async def _start_local_chat(
+        self, conversation_id: str, config: ProjectAgentActorConfig, request: ProjectChatRequest
+    ) -> None:
         """Start local execution task and register cancellation signal."""
         abort_signal = asyncio.Event()
         task = asyncio.create_task(self._run_chat_local(config, request, abort_signal=abort_signal))

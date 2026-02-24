@@ -8,6 +8,7 @@ into remote Sandbox containers.
 import logging
 import re
 from pathlib import Path
+from typing import ClassVar
 
 from src.infrastructure.skill.filesystem_scanner import FileSystemSkillScanner
 
@@ -22,13 +23,13 @@ class SkillResourceLoader:
     """
 
     # 资源目录名称
-    RESOURCE_DIRS = ["scripts", "references", "assets"]
+    RESOURCE_DIRS: ClassVar[list] = ["scripts", "references", "assets"]
 
     # SKILL.md 中常见的资源引用模式
-    RESOURCE_PATTERNS = [
-        r'scripts/[\w./\-]+',      # scripts/xxx.py
-        r'references/[\w./\-]+',   # references/xxx.md
-        r'assets/[\w./\-]+',       # assets/xxx.png
+    RESOURCE_PATTERNS: ClassVar[list] = [
+        r"scripts/[\w./\-]+",  # scripts/xxx.py
+        r"references/[\w./\-]+",  # references/xxx.md
+        r"assets/[\w./\-]+",  # assets/xxx.png
     ]
 
     def __init__(

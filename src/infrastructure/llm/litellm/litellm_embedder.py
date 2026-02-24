@@ -70,6 +70,7 @@ DEFAULT_EMBEDDING_MODELS = {
     ProviderType.DASHSCOPE: "text-embedding-v3",
     ProviderType.KIMI: "kimi-embedding-1",
     ProviderType.DEEPSEEK: "text-embedding-v3",  # Uses Dashscope fallback
+    ProviderType.MINIMAX: "embo-01",
     ProviderType.ZAI: "embedding-3",
     ProviderType.COHERE: "embed-english-v3.0",
     ProviderType.MISTRAL: "mistral-embed",
@@ -270,9 +271,7 @@ class LiteLLMEmbedder(BaseEmbedder):
         return 1024
 
     @staticmethod
-    def _resolve_api_base(
-        provider_type: ProviderType | None, base_url: str | None
-    ) -> str | None:
+    def _resolve_api_base(provider_type: ProviderType | None, base_url: str | None) -> str | None:
         """Resolve api_base using configured value or local-provider defaults."""
         if base_url:
             return base_url
@@ -340,6 +339,9 @@ class LiteLLMEmbedder(BaseEmbedder):
             # Kimi uses OpenAI-compatible API
             if not model.startswith("openai/"):
                 return f"openai/{model}"
+        elif provider_type == "minimax":
+            if not model.startswith("minimax/"):
+                return f"minimax/{model}"
         elif provider_type == "zai":
             # ZhipuAI embedding API is OpenAI-compatible.
             if not model.startswith("openai/"):

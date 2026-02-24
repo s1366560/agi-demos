@@ -22,6 +22,7 @@ PROVIDER_TYPE_MAP: dict[str, ProviderType] = {
     "dashscope": ProviderType.DASHSCOPE,
     "openai": ProviderType.OPENAI,
     "deepseek": ProviderType.DEEPSEEK,
+    "minimax": ProviderType.MINIMAX,
     "zai": ProviderType.ZAI,
     "zhipu": ProviderType.ZAI,  # Alias for zai
     "kimi": ProviderType.KIMI,  # Moonshot AI (Kimi)
@@ -93,7 +94,7 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
     # Get the configured provider
     # Fallback to 'gemini' if not set, but try to detect based on API keys first
     provider_name = os.getenv("LLM_PROVIDER", "").lower()
-    
+
     # Auto-detect if not set
     if not provider_name:
         if os.getenv("GEMINI_API_KEY"):
@@ -104,6 +105,8 @@ async def initialize_default_llm_providers(force_recreate: bool = False) -> bool
             provider_name = "openai"
         elif os.getenv("DEEPSEEK_API_KEY"):
             provider_name = "deepseek"
+        elif os.getenv("MINIMAX_API_KEY"):
+            provider_name = "minimax"
         elif os.getenv("ZAI_API_KEY") or os.getenv("ZHIPU_API_KEY"):
             provider_name = "zai"
         elif os.getenv("KIMI_API_KEY"):
@@ -194,14 +197,22 @@ def _build_provider_config(
         llm_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         embedding_model = os.getenv("GEMINI_EMBEDDING_MODEL", "text-embedding-004")
         reranker_model = os.getenv("GEMINI_RERANK_MODEL", "gemini-2.0-flash")
-        
+
     elif provider_name in ("zhipu", "zai"):
         api_key = os.getenv("ZAI_API_KEY") or os.getenv("ZHIPU_API_KEY")
         llm_model = os.getenv("ZAI_MODEL") or os.getenv("ZHIPU_MODEL", "glm-4-plus")
-        llm_small_model = os.getenv("ZAI_SMALL_MODEL") or os.getenv("ZHIPU_SMALL_MODEL", "glm-4-flash")
-        embedding_model = os.getenv("ZAI_EMBEDDING_MODEL") or os.getenv("ZHIPU_EMBEDDING_MODEL", "embedding-3")
-        reranker_model = os.getenv("ZAI_RERANK_MODEL") or os.getenv("ZHIPU_RERANK_MODEL", "glm-4-flash")
-        base_url = os.getenv("ZAI_BASE_URL") or os.getenv("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
+        llm_small_model = os.getenv("ZAI_SMALL_MODEL") or os.getenv(
+            "ZHIPU_SMALL_MODEL", "glm-4-flash"
+        )
+        embedding_model = os.getenv("ZAI_EMBEDDING_MODEL") or os.getenv(
+            "ZHIPU_EMBEDDING_MODEL", "embedding-3"
+        )
+        reranker_model = os.getenv("ZAI_RERANK_MODEL") or os.getenv(
+            "ZHIPU_RERANK_MODEL", "glm-4-flash"
+        )
+        base_url = os.getenv("ZAI_BASE_URL") or os.getenv(
+            "ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"
+        )
 
     elif provider_name == "dashscope":
         api_key = os.getenv("DASHSCOPE_API_KEY")
@@ -209,7 +220,9 @@ def _build_provider_config(
         llm_small_model = os.getenv("DASHSCOPE_SMALL_MODEL", "qwen-turbo")
         embedding_model = os.getenv("DASHSCOPE_EMBEDDING_MODEL", "text-embedding-v3")
         reranker_model = os.getenv("DASHSCOPE_RERANK_MODEL", "qwen-turbo")
-        base_url = os.getenv("DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+        base_url = os.getenv(
+            "DASHSCOPE_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        )
 
     elif provider_name == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
@@ -225,6 +238,14 @@ def _build_provider_config(
         llm_small_model = os.getenv("DEEPSEEK_SMALL_MODEL", "deepseek-coder")
         reranker_model = os.getenv("DEEPSEEK_RERANK_MODEL", "deepseek-chat")
         base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+
+    elif provider_name == "minimax":
+        api_key = os.getenv("MINIMAX_API_KEY")
+        llm_model = os.getenv("MINIMAX_MODEL", "abab6.5-chat")
+        llm_small_model = os.getenv("MINIMAX_SMALL_MODEL", "abab6.5s-chat")
+        embedding_model = os.getenv("MINIMAX_EMBEDDING_MODEL", "embo-01")
+        reranker_model = os.getenv("MINIMAX_RERANK_MODEL", "abab6.5-chat")
+        base_url = os.getenv("MINIMAX_BASE_URL", "https://api.minimax.chat/v1")
 
     elif provider_name in ("kimi", "moonshot"):
         api_key = os.getenv("KIMI_API_KEY")

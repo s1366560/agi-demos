@@ -5,6 +5,7 @@ This module defines all system roles and their associated permissions.
 Roles are hierarchical and organized by scope (tenant, project, system).
 """
 
+from typing import ClassVar
 
 from src.domain.model.auth.permissions import PermissionCode
 
@@ -33,7 +34,7 @@ class RoleDefinition:
     SYSTEM_ADMIN = "system_admin"
 
     # Mapping of role names to their permissions
-    ROLES: dict[str, list[str]] = {
+    ROLES: ClassVar[dict[str, list[str]]] = {
         # ========== Tenant Roles ==========
         TENANT_OWNER: [
             # Full control over tenant

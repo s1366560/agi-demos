@@ -8,7 +8,7 @@ Provides:
 
 Usage:
     from src.infrastructure.llm.provider_config import ProviderPrefix, UnifiedLLMConfig
-    
+
     config = UnifiedLLMConfig(
         provider_type=ProviderType.DASHSCOPE,
         model="qwen-max",
@@ -27,37 +27,38 @@ from src.domain.llm_providers.models import ProviderType
 class ProviderPrefix(str, Enum):
     """
     Provider prefixes for LiteLLM model names.
-    
+
     LiteLLM requires provider prefixes for some models to disambiguate
     between providers with similar model names.
-    
+
     Example:
         "dashscope/qwen-max"  # Qwen via Dashscope
         "openai/gpt-4"        # GPT-4 via OpenAI
         "gemini/gemini-pro"   # Gemini via Google
     """
-    
+
     # Major providers
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     GEMINI = "gemini"
     DASHSCOPE = "dashscope"
     DEEPSEEK = "deepseek"
+    MINIMAX = "minimax"
     ZAI = "zai"  # Zhipu AI
     KIMI = "openai"  # Kimi uses OpenAI-compatible API
     MISTRAL = "mistral"
     GROQ = "groq"
     COHERE = "cohere"
-    
+
     # Cloud providers
     BEDROCK = "bedrock"
     VERTEX_AI = "vertex_ai"
     AZURE = "azure"
-    
+
     # Local providers
     OLLAMA = "ollama"
     LMSTUDIO = "openai"  # LM Studio uses OpenAI-compatible API
-    
+
     # Default (no prefix needed)
     DEFAULT = ""
 
@@ -70,6 +71,8 @@ MODEL_PREFIX_TO_PROVIDER: dict[str, ProviderType] = {
     "o1-": ProviderType.OPENAI,
     "gemini-": ProviderType.GEMINI,
     "deepseek-": ProviderType.DEEPSEEK,
+    "minimax-": ProviderType.MINIMAX,
+    "abab": ProviderType.MINIMAX,
     "glm-": ProviderType.ZAI,
     "claude-": ProviderType.ANTHROPIC,
     "mistral-": ProviderType.MISTRAL,
@@ -117,6 +120,12 @@ DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
         "completion_medium": "deepseek-chat",
         "embedding": "text-embedding-v3",  # Uses Dashscope
         "rerank": "deepseek-chat",
+    },
+    ProviderType.MINIMAX: {
+        "completion": "abab6.5-chat",
+        "completion_medium": "abab6.5-chat",
+        "embedding": "embo-01",
+        "rerank": "abab6.5-chat",
     },
     ProviderType.ZAI: {
         "completion": "glm-4-flash",
@@ -178,10 +187,10 @@ DEFAULT_MODELS: dict[ProviderType, dict[str, str]] = {
 def get_provider_prefix(provider_type: ProviderType) -> ProviderPrefix:
     """
     Get LiteLLM provider prefix for provider type.
-    
+
     Args:
         provider_type: Provider type enum
-        
+
     Returns:
         ProviderPrefix enum value
     """
@@ -191,6 +200,7 @@ def get_provider_prefix(provider_type: ProviderType) -> ProviderPrefix:
         ProviderType.GEMINI: ProviderPrefix.GEMINI,
         ProviderType.DASHSCOPE: ProviderPrefix.DASHSCOPE,
         ProviderType.DEEPSEEK: ProviderPrefix.DEEPSEEK,
+        ProviderType.MINIMAX: ProviderPrefix.MINIMAX,
         ProviderType.ZAI: ProviderPrefix.ZAI,
         ProviderType.KIMI: ProviderPrefix.KIMI,
         ProviderType.MISTRAL: ProviderPrefix.MISTRAL,
@@ -208,19 +218,19 @@ def get_provider_prefix(provider_type: ProviderType) -> ProviderPrefix:
 def infer_provider_from_model(model_name: str) -> ProviderType:
     """
     Infer provider type from model name.
-    
+
     Args:
         model_name: Model name string
-        
+
     Returns:
         Inferred ProviderType (defaults to OPENAI)
     """
     model_lower = model_name.lower()
-    
+
     for prefix, provider in MODEL_PREFIX_TO_PROVIDER.items():
         if model_lower.startswith(prefix):
             return provider
-    
+
     return ProviderType.OPENAI
 
 
@@ -228,10 +238,10 @@ def infer_provider_from_model(model_name: str) -> ProviderType:
 class UnifiedLLMConfig:
     """
     Unified configuration for LLM operations.
-    
+
     Replaces separate LLMConfig, EmbedderConfig, StreamConfig with
     a single comprehensive configuration object.
-    
+
     Example:
         config = UnifiedLLMConfig(
             provider_type=ProviderType.DASHSCOPE,
@@ -240,46 +250,46 @@ class UnifiedLLMConfig:
             max_tokens=4096,
             api_key="sk-...",
         )
-        
+
         # Get LiteLLM model name with prefix
         litellm_model = config.get_litellm_model_name()
-        
+
         # Get default model for provider
         default_model = config.get_default_model("completion")
     """
-    
+
     # Provider configuration
     provider_type: ProviderType
     api_key: str | None = None
     base_url: str | None = None
-    
+
     # Model configuration
     model: str = ""  # Primary model (medium/large)
     small_model: str | None = None  # Small/fast model
     embedding_model: str | None = None
     reranker_model: str | None = None
-    
+
     # Generation parameters
     temperature: float = 0.0
     max_tokens: int = 4096
     timeout: int = 600  # seconds
-    
+
     # Provider-specific options
     provider_options: dict[str, Any] = field(default_factory=dict)
-    
+
     # Caching
     cache_enabled: bool = True
-    
+
     def __post_init__(self) -> None:
         """Validate and normalize configuration."""
         # Use default model if not specified
         if not self.model:
             self.model = self.get_default_model("completion")
-        
+
         # Use default small model if not specified
         if not self.small_model:
             self.small_model = self.get_default_model("completion", use_small=True)
-    
+
     def get_default_model(
         self,
         operation: str = "completion",
@@ -287,43 +297,43 @@ class UnifiedLLMConfig:
     ) -> str:
         """
         Get default model for provider and operation.
-        
+
         Args:
             operation: Operation type (completion, embedding, rerank)
             use_small: Use small/fast model variant
-            
+
         Returns:
             Default model name
         """
         provider_defaults = DEFAULT_MODELS.get(self.provider_type, {})
-        
+
         if operation == "completion":
             if use_small:
                 # For some providers, small = flash/haiku/turbo variants
                 return provider_defaults.get("completion", "gpt-4o-mini")
             return provider_defaults.get("completion_medium", "gpt-4o")
-        
+
         return provider_defaults.get(operation, "gpt-4o-mini")
-    
+
     def get_litellm_model_name(self, model: str | None = None) -> str:
         """
         Get model name in LiteLLM format with provider prefix.
-        
+
         Args:
             model: Model name (uses config.model if None)
-            
+
         Returns:
             LiteLLM-formatted model name
         """
         model_name = model or self.model
-        
+
         # Skip if already prefixed
         if "/" in model_name:
             return model_name
-        
+
         # Get provider prefix
         prefix = get_provider_prefix(self.provider_type)
-        
+
         # Special handling for providers that need explicit prefix
         needs_prefix = {
             ProviderType.ANTHROPIC,
@@ -332,25 +342,26 @@ class UnifiedLLMConfig:
             ProviderType.MISTRAL,
             ProviderType.GROQ,
             ProviderType.DEEPSEEK,
+            ProviderType.MINIMAX,
             ProviderType.ZAI,
             ProviderType.COHERE,
             ProviderType.BEDROCK,
             ProviderType.VERTEX,
             ProviderType.OLLAMA,
         }
-        
+
         if self.provider_type in needs_prefix and prefix.value:
             return f"{prefix.value}/{model_name}"
-        
+
         return model_name
-    
+
     def get_model_for_size(self, size: str) -> str:
         """
         Get model name for requested size.
-        
+
         Args:
             size: Model size (small, medium, large)
-            
+
         Returns:
             Model name
         """
@@ -360,11 +371,11 @@ class UnifiedLLMConfig:
             # For large, use medium model (may be same)
             return self.get_default_model("completion", use_small=False)
         return self.model
-    
+
     def to_kwargs(self) -> dict[str, Any]:
         """
         Convert to kwargs for LiteLLM calls.
-        
+
         Returns:
             Dictionary of kwargs
         """
@@ -381,7 +392,7 @@ class UnifiedLLMConfig:
 class ProviderHealthConfig:
     """
     Health check configuration for providers.
-    
+
     Example:
         health_config = ProviderHealthConfig(
             provider_type=ProviderType.DASHSCOPE,
@@ -390,21 +401,21 @@ class ProviderHealthConfig:
             recovery_timeout=60,
         )
     """
-    
+
     provider_type: ProviderType
     health_check_model: str | None = None
     health_check_endpoint: str | None = None
-    
+
     # Circuit breaker settings
     failure_threshold: int = 5
     success_threshold: int = 2
     recovery_timeout: float = 60.0  # seconds
     half_open_max_calls: int = 3
-    
+
     # Rate limiter settings
     max_concurrent_requests: int = 10
     rate_limit_window: float = 1.0  # seconds
-    
+
     def __post_init__(self) -> None:
         """Set default health check model if not specified."""
         if not self.health_check_model:

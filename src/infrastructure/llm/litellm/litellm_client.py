@@ -102,6 +102,8 @@ class LiteLLMClient(LLMClient):
             return self.provider_config.base_url or "https://open.bigmodel.cn/api/paas/v4"
         elif provider_type == "kimi":
             return self.provider_config.base_url or "https://api.moonshot.cn/v1"
+        elif provider_type == "minimax":
+            return self.provider_config.base_url or "https://api.minimax.chat/v1"
         elif provider_type == "ollama":
             return self.provider_config.base_url or "http://localhost:11434"
         elif provider_type == "lmstudio":
@@ -132,6 +134,7 @@ class LiteLLMClient(LLMClient):
             "deepseek": "DEEPSEEK_API_KEY",
             "zai": "ZAI_API_KEY",
             "kimi": "KIMI_API_KEY",
+            "minimax": "MINIMAX_API_KEY",
         }
         env_var = env_key_map.get(provider_type)
         if env_var and api_key:
@@ -705,6 +708,8 @@ class LiteLLMClient(LLMClient):
         elif provider_type == "zai":
             # ZhipuAI uses 'zai/' prefix in LiteLLM (not 'zhipu/')
             return f"zai/{model}"
+        elif provider_type == "minimax":
+            return f"minimax/{model}"
         elif provider_type == "kimi":
             # Moonshot AI (Kimi) uses OpenAI-compatible API
             return f"openai/{model}"

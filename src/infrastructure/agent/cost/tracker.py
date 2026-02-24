@@ -6,7 +6,7 @@ Supports cache tokens, reasoning tokens, and context overflow pricing.
 
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, ClassVar, Optional
 
 
 @dataclass
@@ -103,7 +103,7 @@ class CostTracker:
 
     # Model cost configurations (per million tokens in USD)
     # Updated as of January 2025
-    MODEL_COSTS: dict[str, ModelCost] = {
+    MODEL_COSTS: ClassVar[dict[str, ModelCost]] = {
         # OpenAI models
         "gpt-4o": ModelCost(
             input=Decimal("2.50"),

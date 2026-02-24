@@ -17,6 +17,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import ClassVar
 
 logger = logging.getLogger(__name__)
 
@@ -125,12 +126,12 @@ class FileSystemSkillScanner:
     """
 
     # Default skill directory patterns relative to base path (project-level)
-    DEFAULT_SKILL_DIRS = [
+    DEFAULT_SKILL_DIRS: ClassVar[list] = [
         ".memstack/skills",
     ]
 
     # Global skill directories (relative to user home)
-    GLOBAL_SKILL_DIRS = [
+    GLOBAL_SKILL_DIRS: ClassVar[list] = [
         "~/.memstack/skills",
     ]
 

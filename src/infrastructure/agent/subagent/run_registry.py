@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 try:
     import fcntl
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 class SubAgentRunRegistry:
     """Tracks delegated SubAgent runs grouped by conversation."""
 
-    _ACTIVE_STATUSES = {SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING}
+    _ACTIVE_STATUSES: ClassVar[set] = {SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING}
     _PERSIST_VERSION = 1
 
     def __init__(

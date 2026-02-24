@@ -6,6 +6,7 @@ provider-specific retry-after header support.
 
 import re
 from dataclasses import dataclass
+from typing import ClassVar
 
 
 @dataclass
@@ -47,7 +48,7 @@ class RetryPolicy:
     MAX_ATTEMPTS = 5
 
     # Patterns indicating retryable errors
-    RETRYABLE_PATTERNS = [
+    RETRYABLE_PATTERNS: ClassVar[list] = [
         r"overloaded",
         r"too_many_requests",
         r"rate.?limit",
@@ -65,7 +66,7 @@ class RetryPolicy:
     ]
 
     # HTTP status codes that indicate retryable errors
-    RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+    RETRYABLE_STATUS_CODES: ClassVar[set] = {429, 500, 502, 503, 504}
 
     def __init__(
         self,

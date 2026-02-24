@@ -97,6 +97,7 @@ class LLMProviderManager:
         self._fallback_order: dict[OperationType, list[ProviderType]] = {
             OperationType.LLM: [
                 ProviderType.OPENAI,
+                ProviderType.MINIMAX,
                 ProviderType.ANTHROPIC,
                 ProviderType.GEMINI,
                 ProviderType.DASHSCOPE,
@@ -106,6 +107,7 @@ class LLMProviderManager:
             ],
             OperationType.EMBEDDING: [
                 ProviderType.OPENAI,
+                ProviderType.MINIMAX,
                 ProviderType.DASHSCOPE,
                 ProviderType.GEMINI,
                 ProviderType.OLLAMA,
@@ -196,25 +198,20 @@ class LLMProviderManager:
             # Check if we have config for this provider
             provider_config = self._provider_configs.get(provider_type)
             if not provider_config:
-                logger.debug(
-                    f"Skipping {provider_type.value}: no configuration registered"
-                )
+                logger.debug(f"Skipping {provider_type.value}: no configuration registered")
                 continue
 
             # Check circuit breaker
             circuit_breaker = self._circuit_breakers.get(provider_type)
             if not circuit_breaker.can_execute():
-                logger.debug(
-                    f"Skipping {provider_type.value}: circuit breaker open"
-                )
+                logger.debug(f"Skipping {provider_type.value}: circuit breaker open")
                 continue
 
             # Check health status
             health = await self._health_checker.get_health(provider_type)
             if not health.is_healthy:
                 logger.debug(
-                    f"Skipping {provider_type.value}: unhealthy "
-                    f"(status: {health.status.value})"
+                    f"Skipping {provider_type.value}: unhealthy (status: {health.status.value})"
                 )
                 continue
 
@@ -230,9 +227,7 @@ class LLMProviderManager:
 
             except Exception as e:
                 last_error = e
-                logger.warning(
-                    f"Failed to create adapter for {provider_type.value}: {e}"
-                )
+                logger.warning(f"Failed to create adapter for {provider_type.value}: {e}")
                 circuit_breaker.record_failure()
 
                 if not allow_fallback:
@@ -338,9 +333,7 @@ class LLMProviderManager:
                 continue
 
             # Check cached health status
-            status = self._health_checker._current_status.get(
-                provider_type, HealthStatus.UNKNOWN
-            )
+            status = self._health_checker._current_status.get(provider_type, HealthStatus.UNKNOWN)
             if status in (HealthStatus.HEALTHY, HealthStatus.DEGRADED):
                 healthy.append(provider_type)
 

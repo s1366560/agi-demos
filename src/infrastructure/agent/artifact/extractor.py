@@ -19,7 +19,7 @@ import base64
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, ClassVar, Protocol
 
 from src.domain.events.agent_events import AgentArtifactCreatedEvent
 
@@ -134,32 +134,25 @@ class ArtifactLike(Protocol):
     """Protocol for artifact objects returned by ArtifactService."""
 
     @property
-    def id(self) -> str:
-        ...
+    def id(self) -> str: ...
 
     @property
-    def filename(self) -> str:
-        ...
+    def filename(self) -> str: ...
 
     @property
-    def mime_type(self) -> str:
-        ...
+    def mime_type(self) -> str: ...
 
     @property
-    def category(self) -> str:
-        ...
+    def category(self) -> str: ...
 
     @property
-    def size_bytes(self) -> int:
-        ...
+    def size_bytes(self) -> int: ...
 
     @property
-    def url(self) -> str | None:
-        ...
+    def url(self) -> str | None: ...
 
     @property
-    def preview_url(self) -> str | None:
-        ...
+    def preview_url(self) -> str | None: ...
 
 
 # ============================================================
@@ -194,7 +187,7 @@ class ArtifactExtractor:
     """
 
     # MIME type to extension mapping
-    MIME_TO_EXT = {
+    MIME_TO_EXT: ClassVar[dict] = {
         "image/png": ".png",
         "image/jpeg": ".jpg",
         "image/gif": ".gif",
@@ -280,9 +273,7 @@ class ArtifactExtractor:
         # Upload each artifact and emit events
         for artifact_data in extraction_result.artifacts:
             try:
-                artifact = await self._upload_artifact(
-                    artifact_data, context, tool_execution_id
-                )
+                artifact = await self._upload_artifact(artifact_data, context, tool_execution_id)
 
                 if artifact:
                     logger.info(
@@ -303,9 +294,7 @@ class ArtifactExtractor:
                     )
 
             except Exception as e:
-                logger.error(
-                    f"[ArtifactExtractor] Failed to create artifact from {tool_name}: {e}"
-                )
+                logger.error(f"[ArtifactExtractor] Failed to create artifact from {tool_name}: {e}")
 
     def _extract_from_result(
         self, result: dict[str, Any], tool_name: str
@@ -324,9 +313,7 @@ class ArtifactExtractor:
 
         # Check for export_artifact special format
         if result.get("artifact"):
-            artifact_data = self._extract_from_export_artifact(
-                result, tool_name, extraction
-            )
+            artifact_data = self._extract_from_export_artifact(result, tool_name, extraction)
             if artifact_data:
                 extraction.artifacts.append(artifact_data)
                 return extraction  # export_artifact is exclusive
@@ -338,9 +325,7 @@ class ArtifactExtractor:
 
         # Check for rich content types
         has_rich_content = any(
-            item.get("type") in ("image", "resource")
-            for item in content
-            if isinstance(item, dict)
+            item.get("type") in ("image", "resource") for item in content if isinstance(item, dict)
         )
 
         if not has_rich_content:
@@ -398,9 +383,7 @@ class ArtifactExtractor:
 
                 first_item = content[0] if content else {}
                 text = (
-                    first_item.get("text", "")
-                    if isinstance(first_item, dict)
-                    else str(first_item)
+                    first_item.get("text", "") if isinstance(first_item, dict) else str(first_item)
                 )
 
                 if not text:
@@ -609,9 +592,7 @@ class ArtifactExtractor:
             metadata=artifact_data.metadata,
         )
 
-    def extract_only(
-        self, result: Any, tool_name: str
-    ) -> ArtifactExtractionResult:
+    def extract_only(self, result: Any, tool_name: str) -> ArtifactExtractionResult:
         """
         Extract artifacts without uploading (for testing or preview).
 

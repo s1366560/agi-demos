@@ -612,6 +612,7 @@ class TestLLMProvidersRouterTypes:
         assert "dashscope" in data
         assert "gemini" in data
         assert "anthropic" in data
+        assert "minimax" in data
 
     @pytest.mark.asyncio
     async def test_list_models_for_openai(self, llm_client):
@@ -643,6 +644,17 @@ class TestLLMProvidersRouterTypes:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["provider_type"] == "gemini"
+
+    @pytest.mark.asyncio
+    async def test_list_models_for_minimax(self, llm_client):
+        """Test listing models for MiniMax provider type."""
+        response = llm_client.get("/api/v1/llm-providers/models/minimax")
+
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["provider_type"] == "minimax"
+        assert "abab6.5-chat" in data["models"]["chat"]
+        assert "embo-01" in data["models"]["embedding"]
 
     @pytest.mark.asyncio
     async def test_list_models_for_kimi(self, llm_client):

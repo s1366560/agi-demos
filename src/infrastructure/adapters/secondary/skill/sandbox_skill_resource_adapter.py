@@ -8,6 +8,7 @@ Injects SKILL resources into containers via MCP WebSocket tools.
 import hashlib
 import logging
 from pathlib import Path
+from typing import ClassVar
 
 from src.domain.ports.services.sandbox_port import SandboxPort
 from src.domain.ports.services.skill_resource_port import (
@@ -31,7 +32,7 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
     """
 
     # Directories and files to exclude from sync
-    EXCLUDED_NAMES = {"__pycache__", ".git", ".DS_Store", "node_modules"}
+    EXCLUDED_NAMES: ClassVar[set] = {"__pycache__", ".git", ".DS_Store", "node_modules"}
 
     # Container base path for skills
     CONTAINER_SKILL_BASE = "/workspace/.memstack/skills"
@@ -199,9 +200,7 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
 
                 relative_path = item.relative_to(skill_dir)
                 virtual_path = self.build_virtual_path(context.skill_name, str(relative_path))
-                container_path = self._get_container_path(
-                    context.skill_name, str(relative_path)
-                )
+                container_path = self._get_container_path(context.skill_name, str(relative_path))
 
                 resource = SkillResource(
                     virtual_path=virtual_path,

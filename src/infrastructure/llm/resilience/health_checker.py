@@ -297,6 +297,14 @@ class HealthChecker:
                 )
                 response.raise_for_status()
 
+            elif provider_type == ProviderType.MINIMAX:
+                base_url = provider_config.base_url or "https://api.minimax.chat/v1"
+                response = await client.get(
+                    f"{base_url}/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                response.raise_for_status()
+
             elif provider_type == ProviderType.ZAI:
                 base_url = provider_config.base_url or "https://open.bigmodel.cn/api/paas/v4"
                 response = await client.get(

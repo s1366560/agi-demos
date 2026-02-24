@@ -264,6 +264,7 @@ class ProviderType(str, Enum):
     BEDROCK = "bedrock"
     VERTEX = "vertex"
     DEEPSEEK = "deepseek"
+    MINIMAX = "minimax"
     ZAI = "zai"  # Z.AI (ZhipuAI)
     KIMI = "kimi"  # Moonshot AI (Kimi)
     OLLAMA = "ollama"  # Local Ollama server

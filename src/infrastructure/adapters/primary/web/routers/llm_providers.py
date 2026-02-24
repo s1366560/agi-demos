@@ -208,6 +208,11 @@ async def list_models_for_provider_type(
             "embedding": [],
             "rerank": ["deepseek-chat"],
         },
+        "minimax": {
+            "chat": ["abab6.5-chat", "abab6.5s-chat", "MiniMax-Text-01"],
+            "embedding": ["embo-01"],
+            "rerank": ["abab6.5-chat"],
+        },
         "cohere": {
             "chat": ["command-r-plus", "command-r"],
             "embedding": ["embed-english-v3.0", "embed-multilingual-v3.0"],
