@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class HasContentAndScore(Protocol):
@@ -48,11 +48,11 @@ class MMRItem:
 
 
 def mmr_rerank(
-    items: list[dict],
+    items: list[dict[str, Any]],
     lambda_: float = 0.7,
     content_key: str = "content",
     score_key: str = "score",
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Re-rank items using Maximal Marginal Relevance.
 
     MMR score = lambda * relevance - (1 - lambda) * max_similarity_to_selected

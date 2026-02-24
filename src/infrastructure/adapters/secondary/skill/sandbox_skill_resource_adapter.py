@@ -32,7 +32,7 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
     """
 
     # Directories and files to exclude from sync
-    EXCLUDED_NAMES: ClassVar[set] = {"__pycache__", ".git", ".DS_Store", "node_modules"}
+    EXCLUDED_NAMES: ClassVar[set[str]] = {"__pycache__", ".git", ".DS_Store", "node_modules"}
 
     # Container base path for skills
     CONTAINER_SKILL_BASE = "/workspace/.memstack/skills"

@@ -8,6 +8,7 @@
 
 from dataclasses import asdict, dataclass, field
 from enum import Enum
+from typing import Any
 
 
 class SandboxProfileType(str, Enum):
@@ -36,11 +37,11 @@ class SandboxProfile:
     max_instances: int = 5
     image_name: str | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典."""
         return asdict(self)
 
-    def get_config(self) -> dict:
+    def get_config(self) -> dict[str, Any]:
         """获取 Sandbox 创建配置."""
         return {
             "memory_limit": self.memory_limit,

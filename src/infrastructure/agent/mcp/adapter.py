@@ -26,7 +26,7 @@ class MCPToolAdapter(AgentTool):
     def __init__(
         self,
         server_id: str,
-        tool_definition: dict,
+        tool_definition: dict[str, Any],
         registry: MCPServerRegistry,
     ) -> None:
         """
@@ -150,7 +150,7 @@ class MCPToolAdapter(AgentTool):
 
         return isinstance(value, python_type)
 
-    def get_input_schema(self) -> dict:
+    def get_input_schema(self) -> dict[str, Any]:
         """Get the MCP tool input schema."""
         return self.input_schema
 

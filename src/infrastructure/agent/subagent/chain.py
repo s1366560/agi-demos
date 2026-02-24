@@ -80,10 +80,10 @@ class ChainResult:
 
     steps_completed: int
     total_steps: int
-    results: tuple = ()
+    results: tuple[Any, ...] = ()
     final_summary: str = ""
     success: bool = True
-    skipped_steps: tuple = ()
+    skipped_steps: tuple[str, ...] = ()
     total_tokens: int = 0
     total_tool_calls: int = 0
     execution_time_ms: int = 0

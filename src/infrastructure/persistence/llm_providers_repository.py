@@ -81,7 +81,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
     def _build_embedding_payload(
         embedding_model: str | None,
         embedding_config: EmbeddingConfig | None,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Build normalized embedding payload for config JSON storage."""
         payload = embedding_config.model_dump(exclude_none=True) if embedding_config else {}
         if embedding_model and not payload.get("model"):
@@ -261,7 +261,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         self,
         orm: LLMProviderORM,
         config: ProviderConfigUpdate,
-        updated_config: dict,
+        updated_config: dict[str, Any],
     ) -> bool:
         """Apply embedding_config update. Returns True if config dict was modified."""
         embedding_payload = self._build_embedding_payload(
@@ -280,7 +280,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         self,
         orm: LLMProviderORM,
         config: ProviderConfigUpdate,
-        updated_config: dict,
+        updated_config: dict[str, Any],
     ) -> bool:
         """Apply embedding_model-only update. Returns True if config dict was modified."""
         existing_embedding = (

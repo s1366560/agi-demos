@@ -48,9 +48,9 @@ class ConnectionManager:
         # conversation_id -> set of session_ids (reverse index for broadcasting)
         self.conversation_subscribers: dict[str, set[str]] = {}
         # session_id -> {conversation_id -> asyncio.Task} (bridge tasks)
-        self.bridge_tasks: dict[str, dict[str, asyncio.Task]] = {}
+        self.bridge_tasks: dict[str, dict[str, asyncio.Task[None]]] = {}
         # session_id -> {project_id -> asyncio.Task} (status monitoring tasks)
-        self.status_tasks: dict[str, dict[str, asyncio.Task]] = {}
+        self.status_tasks: dict[str, dict[str, asyncio.Task[None]]] = {}
         # session_id -> set of subscribed project_ids for status updates
         self.status_subscriptions: dict[str, set[str]] = {}
         # tenant_id -> project_id -> set of session_ids (lifecycle state subscriptions)
@@ -331,7 +331,7 @@ class ConnectionManager:
     # Status Subscriptions
     # ==========================================================================
 
-    async def subscribe_status(self, session_id: str, project_id: str, task: asyncio.Task) -> None:
+    async def subscribe_status(self, session_id: str, project_id: str, task: asyncio.Task[None]) -> None:
         """Subscribe a session to status updates for a project."""
         async with self._lock:
             if session_id not in self.status_subscriptions:
@@ -368,7 +368,7 @@ class ConnectionManager:
         """Get the WebSocket connection for a session."""
         return self.active_connections.get(session_id)
 
-    def add_bridge_task(self, session_id: str, conversation_id: str, task: asyncio.Task) -> None:
+    def add_bridge_task(self, session_id: str, conversation_id: str, task: asyncio.Task[None]) -> None:
         """Register a bridge task for a session's conversation."""
         if session_id not in self.bridge_tasks:
             self.bridge_tasks[session_id] = {}

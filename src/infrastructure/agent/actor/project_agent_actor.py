@@ -48,7 +48,7 @@ class ProjectAgentActor:
         self._bootstrapped = False
         self._bootstrap_lock = asyncio.Lock()
         self._init_lock = asyncio.Lock()
-        self._tasks: dict[str, asyncio.Task] = {}
+        self._tasks: dict[str, asyncio.Task[Any]] = {}
         self._task_conversations: dict[str, str] = {}
         self._abort_signals: dict[str, asyncio.Event] = {}
         self._current_conversation_id: str | None = None

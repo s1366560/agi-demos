@@ -28,9 +28,9 @@ class SandboxContainer:
         db: AsyncSession | None = None,
         redis_client: Any = None,
         settings: Settings | None = None,
-        sandbox_adapter_factory: Callable | None = None,
-        sandbox_event_publisher_factory: Callable | None = None,
-        distributed_lock_factory: Callable | None = None,
+        sandbox_adapter_factory: Callable[..., Any] | None = None,
+        sandbox_event_publisher_factory: Callable[..., Any] | None = None,
+        distributed_lock_factory: Callable[..., Any] | None = None,
     ) -> None:
         self._db = db
         self._redis_client = redis_client

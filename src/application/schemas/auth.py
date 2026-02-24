@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
+from typing import Any
 
 
 class APIKey(BaseModel):
@@ -43,7 +44,7 @@ class User(BaseModel):
     roles: list[str] = Field(default_factory=list)
     is_active: bool = True
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    profile: dict | None = Field(default_factory=dict)
+    profile: dict[str, Any] | None = Field(default_factory=dict)
 
     class Config:
         json_schema_extra = {
@@ -107,7 +108,7 @@ class UserResponse(BaseModel):
     roles: list[str]
     is_active: bool
     created_at: datetime
-    profile: dict | None = Field(default_factory=dict)
+    profile: dict[str, Any] | None = Field(default_factory=dict)
 
     class Config:
         from_attributes = True

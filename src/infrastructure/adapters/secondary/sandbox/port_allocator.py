@@ -15,6 +15,7 @@ import logging
 import socket
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from docker import DockerClient
 
@@ -408,7 +409,7 @@ class PortAllocator:
         async with self._lock:
             return self._cleanup_expired_unsafe()
 
-    async def get_stats(self) -> dict:
+    async def get_stats(self) -> dict[str, Any]:
         """Get port allocator statistics."""
         async with self._lock:
             total_mcp = self._mcp_port_range[1] - self._mcp_port_range[0]

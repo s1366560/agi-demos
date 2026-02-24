@@ -195,7 +195,7 @@ class MCPSandboxAdapter(SandboxPort):
         )
 
         # Periodic cleanup task management
-        self._cleanup_task: asyncio.Task | None = None
+        self._cleanup_task: asyncio.Task[None] | None = None
         self._cleanup_interval_seconds = 300.0  # Default: 5 minutes
 
         # Cleanup statistics
@@ -207,7 +207,7 @@ class MCPSandboxAdapter(SandboxPort):
         }
 
         # MCP Server health check task management
-        self._health_check_task: asyncio.Task | None = None
+        self._health_check_task: asyncio.Task[None] | None = None
         self._health_check_interval_seconds = 60.0  # Default: 1 minute
 
         # Health check statistics
@@ -219,7 +219,7 @@ class MCPSandboxAdapter(SandboxPort):
         }
 
         # MCP server configs for restart (key: (sandbox_id, server_name))
-        self._mcp_server_configs: dict[tuple, dict[str, Any]] = {}
+        self._mcp_server_configs: dict[tuple[str, str], dict[str, Any]] = {}
 
         # URL service for building service URLs
         self._url_service = SandboxUrlService(default_host="localhost", api_base="/api/v1")
@@ -832,7 +832,7 @@ class MCPSandboxAdapter(SandboxPort):
             logger.warning("read_resource error for %s: %s", uri, e)
             return None
 
-    async def list_resources(self, sandbox_id: str) -> list:
+    async def list_resources(self, sandbox_id: str) -> list[Any]:
         """List resources from sandbox MCP servers via resources/list.
         List of resource descriptors, or empty list.
         """
@@ -1074,7 +1074,7 @@ class MCPSandboxAdapter(SandboxPort):
 
     def _find_containers_by_mount_or_name(
         self,
-        containers: list,
+        containers: list[Any],
         project_id: str,
     ) -> set[str]:
         """Find container IDs matching a project by mount path or container name.
@@ -2932,7 +2932,7 @@ class MCPSandboxAdapter(SandboxPort):
         }
         logger.debug(f"Stored config for MCP server {server_name}")
 
-    def _parse_mcp_server_list(self, result: dict[str, Any]) -> list[dict]:
+    def _parse_mcp_server_list(self, result: dict[str, Any]) -> list[dict[str, Any]]:
         """Parse server list from mcp_server_list result."""
         import json
 

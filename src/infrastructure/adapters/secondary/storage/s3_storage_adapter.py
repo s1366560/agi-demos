@@ -58,7 +58,7 @@ class S3StorageAdapter(StorageServicePort):
         # Configure timeouts to prevent indefinite hangs
         from botocore.config import Config
 
-        config_kwargs: dict = {
+        config_kwargs: dict[str, Any] = {
             "connect_timeout": 10,
             "read_timeout": 30,
             "retries": {"max_attempts": 5, "mode": "standard"},
@@ -87,7 +87,7 @@ class S3StorageAdapter(StorageServicePort):
         file_content: bytes,
         object_key: str,
         content_type: str,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> UploadResult:
         """Upload a file to S3."""
         async with await self._get_client() as s3:
@@ -284,7 +284,7 @@ class S3StorageAdapter(StorageServicePort):
         self,
         object_key: str,
         content_type: str,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> MultipartUploadResult:
         """Initialize a multipart upload in S3."""
         async with await self._get_client() as s3:

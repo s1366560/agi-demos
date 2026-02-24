@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +127,7 @@ def _strip_provider_prefix(model: str) -> str:
 
 def get_model_limits(
     model: str,
-    provider_config_overrides: dict | None = None,
+    provider_config_overrides: dict[str, Any] | None = None,
 ) -> ModelLimits:
     """Return token limits for *model*, with optional DB overrides.
 

@@ -10,6 +10,7 @@ This model tracks the execution status of agent responses, enabling:
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
+from typing import Any
 
 
 class AgentExecutionStatus(str, Enum):
@@ -96,7 +97,7 @@ class AgentExecution:
         if sequence > self.last_event_sequence:
             self.last_event_sequence = sequence
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "id": self.id,

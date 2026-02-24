@@ -202,7 +202,7 @@ class SandboxArtifactIntegration:
 
     @staticmethod
     async def _read_text_fallback(
-        call_tool_fn: Callable,
+        call_tool_fn: Callable[..., Any],
         sandbox_id: str,
         path: str,
     ) -> bytes | None:
@@ -242,7 +242,7 @@ class SandboxArtifactIntegration:
 
     async def _read_sandbox_file(
         self,
-        call_tool_fn: Callable,
+        call_tool_fn: Callable[..., Any],
         sandbox_id: str,
         path: str,
     ) -> bytes | None:
@@ -267,7 +267,7 @@ class SandboxArtifactIntegration:
 
     async def _list_sandbox_files(
         self,
-        call_tool_fn: Callable,
+        call_tool_fn: Callable[..., Any],
         sandbox_id: str,
         directory: str,
     ) -> list[str]:
@@ -293,7 +293,7 @@ class SandboxArtifactIntegration:
         sandbox_id: str,
         tool_name: str,
         tool_result: dict[str, Any],
-        call_tool_fn: Callable,
+        call_tool_fn: Callable[..., Any],
         project_id: str,
         tenant_id: str,
         tool_execution_id: str | None = None,

@@ -264,7 +264,7 @@ class CardKitStreamingManager:
     async def add_hitl_buttons(
         self,
         state: CardStreamState,
-        elements: list,
+        elements: list[Any],
     ) -> bool:
         """Add HITL interactive buttons to the streaming card.
 

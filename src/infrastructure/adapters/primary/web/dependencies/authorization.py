@@ -36,7 +36,7 @@ def require_permission(permission: str) -> None:
         Decorator function
     """
 
-    def decorator(func: Callable) -> None:
+    def decorator(func: Callable[..., Any]) -> None:
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> None:
             # Extract current_user from kwargs (injected by FastAPI Depends)
@@ -114,7 +114,7 @@ def require_any_permission(*permissions: str) -> None:
         Decorator function
     """
 
-    def decorator(func: Callable) -> None:
+    def decorator(func: Callable[..., Any]) -> None:
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> None:
             current_user: User | None = kwargs.get("current_user")
@@ -182,7 +182,7 @@ def require_all_permissions(*permissions: str) -> None:
         Decorator function
     """
 
-    def decorator(func: Callable) -> None:
+    def decorator(func: Callable[..., Any]) -> None:
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> None:
             current_user: User | None = kwargs.get("current_user")
@@ -250,7 +250,7 @@ def require_role(role: str) -> None:
         Decorator function
     """
 
-    def decorator(func: Callable) -> None:
+    def decorator(func: Callable[..., Any]) -> None:
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> None:
             current_user: User | None = kwargs.get("current_user")

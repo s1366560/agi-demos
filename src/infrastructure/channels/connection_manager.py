@@ -76,7 +76,7 @@ class ManagedConnection:
     project_id: str
     channel_type: str
     adapter: Any  # ChannelAdapter instance
-    task: asyncio.Task | None = None
+    task: asyncio.Task[None] | None = None
     status: ConnectionStatus = ConnectionStatus.DISCONNECTED
     last_heartbeat: datetime | None = None
     last_error: str | None = None
@@ -133,7 +133,7 @@ class ChannelConnectionManager:
         self._connections: dict[str, ManagedConnection] = {}
         self._message_router = message_router
         self._session_factory = session_factory
-        self._health_check_task: asyncio.Task | None = None
+        self._health_check_task: asyncio.Task[None] | None = None
         self._outbox_worker: OutboxRetryWorker | None = None
         self._main_loop: asyncio.AbstractEventLoop | None = None
         self._started = False

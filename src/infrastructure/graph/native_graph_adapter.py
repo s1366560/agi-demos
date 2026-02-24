@@ -661,7 +661,7 @@ class NativeGraphAdapter(GraphServicePort):
         project_id: str,
         entities: list[EntityNode],
         relationships: list[EpisodicEdge],
-        existing_entity_types: set,
+        existing_entity_types: set[str],
     ) -> None:
         """
         Save discovered entity types and edge types to PostgreSQL.

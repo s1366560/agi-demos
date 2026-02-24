@@ -8,6 +8,7 @@ Provides CRUD operations for workflow patterns:
 """
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -175,7 +176,7 @@ async def delete_pattern(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
-) -> dict:
+) -> dict[str, Any]:
     """
     Delete a workflow pattern by ID (T082) - Admin only.
     """

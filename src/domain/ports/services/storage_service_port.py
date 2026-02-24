@@ -2,6 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -43,7 +44,7 @@ class StorageServicePort(ABC):
         file_content: bytes,
         object_key: str,
         content_type: str,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> UploadResult:
         """
         Upload a file to storage.
@@ -137,7 +138,7 @@ class StorageServicePort(ABC):
         self,
         object_key: str,
         content_type: str,
-        metadata: dict | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> MultipartUploadResult:
         """
         Initialize a multipart upload.

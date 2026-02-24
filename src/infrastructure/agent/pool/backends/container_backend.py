@@ -98,7 +98,7 @@ class ContainerBackend(Backend):
         self._next_grpc_port = self._config.grpc_port_start
         self._next_health_port = self._config.health_port_start
         self._is_running = False
-        self._health_task: asyncio.Task | None = None
+        self._health_task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
 
     @property

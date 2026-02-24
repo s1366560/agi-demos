@@ -47,7 +47,7 @@ class RedisDLQAdapter(DeadLetterQueuePort):
     STATS_KEY = "dlq:stats"
 
     # Retry backoff (exponential)
-    RETRY_DELAYS: ClassVar[list] = [60, 300, 900, 3600]  # 1min, 5min, 15min, 1hour
+    RETRY_DELAYS: ClassVar[list[int]] = [60, 300, 900, 3600]  # 1min, 5min, 15min, 1hour
 
     def __init__(
         self,

@@ -242,10 +242,10 @@ async def stream_agent_to_websocket(
     conversation_id: str,
     user_message: str,
     project_id: str,
-    attachment_ids: list | None = None,
-    file_metadata: list | None = None,
+    attachment_ids: list[str] | None = None,
+    file_metadata: list[dict[str, Any]] | None = None,
     forced_skill_name: str | None = None,
-    app_model_context: dict | None = None,
+    app_model_context: dict[str, Any] | None = None,
 ) -> None:
     """
     Stream agent events to WebSocket.

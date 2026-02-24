@@ -89,7 +89,7 @@ class MemoryCreate(BaseModel):
     relationships: list[RelationshipCreate] = []
     collaborators: list[str] = []
     is_public: bool = False
-    metadata: dict = {}
+    metadata: dict[str, Any] = {}
 
 
 class MemoryResponse(BaseModel):
@@ -99,15 +99,15 @@ class MemoryResponse(BaseModel):
     content: str
     content_type: str
     tags: list[str]
-    entities: list[dict]
-    relationships: list[dict]
+    entities: list[dict[str, Any]]
+    relationships: list[dict[str, Any]]
     version: int
     author_id: str
     collaborators: list[str]
     is_public: bool
     status: str
     processing_status: str
-    meta: dict = Field(serialization_alias="metadata")
+    meta: dict[str, Any] = Field(serialization_alias="metadata")
     created_at: datetime
     updated_at: datetime | None
     task_id: str | None = None  # Task ID for SSE streaming
@@ -129,9 +129,9 @@ class MemoryUpdate(BaseModel):
     title: str | None = None
     content: str | None = None
     tags: list[str] | None = None
-    entities: list[dict] | None = None
-    relationships: list[dict] | None = None
-    metadata: dict | None = None
+    entities: list[dict[str, Any]] | None = None
+    relationships: list[dict[str, Any]] | None = None
+    metadata: dict[str, Any] | None = None
     version: int  # Required for optimistic locking
 
 
@@ -151,7 +151,7 @@ class MemoryShareResponse(BaseModel):
     memory_id: str
     shared_with_user_id: str | None
     shared_with_project_id: str | None
-    permissions: dict
+    permissions: dict[str, Any]
     shared_by: str
     created_at: datetime
     expires_at: datetime | None
@@ -164,7 +164,7 @@ class MemoryShareResponse(BaseModel):
 # --- Endpoints ---
 @router.post("/memories/extract-entities")
 async def extract_entities(
-    payload: dict,
+    payload: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -184,7 +184,7 @@ async def extract_entities(
 
 @router.post("/memories/extract-relationships")
 async def extract_relationships(
-    payload: dict,
+    payload: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -853,7 +853,7 @@ async def update_memory(
 @router.post("/memories/{memory_id}/shares", status_code=status.HTTP_201_CREATED)
 async def create_memory_share(
     memory_id: str,
-    share_data: dict,
+    share_data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:

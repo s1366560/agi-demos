@@ -5,6 +5,7 @@ V2 SQLAlchemy implementation of MCPServerRepository using BaseRepository.
 import logging
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,7 +38,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         name: str,
         description: str | None,
         server_type: str,
-        transport_config: dict,
+        transport_config: dict[str, Any],
         enabled: bool = True,
     ) -> str:
         """Create a new MCP server configuration."""
@@ -124,7 +125,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         name: str | None = None,
         description: str | None = None,
         server_type: str | None = None,
-        transport_config: dict | None = None,
+        transport_config: dict[str, Any] | None = None,
         enabled: bool | None = None,
     ) -> bool:
         """Update an MCP server configuration."""
@@ -155,7 +156,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
     async def update_discovered_tools(
         self,
         server_id: str,
-        tools: list[dict],
+        tools: list[dict[str, Any]],
         last_sync_at: datetime,
         sync_error: str | None = None,
     ) -> bool:
@@ -181,7 +182,7 @@ class SqlMCPServerRepository(BaseRepository[MCPServer, DBMCPServer], MCPServerRe
         self,
         server_id: str,
         runtime_status: str | None = None,
-        runtime_metadata: dict | None = None,
+        runtime_metadata: dict[str, Any] | None = None,
     ) -> bool:
         """Update runtime status/metadata for MCP server lifecycle tracking."""
         result = await self._session.execute(select(DBMCPServer).where(DBMCPServer.id == server_id))

@@ -18,7 +18,7 @@ class CreateConversationRequest(BaseModel):
 
     project_id: str
     title: str | None = "New Conversation"
-    agent_config: dict | None = None
+    agent_config: dict[str, Any] | None = None
 
 
 class UpdateConversationTitleRequest(BaseModel):
@@ -132,7 +132,7 @@ class ToolCompositionResponse(BaseModel):
     name: str
     description: str
     tools: list[str]
-    execution_template: dict
+    execution_template: dict[str, Any]
     success_rate: float
     success_count: int
     failure_count: int
@@ -159,7 +159,7 @@ class PatternStepResponse(BaseModel):
     tool_name: str
     expected_output_format: str
     similarity_threshold: float
-    tool_parameters: dict | None = None
+    tool_parameters: dict[str, Any] | None = None
 
 
 class WorkflowPatternResponse(BaseModel):
@@ -174,7 +174,7 @@ class WorkflowPatternResponse(BaseModel):
     usage_count: int
     created_at: str
     updated_at: str
-    metadata: dict | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class PatternsListResponse(BaseModel):
@@ -239,7 +239,7 @@ class ExecutionStatsResponse(BaseModel):
     average_duration_ms: float
     tool_usage: dict[str, int]
     status_distribution: dict[str, int]
-    timeline_data: list[dict]
+    timeline_data: list[dict[str, Any]]
 
 
 # === HITL Schemas ===
@@ -253,9 +253,9 @@ class HITLRequestResponse(BaseModel):
     message_id: str
     request_type: str
     question: str
-    options: list | None = None
-    context: dict | None = None
-    metadata: dict | None = None
+    options: list[Any] | None = None
+    context: dict[str, Any] | None = None
+    metadata: dict[str, Any] | None = None
     created_at: str
     expires_at: str | None = None
     status: str
@@ -315,7 +315,7 @@ class HITLResponseRequest(BaseModel):
 
     request_id: str
     hitl_type: str  # "clarification", "decision", "env_var", "permission"
-    response_data: dict  # Type-specific response data
+    response_data: dict[str, Any]  # Type-specific response data
 
     # For clarification: {"answer": "user answer"}
     # For decision: {"decision": "option_id"}
@@ -356,8 +356,8 @@ class UpdatePlanRequest(BaseModel):
     content: str | None = None
     title: str | None = None
     explored_files: list[str] | None = None
-    critical_files: list[dict] | None = None
-    metadata: dict | None = None
+    critical_files: list[dict[str, Any]] | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class PlanResponse(BaseModel):
@@ -369,7 +369,7 @@ class PlanResponse(BaseModel):
     content: str
     status: str
     version: int
-    metadata: dict
+    metadata: dict[str, Any]
     created_at: str
     updated_at: str
 
@@ -389,7 +389,7 @@ class PlanModeStatusResponse(BaseModel):
 class EventReplayResponse(BaseModel):
     """Response with replay events."""
 
-    events: list[dict]
+    events: list[dict[str, Any]]
     has_more: bool
 
 

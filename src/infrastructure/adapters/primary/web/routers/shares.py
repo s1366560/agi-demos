@@ -49,7 +49,7 @@ async def _check_project_admin_access(db: AsyncSession, user_id: str, project_id
 @router.post("/memories/{memory_id}/shares", status_code=status.HTTP_201_CREATED)
 async def create_share(
     memory_id: str,
-    share_data: dict,
+    share_data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:

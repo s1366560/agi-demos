@@ -33,11 +33,11 @@ class MemoryItem(BaseModel):
     name: str
     content: str
     created_at: str | None = None
-    metadata: dict | None = None
+    metadata: dict[str, Any] | None = None
 
 
 class ShortTermRecallResponse(BaseModel):
-    results: list
+    results: list[Any]
     total: int
     window_minutes: int
 

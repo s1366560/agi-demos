@@ -138,7 +138,7 @@ async def delete_notification(
 
 @router.post("/notifications/create")
 async def create_notification(
-    notification_data: dict,
+    notification_data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:

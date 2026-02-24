@@ -63,7 +63,7 @@ class OnDemandBackend(Backend):
         self._running = False
 
         # 清理任务
-        self._cleanup_task: asyncio.Task | None = None
+        self._cleanup_task: asyncio.Task[None] | None = None
 
         logger.info(
             f"[OnDemandBackend] Initialized: "

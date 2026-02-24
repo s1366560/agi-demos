@@ -50,7 +50,7 @@ class HealthCheckResult:
     sandbox_id: str
     errors: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典."""
         return {
             "level": self.level.value,

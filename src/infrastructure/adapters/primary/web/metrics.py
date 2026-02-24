@@ -23,7 +23,7 @@ _otel_functions: dict[str, Any] = {}
 _otel_checked = False
 
 
-def _get_otel_function(name: str) -> Callable | None:
+def _get_otel_function(name: str) -> Callable[..., Any] | None:
     """Lazy-load OpenTelemetry function to avoid Temporal sandbox import issues."""
     global _otel_functions, _otel_checked
 
@@ -221,7 +221,7 @@ def track_execution(operation_name: str) -> None:
         Decorator function
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> None:
             start_time = time.time()

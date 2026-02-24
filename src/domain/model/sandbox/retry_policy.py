@@ -188,7 +188,7 @@ def RetryableError(
     max_delay: float = 30.0,
     backoff_factor: float = 2.0,
     should_retry: Callable[[Exception], bool] | None = None,
-) -> Callable:
+) -> Callable[..., Any]:
     """
     Decorator to add retry logic to async functions.
 

@@ -131,7 +131,7 @@ class HealthMonitor:
         self._lock = asyncio.Lock()
 
         # 监控任务
-        self._monitoring_tasks: dict[str, asyncio.Task] = {}
+        self._monitoring_tasks: dict[str, asyncio.Task[None]] = {}
         self._monitored_instances: dict[str, AgentInstance] = {}
 
         logger.info(

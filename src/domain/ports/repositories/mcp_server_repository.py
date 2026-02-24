@@ -7,7 +7,7 @@ following the Repository pattern.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from src.domain.model.mcp.server import MCPServer
@@ -30,7 +30,7 @@ class MCPServerRepositoryPort(ABC):
         name: str,
         description: str | None,
         server_type: str,
-        transport_config: dict,
+        transport_config: dict[str, Any],
         enabled: bool = True,
     ) -> str:
         """
@@ -115,7 +115,7 @@ class MCPServerRepositoryPort(ABC):
         name: str | None = None,
         description: str | None = None,
         server_type: str | None = None,
-        transport_config: dict | None = None,
+        transport_config: dict[str, Any] | None = None,
         enabled: bool | None = None,
     ) -> bool:
         """
@@ -137,7 +137,7 @@ class MCPServerRepositoryPort(ABC):
     async def update_discovered_tools(
         self,
         server_id: str,
-        tools: list[dict],
+        tools: list[dict[str, Any]],
         last_sync_at: datetime,
         sync_error: str | None = None,
     ) -> bool:

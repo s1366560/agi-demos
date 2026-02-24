@@ -34,7 +34,7 @@ class MemoryRecallPreprocessor:
         self._chunk_search = chunk_search
         self._graph_search = graph_search
         # Tracking for event emission
-        self.last_results: list[dict] = []
+        self.last_results: list[dict[str, Any]] = []
         self.last_search_ms: int = 0
 
     async def recall(
@@ -61,7 +61,7 @@ class MemoryRecallPreprocessor:
             return None
 
         start = time.monotonic()
-        all_results: list[dict] = []
+        all_results: list[dict[str, Any]] = []
 
         # Search chunk index (PostgreSQL)
         chunk_results = await self._search_chunks(query, project_id, max_results)
@@ -93,7 +93,7 @@ class MemoryRecallPreprocessor:
 
         return self._format_context(unique_results)
 
-    async def _search_chunks(self, query: str, project_id: str, max_results: int) -> list[dict]:
+    async def _search_chunks(self, query: str, project_id: str, max_results: int) -> list[dict[str, Any]]:
         """Search chunk index (PostgreSQL) for relevant memories."""
         if not self._chunk_search:
             return []
@@ -118,7 +118,7 @@ class MemoryRecallPreprocessor:
             logger.warning(f"Chunk search failed during recall: {e}")
             return []
 
-    async def _search_graph(self, query: str, project_id: str, max_results: int) -> list[dict]:
+    async def _search_graph(self, query: str, project_id: str, max_results: int) -> list[dict[str, Any]]:
         """Search knowledge graph (Neo4j) for relevant entities."""
         if not self._graph_search:
             return []
@@ -160,11 +160,11 @@ class MemoryRecallPreprocessor:
             return result.get("fact", result.get("content", str(result)))
         return ""
 
-    def _deduplicate_results(self, results: list[dict]) -> list[dict]:
+    def _deduplicate_results(self, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Sort by score and remove duplicate content."""
         results.sort(key=lambda x: x["score"], reverse=True)
         seen_content: set[str] = set()
-        unique_results: list[dict] = []
+        unique_results: list[dict[str, Any]] = []
         for r in results:
             content_key = r["content"].strip().lower()
             if content_key not in seen_content:
@@ -172,7 +172,7 @@ class MemoryRecallPreprocessor:
                 unique_results.append(r)
         return unique_results
 
-    def _format_context(self, results: list[dict]) -> str:
+    def _format_context(self, results: list[dict[str, Any]]) -> str:
         """Format memory results with citations for system prompt injection."""
         lines = ["<relevant_memories>"]
         total_chars = 0

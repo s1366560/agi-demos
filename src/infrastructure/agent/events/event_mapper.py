@@ -233,8 +233,8 @@ class EventBus:
             mapper: Optional event mapper for SSE conversion
         """
         self._mapper = mapper or EventMapper()
-        self._subscribers: dict[AgentEventType, list[Callable]] = {}
-        self._global_subscribers: list[Callable] = []
+        self._subscribers: dict[AgentEventType, list[Callable[..., Any]]] = {}
+        self._global_subscribers: list[Callable[..., Any]] = []
         self._event_history: list[AgentDomainEvent] = []
         self._max_history = 1000
 

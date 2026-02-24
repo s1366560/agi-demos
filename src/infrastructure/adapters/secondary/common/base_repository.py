@@ -42,7 +42,7 @@ T = TypeVar("T")  # Domain entity type
 M = TypeVar("M")  # Database model type
 
 
-def handle_db_errors(entity_type: str = "Entity") -> Callable:
+def handle_db_errors(entity_type: str = "Entity") -> Callable[..., Any]:
     """
     Decorator to handle database errors and convert to domain exceptions.
 
@@ -53,7 +53,7 @@ def handle_db_errors(entity_type: str = "Entity") -> Callable:
         Decorated function that maps SQLAlchemy errors to domain exceptions
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> None:
             try:
@@ -96,7 +96,7 @@ def handle_db_errors(entity_type: str = "Entity") -> Callable:
     return decorator
 
 
-def transactional(func: Callable) -> Callable:
+def transactional(func: Callable[..., Any]) -> Callable[..., Any]:
     """
     Decorator to wrap a repository method in a transaction.
 
@@ -181,7 +181,7 @@ class BaseRepository[T, M](ABC):
             return self._model_class.__name__
         return "Entity"
 
-    def _eager_load_options(self) -> list:
+    def _eager_load_options(self) -> list[Any]:
         """
         Return eager loading options for queries.
 
@@ -245,7 +245,7 @@ class BaseRepository[T, M](ABC):
             if hasattr(db_model, key) and not key.startswith("_"):
                 setattr(db_model, key, value)
 
-    def _apply_filters(self, query: Select, **filters: Any) -> Select:
+    def _apply_filters(self, query: Select[Any], **filters: Any) -> Select[Any]:
         """
         Apply filters to a query.
 
@@ -519,7 +519,7 @@ class BaseRepository[T, M](ABC):
         filters: dict[str, Any] | None = None,
         order_by: str | None = None,
         order_desc: bool = False,
-    ) -> Select:
+    ) -> Select[Any]:
         """
         Build a SQLAlchemy query with optional filters and ordering.
 

@@ -32,7 +32,7 @@ class ChatUseCase:
         project_id: str,
         user_id: str,
         tenant_id: str,
-        app_model_context: dict | None = None,
+        app_model_context: dict[str, Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute the use case.

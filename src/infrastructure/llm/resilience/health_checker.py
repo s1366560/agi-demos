@@ -28,7 +28,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import httpx
 
@@ -261,7 +261,7 @@ class HealthChecker:
         self._results: dict[ProviderType, list[HealthCheckResult]] = {}
         self._current_status: dict[ProviderType, HealthStatus] = {}
         self._running = False
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
         self._encryption_service = get_encryption_service()
 
@@ -490,7 +490,7 @@ class HealthChecker:
             if status in (HealthStatus.HEALTHY, HealthStatus.DEGRADED)
         ]
 
-    def get_all_statuses(self) -> dict[str, dict]:
+    def get_all_statuses(self) -> dict[str, dict[str, Any]]:
         """Get health status for all providers."""
         result = {}
         for provider_type in self._providers.keys():

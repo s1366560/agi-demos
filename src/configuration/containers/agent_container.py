@@ -90,11 +90,11 @@ class AgentContainer:
         graph_service: GraphServicePort | None = None,
         redis_client: redis.Redis | None = None,
         settings: Settings | None = None,
-        neo4j_client_factory: Callable | None = None,
-        storage_service_factory: Callable | None = None,
-        sandbox_orchestrator_factory: Callable | None = None,
-        sandbox_event_publisher_factory: Callable | None = None,
-        sequence_service_factory: Callable | None = None,
+        neo4j_client_factory: Callable[..., Any] | None = None,
+        storage_service_factory: Callable[..., Any] | None = None,
+        sandbox_orchestrator_factory: Callable[..., Any] | None = None,
+        sandbox_event_publisher_factory: Callable[..., Any] | None = None,
+        sequence_service_factory: Callable[..., Any] | None = None,
     ) -> None:
         self._db = db
         self._graph_service = graph_service
@@ -330,7 +330,7 @@ class AgentContainer:
 
         return LLMInvoker(llm_client=llm)
 
-    def tool_executor(self, tools: dict) -> Any:
+    def tool_executor(self, tools: dict[str, Any]) -> Any:
         """Get ToolExecutor for tool execution with permission checking."""
         from src.infrastructure.agent.tools.executor import ToolExecutor
 
@@ -342,7 +342,7 @@ class AgentContainer:
 
         return get_artifact_extractor()
 
-    def react_loop(self, llm: LLMClient, tools: dict) -> Any:
+    def react_loop(self, llm: LLMClient, tools: dict[str, Any]) -> Any:
         """Get ReActLoop for core reasoning loop."""
         from src.infrastructure.agent.core.react_loop import ReActLoop
 

@@ -35,7 +35,7 @@ class BackgroundCompressor:
 
     def __init__(self, engine: ContextCompressionEngine) -> None:
         self._engine = engine
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[Any] | None = None
         self._last_result: CompressionResult | None = None
 
     @property

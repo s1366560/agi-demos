@@ -54,7 +54,7 @@ class TableFormatter(OutputFormatter):
         else:
             return self._format_markdown(rows, columns)
 
-    def _normalize_data(self, data: Any) -> tuple[list[dict], list[str]]:
+    def _normalize_data(self, data: Any) -> tuple[list[dict[str, Any]], list[str]]:
         """
         Normalize data to list of dicts and extract columns.
 
@@ -93,7 +93,7 @@ class TableFormatter(OutputFormatter):
             # Single value
             return [{"value": str(data)}], ["value"]
 
-    def _format_markdown(self, rows: list[dict], columns: list[str]) -> str:
+    def _format_markdown(self, rows: list[dict[str, Any]], columns: list[str]) -> str:
         """Format as markdown table."""
         if not rows or not columns:
             return "No data available"
@@ -115,7 +115,7 @@ class TableFormatter(OutputFormatter):
 
         return "\n".join(lines)
 
-    def _format_csv(self, rows: list[dict], columns: list[str]) -> str:
+    def _format_csv(self, rows: list[dict[str, Any]], columns: list[str]) -> str:
         """Format as CSV."""
         if not rows or not columns:
             return ""
@@ -139,7 +139,7 @@ class TableFormatter(OutputFormatter):
             return f'"{escaped}"'
         return value
 
-    def _format_html(self, rows: list[dict], columns: list[str]) -> str:
+    def _format_html(self, rows: list[dict[str, Any]], columns: list[str]) -> str:
         """Format as HTML table."""
         if not rows or not columns:
             return "<p>No data available</p>"

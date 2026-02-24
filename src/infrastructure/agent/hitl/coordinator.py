@@ -66,7 +66,7 @@ class HITLCoordinator:
         self.project_id = project_id
         self.message_id = message_id
         self.default_timeout = default_timeout
-        self._pending: dict[str, asyncio.Future] = {}
+        self._pending: dict[str, asyncio.Future[Any]] = {}
 
     def _get_strategy(self, hitl_type: HITLType) -> HITLTypeStrategy:
         strategy = self._strategies.get(hitl_type)
@@ -100,7 +100,7 @@ class HITLCoordinator:
         request_id = hitl_request.request_id
 
         loop = asyncio.get_running_loop()
-        fut: asyncio.Future = loop.create_future()
+        fut: asyncio.Future[Any] = loop.create_future()
         self._pending[request_id] = fut
         register_coordinator(request_id, self)
 

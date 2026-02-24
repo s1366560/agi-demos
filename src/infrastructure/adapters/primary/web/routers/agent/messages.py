@@ -66,9 +66,9 @@ _SKIP_EVENT_SENTINEL = object()
 # ---------------------------------------------------------------------------
 
 
-def _build_tool_exec_map(tool_executions: list) -> dict:
+def _build_tool_exec_map(tool_executions: list[Any]) -> dict[str, Any]:
     """Build a lookup map from tool executions keyed by message_id:tool_name."""
-    tool_exec_map: dict[str, dict] = {}
+    tool_exec_map: dict[str, dict[str, Any]] = {}
     for te in tool_executions:
         key = f"{te.message_id}:{te.tool_name}"
         tool_exec_map[key] = {
@@ -79,9 +79,9 @@ def _build_tool_exec_map(tool_executions: list) -> dict:
     return tool_exec_map
 
 
-def _build_hitl_answered_map(events: list) -> dict:
+def _build_hitl_answered_map(events: list[Any]) -> dict[str, Any]:
     """Build HITL answered map from answered events by request_id."""
-    hitl_answered_map: dict[str, dict] = {}
+    hitl_answered_map: dict[str, dict[str, Any]] = {}
     _answer_extractors: dict[str, str] = {
         "clarification_answered": "answer",
         "decision_answered": "decision",
@@ -102,9 +102,9 @@ def _build_hitl_answered_map(events: list) -> dict:
     return hitl_answered_map
 
 
-def _build_hitl_status_map(hitl_requests: list) -> dict:
+def _build_hitl_status_map(hitl_requests: list[Any]) -> dict[str, Any]:
     """Build HITL status map from database requests."""
-    hitl_status_map: dict[str, dict] = {}
+    hitl_status_map: dict[str, dict[str, Any]] = {}
     for req in hitl_requests:
         hitl_status_map[req.id] = {
             "status": req.status.value if hasattr(req.status, "value") else req.status,
@@ -114,10 +114,10 @@ def _build_hitl_status_map(hitl_requests: list) -> dict:
     return hitl_status_map
 
 
-def _build_artifact_maps(events: list) -> tuple[dict, dict]:
+def _build_artifact_maps(events: list[Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     """Build artifact ready/error maps for merging into artifact_created events."""
-    artifact_ready_map: dict[str, dict] = {}
-    artifact_error_map: dict[str, dict] = {}
+    artifact_ready_map: dict[str, dict[str, Any]] = {}
+    artifact_error_map: dict[str, dict[str, Any]] = {}
     for event in events:
         event_type = event.event_type
         data = event.event_data or {}
@@ -140,8 +140,8 @@ def _build_artifact_maps(events: list) -> tuple[dict, dict]:
 def _resolve_hitl_answered(
     request_id: str,
     field_name: str,
-    hitl_answered_map: dict,
-    hitl_status_map: dict,
+    hitl_answered_map: dict[str, Any],
+    hitl_status_map: dict[str, Any],
 ) -> tuple[bool, Any]:
     """Check if an HITL request has been answered and extract the response value."""
     if request_id in hitl_answered_map:
@@ -161,7 +161,7 @@ def _resolve_hitl_answered(
 # ---------------------------------------------------------------------------
 
 
-def _build_user_message(data: dict, **_kwargs: Any) -> dict:
+def _build_user_message(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     item: dict[str, Any] = {
         "message_id": data.get("message_id"),
         "content": data.get("content", ""),
@@ -177,7 +177,7 @@ def _build_user_message(data: dict, **_kwargs: Any) -> dict:
     return item
 
 
-def _build_assistant_message(data: dict, **_kwargs: Any) -> dict:
+def _build_assistant_message(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "message_id": data.get("message_id"),
         "content": data.get("content", ""),
@@ -185,14 +185,14 @@ def _build_assistant_message(data: dict, **_kwargs: Any) -> dict:
     }
 
 
-def _build_thought(data: dict, **_kwargs: Any) -> dict | object:
+def _build_thought(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any] | object:
     thought_content = data.get("thought", "")
     if not thought_content or not thought_content.strip():
         return _SKIP_EVENT_SENTINEL
     return {"content": thought_content}
 
 
-def _build_act(data: dict, event: Any, tool_exec_map: dict, **_kwargs: Any) -> dict:
+def _build_act(data: dict[str, Any], event: Any, tool_exec_map: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     item: dict[str, Any] = {
         "toolName": data.get("tool_name", ""),
         "toolInput": data.get("tool_input", {}),
@@ -203,7 +203,7 @@ def _build_act(data: dict, event: Any, tool_exec_map: dict, **_kwargs: Any) -> d
     return item
 
 
-def _build_observe(data: dict, **_kwargs: Any) -> dict:
+def _build_observe(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     item: dict[str, Any] = {
         "toolName": data.get("tool_name", ""),
         "toolOutput": data.get("observation", ""),
@@ -221,11 +221,11 @@ def _build_observe(data: dict, **_kwargs: Any) -> dict:
     return item
 
 
-def _build_work_plan(data: dict, **_kwargs: Any) -> dict:
+def _build_work_plan(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {"steps": data.get("steps", []), "status": data.get("status", "planning")}
 
 
-def _build_task_start(data: dict, **_kwargs: Any) -> dict:
+def _build_task_start(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "taskId": data.get("task_id", ""),
         "content": data.get("content", ""),
@@ -234,7 +234,7 @@ def _build_task_start(data: dict, **_kwargs: Any) -> dict:
     }
 
 
-def _build_task_complete(data: dict, **_kwargs: Any) -> dict:
+def _build_task_complete(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {
         "taskId": data.get("task_id", ""),
         "status": data.get("status", "completed"),
@@ -244,8 +244,8 @@ def _build_task_complete(data: dict, **_kwargs: Any) -> dict:
 
 
 def _build_artifact_created(
-    data: dict, artifact_ready_map: dict, artifact_error_map: dict, **_kwargs: Any
-) -> dict:
+    data: dict[str, Any], artifact_ready_map: dict[str, Any], artifact_error_map: dict[str, Any], **_kwargs: Any
+) -> dict[str, Any]:
     artifact_id = data.get("artifact_id", "")
     item: dict[str, Any] = {
         "artifactId": artifact_id,
@@ -273,8 +273,8 @@ def _build_artifact_skip(**_kwargs: Any) -> object:
 
 
 def _build_clarification_asked(
-    data: dict, hitl_answered_map: dict, hitl_status_map: dict, **_kwargs: Any
-) -> dict:
+    data: dict[str, Any], hitl_answered_map: dict[str, Any], hitl_status_map: dict[str, Any], **_kwargs: Any
+) -> dict[str, Any]:
     request_id = data.get("request_id", "")
     answered, answer = _resolve_hitl_answered(
         request_id, "answer", hitl_answered_map, hitl_status_map
@@ -289,13 +289,13 @@ def _build_clarification_asked(
     }
 
 
-def _build_clarification_answered(data: dict, **_kwargs: Any) -> dict:
+def _build_clarification_answered(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {"requestId": data.get("request_id", ""), "answer": data.get("answer", "")}
 
 
 def _build_decision_asked(
-    data: dict, hitl_answered_map: dict, hitl_status_map: dict, **_kwargs: Any
-) -> dict:
+    data: dict[str, Any], hitl_answered_map: dict[str, Any], hitl_status_map: dict[str, Any], **_kwargs: Any
+) -> dict[str, Any]:
     request_id = data.get("request_id", "")
     answered, decision = _resolve_hitl_answered(
         request_id, "decision", hitl_answered_map, hitl_status_map
@@ -312,16 +312,16 @@ def _build_decision_asked(
     }
 
 
-def _build_decision_answered(data: dict, **_kwargs: Any) -> dict:
+def _build_decision_answered(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {"requestId": data.get("request_id", ""), "decision": data.get("decision", "")}
 
 
 def _build_env_var_requested(
-    data: dict, hitl_answered_map: dict, hitl_status_map: dict, **_kwargs: Any
-) -> dict:
+    data: dict[str, Any], hitl_answered_map: dict[str, Any], hitl_status_map: dict[str, Any], **_kwargs: Any
+) -> dict[str, Any]:
     request_id = data.get("request_id", "")
     answered = False
-    values: dict = {}
+    values: dict[str, Any] = {}
     if request_id in hitl_answered_map:
         answered = True
         values = hitl_answered_map[request_id].get("values", {})
@@ -341,7 +341,7 @@ def _build_env_var_requested(
     }
 
 
-def _build_env_var_provided(data: dict, **_kwargs: Any) -> dict:
+def _build_env_var_provided(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     variable_names = data.get("saved_variables", [])
     if not variable_names:
         variable_names = list(data.get("values", {}).keys())
@@ -353,8 +353,8 @@ def _build_env_var_provided(data: dict, **_kwargs: Any) -> dict:
 
 
 def _build_permission_asked(
-    data: dict, hitl_answered_map: dict, hitl_status_map: dict, **_kwargs: Any
-) -> dict:
+    data: dict[str, Any], hitl_answered_map: dict[str, Any], hitl_status_map: dict[str, Any], **_kwargs: Any
+) -> dict[str, Any]:
     request_id = data.get("request_id", "")
     answered = False
     granted = None
@@ -381,7 +381,7 @@ def _build_permission_asked(
     }
 
 
-def _build_permission_replied(data: dict, **_kwargs: Any) -> dict:
+def _build_permission_replied(data: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
     return {"requestId": data.get("request_id", ""), "granted": data.get("granted", False)}
 
 
@@ -412,15 +412,15 @@ _EVENT_BUILDERS: dict[str, Any] = {
 
 
 def _build_timeline(
-    events: list,
-    tool_exec_map: dict,
-    hitl_answered_map: dict,
-    hitl_status_map: dict,
-    artifact_ready_map: dict,
-    artifact_error_map: dict,
-) -> list[dict]:
+    events: list[Any],
+    tool_exec_map: dict[str, Any],
+    hitl_answered_map: dict[str, Any],
+    hitl_status_map: dict[str, Any],
+    artifact_ready_map: dict[str, Any],
+    artifact_error_map: dict[str, Any],
+) -> list[dict[str, Any]]:
     """Build the timeline list from raw events using the dispatch dict."""
-    timeline: list[dict] = []
+    timeline: list[dict[str, Any]] = []
     for event in events:
         event_type = event.event_type
         data = event.event_data or {}
@@ -519,7 +519,7 @@ async def get_conversation_messages(
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
-) -> dict:
+) -> dict[str, Any]:
     """
     Get conversation timeline from unified event stream with bidirectional pagination.
 
@@ -623,7 +623,7 @@ async def get_conversation_execution(
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
-) -> dict:
+) -> dict[str, Any]:
     """Get the agent execution history for a conversation."""
     try:
         container = get_container_with_db(request, db)
@@ -667,7 +667,7 @@ async def get_conversation_tool_executions(
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
-) -> dict:
+) -> dict[str, Any]:
     """Get the tool execution history for a conversation."""
     try:
         container = get_container_with_db(request, db)
@@ -716,7 +716,7 @@ async def get_conversation_execution_status(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
-) -> dict:
+) -> dict[str, Any]:
     """Get the current execution status of a conversation with optional recovery info."""
     try:
         container = get_container_with_db(request, db)
@@ -782,7 +782,7 @@ async def _get_recovery_info(
     conversation_id: str,
     message_id: str | None,
     from_time_us: int,
-) -> dict:
+) -> dict[str, Any]:
     """Get event stream recovery information."""
     recovery_info = {
         "can_recover": False,
@@ -840,7 +840,7 @@ async def _get_recovery_info(
 # ---------------------------------------------------------------------------
 
 
-def _compute_durations(executions: list[dict]) -> list[float]:
+def _compute_durations(executions: list[dict[str, Any]]) -> list[float]:
     """Extract durations in ms from executions that have both start and end times."""
     durations: list[float] = []
     for e in executions:
@@ -851,7 +851,7 @@ def _compute_durations(executions: list[dict]) -> list[float]:
     return durations
 
 
-def _compute_tool_usage(executions: list[dict]) -> dict[str, int]:
+def _compute_tool_usage(executions: list[dict[str, Any]]) -> dict[str, int]:
     """Count tool usage across executions."""
     tool_usage: dict[str, int] = {}
     for e in executions:
@@ -861,7 +861,7 @@ def _compute_tool_usage(executions: list[dict]) -> dict[str, int]:
     return tool_usage
 
 
-def _compute_status_distribution(executions: list[dict]) -> dict[str, int]:
+def _compute_status_distribution(executions: list[dict[str, Any]]) -> dict[str, int]:
     """Count status distribution across executions."""
     status_distribution: dict[str, int] = {}
     for e in executions:
@@ -870,12 +870,12 @@ def _compute_status_distribution(executions: list[dict]) -> dict[str, int]:
     return status_distribution
 
 
-def _compute_timeline_data(executions: list[dict]) -> list[dict]:
+def _compute_timeline_data(executions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Build timeline data bucketed by hour."""
     if not executions:
         return []
 
-    time_buckets: dict[str, dict] = defaultdict(lambda: {"count": 0, "completed": 0, "failed": 0})
+    time_buckets: dict[str, dict[str, int]] = defaultdict(lambda: {"count": 0, "completed": 0, "failed": 0})
 
     for e in executions:
         if not e.get("started_at"):
@@ -940,7 +940,7 @@ async def get_message_replies(
     message_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Get replies to a specific message."""
     try:
         query = (

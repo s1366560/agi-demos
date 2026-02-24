@@ -208,7 +208,7 @@ async def add_tenant_member(
     role: str = Query("member", description="Member role"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """Add member to tenant."""
     # Validate role set
     if role not in ["owner", "admin", "member", "viewer", "editor"]:
@@ -264,7 +264,7 @@ async def add_tenant_member_json(
     body: AddMemberRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """Add member to tenant (JSON body version to match frontend)."""
     role = body.role or "member"
     if role not in ["owner", "admin", "member", "viewer", "editor"]:
@@ -363,7 +363,7 @@ async def list_tenant_members(
     request: Request = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """List tenant members."""
     # Check if user has access to tenant
     user_tenant_result = await db.execute(
@@ -406,7 +406,7 @@ async def get_tenant_stats(
     tenant_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """Get tenant statistics for the overview dashboard."""
     # Check access
     user_tenant_result = await db.execute(
@@ -603,7 +603,7 @@ async def _get_memory_count(db: AsyncSession, project_id: str) -> int:
     return result.scalar() or 0
 
 
-async def _get_memory_growth_by_day(db: AsyncSession, project_ids: list, days: int) -> list:
+async def _get_memory_growth_by_day(db: AsyncSession, project_ids: list[str], days: int) -> list[Any]:
     """Get memory creation counts by day for the last N days."""
     if not project_ids:
         return []

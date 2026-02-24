@@ -7,7 +7,7 @@ Handles business logic and coordinates between domain and infrastructure layers.
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 if TYPE_CHECKING:
@@ -531,7 +531,7 @@ class ProviderService:
         operation_type: str | None = None,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
-    ) -> list:
+    ) -> list[Any]:
         """Get usage statistics."""
         return await self.repository.get_usage_statistics(
             provider_id, tenant_id, operation_type, start_date, end_date

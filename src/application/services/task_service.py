@@ -9,6 +9,7 @@ Temporal's built-in mechanisms.
 import logging
 from datetime import UTC, datetime
 
+from typing import Any
 from src.domain.model.task.task_log import TaskLog, TaskLogStatus
 from src.domain.ports.repositories.task_repository import TaskRepository
 
@@ -162,7 +163,7 @@ class TaskService:
         await self._task_repo.delete(task_id)
         logger.info(f"Deleted task {task_id}")
 
-    async def get_task_progress(self, task_id: str) -> dict:
+    async def get_task_progress(self, task_id: str) -> dict[str, Any]:
         """
         Get task progress information.
 

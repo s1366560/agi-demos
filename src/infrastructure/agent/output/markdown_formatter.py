@@ -66,7 +66,7 @@ class MarkdownFormatter(OutputFormatter):
         """Format a dictionary key as a heading."""
         return key.replace("_", " ").replace("-", " ").title()
 
-    def _format_list(self, items: list, indent: int = 0) -> list[str]:
+    def _format_list(self, items: list[Any], indent: int = 0) -> list[str]:
         """Format a list as markdown list items."""
         lines = []
         prefix = "  " * indent
@@ -87,7 +87,7 @@ class MarkdownFormatter(OutputFormatter):
 
         return lines
 
-    def _format_dict(self, data: dict, indent: int = 0) -> list[str]:
+    def _format_dict(self, data: dict[str, Any], indent: int = 0) -> list[str]:
         """Format a dictionary as markdown."""
         lines = []
         prefix = "  " * indent

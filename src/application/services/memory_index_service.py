@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.memory.chunker import TextChunk, chunk_text
 
@@ -68,7 +68,7 @@ class MemoryIndexService:
     async def index_conversation(
         self,
         conversation_id: str,
-        messages: list[dict],
+        messages: list[dict[str, Any]],
         project_id: str,
         max_tokens: int = 400,
     ) -> int:
@@ -205,7 +205,7 @@ class MemoryIndexService:
         source_type: str,
         source_id: str,
         category: str,
-    ) -> list:
+    ) -> list[Any]:
         """Build MemoryChunk ORM instances from chunks and embeddings."""
         from src.infrastructure.adapters.secondary.persistence.models import MemoryChunk
 
@@ -228,7 +228,7 @@ class MemoryIndexService:
             for i, chunk in enumerate(chunks)
         ]
 
-    async def _save_chunks(self, db_chunks: list) -> None:
+    async def _save_chunks(self, db_chunks: list[Any]) -> None:
         """Persist chunk models to the repository."""
         if not db_chunks:
             return

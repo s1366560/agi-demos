@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 class SubAgentRunRegistry:
     """Tracks delegated SubAgent runs grouped by conversation."""
 
-    _ACTIVE_STATUSES: ClassVar[set] = {SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING}
+    _ACTIVE_STATUSES: ClassVar[set[SubAgentRunStatus]] = {SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING}
     _PERSIST_VERSION = 1
 
     def __init__(

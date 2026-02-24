@@ -59,7 +59,7 @@ class DecisionTool(AgentTool):
     def __init__(
         self,
         hitl_handler: RayHITLHandler | None = None,
-        emit_sse_callback: Callable | None = None,
+        emit_sse_callback: Callable[..., Any] | None = None,
     ) -> None:
         """
         Initialize the decision tool.

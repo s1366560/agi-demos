@@ -43,7 +43,7 @@ class MCPAppResourceResolver:
     def __init__(
         self,
         sandbox_mcp_server_manager: Any = None,
-        manager_factory: Callable | None = None,
+        manager_factory: Callable[..., Any] | None = None,
     ) -> None:
         """Initialize resource resolver.
 
@@ -163,7 +163,7 @@ class MCPAppResourceResolver:
 
     def _extract_resource_content(
         self,
-        content: list,
+        content: list[Any],
         resource_uri: str,
     ) -> str:
         """Extract HTML content from MCP resources/read response."""
@@ -192,7 +192,7 @@ class MCPAppResourceResolver:
         )
 
     @staticmethod
-    def _extract_text(content: list) -> str:
+    def _extract_text(content: list[Any]) -> str:
         """Extract text from MCP content items."""
         texts = []
         for item in content:

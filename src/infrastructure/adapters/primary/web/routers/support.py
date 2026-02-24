@@ -17,7 +17,7 @@ router = APIRouter(prefix="/support", tags=["support"])
 
 @router.post("/tickets")
 async def create_support_ticket(
-    ticket_data: dict,
+    ticket_data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -123,7 +123,7 @@ async def get_support_ticket(
 @router.put("/tickets/{ticket_id}")
 async def update_support_ticket(
     ticket_id: str,
-    update_data: dict,
+    update_data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:

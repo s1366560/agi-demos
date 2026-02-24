@@ -38,8 +38,8 @@ class WebSocketTransport(BaseTransport):
         super().__init__(config)
         self._ws: aiohttp.ClientWebSocketResponse | None = None
         self._session: aiohttp.ClientSession | None = None
-        self._pending_requests: dict[int, asyncio.Future] = {}
-        self._receive_task: asyncio.Task | None = None
+        self._pending_requests: dict[int, asyncio.Future[Any]] = {}
+        self._receive_task: asyncio.Task[None] | None = None
         self._initialized = False
         self._closed = False
 
@@ -143,7 +143,7 @@ class WebSocketTransport(BaseTransport):
         }
 
         # Create future for response
-        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        future: asyncio.Future[Any] = asyncio.get_event_loop().create_future()
         self._pending_requests[request_id] = future
 
         try:

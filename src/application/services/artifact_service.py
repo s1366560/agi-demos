@@ -60,7 +60,7 @@ class ArtifactService:
     def __init__(
         self,
         storage_service: StorageServicePort,
-        event_publisher: Callable | None = None,
+        event_publisher: Callable[..., Any] | None = None,
         bucket_prefix: str = "artifacts",
         url_expiration_seconds: int = 7 * 24 * 3600,  # 7 days default
     ) -> None:
@@ -517,7 +517,7 @@ class SandboxArtifactDetector:
         """
         self._artifact_service = artifact_service
         self._output_dirs = output_dirs or SANDBOX_OUTPUT_DIRS
-        self._tracked_files: dict[str, set] = {}  # sandbox_id -> set of known files
+        self._tracked_files: dict[str, set[str]] = {}  # sandbox_id -> set of known files
 
     def _should_ignore(self, path: str) -> bool:
         """Check if a file should be ignored."""

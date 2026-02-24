@@ -41,7 +41,7 @@ class AgentRuntimeBootstrapper:
         user_message: str,
         conversation_context: list[dict[str, Any]],
         attachment_ids: list[str] | None = None,
-        file_metadata: list | None = None,
+        file_metadata: list[Any] | None = None,
         correlation_id: str | None = None,
         forced_skill_name: str | None = None,
         context_summary_data: dict[str, Any] | None = None,

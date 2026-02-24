@@ -5,27 +5,28 @@ Repository interface for persisting and retrieving SubAgent templates.
 """
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 
 class SubAgentTemplateRepositoryPort(ABC):
     """Repository port for SubAgent template persistence."""
 
     @abstractmethod
-    async def create(self, template: dict) -> dict:
+    async def create(self, template: dict[str, Any]) -> dict[str, Any]:
         """Create a new template. Returns the created template as dict."""
 
     @abstractmethod
-    async def get_by_id(self, template_id: str) -> dict | None:
+    async def get_by_id(self, template_id: str) -> dict[str, Any] | None:
         """Get a template by ID."""
 
     @abstractmethod
     async def get_by_name(
         self, tenant_id: str, name: str, version: str | None = None
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Get a template by name within a tenant, optionally by version."""
 
     @abstractmethod
-    async def update(self, template_id: str, data: dict) -> dict | None:
+    async def update(self, template_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
         """Update a template. Returns updated template or None."""
 
     @abstractmethod
@@ -42,7 +43,7 @@ class SubAgentTemplateRepositoryPort(ABC):
         published_only: bool = True,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """List templates with filtering."""
 
     @abstractmethod

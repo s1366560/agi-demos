@@ -59,7 +59,7 @@ class DockerEventMonitor:
         self._on_status_change = on_status_change
         self._docker = docker_client
         self._running = False
-        self._monitor_task: asyncio.Task | None = None
+        self._monitor_task: asyncio.Task[None] | None = None
         self._tracked_containers: set[str] = set()
         self._loop: asyncio.AbstractEventLoop | None = None  # Store main event loop
 

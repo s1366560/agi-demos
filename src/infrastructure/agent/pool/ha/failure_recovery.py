@@ -176,12 +176,12 @@ class FailureRecoveryService:
         }
 
         # Callbacks
-        self._on_failure_callbacks: list[Callable] = []
-        self._on_recovery_callbacks: list[Callable] = []
-        self._on_escalation_callbacks: list[Callable] = []
+        self._on_failure_callbacks: list[Callable[..., Any]] = []
+        self._on_recovery_callbacks: list[Callable[..., Any]] = []
+        self._on_escalation_callbacks: list[Callable[..., Any]] = []
 
         # Recovery state
-        self._active_recoveries: dict[str, asyncio.Task] = {}
+        self._active_recoveries: dict[str, asyncio.Task[Any]] = {}
         self._recovery_attempts: dict[str, int] = {}
 
         self._is_running = False
@@ -309,15 +309,15 @@ class FailureRecoveryService:
             "active_recoveries": len(self._active_recoveries),
         }
 
-    def on_failure(self, callback: Callable) -> None:
+    def on_failure(self, callback: Callable[..., Any]) -> None:
         """Register failure callback."""
         self._on_failure_callbacks.append(callback)
 
-    def on_recovery(self, callback: Callable) -> None:
+    def on_recovery(self, callback: Callable[..., Any]) -> None:
         """Register recovery callback."""
         self._on_recovery_callbacks.append(callback)
 
-    def on_escalation(self, callback: Callable) -> None:
+    def on_escalation(self, callback: Callable[..., Any]) -> None:
         """Register escalation callback."""
         self._on_escalation_callbacks.append(callback)
 

@@ -30,7 +30,7 @@ async def _publish_hitl_response_to_redis(
     conversation_id: str,
     request_id: str,
     hitl_type: str,
-    response_data: dict,
+    response_data: dict[str, Any],
     user_id: str,
     agent_mode: str,
 ) -> bool:
@@ -75,7 +75,7 @@ async def _handle_hitl_response(
     context: MessageContext,
     request_id: str,
     hitl_type: str,
-    response_data: dict,
+    response_data: dict[str, Any],
     ack_type: str,
 ) -> None:
     """

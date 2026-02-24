@@ -56,7 +56,7 @@ class MCPServerRegistry:
         self._clients: dict[str, MCPClient] = {}
 
         # Tool cache: server_id -> (tools, last_sync_at)
-        self._tool_cache: dict[str, tuple[list[dict], datetime]] = {}
+        self._tool_cache: dict[str, tuple[list[dict[str, Any]], datetime]] = {}
 
         # Health status: server_id -> (is_healthy, last_check_at)
         self._health_status: dict[str, tuple[bool, datetime]] = {}
@@ -68,7 +68,7 @@ class MCPServerRegistry:
         self._elicitation_handler: callable | None = None
 
         # Background tasks
-        self._health_check_task: asyncio.Task | None = None
+        self._health_check_task: asyncio.Task[None] | None = None
         self._running = False
 
     async def start(self) -> None:
@@ -107,7 +107,7 @@ class MCPServerRegistry:
         logger.info("MCP server registry stopped")
 
     async def register_server(
-        self, server_id: str, server_type: str, transport_config: dict
+        self, server_id: str, server_type: str, transport_config: dict[str, Any]
     ) -> None:
         """
         Register and connect to an MCP server.
@@ -153,7 +153,7 @@ class MCPServerRegistry:
         self._tool_cache.pop(server_id, None)
         self._health_status.pop(server_id, None)
 
-    async def sync_tools(self, server_id: str, force: bool = False) -> list[dict]:
+    async def sync_tools(self, server_id: str, force: bool = False) -> list[dict[str, Any]]:
         """
         Sync tool metadata from an MCP server.
 
@@ -186,7 +186,7 @@ class MCPServerRegistry:
             logger.error(f"Failed to sync tools from server {server_id}: {e}")
             raise
 
-    async def get_tools(self, server_id: str) -> list[dict]:
+    async def get_tools(self, server_id: str) -> list[dict[str, Any]]:
         """
         Get cached tool metadata for a server.
 
@@ -202,7 +202,7 @@ class MCPServerRegistry:
         tools, _ = self._tool_cache[server_id]
         return tools
 
-    async def get_all_tools(self) -> dict[str, list[dict]]:
+    async def get_all_tools(self) -> dict[str, list[dict[str, Any]]]:
         """
         Get tool metadata from all registered servers.
 
@@ -218,7 +218,7 @@ class MCPServerRegistry:
                 result[server_id] = []
         return result
 
-    async def call_tool(self, server_id: str, tool_name: str, arguments: dict) -> Any:
+    async def call_tool(self, server_id: str, tool_name: str, arguments: dict[str, Any]) -> Any:
         """
         Call a tool on a registered MCP server.
 
@@ -457,9 +457,9 @@ class MCPServerRegistry:
         self,
         server_id: str,
         message: str,
-        requested_schema: dict,
+        requested_schema: dict[str, Any],
         timeout_seconds: float = 300.0,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """
         Handle an elicitation request from an MCP server.
 
@@ -505,7 +505,7 @@ class MCPServerRegistry:
     # Prompts API Support (Priority 3)
     # =========================================================================
 
-    async def get_server_prompts(self, server_id: str) -> list[dict]:
+    async def get_server_prompts(self, server_id: str) -> list[dict[str, Any]]:
         """
         Get list of prompts available from a registered MCP server.
 
@@ -539,8 +539,8 @@ class MCPServerRegistry:
         self,
         server_id: str,
         prompt_name: str,
-        arguments: dict | None = None,
-    ) -> dict:
+        arguments: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         Get a specific prompt from a registered MCP server.
 
@@ -567,7 +567,7 @@ class MCPServerRegistry:
             logger.error(f"Failed to get prompt {prompt_name} from server {server_id}: {e}")
             raise
 
-    async def get_all_prompts(self) -> dict[str, list[dict]]:
+    async def get_all_prompts(self) -> dict[str, list[dict[str, Any]]]:
         """
         Get prompts from all registered servers.
 

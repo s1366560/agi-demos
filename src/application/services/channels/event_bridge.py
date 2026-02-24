@@ -99,7 +99,7 @@ class ChannelEventBridge:
         self._task_card_states: dict[str, str] = {}
         # conversation_id -> detached subagent thread focus state
         self._subagent_focus: dict[str, dict[str, Any]] = {}
-        self._subagent_focus_timeout_tasks: dict[str, asyncio.Task] = {}
+        self._subagent_focus_timeout_tasks: dict[str, asyncio.Task[None]] = {}
         configured_focus_ttl_seconds = (
             self._DEFAULT_SUBAGENT_FOCUS_TTL_SECONDS
             if subagent_focus_ttl_seconds is None

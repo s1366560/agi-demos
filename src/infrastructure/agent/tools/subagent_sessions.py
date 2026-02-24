@@ -1073,7 +1073,7 @@ class SessionsOverviewTool(AgentTool):
 class SessionsWaitTool(AgentTool):
     """Wait until a run reaches terminal state or timeout."""
 
-    _TERMINAL_STATUSES: ClassVar[set] = {
+    _TERMINAL_STATUSES: ClassVar[set[SubAgentRunStatus]] = {
         SubAgentRunStatus.COMPLETED,
         SubAgentRunStatus.FAILED,
         SubAgentRunStatus.CANCELLED,
@@ -1163,7 +1163,7 @@ class SessionsWaitTool(AgentTool):
 class SessionsAckTool(AgentTool):
     """Acknowledge a terminal run for wait/ack workflow."""
 
-    _TERMINAL_STATUSES: ClassVar[set] = {
+    _TERMINAL_STATUSES: ClassVar[set[SubAgentRunStatus]] = {
         SubAgentRunStatus.COMPLETED,
         SubAgentRunStatus.FAILED,
         SubAgentRunStatus.CANCELLED,
@@ -1553,7 +1553,7 @@ class SessionsSendTool(AgentTool):
 class SubAgentsControlTool(AgentTool):
     """List and control SubAgent runs."""
 
-    _ACTIVE_STATUSES: ClassVar[set] = {SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING}
+    _ACTIVE_STATUSES: ClassVar[set[SubAgentRunStatus]] = {SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING}
 
     def __init__(
         self,

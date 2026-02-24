@@ -563,7 +563,7 @@ async def get_search_capabilities(current_user: User = Depends(get_current_user)
 
 @memory_router.post("/memory/search")
 async def memory_search(
-    params: dict,
+    params: dict[str, Any],
     current_user: User = Depends(get_current_user),
     graph_service: GraphServicePort | None = Depends(get_graph_service),
 ) -> dict[str, Any]:

@@ -6,6 +6,7 @@ CRUD operations for Agent conversations.
 import logging
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
@@ -190,7 +191,7 @@ async def get_context_status(
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
-) -> dict:
+) -> dict[str, Any]:
     """Get context window status for a conversation.
 
     Returns the cached context summary info (if any) and message count,
@@ -214,7 +215,7 @@ async def get_context_status(
         adapter = container.context_summary_adapter()
         summary = await adapter.get_summary(conversation_id)
 
-        result: dict = {
+        result: dict[str, Any] = {
             "conversation_id": conversation_id,
             "message_count": conversation.message_count,
             "has_summary": summary is not None,
@@ -523,7 +524,7 @@ async def fork_conversation(
     message_id: str = Query(..., description="Message ID to fork from"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """Fork a conversation from a specific message point."""
     try:
         original = await db.get(ConversationModel, conversation_id)
@@ -590,10 +591,10 @@ async def fork_conversation(
 async def edit_message(
     conversation_id: str,
     message_id: str,
-    data: dict,
+    data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """Edit a message and increment version."""
     try:
         msg = await db.get(MessageModel, message_id)
@@ -631,7 +632,7 @@ async def request_tool_undo(
     execution_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """Request undo of a tool execution.
 
     Creates a follow-up user message asking the agent to undo

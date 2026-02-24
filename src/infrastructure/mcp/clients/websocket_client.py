@@ -111,8 +111,8 @@ class MCPWebSocketClient:
         self._request_id_lock = asyncio.Lock()
         # Legacy lock - kept for backward compatibility
         self._lock = self._request_id_lock
-        self._pending_requests: dict[int, asyncio.Future] = {}
-        self._receive_task: asyncio.Task | None = None
+        self._pending_requests: dict[int, asyncio.Future[Any]] = {}
+        self._receive_task: asyncio.Task[None] | None = None
         self._cleanup_lock = asyncio.Lock()  # Lock to prevent double cleanup
         self._is_cleaning_up = False
 
@@ -341,7 +341,7 @@ class MCPWebSocketClient:
                     future.set_exception(RuntimeError("WebSocket connection closed"))
             self._pending_requests.clear()
 
-    async def _handle_message(self, data: dict) -> None:
+    async def _handle_message(self, data: dict[str, Any]) -> None:
         """Handle incoming JSON-RPC message."""
         request_id = data.get("id")
 
@@ -696,7 +696,7 @@ class MCPWebSocketClient:
             self._request_id += 1
             request_id = self._request_id
             # Create future for response
-            future: asyncio.Future = asyncio.get_event_loop().create_future()
+            future: asyncio.Future[Any] = asyncio.get_event_loop().create_future()
             self._pending_requests[request_id] = future
 
         # Build request outside of lock

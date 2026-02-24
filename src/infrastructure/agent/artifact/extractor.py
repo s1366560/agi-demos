@@ -187,7 +187,7 @@ class ArtifactExtractor:
     """
 
     # MIME type to extension mapping
-    MIME_TO_EXT: ClassVar[dict] = {
+    MIME_TO_EXT: ClassVar[dict[str, str]] = {
         "image/png": ".png",
         "image/jpeg": ".jpg",
         "image/gif": ".gif",

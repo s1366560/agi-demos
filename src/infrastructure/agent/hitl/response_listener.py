@@ -89,11 +89,11 @@ class HITLResponseListener:
         self._worker_id = worker_id or f"worker-{os.getpid()}"
 
         # Projects being listened to
-        self._projects: set[tuple] = set()  # Set of (tenant_id, project_id)
+        self._projects: set[tuple[str, str]] = set()  # Set of (tenant_id, project_id)
 
         # Running state
         self._running = False
-        self._listen_task: asyncio.Task | None = None
+        self._listen_task: asyncio.Task[None] | None = None
 
         # Metrics
         self._messages_received = 0

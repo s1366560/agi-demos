@@ -77,7 +77,7 @@ class MemoryFlushService:
 
     async def flush(
         self,
-        conversation_messages: list[dict],
+        conversation_messages: list[dict[str, Any]],
         project_id: str,
         conversation_id: str = "unknown",
     ) -> int:
@@ -122,7 +122,7 @@ class MemoryFlushService:
 
     async def _process_and_store_items(
         self,
-        items: list[dict],
+        items: list[dict[str, Any]],
         chunk_repo: Any | None,
         project_id: str,
         conversation_id: str,
@@ -157,7 +157,7 @@ class MemoryFlushService:
 
     async def _process_flush_item(
         self,
-        item: dict,
+        item: dict[str, Any],
         chunk_repo: Any | None,
         project_id: str,
         conversation_id: str,
@@ -204,7 +204,7 @@ class MemoryFlushService:
         except Exception:
             return None
 
-    def _format_conversation(self, messages: list[dict], max_chars: int = 8000) -> str:
+    def _format_conversation(self, messages: list[dict[str, Any]], max_chars: int = 8000) -> str:
         """Format messages into a compact text for LLM analysis."""
         lines: list[str] = []
         total = 0
@@ -223,7 +223,7 @@ class MemoryFlushService:
             total += len(line)
         return "\n".join(lines)
 
-    async def _extract(self, conv_text: str, msg_count: int) -> list[dict]:
+    async def _extract(self, conv_text: str, msg_count: int) -> list[dict[str, Any]]:
         """Call LLM to extract durable memories."""
         try:
             user_prompt = FLUSH_USER_TEMPLATE.format(

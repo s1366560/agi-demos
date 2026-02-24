@@ -6,6 +6,7 @@ Implements fallback hierarchy and caching for performance.
 """
 
 import logging
+from typing import Any
 
 from src.domain.llm_providers.models import (
     NoActiveProviderError,
@@ -35,7 +36,7 @@ class ProviderResolutionService:
     def __init__(
         self,
         repository: ProviderRepository,
-        cache: dict | None = None,
+        cache: dict[str, Any] | None = None,
     ) -> None:
         """
         Initialize provider resolution service.

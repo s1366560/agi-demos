@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.memory.mmr import mmr_rerank
 from src.infrastructure.memory.query_expansion import extract_keywords
@@ -48,7 +48,7 @@ class ChunkSearchResult:
     id: str
     content: str
     score: float
-    metadata: dict = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     category: str = "other"
     source_type: str | None = None
     source_id: str | None = None
@@ -127,7 +127,7 @@ class ChunkHybridSearch:
         fetch_limit = limit * 3  # Over-fetch for MMR/decay filtering
 
         # 1. Vector search (with graceful fallback)
-        vector_results: list[dict] = []
+        vector_results: list[dict[str, Any]] = []
         query_embedding = await self._embedding.embed_text_safe(query)
 
         if query_embedding is not None:
@@ -194,15 +194,15 @@ class ChunkHybridSearch:
 
     def _rrf_fusion(
         self,
-        vector_results: list[dict],
-        fts_results: list[dict],
-    ) -> list[dict]:
+        vector_results: list[dict[str, Any]],
+        fts_results: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
         """Reciprocal Rank Fusion to merge vector and FTS results.
 
         RRF score = w_vec / (K + rank_vec) + w_fts / (K + rank_fts)
         """
         scores: dict[str, float] = {}
-        items: dict[str, dict] = {}
+        items: dict[str, dict[str, Any]] = {}
         k = RRF_K
 
         for rank, item in enumerate(vector_results):

@@ -64,7 +64,7 @@ class Community(BaseModel):
 
 
 class GraphData(BaseModel):
-    elements: dict
+    elements: dict[str, Any]
 
 
 class SubgraphRequest(BaseModel):

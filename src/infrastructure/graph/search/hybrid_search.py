@@ -48,7 +48,7 @@ class GraphSearchConfig:
     enable_query_expansion: bool = True
 
 
-def _item_to_dict(item: SearchResultItem) -> dict:
+def _item_to_dict(item: SearchResultItem) -> dict[str, Any]:
     """Convert a SearchResultItem to a dict for MMR/temporal decay processing."""
     return {
         "uuid": item.uuid,
@@ -61,7 +61,7 @@ def _item_to_dict(item: SearchResultItem) -> dict:
     }
 
 
-def _dict_to_item(d: dict) -> SearchResultItem:
+def _dict_to_item(d: dict[str, Any]) -> SearchResultItem:
     """Convert a processed dict back to a SearchResultItem."""
     return SearchResultItem(
         type=d["type"],

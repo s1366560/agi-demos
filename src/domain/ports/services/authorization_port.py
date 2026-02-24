@@ -1,6 +1,7 @@
 """Authorization port - Domain layer interface for authorization."""
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 
 class AuthorizationPort(ABC):
@@ -50,7 +51,7 @@ class AuthorizationPort(ABC):
         ...
 
     @abstractmethod
-    async def get_user_roles(self, user_id: str, tenant_id: str | None = None) -> list[dict]:
+    async def get_user_roles(self, user_id: str, tenant_id: str | None = None) -> list[dict[str, Any]]:
         """Get all roles assigned to a user."""
         ...
 

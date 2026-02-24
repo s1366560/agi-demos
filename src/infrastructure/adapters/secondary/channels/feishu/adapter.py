@@ -757,7 +757,7 @@ class FeishuAdapter:
             return FeishuAdapter._render_code_element(element)
         return "", None
 
-    def _parse_post_content(self, content: dict[str, Any]) -> tuple:
+    def _parse_post_content(self, content: dict[str, Any]) -> tuple[str, str | None]:
         """Parse rich text post content. Returns (text, image_key)."""
         title = content.get("title", "")
         content_blocks = content.get("content", [])

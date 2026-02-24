@@ -147,7 +147,7 @@ _agent_session_pool_lock = asyncio.Lock()
 # Stores (definitions, cached_at) tuples for TTL expiry
 _TOOL_DEFINITIONS_TTL_SECONDS = 300  # 5 minutes, aligned with MCP tools TTL
 _TOOL_DEFINITIONS_MAX_ENTRIES = 100  # LRU-like cap to prevent unbounded growth
-_tool_definitions_cache: dict[str, tuple] = {}  # hash -> (List[ToolDef], float)
+_tool_definitions_cache: dict[str, tuple[Any, float]] = {}  # hash -> (List[ToolDef], float)
 _tool_definitions_cache_lock = asyncio.Lock()
 
 # MCP Tools Cache - tools loaded from MCP workflows with TTL
@@ -1109,7 +1109,7 @@ def get_project_isolation_info() -> dict[str, Any]:
     Returns:
         Dictionary with isolation statistics
     """
-    tenant_projects: dict[str, set] = {}
+    tenant_projects: dict[str, set[str]] = {}
 
     for key in _agent_session_pool.keys():
         parts = key.split(":")

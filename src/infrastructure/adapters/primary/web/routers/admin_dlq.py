@@ -9,6 +9,7 @@ Provides administrative endpoints for managing the Dead Letter Queue:
 
 import logging
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field
@@ -54,7 +55,7 @@ class DLQMessageResponse(BaseModel):
     last_failed_at: datetime
     next_retry_at: datetime | None = None
     status: str
-    metadata: dict
+    metadata: dict[str, Any]
     can_retry: bool
     age_seconds: float
 
@@ -100,8 +101,8 @@ class DLQStatsResponse(BaseModel):
     expired_count: int
     resolved_count: int
     oldest_message_age_seconds: float
-    error_type_counts: dict
-    event_type_counts: dict
+    error_type_counts: dict[str, int]
+    event_type_counts: dict[str, int]
 
 
 class RetryRequest(BaseModel):
@@ -113,7 +114,7 @@ class RetryRequest(BaseModel):
 class RetryResponse(BaseModel):
     """Response model for retry operation."""
 
-    results: dict  # message_id -> success (bool)
+    results: dict[str, bool]  # message_id -> success (bool)
     success_count: int
     failure_count: int
 
@@ -128,7 +129,7 @@ class DiscardRequest(BaseModel):
 class DiscardResponse(BaseModel):
     """Response model for discard operation."""
 
-    results: dict  # message_id -> success (bool)
+    results: dict[str, bool]  # message_id -> success (bool)
     success_count: int
     failure_count: int
 
@@ -249,7 +250,7 @@ async def retry_message(
     message_id: str,
     dlq: DeadLetterQueuePort = Depends(get_dlq),
     _user: User = Depends(require_admin),
-) -> dict:
+) -> dict[str, Any]:
     """Retry a single DLQ message.
 
     Admin only endpoint for retrying a failed event.
@@ -297,7 +298,7 @@ async def discard_message(
     reason: str = Query(..., min_length=1, max_length=500, description="Reason for discarding"),
     dlq: DeadLetterQueuePort = Depends(get_dlq),
     _user: User = Depends(require_admin),
-) -> dict:
+) -> dict[str, Any]:
     """Discard a single DLQ message.
 
     Admin only endpoint for permanently discarding a failed event.

@@ -790,7 +790,7 @@ class ChannelMessageRouter:
 
         # Start background card updater
         streaming_adapter = self._get_streaming_adapter(message)
-        _card_updater_task: asyncio.Task | None = None
+        _card_updater_task: asyncio.Task[None] | None = None
 
         if streaming_adapter:
             _card_updater_task = asyncio.create_task(
@@ -866,7 +866,7 @@ class ChannelMessageRouter:
         if handler_name:
             getattr(state, handler_name)(event_data)
 
-    async def _await_card_updater(self, task: asyncio.Task | None) -> None:
+    async def _await_card_updater(self, task: asyncio.Task[None] | None) -> None:
         """Wait for the card updater task to complete."""
         if not task:
             return

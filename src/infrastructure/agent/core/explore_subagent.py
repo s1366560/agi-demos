@@ -8,6 +8,7 @@ the codebase before implementation.
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from src.domain.model.agent.subagent import AgentModel, AgentTrigger, SubAgent
 
@@ -120,7 +121,7 @@ def create_explore_subagent(
     )
 
 
-def get_explore_agent_template() -> dict:
+def get_explore_agent_template() -> dict[str, Any]:
     """
     Get the explore-agent template for UI display.
 

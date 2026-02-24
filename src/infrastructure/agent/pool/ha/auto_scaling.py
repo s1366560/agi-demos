@@ -148,11 +148,11 @@ class AutoScalingService:
         self._max_events = 1000
 
         # Callbacks
-        self._on_scale_callbacks: list[Callable] = []
+        self._on_scale_callbacks: list[Callable[..., Any]] = []
 
         # Control
         self._is_running = False
-        self._monitor_task: asyncio.Task | None = None
+        self._monitor_task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
 
     async def start(self) -> None:
@@ -310,7 +310,7 @@ class AutoScalingService:
             "active_policies": len(self._policies),
         }
 
-    def on_scale(self, callback: Callable) -> None:
+    def on_scale(self, callback: Callable[..., Any]) -> None:
         """Register scaling callback."""
         self._on_scale_callbacks.append(callback)
 

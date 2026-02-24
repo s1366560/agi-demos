@@ -7,6 +7,7 @@ including roles and permissions.
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from src.domain.model.tenant.tenant import Tenant
 from src.domain.ports.repositories.tenant_repository import TenantRepository
@@ -144,7 +145,7 @@ class TenantService:
         await self._tenant_repo.delete(tenant_id)
         logger.info(f"Deleted tenant {tenant_id}")
 
-    async def get_tenant_stats(self, tenant_id: str) -> dict:
+    async def get_tenant_stats(self, tenant_id: str) -> dict[str, Any]:
         """
         Get statistics for a tenant.
 

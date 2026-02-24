@@ -15,6 +15,7 @@ Features:
 import fnmatch
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 
 class SkillPermissionAction(str, Enum):
@@ -69,7 +70,7 @@ class SkillPermissionRule:
         """
         return fnmatch.fnmatch(skill_name, self.pattern)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "pattern": self.pattern,
@@ -78,7 +79,7 @@ class SkillPermissionRule:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "SkillPermissionRule":
+    def from_dict(cls, data: dict[str, Any]) -> "SkillPermissionRule":
         """Create from dictionary."""
         return cls(
             pattern=data["pattern"],
@@ -141,7 +142,7 @@ class SkillPermissionRuleset:
                 return rule
         return None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "name": self.name,
@@ -149,7 +150,7 @@ class SkillPermissionRuleset:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "SkillPermissionRuleset":
+    def from_dict(cls, data: dict[str, Any]) -> "SkillPermissionRuleset":
         """Create from dictionary."""
         return cls(
             name=data.get("name"),

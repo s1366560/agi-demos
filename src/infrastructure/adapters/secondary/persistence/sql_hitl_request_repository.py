@@ -174,7 +174,7 @@ class SqlHITLRequestRepository(BaseRepository[HITLRequest, object], HITLRequestR
         self,
         request_id: str,
         response: str,
-        response_metadata: dict | None = None,
+        response_metadata: dict[str, Any] | None = None,
     ) -> HITLRequest | None:
         """Update an HITL request with a response."""
         from src.infrastructure.adapters.secondary.persistence.models import (

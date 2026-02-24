@@ -31,7 +31,7 @@ class EpisodeCreate(BaseModel):
     content: str
     source_description: str | None = "text"
     episode_type: str | None = "text"
-    metadata: dict | None = None
+    metadata: dict[str, Any] | None = None
     project_id: str | None = None
     tenant_id: str | None = None
     user_id: str | None = None

@@ -37,7 +37,7 @@ class SynthesizeResultsUseCase:
         work_plan: WorkPlan,
         original_query: str,
         step_results: list[dict[str, Any]],
-        conversation_context: list[dict],
+        conversation_context: list[dict[str, Any]],
     ) -> str:
         """
         Synthesize results from all steps into a final response.

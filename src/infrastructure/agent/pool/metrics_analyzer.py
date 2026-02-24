@@ -206,7 +206,7 @@ class PoolMetricsAnalyzer:
 
     def _analyze_single_metric(
         self,
-        data: list[tuple],
+        data: list[tuple[float, float]],
         metric_name: str,
     ) -> TrendAnalysis:
         """Analyze trend for a single metric."""

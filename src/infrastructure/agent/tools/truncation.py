@@ -14,6 +14,7 @@ Reference: vendor/opencode/packages/opencode/src/tool/read.ts
 
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,7 @@ class TruncationResult:
     last_read_line: int | None = None
     has_more: bool = False
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
             "truncated": self.truncated,

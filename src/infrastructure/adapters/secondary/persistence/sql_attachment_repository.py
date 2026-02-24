@@ -16,6 +16,7 @@ Migration Benefits:
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -232,7 +233,7 @@ class SqlAttachmentRepository(
             error_message=model.error_message,
         )
 
-    def _to_model_dict(self, entity: Attachment) -> dict:
+    def _to_model_dict(self, entity: Attachment) -> dict[str, Any]:
         """
         Convert domain entity to model dictionary for insert/update.
 

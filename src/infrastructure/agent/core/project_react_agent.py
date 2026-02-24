@@ -1242,7 +1242,7 @@ class ProjectAgentManager:
         """Initialize the project agent manager."""
         self._agents: dict[str, ProjectReActAgent] = {}
         self._lock = asyncio.Lock()
-        self._cleanup_task: asyncio.Task | None = None
+        self._cleanup_task: asyncio.Task[None] | None = None
         self._is_running = False
 
     async def start(self) -> None:

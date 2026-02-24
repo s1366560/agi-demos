@@ -279,7 +279,7 @@ class LLMProviderManager:
 
         return providers
 
-    async def health_check_all(self) -> dict[ProviderType, dict]:
+    async def health_check_all(self) -> dict[ProviderType, dict[str, Any]]:
         """
         Check health of all registered providers.
 
@@ -353,7 +353,7 @@ class LLMProviderManager:
         """
         self._fallback_order[operation] = providers
 
-    def get_metrics(self) -> dict:
+    def get_metrics(self) -> dict[str, Any]:
         """
         Get aggregated metrics for all providers.
 

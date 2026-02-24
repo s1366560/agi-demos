@@ -7,6 +7,7 @@ Business logic is delegated to AuthService in the application layer.
 """
 
 import logging
+from typing import Any
 from uuid import uuid4
 
 from fastapi import Depends, Header, HTTPException, Query, Request, status
@@ -547,7 +548,7 @@ async def _ensure_tenant_membership(
     user_id: str,
     tenant_id: str,
     role: str = "member",
-    permissions: dict | None = None,
+    permissions: dict[str, Any] | None = None,
 ) -> None:
     """Ensure a user has membership in a tenant."""
     result = await db.execute(

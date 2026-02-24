@@ -104,13 +104,13 @@ class PermissionManager:
         self.approved: list[PermissionRule] = []  # Runtime-approved rules
         self.mode_rules: list[PermissionRule] = []  # Mode-specific rules
         self.pending: dict[str, _PendingRequest] = {}
-        self._event_publisher: Callable[[dict], Awaitable[None]] | None = None
+        self._event_publisher: Callable[[dict[str, Any]], Awaitable[None]] | None = None
         self._request_counter = 0
         self._current_mode = AgentPermissionMode.BUILD
 
     def set_event_publisher(
         self,
-        publisher: Callable[[dict], Awaitable[None]],
+        publisher: Callable[[dict[str, Any]], Awaitable[None]],
     ) -> None:
         """
         Set the SSE event publisher for permission requests.
@@ -469,7 +469,7 @@ class PermissionManager:
         self._request_counter = 0
         self._current_mode = AgentPermissionMode.BUILD
 
-    def get_disabled_tools(self, tools: list[str]) -> set:
+    def get_disabled_tools(self, tools: list[str]) -> set[str]:
         """
         Get the set of tools that are disabled based on current mode and rules.
 

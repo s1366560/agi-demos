@@ -131,7 +131,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
 
     def _filter_stream_messages(
         self,
-        streams: list,
+        streams: list[Any],
         from_time_us: int,
         from_counter: int,
     ) -> tuple[list[AgentEvent], str | None, bool]:
@@ -359,7 +359,7 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
         return int(value) if value else default
 
     @staticmethod
-    def _parse_data_field(data: Any) -> dict:
+    def _parse_data_field(data: Any) -> dict[str, Any]:
         """Parse the data field from raw string/bytes to dict."""
         if isinstance(data, bytes):
             data = data.decode("utf-8")

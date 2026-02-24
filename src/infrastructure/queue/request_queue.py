@@ -24,8 +24,8 @@ class QueuedRequest:
         self,
         request_id: str,
         func: Callable[..., Awaitable[Any]],
-        args: tuple,
-        kwargs: dict,
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
         priority: int = 0,
     ) -> None:
         self.request_id = request_id
@@ -69,7 +69,7 @@ class RequestQueue:
         self._max_concurrent = max_concurrent
         self._max_queue_size = max_queue_size
         self._request_timeout = request_timeout
-        self._workers: list[asyncio.Task] = []
+        self._workers: list[asyncio.Task[None]] = []
         self._running = False
 
     def _get_next_request(self) -> QueuedRequest | None:
@@ -124,8 +124,8 @@ class RequestQueue:
     async def enqueue(
         self,
         func: Callable[..., Awaitable[Any]],
-        args: tuple = (),
-        kwargs: dict | None = None,
+        args: tuple[Any, ...] = (),
+        kwargs: dict[str, Any] | None = None,
         priority: int = 0,
     ) -> Any:
         """

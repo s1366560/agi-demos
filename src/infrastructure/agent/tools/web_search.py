@@ -83,7 +83,7 @@ class WebSearchTool(AgentTool):
         self._redis = redis_client
         self._http_client: httpx.AsyncClient | None = None
 
-    def get_parameters_schema(self) -> dict:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
         return {
             "type": "object",

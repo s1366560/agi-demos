@@ -13,7 +13,7 @@ class RichCardBuilder:
     """Builds Feishu interactive cards for common agent events."""
 
     # Status icon mapping
-    _STATUS_ICONS: ClassVar[dict] = {
+    _STATUS_ICONS: ClassVar[dict[str, str]] = {
         "completed": "✅",
         "done": "✅",
         "in_progress": "🔄",

@@ -13,6 +13,7 @@ Architecture (Ray-based, Redis Streams only):
 import json
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -350,7 +351,7 @@ async def _publish_hitl_response_to_redis(
     conversation_id: str,
     request_id: str,
     hitl_type: str,
-    response_data: dict,
+    response_data: dict[str, Any],
     user_id: str,
     agent_mode: str,
 ) -> bool:

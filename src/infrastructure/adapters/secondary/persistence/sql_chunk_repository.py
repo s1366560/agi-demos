@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-
+from typing import Any
 from sqlalchemy import bindparam, delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -81,7 +81,7 @@ class SqlChunkRepository:
         query_embedding: list[float],
         project_id: str,
         limit: int = 10,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Search chunks by vector similarity using pgvector.
 
         Returns list of dicts with id, content, metadata, score, created_at.
@@ -124,7 +124,7 @@ class SqlChunkRepository:
         query: str,
         project_id: str,
         limit: int = 10,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Search chunks using PostgreSQL full-text search with ILIKE fallback.
 
         Uses plainto_tsquery with 'simple' config first.
@@ -194,7 +194,7 @@ class SqlChunkRepository:
         project_id: str,
         threshold: float = 0.95,
         limit: int = 1,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Find chunks with similarity above threshold (for dedup)."""
         # Use CAST(... AS vector) instead of ::vector to avoid SQLAlchemy
         # misinterpreting the PostgreSQL :: cast as part of the bind param name.

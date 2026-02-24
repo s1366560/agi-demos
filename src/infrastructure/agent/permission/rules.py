@@ -3,6 +3,7 @@
 import fnmatch
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 
 class PermissionAction(Enum):
@@ -45,7 +46,7 @@ class PermissionRule:
             target, self.pattern
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "permission": self.permission,
@@ -54,7 +55,7 @@ class PermissionRule:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "PermissionRule":
+    def from_dict(cls, data: dict[str, Any]) -> "PermissionRule":
         """Create from dictionary."""
         return cls(
             permission=data["permission"],

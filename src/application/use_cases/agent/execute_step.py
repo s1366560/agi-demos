@@ -38,7 +38,7 @@ class ExecuteStepUseCase:
     async def execute(
         self,
         work_plan: Any,
-        conversation_context: list[dict],
+        conversation_context: list[dict[str, Any]],
     ) -> dict[str, Any]:
         """Execute a step (placeholder - plan system being refactored)."""
         raise NotImplementedError("Plan execution system is being refactored")

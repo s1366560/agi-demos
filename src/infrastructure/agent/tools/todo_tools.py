@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class TodoReadTool(AgentTool):
     """Read the task list for a conversation from DB."""
 
-    def __init__(self, session_factory: Callable | None = None) -> None:
+    def __init__(self, session_factory: Callable[..., Any] | None = None) -> None:
         super().__init__(
             name="todoread",
             description=(
@@ -95,7 +95,7 @@ class TodoReadTool(AgentTool):
 class TodoWriteTool(AgentTool):
     """Write/update the task list for a conversation. Persists to DB."""
 
-    def __init__(self, session_factory: Callable | None = None) -> None:
+    def __init__(self, session_factory: Callable[..., Any] | None = None) -> None:
         super().__init__(
             name="todowrite",
             description=(
@@ -299,11 +299,11 @@ class TodoWriteTool(AgentTool):
 # =============================================================================
 
 
-def create_todoread_tool(session_factory: Callable | None = None) -> TodoReadTool:
+def create_todoread_tool(session_factory: Callable[..., Any] | None = None) -> TodoReadTool:
     """Create a TodoReadTool instance."""
     return TodoReadTool(session_factory=session_factory)
 
 
-def create_todowrite_tool(session_factory: Callable | None = None) -> TodoWriteTool:
+def create_todowrite_tool(session_factory: Callable[..., Any] | None = None) -> TodoWriteTool:
     """Create a TodoWriteTool instance."""
     return TodoWriteTool(session_factory=session_factory)

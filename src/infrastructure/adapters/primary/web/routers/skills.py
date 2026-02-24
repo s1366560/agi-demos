@@ -764,7 +764,7 @@ async def list_skill_versions(
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    tenant: dict = Depends(get_current_user_tenant),
+    tenant: dict[str, Any] = Depends(get_current_user_tenant),
 ) -> SkillVersionListResponse:
     """List all versions of a skill, ordered by version_number DESC."""
     from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
@@ -801,7 +801,7 @@ async def get_skill_version(
     skill_id: str,
     version_number: int,
     db: AsyncSession = Depends(get_db),
-    tenant: dict = Depends(get_current_user_tenant),
+    tenant: dict[str, Any] = Depends(get_current_user_tenant),
 ) -> SkillVersionDetailResponse:
     """Get a specific version of a skill including content and resource files."""
     from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
@@ -839,7 +839,7 @@ async def rollback_skill(
     skill_id: str,
     request_body: SkillRollbackRequest,
     db: AsyncSession = Depends(get_db),
-    tenant: dict = Depends(get_current_user_tenant),
+    tenant: dict[str, Any] = Depends(get_current_user_tenant),
 ) -> skill_to_response:
     """Rollback a skill to a specific version. Creates a new version entry."""
     from pathlib import Path

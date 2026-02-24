@@ -39,7 +39,7 @@ class Counter:
     name: str
     help: str
     labels: list[str] = field(default_factory=list)
-    _values: dict[tuple, float] = field(default_factory=dict)
+    _values: dict[tuple[Any, ...], float] = field(default_factory=dict)
 
     def inc(self, labels: dict[str, str] | None = None, value: float = 1.0) -> None:
         """增加计数."""
@@ -51,7 +51,7 @@ class Counter:
         key = self._make_key(labels)
         return self._values.get(key, 0.0)
 
-    def _make_key(self, labels: dict[str, str] | None) -> tuple:
+    def _make_key(self, labels: dict[str, str] | None) -> tuple[Any, ...]:
         """生成标签键."""
         if not labels:
             return ()
@@ -80,7 +80,7 @@ class Gauge:
     name: str
     help: str
     labels: list[str] = field(default_factory=list)
-    _values: dict[tuple, float] = field(default_factory=dict)
+    _values: dict[tuple[Any, ...], float] = field(default_factory=dict)
 
     def set(self, value: float, labels: dict[str, str] | None = None) -> None:
         """设置值."""
@@ -102,7 +102,7 @@ class Gauge:
         key = self._make_key(labels)
         return self._values.get(key, 0.0)
 
-    def _make_key(self, labels: dict[str, str] | None) -> tuple:
+    def _make_key(self, labels: dict[str, str] | None) -> tuple[Any, ...]:
         """生成标签键."""
         if not labels:
             return ()
@@ -134,7 +134,7 @@ class Histogram:
     buckets: list[float] = field(
         default_factory=lambda: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
     )
-    _values: dict[tuple, list[float]] = field(default_factory=dict)
+    _values: dict[tuple[Any, ...], list[float]] = field(default_factory=dict)
 
     def observe(self, value: float, labels: dict[str, str] | None = None) -> None:
         """记录观测值."""
@@ -143,7 +143,7 @@ class Histogram:
             self._values[key] = []
         self._values[key].append(value)
 
-    def _make_key(self, labels: dict[str, str] | None) -> tuple:
+    def _make_key(self, labels: dict[str, str] | None) -> tuple[Any, ...]:
         """生成标签键."""
         if not labels:
             return ()

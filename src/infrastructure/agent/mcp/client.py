@@ -34,7 +34,7 @@ class MCPTransport(ABC):
         """Close connection to MCP server."""
 
     @abstractmethod
-    async def send_request(self, method: str, params: dict | None = None) -> dict:
+    async def send_request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Send a request to the MCP server.
 
@@ -47,11 +47,11 @@ class MCPTransport(ABC):
         """
 
     @abstractmethod
-    async def list_tools(self) -> list[dict]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools from the MCP server."""
 
     @abstractmethod
-    async def call_tool(self, tool_name: str, arguments: dict) -> dict:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Call a tool on the MCP server.
 
@@ -84,7 +84,7 @@ class MCPTransport(ABC):
             True if successful, False otherwise
         """
 
-    async def list_prompts(self) -> list[dict]:
+    async def list_prompts(self) -> list[dict[str, Any]]:
         """
         List all available prompts from the MCP server.
 
@@ -94,7 +94,7 @@ class MCPTransport(ABC):
         # Default implementation - subclasses can override
         return []
 
-    async def get_prompt(self, prompt_name: str, arguments: dict | None = None) -> dict:
+    async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Get a specific prompt from the MCP server.
 
@@ -112,7 +112,7 @@ class MCPTransport(ABC):
 class StdioTransport(MCPTransport):
     """MCP transport using stdio (subprocess communication)."""
 
-    def __init__(self, config: dict) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         import os
 
         self.config = config
@@ -178,7 +178,7 @@ class StdioTransport(MCPTransport):
 
         self._initialized = True
 
-    async def _send_notification(self, method: str, params: dict) -> None:
+    async def _send_notification(self, method: str, params: dict[str, Any]) -> None:
         """Send a JSON-RPC notification (no response expected)."""
         if not self.process or not self.process.stdin:
             raise RuntimeError("MCP server process not started")
@@ -197,7 +197,7 @@ class StdioTransport(MCPTransport):
             self._initialized = False
             logger.info("MCP server process terminated")
 
-    async def send_request(self, method: str, params: dict | None = None) -> dict:
+    async def send_request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Send JSON-RPC request via stdin and read response from stdout."""
         if not self.process or not self.process.stdin or not self.process.stdout:
             raise RuntimeError("MCP server process not started")
@@ -242,12 +242,12 @@ class StdioTransport(MCPTransport):
 
         return response.get("result", {})
 
-    async def list_tools(self) -> list[dict]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools."""
         result = await self.send_request("tools/list")
         return result.get("tools", [])
 
-    async def call_tool(self, tool_name: str, arguments: dict) -> dict:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the server."""
         params = {"name": tool_name, "arguments": arguments}
         return await self.send_request("tools/call", params)
@@ -270,12 +270,12 @@ class StdioTransport(MCPTransport):
             logger.error(f"Set logging level failed: {e}")
             return False
 
-    async def list_prompts(self) -> list[dict]:
+    async def list_prompts(self) -> list[dict[str, Any]]:
         """List all available prompts from the MCP server."""
         result = await self.send_request("prompts/list")
         return result.get("prompts", [])
 
-    async def get_prompt(self, prompt_name: str, arguments: dict | None = None) -> dict:
+    async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""
         params = {"name": prompt_name}
         if arguments:
@@ -286,7 +286,7 @@ class StdioTransport(MCPTransport):
 class HTTPTransport(MCPTransport):
     """MCP transport using HTTP request/response."""
 
-    def __init__(self, config: dict) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         self.config = config
         self.base_url = config.get("url")
         self.headers = config.get("headers", {})
@@ -307,7 +307,7 @@ class HTTPTransport(MCPTransport):
             self.client = None
             logger.info("HTTP client closed")
 
-    async def send_request(self, method: str, params: dict | None = None) -> dict:
+    async def send_request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Send HTTP POST request with JSON-RPC payload."""
         if not self.client:
             raise RuntimeError("HTTP client not initialized")
@@ -327,12 +327,12 @@ class HTTPTransport(MCPTransport):
             logger.error(f"HTTP request failed: {e}")
             raise
 
-    async def list_tools(self) -> list[dict]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools."""
         result = await self.send_request("tools/list")
         return result.get("tools", [])
 
-    async def call_tool(self, tool_name: str, arguments: dict) -> dict:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the server."""
         params = {"name": tool_name, "arguments": arguments}
         return await self.send_request("tools/call", params)
@@ -355,12 +355,12 @@ class HTTPTransport(MCPTransport):
             logger.error(f"Set logging level failed: {e}")
             return False
 
-    async def list_prompts(self) -> list[dict]:
+    async def list_prompts(self) -> list[dict[str, Any]]:
         """List all available prompts from the MCP server."""
         result = await self.send_request("prompts/list")
         return result.get("prompts", [])
 
-    async def get_prompt(self, prompt_name: str, arguments: dict | None = None) -> dict:
+    async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""
         params = {"name": prompt_name}
         if arguments:
@@ -371,7 +371,7 @@ class HTTPTransport(MCPTransport):
 class SSETransport(MCPTransport):
     """MCP transport using Streamable HTTP (MCP SDK)."""
 
-    def __init__(self, config: dict) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         self.config = config
         self.url = config.get("url")
         self.headers = config.get("headers", {})
@@ -379,7 +379,7 @@ class SSETransport(MCPTransport):
         self._read_stream = None
         self._write_stream = None
         self._request_id = 0
-        self._pending_requests: dict[int, asyncio.Future] = {}
+        self._pending_requests: dict[int, asyncio.Future[Any]] = {}
         self._reader_task = None
 
     async def connect(self) -> None:
@@ -444,7 +444,7 @@ class SSETransport(MCPTransport):
         request_id = self._request_id
 
         # Create future for response
-        future: asyncio.Future = asyncio.Future()
+        future: asyncio.Future[Any] = asyncio.Future()
         self._pending_requests[request_id] = future
 
         # Send message - wrap JSONRPCRequest in JSONRPCMessage
@@ -530,7 +530,7 @@ class SSETransport(MCPTransport):
         self._pending_requests.clear()
         logger.info("Streamable HTTP client closed")
 
-    async def send_request(self, method: str, params: dict | None = None) -> dict:
+    async def send_request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Send request via streamable HTTP."""
         if not self._write_stream:
             raise RuntimeError("Streamable HTTP client not initialized")
@@ -542,7 +542,7 @@ class SSETransport(MCPTransport):
         request_id = self._request_id
 
         # Create future for response
-        future: asyncio.Future = asyncio.Future()
+        future: asyncio.Future[Any] = asyncio.Future()
         self._pending_requests[request_id] = future
 
         # Send request - wrap JSONRPCRequest in JSONRPCMessage
@@ -568,14 +568,14 @@ class SSETransport(MCPTransport):
             self._pending_requests.pop(request_id, None)
             raise RuntimeError(f"Timeout waiting for response to {method}") from None
 
-    async def list_tools(self) -> list[dict]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools."""
         result = await self.send_request("tools/list")
         tools = result.get("tools", [])
         # Convert Pydantic models to dicts if needed
         return [t.model_dump() if hasattr(t, "model_dump") else t for t in tools]
 
-    async def call_tool(self, tool_name: str, arguments: dict) -> dict:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """Call a tool on the server."""
         params = {"name": tool_name, "arguments": arguments}
         return await self.send_request("tools/call", params)
@@ -598,14 +598,14 @@ class SSETransport(MCPTransport):
             logger.error(f"Set logging level failed: {e}")
             return False
 
-    async def list_prompts(self) -> list[dict]:
+    async def list_prompts(self) -> list[dict[str, Any]]:
         """List all available prompts from the MCP server."""
         result = await self.send_request("prompts/list")
         prompts = result.get("prompts", [])
         # Convert Pydantic models to dicts if needed
         return [p.model_dump() if hasattr(p, "model_dump") else p for p in prompts]
 
-    async def get_prompt(self, prompt_name: str, arguments: dict | None = None) -> dict:
+    async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""
         params = {"name": prompt_name}
         if arguments:
@@ -623,7 +623,7 @@ class WebSocketTransport(MCPTransport):
     - Real-time streaming for long-running operations
     """
 
-    def __init__(self, config: dict) -> None:
+    def __init__(self, config: dict[str, Any]) -> None:
         """
         Initialize WebSocket transport.
 
@@ -647,8 +647,8 @@ class WebSocketTransport(MCPTransport):
         self._ws: aiohttp.ClientWebSocketResponse | None = None
         self._session: aiohttp.ClientSession | None = None
         self._request_id = 0
-        self._pending_requests: dict[int, asyncio.Future] = {}
-        self._receive_task: asyncio.Task | None = None
+        self._pending_requests: dict[int, asyncio.Future[Any]] = {}
+        self._receive_task: asyncio.Task[None] | None = None
         self._initialized = False
         self._closed = False
 
@@ -714,7 +714,7 @@ class WebSocketTransport(MCPTransport):
 
         self._initialized = True
 
-    async def _send_notification(self, method: str, params: dict) -> None:
+    async def _send_notification(self, method: str, params: dict[str, Any]) -> None:
         """Send a JSON-RPC notification (no response expected)."""
         if not self._ws or self._ws.closed:
             raise RuntimeError("WebSocket not connected")
@@ -756,7 +756,7 @@ class WebSocketTransport(MCPTransport):
                     future.set_exception(RuntimeError("WebSocket connection closed"))
             self._pending_requests.clear()
 
-    async def _handle_message(self, data: dict) -> None:
+    async def _handle_message(self, data: dict[str, Any]) -> None:
         """Handle incoming JSON-RPC message."""
         request_id = data.get("id")
 
@@ -818,7 +818,7 @@ class WebSocketTransport(MCPTransport):
                 future.set_exception(RuntimeError("WebSocket connection closed"))
         self._pending_requests.clear()
 
-    async def send_request(self, method: str, params: dict | None = None) -> dict:
+    async def send_request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Send JSON-RPC request and wait for response.
 
@@ -846,7 +846,7 @@ class WebSocketTransport(MCPTransport):
         }
 
         # Create future for response
-        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        future: asyncio.Future[Any] = asyncio.get_event_loop().create_future()
         self._pending_requests[request_id] = future
 
         try:
@@ -866,12 +866,12 @@ class WebSocketTransport(MCPTransport):
             self._pending_requests.pop(request_id, None)
             raise
 
-    async def list_tools(self) -> list[dict]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         """List all available tools from the MCP server."""
         result = await self.send_request("tools/list")
         return result.get("tools", [])
 
-    async def call_tool(self, tool_name: str, arguments: dict) -> dict:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         """
         Call a tool on the MCP server.
 
@@ -903,12 +903,12 @@ class WebSocketTransport(MCPTransport):
             logger.error(f"Set logging level failed: {e}")
             return False
 
-    async def list_prompts(self) -> list[dict]:
+    async def list_prompts(self) -> list[dict[str, Any]]:
         """List all available prompts from the MCP server."""
         result = await self.send_request("prompts/list")
         return result.get("prompts", [])
 
-    async def get_prompt(self, prompt_name: str, arguments: dict | None = None) -> dict:
+    async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""
         params = {"name": prompt_name}
         if arguments:
@@ -924,7 +924,7 @@ class MCPClient:
     for tool discovery and execution.
     """
 
-    def __init__(self, server_type: str, transport_config: dict) -> None:
+    def __init__(self, server_type: str, transport_config: dict[str, Any]) -> None:
         """
         Initialize MCP client.
 
@@ -948,7 +948,7 @@ class MCPClient:
         """
         self._progress_callback = callback
 
-    async def _handle_progress_notification(self, data: dict) -> None:
+    async def _handle_progress_notification(self, data: dict[str, Any]) -> None:
         """
         Handle incoming progress notification from server.
 
@@ -995,7 +995,7 @@ class MCPClient:
             self.transport = None
             logger.info("MCP client disconnected")
 
-    async def list_tools(self) -> list[dict]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         """
         List all available tools from the MCP server.
 
@@ -1007,7 +1007,7 @@ class MCPClient:
 
         return await self.transport.list_tools()
 
-    async def call_tool(self, tool_name: str, arguments: dict) -> Any:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         """
         Call a tool on the MCP server.
 
@@ -1068,7 +1068,7 @@ class MCPClient:
 
         return await self.transport.set_logging_level(level)
 
-    async def list_prompts(self) -> list[dict]:
+    async def list_prompts(self) -> list[dict[str, Any]]:
         """
         List all available prompts from the MCP server.
 
@@ -1085,7 +1085,7 @@ class MCPClient:
 
         return await self.transport.list_prompts()
 
-    async def get_prompt(self, prompt_name: str, arguments: dict | None = None) -> dict:
+    async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """
         Get a specific prompt from the MCP server.
 

@@ -915,7 +915,7 @@ def _get_embedding_recommendations(
     existing_dim: int | None,
     total_embeddings: int,
     is_compatible: bool,
-) -> list:
+) -> list[dict[str, Any]]:
     """Generate recommendations based on embedding status."""
     recommendations = []
 

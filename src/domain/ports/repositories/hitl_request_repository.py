@@ -7,6 +7,7 @@ following the Repository pattern with tenant and project-level isolation.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
+from typing import Any
 
 from src.domain.model.agent.hitl_request import HITLRequest
 
@@ -104,7 +105,7 @@ class HITLRequestRepositoryPort(ABC):
         self,
         request_id: str,
         response: str,
-        response_metadata: dict | None = None,
+        response_metadata: dict[str, Any] | None = None,
     ) -> HITLRequest | None:
         """
         Update an HITL request with a response.

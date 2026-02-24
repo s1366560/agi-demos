@@ -108,7 +108,7 @@ class PrewarmPool:
 
         # 运行状态
         self._running = False
-        self._maintenance_task: asyncio.Task | None = None
+        self._maintenance_task: asyncio.Task[None] | None = None
 
         # 统计
         self._stats = {

@@ -254,7 +254,7 @@ FILE_SIZE_LIMITS = {
 def build_file_size_limits(
     llm_max_mb: int = DEFAULT_MAX_SIZE_LLM_MB,
     sandbox_max_mb: int = DEFAULT_MAX_SIZE_SANDBOX_MB,
-) -> dict:
+) -> dict[str, int]:
     """Build file size limits dict from configurable MB values."""
     return {
         AttachmentPurpose.LLM_CONTEXT: llm_max_mb * 1024 * 1024,

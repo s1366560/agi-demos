@@ -7,6 +7,7 @@ Provides read/write operations for tenant-level agent configuration:
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
@@ -38,7 +39,7 @@ async def check_config_modify_permission(
     tenant_id: str = Query(..., description="Tenant ID to check permission for"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """
     Check if current user can modify tenant agent configuration.
 

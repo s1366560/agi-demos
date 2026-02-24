@@ -67,7 +67,7 @@ class ArtifactResponse(BaseModel):
     source_tool: str | None = None
     source_path: str | None = None
 
-    metadata: dict = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: str
 
 

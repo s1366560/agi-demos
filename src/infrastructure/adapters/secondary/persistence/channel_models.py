@@ -1,6 +1,7 @@
 """Channel configuration database models."""
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -78,12 +79,12 @@ class ChannelConfigModel(IdGeneratorMixin, Base):
         nullable=False,
         comment="Group policy: open, allowlist, disabled",
     )
-    allow_from: Mapped[list | None] = mapped_column(
+    allow_from: Mapped[list[Any] | None] = mapped_column(
         JSON,
         nullable=True,
         comment="Allowlist of user IDs for DM access (wildcard * = all)",
     )
-    group_allow_from: Mapped[list | None] = mapped_column(
+    group_allow_from: Mapped[list[Any] | None] = mapped_column(
         JSON,
         nullable=True,
         comment="Allowlist of group/chat IDs allowed to trigger the agent",
@@ -98,7 +99,7 @@ class ChannelConfigModel(IdGeneratorMixin, Base):
     domain: Mapped[str | None] = mapped_column(
         String, default="feishu", comment="Domain: feishu, lark, or custom"
     )
-    extra_settings: Mapped[dict | None] = mapped_column(
+    extra_settings: Mapped[dict[str, Any] | None] = mapped_column(
         JSON, nullable=True, comment="Additional channel-specific settings"
     )
 
@@ -187,7 +188,7 @@ class ChannelMessageModel(IdGeneratorMixin, Base):
         Text,
         nullable=True,
     )
-    content_data: Mapped[dict | None] = mapped_column(
+    content_data: Mapped[dict[str, Any] | None] = mapped_column(
         JSON, nullable=True, comment="Structured content data"
     )
 
@@ -195,7 +196,7 @@ class ChannelMessageModel(IdGeneratorMixin, Base):
     reply_to: Mapped[str | None] = mapped_column(
         String, nullable=True, comment="ID of message being replied to"
     )
-    mentions: Mapped[list | None] = mapped_column(
+    mentions: Mapped[list[Any] | None] = mapped_column(
         JSON, nullable=True, comment="List of mentioned user IDs"
     )
 
@@ -203,7 +204,7 @@ class ChannelMessageModel(IdGeneratorMixin, Base):
     direction: Mapped[str] = mapped_column(String, nullable=False, comment="inbound or outbound")
 
     # Raw data for debugging
-    raw_data: Mapped[dict | None] = mapped_column(
+    raw_data: Mapped[dict[str, Any] | None] = mapped_column(
         JSON, nullable=True, comment="Original message data from channel"
     )
 
@@ -333,7 +334,7 @@ class ChannelOutboxModel(IdGeneratorMixin, Base):
     sent_channel_message_id: Mapped[str | None] = mapped_column(String, nullable=True)
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     next_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    metadata_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

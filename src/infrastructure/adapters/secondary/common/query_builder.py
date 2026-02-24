@@ -10,7 +10,7 @@ Provides a fluent interface for building SQLAlchemy queries with:
 """
 
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, Generic, TypeVar
 
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import DeclarativeBase
@@ -19,7 +19,7 @@ from sqlalchemy.sql import ColumnElement, Select
 T = TypeVar("T", bound=DeclarativeBase)
 
 
-class QueryBuilder:
+class QueryBuilder(Generic[T]):
     """
     Fluent query builder for SQLAlchemy.
 
@@ -49,8 +49,8 @@ class QueryBuilder:
         """
         self._model_class = model_class
         self._query: Select[tuple[T]] = query if query is not None else select(model_class)
-        self._where_conditions: list[ColumnElement] = []
-        self._order_by_clauses: list = []
+        self._where_conditions: list[ColumnElement[bool]] = []
+        self._order_by_clauses: list[Any] = []
         self._limit_value: int | None = None
         self._offset_value: int | None = None
 
@@ -447,7 +447,7 @@ class QueryBuilder:
 
     # === Build ===
 
-    def build(self) -> Select:
+    def build(self) -> Select[Any]:
         """
         Build and return the SQLAlchemy Select query.
 

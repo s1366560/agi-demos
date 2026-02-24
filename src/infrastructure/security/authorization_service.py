@@ -6,6 +6,7 @@ decisions using SQLAlchemy ORM models directly.
 """
 
 import logging
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -223,7 +224,7 @@ class AuthorizationService(AuthorizationPort):
 
         logger.info(f"Removed role {role_name} from user {user_id}")
 
-    async def get_user_roles(self, user_id: str, tenant_id: str | None = None) -> list[dict]:
+    async def get_user_roles(self, user_id: str, tenant_id: str | None = None) -> list[dict[str, Any]]:
         """
         Get all roles assigned to a user.
 

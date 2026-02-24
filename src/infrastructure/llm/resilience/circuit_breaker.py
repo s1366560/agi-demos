@@ -31,6 +31,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -254,7 +255,7 @@ class CircuitBreaker:
             f"{old_state.value} -> {new_state.value}"
         )
 
-    def get_status(self) -> dict:
+    def get_status(self) -> dict[str, Any]:
         """Get current circuit breaker status as dict."""
         return {
             "provider_id": self.provider_id,
@@ -348,7 +349,7 @@ class CircuitBreakerRegistry:
         async with self._lock:
             return self.get_breaker(provider_id, config)
 
-    def get_all_statuses(self) -> dict[str, dict]:
+    def get_all_statuses(self) -> dict[str, dict[str, Any]]:
         """Get status of all circuit breakers."""
         return {pid: breaker.get_status() for pid, breaker in self._breakers.items()}
 

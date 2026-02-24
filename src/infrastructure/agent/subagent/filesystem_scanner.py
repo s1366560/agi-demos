@@ -69,11 +69,11 @@ class FileSystemSubAgentScanner:
     SubAgents use flat {name}.md files in the agents/ directory.
     """
 
-    DEFAULT_AGENT_DIRS: ClassVar[list] = [
+    DEFAULT_AGENT_DIRS: ClassVar[list[str]] = [
         ".memstack/agents",
     ]
 
-    GLOBAL_AGENT_DIRS: ClassVar[list] = [
+    GLOBAL_AGENT_DIRS: ClassVar[list[str]] = [
         "~/.memstack/agents",
     ]
 

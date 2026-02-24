@@ -77,7 +77,7 @@ class ExecutionMetrics:
     total_latency_ms: float = 0.0
     total_tokens: int = 0
     total_cost: float = 0.0
-    latencies: list = field(default_factory=list)
+    latencies: list[float] = field(default_factory=list)
 
     @property
     def avg_latency_ms(self) -> float:

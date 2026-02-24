@@ -259,7 +259,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
             return f"Error executing tool: {e}"
 
     @staticmethod
-    def _extract_text(content: list) -> str:
+    def _extract_text(content: list[Any]) -> str:
         """Extract text from MCP content items."""
         texts = []
         for item in content:
@@ -272,7 +272,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
                 texts.append(str(item))
         return "\n".join(texts)
 
-    def _capture_html_from_content(self, content: list) -> None:
+    def _capture_html_from_content(self, content: list[Any]) -> None:
         """Detect HTML in tool result and cache it for mcp_app_result emission.
 
         If the tool execution returns HTML directly (e.g., a game renderer that

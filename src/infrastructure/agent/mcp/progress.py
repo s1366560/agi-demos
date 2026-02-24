@@ -5,6 +5,7 @@ from MCP tools during long-running operations.
 """
 
 from collections.abc import Callable
+from typing import Any
 
 # Type alias for progress callback
 ProgressHandler = Callable[
@@ -31,7 +32,7 @@ class ProgressTracker:
 
     def __init__(self) -> None:
         """Initialize the progress tracker."""
-        self._active_progress: dict[str, dict] = {}
+        self._active_progress: dict[str, dict[str, Any]] = {}
 
     def start_tracking(
         self,
@@ -59,7 +60,7 @@ class ProgressTracker:
         progress_token: str,
         progress: float,
         message: str | None = None,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """
         Update progress for a tracked operation.
 
@@ -80,7 +81,7 @@ class ProgressTracker:
 
         return self._active_progress[progress_token].copy()
 
-    def complete_tracking(self, progress_token: str) -> dict | None:
+    def complete_tracking(self, progress_token: str) -> dict[str, Any] | None:
         """
         Mark a tracked operation as complete.
 
@@ -97,7 +98,7 @@ class ProgressTracker:
         del self._active_progress[progress_token]
         return result
 
-    def get_progress(self, progress_token: str) -> dict | None:
+    def get_progress(self, progress_token: str) -> dict[str, Any] | None:
         """
         Get current progress for a tracked operation.
 
@@ -109,7 +110,7 @@ class ProgressTracker:
         """
         return self._active_progress.get(progress_token, {}).copy()
 
-    def get_all_progress(self) -> dict[str, dict]:
+    def get_all_progress(self) -> dict[str, dict[str, Any]]:
         """
         Get all active progress tracking.
 

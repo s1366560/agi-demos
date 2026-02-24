@@ -65,7 +65,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
 
-    async def create(self, template: dict) -> dict:
+    async def create(self, template: dict[str, Any]) -> dict[str, Any]:
         DBTemplate = self._get_model()
         template_id = template.get("id") or _generate_id()
 
@@ -100,7 +100,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
         await self._session.refresh(db_obj)
         return self._row_to_dict(db_obj)
 
-    async def get_by_id(self, template_id: str) -> dict | None:
+    async def get_by_id(self, template_id: str) -> dict[str, Any] | None:
         DBTemplate = self._get_model()
         query = select(DBTemplate).where(DBTemplate.id == template_id)
         result = await self._session.execute(query)
@@ -109,7 +109,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
 
     async def get_by_name(
         self, tenant_id: str, name: str, version: str | None = None
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         DBTemplate = self._get_model()
         query = select(DBTemplate).where(
             DBTemplate.tenant_id == tenant_id,
@@ -124,7 +124,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
         row = result.scalar_one_or_none()
         return self._row_to_dict(row) if row else None
 
-    async def update(self, template_id: str, data: dict) -> dict | None:
+    async def update(self, template_id: str, data: dict[str, Any]) -> dict[str, Any] | None:
         DBTemplate = self._get_model()
 
         # Build update values, excluding None
@@ -179,7 +179,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
         published_only: bool = True,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         DBTemplate = self._get_model()
         stmt = select(DBTemplate).where(DBTemplate.tenant_id == tenant_id)
 

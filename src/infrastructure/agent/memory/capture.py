@@ -144,7 +144,7 @@ class MemoryCapturePostprocessor:
 
     async def _process_and_store_items(
         self,
-        items: list[dict],
+        items: list[dict[str, Any]],
         chunk_repo: Any,
         project_id: str,
         conversation_id: str,
@@ -180,7 +180,7 @@ class MemoryCapturePostprocessor:
 
     async def _process_capture_item(
         self,
-        item: dict,
+        item: dict[str, Any],
         chunk_repo: Any,
         project_id: str,
         conversation_id: str,
@@ -236,7 +236,7 @@ class MemoryCapturePostprocessor:
         self,
         user_message: str,
         assistant_response: str,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Ask LLM to extract memorable items from conversation."""
         if not self._llm_client:
             return []
@@ -271,7 +271,7 @@ class MemoryCapturePostprocessor:
             logger.warning(f"LLM memory extraction failed ({type(self._llm_client).__name__}): {e}")
             return []
 
-    def _parse_llm_response(self, content: str) -> list[dict]:
+    def _parse_llm_response(self, content: str) -> list[dict[str, Any]]:
         """Parse LLM JSON response, handling markdown fences."""
         if not content:
             return []

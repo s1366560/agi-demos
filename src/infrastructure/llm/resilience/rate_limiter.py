@@ -22,6 +22,7 @@ import logging
 import time
 from dataclasses import dataclass, field
 from types import TracebackType
+from typing import Any
 
 from src.domain.llm_providers.models import ProviderType
 
@@ -260,7 +261,7 @@ class ProviderRateLimiter:
 
         return RateLimitContext(semaphore, provider_type, self)
 
-    def get_stats(self, provider_type: ProviderType) -> dict:
+    def get_stats(self, provider_type: ProviderType) -> dict[str, Any]:
         """Get rate limiting statistics for a provider."""
         stats = self._get_stats(provider_type)
         config = self._get_config(provider_type)
@@ -291,7 +292,7 @@ class ProviderRateLimiter:
             },
         }
 
-    def get_all_stats(self) -> dict[str, dict]:
+    def get_all_stats(self) -> dict[str, dict[str, Any]]:
         """Get statistics for all providers."""
         return {
             provider_type.value: self.get_stats(provider_type)

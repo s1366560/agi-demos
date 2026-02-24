@@ -568,7 +568,7 @@ class ReActAgent:
             redis_cache_ttl_seconds=subagent_run_redis_cache_ttl_seconds,
             terminal_retention_seconds=subagent_terminal_retention_seconds,
         )
-        self._subagent_session_tasks: dict[str, asyncio.Task] = {}
+        self._subagent_session_tasks: dict[str, asyncio.Task[Any]] = {}
 
     def _init_orchestrators(
         self,
@@ -1020,7 +1020,7 @@ class ReActAgent:
 
     async def _background_index_conversation(
         self,
-        messages: list[dict],
+        messages: list[dict[str, Any]],
         project_id: str,
         conversation_id: str,
     ) -> None:
@@ -2127,7 +2127,7 @@ class ReActAgent:
     async def _stream_process_events(
         self,
         processor: SessionProcessor,
-        messages: list[dict],
+        messages: list[dict[str, Any]],
         langfuse_context: dict[str, Any],
         abort_signal: asyncio.Event | None,
         matched_skill: Skill | None,

@@ -124,11 +124,11 @@ class FeishuEventDispatcher:
     """Dispatcher for Feishu events with filtering and middleware."""
 
     def __init__(self) -> None:
-        self._handlers: dict[str, list[Callable]] = {}
-        self._middleware: list[Callable] = []
+        self._handlers: dict[str, list[Callable[..., Any]]] = {}
+        self._middleware: list[Callable[..., Any]] = []
         self._filters: list[Callable[[dict[str, Any]], bool]] = []
 
-    def on(self, event_type: str, *filters: Callable[[dict[str, Any]], bool]) -> Callable:
+    def on(self, event_type: str, *filters: Callable[[dict[str, Any]], bool]) -> Callable[..., Any]:
         """Decorator to register an event handler.
 
         Args:
@@ -141,7 +141,7 @@ class FeishuEventDispatcher:
                 print(event)
         """
 
-        def decorator(handler: Callable) -> Callable:
+        def decorator(handler: Callable[..., Any]) -> Callable[..., Any]:
             if event_type not in self._handlers:
                 self._handlers[event_type] = []
 
@@ -155,7 +155,7 @@ class FeishuEventDispatcher:
 
         return decorator
 
-    def use(self, middleware: Callable) -> Callable:
+    def use(self, middleware: Callable[..., Any]) -> Callable[..., Any]:
         """Register middleware.
 
         Middleware is called before handlers and can modify the event.

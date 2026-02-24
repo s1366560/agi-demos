@@ -7,6 +7,7 @@ against API abuse and ensure fair resource allocation.
 
 import logging
 from collections.abc import Callable
+from typing import Any
 
 from fastapi import Request, Response
 from slowapi import Limiter
@@ -45,7 +46,7 @@ def get_rate_limiter() -> Limiter:
     return _rate_limiter
 
 
-async def rate_limit_middleware(request: Request, call_next: Callable) -> Response:
+async def rate_limit_middleware(request: Request, call_next: Callable[..., Any]) -> Response:
     """
     Rate limiting middleware for FastAPI.
 

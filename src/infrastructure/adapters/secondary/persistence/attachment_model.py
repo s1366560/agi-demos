@@ -7,6 +7,7 @@ This model represents file attachments in conversations, supporting:
 """
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import (
     JSON,
@@ -76,7 +77,7 @@ class AttachmentModel(Base):
 
     # Additional metadata (dimensions for images, page count for docs, etc.)
     # Note: Use 'file_metadata' to avoid conflict with SQLAlchemy's reserved 'metadata'
-    file_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=True)
+    file_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=True)
 
     # Error tracking
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

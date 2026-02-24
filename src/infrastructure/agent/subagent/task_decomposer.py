@@ -34,7 +34,7 @@ class SubTask:
     id: str
     description: str
     target_subagent: str | None = None
-    dependencies: tuple = field(default_factory=tuple)
+    dependencies: tuple[str, ...] = field(default_factory=tuple)
     priority: int = 0
 
 
@@ -48,7 +48,7 @@ class DecompositionResult:
         is_decomposed: Whether the task was actually split (False = single task).
     """
 
-    subtasks: tuple
+    subtasks: tuple[SubTask, ...]
     reasoning: str = ""
     is_decomposed: bool = False
 

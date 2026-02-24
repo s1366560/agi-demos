@@ -524,7 +524,7 @@ class RelationshipExtractor:
         ]
 
         # Collect all allowed types from matching signatures
-        allowed_types: set = set()
+        allowed_types: set[str] = set()
         has_constraints = False
 
         for signature in signatures_to_check:

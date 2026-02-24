@@ -54,7 +54,7 @@ class BackgroundExecutor:
         """
         self._tracker = state_tracker or StateTracker()
         self._on_event = on_event
-        self._tasks: dict[str, asyncio.Task] = {}
+        self._tasks: dict[str, asyncio.Task[Any]] = {}
 
     @property
     def tracker(self) -> StateTracker:

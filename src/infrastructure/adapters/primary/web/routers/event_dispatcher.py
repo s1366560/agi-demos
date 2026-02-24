@@ -78,7 +78,7 @@ class EventDispatcher:
         self.queue: asyncio.Queue[QueuedEvent] = asyncio.Queue(maxsize=self.config.queue_size)
 
         # Sender task
-        self.sender_task: asyncio.Task | None = None
+        self.sender_task: asyncio.Task[None] | None = None
         self.running = False
 
         # Statistics

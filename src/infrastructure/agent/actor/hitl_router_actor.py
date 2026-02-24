@@ -34,7 +34,7 @@ class HITLStreamRouterActor:
         self._redis: aioredis.Redis | None = None
         self._projects: set[tuple[str, str]] = set()
         self._running = False
-        self._listen_task: asyncio.Task | None = None
+        self._listen_task: asyncio.Task[None] | None = None
         self._worker_id = f"router-{os.getpid()}"
 
     async def start(self) -> None:

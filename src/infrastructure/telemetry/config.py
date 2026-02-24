@@ -49,7 +49,7 @@ def _reset_providers() -> None:
         metrics.set_meter_provider(None)
 
 
-def _create_resource(settings_override: dict | None = None) -> Resource:
+def _create_resource(settings_override: dict[str, Any] | None = None) -> Resource:
     """Create OpenTelemetry Resource with service attributes."""
     settings = settings_override or get_settings().__dict__
 
@@ -70,7 +70,7 @@ def _create_resource(settings_override: dict | None = None) -> Resource:
     return Resource.create(attributes)
 
 
-def _create_trace_exporter(settings_override: dict | None = None) -> Any:
+def _create_trace_exporter(settings_override: dict[str, Any] | None = None) -> Any:
     """Create appropriate trace exporter based on configuration."""
     settings = settings_override or get_settings().__dict__
 
@@ -93,7 +93,7 @@ def _create_trace_exporter(settings_override: dict | None = None) -> Any:
         return ConsoleSpanExporter()
 
 
-def _get_sampler(settings_override: dict | None = None) -> TraceIdRatioBased:
+def _get_sampler(settings_override: dict[str, Any] | None = None) -> TraceIdRatioBased:
     """Create sampler based on environment."""
     settings = settings_override or get_settings().__dict__
     environment = settings.get("environment", "development")
@@ -108,7 +108,7 @@ def _get_sampler(settings_override: dict | None = None) -> TraceIdRatioBased:
 
 
 def configure_tracer_provider(
-    settings_override: dict | None = None, force_reset: bool = False
+    settings_override: dict[str, Any] | None = None, force_reset: bool = False
 ) -> TracerProvider | None:
     """Configure and return the tracer provider.
 
@@ -166,7 +166,7 @@ def configure_tracer_provider(
 
 
 def configure_meter_provider(
-    settings_override: dict | None = None, force_reset: bool = False
+    settings_override: dict[str, Any] | None = None, force_reset: bool = False
 ) -> MeterProvider | None:
     """Configure and return the meter provider.
 
@@ -220,7 +220,7 @@ def configure_meter_provider(
         return None
 
 
-def configure_telemetry(settings_override: dict | None = None) -> None:
+def configure_telemetry(settings_override: dict[str, Any] | None = None) -> None:
     """Configure OpenTelemetry tracing and metrics.
 
     This function should be called during application startup.

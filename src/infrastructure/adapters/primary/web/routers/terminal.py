@@ -203,7 +203,7 @@ async def close_terminal_session(
     session_id: str,
     _user: User = Depends(get_current_user),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
-) -> dict:
+) -> dict[str, Any]:
     """Close a terminal session."""
     proxy = get_terminal_proxy()
 
@@ -251,7 +251,7 @@ async def terminal_websocket(
     """
     await websocket.accept()
     proxy = get_terminal_proxy()
-    output_task: asyncio.Task | None = None
+    output_task: asyncio.Task[None] | None = None
 
     try:
         session = await _resolve_terminal_session(proxy, websocket, sandbox_id, session_id)
@@ -322,7 +322,7 @@ async def _read_terminal_output(proxy: Any, websocket: WebSocket, session: Termi
 
 
 async def _handle_terminal_message(
-    proxy: Any, websocket: WebSocket, session: TerminalSession, msg: dict
+    proxy: Any, websocket: WebSocket, session: TerminalSession, msg: dict[str, Any]
 ) -> None:
     """Dispatch a single terminal WebSocket message."""
     msg_type = msg.get("type")

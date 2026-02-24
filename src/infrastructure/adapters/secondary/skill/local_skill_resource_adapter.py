@@ -31,7 +31,7 @@ class LocalSkillResourceAdapter(SkillResourcePort):
     """
 
     # Resource directories to scan
-    RESOURCE_DIRS: ClassVar[list] = ["scripts", "references", "assets", "templates"]
+    RESOURCE_DIRS: ClassVar[list[str]] = ["scripts", "references", "assets", "templates"]
 
     def __init__(
         self,

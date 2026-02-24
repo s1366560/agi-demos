@@ -5,8 +5,9 @@ This module contains SQLAlchemy ORM models for LLM provider configuration.
 These models map to the database tables created in the Alembic migration.
 """
 
+import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import (
     JSON,
@@ -37,7 +38,7 @@ class LLMProvider(Base):
     __tablename__ = "llm_providers"
 
     # Primary key
-    id: Mapped[UUID] = mapped_column(
+    id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
 
@@ -58,7 +59,7 @@ class LLMProvider(Base):
     reranker_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     # Provider-specific configuration (JSONB for flexibility)
-    config: Mapped[dict] = mapped_column(
+    config: Mapped[dict[str, Any]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), default=dict, nullable=False
     )
 
@@ -110,14 +111,14 @@ class TenantProviderMapping(Base):
     __tablename__ = "tenant_provider_mappings"
 
     # Primary key
-    id: Mapped[UUID] = mapped_column(
+    id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
 
     # Mapping
     tenant_id: Mapped[str] = mapped_column(String(255), nullable=False)
     operation_type: Mapped[str] = mapped_column(String(20), default="llm", nullable=False)
-    provider_id: Mapped[UUID] = mapped_column(
+    provider_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="CASCADE"), nullable=False
     )
 
@@ -166,7 +167,7 @@ class ProviderHealth(Base):
     __tablename__ = "provider_health"
 
     # Composite key: provider_id + timestamp
-    provider_id: Mapped[UUID] = mapped_column(
+    provider_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("llm_providers.id", ondelete="CASCADE"),
         primary_key=True,
@@ -207,12 +208,12 @@ class LLMUsageLog(Base):
     __tablename__ = "llm_usage_logs"
 
     # Primary key
-    id: Mapped[UUID] = mapped_column(
+    id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid()
     )
 
     # Context
-    provider_id: Mapped[UUID | None] = mapped_column(
+    provider_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("llm_providers.id", ondelete="SET NULL"), nullable=True
     )
     tenant_id: Mapped[str | None] = mapped_column(String(255), nullable=True)

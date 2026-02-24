@@ -1036,7 +1036,7 @@ class SessionProcessor:
         return None
 
     @staticmethod
-    def _try_parse_json_dict(text: str) -> dict | None:
+    def _try_parse_json_dict(text: str) -> dict[str, Any] | None:
         """Try to parse text as a JSON dict. Returns dict or None."""
         try:
             parsed = json.loads(text)
@@ -1861,7 +1861,7 @@ class SessionProcessor:
                     )
 
             # Build observe-level ui_metadata for MCP tools with UI
-            _observe_ui_meta: dict | None = None
+            _observe_ui_meta: dict[str, Any] | None = None
             _hydrated_ui_meta: dict[str, Any] = {}
             if tool_instance and has_ui:
                 _o_app_id = (
@@ -2316,7 +2316,7 @@ class SessionProcessor:
                     region: str,
                     mime: str,
                     no_proxy: bool = False,
-                ) -> dict:
+                ) -> dict[str, Any]:
                     """Synchronous S3 upload in a thread pool."""
                     from datetime import date
                     from urllib.parse import quote
@@ -2324,7 +2324,7 @@ class SessionProcessor:
                     import boto3
                     from botocore.config import Config as BotoConfig
 
-                    config_kwargs: dict = {
+                    config_kwargs: dict[str, Any] = {
                         "connect_timeout": 10,
                         "read_timeout": 30,
                         "retries": {"max_attempts": 5, "mode": "standard"},

@@ -261,7 +261,7 @@ class AgentSkillsValidator:
     COMPATIBILITY_MAX_LENGTH = 500
 
     # Fields that are not part of AgentSkills.io spec (custom extensions)
-    DEPRECATED_FIELDS: ClassVar[dict] = {
+    DEPRECATED_FIELDS: ClassVar[dict[str, str]] = {
         "trigger_patterns": "Use name/description for implicit triggering",
         "triggers": "Use name/description for implicit triggering",
         "tools": "Use 'allowed-tools' with space-separated format",

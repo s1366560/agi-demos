@@ -35,7 +35,7 @@ from ..hitl.coordinator import HITLCoordinator
 logger = logging.getLogger(__name__)
 
 
-def _ensure_dict(raw: Any) -> dict:
+def _ensure_dict(raw: Any) -> dict[str, Any]:
     """Ensure context argument is a dictionary."""
     if isinstance(raw, str):
         return {"description": raw} if raw else {}

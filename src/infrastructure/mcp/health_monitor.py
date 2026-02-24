@@ -109,7 +109,7 @@ class MCPServerHealthMonitor:
         self._health_check_timeout = health_check_timeout
 
         # Active monitoring tasks
-        self._monitoring_tasks: dict[str, asyncio.Task] = {}
+        self._monitoring_tasks: dict[str, asyncio.Task[None]] = {}
 
         # Server configurations for restart (sandbox_id -> {server_name -> config})
         self._server_configs: dict[str, dict[str, dict[str, Any]]] = {}

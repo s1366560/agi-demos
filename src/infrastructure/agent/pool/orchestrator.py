@@ -106,7 +106,7 @@ class PoolOrchestrator:
 
         # State
         self._is_running = False
-        self._background_tasks: list[asyncio.Task] = []
+        self._background_tasks: list[asyncio.Task[Any]] = []
         self._lock = asyncio.Lock()
 
     @property

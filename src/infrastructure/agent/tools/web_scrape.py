@@ -40,7 +40,7 @@ class WebScrapeTool(AgentTool):
     )
 
     # Blocked domains (security)
-    BLOCKED_DOMAINS: ClassVar[dict] = {
+    BLOCKED_DOMAINS: ClassVar[dict[str, str]] = {
         "localhost",
         "127.0.0.1",
         "0.0.0.0",
@@ -48,7 +48,7 @@ class WebScrapeTool(AgentTool):
     }
 
     # Content selectors for main content extraction
-    CONTENT_SELECTORS: ClassVar[list] = [
+    CONTENT_SELECTORS: ClassVar[list[str]] = [
         "article",
         "main",
         '[role="main"]',
@@ -60,7 +60,7 @@ class WebScrapeTool(AgentTool):
     ]
 
     # Unwanted element selectors to remove
-    UNWANTED_SELECTORS: ClassVar[list] = [
+    UNWANTED_SELECTORS: ClassVar[list[str]] = [
         "nav",
         "header",
         "footer",
@@ -91,7 +91,7 @@ class WebScrapeTool(AgentTool):
         )
         self._settings = get_settings()
 
-    def get_parameters_schema(self) -> dict:
+    def get_parameters_schema(self) -> dict[str, Any]:
         """Get the parameters schema for LLM function calling."""
         return {
             "type": "object",

@@ -313,7 +313,7 @@ class CommunityUpdater:
 
     async def _call_llm_with_json_extraction(
         self,
-        messages: list,
+        messages: list[Any],
     ) -> CommunitySummary:
         """
         Call LLM and extract JSON from response, handling markdown wrapping.

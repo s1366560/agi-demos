@@ -48,10 +48,10 @@ class MCPAppResponse(BaseModel):
     server_id: str | None = None
     server_name: str
     tool_name: str
-    ui_metadata: dict
+    ui_metadata: dict[str, Any]
     source: str
     status: str
-    lifecycle_metadata: dict = Field(default_factory=dict)
+    lifecycle_metadata: dict[str, Any] = Field(default_factory=dict)
     error_message: str | None = None
     has_resource: bool = False
     resource_size_bytes: int | None = None
@@ -67,14 +67,14 @@ class MCPAppResourceResponse(BaseModel):
     html_content: str
     mime_type: str = "text/html;profile=mcp-app"
     size_bytes: int = 0
-    ui_metadata: dict = Field(default_factory=dict)
+    ui_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class MCPAppToolCallRequest(BaseModel):
     """Request schema for proxying a tool call from an MCP App iframe."""
 
     tool_name: str = Field(..., description="Name of the MCP tool to call")
-    arguments: dict = Field(default_factory=dict, description="Tool call arguments")
+    arguments: dict[str, Any] = Field(default_factory=dict, description="Tool call arguments")
 
 
 class MCPAppToolCallResponse(BaseModel):
@@ -83,7 +83,7 @@ class MCPAppToolCallResponse(BaseModel):
     Error responses follow JSON-RPC -32000 convention per SEP-1865.
     """
 
-    content: list = Field(default_factory=list)
+    content: list[Any] = Field(default_factory=list)
     is_error: bool = False
     error_message: str | None = None
     error_code: int | None = Field(None, description="JSON-RPC error code (-32000 for proxy)")
@@ -169,7 +169,7 @@ class MCPDirectToolCallRequest(BaseModel):
     project_id: str = Field(..., description="Project owning the sandbox")
     server_name: str = Field(..., description="MCP server name in the sandbox")
     tool_name: str = Field(..., description="Name of the MCP tool to call")
-    arguments: dict = Field(default_factory=dict, description="Tool call arguments")
+    arguments: dict[str, Any] = Field(default_factory=dict, description="Tool call arguments")
 
 
 @router.post("/proxy/tool-call", response_model=MCPAppToolCallResponse)
@@ -422,7 +422,7 @@ class MCPResourceReadRequest(BaseModel):
 class MCPResourceReadResponse(BaseModel):
     """Response compatible with AppRenderer's onReadResource callback."""
 
-    contents: list = Field(default_factory=list)
+    contents: list[Any] = Field(default_factory=list)
 
 
 def _extract_server_name_from_uri(uri: str) -> str | None:
@@ -628,7 +628,7 @@ class MCPResourceListRequest(BaseModel):
 class MCPResourceListResponse(BaseModel):
     """Response compatible with AppRenderer's onListResources callback."""
 
-    resources: list = Field(default_factory=list)
+    resources: list[Any] = Field(default_factory=list)
 
 
 @router.post("/resources/list", response_model=MCPResourceListResponse)

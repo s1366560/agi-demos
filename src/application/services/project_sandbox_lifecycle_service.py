@@ -1002,7 +1002,7 @@ class ProjectSandboxLifecycleService:
         project_id: str,
         server_name: str,
         server_type: str,
-        transport_config: dict,
+        transport_config: dict[str, Any],
     ) -> None:
         """Install and start a single MCP server in the project sandbox.
 

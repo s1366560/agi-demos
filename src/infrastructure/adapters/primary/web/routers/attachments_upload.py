@@ -104,7 +104,7 @@ class CompleteUploadRequest(BaseModel):
     """Request model for completing multipart upload."""
 
     attachment_id: str = Field(..., description="ID of the attachment")
-    parts: list[dict] = Field(
+    parts: list[dict[str, Any]] = Field(
         ...,
         description="List of uploaded parts with 'part_number' and 'etag'",
     )

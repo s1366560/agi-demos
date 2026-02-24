@@ -71,7 +71,7 @@ class AgentPoolManager:
         self._project_instances: dict[str, set[str]] = {}
 
         # 后台任务
-        self._cleanup_task: asyncio.Task | None = None
+        self._cleanup_task: asyncio.Task[None] | None = None
         self._running = False
         self._background_tasks: set[asyncio.Task[Any]] = set()
 

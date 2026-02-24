@@ -110,15 +110,15 @@ class LocalSandboxAdapter(SandboxPort):
         self._reconnect_backoff_max = reconnect_backoff_max
 
         self._connections: dict[str, LocalSandboxConnection] = {}
-        self._health_task: asyncio.Task | None = None
-        self._heartbeat_task: asyncio.Task | None = None
-        self._reconnect_tasks: dict[str, asyncio.Task] = {}
+        self._health_task: asyncio.Task[None] | None = None
+        self._heartbeat_task: asyncio.Task[None] | None = None
+        self._reconnect_tasks: dict[str, asyncio.Task[None]] = {}
         self._reconnect_attempts: dict[str, int] = {}
         self._running = False
 
         # Callbacks for connection state changes
-        self._on_disconnect_callbacks: list[Callable] = []
-        self._on_reconnect_callbacks: list[Callable] = []
+        self._on_disconnect_callbacks: list[Callable[..., Any]] = []
+        self._on_reconnect_callbacks: list[Callable[..., Any]] = []
 
     async def start(self) -> None:
         """Start the adapter and health monitoring."""
@@ -163,12 +163,12 @@ class LocalSandboxAdapter(SandboxPort):
         self._connections.clear()
         logger.info("LocalSandboxAdapter stopped")
 
-    def on_disconnect(self, callback: Callable) -> "LocalSandboxAdapter":
+    def on_disconnect(self, callback: Callable[..., Any]) -> "LocalSandboxAdapter":
         """Register callback for when a connection is lost."""
         self._on_disconnect_callbacks.append(callback)
         return self
 
-    def on_reconnect(self, callback: Callable) -> "LocalSandboxAdapter":
+    def on_reconnect(self, callback: Callable[..., Any]) -> "LocalSandboxAdapter":
         """Register callback for when a connection is restored."""
         self._on_reconnect_callbacks.append(callback)
         return self

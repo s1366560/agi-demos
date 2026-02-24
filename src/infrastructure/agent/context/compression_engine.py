@@ -225,7 +225,7 @@ class ContextCompressionEngine:
         summary_max_tokens: int = 500,
         prune_min_tokens: int | None = None,
         prune_protect_tokens: int | None = None,
-        prune_protected_tools: set | None = None,
+        prune_protected_tools: set[str] | None = None,
         assistant_truncate_chars: int = 2000,
         role_truncate_limits: dict[str, int] | None = None,
     ) -> None:

@@ -23,6 +23,7 @@ Features:
 import asyncio
 import logging
 from collections.abc import AsyncIterator
+from typing import Any
 
 import redis.asyncio as redis
 
@@ -228,10 +229,10 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
             self._active_subscriptions.pop(subscription_id, None)
 
     def _iter_decoded_messages(
-        self, streams: list, stream_name_key: str | None = None
-    ) -> list[tuple[str, str, dict]]:
+        self, streams: list[Any], stream_name_key: str | None = None
+    ) -> list[tuple[str, str, dict[str, Any]]]:
         """Decode stream messages, returning (stream_name, msg_id, fields) tuples."""
-        results: list[tuple[str, str, dict]] = []
+        results: list[tuple[str, str, dict[str, Any]]] = []
         for stream_name, messages in streams:
             if isinstance(stream_name, bytes):
                 stream_name = stream_name.decode("utf-8")

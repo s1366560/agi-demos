@@ -271,7 +271,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
         self,
         project_id: str,
         tenant_id: str | None = None,
-    ) -> list:
+    ) -> list[Any]:
         """List resources from MCP servers in the sandbox.
 
         Proxies the resources/list call through the sandbox WebSocket client.

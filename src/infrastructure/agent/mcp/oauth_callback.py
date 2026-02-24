@@ -11,6 +11,7 @@ Based on vendor/opencode/packages/opencode/src/mcp/oauth-callback.ts
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from aiohttp import web
 
@@ -251,7 +252,7 @@ class MCPOAuthCallbackServer:
 
         return future
 
-    def _timeout_callback(self, future: asyncio.Future, oauth_state: str) -> None:
+    def _timeout_callback(self, future: asyncio.Future[Any], oauth_state: str) -> None:
         """Handle callback timeout.
 
         Args:

@@ -246,7 +246,7 @@ async def cleanup_data(
         None, ge=1, description="Delete data older than this many days"
     ),
     tenant_id: str | None = Query(None, description="Filter by tenant ID"),
-    body: dict | None = Body(None),
+    body: dict[str, Any] | None = Body(None),
     current_user: User = Depends(get_current_user),
     graphiti_client: Any = Depends(get_graphiti_client),
 ) -> dict[str, Any]:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.domain.llm_providers.llm_types import LLMClient
@@ -34,11 +34,11 @@ class AggregatedResult:
     """
 
     summary: str
-    results: tuple
+    results: tuple[Any, ...]
     total_tokens: int = 0
     total_tool_calls: int = 0
     all_succeeded: bool = True
-    failed_agents: tuple = field(default_factory=tuple)
+    failed_agents: tuple[str, ...] = field(default_factory=tuple)
 
 
 class ResultAggregator:

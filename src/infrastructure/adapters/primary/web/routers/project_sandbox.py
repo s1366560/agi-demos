@@ -902,7 +902,7 @@ def _rewrite_desktop_content(
     content_str = content_bytes.decode("utf-8", errors="replace")
     proxy_prefix = f"/api/v1/projects/{project_id}/sandbox/desktop/proxy/"
 
-    def rewrite_url(match: re.Match) -> str:
+    def rewrite_url(match: re.Match[str]) -> str:
         """Rewrite URL with proxy prefix and token."""
         attr = match.group(1)
         quote = match.group(2)

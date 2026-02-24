@@ -160,7 +160,7 @@ async def list_invoices(
 @router.post("/{tenant_id}/upgrade")
 async def upgrade_plan(
     tenant_id: str,
-    plan_data: dict,
+    plan_data: dict[str, Any],
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:

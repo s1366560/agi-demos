@@ -170,7 +170,7 @@ class MemoryGetTool(AgentTool):
 
     def __init__(
         self,
-        session_factory: Callable | None = None,
+        session_factory: Callable[..., Any] | None = None,
         project_id: str = "",
     ) -> None:
         super().__init__(

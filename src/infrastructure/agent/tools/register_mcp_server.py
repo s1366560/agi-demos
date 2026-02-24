@@ -321,7 +321,7 @@ class RegisterMCPServerTool(AgentTool):
         )
         return lifecycle_result
 
-    async def _detect_and_persist_apps(self, server_name: str, tools: list[dict]) -> list[str]:
+    async def _detect_and_persist_apps(self, server_name: str, tools: list[dict[str, Any]]) -> list[str]:
         """Detect tools with UI metadata and persist as MCP Apps."""
         app_tools = []
         for t in tools:
@@ -363,7 +363,7 @@ class RegisterMCPServerTool(AgentTool):
         server_name: str,
         tool_name: str,
         resource_uri: str,
-        ui_metadata: dict,
+        ui_metadata: dict[str, Any],
     ) -> str:
         """Persist an auto-detected MCP App to the database. Returns app ID."""
         from src.domain.model.mcp.app import (

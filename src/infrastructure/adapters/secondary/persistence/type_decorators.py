@@ -15,7 +15,7 @@ from sqlalchemy.types import TypeDecorator
 T = TypeVar("T", bound=BaseModel)
 
 
-class PydanticType[T: BaseModel](TypeDecorator):
+class PydanticType[T: BaseModel](TypeDecorator[Any]):
     """
     SQLAlchemy TypeDecorator for storing Pydantic models as JSON.
 
@@ -31,7 +31,7 @@ class PydanticType[T: BaseModel](TypeDecorator):
         super().__init__(*args, **kwargs)
         self.pydantic_type = pydantic_type
 
-    def process_bind_param(self, value: T | None, dialect: Dialect) -> dict | None:
+    def process_bind_param(self, value: T | None, dialect: Dialect) -> dict[str, Any] | None:
         """Convert Pydantic model to dict for storage."""
         if value is None:
             return None
@@ -43,14 +43,14 @@ class PydanticType[T: BaseModel](TypeDecorator):
             return value.model_dump(mode="json", by_alias=True)
         raise ValueError(f"Expected {self.pydantic_type.__name__} or dict, got {type(value)}")
 
-    def process_result_value(self, value: dict | None, dialect: Dialect) -> T | None:
+    def process_result_value(self, value: dict[str, Any] | None, dialect: Dialect) -> T | None:
         """Convert stored dict back to Pydantic model."""
         if value is None:
             return None
         return self.pydantic_type.model_validate(value)
 
 
-class PydanticListType[T: BaseModel](TypeDecorator):
+class PydanticListType[T: BaseModel](TypeDecorator[Any]):
     """
     SQLAlchemy TypeDecorator for storing lists of Pydantic models as JSON.
 
@@ -66,7 +66,7 @@ class PydanticListType[T: BaseModel](TypeDecorator):
         super().__init__(*args, **kwargs)
         self.pydantic_type = pydantic_type
 
-    def process_bind_param(self, value: list[T] | None, dialect: Dialect) -> list[dict] | None:
+    def process_bind_param(self, value: list[T] | None, dialect: Dialect) -> list[dict[str, Any]] | None:
         """Convert list of Pydantic models to list of dicts for storage."""
         if value is None:
             return None
@@ -83,14 +83,14 @@ class PydanticListType[T: BaseModel](TypeDecorator):
                 )
         return result
 
-    def process_result_value(self, value: list[dict] | None, dialect: Dialect) -> list[T] | None:
+    def process_result_value(self, value: list[dict[str, Any]] | None, dialect: Dialect) -> list[T] | None:
         """Convert stored list of dicts back to list of Pydantic models."""
         if value is None:
             return None
         return [self.pydantic_type.model_validate(item) for item in value]
 
 
-class ValidatedJSON(TypeDecorator):
+class ValidatedJSON(TypeDecorator[Any]):
     """
     SQLAlchemy TypeDecorator for JSON with optional Pydantic validation.
 
@@ -111,7 +111,7 @@ class ValidatedJSON(TypeDecorator):
         super().__init__(*args, **kwargs)
         self.pydantic_type = pydantic_type
 
-    def process_bind_param(self, value: Any, dialect: Dialect) -> dict | None:
+    def process_bind_param(self, value: Any, dialect: Dialect) -> dict[str, Any] | None:
         """Validate and convert value for storage."""
         if value is None:
             return None

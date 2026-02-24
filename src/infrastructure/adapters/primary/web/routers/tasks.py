@@ -54,7 +54,7 @@ class TaskLogResponse(BaseModel):
     entity_id: str | None
     entity_type: str | None
     progress: int = 0
-    result: dict | None = None
+    result: dict[str, Any] | None = None
     message: str | None = None
 
 
@@ -385,7 +385,7 @@ async def stop_task_endpoint(
     return {"message": "Task marked as stopped"}
 
 
-def _serialize_task_response_dict(task: Any) -> dict:
+def _serialize_task_response_dict(task: Any) -> dict[str, Any]:
     """Convert task to a JSON-serializable dict with ISO datetime strings."""
     response_dict = task_to_response(task).model_dump()
     response_dict["created_at"] = response_dict["created_at"].isoformat()
@@ -396,7 +396,7 @@ def _serialize_task_response_dict(task: Any) -> dict:
     return response_dict
 
 
-def _build_progress_event(task: Any) -> dict:
+def _build_progress_event(task: Any) -> dict[str, Any]:
     """Build a progress SSE event dict from a task."""
     return {
         "event": "progress",

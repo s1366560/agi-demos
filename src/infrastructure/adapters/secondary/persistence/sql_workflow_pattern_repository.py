@@ -23,6 +23,7 @@ Key Features:
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -209,7 +210,7 @@ class SqlWorkflowPatternRepository(
 
     # === Step conversion helpers ===
 
-    def _step_to_dict(self, step: PatternStep) -> dict:
+    def _step_to_dict(self, step: PatternStep) -> dict[str, Any]:
         """
         Convert a PatternStep to dictionary for JSON storage.
 
@@ -228,7 +229,7 @@ class SqlWorkflowPatternRepository(
             "tool_parameters": step.tool_parameters,
         }
 
-    def _step_from_dict(self, data: dict) -> PatternStep:
+    def _step_from_dict(self, data: dict[str, Any]) -> PatternStep:
         """
         Convert a dictionary to PatternStep.
 

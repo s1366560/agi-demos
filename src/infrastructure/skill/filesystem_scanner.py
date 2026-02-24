@@ -126,12 +126,12 @@ class FileSystemSkillScanner:
     """
 
     # Default skill directory patterns relative to base path (project-level)
-    DEFAULT_SKILL_DIRS: ClassVar[list] = [
+    DEFAULT_SKILL_DIRS: ClassVar[list[str]] = [
         ".memstack/skills",
     ]
 
     # Global skill directories (relative to user home)
-    GLOBAL_SKILL_DIRS: ClassVar[list] = [
+    GLOBAL_SKILL_DIRS: ClassVar[list[str]] = [
         "~/.memstack/skills",
     ]
 

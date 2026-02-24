@@ -139,7 +139,7 @@ _tools_cache: dict[str, dict[str, Any]] = {}
 _tools_cache_lock = asyncio.Lock()
 
 # Skills cache (by tenant_id:project_id key)
-_skills_cache: dict[str, list] = {}
+_skills_cache: dict[str, list[Any]] = {}
 _skills_cache_lock = asyncio.Lock()
 
 # SkillLoaderTool cache (by tenant_id:project_id:agent_mode key)
@@ -946,7 +946,7 @@ async def _discover_sandbox_from_docker(project_id: str) -> str | None:
 
 
 async def _match_container_to_project(
-    containers: list, project_id: str, loop: Any
+    containers: list[Any], project_id: str, loop: Any
 ) -> str | None:
     """Match a Docker container to the given project ID."""
     import asyncio
@@ -1078,7 +1078,7 @@ async def _resolve_mcp_app_ids(
         logger.warning(f"[AgentWorker] Failed to resolve MCPApp IDs: {e}")
 
 
-def _apply_app_matches(adapters: list, project_apps: list) -> None:
+def _apply_app_matches(adapters: list[Any], project_apps: list[Any]) -> None:
     """Apply MCPApp matches to adapters."""
     for adapter in adapters:
         matched_app = _match_adapter_to_app(adapter, project_apps)
@@ -1316,7 +1316,7 @@ async def _auto_restore_mcp_servers(
     sandbox_adapter: SandboxPort,
     sandbox_id: str,
     project_id: str,
-    running_names: set,
+    running_names: set[str],
     redis_client: redis.Redis | None = None,
 ) -> None:
     """Auto-restore enabled MCP servers from DB that aren't running in sandbox.
@@ -1368,8 +1368,8 @@ async def _auto_restore_mcp_servers(
 
 async def _find_servers_to_restore(
     project_id: str,
-    running_names: set,
-) -> list:
+    running_names: set[str],
+) -> list[Any]:
     """Find enabled MCP servers from DB that aren't currently running."""
     from src.infrastructure.adapters.secondary.persistence.database import (
         async_session_factory,
@@ -1416,7 +1416,7 @@ async def _restore_with_lock(
     server: Any,
     server_name: str,
     server_type: str,
-    transport_config: dict,
+    transport_config: dict[str, Any],
     redis_client: redis.Redis,
 ) -> None:
     """Restore a server using distributed lock to prevent race conditions."""
@@ -1461,7 +1461,7 @@ async def _restore_without_lock(
     server: Any,
     server_name: str,
     server_type: str,
-    transport_config: dict,
+    transport_config: dict[str, Any],
 ) -> None:
     """Restore a server without distributed locking (backward compatible fallback)."""
     restored, restore_error = await _restore_single_server(
@@ -1546,7 +1546,7 @@ async def _restore_single_server(
     sandbox_id: str,
     server_name: str,
     server_type: str,
-    transport_config: dict,
+    transport_config: dict[str, Any],
 ) -> tuple[bool, str | None]:
     """Restore a single MCP server by installing and starting it.
 
@@ -1663,7 +1663,7 @@ async def _persist_restore_lifecycle_result(
         )
 
 
-def _parse_mcp_server_list(content: list) -> list:
+def _parse_mcp_server_list(content: list[Any]) -> list[Any]:
     """Parse server list from mcp_server_list tool response."""
     import json
 
@@ -1681,7 +1681,7 @@ def _parse_mcp_server_list(content: list) -> list:
     return []
 
 
-def _parse_discovered_tools(content: list) -> list:
+def _parse_discovered_tools(content: list[Any]) -> list[Any]:
     """Parse tool list from mcp_server_discover_tools response."""
     import json
 
@@ -1699,7 +1699,7 @@ def _parse_discovered_tools(content: list) -> list:
     return []
 
 
-def _match_adapter_to_app(adapter: Any, apps: list) -> Any:
+def _match_adapter_to_app(adapter: Any, apps: list[Any]) -> Any:
     """Match a SandboxMCPServerToolAdapter to an MCPApp from DB.
 
     Matching strategy (in priority order):
@@ -1720,7 +1720,7 @@ def _match_adapter_to_app(adapter: Any, apps: list) -> Any:
     return matched_app
 
 
-def _match_adapter_to_app_with_score(adapter: Any, apps: list) -> tuple:
+def _match_adapter_to_app_with_score(adapter: Any, apps: list[Any]) -> tuple[Any, float]:
     """Match a SandboxMCPServerToolAdapter to an MCPApp from DB with confidence score.
 
     This function returns both the matched app and a confidence score,
@@ -1939,7 +1939,7 @@ def invalidate_all_caches_for_project(
 async def get_or_create_skills(
     tenant_id: str,
     project_id: str | None = None,
-) -> list:
+) -> list[Any]:
     """Get or create a cached skills list for a tenant/project.
 
     This function caches skills by tenant_id:project_id key to avoid
@@ -2055,7 +2055,7 @@ async def get_or_create_llm_client(
     return factory.create_llm_client(resolved_config)
 
 
-def get_cached_skills() -> dict[str, list]:
+def get_cached_skills() -> dict[str, list[Any]]:
     """Get all cached skill lists (for debugging/monitoring)."""
     return dict(_skills_cache)
 

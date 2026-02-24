@@ -5,7 +5,7 @@ Creates appropriate transport instances based on configuration.
 """
 
 import logging
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from src.domain.model.mcp.transport import TransportConfig, TransportType
 from src.infrastructure.mcp.transport.base import BaseTransport, MCPTransportError
@@ -71,7 +71,7 @@ class TransportFactory:
     def create_from_type(
         cls,
         transport_type: str,
-        config_dict: dict,
+        config_dict: dict[str, Any],
     ) -> BaseTransport:
         """
         Create a transport from type string and config dict.

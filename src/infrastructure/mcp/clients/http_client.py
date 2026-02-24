@@ -97,8 +97,8 @@ class MCPHttpClient:
         self._http_client: httpx.AsyncClient | None = None
         self._read_stream = None
         self._write_stream = None
-        self._reader_task: asyncio.Task | None = None
-        self._pending_requests: dict[int, asyncio.Future] = {}
+        self._reader_task: asyncio.Task[None] | None = None
+        self._pending_requests: dict[int, asyncio.Future[Any]] = {}
 
     @property
     def is_connected(self) -> bool:
@@ -482,7 +482,7 @@ class MCPHttpClient:
         return MCPToolResult(content=content, isError=is_error)
 
     @staticmethod
-    def _normalize_content_items(content_items: list) -> list[dict[str, Any]]:
+    def _normalize_content_items(content_items: list[Any]) -> list[dict[str, Any]]:
         """Normalize content items to a list of dicts."""
         content: list[dict[str, Any]] = []
         for item in content_items:

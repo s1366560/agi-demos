@@ -103,7 +103,7 @@ def with_tracer(component_name: str, attributes: dict[str, Any] | None = None) -
         Decorator function
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             tracer = get_tracer(component_name)
@@ -146,7 +146,7 @@ def async_with_tracer(component_name: str, attributes: dict[str, Any] | None = N
         Decorator function
     """
 
-    def decorator(func: Callable) -> Callable:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @functools.wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             tracer = get_tracer(component_name)

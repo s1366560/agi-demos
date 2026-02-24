@@ -17,7 +17,7 @@ class HITLCardBuilder:
     """
 
     # Normalize event type names to canonical HITL types
-    _TYPE_MAP: ClassVar[dict] = {
+    _TYPE_MAP: ClassVar[dict[str, str]] = {
         "clarification": "clarification",
         "clarification_asked": "clarification",
         "decision": "decision",

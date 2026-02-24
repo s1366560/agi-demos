@@ -214,9 +214,9 @@ class EnhancedHealthMonitor:
 
         # Running state
         self._running = False
-        self._health_check_task: asyncio.Task | None = None
-        self._heartbeat_task: asyncio.Task | None = None
-        self._ttl_cleanup_task: asyncio.Task | None = None
+        self._health_check_task: asyncio.Task[None] | None = None
+        self._heartbeat_task: asyncio.Task[None] | None = None
+        self._ttl_cleanup_task: asyncio.Task[None] | None = None
 
         # TTL caches for various tracking data
         self._rebuild_timestamps = TTLCache(default_ttl_seconds=300.0, max_size=1000)
@@ -224,29 +224,29 @@ class EnhancedHealthMonitor:
         self._last_health_results = TTLCache(default_ttl_seconds=600.0, max_size=1000)
 
         # Callbacks for state changes
-        self._on_unhealthy_callbacks: list[Callable[[str, HealthCheckResult], Coroutine]] = []
-        self._on_recovered_callbacks: list[Callable[[str, HealthCheckResult], Coroutine]] = []
-        self._on_terminated_callbacks: list[Callable[[str], Coroutine]] = []
+        self._on_unhealthy_callbacks: list[Callable[[str, HealthCheckResult], Coroutine[Any, Any, Any]]] = []
+        self._on_recovered_callbacks: list[Callable[[str, HealthCheckResult], Coroutine[Any, Any, Any]]] = []
+        self._on_terminated_callbacks: list[Callable[[str], Coroutine[Any, Any, Any]]] = []
 
         # Track sandboxes currently being recovered (prevent concurrent recovery)
         self._recovering: set[str] = set()
         self._recovering_lock = asyncio.Lock()
 
     def on_unhealthy(
-        self, callback: Callable[[str, HealthCheckResult], Coroutine]
+        self, callback: Callable[[str, HealthCheckResult], Coroutine[Any, Any, Any]]
     ) -> "EnhancedHealthMonitor":
         """Register callback for when a sandbox becomes unhealthy."""
         self._on_unhealthy_callbacks.append(callback)
         return self
 
     def on_recovered(
-        self, callback: Callable[[str, HealthCheckResult], Coroutine]
+        self, callback: Callable[[str, HealthCheckResult], Coroutine[Any, Any, Any]]
     ) -> "EnhancedHealthMonitor":
         """Register callback for when a sandbox recovers."""
         self._on_recovered_callbacks.append(callback)
         return self
 
-    def on_terminated(self, callback: Callable[[str], Coroutine]) -> "EnhancedHealthMonitor":
+    def on_terminated(self, callback: Callable[[str], Coroutine[Any, Any, Any]]) -> "EnhancedHealthMonitor":
         """Register callback for when a sandbox is terminated."""
         self._on_terminated_callbacks.append(callback)
         return self

@@ -365,7 +365,7 @@ class LLMInvoker:
         pending_tool_calls: dict[str, ToolPartProtocol],
         work_plan_steps: list[dict[str, Any]],
         tool_to_step_mapping: dict[str, int],
-        execute_tool_callback: Callable,
+        execute_tool_callback: Callable[..., Any],
         current_plan_step_holder: list[int | None],
     ) -> AsyncIterator[AgentDomainEvent]:
         """
@@ -482,7 +482,7 @@ class LLMInvoker:
         pending_tool_calls: dict[str, ToolPartProtocol],
         work_plan_steps: list[dict[str, Any]],
         tool_to_step_mapping: dict[str, int],
-        execute_tool_callback: Callable,
+        execute_tool_callback: Callable[..., Any],
         current_plan_step_holder: list[int | None],
     ) -> AsyncIterator[AgentDomainEvent]:
         """Handle tool call end event."""

@@ -48,7 +48,7 @@ class RetryPolicy:
     MAX_ATTEMPTS = 5
 
     # Patterns indicating retryable errors
-    RETRYABLE_PATTERNS: ClassVar[list] = [
+    RETRYABLE_PATTERNS: ClassVar[list[str]] = [
         r"overloaded",
         r"too_many_requests",
         r"rate.?limit",
@@ -66,7 +66,7 @@ class RetryPolicy:
     ]
 
     # HTTP status codes that indicate retryable errors
-    RETRYABLE_STATUS_CODES: ClassVar[set] = {429, 500, 502, 503, 504}
+    RETRYABLE_STATUS_CODES: ClassVar[set[int]] = {429, 500, 502, 503, 504}
 
     def __init__(
         self,
@@ -210,7 +210,7 @@ class RetryPolicy:
 
         return None
 
-    def _get_headers(self, error: Exception) -> dict | None:
+    def _get_headers(self, error: Exception) -> dict[str, str] | None:
         """
         Extract response headers from an exception.
 

@@ -25,7 +25,7 @@ class SlackAlertService(AlertServicePort):
     """
 
     # Severity to color mapping
-    SEVERITY_COLORS: ClassVar[dict] = {
+    SEVERITY_COLORS: ClassVar[dict[AlertSeverity, str]] = {
         AlertSeverity.INFO: "#36a64f",  # green
         AlertSeverity.WARNING: "#ff9900",  # orange
         AlertSeverity.ERROR: "#ff0000",  # red
@@ -33,7 +33,7 @@ class SlackAlertService(AlertServicePort):
     }
 
     # Severity to emoji mapping
-    SEVERITY_EMOJIS: ClassVar[dict] = {
+    SEVERITY_EMOJIS: ClassVar[dict[AlertSeverity, str]] = {
         AlertSeverity.INFO: ":information_source:",
         AlertSeverity.WARNING: ":warning:",
         AlertSeverity.ERROR: ":x:",

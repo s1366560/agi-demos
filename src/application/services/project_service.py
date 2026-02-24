@@ -7,6 +7,7 @@ following the hexagonal architecture pattern.
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 
 from src.domain.model.project.project import Project
 from src.domain.ports.repositories.project_repository import ProjectRepository
@@ -110,8 +111,8 @@ class ProjectService:
         name: str | None = None,
         description: str | None = None,
         is_public: bool | None = None,
-        memory_rules: dict | None = None,
-        graph_config: dict | None = None,
+        memory_rules: dict[str, Any] | None = None,
+        graph_config: dict[str, Any] | None = None,
     ) -> Project:
         """
         Update project properties.

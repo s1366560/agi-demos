@@ -110,7 +110,7 @@ class MCPToolErrorClassifier:
     """
 
     # Error patterns for classification
-    CONNECTION_PATTERNS: ClassVar[list] = [
+    CONNECTION_PATTERNS: ClassVar[list[str]] = [
         "connection refused",
         "connection reset",
         "connection lost",
@@ -119,13 +119,13 @@ class MCPToolErrorClassifier:
         "failed to connect",
     ]
 
-    TIMEOUT_PATTERNS: ClassVar[list] = [
+    TIMEOUT_PATTERNS: ClassVar[list[str]] = [
         "timeout",
         "timed out",
         "deadline exceeded",
     ]
 
-    PARAMETER_PATTERNS: ClassVar[list] = [
+    PARAMETER_PATTERNS: ClassVar[list[str]] = [
         "invalid parameter",
         "missing parameter",
         "required parameter",
@@ -134,7 +134,7 @@ class MCPToolErrorClassifier:
         "missing argument",
     ]
 
-    PERMISSION_PATTERNS: ClassVar[list] = [
+    PERMISSION_PATTERNS: ClassVar[list[str]] = [
         "permission denied",
         "unauthorized",
         "access denied",
@@ -145,7 +145,7 @@ class MCPToolErrorClassifier:
     ]
 
     # File not found patterns - separate from parameter errors
-    FILE_NOT_FOUND_PATTERNS: ClassVar[list] = [
+    FILE_NOT_FOUND_PATTERNS: ClassVar[list[str]] = [
         "file not found",
         "no such file",
         "enoent",
@@ -155,14 +155,14 @@ class MCPToolErrorClassifier:
         "directory not found",
     ]
 
-    SANDBOX_NOT_FOUND_PATTERNS: ClassVar[list] = [
+    SANDBOX_NOT_FOUND_PATTERNS: ClassVar[list[str]] = [
         "sandbox not found",
         "container not found",
         "no such container",
     ]
 
     # Resource errors - may be retryable
-    RESOURCE_PATTERNS: ClassVar[list] = [
+    RESOURCE_PATTERNS: ClassVar[list[str]] = [
         "too large",
         "out of memory",
         "no space left",

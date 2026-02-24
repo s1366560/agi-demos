@@ -368,7 +368,7 @@ async def add_project_member(
     body: AddProjectMemberRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """Add member to project."""
     # No explicit header 401 check; rely on role permission checks
     # Validate role
@@ -435,7 +435,7 @@ async def update_project_member(
     member_data: ProjectMemberUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """Update project member role."""
     # Use project_id directly
     role = member_data.role
@@ -535,7 +535,7 @@ async def list_project_members(
     project_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """List project members."""
     # Use project_id directly
     # Existence check first

@@ -396,13 +396,13 @@ class DIContainer:
     def llm_invoker(self, llm: LLMClient) -> Any:
         return self._agent.llm_invoker(llm)
 
-    def tool_executor(self, tools: dict) -> Any:
+    def tool_executor(self, tools: dict[str, Any]) -> Any:
         return self._agent.tool_executor(tools)
 
     def artifact_extractor(self) -> Any:
         return self._agent.artifact_extractor()
 
-    def react_loop(self, llm: LLMClient, tools: dict) -> Any:
+    def react_loop(self, llm: LLMClient, tools: dict[str, Any]) -> Any:
         return self._agent.react_loop(llm, tools)
 
     def message_builder(self) -> Any:

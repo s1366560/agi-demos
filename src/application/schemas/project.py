@@ -1,7 +1,7 @@
 """Project data models."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -23,7 +23,7 @@ class GraphConfig(BaseModel):
     layout_algorithm: str = Field(default="force-directed", description="Layout algorithm")
     node_size: int = Field(default=20, ge=10, le=100, description="Default node size")
     edge_width: int = Field(default=2, ge=1, le=10, description="Default edge width")
-    colors: dict = Field(default_factory=dict, description="Color scheme")
+    colors: dict[str, Any] = Field(default_factory=dict, description="Color scheme")
     animations: bool = Field(default=True, description="Enable animations")
     max_nodes: int = Field(default=1000, ge=100, le=50000, description="Maximum nodes to display")
     max_edges: int = Field(default=10000, ge=100, le=100000, description="Maximum edges to display")
@@ -207,7 +207,7 @@ class ProjectStats(BaseModel):
     system_status: SystemStatus | None = Field(
         default=None, description="System status information"
     )
-    recent_activity: list[dict] | None = Field(
+    recent_activity: list[dict[str, Any]] | None = Field(
         default_factory=list, description="Recent activity feed"
     )
 

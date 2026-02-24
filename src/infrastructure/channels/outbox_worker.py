@@ -37,7 +37,7 @@ class OutboxRetryWorker:
     ) -> None:
         self._session_factory = session_factory
         self._get_connection = get_connection_fn
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
         self._running = False
 
     def start(self) -> None:

@@ -102,7 +102,7 @@ def _resolve_python_type(type_str: str) -> type:
     return _TYPE_MAP.get(type_str, str)
 
 
-def _build_typed_fields(schema: dict) -> dict:
+def _build_typed_fields(schema: dict[str, Any]) -> dict[str, Any]:
     """Build pydantic model fields from a schema definition dict."""
     fields = {}
     for field_name, field_def in schema.items():
@@ -117,9 +117,9 @@ def _build_typed_fields(schema: dict) -> dict:
     return fields
 
 
-async def _fetch_entity_types(session: Any, project_id: str) -> dict:
+async def _fetch_entity_types(session: Any, project_id: str) -> dict[str, Any]:
     """Fetch and build entity type models from the database."""
-    entity_types: dict = {}
+    entity_types: dict[str, Any] = {}
     result = await session.execute(select(EntityType).where(EntityType.project_id == project_id))
     for et in result.scalars().all():
         fields = _build_typed_fields(et.schema)
@@ -130,9 +130,9 @@ async def _fetch_entity_types(session: Any, project_id: str) -> dict:
     return entity_types
 
 
-async def _fetch_edge_types(session: Any, project_id: str) -> dict:
+async def _fetch_edge_types(session: Any, project_id: str) -> dict[str, Any]:
     """Fetch and build edge type models from the database."""
-    edge_types: dict = {}
+    edge_types: dict[str, Any] = {}
     result = await session.execute(select(EdgeType).where(EdgeType.project_id == project_id))
     for et in result.scalars().all():
         fields = _build_typed_fields(et.schema)
@@ -140,9 +140,9 @@ async def _fetch_edge_types(session: Any, project_id: str) -> dict:
     return edge_types
 
 
-async def _fetch_edge_maps(session: Any, project_id: str) -> dict:
+async def _fetch_edge_maps(session: Any, project_id: str) -> dict[str, Any]:
     """Fetch edge type maps from the database."""
-    edge_type_map: dict = {}
+    edge_type_map: dict[str, Any] = {}
     result = await session.execute(select(EdgeTypeMap).where(EdgeTypeMap.project_id == project_id))
     for em in result.scalars().all():
         key = (em.source_type, em.target_type)
@@ -152,7 +152,7 @@ async def _fetch_edge_maps(session: Any, project_id: str) -> dict:
     return edge_type_map
 
 
-async def get_project_schema(project_id: str) -> tuple[dict, dict, dict]:
+async def get_project_schema(project_id: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     """
     Get dynamic schema for a project.
     Returns: (entity_types, edge_types, edge_type_map)
@@ -250,7 +250,7 @@ def get_default_schema_context() -> SchemaContext:
 
 
 # Track which projects have been initialized (in-memory flag)
-_initialized_projects: set = set()
+_initialized_projects: set[str] = set()
 
 
 async def _ensure_default_types_initialized(project_id: str) -> None:

@@ -8,6 +8,7 @@ import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from ..types import AgentInstanceStatus, LifecycleEvent
 
@@ -170,7 +171,7 @@ class LifecycleStateMachine:
     def transition(
         self,
         trigger: str,
-        details: dict | None = None,
+        details: dict[str, Any] | None = None,
         error_message: str | None = None,
     ) -> AgentInstanceStatus:
         """执行状态转换.
@@ -216,7 +217,7 @@ class LifecycleStateMachine:
         event_type: str,
         from_status: AgentInstanceStatus | None,
         to_status: AgentInstanceStatus,
-        details: dict | None = None,
+        details: dict[str, Any] | None = None,
         error_message: str | None = None,
     ) -> None:
         """记录生命周期事件."""
@@ -287,7 +288,7 @@ class LifecycleStateMachine:
         """获取最后一个事件."""
         return self._history[-1] if self._history else None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典."""
         return {
             "instance_id": self.instance_id,

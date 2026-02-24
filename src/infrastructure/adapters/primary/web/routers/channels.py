@@ -163,7 +163,7 @@ class ChannelConfigCreate(BaseModel):
 
     # Settings
     domain: str | None = Field("feishu", description="Domain")
-    extra_settings: dict | None = Field(None, description="Extra settings")
+    extra_settings: dict[str, Any] | None = Field(None, description="Extra settings")
     description: str | None = Field(None, description="Description")
 
     @model_validator(mode="after")
@@ -190,7 +190,7 @@ class ChannelConfigUpdate(BaseModel):
     webhook_port: int | None = Field(None, ge=1, le=65535)
     webhook_path: str | None = None
     domain: str | None = None
-    extra_settings: dict | None = None
+    extra_settings: dict[str, Any] | None = None
     description: str | None = None
     dm_policy: str | None = Field(None, pattern=r"^(open|allowlist|disabled)$")
     group_policy: str | None = Field(None, pattern=r"^(open|allowlist|disabled)$")
@@ -214,7 +214,7 @@ class ChannelConfigResponse(BaseModel):
     webhook_port: int | None = None
     webhook_path: str | None = None
     domain: str | None = None
-    extra_settings: dict | None = None
+    extra_settings: dict[str, Any] | None = None
     dm_policy: str = "open"
     group_policy: str = "open"
     allow_from: list[str] | None = None
@@ -1807,7 +1807,7 @@ class PushMessageRequest(BaseModel):
         default="text",
         description="Content format: text, markdown, or card (JSON)",
     )
-    card: dict | None = Field(
+    card: dict[str, Any] | None = Field(
         default=None,
         description="Card JSON payload (required when content_type is 'card')",
     )
