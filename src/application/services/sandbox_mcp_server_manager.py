@@ -330,7 +330,7 @@ class SandboxMCPServerManager(SandboxMCPServerPort):
                 # If not a list, it might be an error dict or raw text
                 error_msg = "Unknown error"
                 if isinstance(tools, dict):
-                    error_msg = tools.get("error", tools.get("raw_output", str(tools)))
+                    error_msg = tools.get("error", tools.get("raw_output", str(tools))) or "Unknown error"
                 else:
                     error_msg = str(tools)
 

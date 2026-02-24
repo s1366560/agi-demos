@@ -157,7 +157,7 @@ class SqlAgentExecutionEventRepository(
             query = query.order_by(time_col.asc(), counter_col.asc()).limit(limit)
 
             result = await self._session.execute(query)
-            db_events = result.scalars().all()
+            db_events = list(result.scalars().all())
 
         return [d for e in db_events if (d := self._to_domain(e)) is not None]
 

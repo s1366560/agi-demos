@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import BinaryIO, cast
+from typing import Any, BinaryIO, cast
 
 import httpx
 
@@ -93,7 +93,7 @@ class FeishuMediaManager:
         else:
             file_data = file
 
-        data = {
+        data: dict[str, Any] = {
             "file_type": file_type,
             "file_name": file_name,
             "file": file_data,

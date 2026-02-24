@@ -5,7 +5,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from src.domain.events.event_dicts import (
     LLMMessageDict,
@@ -215,7 +215,7 @@ class Message:
             For assistant messages with tool calls, includes the tool_calls field
             in OpenAI format.
         """
-        result = {
+        result: dict[str, Any] = {
             "role": self.role.value,
             "content": self.content or self.get_full_text() or None,
         }
@@ -236,4 +236,4 @@ class Message:
                     for part in tool_parts
                 ]
 
-        return result
+        return cast(LLMMessageDict, result)

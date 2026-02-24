@@ -484,6 +484,8 @@ class HITLCardBuilder:
                 project_id=project_id,
             )
 
+        return []
+
     # ------------------------------------------------------------------
     # CardKit entity builders (JSON 2.0 base cards, no buttons)
     # ------------------------------------------------------------------

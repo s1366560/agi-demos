@@ -159,7 +159,7 @@ class SqlMessageExecutionStatusRepository(
             MessageExecutionStatus as MessageExecutionStatusModel,
         )
 
-        update_data = {
+        update_data: dict[str, Any] = {
             "status": status.value,
         }
 

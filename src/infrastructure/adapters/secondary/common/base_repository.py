@@ -152,7 +152,7 @@ class BaseRepository[T, M](ABC):
     """
 
     # Subclasses must define their SQLAlchemy model class
-    _model_class: type[M] = None
+    _model_class: type[M] | None = None
     # Optional: override for custom entity name in error messages
     _entity_name: str | None = None
 

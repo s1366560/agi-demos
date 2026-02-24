@@ -69,13 +69,13 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             )
         return self.session
 
-    async def _run_with_session(self, operation: Callable[[AsyncSession], Awaitable[Any]]) -> None:
+    async def _run_with_session(self, operation: Callable[[AsyncSession], Awaitable[Any]]) -> Any:
         """Run operation with existing session or create a new ephemeral one."""
         if self.session:
-            return cast(None, await operation(self.session))
+            return await operation(self.session)
 
         async with async_session_factory() as session:
-            return cast(None, await operation(session))
+            return await operation(session)
 
     @staticmethod
     def _build_embedding_payload(
@@ -179,12 +179,12 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
             return self._orm_to_config(orm)
 
-        return await self._run_with_session(op)
+        return cast(ProviderConfig, await self._run_with_session(op))
 
     async def get_by_id(self, provider_id: UUID) -> ProviderConfig | None:
         """Get provider by ID."""
 
-        async def op(session: AsyncSession) -> None:
+        async def op(session: AsyncSession) -> ProviderConfig | None:
             from uuid import UUID as _UUID
 
             pid = _UUID(str(provider_id))
@@ -192,19 +192,19 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             orm = result.scalar_one_or_none()
             return self._orm_to_config(orm) if orm else None
 
-        return await self._run_with_session(op)
+        return cast("ProviderConfig | None", await self._run_with_session(op))
 
     async def get_by_name(self, name: str) -> ProviderConfig | None:
         """Get provider by name."""
 
-        async def op(session: AsyncSession) -> None:
+        async def op(session: AsyncSession) -> ProviderConfig | None:
             result = await session.execute(
                 select(LLMProviderORM).where(LLMProviderORM.name == name)
             )
             orm = result.scalar_one_or_none()
             return self._orm_to_config(orm) if orm else None
 
-        return await self._run_with_session(op)
+        return cast("ProviderConfig | None", await self._run_with_session(op))
 
     async def list_all(self, include_inactive: bool = False) -> list[ProviderConfig]:
         """List all providers."""
@@ -218,7 +218,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             orms = result.scalars().all()
             return [self._orm_to_config(orm) for orm in orms]
 
-        return await self._run_with_session(op)
+        return cast(list[ProviderConfig], await self._run_with_session(op))
 
     async def list_active(self) -> list[ProviderConfig]:
         """List all active providers."""
@@ -370,12 +370,12 @@ class SQLAlchemyProviderRepository(ProviderRepository):
 
             return True
 
-        return await self._run_with_session(op)
+        return cast(bool, await self._run_with_session(op))
 
     async def find_default_provider(self) -> ProviderConfig | None:
         """Find the default provider."""
 
-        async def op(session: AsyncSession) -> None:
+        async def op(session: AsyncSession) -> ProviderConfig | None:
             result = await session.execute(
                 select(LLMProviderORM)
                 .where(LLMProviderORM.is_default)
@@ -384,12 +384,12 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             orm = result.scalar_one_or_none()
             return self._orm_to_config(orm) if orm else None
 
-        return await self._run_with_session(op)
+        return cast("ProviderConfig | None", await self._run_with_session(op))
 
     async def find_first_active_provider(self) -> ProviderConfig | None:
         """Find the first active provider as fallback."""
 
-        async def op(session: AsyncSession) -> None:
+        async def op(session: AsyncSession) -> ProviderConfig | None:
             result = await session.execute(
                 select(LLMProviderORM)
                 .where(LLMProviderORM.is_active)
@@ -399,7 +399,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             orm = result.scalar_one_or_none()
             return self._orm_to_config(orm) if orm else None
 
-        return await self._run_with_session(op)
+        return cast("ProviderConfig | None", await self._run_with_session(op))
 
     async def find_tenant_provider(
         self,
@@ -408,7 +408,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
     ) -> ProviderConfig | None:
         """Find provider assigned to specific tenant."""
 
-        async def op(session: AsyncSession) -> None:
+        async def op(session: AsyncSession) -> ProviderConfig | None:
             operation_value = operation_type.value
             query = (
                 select(LLMProviderORM)
@@ -435,7 +435,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
                 orm = fallback_result.scalar_one_or_none()
             return self._orm_to_config(orm, tenant_id=tenant_id) if orm else None
 
-        return await self._run_with_session(op)
+        return cast("ProviderConfig | None", await self._run_with_session(op))
 
     async def resolve_provider(
         self,
@@ -643,7 +643,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         """Assign provider to tenant."""
         session = await self._get_session()
 
-        stmt = pg_insert(TenantProviderMappingORM).values(
+        stmt: Any = pg_insert(TenantProviderMappingORM).values(
             id=uuid4(),
             tenant_id=tenant_id,
             provider_id=provider_id,

@@ -157,7 +157,7 @@ class MemoryRecallPreprocessor:
         if hasattr(result, "content"):
             return cast(str, result.content)
         if isinstance(result, dict):
-            return result.get("fact", result.get("content", str(result)))
+            return cast(str, result.get("fact", result.get("content", str(result))))
         return ""
 
     def _deduplicate_results(self, results: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -172,7 +172,7 @@ class MemoryRecallPreprocessor:
                 unique_results.append(r)
         return unique_results
 
-    def _format_context(self, results: list[dict[str, Any]]) -> str:
+    def _format_context(self, results: list[dict[str, Any]]) -> str | None:
         """Format memory results with citations for system prompt injection."""
         lines = ["<relevant_memories>"]
         total_chars = 0

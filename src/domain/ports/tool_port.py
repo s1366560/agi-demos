@@ -89,7 +89,7 @@ class ToolParameter:
 
     def to_json_schema(self) -> dict[str, Any]:
         """Convert to JSON Schema format."""
-        schema = {
+        schema: dict[str, Any] = {
             "type": self.type,
             "description": self.description,
         }

@@ -121,12 +121,10 @@ class StdioTransport(MCPTransport):
         self.args = config.get("args", [])
         # Merge custom env with system env, or use None to inherit system env
         custom_env = config.get("env")
+        self.env: dict[str, str] | None = None
         if custom_env:
             # Merge with system environment
             self.env = {**os.environ, **custom_env}
-        else:
-            # Use None to inherit parent's environment (including PATH)
-            self.env = None
         self._request_id = 0
         self._initialized = False
 
@@ -277,7 +275,7 @@ class StdioTransport(MCPTransport):
 
     async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""
-        params = {"name": prompt_name}
+        params: dict[str, Any] = {"name": prompt_name}
         if arguments:
             params["arguments"] = arguments
         return await self.send_request("prompts/get", params)
@@ -362,7 +360,7 @@ class HTTPTransport(MCPTransport):
 
     async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""
-        params = {"name": prompt_name}
+        params: dict[str, Any] = {"name": prompt_name}
         if arguments:
             params["arguments"] = arguments
         return await self.send_request("prompts/get", params)
@@ -389,7 +387,7 @@ class SSETransport(MCPTransport):
         import httpx
         from mcp.client.streamable_http import streamable_http_client
 
-        self._exit_stack = AsyncExitStack()
+        self._exit_stack: AsyncExitStack | None = AsyncExitStack()
         await self._exit_stack.__aenter__()
 
         try:
@@ -559,9 +557,9 @@ class SSETransport(MCPTransport):
             result = await asyncio.wait_for(future, timeout=30.0)
             # Handle result that may be a Pydantic model or dict
             if hasattr(result, "model_dump"):
-                return result.model_dump()
+                return cast(dict[str, Any], result.model_dump())
             elif isinstance(result, dict):
-                return result
+                return cast(dict[str, Any], result)
             else:
                 return {"result": result}
         except TimeoutError:
@@ -607,7 +605,7 @@ class SSETransport(MCPTransport):
 
     async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""
-        params = {"name": prompt_name}
+        params: dict[str, Any] = {"name": prompt_name}
         if arguments:
             params["arguments"] = arguments
         return await self.send_request("prompts/get", params)
@@ -910,7 +908,7 @@ class WebSocketTransport(MCPTransport):
 
     async def get_prompt(self, prompt_name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Get a specific prompt from the MCP server."""
-        params = {"name": prompt_name}
+        params: dict[str, Any] = {"name": prompt_name}
         if arguments:
             params["arguments"] = arguments
         return await self.send_request("prompts/get", params)

@@ -1457,9 +1457,9 @@ class ProjectAgentManager:
         for key in agents_to_stop:
             try:
                 # Get agent from local list (already removed from dict)
-                agent = next((a for k, a in self._agents.items() if k == key), None)
-                if agent:
-                    await agent.stop()
+                found_agent: ProjectReActAgent | None = next((a for k, a in self._agents.items() if k == key), None)
+                if found_agent:
+                    await found_agent.stop()
                     logger.info(f"ProjectAgentManager: Cleaned up idle agent {key}")
             except Exception as e:
                 logger.warning(f"ProjectAgentManager: Error cleaning up agent {key}: {e}")

@@ -705,7 +705,7 @@ class FeishuAdapter:
             image_key=image_key,
         )
 
-    def _parse_content(self, content_data: Any, message_type: str) -> MessageContent:
+    def _parse_content(self, content_data: Any, message_type: str) -> MessageContent | None:
         """Parse message content based on type."""
         logger.info(
             f"[FeishuAdapter] Parsing message - type={message_type}, "

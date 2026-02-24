@@ -360,7 +360,7 @@ class LLMProviderManager:
         Returns:
             Dict with metrics per provider and aggregates
         """
-        metrics = {
+        metrics: dict[str, Any] = {
             "providers": {},
             "totals": {
                 "healthy_count": 0,

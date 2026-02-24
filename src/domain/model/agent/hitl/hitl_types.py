@@ -438,7 +438,7 @@ class HITLResponse:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
-        result = {
+        result: dict[str, Any] = {
             "request_id": self.request_id,
             "hitl_type": self.hitl_type.value,
             "responded_at": self.responded_at.isoformat() if self.responded_at else None,
@@ -719,7 +719,7 @@ class HITLPendingException(Exception):
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
-        result = {
+        result: dict[str, Any] = {
             "request_id": self.request_id,
             "hitl_type": self.hitl_type.value,
             "request_data": self.request_data,

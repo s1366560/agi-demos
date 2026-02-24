@@ -210,7 +210,7 @@ class AgentMetrics:
 agent_metrics = AgentMetrics()
 
 
-def track_execution(operation_name: str) -> None:
+def track_execution(operation_name: str) -> Callable[..., Any]:
     """
     Decorator to track execution time and success/failure.
 
@@ -223,13 +223,13 @@ def track_execution(operation_name: str) -> None:
 
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
-        async def async_wrapper(*args: Any, **kwargs: Any) -> None:
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             start_time = time.time()
             success = True
 
             try:
                 result = await func(*args, **kwargs)
-                return cast(None, result)
+                return result
             except Exception as e:
                 success = False
                 logger.error(f"Error in {operation_name}: {e}")
@@ -247,13 +247,13 @@ def track_execution(operation_name: str) -> None:
                     agent_metrics.increment(f"{operation_name}_failure")
 
         @wraps(func)
-        def sync_wrapper(*args: Any, **kwargs: Any) -> None:
+        def sync_wrapper(*args: Any, **kwargs: Any) -> Any:
             start_time = time.time()
             success = True
 
             try:
                 result = func(*args, **kwargs)
-                return cast(None, result)
+                return result
             except Exception as e:
                 success = False
                 logger.error(f"Error in {operation_name}: {e}")

@@ -269,9 +269,9 @@ class MediaImportService:
                 "application/json": "json",
                 "application/xml": "xml",
             }
-            ext = mime_to_ext.get(mime_type.lower(), None)
-            if ext:
-                return f"feishu_{media_type}_{short_key}_{unique_suffix}.{ext}"
+            mime_ext: str | None = mime_to_ext.get(mime_type.lower(), None)
+            if mime_ext:
+                return f"feishu_{media_type}_{short_key}_{unique_suffix}.{mime_ext}"
 
         # Fallback to default extension map
         extension_map = {

@@ -29,7 +29,7 @@ class SqlSubAgentTemplateRepository(SubAgentTemplateRepositoryPort):
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
-    def _get_model(self) -> None:
+    def _get_model(self) -> type[Any]:
         from src.infrastructure.adapters.secondary.persistence.models import (
             SubAgentTemplate as DBTemplate,
         )

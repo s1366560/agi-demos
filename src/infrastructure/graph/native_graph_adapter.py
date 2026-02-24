@@ -122,7 +122,7 @@ class NativeGraphAdapter(GraphServicePort):
         return self._neo4j_client
 
     @property
-    def driver(self) -> None:
+    def driver(self) -> Any:
         """Get the Neo4j driver (for direct driver access)."""
         return self._neo4j_client.driver
 
@@ -197,7 +197,7 @@ class NativeGraphAdapter(GraphServicePort):
     def _get_hybrid_search(self) -> HybridSearch:
         """Get or create hybrid search with optional cached embeddings."""
         if self._hybrid_search is None:
-            embedding_service = self._embedding_service
+            embedding_service: Any = self._embedding_service
 
             # Wrap with CachedEmbeddingService if Redis is available
             if self._redis_client is not None:

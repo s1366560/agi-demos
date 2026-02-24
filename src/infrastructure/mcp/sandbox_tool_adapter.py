@@ -84,7 +84,7 @@ class SandboxMCPServerToolAdapter(AgentTool):
         self._cache_ttl_seconds = cache_ttl_seconds
         self._cached_html: str | None = None
         self._cache_fetched_at: float | None = None
-        self._cache_stats = {
+        self._cache_stats: dict[str, Any] = {
             "hits": 0,
             "misses": 0,
             "last_fetch_at": None,

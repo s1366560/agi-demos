@@ -52,7 +52,7 @@ async def verify_project_access(
     user: User,
     db: AsyncSession,
     required_role: list[str] | None = None,
-) -> None:
+) -> Any:
     """Verify that user has access to the project.
 
     Args:

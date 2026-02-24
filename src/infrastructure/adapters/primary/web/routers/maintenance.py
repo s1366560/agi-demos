@@ -592,7 +592,7 @@ async def optimize_graph(
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None = Depends(get_neo4j_client),
     workflow_engine: WorkflowEnginePort = Depends(get_workflow_engine),
-) -> None:
+) -> Any:
     """
     Run multiple optimization operations.
 

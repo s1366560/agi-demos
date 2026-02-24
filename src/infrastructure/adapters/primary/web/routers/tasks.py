@@ -190,7 +190,7 @@ async def get_task_stats(db: AsyncSession = Depends(get_db)) -> TaskStatsRespons
 
 
 @router.get("/queue-depth", response_model=list[QueueDepthPoint])
-async def get_queue_depth(db: AsyncSession = Depends(get_db)) -> None:
+async def get_queue_depth(db: AsyncSession = Depends(get_db)) -> Any:
     """Get queue depth over time."""
     now = datetime.now(UTC)
     points = []
@@ -228,7 +228,7 @@ async def get_recent_tasks(
     limit: int = 50,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> Any:
     """Get recent tasks with filtering."""
     # For complex queries with multiple filters, use direct DB access
     # In a full refactoring, this would move to a use case with filter objects
@@ -488,7 +488,7 @@ async def _poll_task_updates(
 @router.get("/{task_id}/stream", response_class=EventSourceResponse, response_model=None)
 async def stream_task_status(
     task_id: str, db: AsyncSession = Depends(get_db)
-) -> AsyncGenerator[Any, None]:
+) -> EventSourceResponse:
     """Stream task status updates using Server-Sent Events (SSE).
 
     This endpoint provides real-time updates for task progress, completion, and errors.
@@ -566,7 +566,7 @@ async def stream_task_status(
 
 
 @router.get("/{task_id}", response_model=TaskLogResponse)
-async def get_task_status(task_id: str, db: AsyncSession = Depends(get_db)) -> task_to_response:
+async def get_task_status(task_id: str, db: AsyncSession = Depends(get_db)) -> Any:
     """Get a single task by ID."""
     result = await db.execute(select(DBTaskLog).where(DBTaskLog.id == task_id))
     task = result.scalar_one_or_none()
@@ -581,7 +581,7 @@ async def get_task_status(task_id: str, db: AsyncSession = Depends(get_db)) -> t
 async def cancel_task_endpoint(
     task_id: str,
     container: DIContainer = Depends(get_di_container),
-) -> None:
+) -> Any:
     """Cancel a task (alias for stop)."""
     # Reuse the stop logic
     return await stop_task_endpoint(task_id, container)

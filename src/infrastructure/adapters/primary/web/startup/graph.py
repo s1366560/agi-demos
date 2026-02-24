@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from src.configuration.factories import create_native_graph_adapter
 
@@ -27,7 +27,7 @@ async def initialize_graph_service() -> NativeGraphAdapter:
     try:
         graph_service = await create_native_graph_adapter()
         logger.info("NativeGraphAdapter created successfully")
-        return graph_service
+        return cast("NativeGraphAdapter", graph_service)
     except Exception as e:
         logger.error(f"Failed to create NativeGraphAdapter: {e}")
         logger.error("Neo4j is required for MemStack to function. Please ensure Neo4j is running.")

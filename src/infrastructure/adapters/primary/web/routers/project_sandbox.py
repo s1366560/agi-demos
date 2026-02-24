@@ -1112,7 +1112,7 @@ async def proxy_project_desktop(
     request: Request,
     current_user: User = Depends(get_current_user_from_desktop_proxy),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
-) -> None:
+) -> Any:
     """Proxy requests to the project's sandbox desktop (KasmVNC) web client.
 
     This allows browser access to the desktop without exposing container ports directly.

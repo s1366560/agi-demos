@@ -83,10 +83,10 @@ class ValidatedEmbedder(EmbedderClient):
         Returns:
             Embedding vector with guaranteed correct dimension
         """
-        embedding = await self._base_embedder.create(input_data)
+        raw_embedding = await self._base_embedder.create(input_data)
 
         # Validate and fix dimension
-        embedding = self._validate_and_fix_dimension(embedding, input_data)
+        embedding = self._validate_and_fix_dimension(raw_embedding, input_data)  # type: ignore[arg-type]
 
         return embedding
 

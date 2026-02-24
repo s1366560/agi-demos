@@ -442,7 +442,7 @@ class QueryBuilder(Generic[T]):
         """
         from sqlalchemy import func
 
-        self._query = select(func.count()).select_from(self._model_class)
+        self._query = select(func.count()).select_from(self._model_class)  # type: ignore[assignment]
         return self
 
     # === Build ===

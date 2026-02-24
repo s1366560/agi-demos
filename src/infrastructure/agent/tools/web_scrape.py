@@ -40,7 +40,7 @@ class WebScrapeTool(AgentTool):
     )
 
     # Blocked domains (security)
-    BLOCKED_DOMAINS: ClassVar[dict[str, str]] = {
+    BLOCKED_DOMAINS: ClassVar[set[str]] = {
         "localhost",
         "127.0.0.1",
         "0.0.0.0",

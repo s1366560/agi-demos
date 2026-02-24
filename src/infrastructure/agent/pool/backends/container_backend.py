@@ -527,7 +527,7 @@ class ContainerBackend(Backend):
 
         raise TimeoutError(f"Container not ready after {timeout}s: {container_info.container_id}")
 
-    async def _get_grpc_client(self, instance_id: str) -> None:
+    async def _get_grpc_client(self, instance_id: str) -> Any:
         """Get or create gRPC client for instance."""
         if instance_id in self._grpc_clients:
             return cast(None, self._grpc_clients[instance_id])

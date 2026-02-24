@@ -167,7 +167,7 @@ class EmbeddingService:
             if embedding is None:
                 embeddings[i] = [0.0] * self.embedding_dim
 
-        return embeddings
+        return cast(list[list[float]], embeddings)
 
     async def _embed_batch_api(
         self,

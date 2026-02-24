@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 try:
     import fcntl
 except ImportError:  # pragma: no cover - non-Unix fallback
-    fcntl = None
+    fcntl: Any = None  # type: ignore[no-redef]
 
 from src.domain.model.agent.subagent_run import SubAgentRun, SubAgentRunStatus
 from src.infrastructure.agent.subagent.run_repository import (

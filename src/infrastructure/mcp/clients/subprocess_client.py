@@ -251,6 +251,7 @@ class MCPSubprocessClient:
                 for tool in tools_data
             ]
 
+        return []
     async def call_tool(
         self,
         name: str,

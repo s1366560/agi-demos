@@ -178,7 +178,7 @@ async def get_api_key_from_header_query_or_cookie(
 
 async def verify_api_key_from_header_or_query(
     api_key: str = Depends(get_api_key_from_header_or_query), db: AsyncSession = Depends(get_db)
-) -> DBAPIKey:
+) -> DBAPIKey | None:
     """Verify API key from header or query parameter.
 
     This is a FastAPI adapter that uses the AuthService for business logic.
@@ -210,7 +210,7 @@ async def verify_api_key_from_header_or_query(
 async def verify_api_key_from_header_query_or_cookie(
     api_key: str = Depends(get_api_key_from_header_query_or_cookie),
     db: AsyncSession = Depends(get_db),
-) -> DBAPIKey:
+) -> DBAPIKey | None:
     """Verify API key from header, query parameter, or cookie."""
     auth_service = AuthService(
         user_repository=SqlUserRepository(db),
@@ -294,7 +294,7 @@ async def get_current_user_from_header_or_query(
 
 async def verify_api_key_dependency(
     api_key: str = Depends(get_api_key_from_header), db: AsyncSession = Depends(get_db)
-) -> DBAPIKey:
+) -> DBAPIKey | None:
     """
     Dependency to verify API key from request header.
 
@@ -405,7 +405,7 @@ async def create_api_key(
     name: str,
     permissions: list[str],
     expires_in_days: int | None = None,
-) -> tuple[str, DBAPIKey]:
+) -> tuple[str, DBAPIKey | None]:
     """
     Create a new API key for a user.
 
@@ -433,7 +433,7 @@ async def create_api_key(
     return plain_key, db_key
 
 
-async def create_user(db: AsyncSession, email: str, name: str, password: str) -> DBUser:
+async def create_user(db: AsyncSession, email: str, name: str, password: str) -> DBUser | None:
     """
     Create a new user.
 

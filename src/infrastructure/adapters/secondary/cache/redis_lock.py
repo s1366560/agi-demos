@@ -309,7 +309,10 @@ class RedisDistributedLock:
             Owner token if locked, None if not
         """
         try:
-            return cast(bytes | None, await self._redis.get(self._key))
+            value = await self._redis.get(self._key)
+            if isinstance(value, bytes):
+                return value.decode()
+            return cast(str | None, value)
         except Exception as e:
             logger.error(f"Error getting lock owner {self._key}: {e}")
             return None

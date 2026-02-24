@@ -134,7 +134,7 @@ async def list_tool_compositions(
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of compositions"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> ToolCompositionsListResponse:
     """List tool compositions."""
     try:
@@ -182,7 +182,7 @@ async def get_tool_composition(
     composition_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> ToolCompositionResponse:
     """Get a specific tool composition."""
     try:

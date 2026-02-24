@@ -185,7 +185,7 @@ class AuditLogService:
         tenant_id: str | None = None,
     ) -> None:
         """Log provider creation."""
-        return await self.log_event(
+        await self.log_event(
             action="provider.created",
             resource_type="provider",
             resource_id=str(provider_id),
@@ -205,7 +205,7 @@ class AuditLogService:
         tenant_id: str | None = None,
     ) -> None:
         """Log provider update."""
-        return await self.log_event(
+        await self.log_event(
             action="provider.updated",
             resource_type="provider",
             resource_id=str(provider_id),
@@ -222,7 +222,7 @@ class AuditLogService:
         tenant_id: str | None = None,
     ) -> None:
         """Log provider deletion."""
-        return await self.log_event(
+        await self.log_event(
             action="provider.deleted",
             resource_type="provider",
             resource_id=str(provider_id),
@@ -239,7 +239,7 @@ class AuditLogService:
         actor: str | None = None,
     ) -> None:
         """Log provider health check."""
-        return await self.log_event(
+        await self.log_event(
             action="provider.health_check",
             resource_type="provider",
             resource_id=str(provider_id),
@@ -258,7 +258,7 @@ class AuditLogService:
         actor: str | None = None,
     ) -> None:
         """Log tenant-provider assignment."""
-        return await self.log_event(
+        await self.log_event(
             action="tenant_provider.assigned",
             resource_type="tenant_provider_mapping",
             resource_id=f"{tenant_id}:{provider_id}",
@@ -277,7 +277,7 @@ class AuditLogService:
         actor: str | None = None,
     ) -> None:
         """Log tenant-provider unassignment."""
-        return await self.log_event(
+        await self.log_event(
             action="tenant_provider.unassigned",
             resource_type="tenant_provider_mapping",
             resource_id=f"{tenant_id}:{provider_id}",

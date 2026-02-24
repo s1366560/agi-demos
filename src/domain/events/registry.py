@@ -176,7 +176,7 @@ class EventSchemaRegistry:
             Schema class or None if not found
         """
         if version == "latest":
-            version = cls._latest_versions.get(event_type)
+            version = cls._latest_versions.get(event_type)  # type: ignore[assignment]
             if not version:
                 return None
 

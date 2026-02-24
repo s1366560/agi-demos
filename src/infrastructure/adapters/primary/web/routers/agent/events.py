@@ -109,7 +109,7 @@ async def get_conversation_events(
     limit: int = Query(1000, ge=1, le=10000, description="Maximum events to return"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> EventReplayResponse:
     """
     Get SSE events for a conversation, used for replaying execution state.
@@ -159,7 +159,7 @@ async def get_execution_status(
     ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> ExecutionStatusResponse:
     """
     Get the current execution status of a conversation with optional recovery info.
@@ -239,7 +239,7 @@ async def resume_execution(
     ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> dict[str, Any]:
     """
     Resume agent execution from the last checkpoint.
@@ -303,7 +303,7 @@ async def get_workflow_status(
     message_id: str | None = Query(None, description="Message ID to get workflow status for"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> WorkflowStatusResponse:
     """
     Get the Ray Actor status for an agent execution.

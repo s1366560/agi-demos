@@ -321,7 +321,7 @@ class StructuredOutputValidator:
             ValidationResult with validated data or error
         """
         # Prepare messages
-        working_messages = list(messages)
+        working_messages: list[Message | dict[str, Any]] = list(messages)
 
         # Add schema to system prompt if configured
         if self.config.include_schema_in_prompt:

@@ -11,7 +11,7 @@ import logging
 import socket
 import uuid
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, Callable, cast
 
@@ -63,11 +63,7 @@ class MCPSandboxInstance(SandboxInstance):
     desktop_url: str | None = None
     terminal_url: str | None = None
     # Labels for identification
-    labels: dict[str, str] | None = None
-
-    def __post_init__(self):
-        if self.labels is None:
-            self.labels = {}
+    labels: dict[str, str] = field(default_factory=dict)
 
     @property
     def project_id(self) -> str | None:
@@ -199,7 +195,7 @@ class MCPSandboxAdapter(SandboxPort):
         self._cleanup_interval_seconds = 300.0  # Default: 5 minutes
 
         # Cleanup statistics
-        self._cleanup_stats = {
+        self._cleanup_stats: dict[str, int | str | None] = {
             "total_cleanups": 0,
             "containers_removed": 0,
             "last_cleanup_at": None,
@@ -211,7 +207,7 @@ class MCPSandboxAdapter(SandboxPort):
         self._health_check_interval_seconds = 60.0  # Default: 1 minute
 
         # Health check statistics
-        self._health_check_stats = {
+        self._health_check_stats: dict[str, int | str | None] = {
             "total_checks": 0,
             "restarts_triggered": 0,
             "last_check_at": None,
@@ -2505,6 +2501,11 @@ class MCPSandboxAdapter(SandboxPort):
                     "is_error": True,
                 }
 
+        # Should not reach here, but satisfy mypy
+        return {
+            "content": [{"type": "text", "text": "Tool call failed: no attempts made"}],
+            "is_error": True,
+        }
     # === Enhanced Orphan Cleanup ===
 
     async def _is_container_tracked_in_db(

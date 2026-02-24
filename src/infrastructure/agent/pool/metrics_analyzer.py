@@ -229,7 +229,7 @@ class PoolMetricsAnalyzer:
         denominator = sum((i - x_mean) ** 2 for i in range(n))
 
         if denominator == 0:
-            slope = 0
+            slope: float = 0
         else:
             slope = numerator / denominator
 

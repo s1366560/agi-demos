@@ -6,7 +6,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, field_validator
 
-from src.domain.model.task.task_log import TaskLog
+from src.domain.model.task.task_log import TaskLog, TaskLogStatus
 from src.domain.ports.repositories.task_repository import TaskRepository
 
 
@@ -55,7 +55,7 @@ class UpdateTaskUseCase:
 
         # Update fields
         if command.status is not None:
-            task.status = command.status
+            task.status = TaskLogStatus(command.status)
         if command.error_message is not None:
             task.error_message = command.error_message
         if command.started_at is not None:

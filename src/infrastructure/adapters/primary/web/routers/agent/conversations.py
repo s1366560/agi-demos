@@ -46,7 +46,7 @@ async def create_conversation(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> ConversationResponse:
     """Create a new conversation."""
     try:
@@ -104,7 +104,7 @@ async def list_conversations(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> PaginatedConversationsResponse:
     """List conversations for a project with pagination."""
     try:
@@ -157,7 +157,7 @@ async def get_conversation(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> ConversationResponse:
     """Get a conversation by ID."""
     try:
@@ -190,7 +190,7 @@ async def get_context_status(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> dict[str, Any]:
     """Get context window status for a conversation.
 
@@ -256,7 +256,7 @@ async def delete_conversation(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> None:
     """Delete a conversation and all its messages."""
     try:
@@ -294,7 +294,7 @@ async def update_conversation_title(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> ConversationResponse:
     """Update conversation title."""
     try:
@@ -353,7 +353,7 @@ async def generate_conversation_title(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> ConversationResponse:
     """
     Generate and update a friendly conversation title based on the first user message.
@@ -444,7 +444,7 @@ async def generate_summary(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> ConversationResponse:
     """Generate an AI summary of the conversation."""
     try:

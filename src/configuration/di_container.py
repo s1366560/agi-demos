@@ -188,14 +188,14 @@ class DIContainer:
     # === Properties that stay on the main class ===
 
     @property
-    def neo4j_client(self) -> None:
+    def neo4j_client(self) -> Any:
         """Get Neo4j client for direct driver access."""
         if self._graph_service and hasattr(self._graph_service, "client"):
             return self._graph_service.client  # type: ignore[no-any-return]
         return None
 
     @property
-    def graph_service(self) -> None:
+    def graph_service(self) -> Any:
         """Get the GraphServicePort for graph operations."""
         return self._graph_service  # type: ignore[no-any-return]
 

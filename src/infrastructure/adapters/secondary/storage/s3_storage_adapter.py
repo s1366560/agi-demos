@@ -92,7 +92,7 @@ class S3StorageAdapter(StorageServicePort):
         """Upload a file to S3."""
         async with await self._get_client() as s3:
             try:
-                put_kwargs = {
+                put_kwargs: dict[str, Any] = {
                     "Bucket": self._bucket,
                     "Key": object_key,
                     "Body": file_content,
@@ -260,7 +260,7 @@ class S3StorageAdapter(StorageServicePort):
                 if error_code == "404":
                     # Bucket doesn't exist, create it
                     try:
-                        create_kwargs = {"Bucket": self._bucket}
+                        create_kwargs: dict[str, Any] = {"Bucket": self._bucket}
                         # LocationConstraint is required for regions other than us-east-1
                         if self._region != "us-east-1":
                             create_kwargs["CreateBucketConfiguration"] = {
@@ -289,7 +289,7 @@ class S3StorageAdapter(StorageServicePort):
         """Initialize a multipart upload in S3."""
         async with await self._get_client() as s3:
             try:
-                kwargs = {
+                kwargs: dict[str, Any] = {
                     "Bucket": self._bucket,
                     "Key": object_key,
                     "ContentType": content_type,

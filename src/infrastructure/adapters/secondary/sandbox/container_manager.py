@@ -248,7 +248,7 @@ class ContainerManager:
     ) -> list[Container]:
         """List all sandbox containers with optional filtering."""
         loop = asyncio.get_event_loop()
-        filters = {"label": "memstack.sandbox=true"}
+        filters: dict[str, str | list[str]] = {"label": "memstack.sandbox=true"}
 
         if project_id:
             filters["label"] = [

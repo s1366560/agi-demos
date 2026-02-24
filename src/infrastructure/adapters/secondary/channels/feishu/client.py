@@ -46,7 +46,7 @@ class FeishuClient:
         return cast(None, self._client)
 
     @property
-    def media(self) -> None:
+    def media(self) -> Any:
         """Get media manager for image/file operations."""
         if self._media is None:
             from src.infrastructure.adapters.secondary.channels.feishu.media import (
@@ -57,7 +57,7 @@ class FeishuClient:
         return self._media
 
     @property
-    def docs(self) -> None:
+    def docs(self) -> Any:
         """Get document client for docx operations."""
         if self._docs is None:
             from src.infrastructure.adapters.secondary.channels.feishu.docx import FeishuDocClient
@@ -66,7 +66,7 @@ class FeishuClient:
         return self._docs
 
     @property
-    def wiki(self) -> None:
+    def wiki(self) -> Any:
         """Get wiki client for knowledge base operations."""
         if self._wiki is None:
             from src.infrastructure.adapters.secondary.channels.feishu.wiki import FeishuWikiClient
@@ -75,7 +75,7 @@ class FeishuClient:
         return self._wiki
 
     @property
-    def drive(self) -> None:
+    def drive(self) -> Any:
         """Get drive client for cloud storage operations."""
         if self._drive is None:
             from src.infrastructure.adapters.secondary.channels.feishu.drive import (
@@ -86,7 +86,7 @@ class FeishuClient:
         return self._drive
 
     @property
-    def bitable(self) -> None:
+    def bitable(self) -> Any:
         """Get bitable client for multi-dimensional table operations."""
         if self._bitable is None:
             from src.infrastructure.adapters.secondary.channels.feishu.bitable import (

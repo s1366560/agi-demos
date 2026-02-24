@@ -100,7 +100,7 @@ class DebugMCPServerTool(AgentTool):
         Returns:
             Dict with debug information including status, logs, and errors.
         """
-        result = {
+        result: dict[str, Any] = {
             "server_name": server_name,
             "status": None,
             "logs": None,

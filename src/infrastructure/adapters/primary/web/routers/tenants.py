@@ -360,7 +360,7 @@ async def remove_tenant_member(
 @router.get("/{tenant_id}/members")
 async def list_tenant_members(
     tenant_id: str,
-    request: Request = None,
+    request: Request | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:

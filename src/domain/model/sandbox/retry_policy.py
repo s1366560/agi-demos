@@ -219,7 +219,7 @@ def RetryableError(
         )
 
         async def wrapper(*args: Any, **kwargs: Any) -> T:
-            async def bound_operation() -> None:
+            async def bound_operation() -> T:
                 return await func(*args, **kwargs)
 
             return await policy.execute(bound_operation)

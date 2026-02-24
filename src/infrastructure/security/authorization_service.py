@@ -291,18 +291,18 @@ class AuthorizationService(AuthorizationPort):
                 select(Permission).where(Permission.code == permission.value)
             )
             if not existing.scalar_one_or_none():
-                perm = Permission(
+                new_perm = Permission(
                     id=Permission.generate_id(),
                     code=permission.value,
                     name=permission.value.replace(":", " ").title(),
                     description=f"Permission for {permission.value}",
                 )
-                self._session.add(perm)
+                self._session.add(new_perm)
 
         # Create all roles
         for role_name in RoleDefinition.get_all_roles():
-            existing = await self._session.execute(select(Role).where(Role.name == role_name))
-            role = existing.scalar_one_or_none()
+            role_existing = await self._session.execute(select(Role).where(Role.name == role_name))
+            role: Role | None = role_existing.scalar_one_or_none()
 
             if not role:
                 role = Role(
@@ -317,10 +317,10 @@ class AuthorizationService(AuthorizationPort):
             # Associate permissions with role
             for perm_code in permission_codes:
                 # Get permission from database
-                perm = await self._session.execute(
+                perm_result = await self._session.execute(
                     select(Permission).where(Permission.code == perm_code)
                 )
-                perm_obj = perm.scalar_one_or_none()
+                perm_obj = perm_result.scalar_one_or_none()
 
                 if perm_obj:
                     # Check if role_permission already exists

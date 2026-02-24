@@ -66,7 +66,7 @@ class MemoryFlushService:
     def __init__(
         self,
         llm_client: LLMClient,
-        embedding_service: EmbeddingService = None,
+        embedding_service: EmbeddingService | None = None,
         session_factory: Any = None,
     ) -> None:
         self._llm_client = llm_client

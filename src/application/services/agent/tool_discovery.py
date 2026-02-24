@@ -26,7 +26,7 @@ class ToolDiscoveryService:
     ) -> None:
         self._redis_client = redis_client
         self._skill_service = skill_service
-        self._tool_definitions_cache: dict[str, list[dict[str, Any]]] | None = None
+        self._tool_definitions_cache: list[dict[str, Any]] | None = None
 
     async def get_available_tools(
         self, project_id: str, tenant_id: str, agent_mode: str = "default"

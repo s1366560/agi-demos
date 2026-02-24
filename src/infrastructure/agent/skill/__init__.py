@@ -11,6 +11,7 @@ from src.infrastructure.agent.skill.orchestrator import (
     SkillExecutionMode,
     SkillMatchResult,
     SkillOrchestrator,
+    SkillProtocol,
     create_skill_orchestrator,
     get_skill_orchestrator,
     set_skill_orchestrator,
@@ -36,6 +37,7 @@ __all__ = [
     "SkillMatchResult",
     # Orchestrator
     "SkillOrchestrator",
+    "SkillProtocol",
     "SkillResourceInjector",
     # Resources
     "SkillResourceLoader",

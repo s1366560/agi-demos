@@ -625,6 +625,7 @@ async def get_or_create_agent_session(
 
     from pathlib import Path
 
+    from src.domain.ports.services.skill_resource_port import SkillResourcePort
     from src.infrastructure.adapters.secondary.skill import (
         LocalSkillResourceAdapter,
         SandboxSkillResourceAdapter,
@@ -645,7 +646,7 @@ async def get_or_create_agent_session(
     sandbox_workspace = Path("/workspace")
 
     # Create unified SkillResourcePort based on environment
-    skill_resource_port = None
+    skill_resource_port: SkillResourcePort | None = None
     if sandbox_adapter:
         skill_resource_port = SandboxSkillResourceAdapter(
             sandbox_adapter=sandbox_adapter,

@@ -676,7 +676,7 @@ class ProjectSandboxLifecycleService:
             offset=offset,
         )
 
-        results = []
+        results: list[SandboxInfo] = []
         if not associations:
             return results
 

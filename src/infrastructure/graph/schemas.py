@@ -129,7 +129,7 @@ class EntityNode(BaseNode):
 
     def to_neo4j_properties(self) -> dict[str, Any]:
         """Convert to Neo4j-compatible property dict."""
-        props = {
+        props: dict[str, Any] = {
             "uuid": self.uuid,
             "name": self.name,
             "entity_type": self.entity_type,

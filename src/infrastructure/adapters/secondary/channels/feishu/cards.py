@@ -304,7 +304,7 @@ def build_mentioned_message(mentions: list[dict[str, str]], message_text: str) -
     return " ".join(mention_texts) + " " + message_text
 
 
-def extract_post_text(content: str | dict[str, Any]) -> str:
+def extract_post_text(content: str | dict[str, Any]) -> str | dict[str, Any]:
     """Extract plain text from a post message.
 
     Args:
@@ -315,9 +315,11 @@ def extract_post_text(content: str | dict[str, Any]) -> str:
     """
     if isinstance(content, str):
         try:
-            content = json.loads(content)
+            parsed = json.loads(content)
         except json.JSONDecodeError:
             return content
+
+        content = parsed
 
     # Handle both zh_cn and en_us
     post_data = content.get("zh_cn", content.get("en_us", content))

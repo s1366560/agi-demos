@@ -200,7 +200,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         self,
         subagent_id: str,
         enabled: bool,
-    ) -> SubAgent:
+    ) -> SubAgent | None:
         """Enable or disable a subagent."""
         from src.infrastructure.adapters.secondary.persistence.models import SubAgent as DBSubAgent
 
@@ -215,7 +215,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
 
         await self._session.flush()
 
-        return self._to_domain(db_subagent)
+        return self._to_domain(db_subagent) if db_subagent else None
 
     async def update_statistics(
         self,

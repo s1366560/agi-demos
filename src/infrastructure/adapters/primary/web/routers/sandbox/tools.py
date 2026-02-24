@@ -171,7 +171,7 @@ async def read_file(
     limit: int = 2000,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-) -> None:
+) -> Any:
     """Read a file from sandbox (convenience endpoint)."""
     result = await adapter.call_tool(
         sandbox_id=sandbox_id,
@@ -188,7 +188,7 @@ async def write_file(
     content: str,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-) -> None:
+) -> Any:
     """Write a file to sandbox (convenience endpoint)."""
     result = await adapter.call_tool(
         sandbox_id=sandbox_id,
@@ -206,7 +206,7 @@ async def execute_bash(
     working_dir: str | None = None,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-) -> None:
+) -> Any:
     """Execute bash command in sandbox (convenience endpoint)."""
     args = {"command": command, "timeout": timeout}
     if working_dir:

@@ -290,7 +290,7 @@ async def check_messages_table_exists() -> bool:
                 ")"
             )
         )
-        return result.scalar()
+        return bool(result.scalar())
 
 
 async def migrate_skills_multi_tenant() -> None:

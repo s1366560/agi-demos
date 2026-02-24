@@ -489,7 +489,7 @@ class LLMStream:
             }
 
         # Prepare additional kwargs from config
-        extra_kwargs = {}
+        extra_kwargs: dict[str, Any] = {}
         if self.config.tools:
             extra_kwargs["tools"] = self.config.tools
             if self.config.tool_choice:

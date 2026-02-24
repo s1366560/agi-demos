@@ -92,7 +92,7 @@ def set_span_error(exception: Exception) -> None:
         span.set_status(Status(StatusCode.ERROR, str(exception)))
 
 
-def with_tracer(component_name: str, attributes: dict[str, Any] | None = None) -> None:
+def with_tracer(component_name: str, attributes: dict[str, Any] | None = None) -> Callable[..., Any]:
     """Decorator to add tracing to synchronous functions.
 
     Args:
@@ -135,7 +135,7 @@ def with_tracer(component_name: str, attributes: dict[str, Any] | None = None) -
     return decorator
 
 
-def async_with_tracer(component_name: str, attributes: dict[str, Any] | None = None) -> None:
+def async_with_tracer(component_name: str, attributes: dict[str, Any] | None = None) -> Callable[..., Any]:
     """Decorator to add tracing to asynchronous functions.
 
     Args:

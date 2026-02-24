@@ -31,7 +31,7 @@ class SqlPromptTemplateRepository(PromptTemplateRepository):
             existing.title = template.title
             existing.content = template.content
             existing.category = template.category
-            existing.variables = [
+            existing.variables = [  # type: ignore[assignment]
                 {
                     "name": v.name,
                     "description": v.description,

@@ -390,7 +390,7 @@ class SystemHealthChecker:
             )
 
             for (name, _), result in zip(tasks, results, strict=False):
-                if isinstance(result, Exception):
+                if isinstance(result, BaseException):
                     checks[name] = HealthStatus(
                         service=name,
                         healthy=False,
@@ -398,7 +398,7 @@ class SystemHealthChecker:
                         latency_ms=0,
                     )
                 else:
-                    checks[name] = result
+                    checks[name] = result  # type: ignore[assignment]
 
         # Determine overall health
         all_healthy = all(status.healthy for status in checks.values())

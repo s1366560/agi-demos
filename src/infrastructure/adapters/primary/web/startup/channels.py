@@ -7,7 +7,7 @@ ChannelConnectionManager during application lifecycle.
 import asyncio
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 from src.infrastructure.agent.plugins.manager import get_plugin_runtime_manager
@@ -36,7 +36,7 @@ def get_channel_manager() -> ChannelConnectionManager | None:
 
 
 async def initialize_channel_manager(
-    message_router: Callable[["Message"], None] | None = None,
+    message_router: Callable[["Message"], Any] | None = None,
 ) -> ChannelConnectionManager | None:
     """Initialize and start the channel connection manager.
 
@@ -140,7 +140,7 @@ async def shutdown_channel_manager() -> None:
         _channel_manager = None
 
 
-def set_message_router(router: Callable[["Message"], None]) -> None:
+def set_message_router(router: Callable[["Message"], Any]) -> None:
     """Set the message router on the channel manager.
 
     This can be called after initialization to update the message router.

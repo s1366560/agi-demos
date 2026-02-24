@@ -314,7 +314,7 @@ class SandboxHealthService:
         self,
         sandbox_ids: list[str],
         level: HealthCheckLevel = HealthCheckLevel.BASIC,
-    ) -> list[HealthCheckResult]:
+    ) -> list[HealthCheckResult | BaseException]:
         """批量检查多个 Sandbox 健康状态.
 
         Args:

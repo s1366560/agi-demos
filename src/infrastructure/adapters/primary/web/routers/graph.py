@@ -95,7 +95,7 @@ async def list_communities(
     """
     try:
         conditions = ["coalesce(c.member_count, 0) >= 0"]  # Always include base condition
-        params = {"limit": limit, "offset": offset}
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
 
         # Filter by project_id if provided
         if project_id:
@@ -167,7 +167,7 @@ async def list_entities(
     """List entities in the knowledge graph with filtering and pagination."""
     try:
         conditions = []
-        params = {"limit": limit, "offset": offset}
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
 
         if project_id:
             project_condition = """

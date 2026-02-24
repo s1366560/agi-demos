@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -438,7 +438,7 @@ class ToolExecutor:
                     error=str(result),
                 )
 
-        return results
+        return cast(list[ToolExecutionResult], results)
 
 
 # Global tool registry

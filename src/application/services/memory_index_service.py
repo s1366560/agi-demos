@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from src.infrastructure.memory.chunker import TextChunk, chunk_text
 
@@ -186,7 +186,7 @@ class MemoryIndexService:
         embeddings: list[list[float] | None] = [None] * len(texts)
         try:
             if hasattr(self._embedding, "embed_batch"):
-                embeddings = await self._embedding.embed_batch(texts)
+                embeddings = cast(list[list[float] | None], await self._embedding.embed_batch(texts))
             elif hasattr(self._embedding, "embed_text_safe"):
                 for i, text in enumerate(texts):
                     embeddings[i] = await self._embedding.embed_text_safe(text)

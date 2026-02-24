@@ -155,7 +155,7 @@ class FeishuDocClient:
         Returns:
             Created block info
         """
-        data = {
+        data: dict[str, Any] = {
             "children": [
                 {
                     "block_type": block_type,

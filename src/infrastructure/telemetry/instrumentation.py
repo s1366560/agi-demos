@@ -110,7 +110,7 @@ def instrument_fastapi(app: Any) -> bool | None:
         return False
 
 
-def instrument_all(auto_instrument: bool = True) -> None:
+def instrument_all(auto_instrument: bool = True) -> dict[str, bool | None]:
     """Instrument all supported libraries.
 
     Args:
@@ -119,7 +119,7 @@ def instrument_all(auto_instrument: bool = True) -> None:
     Returns:
         Dictionary with instrumentation results
     """
-    results = {
+    results: dict[str, bool | None] = {
         "httpx": False,
         "sqlalchemy": False,
         "redis": False,

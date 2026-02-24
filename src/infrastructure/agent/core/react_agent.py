@@ -59,7 +59,7 @@ from ..routing import (
     SubAgentOrchestratorConfig,
 )
 from ..routing.hybrid_router import HybridRouter, HybridRouterConfig
-from ..skill import SkillExecutionConfig, SkillExecutionContext, SkillOrchestrator
+from ..skill import SkillExecutionConfig, SkillExecutionContext, SkillOrchestrator, SkillProtocol
 from .processor import ProcessorConfig, SessionProcessor, ToolDefinition
 from .skill_executor import SkillExecutor
 from .subagent_router import SubAgentMatch, SubAgentRouter
@@ -920,7 +920,7 @@ class ReActAgent:
 
         return self.raw_tools, self.tool_definitions
 
-    def _match_skill(self, query: str) -> tuple[Skill | None, float]:
+    def _match_skill(self, query: str) -> tuple[SkillProtocol | None, float]:
         """
         Match query against available skills, filtered by agent_mode.
 
@@ -2283,7 +2283,7 @@ class ReActAgent:
         project_id: str,
         processed_user_message: str,
         conversation_context: list[dict[str, str]],
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> tuple[str, ToolSelectionContext]:
         """Resolve effective mode and build selection context.
 
         Returns:
@@ -3571,26 +3571,6 @@ class ReActAgent:
             requested_thinking_override,
         )
 
-    @staticmethod
-    def _normalize_launch_params(
-        spawn_mode: str,
-        cleanup: str,
-        model_override: str | None,
-        thinking_override: str | None,
-    ) -> tuple[str, str, str | None, str | None]:
-        """Normalize launch parameter strings.
-
-        Returns:
-            (normalized_spawn_mode, normalized_cleanup,
-             requested_model_override, requested_thinking_override)
-        """
-        return (
-            (spawn_mode or "run").strip().lower() or "run",
-            (cleanup or "keep").strip().lower() or "keep",
-            (model_override or "").strip() or None,
-            (thinking_override or "").strip() or None,
-        )
-
     async def _runner_consume_and_extract(
         self,
         *,
@@ -4062,7 +4042,7 @@ class ReActAgent:
             return domain_event
 
         # Delegate to EventConverter
-        return self._event_converter.convert(domain_event)
+        return cast(dict[str, Any] | None, self._event_converter.convert(domain_event))
 
     async def astream_multi_level(
         self,

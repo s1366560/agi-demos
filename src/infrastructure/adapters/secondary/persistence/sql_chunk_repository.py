@@ -158,7 +158,7 @@ class SqlChunkRepository:
                 keywords = [query.strip()]
             # Build OR-based ILIKE conditions for each keyword
             conditions = " OR ".join(f"content ILIKE :kw{i}" for i in range(len(keywords)))
-            params = {f"kw{i}": f"%{kw}%" for i, kw in enumerate(keywords)}
+            params: dict[str, Any] = {f"kw{i}": f"%{kw}%" for i, kw in enumerate(keywords)}
             params["project_id"] = project_id
             params["limit"] = limit
             fallback_sql = text(f"""

@@ -43,7 +43,7 @@ class AttachmentMetadata:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary, excluding None values."""
-        result = {}
+        result: dict[str, Any] = {}
         if self.width is not None:
             result["width"] = self.width
         if self.height is not None:

@@ -1741,7 +1741,7 @@ class SessionProcessor:
                 )
 
                 # Define helper to escape control characters
-                def escape_control_chars(s: str) -> None:
+                def escape_control_chars(s: str) -> str:
                     """Escape control characters in a JSON string."""
                     s = s.replace("\n", "\\n")
                     s = s.replace("\r", "\\r")
@@ -1827,7 +1827,7 @@ class SessionProcessor:
                 # Strip binary data from SSE result to prevent huge JSON in
                 # Redis/DB persistence.  The artifact binary is handled
                 # separately by _process_tool_artifacts().
-                sse_result = _strip_artifact_binary_data(result)
+                sse_result: Any = _strip_artifact_binary_data(result)
             elif isinstance(result, dict) and "output" in result:
                 # Extract output for tool_part (used for LLM context)
                 output_str = result.get("output", "")

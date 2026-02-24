@@ -71,7 +71,7 @@ async def get_tenant_agent_config(
     tenant_id: str = Query(..., description="Tenant ID to get config for"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> TenantAgentConfigResponse:
     """
     Get tenant-level agent configuration (T096).
@@ -119,7 +119,7 @@ async def update_tenant_agent_config(
     tenant_id: str = Query(..., description="Tenant ID to update config for"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> TenantAgentConfigResponse:
     """
     Update tenant-level agent configuration (T097) - Admin only.

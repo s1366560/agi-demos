@@ -60,7 +60,7 @@ async def get_current_user_with_roles(
     return result.scalar_one()
 
 
-async def require_admin(current_user: User = Depends(get_current_user_with_roles)) -> None:
+async def require_admin(current_user: User = Depends(get_current_user_with_roles)) -> Any:
     """Dependency to require admin role."""
     is_admin = any(r.role.name == "admin" for r in current_user.roles)
     if not is_admin:
@@ -83,7 +83,7 @@ async def create_provider(
     config: ProviderConfigCreate,
     current_user: User = Depends(require_admin),
     service: ProviderService = Depends(get_provider_service_with_session),
-) -> ProviderConfigResponse:
+) -> ProviderConfigResponse | None:
     """
     Create a new LLM provider configuration.
 
@@ -295,7 +295,7 @@ async def update_provider(
     config: ProviderConfigUpdate,
     current_user: User = Depends(require_admin),
     service: ProviderService = Depends(get_provider_service_with_session),
-) -> ProviderConfigResponse:
+) -> ProviderConfigResponse | None:
     """
     Update a provider configuration.
 
@@ -389,7 +389,7 @@ async def list_tenant_assignments(
     ),
     current_user: User = Depends(get_current_user_with_roles),
     service: ProviderService = Depends(get_provider_service_with_session),
-) -> None:
+) -> Any:
     """
     List all provider assignments for a tenant.
     """
@@ -452,7 +452,7 @@ async def get_tenant_provider(
     ),
     current_user: User = Depends(get_current_user),
     service: ProviderService = Depends(get_provider_service_with_session),
-) -> ProviderConfigResponse:
+) -> ProviderConfigResponse | None:
     """
     Get the provider assigned to a specific tenant.
 

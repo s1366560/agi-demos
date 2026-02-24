@@ -1965,7 +1965,7 @@ def get_channel_message_router() -> ChannelMessageRouter:
                 async_session_factory,
             )
 
-            async def _init_media_service() -> None:
+            async def _init_media_service() -> MediaImportService | None:
                 """Initialize media import service asynchronously."""
                 try:
                     async with async_session_factory() as session:

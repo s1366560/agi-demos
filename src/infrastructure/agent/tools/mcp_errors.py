@@ -56,7 +56,7 @@ class MCPToolError:
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
-        result = {
+        result: dict[str, Any] = {
             "error_type": self.error_type.value,
             "message": self.message,
             "tool_name": self.tool_name,

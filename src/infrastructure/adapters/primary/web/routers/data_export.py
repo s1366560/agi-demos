@@ -2,6 +2,7 @@
 
 import logging
 from datetime import UTC, datetime, timedelta
+from collections.abc import Sequence
 from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
@@ -18,7 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/data", tags=["data"])
 
 
-def _records(result: Any) -> list[Any]:
+def _records(result: Any) -> Sequence[Any]:
     try:
         recs = getattr(result, "records", None)
         if isinstance(recs, (list, tuple)):

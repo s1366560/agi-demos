@@ -30,9 +30,10 @@ class SandboxToolRegistration:
     tool_names: list[str] = field(default_factory=list)
     registered_at: datetime = field(default_factory=datetime.now)
 
-    def age_seconds(self) -> int:
+    def age_seconds(self) -> float:
         """Get age of registration in seconds."""
-        return (datetime.now() - self.registered_at).total_seconds()
+        delta = datetime.now() - self.registered_at
+        return delta.total_seconds()
 
 
 class SandboxToolRegistry:

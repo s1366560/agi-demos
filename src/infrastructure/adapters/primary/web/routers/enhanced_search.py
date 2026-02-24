@@ -394,7 +394,7 @@ async def search_with_facets(
 
         # Build filters
         conditions = []
-        params = {"limit": limit, "offset": offset}
+        params: dict[str, Any] = {"limit": limit, "offset": offset}
 
         if entity_types:
             conditions.append("e.entity_type IN $entity_types")

@@ -27,7 +27,7 @@ EMBEDDING_DIMS = {
 
 async def create_native_graph_adapter(
     tenant_id: str | None = None,
-) -> None:
+) -> "NativeGraphAdapter":
     """
     Create NativeGraphAdapter for knowledge graph operations.
 

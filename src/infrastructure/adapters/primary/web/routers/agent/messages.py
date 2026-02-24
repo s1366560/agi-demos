@@ -518,7 +518,7 @@ async def get_conversation_messages(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> dict[str, Any]:
     """
     Get conversation timeline from unified event stream with bidirectional pagination.
@@ -622,7 +622,7 @@ async def get_conversation_execution(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> dict[str, Any]:
     """Get the agent execution history for a conversation."""
     try:
@@ -666,7 +666,7 @@ async def get_conversation_tool_executions(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> dict[str, Any]:
     """Get the tool execution history for a conversation."""
     try:
@@ -715,7 +715,7 @@ async def get_conversation_execution_status(
     ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> dict[str, Any]:
     """Get the current execution status of a conversation with optional recovery info."""
     try:
@@ -898,7 +898,7 @@ async def get_execution_stats(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-    request: Request = None,
+    request: Request | None = None,
 ) -> ExecutionStatsResponse:
     """Get execution statistics for a conversation."""
     try:

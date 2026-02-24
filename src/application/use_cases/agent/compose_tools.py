@@ -267,7 +267,7 @@ class ComposeToolsUseCase:
                     step_result.get("output") if step_result.get("success") else None
                 )
 
-            final_result = {
+            final_result: str | dict[str, object] = {
                 "results": results,
                 "all_succeeded": success,
                 "succeeded_tools": [s["tool"] for s in steps if s["success"]],

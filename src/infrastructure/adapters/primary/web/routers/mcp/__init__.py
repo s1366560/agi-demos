@@ -6,7 +6,7 @@ MCP servers provide external tools and capabilities via the Model Context Protoc
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import cast
+from typing import Any, cast
 
 from src.infrastructure.adapters.primary.web.dependencies import get_current_user_tenant
 from src.infrastructure.adapters.secondary.persistence.database import get_db
@@ -39,11 +39,11 @@ async def create_mcp_server_root(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-) -> None:
+) -> Any:
     """Create MCP server (root path alias)."""
-    return cast(None, await servers.create_mcp_server(
+    return await servers.create_mcp_server(
         server_data=server_data, request=request, db=db, tenant_id=tenant_id
-    ))
+    )
 
 
 @router.get("", response_model=list[MCPServerResponse], include_in_schema=False)
@@ -52,7 +52,7 @@ async def list_mcp_servers_root(
     enabled_only: bool = Query(False, description="Only return enabled servers"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-) -> None:
+) -> Any:
     """List MCP servers (root path alias)."""
     return await servers.list_mcp_servers(
         project_id=project_id, enabled_only=enabled_only, db=db, tenant_id=tenant_id
