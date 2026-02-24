@@ -483,8 +483,8 @@ exclude = [
     "src/memstack_agent/",  # Legacy code, migrate progressively
 ]
 
-# Handle untyped third-party libraries
-ignore_missing_imports = true
+# Per-module overrides for untyped third-party libraries
+# (replaces global ignore_missing_imports = true)
 
 # Progressive enablement - fix first, then enable
 # disallow_untyped_calls = true   # Phase 2: 2362 errors, fix incrementally
@@ -493,12 +493,43 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "src.infrastructure.llm.litellm.*"
-ignore_errors = true  # Legacy code
+ignore_errors = true  # 25 remaining errors (no-any-return, arg-type, attr-defined, etc.)
 
 [[tool.mypy.overrides]]
 module = "src.infrastructure.adapters.secondary.ray.*"
-ignore_errors = true  # Ray library type issues
+# ignore_errors removed — 0 errors in this module
 
+[[tool.mypy.overrides]]
+module = [
+    "docker",
+    "docker.*",
+    "yaml",
+    "boto3",
+    "botocore",
+    "botocore.*",
+    "aioboto3",
+    "lark_oapi",
+    "lark_oapi.*",
+    "pgvector",
+    "pgvector.*",
+    "psycopg2",
+    "psycopg2.*",
+    "networkx",
+    "networkx.*",
+    "jsonschema",
+    "jsonschema.*",
+    "grpc",
+    "grpc.*",
+]
+ignore_missing_imports = true
+
+# Internal modules that may not exist in all environments
+[[tool.mypy.overrides]]
+module = [
+    "src.infrastructure.llm.embedding_service",
+    "src.infrastructure.adapters.secondary.graphiti.embedding_utils",
+]
+ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
