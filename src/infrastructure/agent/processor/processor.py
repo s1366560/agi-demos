@@ -494,7 +494,115 @@ class SessionProcessor:
 
         return ui_metadata
 
-    async def process(
+    @staticmethod
+    def _classify_step_event(event: ProcessorEvent) -> str | None:
+        """Extract the event type string from a step event."""
+        event_type_raw = (
+            event.get("type")
+            if isinstance(event, dict)
+            else getattr(event, "event_type", None)
+        )
+        if isinstance(event_type_raw, AgentEventType):
+            return event_type_raw.value
+        return event_type_raw
+
+    async def _evaluate_no_tool_result(
+        self,
+        session_id: str,
+        messages: list[dict[str, Any]],
+    ) -> AsyncIterator[tuple[ProcessorResult, ProcessorEvent | None]]:
+        """Evaluate goal when no tool calls were made, yielding (result, event) pairs."""
+        goal_check = await self._evaluate_goal_completion(session_id, messages)
+        if goal_check.achieved:
+            self._no_progress_steps = 0
+            yield (
+                ProcessorResult.COMPLETE,
+                AgentStatusEvent(status=f"goal_achieved:{goal_check.source}"),
+            )
+            return
+
+        if self._is_conversational_response():
+            self._no_progress_steps = 0
+            yield (
+                ProcessorResult.COMPLETE,
+                AgentStatusEvent(status="goal_achieved:conversational_response"),
+            )
+            return
+
+        if goal_check.should_stop:
+            self._state = ProcessorState.ERROR
+            yield (
+                ProcessorResult.STOP,
+                AgentErrorEvent(
+                    message=goal_check.reason or "Goal cannot be completed",
+                    code="GOAL_NOT_ACHIEVED",
+                ),
+            )
+            return
+
+        # No progress -- increment counter and check limit
+        self._no_progress_steps += 1
+        yield (
+            ProcessorResult.CONTINUE,
+            AgentStatusEvent(status=f"goal_pending:{goal_check.source}"),
+        )
+        if self._no_progress_steps > 1:
+            yield (ProcessorResult.CONTINUE, AgentStatusEvent(status="planning_recheck"))
+        if self._no_progress_steps >= self.config.max_no_progress_steps:
+            self._state = ProcessorState.ERROR
+            yield (
+                ProcessorResult.STOP,
+                AgentErrorEvent(
+                    message=(
+                        "Goal not achieved after "
+                        f"{self._no_progress_steps} no-progress turns. "
+                        f"{goal_check.reason or 'Replan required.'}"
+                    ),
+                    code="GOAL_NOT_ACHIEVED",
+                ),
+            )
+
+    def _append_tool_results_to_messages(self, messages: list[dict[str, Any]]) -> None:
+        """Append current assistant message and tool results to message list."""
+        if not self._current_message:
+            return
+        messages.append(self._current_message.to_llm_format())
+        for part in self._current_message.get_tool_parts():
+            if part.status == ToolState.COMPLETED:
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": part.call_id,
+                        "content": part.output or "",
+                    }
+                )
+            elif part.status == ToolState.ERROR:
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": part.call_id,
+                        "content": f"Error: {part.error}",
+                    }
+                )
+
+    async def _build_completion_events(
+        self, result: ProcessorResult, session_id: str, messages: list[dict[str, Any]]
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Yield final events when processing loop completes."""
+        if result == ProcessorResult.COMPLETE:
+            suggestions_event = await self._generate_suggestions(messages)
+            if suggestions_event:
+                yield suggestions_event
+            trace_url = None
+            if self._langfuse_context:
+                    from src.configuration.config import get_settings
+                if settings.langfuse_enabled and settings.langfuse_host:
+                    trace_id = self._langfuse_context.get("conversation_id", session_id)
+                    trace_url = f"{settings.langfuse_host}/trace/{trace_id}"
+            yield AgentCompleteEvent(trace_url=trace_url)
+            self._state = ProcessorState.COMPLETED
+        elif result == ProcessorResult.COMPACT:
+                yield AgentStatusEvent(status="compact_needed")
         self,
         session_id: str,
         messages: list[dict[str, Any]],
@@ -503,13 +611,10 @@ class SessionProcessor:
     ) -> AsyncIterator[ProcessorEvent]:
         """
         Process a conversation turn.
-
-        Runs the ReAct loop:
         1. Call LLM with messages
         2. Process response (text, reasoning, tool calls)
         3. Execute tool calls if any
         4. Continue until complete or blocked
-
         Args:
             session_id: Session identifier
             messages: Conversation messages in OpenAI format
@@ -520,30 +625,21 @@ class SessionProcessor:
                 - tenant_id: Tenant identifier for multi-tenant isolation
                 - project_id: Project identifier
                 - extra: Additional metadata dict
-
-        Yields:
             AgentDomainEvent objects and dict passthrough events for real-time streaming
         """
         self._abort_event = abort_signal or asyncio.Event()
         self._step_count = 0
         self._no_progress_steps = 0
-        self._langfuse_context = langfuse_context  # Store for use in _process_step
-
-        # Emit start event
+        self._langfuse_context = langfuse_context
         yield AgentStartEvent()
         self._state = ProcessorState.THINKING
-
         try:
             result = ProcessorResult.CONTINUE
-
             while result == ProcessorResult.CONTINUE:
-                # Check abort
                 if self._abort_event.is_set():
                     yield AgentErrorEvent(message="Processing aborted", code="ABORTED")
                     self._state = ProcessorState.ERROR
                     return
-
-                # Check step limit
                 self._step_count += 1
                 if self._step_count > self.config.max_steps:
                     yield AgentErrorEvent(
@@ -552,23 +648,10 @@ class SessionProcessor:
                     )
                     self._state = ProcessorState.ERROR
                     return
-
-                # Process one step
                 had_tool_calls = False
                 async for event in self._process_step(session_id, messages):
                     yield event
-
-                    # Check for stop conditions in events
-                    event_type_raw = (
-                        event.get("type")
-                        if isinstance(event, dict)
-                        else getattr(event, "event_type", None)
-                    )
-                    event_type = (
-                        event_type_raw.value
-                        if isinstance(event_type_raw, AgentEventType)
-                        else event_type_raw
-                    )
+                    event_type = self._classify_step_event(event)
                     if event_type == AgentEventType.ERROR.value:
                         result = ProcessorResult.STOP
                         break
@@ -578,96 +661,24 @@ class SessionProcessor:
                         result = ProcessorResult.COMPACT
                         break
 
-                # If no stop/compact, determine result from tool calls
                 if result == ProcessorResult.CONTINUE:
                     if had_tool_calls:
                         self._no_progress_steps = 0
-                        result = ProcessorResult.CONTINUE
                     else:
-                        goal_check = await self._evaluate_goal_completion(session_id, messages)
-                        if goal_check.achieved:
-                            self._no_progress_steps = 0
-                            yield AgentStatusEvent(status=f"goal_achieved:{goal_check.source}")
-                            result = ProcessorResult.COMPLETE
-                        elif self._is_conversational_response():
-                            # Text-only response without tool calls and without an
-                            # explicit goal_achieved=false signal — treat as a
-                            # deliberate conversational reply.
-                            self._no_progress_steps = 0
-                            yield AgentStatusEvent(status="goal_achieved:conversational_response")
-                            result = ProcessorResult.COMPLETE
-                        elif goal_check.should_stop:
-                            yield AgentErrorEvent(
-                                message=goal_check.reason or "Goal cannot be completed",
-                                code="GOAL_NOT_ACHIEVED",
-                            )
-                            self._state = ProcessorState.ERROR
-                            result = ProcessorResult.STOP
-                        else:
-                            self._no_progress_steps += 1
-                            yield AgentStatusEvent(status=f"goal_pending:{goal_check.source}")
-                            if self._no_progress_steps > 1:
-                                yield AgentStatusEvent(status="planning_recheck")
-                            if self._no_progress_steps >= self.config.max_no_progress_steps:
-                                yield AgentErrorEvent(
-                                    message=(
-                                        "Goal not achieved after "
-                                        f"{self._no_progress_steps} no-progress turns. "
-                                        f"{goal_check.reason or 'Replan required.'}"
-                                    ),
-                                    code="GOAL_NOT_ACHIEVED",
-                                )
-                                self._state = ProcessorState.ERROR
-                                result = ProcessorResult.STOP
-                            else:
-                                result = ProcessorResult.CONTINUE
+                        async for pair in self._evaluate_no_tool_result(
+                            session_id, messages
+                        ):
+                            result_val, evt = pair
+                            if evt is not None:
+                                yield evt
+                            if result_val != ProcessorResult.CONTINUE:
+                                result = result_val
 
-                # If we have pending tool results, add them to messages
-                if result == ProcessorResult.CONTINUE and self._current_message:
-                    # Add assistant message with tool calls
-                    messages.append(self._current_message.to_llm_format())
+                if result == ProcessorResult.CONTINUE:
+                    self._append_tool_results_to_messages(messages)
 
-                    # Add tool results
-                    for part in self._current_message.get_tool_parts():
-                        if part.status == ToolState.COMPLETED:
-                            messages.append(
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": part.call_id,
-                                    "content": part.output or "",
-                                }
-                            )
-                        elif part.status == ToolState.ERROR:
-                            messages.append(
-                                {
-                                    "role": "tool",
-                                    "tool_call_id": part.call_id,
-                                    "content": f"Error: {part.error}",
-                                }
-                            )
-
-            # Emit completion
-            if result == ProcessorResult.COMPLETE:
-                # Generate follow-up suggestions
-                suggestions_event = await self._generate_suggestions(messages)
-                if suggestions_event:
-                    yield suggestions_event
-
-                # Build trace URL if Langfuse context is available
-                trace_url = None
-                if self._langfuse_context:
-                    from src.configuration.config import get_settings
-
-                    settings = get_settings()
-                    if settings.langfuse_enabled and settings.langfuse_host:
-                        trace_id = self._langfuse_context.get("conversation_id", session_id)
-                        trace_url = f"{settings.langfuse_host}/trace/{trace_id}"
-                yield AgentCompleteEvent(trace_url=trace_url)
-                self._state = ProcessorState.COMPLETED
-            elif result == ProcessorResult.COMPACT:
-                yield AgentStatusEvent(status="compact_needed")
-
-        except Exception as e:
+            async for event in self._build_completion_events(result, session_id, messages):
+                    yield event
             logger.error(f"Processor error: {e}", exc_info=True)
             yield AgentErrorEvent(message=str(e), code=type(e).__name__)
             self._state = ProcessorState.ERROR

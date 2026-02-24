@@ -300,6 +300,144 @@ class MCPSandboxAdapter(SandboxPort):
         for port in ports:
             self._used_ports.discard(port)
 
+    def _extract_ports_from_labels(
+        self,
+        labels: dict[str, str],
+    ) -> tuple[int | None, int | None, int | None]:
+        """Extract MCP, desktop, and terminal ports from container labels."""
+        mcp_port_str = labels.get("memstack.sandbox.mcp_port", "")
+        desktop_port_str = labels.get("memstack.sandbox.desktop_port", "")
+        terminal_port_str = labels.get("memstack.sandbox.terminal_port", "")
+        mcp_port = int(mcp_port_str) if mcp_port_str else None
+        desktop_port = int(desktop_port_str) if desktop_port_str else None
+        terminal_port = int(terminal_port_str) if terminal_port_str else None
+        return mcp_port, desktop_port, terminal_port
+
+    @staticmethod
+    def _extract_project_path_from_mounts(container: Any) -> str:
+        """Extract project path from container volume mounts."""
+        mounts = container.attrs.get("Mounts", [])
+        for mount in mounts:
+            if mount.get("Destination") == "/workspace":
+                return mount.get("Source", "")
+        return ""
+
+    def _build_urls_from_ports(
+        self,
+        sandbox_id: str,
+        mcp_port: int | None,
+        desktop_port: int | None,
+        terminal_port: int | None,
+    ) -> tuple[str | None, str | None, str | None]:
+        """Build websocket, desktop, and terminal URLs from port information."""
+        if not mcp_port:
+            return None, None, None
+        instance_info = SandboxInstanceInfo(
+            mcp_port=mcp_port,
+            desktop_port=desktop_port or 0,
+            terminal_port=terminal_port or 0,
+            sandbox_id=sandbox_id,
+            host="localhost",
+        )
+        urls = self._url_service.build_all_urls(instance_info)
+        websocket_url = urls.mcp_url
+        desktop_url = urls.desktop_url if desktop_port else None
+        terminal_url = urls.terminal_url if terminal_port else None
+        return websocket_url, desktop_url, terminal_url
+
+    def _build_instance_from_container(
+        self,
+        sandbox_id: str,
+        labels: dict[str, str],
+        project_path: str,
+        mcp_port: int | None,
+        desktop_port: int | None,
+        terminal_port: int | None,
+    ) -> MCPSandboxInstance:
+        """Build an MCPSandboxInstance from container metadata."""
+        websocket_url, desktop_url, terminal_url = self._build_urls_from_ports(
+            sandbox_id, mcp_port, desktop_port, terminal_port,
+        )
+        now = datetime.now()
+        return MCPSandboxInstance(
+            id=sandbox_id,
+            status=SandboxStatus.RUNNING,
+            config=SandboxConfig(image=self._mcp_image),
+            project_path=project_path,
+            endpoint=websocket_url,
+            created_at=now,
+            last_activity_at=now,
+            websocket_url=websocket_url,
+            mcp_client=None,
+            mcp_port=mcp_port,
+            desktop_port=desktop_port,
+            terminal_port=terminal_port,
+            desktop_url=desktop_url,
+            terminal_url=terminal_url,
+            labels=labels,
+        )
+
+    def _track_ports(self, *ports: int | None) -> None:
+        """Add non-None ports to the used ports set (must hold port_allocation_lock)."""
+        for p in ports:
+            if p is not None:
+                self._used_ports.add(p)
+
+    def _get_instance_ports(self, instance: MCPSandboxInstance) -> list[int]:
+        """Get list of non-None ports from an instance."""
+        return [
+            p for p in [instance.mcp_port, instance.desktop_port, instance.terminal_port]
+            if p is not None
+        ]
+
+    async def _ensure_mcp_connected(
+        self,
+        sandbox_id: str,
+        instance: MCPSandboxInstance,
+        timeout: float = 15.0,
+    ) -> bool:
+        """Ensure MCP client is connected for the instance. Returns True if connected."""
+        if instance.mcp_client and instance.mcp_client.is_connected:
+            return True
+        try:
+            return await self.connect_mcp(sandbox_id, timeout=timeout)
+        except Exception as e:
+            logger.warning(
+                "MCP client connect error for %s: %s", sandbox_id, e,
+            )
+            return False
+
+    async def _safe_stop_and_remove_container(
+        self,
+        container: Any,
+        container_name: str,
+        stop_timeout: int = 5,
+        overall_timeout: float = 10.0,
+    ) -> bool:
+        """Stop and remove a container safely. Returns True if successful."""
+        loop = asyncio.get_event_loop()
+        try:
+            if container.status == "running":
+                try:
+                    await asyncio.wait_for(
+                        loop.run_in_executor(
+                            None, lambda c=container: c.stop(timeout=stop_timeout)
+                        ),
+                        timeout=overall_timeout,
+                    )
+                except TimeoutError:
+                    logger.warning(
+                        f"Stop timed out for container {container_name}, forcing kill"
+                    )
+                    await loop.run_in_executor(None, container.kill)
+            await loop.run_in_executor(
+                None, lambda c=container: c.remove(force=True)
+            )
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to stop/remove container {container_name}: {e}")
+            return False
+
     async def create_sandbox(
         self,
         project_path: str,

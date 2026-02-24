@@ -277,6 +277,7 @@ export type ProviderType =
   | 'bedrock'
   | 'vertex'
   | 'deepseek'
+  | 'minimax'
   | 'zai'
   | 'ollama'
   | 'lmstudio';

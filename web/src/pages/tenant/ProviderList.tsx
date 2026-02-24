@@ -30,6 +30,7 @@ const PROVIDER_TYPE_LABELS: Record<ProviderType, string> = {
   bedrock: 'AWS Bedrock',
   vertex: 'Google Vertex AI',
   deepseek: 'Deepseek',
+  minimax: 'MiniMax',
   zai: 'ZhipuAI',
   ollama: 'Ollama',
   lmstudio: 'LM Studio',
@@ -321,6 +322,7 @@ export const ProviderList: React.FC = () => {
                     <option value="gemini">Google Gemini</option>
                     <option value="dashscope">Dashscope</option>
                     <option value="deepseek">Deepseek</option>
+                    <option value="minimax">MiniMax</option>
                     <option value="zai">ZhipuAI</option>
                     <option value="groq">Groq</option>
                     <option value="cohere">Cohere</option>

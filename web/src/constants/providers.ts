@@ -87,6 +87,18 @@ export const PROVIDERS: ProviderMeta[] = [
     documentationUrl: 'https://platform.deepseek.com/docs',
   },
   {
+    value: 'minimax',
+    label: 'MiniMax',
+    icon: '🧩',
+    description: 'abab6.5-chat, embo-01',
+    apiKeyEnvVar: 'MINIMAX_API_KEY',
+    apiKeyPlaceholder: '...',
+    hasEmbedding: true,
+    hasNativeRerank: false,
+    baseUrlRequired: false,
+    documentationUrl: 'https://platform.minimaxi.com/document',
+  },
+  {
     value: 'zai',
     label: 'ZhipuAI 智谱',
     icon: '🐲',

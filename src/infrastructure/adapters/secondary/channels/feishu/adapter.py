@@ -1533,7 +1533,7 @@ class FeishuAdapter:
                     .message_id(reply_to)
                     .request_body(
                         ReplyMessageRequestBody.builder()
-                        .msg_type("interactive")
+                        .msg_type("card")
                         .content(msg_content)
                         .build()
                     )
@@ -1556,7 +1556,7 @@ class FeishuAdapter:
             .request_body(
                 CreateMessageRequestBody.builder()
                 .receive_id(to)
-                .msg_type("interactive")
+                .msg_type("card")
                 .content(msg_content)
                 .build()
             )

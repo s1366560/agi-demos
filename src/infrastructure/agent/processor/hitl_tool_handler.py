@@ -104,7 +104,7 @@ async def handle_clarification_tool(
         end_time = time.time()
 
         yield AgentClarificationAnsweredEvent(
-            request_id="resolved",
+            request_id=request_id,
             answer=answer,
         )
 
@@ -210,7 +210,7 @@ async def handle_decision_tool(
         end_time = time.time()
 
         yield AgentDecisionAnsweredEvent(
-            request_id="resolved",
+            request_id=request_id,
             decision=decision,
         )
 
@@ -339,7 +339,7 @@ async def handle_env_var_tool(
             saved_variables = list(values.keys()) if values else []
 
         yield AgentEnvVarProvidedEvent(
-            request_id="resolved",
+            request_id=request_id,
             tool_name=target_tool_name,
             saved_variables=saved_variables,
         )

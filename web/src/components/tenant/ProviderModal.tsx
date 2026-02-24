@@ -25,6 +25,7 @@ const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
   { value: 'bedrock', label: 'AWS Bedrock' },
   { value: 'vertex', label: 'Google Vertex AI' },
   { value: 'deepseek', label: 'Deepseek' },
+  { value: 'minimax', label: 'MiniMax' },
   { value: 'zai', label: 'ZhipuAI (智普AI)' },
   { value: 'ollama', label: 'Ollama (Local)' },
   { value: 'lmstudio', label: 'LM Studio (Local)' },
@@ -70,6 +71,12 @@ const DEFAULT_MODELS: Record<
   bedrock: { llm: 'anthropic.claude-3-sonnet-20240229-v1:0' },
   vertex: { llm: 'gemini-1.5-pro', small: 'gemini-1.5-flash' },
   deepseek: { llm: 'deepseek-chat', small: 'deepseek-coder' },
+  minimax: {
+    llm: 'abab6.5-chat',
+    small: 'abab6.5s-chat',
+    embedding: 'embo-01',
+    reranker: 'abab6.5-chat',
+  },
   zai: {
     llm: 'glm-4-plus',
     small: 'glm-4-flash',

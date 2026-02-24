@@ -53,6 +53,12 @@ const PROVIDER_CONFIG: Record<
     label: 'Deepseek',
     description: 'Deepseek-Chat, Coder',
   },
+  minimax: {
+    icon: '🧩',
+    gradient: 'from-violet-500 to-purple-600',
+    label: 'MiniMax',
+    description: 'abab6.5-chat, embo-01',
+  },
   zai: {
     icon: '🐲',
     gradient: 'from-yellow-400 to-red-500',

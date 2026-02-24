@@ -1,5 +1,6 @@
 """Unit tests for Feishu adapter message normalization."""
 
+import json
 import sys
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
@@ -948,6 +949,69 @@ async def test_add_card_elements_with_target(adapter: FeishuAdapter) -> None:
             sequence=2,
         )
         assert result is True
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_card_entity_message_uses_card_msg_type_for_reply(
+    adapter: FeishuAdapter,
+) -> None:
+    """send_card_entity_message should send card_id via msg_type=card on reply path."""
+    msg_api = _FakeMessageAPI(
+        reply_response=_FakeResponse(message_id="om_reply_card"),
+        create_response=_FakeResponse(message_id="om_create_card"),
+    )
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    message_id = await adapter.send_card_entity_message("oc_chat_1", "ck_001", reply_to="om_parent")
+
+    assert message_id == "om_reply_card"
+    assert msg_api.reply_called is True
+    assert msg_api.create_called is False
+    assert msg_api.reply_request.request_body.msg_type == "card"
+    assert msg_api.reply_request.request_body.content == json.dumps({"card_id": "ck_001"})
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_card_entity_message_uses_card_msg_type_for_create(
+    adapter: FeishuAdapter,
+) -> None:
+    """send_card_entity_message should send card_id via msg_type=card on create path."""
+    msg_api = _FakeMessageAPI(create_response=_FakeResponse(message_id="om_create_card"))
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    message_id = await adapter.send_card_entity_message("oc_chat_1", "ck_002")
+
+    assert message_id == "om_create_card"
+    assert msg_api.create_called is True
+    assert msg_api.create_request.request_body.msg_type == "card"
+    assert msg_api.create_request.request_body.content == json.dumps({"card_id": "ck_002"})
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_send_card_entity_message_reply_fallback_still_uses_card_msg_type(
+    adapter: FeishuAdapter,
+) -> None:
+    """send_card_entity_message should fallback to create with msg_type=card."""
+    msg_api = _FakeMessageAPI(
+        reply_response=_FakeResponse(code=999, msg="reply failed"),
+        create_response=_FakeResponse(message_id="om_create_fallback"),
+    )
+    adapter._connected = True
+    adapter._build_rest_client = lambda: _build_fake_client(msg_api)
+
+    message_id = await adapter.send_card_entity_message("oc_chat_1", "ck_003", reply_to="om_parent")
+
+    assert message_id == "om_create_fallback"
+    assert msg_api.reply_called is True
+    assert msg_api.create_called is True
+    assert msg_api.reply_request.request_body.msg_type == "card"
+    assert msg_api.create_request.request_body.msg_type == "card"
+    assert msg_api.create_request.request_body.content == json.dumps({"card_id": "ck_003"})
 
 
 @pytest.mark.unit

@@ -157,7 +157,7 @@ cp .env.example .env
 # - NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD
 # - DATABASE_URL (PostgreSQL)
 # - REDIS_URL
-# - LLM_PROVIDER (gemini, dashscope, deepseek, zhipu, openai)
+# - LLM_PROVIDER (gemini, dashscope, deepseek, minimax, zai/zhipu, openai)
 # - Corresponding LLM API keys
 #
 # Optional SubAgent runtime tuning:
