@@ -15,32 +15,38 @@ import { ApiError } from './ApiError';
  */
 export interface RetryConfig {
   /** Maximum number of retry attempts (default: 3) */
-  maxRetries?: number;
+  maxRetries?: number | undefined;
 
   /** Initial delay in milliseconds before first retry (default: 1000) */
-  initialDelay?: number;
+  initialDelay?: number | undefined;
 
   /** Maximum delay between retries in milliseconds (default: 10000) */
-  maxDelay?: number;
+  maxDelay?: number | undefined;
 
   /** Multiplier for exponential backoff (default: 2) */
-  backoffMultiplier?: number;
+  backoffMultiplier?: number | undefined;
 
   /** Whether to add jitter to delay (default: true) */
-  jitter?: boolean;
+  jitter?: boolean | undefined;
 
   /** HTTP status codes that should trigger retry (default: 408, 429, 500+) */
-  retryableStatusCodes?: Set<number>;
+  retryableStatusCodes?: Set<number> | undefined;
 
   /** Custom function to determine if an error is retryable */
-  isRetryable?: (error: ApiError) => boolean;
+  isRetryable?: ((error: ApiError) => boolean) | undefined;
 }
 
 /**
  * Default retry configuration
  */
-export const DEFAULT_RETRY_CONFIG: Required<Omit<RetryConfig, 'isRetryable'>> & {
-  isRetryable?: RetryConfig['isRetryable'];
+export const DEFAULT_RETRY_CONFIG: {
+  maxRetries: number;
+  initialDelay: number;
+  maxDelay: number;
+  backoffMultiplier: number;
+  jitter: boolean;
+  retryableStatusCodes: Set<number>;
+  isRetryable?: RetryConfig['isRetryable'] | undefined;
 } = {
   maxRetries: 3,
   initialDelay: 1000,
@@ -59,11 +65,14 @@ export const DEFAULT_RETRY_CONFIG: Required<Omit<RetryConfig, 'isRetryable'>> & 
  */
 export function calculateDelay(attempt: number, config: RetryConfig = {}): number {
   const {
-    initialDelay = DEFAULT_RETRY_CONFIG.initialDelay,
-    maxDelay = DEFAULT_RETRY_CONFIG.maxDelay,
-    backoffMultiplier = DEFAULT_RETRY_CONFIG.backoffMultiplier,
+    initialDelay: _initialDelay = DEFAULT_RETRY_CONFIG.initialDelay,
+    maxDelay: _maxDelay = DEFAULT_RETRY_CONFIG.maxDelay,
+    backoffMultiplier: _backoffMultiplier = DEFAULT_RETRY_CONFIG.backoffMultiplier,
     jitter = DEFAULT_RETRY_CONFIG.jitter,
   } = config;
+  const initialDelay = _initialDelay ?? DEFAULT_RETRY_CONFIG.initialDelay;
+  const maxDelay = _maxDelay ?? DEFAULT_RETRY_CONFIG.maxDelay;
+  const backoffMultiplier = _backoffMultiplier ?? DEFAULT_RETRY_CONFIG.backoffMultiplier;
 
   // Calculate exponential backoff: initialDelay * (multiplier ^ attempt)
   const exponentialDelay = initialDelay * Math.pow(backoffMultiplier, attempt);
@@ -101,7 +110,8 @@ export function isRetryableError(error: ApiError, config: RetryConfig = {}): boo
 
   // Check if status code is in retryable list
   const { retryableStatusCodes = DEFAULT_RETRY_CONFIG.retryableStatusCodes } = config;
-  if (error.statusCode && retryableStatusCodes.has(error.statusCode)) {
+  const codes = retryableStatusCodes ?? DEFAULT_RETRY_CONFIG.retryableStatusCodes;
+  if (error.statusCode && codes.has(error.statusCode)) {
     return true;
   }
 
@@ -119,7 +129,8 @@ export async function retryWithBackoff<T>(
   fn: () => Promise<T>,
   config: RetryConfig = {}
 ): Promise<T> {
-  const { maxRetries = DEFAULT_RETRY_CONFIG.maxRetries } = config;
+  const { maxRetries: _maxRetries = DEFAULT_RETRY_CONFIG.maxRetries } = config;
+  const maxRetries = _maxRetries ?? DEFAULT_RETRY_CONFIG.maxRetries;
 
   let lastError: Error | undefined;
 

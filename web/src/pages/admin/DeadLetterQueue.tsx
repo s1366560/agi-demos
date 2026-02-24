@@ -314,7 +314,7 @@ const DeadLetterQueue: React.FC = () => {
       key: 'retries',
       width: 80,
       render: (_, record) => (
-        <Text type={record.retry_count >= record.max_retries ? 'danger' : undefined}>
+        <Text type={record.retry_count >= record.max_retries ? 'danger' : 'secondary'}>
           {record.retry_count}/{record.max_retries}
         </Text>
       ),

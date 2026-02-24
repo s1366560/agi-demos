@@ -66,7 +66,7 @@ export interface SearchHeaderProps {
   onExportResults: () => void;
 
   // Mobile
-  isMobile?: boolean;
+  isMobile?: boolean | undefined;
 }
 
 /**
@@ -251,7 +251,7 @@ interface SearchModeButtonProps {
   mode: SearchMode;
   currentMode: SearchMode;
   onClick: () => void;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string | undefined }>;
   label: string;
 }
 
@@ -378,7 +378,7 @@ interface SearchInputProps {
   onBlur: () => void;
   onKeyDown: (e: React.KeyboardEvent) => void;
   placeholder: string;
-  Icon: React.ComponentType<{ className?: string }>;
+  Icon: React.ComponentType<{ className?: string | undefined }>;
   showVoiceButton: boolean;
   isListening: boolean;
   onVoiceSearch: () => void;

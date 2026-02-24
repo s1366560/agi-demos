@@ -20,19 +20,19 @@ interface TableViewProps {
   /** Table data */
   data: Record<string, any>[];
   /** Column definitions (optional, auto-detected if not provided) */
-  columns?: ColumnsType<any>;
+  columns?: ColumnsType<any> | undefined;
   /** Table title */
-  title?: string;
+  title?: string | undefined;
   /** Filename for export */
-  filename?: string;
+  filename?: string | undefined;
   /** Show search input */
-  showSearch?: boolean;
+  showSearch?: boolean | undefined;
   /** Show export button */
-  showExport?: boolean;
+  showExport?: boolean | undefined;
   /** Table size */
-  size?: 'small' | 'middle' | 'large';
+  size?: 'small' | 'middle' | 'large' | undefined;
   /** Pagination config */
-  pagination?: TableProps<any>['pagination'];
+  pagination?: TableProps<any>['pagination'] | undefined;
 }
 
 /**

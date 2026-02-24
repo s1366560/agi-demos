@@ -13,11 +13,11 @@ export interface BackgroundSubAgent {
   task: string;
   status: 'running' | 'completed' | 'failed' | 'cancelled';
   startedAt: number;
-  completedAt?: number;
-  summary?: string;
-  error?: string;
-  tokensUsed?: number;
-  executionTimeMs?: number;
+  completedAt?: number | undefined;
+  summary?: string | undefined;
+  error?: string | undefined;
+  tokensUsed?: number | undefined;
+  executionTimeMs?: number | undefined;
 }
 
 interface BackgroundState {

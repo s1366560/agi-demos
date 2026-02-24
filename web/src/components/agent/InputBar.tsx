@@ -59,10 +59,10 @@ interface InputBarProps {
   ) => void;
   onAbort: () => void;
   isStreaming: boolean;
-  disabled?: boolean;
-  projectId?: string;
-  onTogglePlanMode?: () => void;
-  isPlanMode?: boolean;
+  disabled?: boolean | undefined;
+  projectId?: string | undefined;
+  onTogglePlanMode?: (() => void) | undefined;
+  isPlanMode?: boolean | undefined;
 }
 
 const getFileIcon = (mimeType: string) => {

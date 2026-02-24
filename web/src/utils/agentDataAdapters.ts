@@ -100,8 +100,8 @@ export function adaptToolVisualizationData(message: Message): ToolExecutionItem[
  * - llm_usage (custom)
  */
 export function extractTokenData(message: Message): {
-  tokenData?: TokenData;
-  costData?: CostData;
+  tokenData?: TokenData | undefined;
+  costData?: CostData | undefined;
 } {
   const metadata = message.metadata;
 
@@ -135,12 +135,12 @@ export function extractTokenData(message: Message): {
   // Extract cost data if available
   const costMetadata = metadata.cost as
     | {
-        total?: number;
+        total?: number | undefined;
         breakdown?: {
-          input_cost?: number;
-          output_cost?: number;
-          reasoning_cost?: number;
-        };
+          input_cost?: number | undefined;
+          output_cost?: number | undefined;
+          reasoning_cost?: number | undefined;
+        } | undefined;
       }
     | undefined;
 

@@ -30,7 +30,7 @@ export const SchemaLayout: React.FC = () => {
                     ? `/project/${projectId}/schema`
                     : `/project/${projectId}/schema/${tab.path}`
                 }
-                end={tab.exact}
+                end={tab.exact ?? false}
                 className={({ isActive }) => `
                                     flex items-center gap-2 pb-3 px-1 border-b-2 text-sm font-medium transition-colors whitespace-nowrap
                                     ${

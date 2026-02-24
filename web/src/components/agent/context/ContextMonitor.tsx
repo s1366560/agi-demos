@@ -7,7 +7,7 @@ import { Tooltip, Progress } from 'antd';
 import { useContextStatus, useContextActions } from '../../../stores/contextStore';
 
 interface ContextMonitorProps {
-  compact?: boolean;
+  compact?: boolean | undefined;
 }
 
 const levelLabels: Record<string, string> = {

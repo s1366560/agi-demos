@@ -47,24 +47,24 @@ export interface WorkspaceContextValue {
  */
 export interface WorkspaceSwitcherRootProps {
   children: React.ReactNode;
-  mode?: WorkspaceMode;
-  defaultOpen?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  mode?: WorkspaceMode | undefined;
+  defaultOpen?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
 }
 
 /**
  * Props for the Trigger component
  */
 export interface WorkspaceTriggerProps {
-  className?: string;
-  children?: React.ReactNode;
+  className?: string | undefined;
+  children?: React.ReactNode | undefined;
 }
 
 /**
  * Props for the Menu component
  */
 export interface WorkspaceMenuProps {
-  className?: string;
+  className?: string | undefined;
   children: React.ReactNode;
   label: string;
 }
@@ -76,8 +76,8 @@ export interface TenantListProps {
   tenants: Tenant[];
   currentTenant: Tenant | null;
   onTenantSelect: (tenant: Tenant) => void;
-  onCreateTenant?: () => void;
-  createLabel?: string;
+  onCreateTenant?: (() => void) | undefined;
+  createLabel?: string | undefined;
 }
 
 /**
@@ -87,31 +87,31 @@ export interface ProjectListProps {
   projects: Project[];
   currentProjectId: string | null;
   onProjectSelect: (project: Project) => void;
-  onBackToTenant?: () => void;
-  backToTenantLabel?: string;
+  onBackToTenant?: (() => void) | undefined;
+  backToTenantLabel?: string | undefined;
 }
 
 /**
  * Props for the TenantWorkspaceSwitcher convenience component
  */
 export interface TenantWorkspaceSwitcherProps {
-  onTenantSelect?: (tenant: Tenant) => void;
-  onCreateTenant?: () => void;
-  createLabel?: string;
-  triggerClassName?: string;
-  menuClassName?: string;
+  onTenantSelect?: ((tenant: Tenant) => void) | undefined;
+  onCreateTenant?: (() => void) | undefined;
+  createLabel?: string | undefined;
+  triggerClassName?: string | undefined;
+  menuClassName?: string | undefined;
 }
 
 /**
  * Props for the ProjectWorkspaceSwitcher convenience component
  */
 export interface ProjectWorkspaceSwitcherProps {
-  currentProjectId?: string | null;
-  onProjectSelect?: (project: Project) => void;
-  onBackToTenant?: () => void;
-  backToTenantLabel?: string;
-  triggerClassName?: string;
-  menuClassName?: string;
+  currentProjectId?: string | null | undefined;
+  onProjectSelect?: ((project: Project) => void) | undefined;
+  onBackToTenant?: (() => void) | undefined;
+  backToTenantLabel?: string | undefined;
+  triggerClassName?: string | undefined;
+  menuClassName?: string | undefined;
 }
 
 /**
@@ -132,5 +132,5 @@ export type KeyboardEventHandler = (event: React.KeyboardEvent, index?: number) 
 export interface MenuItemState {
   ref: HTMLButtonElement | null;
   focused: boolean;
-  disabled?: boolean;
+  disabled?: boolean | undefined;
 }

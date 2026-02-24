@@ -16,9 +16,9 @@ export interface BrowserWebSocketTransportOptions {
   /** WebSocket URL to connect to */
   url: string;
   /** Connection timeout in milliseconds (default: 10000) */
-  connectTimeout?: number;
+  connectTimeout?: number | undefined;
   /** Auth token to append as query parameter */
-  token?: string;
+  token?: string | undefined;
 }
 
 /**

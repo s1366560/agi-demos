@@ -65,31 +65,31 @@ export interface StandardMCPAppRendererProps {
   /** MCP tool name (required by AppRenderer) */
   toolName: string;
   /** Resource URI for deferred HTML fetching */
-  resourceUri?: string;
+  resourceUri?: string | undefined;
   /** Pre-fetched HTML content (skips all fetching when provided) */
-  html?: string;
+  html?: string | undefined;
   /** Tool input arguments */
-  toolInput?: Record<string, unknown>;
+  toolInput?: Record<string, unknown> | undefined;
   /** Tool execution result (loosely typed - cast to CallToolResult internally) */
-  toolResult?: unknown;
+  toolResult?: unknown | undefined;
   /** Whether tool execution was cancelled (SEP-1865 ui/notifications/tool-cancelled) */
-  toolCancelled?: boolean;
+  toolCancelled?: boolean | undefined;
   /** Project ID for backend proxy calls */
-  projectId?: string;
+  projectId?: string | undefined;
   /** MCP server name (for proxy routing) */
-  serverName?: string;
+  serverName?: string | undefined;
   /** MCP App ID (for efficient tool call proxy - avoids listing all apps) */
-  appId?: string;
+  appId?: string | undefined;
   /** UI metadata with CSP, permissions, and display preferences */
-  uiMetadata?: MCPAppUIMetadata;
+  uiMetadata?: MCPAppUIMetadata | undefined;
   /** Callback when the app sends a ui/message to add to conversation */
-  onMessage?: (message: { role: string; content: { type: string; text: string } }) => void;
+  onMessage?: ((message: { role: string; content: { type: string; text: string } }) => void) | undefined;
   /** Callback when the app updates model context via ui/update-model-context (SEP-1865) */
-  onUpdateModelContext?: (context: Record<string, unknown>) => void;
+  onUpdateModelContext?: ((context: Record<string, unknown>) => void) | undefined;
   /** Callback when the app reports a size change */
-  onSizeChanged?: (size: { width?: number; height?: number }) => void;
+  onSizeChanged?: ((size: { width?: number | undefined; height?: number | undefined }) => void) | undefined;
   /** Height of the container */
-  height?: string | number;
+  height?: string | number | undefined;
 }
 
 /**
@@ -101,7 +101,7 @@ function getSandboxProxyUrl(): URL {
   // (http://localhost:8000/api/v1) from env configs.
   const envApiTarget =
     import.meta.env.VITE_API_HOST ||
-    (import.meta.env as { VITE_API_URL?: string }).VITE_API_URL ||
+    (import.meta.env as { VITE_API_URL?: string | undefined }).VITE_API_URL ||
     (window.location.host.includes(':3000') ? 'localhost:8000' : window.location.host);
   const apiHost = envApiTarget.replace(/^[a-z]+:\/\//i, '').split('/')[0] || 'localhost:8000';
   const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
@@ -252,19 +252,27 @@ export const StandardMCPAppRenderer = forwardRef<
     const effectiveUri =
       resourceUri ||
       uiMetadata?.resourceUri ||
-      (uiMetadata as { resource_uri?: string } | undefined)?.resource_uri ||
+      (uiMetadata as { resource_uri?: string | undefined } | undefined)?.resource_uri ||
       undefined;
 
-    const sandboxConfig = useMemo(
-      () => ({
+    const sandboxConfig = useMemo(() => {
+      const config: { url: URL; permissions: string; csp?: { connectDomains?: string[]; resourceDomains?: string[] } } = {
         url: getSandboxProxyUrl(),
         permissions: 'allow-scripts allow-same-origin allow-forms',
-        // Forward CSP and permissions metadata to sandbox proxy for enforcement
-        ...(uiMetadata?.csp ? { csp: uiMetadata.csp } : {}),
-        ...(uiMetadata?.permissions ? { appPermissions: uiMetadata.permissions } : {}),
-      }),
-      [uiMetadata?.csp, uiMetadata?.permissions]
-    );
+      };
+      // Forward CSP metadata to sandbox proxy for enforcement
+      if (uiMetadata?.csp) {
+        const csp: { connectDomains?: string[]; resourceDomains?: string[] } = {};
+        if (uiMetadata.csp.connectDomains) {
+          csp.connectDomains = uiMetadata.csp.connectDomains;
+        }
+        if (uiMetadata.csp.resourceDomains) {
+          csp.resourceDomains = uiMetadata.csp.resourceDomains;
+        }
+        config.csp = csp;
+      }
+      return config;
+    }, [uiMetadata?.csp]);
 
     // SEP-1865 host styles: map Ant Design tokens to standardized CSS variables
     const hostStyles = useMemo(() => buildHostStyles(computedTheme), [computedTheme]);
@@ -329,7 +337,7 @@ export const StandardMCPAppRenderer = forwardRef<
     // Handler for tool calls from the guest app back to its MCP server
 
     const handleCallTool = useCallback(
-      async (params: { name: string; arguments?: Record<string, unknown> }): Promise<any> => {
+      async (params: { name: string; arguments?: Record<string, unknown> | undefined }): Promise<any> => {
         if (!effectiveProjectId) {
           throw new Error('projectId required for tool calls');
         }
@@ -545,37 +553,22 @@ export const StandardMCPAppRenderer = forwardRef<
             }
           >
             <LazyAppRenderer
-              // Use a stable key so the renderer is never remounted mid-handshake.
-              // The client/onCallTool/onListResources props update reactively when
-              // the connection mode changes (shouldUseFallback) without a remount,
-              // which would interrupt the sandbox proxy PROXY_READY handshake.
               key="mcp-app-renderer"
               ref={appRendererRef}
               toolName={toolName}
               sandbox={sandboxConfig}
-              html={effectiveHtml}
-              toolResourceUri={effectiveUri}
-              toolInput={toolInput}
-              toolCancelled={toolCancelled}
-              toolResult={toolResult as any}
-              hostContext={hostContext as any}
-              // IMPORTANT: When we need to fetch a resource (effectiveUri without html),
-              // we must use onReadResource (HTTP API) instead of client (MCP).
-              // The sandbox MCP server returns MCP format { contents: [{ text }] }
-              // which @mcp-ui/client doesn't parse correctly.
-              // Only pass client when we already have the HTML (no resource fetch needed).
-              client={
-                effectiveHtml && !shouldUseFallback && mcpClient ? (mcpClient as any) : undefined
-              }
-              // Always provide onReadResource when URI is available
-              // The backend returns MCP format { contents: [{ text }] }
-              // We extract the HTML text for @mcp-ui/client compatibility
-              onReadResource={effectiveUri ? (handleReadResource as any) : undefined}
-              // Only use HTTP fallback for tool calls when direct MCP client is unavailable
-              onCallTool={shouldUseHttpToolCall ? (handleCallTool as any) : undefined}
-              onListResources={shouldUseFallback ? (handleListResources as any) : undefined}
-              // Host-specific handlers (always needed regardless of mode)
-
+              {...(effectiveHtml != null ? { html: effectiveHtml } : {})}
+              {...(effectiveUri != null ? { toolResourceUri: effectiveUri } : {})}
+              {...(toolInput != null ? { toolInput } : {})}
+              {...(toolCancelled != null ? { toolCancelled } : {})}
+              {...(toolResult != null ? { toolResult: toolResult as any } : {})}
+              {...(hostContext != null ? { hostContext: hostContext as any } : {})}
+              {...(effectiveHtml && !shouldUseFallback && mcpClient
+                ? { client: mcpClient as any }
+                : {})}
+              {...(effectiveUri ? { onReadResource: handleReadResource as any } : {})}
+              {...(shouldUseHttpToolCall ? { onCallTool: handleCallTool as any } : {})}
+              {...(shouldUseFallback ? { onListResources: handleListResources as any } : {})}
               onMessage={handleMessage as any}
               onSizeChanged={handleSizeChanged as any}
               onError={handleError}

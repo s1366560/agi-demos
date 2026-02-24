@@ -18,9 +18,9 @@ import { useMemo, useState, useCallback, useEffect } from 'react';
 
 export interface UsePaginationOptions {
   totalItems: number;
-  itemsPerPage?: number;
-  initialPage?: number;
-  onPageChange?: (page: number) => void;
+  itemsPerPage?: number | undefined;
+  initialPage?: number | undefined;
+  onPageChange?: ((page: number) => void) | undefined;
 }
 
 export interface UsePaginationReturn {

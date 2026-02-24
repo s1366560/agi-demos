@@ -60,8 +60,8 @@ interface SubAgentCardProps {
   onToggle: (id: string, enabled: boolean) => void;
   onEdit: (subagent: SubAgentResponse) => void;
   onDelete: (id: string) => void;
-  onExport?: (subagent: SubAgentResponse) => void;
-  onImport?: (name: string) => void;
+  onExport?: ((subagent: SubAgentResponse) => void) | undefined;
+  onImport?: ((name: string) => void) | undefined;
 }
 
 export const SubAgentCard = memo<SubAgentCardProps>(

@@ -32,20 +32,20 @@ export interface SubAgentGroup {
   status: 'running' | 'success' | 'error' | 'background';
   events: TimelineEvent[];
   startIndex: number;
-  confidence?: number;
-  reason?: string;
-  task?: string;
-  summary?: string;
-  error?: string;
-  tokensUsed?: number;
-  executionTimeMs?: number;
-  mode?: 'single' | 'parallel' | 'chain';
+  confidence?: number | undefined;
+  reason?: string | undefined;
+  task?: string | undefined;
+  summary?: string | undefined;
+  error?: string | undefined;
+  tokensUsed?: number | undefined;
+  executionTimeMs?: number | undefined;
+  mode?: 'single' | 'parallel' | 'chain' | undefined;
   parallelInfo?: {
     taskCount: number;
     subtasks: Array<{ subagent_name: string; task: string }>;
-    results?: Array<{ subagent_name: string; summary: string; success: boolean }>;
-    totalTimeMs?: number;
-  };
+    results?: Array<{ subagent_name: string; summary: string; success: boolean }> | undefined;
+    totalTimeMs?: number | undefined;
+  } | undefined;
   chainInfo?: {
     stepCount: number;
     chainName: string;
@@ -53,17 +53,17 @@ export interface SubAgentGroup {
       index: number;
       name: string;
       subagentName: string;
-      summary?: string;
-      success?: boolean;
+      summary?: string | undefined;
+      success?: boolean | undefined;
       status: 'pending' | 'running' | 'success' | 'error';
     }>;
-    totalTimeMs?: number;
-  };
+    totalTimeMs?: number | undefined;
+  } | undefined;
 }
 
 interface SubAgentTimelineProps {
   group: SubAgentGroup;
-  isStreaming?: boolean;
+  isStreaming?: boolean | undefined;
 }
 
 const formatDuration = (ms: number): string => {
@@ -77,7 +77,7 @@ const formatTokens = (count: number): string => {
   return `${(count / 1000).toFixed(1)}k`;
 };
 
-const StatusIcon = memo<{ status: string; size?: number }>(({ status, size = 14 }) => {
+const StatusIcon = memo<{ status: string; size?: number | undefined }>(({ status, size = 14 }) => {
   switch (status) {
     case 'running':
       return <Loader2 size={size} className="text-blue-500 animate-spin" />;
@@ -94,7 +94,7 @@ const StatusIcon = memo<{ status: string; size?: number }>(({ status, size = 14 
 
 StatusIcon.displayName = 'StatusIcon';
 
-const ModeIcon = memo<{ mode?: string; size?: number }>(({ mode, size = 14 }) => {
+const ModeIcon = memo<{ mode?: string | undefined; size?: number | undefined }>(({ mode, size = 14 }) => {
   switch (mode) {
     case 'parallel':
       return <Layers size={size} className="text-indigo-500" />;

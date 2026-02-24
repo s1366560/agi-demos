@@ -125,7 +125,7 @@ export interface ConversationState {
     ToolCall & {
       status: 'preparing' | 'running' | 'success' | 'failed';
       startTime: number;
-      partialArguments?: string;
+      partialArguments?: string | undefined;
     }
   >;
   /** Stack of pending tool names */

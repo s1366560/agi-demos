@@ -132,7 +132,7 @@ const RISK_LEVEL_CONFIG: Record<string, { label: string; color: string; icon: Re
 
 interface UnifiedHITLPanelProps {
   request: UnifiedHITLRequest;
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
 }
 
 export const UnifiedHITLPanel: React.FC<UnifiedHITLPanelProps> = ({ request, onClose }) => {
@@ -543,7 +543,7 @@ const DecisionContent: React.FC<HITLContentProps> = ({
         <Button onClick={onCancel}>取消</Button>
         <Button
           type={hasHighRisk ? 'default' : 'primary'}
-          danger={hasHighRisk}
+          danger={hasHighRisk ?? false}
           icon={<CheckCircleOutlined />}
           onClick={handleSubmit}
           disabled={isSubmitDisabled}
@@ -818,7 +818,7 @@ const PermissionContent: React.FC<HITLContentProps> = ({
           <Text>{data?.action}</Text>
         </Descriptions.Item>
         <Descriptions.Item label="风险等级">
-          <Tag color={riskConfig?.color} icon={riskConfig?.icon}>
+          <Tag {...(riskConfig?.color != null ? { color: riskConfig.color } : {})} icon={riskConfig?.icon}>
             {riskConfig?.label}
           </Tag>
         </Descriptions.Item>

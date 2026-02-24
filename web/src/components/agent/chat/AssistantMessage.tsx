@@ -31,11 +31,11 @@ export interface AssistantMessageProps {
   /** Message content (markdown) */
   content: string;
   /** Whether to display as a formal report */
-  isReport?: boolean;
+  isReport?: boolean | undefined;
   /** Generation timestamp */
-  generatedAt?: string;
+  generatedAt?: string | undefined;
   /** Whether currently streaming (shows typing cursor) */
-  isStreaming?: boolean;
+  isStreaming?: boolean | undefined;
 }
 
 /**

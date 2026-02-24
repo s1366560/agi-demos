@@ -22,16 +22,16 @@ export interface PendingAttachment {
   sizeBytes: number;
   status: 'pending' | 'uploading' | 'uploaded' | 'error';
   progress: number;
-  error?: string;
-  fileMetadata?: FileMetadata;
+  error?: string | undefined;
+  fileMetadata?: FileMetadata | undefined;
 }
 
 // ==================== Hook ====================
 
 interface UseFileUploadOptions {
-  projectId?: string;
-  maxFiles?: number;
-  maxSizeMB?: number;
+  projectId?: string | undefined;
+  maxFiles?: number | undefined;
+  maxSizeMB?: number | undefined;
 }
 
 export function useFileUpload({ projectId, maxFiles = 10, maxSizeMB = 100 }: UseFileUploadOptions) {

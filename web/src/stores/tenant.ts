@@ -27,9 +27,9 @@ import type {
 interface ApiError {
   response?: {
     data?: {
-      detail?: string | Record<string, unknown>;
-    };
-  };
+      detail?: string | Record<string, unknown> | undefined;
+    } | undefined;
+  } | undefined;
 }
 
 interface TenantState {
@@ -42,7 +42,7 @@ interface TenantState {
   pageSize: number;
 
   // Actions
-  listTenants: (params?: { page?: number; page_size?: number; search?: string }) => Promise<void>;
+  listTenants: (params?: { page?: number | undefined; page_size?: number | undefined; search?: string | undefined }) => Promise<void>;
   getTenant: (id: string) => Promise<void>;
   createTenant: (data: TenantCreate) => Promise<void>;
   updateTenant: (id: string, data: TenantUpdate) => Promise<void>;

@@ -34,23 +34,23 @@ export interface ToolExecution {
   id: string;
   toolName: string;
   input: Record<string, unknown>;
-  output?: string;
-  error?: string;
-  durationMs?: number;
+  output?: string | undefined;
+  error?: string | undefined;
+  durationMs?: number | undefined;
   timestamp: number;
   /** Artifacts produced by this tool execution */
-  artifacts?: Artifact[];
+  artifacts?: Artifact[] | undefined;
 }
 
 export interface SandboxOutputViewerProps {
   /** List of tool executions to display */
   executions: ToolExecution[];
   /** Maximum height (default: 100%) */
-  maxHeight?: string | number;
+  maxHeight?: string | number | undefined;
   /** Called when user clicks on a file path */
-  onFileClick?: (filePath: string) => void;
+  onFileClick?: ((filePath: string) => void) | undefined;
   /** Called when user wants to expand an artifact */
-  onArtifactExpand?: (artifact: Artifact) => void;
+  onArtifactExpand?: ((artifact: Artifact) => void) | undefined;
 }
 
 // Tool icons mapping
@@ -79,8 +79,8 @@ function ToolExecutionCard({
   onArtifactExpand,
 }: {
   execution: ToolExecution;
-  onFileClick?: (filePath: string) => void;
-  onArtifactExpand?: (artifact: Artifact) => void;
+  onFileClick?: ((filePath: string) => void) | undefined;
+  onArtifactExpand?: ((artifact: Artifact) => void) | undefined;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -131,7 +131,7 @@ function ToolExecutionCard({
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
         <div className="flex items-center gap-2">
-          <Tag icon={TOOL_ICONS[execution.toolName]} color={TOOL_COLORS[execution.toolName]}>
+          <Tag icon={TOOL_ICONS[execution.toolName]} {...(TOOL_COLORS[execution.toolName] != null ? { color: TOOL_COLORS[execution.toolName] } : {})}>
             {execution.toolName}
           </Tag>
           <Text
@@ -241,7 +241,7 @@ export function SandboxOutputViewer({
       key: exec.id,
       label: (
         <div className="flex items-center gap-2">
-          <Tag icon={TOOL_ICONS[exec.toolName]} color={TOOL_COLORS[exec.toolName]} className="m-0">
+          <Tag icon={TOOL_ICONS[exec.toolName]} {...(TOOL_COLORS[exec.toolName] != null ? { color: TOOL_COLORS[exec.toolName] } : {})} className="m-0">
             {exec.toolName}
           </Tag>
           <Text className="text-sm text-slate-600">{formatTimeOnly(exec.timestamp)}</Text>

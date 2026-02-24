@@ -31,15 +31,15 @@ export interface AppHeaderRootProps {
   /** Base path for navigation */
   basePath: string;
   /** Layout context */
-  context?: 'tenant' | 'project' | 'agent';
+  context?: 'tenant' | 'project' | 'agent' | undefined;
   /** Header variant (presets for common configurations) */
-  variant?: HeaderVariant;
+  variant?: HeaderVariant | undefined;
   /** Custom breadcrumbs to display */
-  breadcrumbs?: Breadcrumb[];
+  breadcrumbs?: Breadcrumb[] | undefined;
   /** Options for breadcrumb generation */
   breadcrumbOptions?: {
-    skipFirst?: boolean;
-  };
+    skipFirst?: boolean | undefined;
+  } | undefined;
 }
 
 /**
@@ -51,7 +51,7 @@ export interface SidebarToggleProps {
   /** Callback when toggle is clicked */
   onToggle: () => void;
   /** ARIA label for the button */
-  ariaLabel?: string;
+  ariaLabel?: string | undefined;
 }
 
 /**
@@ -61,7 +61,7 @@ export interface MobileMenuProps {
   /** Callback when menu toggle is clicked */
   onToggle: () => void;
   /** ARIA label for the button */
-  ariaLabel?: string;
+  ariaLabel?: string | undefined;
 }
 
 /**
@@ -69,15 +69,15 @@ export interface MobileMenuProps {
  */
 export interface SearchProps {
   /** Current search value */
-  value?: string;
+  value?: string | undefined;
   /** Callback when search value changes */
-  onChange?: (value: string) => void;
+  onChange?: ((value: string) => void) | undefined;
   /** Callback when search is submitted (Enter key) */
-  onSubmit?: (value: string) => void;
+  onSubmit?: ((value: string) => void) | undefined;
   /** Placeholder text */
-  placeholder?: string;
+  placeholder?: string | undefined;
   /** ARIA label for the input */
-  ariaLabel?: string;
+  ariaLabel?: string | undefined;
 }
 
 /**
@@ -85,11 +85,11 @@ export interface SearchProps {
  */
 export interface NotificationsProps {
   /** Notification count for badge */
-  count?: number;
+  count?: number | undefined;
   /** Callback when notification bell is clicked */
-  onClick?: () => void;
+  onClick?: (() => void) | undefined;
   /** ARIA label for the button */
-  ariaLabel?: string;
+  ariaLabel?: string | undefined;
 }
 
 /**
@@ -105,7 +105,7 @@ export interface ToolsProps {
  */
 export interface ThemeToggleProps {
   /** Custom theme toggle component */
-  as?: React.ElementType;
+  as?: React.ElementType | undefined;
 }
 
 /**
@@ -113,7 +113,7 @@ export interface ThemeToggleProps {
  */
 export interface LanguageSwitcherProps {
   /** Custom language switcher component */
-  as?: React.ElementType;
+  as?: React.ElementType | undefined;
 }
 
 /**
@@ -123,7 +123,7 @@ export interface WorkspaceSwitcherProps {
   /** Workspace switcher mode */
   mode: WorkspaceMode;
   /** Custom workspace switcher component */
-  as?: React.ElementType;
+  as?: React.ElementType | undefined;
 }
 
 /**
@@ -131,11 +131,11 @@ export interface WorkspaceSwitcherProps {
  */
 export interface UserMenuProps {
   /** User profile path */
-  profilePath?: string;
+  profilePath?: string | undefined;
   /** User settings path */
-  settingsPath?: string;
+  settingsPath?: string | undefined;
   /** Custom user menu component */
-  as?: React.ElementType;
+  as?: React.ElementType | undefined;
 }
 
 /**
@@ -147,9 +147,9 @@ export interface PrimaryActionProps {
   /** Link destination */
   to: string;
   /** Optional icon */
-  icon?: React.ReactNode;
+  icon?: React.ReactNode | undefined;
   /** Button variant */
-  variant?: 'primary' | 'secondary';
+  variant?: 'primary' | 'secondary' | undefined;
 }
 
 /**
@@ -173,7 +173,7 @@ export interface CompoundComponentProps {
  */
 export interface AppHeaderContextValue {
   basePath: string;
-  context?: 'tenant' | 'project' | 'agent';
+  context?: 'tenant' | 'project' | 'agent' | undefined;
 }
 
 /**
@@ -181,55 +181,55 @@ export interface AppHeaderContextValue {
  */
 export interface LegacyAppHeaderProps {
   /** Layout context for breadcrumbs */
-  context?: 'tenant' | 'project' | 'agent';
+  context?: 'tenant' | 'project' | 'agent' | undefined;
   /** Base path for navigation */
   basePath: string;
   /** Current project/tenant name for context */
-  contextName?: string;
+  contextName?: string | undefined;
   /** Show sidebar toggle button */
-  showSidebarToggle?: boolean;
+  showSidebarToggle?: boolean | undefined;
   /** Sidebar collapsed state */
-  sidebarCollapsed?: boolean;
+  sidebarCollapsed?: boolean | undefined;
   /** Callback when sidebar toggle is clicked */
-  onSidebarToggle?: () => void;
+  onSidebarToggle?: (() => void) | undefined;
   /** Show mobile menu button */
-  showMobileMenu?: boolean;
+  showMobileMenu?: boolean | undefined;
   /** Callback when mobile menu is toggled */
-  onMobileMenuToggle?: () => void;
+  onMobileMenuToggle?: (() => void) | undefined;
   /** Show search input */
-  showSearch?: boolean;
+  showSearch?: boolean | undefined;
   /** Search input value */
-  searchValue?: string;
+  searchValue?: string | undefined;
   /** Callback when search value changes */
-  onSearchChange?: (value: string) => void;
+  onSearchChange?: ((value: string) => void) | undefined;
   /** Callback when search is submitted */
-  onSearchSubmit?: (value: string) => void;
+  onSearchSubmit?: ((value: string) => void) | undefined;
   /** Show notifications bell */
-  showNotifications?: boolean;
+  showNotifications?: boolean | undefined;
   /** Notification count badge */
-  notificationCount?: number;
+  notificationCount?: number | undefined;
   /** Callback when notification bell is clicked */
-  onNotificationsClick?: () => void;
+  onNotificationsClick?: (() => void) | undefined;
   /** Show theme toggle */
-  showThemeToggle?: boolean;
+  showThemeToggle?: boolean | undefined;
   /** Show language switcher */
-  showLanguageSwitcher?: boolean;
+  showLanguageSwitcher?: boolean | undefined;
   /** Show workspace switcher */
-  showWorkspaceSwitcher?: boolean;
+  showWorkspaceSwitcher?: boolean | undefined;
   /** Workspace switcher mode */
-  workspaceMode?: WorkspaceMode;
+  workspaceMode?: WorkspaceMode | undefined;
   /** Primary action button */
   primaryAction?: {
     label: string;
     to: string;
-    icon?: React.ReactNode;
-  };
+    icon?: React.ReactNode | undefined;
+  } | undefined;
   /** Additional actions to display on the right */
-  extraActions?: React.ReactNode;
+  extraActions?: React.ReactNode | undefined;
   /** Show user status bar */
-  showUserStatus?: boolean;
+  showUserStatus?: boolean | undefined;
   /** User profile path */
-  userProfilePath?: string;
+  userProfilePath?: string | undefined;
   /** User settings path */
-  userSettingsPath?: string;
+  userSettingsPath?: string | undefined;
 }

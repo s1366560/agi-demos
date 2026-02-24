@@ -45,16 +45,16 @@ export interface EventEnvelope<T = Record<string, unknown>> {
   source: string;
 
   /** Optional ID for correlating related events (e.g., same request chain) */
-  correlation_id?: string;
+  correlation_id?: string | undefined;
 
   /** Optional ID of the event that caused this event */
-  causation_id?: string;
+  causation_id?: string | undefined;
 
   /** Event-specific data */
   payload: T;
 
   /** Additional context (e.g., user_id, tenant_id) */
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -107,9 +107,9 @@ export function legacyToEnvelope<T = Record<string, unknown>>(
   type: AgentEventType,
   data: T,
   options?: {
-    correlationId?: string;
-    causationId?: string;
-    metadata?: Record<string, unknown>;
+    correlationId?: string | undefined;
+    causationId?: string | undefined;
+    metadata?: Record<string, unknown> | undefined;
   }
 ): EventEnvelope<T> {
   return {

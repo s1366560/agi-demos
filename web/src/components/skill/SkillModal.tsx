@@ -146,7 +146,7 @@ export const SkillModal: React.FC<SkillModalProps> = ({ isOpen, onClose, onSucce
 
       onSuccess();
     } catch (error: unknown) {
-      const err = error as { errorFields?: Array<{ name?: string[] }> };
+      const err = error as { errorFields?: Array<{ name?: string[] | undefined }> | undefined };
       if (err.errorFields) {
         // Form validation error - switch to the tab with the error
         const firstErrorField = err.errorFields[0]?.name?.[0];

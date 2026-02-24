@@ -10,9 +10,9 @@ import { Menu } from 'lucide-react';
 
 export interface MobileMenuProps {
   onToggle: () => void;
-  ariaLabel?: string;
+  ariaLabel?: string | undefined;
   /** @internal Slot for positioning */
-  slot?: 'left' | 'right';
+  slot?: 'left' | 'right' | undefined;
 }
 
 export const MobileMenu = React.memo(function MobileMenu({

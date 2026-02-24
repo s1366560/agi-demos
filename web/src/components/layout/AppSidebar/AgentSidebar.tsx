@@ -30,11 +30,11 @@ export function AgentSidebar({
   onLogout: externalLogout,
   t: externalT,
 }: AgentSidebarProps & {
-  collapsed?: boolean;
-  onCollapseToggle?: () => void;
-  user?: NavUser;
-  onLogout?: () => void;
-  t?: (key: string) => string;
+  collapsed?: boolean | undefined;
+  onCollapseToggle?: (() => void) | undefined;
+  user?: NavUser | undefined;
+  onLogout?: (() => void) | undefined;
+  t?: ((key: string) => string) | undefined;
 }) {
   const { t: useT } = useTranslation();
   const { user: authUser, logout: authLogout } = useAuthStore();

@@ -497,8 +497,8 @@ describe('StandardMCPAppRenderer - General Functionality', () => {
   });
 
   it('should normalize full URL VITE_API_HOST for sandbox proxy URL', async () => {
-    const originalHost = (import.meta.env as { VITE_API_HOST?: string }).VITE_API_HOST;
-    (import.meta.env as { VITE_API_HOST?: string }).VITE_API_HOST = 'http://localhost:8000/api/v1';
+    const originalHost = (import.meta.env as { VITE_API_HOST?: string | undefined }).VITE_API_HOST;
+    (import.meta.env as { VITE_API_HOST?: string | undefined }).VITE_API_HOST = 'http://localhost:8000/api/v1';
 
     try {
       render(<StandardMCPAppRenderer {...createProps({ html: '<div>Test</div>' })} />);
@@ -510,9 +510,9 @@ describe('StandardMCPAppRenderer - General Functionality', () => {
       );
     } finally {
       if (originalHost === undefined) {
-        delete (import.meta.env as { VITE_API_HOST?: string }).VITE_API_HOST;
+        delete (import.meta.env as { VITE_API_HOST?: string | undefined }).VITE_API_HOST;
       } else {
-        (import.meta.env as { VITE_API_HOST?: string }).VITE_API_HOST = originalHost;
+        (import.meta.env as { VITE_API_HOST?: string | undefined }).VITE_API_HOST = originalHost;
       }
     }
   });

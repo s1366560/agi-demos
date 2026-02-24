@@ -10,19 +10,19 @@ const SandboxPanelContext = createContext<SandboxPanelContextValue | null>(null)
 
 export interface SandboxProviderProps {
   sandboxId: string | null;
-  defaultTab?: SandboxTabKey;
+  defaultTab?: SandboxTabKey | undefined;
   toolExecutions: SandboxPanelContextValue['toolExecutions'];
   currentTool: SandboxPanelContextValue['currentTool'];
   desktopStatus: SandboxPanelContextValue['desktopStatus'];
   terminalStatus: SandboxPanelContextValue['terminalStatus'];
-  onDesktopStart?: () => void;
-  onDesktopStop?: () => void;
-  onTerminalStart?: () => void;
-  onTerminalStop?: () => void;
+  onDesktopStart?: (() => void) | undefined;
+  onDesktopStop?: (() => void) | undefined;
+  onTerminalStart?: (() => void) | undefined;
+  onTerminalStop?: (() => void) | undefined;
   isDesktopLoading: boolean;
   isTerminalLoading: boolean;
-  onFileClick?: (filePath: string) => void;
-  onClose?: () => void;
+  onFileClick?: ((filePath: string) => void) | undefined;
+  onClose?: (() => void) | undefined;
   children: ReactNode;
 }
 

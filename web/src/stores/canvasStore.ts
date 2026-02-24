@@ -16,33 +16,33 @@ export interface CanvasTab {
   title: string;
   type: CanvasContentType;
   content: string;
-  language?: string;
+  language?: string | undefined;
   dirty: boolean;
   createdAt: number;
   history: string[];
   historyIndex: number;
   /** Links this canvas tab to a stored artifact for download/save */
-  artifactId?: string;
+  artifactId?: string | undefined;
   /** Presigned URL for downloading the original artifact */
-  artifactUrl?: string;
+  artifactUrl?: string | undefined;
   /** MCP App ID (when type is 'mcp-app') */
-  mcpAppId?: string;
+  mcpAppId?: string | undefined;
   /** MCP App HTML content (when type is 'mcp-app') */
-  mcpAppHtml?: string;
+  mcpAppHtml?: string | undefined;
   /** MCP App initial tool result (when type is 'mcp-app') */
-  mcpAppToolResult?: unknown;
+  mcpAppToolResult?: unknown | undefined;
   /** MCP App tool input arguments (when type is 'mcp-app') */
-  mcpAppToolInput?: Record<string, unknown>;
+  mcpAppToolInput?: Record<string, unknown> | undefined;
   /** MCP App UI metadata (when type is 'mcp-app') */
-  mcpAppUiMetadata?: Record<string, unknown>;
+  mcpAppUiMetadata?: Record<string, unknown> | undefined;
   /** MCP resource URI (stable identifier for MCP Apps standard) */
-  mcpResourceUri?: string;
+  mcpResourceUri?: string | undefined;
   /** MCP tool name (for AppRenderer) */
-  mcpToolName?: string;
+  mcpToolName?: string | undefined;
   /** Project ID (for backend proxy calls) */
-  mcpProjectId?: string;
+  mcpProjectId?: string | undefined;
   /** MCP server name (for proxy routing) */
-  mcpServerName?: string;
+  mcpServerName?: string | undefined;
 }
 
 const MAX_HISTORY = 50;

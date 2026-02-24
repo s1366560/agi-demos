@@ -16,7 +16,7 @@ interface QueuedEvent {
   type: string;
   data: unknown;
   timestamp: number;
-  conversationId?: string;
+  conversationId?: string | undefined;
 }
 
 /**
@@ -25,7 +25,7 @@ interface QueuedEvent {
 type EventHandler = (event: {
   type: string;
   data: unknown;
-  conversationId?: string;
+  conversationId?: string | undefined;
 }) => void | Promise<void>;
 
 /**
@@ -33,9 +33,9 @@ type EventHandler = (event: {
  */
 export interface EventQueueConfig {
   /** Events that should be processed with priority (in order of priority) */
-  priorityEvents?: string[];
+  priorityEvents?: string[] | undefined;
   /** Whether to enable debug logging */
-  debug?: boolean;
+  debug?: boolean | undefined;
 }
 
 /**

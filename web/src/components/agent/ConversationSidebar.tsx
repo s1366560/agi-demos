@@ -66,12 +66,12 @@ interface ConversationSidebarProps {
   onSelect: (id: string) => void;
   onNew: () => void;
   onDelete: (id: string, e: React.MouseEvent) => void;
-  onRename?: (id: string, title: string) => Promise<void>;
+  onRename?: ((id: string, title: string) => Promise<void>) | undefined;
   collapsed: boolean;
   onToggleCollapse: () => void;
-  headerExtra?: React.ReactNode;
+  headerExtra?: React.ReactNode | undefined;
   /** Status map for each conversation (conversationId -> status) */
-  conversationStatuses?: Map<string, ConversationStatus>;
+  conversationStatuses?: Map<string, ConversationStatus> | undefined;
 }
 
 interface ConversationItemProps {
@@ -79,10 +79,10 @@ interface ConversationItemProps {
   isActive: boolean;
   onSelect: () => void;
   onDelete: (e: React.MouseEvent) => void;
-  onRename?: () => void;
-  compact?: boolean;
+  onRename?: (() => void) | undefined;
+  compact?: boolean | undefined;
   /** Status for this conversation */
-  status?: ConversationStatus;
+  status?: ConversationStatus | undefined;
 }
 
 /**

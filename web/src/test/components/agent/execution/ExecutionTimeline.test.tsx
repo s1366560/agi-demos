@@ -56,8 +56,8 @@ vi.mock('../../../../components/agent/shared', () => ({
     className,
   }: {
     name: string;
-    size?: number;
-    className?: string;
+    size?: number | undefined;
+    className?: string | undefined;
   }) => (
     <span data-testid={`icon-${name}`} className={className} data-size={size}>
       {name}

@@ -22,9 +22,9 @@ interface ResizerProps {
   /** Callback when size changes */
   onResize: (newSize: number) => void;
   /** Optional className */
-  className?: string;
+  className?: string | undefined;
   /** Position: 'left' | 'right' for horizontal, 'top' | 'bottom' for vertical */
-  position?: 'left' | 'right' | 'top' | 'bottom';
+  position?: 'left' | 'right' | 'top' | 'bottom' | undefined;
 }
 
 export const Resizer: React.FC<ResizerProps> = ({

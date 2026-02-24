@@ -219,10 +219,10 @@ export function isValidWebSocketUrl(url: string): boolean {
  */
 export function parseSandboxConnection(sandbox: {
   id: string;
-  desktop_port?: number;
-  terminal_port?: number;
-  desktop_url?: string;
-  terminal_url?: string;
+  desktop_port?: number | undefined;
+  terminal_port?: number | undefined;
+  desktop_url?: string | undefined;
+  terminal_url?: string | undefined;
 }): {
   desktopUrl: string | null;
   terminalWsUrl: string | null;

@@ -36,13 +36,13 @@ export interface MessageBubbleProps {
   /** The timeline event to render */
   event: TimelineEvent;
   /** Whether currently streaming */
-  isStreaming?: boolean;
+  isStreaming?: boolean | undefined;
   /** All timeline events (for finding related events like observe for act) */
-  allEvents?: TimelineEvent[];
+  allEvents?: TimelineEvent[] | undefined;
   /** Whether this message is pinned */
-  isPinned?: boolean;
+  isPinned?: boolean | undefined;
   /** Callback to toggle pin state */
-  onPin?: () => void;
+  onPin?: (() => void) | undefined;
 }
 
 /**
@@ -50,9 +50,9 @@ export interface MessageBubbleProps {
  */
 export interface MessageBubbleRootProps extends MessageBubbleProps {
   /** Children for compound component pattern */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
   /** Callback when user clicks Reply on a message */
-  onReply?: () => void;
+  onReply?: (() => void) | undefined;
 }
 
 /**
@@ -60,17 +60,17 @@ export interface MessageBubbleRootProps extends MessageBubbleProps {
  */
 export interface UserMessageFileMetadata {
   filename: string;
-  sandbox_path?: string;
+  sandbox_path?: string | undefined;
   mime_type: string;
   size_bytes: number;
 }
 
 export interface UserMessageProps {
   content: string;
-  onReply?: () => void;
-  forcedSkillName?: string;
-  forcedSubAgentName?: string;
-  fileMetadata?: UserMessageFileMetadata[];
+  onReply?: (() => void) | undefined;
+  forcedSkillName?: string | undefined;
+  forcedSubAgentName?: string | undefined;
+  fileMetadata?: UserMessageFileMetadata[] | undefined;
 }
 
 /**
@@ -78,10 +78,10 @@ export interface UserMessageProps {
  */
 export interface AssistantMessageProps {
   content: string;
-  isStreaming?: boolean;
-  isPinned?: boolean;
-  onPin?: () => void;
-  onReply?: () => void;
+  isStreaming?: boolean | undefined;
+  isPinned?: boolean | undefined;
+  onPin?: (() => void) | undefined;
+  onReply?: (() => void) | undefined;
 }
 
 /**
@@ -103,7 +103,7 @@ export interface ThoughtProps {
  */
 export interface ToolExecutionProps {
   event: ActEvent;
-  observeEvent?: ObserveEvent;
+  observeEvent?: ObserveEvent | undefined;
 }
 
 /**
@@ -118,16 +118,16 @@ export interface WorkPlanProps {
  */
 export interface TextEndProps {
   event: TextEndEvent;
-  isPinned?: boolean;
-  onPin?: () => void;
-  onReply?: () => void;
+  isPinned?: boolean | undefined;
+  onPin?: (() => void) | undefined;
+  onReply?: (() => void) | undefined;
 }
 
 /**
  * Props for Artifact Created sub-component
  */
 export interface ArtifactCreatedProps {
-  event: ArtifactCreatedEvent & { error?: string };
+  event: ArtifactCreatedEvent & { error?: string | undefined };
 }
 
 /**

@@ -17,8 +17,8 @@ interface ProviderConfigModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  provider?: ProviderConfig | null;
-  initialProviderType?: ProviderType;
+  provider?: ProviderConfig | null | undefined;
+  initialProviderType?: ProviderType | undefined;
 }
 
 const OPTIONAL_API_KEY_PROVIDERS: ProviderType[] = ['ollama', 'lmstudio'];

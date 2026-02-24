@@ -13,7 +13,7 @@ import { tenantService } from '../../services/tenantService';
 interface TenantCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (() => void) | undefined;
 }
 
 export const TenantCreateModal: React.FC<TenantCreateModalProps> = ({

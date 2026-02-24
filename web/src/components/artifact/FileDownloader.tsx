@@ -22,11 +22,11 @@ export interface FileDownloaderProps {
   /** Filename */
   filename: string;
   /** MIME type */
-  mimeType?: string;
+  mimeType?: string | undefined;
   /** File size in bytes */
-  sizeBytes?: number;
+  sizeBytes?: number | undefined;
   /** Compact mode */
-  compact?: boolean;
+  compact?: boolean | undefined;
 }
 
 // Format file size

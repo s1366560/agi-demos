@@ -160,5 +160,5 @@ export type ProjectSettingsNoProjectProps = Record<string, never>;
 // ============================================================================
 
 export interface ProjectSettingsProps {
-  className?: string;
+  className?: string | undefined;
 }

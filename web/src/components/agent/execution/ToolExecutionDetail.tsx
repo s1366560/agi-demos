@@ -30,7 +30,7 @@ export interface ToolExecutionDetailProps {
   /** Tool execution data */
   execution: ToolExecution;
   /** Whether to show compact version */
-  compact?: boolean;
+  compact?: boolean | undefined;
 }
 
 /**

@@ -49,18 +49,18 @@ interface TenantAgentConfigViewProps {
    * Whether current user can edit the config
    * If true, shows edit button
    */
-  canEdit?: boolean;
+  canEdit?: boolean | undefined;
 
   /**
    * Callback when edit button is clicked
    * Opens the TenantAgentConfigEditor modal
    */
-  onEdit?: () => void;
+  onEdit?: (() => void) | undefined;
 
   /**
    * Additional CSS class name
    */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**

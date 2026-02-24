@@ -32,22 +32,22 @@ export interface MessageAction {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
-  danger?: boolean;
+  danger?: boolean | undefined;
 }
 
 interface MessageActionBarProps {
   role: MessageRole;
   content: string;
-  onRetry?: () => void;
-  onEdit?: () => void;
-  onDelete?: () => void;
-  onBookmark?: () => void;
-  onPin?: () => void;
-  onSaveAsTemplate?: () => void;
-  onReply?: () => void;
-  onFork?: () => void;
-  isPinned?: boolean;
-  className?: string;
+  onRetry?: (() => void) | undefined;
+  onEdit?: (() => void) | undefined;
+  onDelete?: (() => void) | undefined;
+  onBookmark?: (() => void) | undefined;
+  onPin?: (() => void) | undefined;
+  onSaveAsTemplate?: (() => void) | undefined;
+  onReply?: (() => void) | undefined;
+  onFork?: (() => void) | undefined;
+  isPinned?: boolean | undefined;
+  className?: string | undefined;
 }
 
 export const MessageActionBar: React.FC<MessageActionBarProps> = memo(

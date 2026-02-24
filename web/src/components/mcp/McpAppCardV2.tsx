@@ -51,7 +51,7 @@ function formatFileSize(bytes?: number): string {
 
 export interface McpAppCardV2Props {
   app: MCPApp;
-  serverRuntime?: string;
+  serverRuntime?: string | undefined;
   onDelete: (appId: string) => void;
   onRetry: (appId: string) => void;
   onOpenInCanvas: (app: MCPApp) => void;

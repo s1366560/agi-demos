@@ -40,21 +40,21 @@ export interface KasmVNCViewerProps {
   /** WebSocket URL to the KasmVNC proxy endpoint */
   wsUrl: string;
   /** Current resolution */
-  resolution?: string;
+  resolution?: string | undefined;
   /** Whether audio is enabled */
-  audioEnabled?: boolean;
+  audioEnabled?: boolean | undefined;
   /** Whether dynamic resize is supported */
-  dynamicResize?: boolean;
+  dynamicResize?: boolean | undefined;
   /** Called when connection is established */
-  onConnect?: () => void;
+  onConnect?: (() => void) | undefined;
   /** Called when connection is lost */
-  onDisconnect?: (reason?: string) => void;
+  onDisconnect?: ((reason?: string) => void) | undefined;
   /** Called on connection error */
-  onError?: (error: string) => void;
+  onError?: ((error: string) => void) | undefined;
   /** Called to change resolution */
-  onResolutionChange?: (resolution: string) => void;
+  onResolutionChange?: ((resolution: string) => void) | undefined;
   /** Show toolbar */
-  showToolbar?: boolean;
+  showToolbar?: boolean | undefined;
 }
 
 export function KasmVNCViewer({
@@ -161,7 +161,7 @@ export function KasmVNCViewer({
         onConnect?.();
       });
 
-      rfb.addEventListener('disconnect', (e: { detail: { clean: boolean; reason?: string } }) => {
+      rfb.addEventListener('disconnect', (e: { detail: { clean: boolean; reason?: string | undefined } }) => {
         console.warn('[KasmVNC] Disconnected', {
           clean: e.detail.clean,
           reason: e.detail.reason || '(no reason)',

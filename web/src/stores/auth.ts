@@ -36,9 +36,9 @@ interface AuthState {
 interface ApiError {
   response?: {
     data?: {
-      detail?: string | Record<string, unknown>;
-    };
-  };
+      detail?: string | Record<string, unknown> | undefined;
+    } | undefined;
+  } | undefined;
 }
 
 export const useAuthStore = create<AuthState>()(

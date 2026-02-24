@@ -11,7 +11,7 @@ interface ProviderSelectorModalProps {
   onClose: () => void;
   onSelect: (provider: ProviderConfig) => void;
   providers: ProviderConfig[];
-  title?: string;
+  title?: string | undefined;
 }
 
 export const ProviderSelectorModal: React.FC<ProviderSelectorModalProps> = ({

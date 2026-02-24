@@ -12,15 +12,15 @@ export interface ToolExecutionLiveProps {
   /** Name of the tool being executed */
   toolName: string;
   /** Current status */
-  status?: ToolExecutionStatus;
+  status?: ToolExecutionStatus | undefined;
   /** Tool input parameters */
-  toolInput?: Record<string, unknown>;
+  toolInput?: Record<string, unknown> | undefined;
   /** Execution mode */
-  executionMode?: string;
+  executionMode?: string | undefined;
   /** Result count (for search tools) */
-  resultCount?: number;
+  resultCount?: number | undefined;
   /** Whether to show details expanded */
-  expanded?: boolean;
+  expanded?: boolean | undefined;
 }
 
 /**

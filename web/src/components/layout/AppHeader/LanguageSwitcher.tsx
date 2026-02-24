@@ -9,7 +9,7 @@ import * as React from 'react';
 import { LanguageSwitcher as BaseLanguageSwitcher } from '@/components/shared/ui/LanguageSwitcher';
 
 export interface LanguageSwitcherProps {
-  as?: React.ElementType;
+  as?: React.ElementType | undefined;
 }
 
 export const LanguageSwitcher = React.memo(function LanguageSwitcher({

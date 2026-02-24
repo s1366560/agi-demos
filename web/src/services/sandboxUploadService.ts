@@ -16,9 +16,9 @@ export interface SandboxUploadResult {
   /** Size of the written file in bytes */
   size_bytes: number;
   /** MD5 hash of the written file */
-  md5?: string;
+  md5?: string | undefined;
   /** Error message if upload failed */
-  error?: string;
+  error?: string | undefined;
 }
 
 export interface FileMetadata {

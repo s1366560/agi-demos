@@ -134,8 +134,8 @@ const COMMUNITY_COLORS = [
 
 interface CommunitiesListProviderProps {
   children: React.ReactNode;
-  projectId?: string;
-  limit?: number;
+  projectId?: string | undefined;
+  limit?: number | undefined;
 }
 
 const CommunitiesListProvider: React.FC<CommunitiesListProviderProps> = memo(
@@ -916,9 +916,9 @@ Info.displayName = 'CommunitiesList.Info';
 // ========================================
 
 interface RootProps {
-  projectId?: string;
-  limit?: number;
-  children?: React.ReactNode;
+  projectId?: string | undefined;
+  limit?: number | undefined;
+  children?: React.ReactNode | undefined;
 }
 
 const Root: React.FC<RootProps> = memo(({ children, projectId, limit }) => {

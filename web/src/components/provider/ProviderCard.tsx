@@ -12,9 +12,9 @@ export interface ProviderCardProps {
   onDelete: (providerId: string) => void;
   onCheckHealth: (providerId: string) => void;
   onResetCircuitBreaker: (providerType: string) => void;
-  onViewStats?: (provider: ProviderConfig) => void;
-  isCheckingHealth?: boolean;
-  isResettingCircuitBreaker?: boolean;
+  onViewStats?: ((provider: ProviderConfig) => void) | undefined;
+  isCheckingHealth?: boolean | undefined;
+  isResettingCircuitBreaker?: boolean | undefined;
 }
 
 const getStatusConfig = (healthStatus?: string) => {

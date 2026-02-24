@@ -9,7 +9,7 @@ interface ProviderModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
-  provider?: ProviderConfig | null;
+  provider?: ProviderConfig | null | undefined;
 }
 
 const PROVIDER_TYPES: { value: ProviderType; label: string }[] = [
@@ -38,7 +38,7 @@ const providerTypeRequiresApiKey = (type: ProviderType) =>
 
 const DEFAULT_MODELS: Record<
   ProviderType,
-  { llm: string; small?: string; embedding?: string; reranker?: string }
+  { llm: string; small?: string | undefined; embedding?: string | undefined; reranker?: string | undefined }
 > = {
   openai: { llm: 'gpt-4o', small: 'gpt-4o-mini', embedding: 'text-embedding-3-small' },
   anthropic: { llm: 'claude-sonnet-4-20250514', small: 'claude-3-5-haiku-20241022' },

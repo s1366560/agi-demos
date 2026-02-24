@@ -18,12 +18,12 @@ import { useLayoutModeStore } from '@/stores/layoutMode';
 
 import { MermaidBlock } from './MermaidBlock';
 
-function extractCodeContent(children: ReactNode): { text: string; language?: string } {
+function extractCodeContent(children: ReactNode): { text: string; language?: string | undefined } {
   if (!children) return { text: '' };
 
   const child = Array.isArray(children) ? children[0] : children;
   if (child && typeof child === 'object' && 'props' in (child as ReactElement)) {
-    const codeEl = child as ReactElement<HTMLAttributes<HTMLElement> & { children?: ReactNode }>;
+    const codeEl = child as ReactElement<HTMLAttributes<HTMLElement> & { children?: ReactNode | undefined }>;
     const className = (codeEl.props?.className as string) || '';
     const langMatch = className.match(/language-(\w+)/);
     const text =
@@ -71,7 +71,7 @@ function useSyntaxHighlighter() {
   return ready ? { SyntaxHighlighter: _SyntaxHighlighter, theme: _theme } : null;
 }
 
-export const CodeBlock = memo<{ children?: ReactNode }>(({ children, ...props }) => {
+export const CodeBlock = memo<{ children?: ReactNode | undefined }>(({ children, ...props }) => {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);

@@ -13,7 +13,7 @@ import { useGraphContext } from './CytoscapeGraph';
 // ========================================
 
 interface ControlsProps {
-  setCyInstance?: (cy: any) => void;
+  setCyInstance?: ((cy: any) => void) | undefined;
 }
 
 // ========================================

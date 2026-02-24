@@ -17,13 +17,13 @@ export interface StarterTile {
 
 export interface IdleStateProps {
   /** Greeting message (default: "How can I help you today?") */
-  greeting?: string;
+  greeting?: string | undefined;
   /** Starter tiles to display */
-  starterTiles?: StarterTile[];
+  starterTiles?: StarterTile[] | undefined;
   /** Callback when a starter tile is clicked */
-  onTileClick?: (tile: StarterTile) => void;
+  onTileClick?: ((tile: StarterTile) => void) | undefined;
   /** Optional subtitle */
-  subtitle?: string;
+  subtitle?: string | undefined;
 }
 
 const DEFAULT_STARTER_TILES: StarterTile[] = [

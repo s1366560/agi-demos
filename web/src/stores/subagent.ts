@@ -66,9 +66,9 @@ interface SubAgentState {
 
   // Actions - SubAgent CRUD
   listSubAgents: (params?: {
-    enabled_only?: boolean;
-    skip?: number;
-    limit?: number;
+    enabled_only?: boolean | undefined;
+    skip?: number | undefined;
+    limit?: number | undefined;
   }) => Promise<void>;
   getSubAgent: (id: string) => Promise<SubAgentResponse>;
   createSubAgent: (data: SubAgentCreate) => Promise<SubAgentResponse>;

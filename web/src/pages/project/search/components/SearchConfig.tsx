@@ -32,7 +32,7 @@ interface SearchConfigProps {
 
   // Temporal params
   timeRange: string;
-  customTimeRange: { since?: string; until?: string };
+  customTimeRange: { since?: string | undefined; until?: string | undefined };
 
   // Faceted params
   selectedEntityTypes: string[];
@@ -53,7 +53,7 @@ interface SearchConfigProps {
   onMaxDepthChange: (depth: number) => void;
   onRelationshipTypesChange: (types: string[]) => void;
   onTimeRangeChange: (range: string) => void;
-  onCustomTimeRangeChange: (range: { since?: string; until?: string }) => void;
+  onCustomTimeRangeChange: (range: { since?: string | undefined; until?: string | undefined }) => void;
   onSelectedEntityTypesChange: (types: string[]) => void;
   onSelectedTagsChange: (tags: string[]) => void;
   onIncludeEpisodesChange: (include: boolean) => void;
@@ -480,9 +480,9 @@ GraphTraversalParams.displayName = 'GraphTraversalParams';
 
 interface TemporalFiltersProps {
   timeRange: string;
-  customTimeRange: { since?: string; until?: string };
+  customTimeRange: { since?: string | undefined; until?: string | undefined };
   onTimeRangeChange: (range: string) => void;
-  onCustomTimeRangeChange: (range: { since?: string; until?: string }) => void;
+  onCustomTimeRangeChange: (range: { since?: string | undefined; until?: string | undefined }) => void;
 }
 
 const TemporalFilters = memo<TemporalFiltersProps>(

@@ -17,21 +17,21 @@ export interface PatternInspectorProps {
     name: string;
     signature: string;
     status: 'preferred' | 'active' | 'deprecated';
-    avgRuntime?: number;
-    successRate?: number;
-    usageCount?: number;
-    pattern?: PatternDefinition;
-  } | null;
+    avgRuntime?: number | undefined;
+    successRate?: number | undefined;
+    usageCount?: number | undefined;
+    pattern?: PatternDefinition | undefined;
+  } | null | undefined;
   /** Callback when close is clicked */
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
   /** Callback when save is clicked */
-  onSave?: (pattern: Record<string, unknown>) => void;
+  onSave?: ((pattern: Record<string, unknown>) => void) | undefined;
   /** Callback when deprecate is clicked */
-  onDeprecate?: () => void;
+  onDeprecate?: (() => void) | undefined;
   /** Admin notes value */
-  adminNotes?: string;
+  adminNotes?: string | undefined;
   /** Callback when admin notes change */
-  onAdminNotesChange?: (notes: string) => void;
+  onAdminNotesChange?: ((notes: string) => void) | undefined;
 }
 
 /**

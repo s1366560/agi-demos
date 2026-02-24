@@ -19,21 +19,21 @@ export interface BaseSidebarProps {
   /** Base path for generating links */
   basePath: string;
   /** Current collapsed state (controlled) */
-  collapsed?: boolean;
+  collapsed?: boolean | undefined;
   /** Default collapsed state */
-  defaultCollapsed?: boolean;
+  defaultCollapsed?: boolean | undefined;
   /** Callback when collapse state changes */
-  onCollapseToggle?: () => void;
+  onCollapseToggle?: (() => void) | undefined;
   /** User information for profile section */
-  user?: NavUser;
+  user?: NavUser | undefined;
   /** Callback when user logs out */
-  onLogout?: () => void;
+  onLogout?: (() => void) | undefined;
   /** Currently open groups (controlled) */
-  openGroups?: Record<string, boolean>;
+  openGroups?: Record<string, boolean> | undefined;
   /** Callback when group is toggled */
-  onGroupToggle?: (groupId: string) => void;
+  onGroupToggle?: ((groupId: string) => void) | undefined;
   /** Translation function for labels */
-  t?: (key: string) => string;
+  t?: ((key: string) => string) | undefined;
 }
 
 /**
@@ -44,11 +44,11 @@ export interface AppSidebarProps extends BaseSidebarProps {
   /** Sidebar configuration from navigation.ts */
   config: SidebarConfig;
   /** Variant type (for backward compatibility, use explicit components instead) */
-  variant?: SidebarVariant;
+  variant?: SidebarVariant | undefined;
   /** Brand element to display in header */
-  brand?: React.ReactNode;
+  brand?: React.ReactNode | undefined;
   /** @deprecated Use variant prop or explicit variant components */
-  context?: SidebarVariant;
+  context?: SidebarVariant | undefined;
 }
 
 /**
@@ -56,7 +56,7 @@ export interface AppSidebarProps extends BaseSidebarProps {
  */
 export interface TenantSidebarProps extends Omit<BaseSidebarProps, 'basePath'> {
   /** Current tenant ID for path generation */
-  tenantId?: string;
+  tenantId?: string | undefined;
 }
 
 /**
@@ -64,7 +64,7 @@ export interface TenantSidebarProps extends Omit<BaseSidebarProps, 'basePath'> {
  */
 export interface ProjectSidebarProps extends Omit<BaseSidebarProps, 'basePath'> {
   /** Current project ID for path generation */
-  projectId?: string;
+  projectId?: string | undefined;
 }
 
 /**
@@ -72,9 +72,9 @@ export interface ProjectSidebarProps extends Omit<BaseSidebarProps, 'basePath'> 
  */
 export interface AgentSidebarProps extends Omit<BaseSidebarProps, 'basePath'> {
   /** Current project ID for navigation */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Current conversation ID for navigation */
-  conversationId?: string;
+  conversationId?: string | undefined;
 }
 
 /**
@@ -82,9 +82,9 @@ export interface AgentSidebarProps extends Omit<BaseSidebarProps, 'basePath'> {
  */
 export interface SidebarBrandProps {
   /** Variant to determine branding */
-  variant?: SidebarVariant;
+  variant?: SidebarVariant | undefined;
   /** Custom brand element */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 export interface SidebarNavigationProps {
@@ -98,5 +98,5 @@ export interface SidebarUserProps {
   /** User information */
   user: NavUser;
   /** Callback when user logs out */
-  onLogout?: () => void;
+  onLogout?: (() => void) | undefined;
 }

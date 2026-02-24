@@ -28,11 +28,11 @@ export interface FinalResponseDisplayProps {
   /** Report content (markdown) */
   content: string;
   /** Report version */
-  version?: string;
+  version?: string | undefined;
   /** Generation timestamp */
-  generatedAt?: string;
+  generatedAt?: string | undefined;
   /** Whether currently streaming (shows typing cursor) */
-  isStreaming?: boolean;
+  isStreaming?: boolean | undefined;
 }
 
 /**

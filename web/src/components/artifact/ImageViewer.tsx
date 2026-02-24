@@ -10,17 +10,17 @@ export interface ImageViewerProps {
   /** Image source URL */
   src: string;
   /** Alt text for accessibility */
-  alt?: string;
+  alt?: string | undefined;
   /** Preview/thumbnail URL (optional) */
-  previewSrc?: string;
+  previewSrc?: string | undefined;
   /** Maximum height */
-  maxHeight?: number | string;
+  maxHeight?: number | string | undefined;
   /** Compact mode */
-  compact?: boolean;
+  compact?: boolean | undefined;
   /** Called when image loads */
-  onLoad?: () => void;
+  onLoad?: (() => void) | undefined;
   /** Called on error */
-  onError?: () => void;
+  onError?: (() => void) | undefined;
 }
 
 export const ImageViewer: React.FC<ImageViewerProps> = ({

@@ -17,21 +17,21 @@ export interface RemoteDesktopViewerProps {
   /** Sandbox container ID */
   sandboxId: string;
   /** Project ID for proxy URL construction */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Desktop status information */
   desktopStatus: DesktopStatus | null;
   /** Called when viewer is ready */
-  onReady?: () => void;
+  onReady?: (() => void) | undefined;
   /** Called when viewer encounters an error */
-  onError?: (error: string) => void;
+  onError?: ((error: string) => void) | undefined;
   /** Called when close button is clicked */
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
   /** Called to change resolution */
-  onResolutionChange?: (resolution: string) => void;
+  onResolutionChange?: ((resolution: string) => void) | undefined;
   /** Height of the viewer (default: "100%") */
-  height?: string | number;
+  height?: string | number | undefined;
   /** Show toolbar (default: true) */
-  showToolbar?: boolean;
+  showToolbar?: boolean | undefined;
 }
 
 export function RemoteDesktopViewer({

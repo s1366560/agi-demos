@@ -37,25 +37,25 @@ export interface MessageAreaContextValue {
   /** Timeline events to display */
   timeline: TimelineEvent[];
   /** Streaming content from assistant */
-  streamingContent?: string;
+  streamingContent?: string | undefined;
   /** Streaming thought content */
-  streamingThought?: string;
+  streamingThought?: string | undefined;
   /** Whether content is actively streaming */
   isStreaming: boolean;
   /** Whether thought is actively streaming */
-  isThinkingStreaming?: boolean;
+  isThinkingStreaming?: boolean | undefined;
   /** Initial loading state */
   isLoading: boolean;
   /** Whether there are earlier messages to load */
   hasEarlierMessages: boolean;
   /** Load earlier messages callback */
-  onLoadEarlier?: () => void;
+  onLoadEarlier?: (() => void) | undefined;
   /** Loading earlier messages state */
   isLoadingEarlier: boolean;
   /** Preload trigger threshold */
   preloadItemCount: number;
   /** Current conversation ID for scroll reset */
-  conversationId?: string | null;
+  conversationId?: string | null | undefined;
   /** Scroll state */
   scroll: MessageAreaScrollState;
 }
@@ -71,31 +71,31 @@ export interface MessageAreaRootProps {
   /** Timeline events to display */
   timeline: TimelineEvent[];
   /** Streaming content from assistant */
-  streamingContent?: string;
+  streamingContent?: string | undefined;
   /** Streaming thought content */
-  streamingThought?: string;
+  streamingThought?: string | undefined;
   /** Whether content is actively streaming */
   isStreaming: boolean;
   /** Whether thought is actively streaming */
-  isThinkingStreaming?: boolean;
+  isThinkingStreaming?: boolean | undefined;
   /** Initial loading state */
   isLoading: boolean;
   /** Whether there are earlier messages to load */
-  hasEarlierMessages?: boolean;
+  hasEarlierMessages?: boolean | undefined;
   /** Load earlier messages callback */
-  onLoadEarlier?: () => void;
+  onLoadEarlier?: (() => void) | undefined;
   /** Loading earlier messages state */
-  isLoadingEarlier?: boolean;
+  isLoadingEarlier?: boolean | undefined;
   /** Preload trigger threshold (default: 10) */
-  preloadItemCount?: number;
+  preloadItemCount?: number | undefined;
   /** Current conversation ID for scroll reset */
-  conversationId?: string | null;
+  conversationId?: string | null | undefined;
   /** Follow-up suggestions to show after assistant response */
-  suggestions?: string[];
+  suggestions?: string[] | undefined;
   /** Callback when user clicks a suggestion chip */
-  onSuggestionSelect?: (suggestion: string) => void;
+  onSuggestionSelect?: ((suggestion: string) => void) | undefined;
   /** Children for compound component pattern */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 /**
@@ -103,7 +103,7 @@ export interface MessageAreaRootProps {
  */
 export interface MessageAreaContainerProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -111,9 +111,9 @@ export interface MessageAreaContainerProps {
  */
 export interface MessageAreaLoadingProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
   /** Optional custom message */
-  message?: string;
+  message?: string | undefined;
 }
 
 /**
@@ -121,11 +121,11 @@ export interface MessageAreaLoadingProps {
  */
 export interface MessageAreaEmptyProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
   /** Optional custom title */
-  title?: string;
+  title?: string | undefined;
   /** Optional custom subtitle */
-  subtitle?: string;
+  subtitle?: string | undefined;
 }
 
 /**
@@ -133,9 +133,9 @@ export interface MessageAreaEmptyProps {
  */
 export interface MessageAreaScrollIndicatorProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
   /** Optional custom label */
-  label?: string;
+  label?: string | undefined;
 }
 
 /**
@@ -143,9 +143,9 @@ export interface MessageAreaScrollIndicatorProps {
  */
 export interface MessageAreaScrollButtonProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
   /** Optional custom title */
-  title?: string;
+  title?: string | undefined;
 }
 
 /**
@@ -153,7 +153,7 @@ export interface MessageAreaScrollButtonProps {
  */
 export interface MessageAreaContentProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -161,7 +161,7 @@ export interface MessageAreaContentProps {
  */
 export interface MessageAreaStreamingContentProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**

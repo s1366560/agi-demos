@@ -17,11 +17,11 @@ export interface ResizeHandleProps {
   /** Callback when resize occurs - called with delta change */
   onResize: (delta: number) => void;
   /** Direction of resize */
-  direction?: 'horizontal' | 'vertical';
+  direction?: 'horizontal' | 'vertical' | undefined;
   /** Position of handle */
-  position?: 'left' | 'right' | 'top' | 'bottom';
+  position?: 'left' | 'right' | 'top' | 'bottom' | undefined;
   /** Optional className for custom styling */
-  className?: string;
+  className?: string | undefined;
 }
 
 export const ResizeHandle = ({

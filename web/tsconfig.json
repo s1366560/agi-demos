@@ -25,6 +25,7 @@
         "noImplicitOverride": true,
         "forceConsistentCasingInFileNames": true,
         "noUncheckedIndexedAccess": true,
+        "exactOptionalPropertyTypes": true,
         /* Path mapping */
         "baseUrl": ".",
         "paths": {

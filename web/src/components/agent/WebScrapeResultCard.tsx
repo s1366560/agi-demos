@@ -9,7 +9,7 @@ import { MaterialIcon } from './shared';
 export interface WebScrapeResultCardProps {
   title: string;
   url: string;
-  description?: string;
+  description?: string | undefined;
   content: string;
 }
 

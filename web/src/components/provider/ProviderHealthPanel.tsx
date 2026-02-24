@@ -6,7 +6,7 @@ import { MaterialIcon } from '../agent/shared/MaterialIcon';
 interface ProviderHealthPanelProps {
   providers: ProviderConfig[];
   systemStatus: SystemResilienceStatus | null;
-  isLoading?: boolean;
+  isLoading?: boolean | undefined;
 }
 
 export const ProviderHealthPanel: React.FC<ProviderHealthPanelProps> = ({

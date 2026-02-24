@@ -119,7 +119,7 @@ export const useTimelineStore = create<TimelineState>()(
             hasEarlier: response.has_more ?? false,
           });
         } catch (error: unknown) {
-          const err = error as { response?: { data?: { detail?: string } }; message?: string };
+          const err = error as { response?: { data?: { detail?: string | undefined } | undefined } | undefined; message?: string | undefined };
           console.error('[TimelineStore] getTimeline error:', error);
           set({
             timelineError: err?.response?.data?.detail || 'Failed to get timeline',
@@ -220,7 +220,7 @@ export const useTimelineStore = create<TimelineState>()(
 
           return true;
         } catch (error: unknown) {
-          const err = error as { response?: { data?: { detail?: string } }; message?: string };
+          const err = error as { response?: { data?: { detail?: string | undefined } | undefined } | undefined; message?: string | undefined };
           console.error('[TimelineStore] loadEarlierMessages error:', error);
           set({
             timelineError: err?.response?.data?.detail || 'Failed to load earlier messages',

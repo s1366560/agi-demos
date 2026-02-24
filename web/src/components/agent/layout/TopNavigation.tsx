@@ -8,19 +8,19 @@ import { MaterialIcon } from '../shared';
 
 export interface TopNavigationProps {
   /** Workspace/project name */
-  workspaceName?: string;
+  workspaceName?: string | undefined;
   /** Currently active tab */
-  activeTab?: 'dashboard' | 'logs';
+  activeTab?: 'dashboard' | 'logs' | undefined;
   /** Callback when tab is clicked */
-  onTabChange?: (tab: 'dashboard' | 'logs') => void;
+  onTabChange?: ((tab: 'dashboard' | 'logs') => void) | undefined;
   /** Search query */
-  searchQuery?: string;
+  searchQuery?: string | undefined;
   /** Callback when search query changes */
-  onSearchChange?: (query: string) => void;
+  onSearchChange?: ((query: string) => void) | undefined;
   /** Number of unread notifications */
-  notificationCount?: number;
+  notificationCount?: number | undefined;
   /** Callback when settings button is clicked */
-  onSettingsClick?: () => void;
+  onSettingsClick?: (() => void) | undefined;
 }
 
 /**

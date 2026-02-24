@@ -42,27 +42,27 @@ export interface ProjectSandbox {
   /** Current lifecycle status */
   status: ProjectSandboxStatus;
   /** MCP WebSocket endpoint */
-  endpoint?: string;
+  endpoint?: string | undefined;
   /** WebSocket URL */
-  websocket_url?: string;
+  websocket_url?: string | undefined;
   /** MCP server port */
-  mcp_port?: number;
+  mcp_port?: number | undefined;
   /** Desktop (noVNC) port */
-  desktop_port?: number;
+  desktop_port?: number | undefined;
   /** Terminal (ttyd) port */
-  terminal_port?: number;
+  terminal_port?: number | undefined;
   /** Desktop access URL */
-  desktop_url?: string;
+  desktop_url?: string | undefined;
   /** Terminal access URL */
-  terminal_url?: string;
+  terminal_url?: string | undefined;
   /** Creation timestamp */
-  created_at?: string;
+  created_at?: string | undefined;
   /** Last access timestamp */
-  last_accessed_at?: string;
+  last_accessed_at?: string | undefined;
   /** Whether sandbox is healthy */
   is_healthy: boolean;
   /** Error message if in error state */
-  error_message?: string;
+  error_message?: string | undefined;
 }
 
 /**
@@ -70,9 +70,9 @@ export interface ProjectSandbox {
  */
 export interface EnsureSandboxRequest {
   /** Optional profile: lite, standard, or full */
-  profile?: string;
+  profile?: string | undefined;
   /** Whether to auto-create if doesn't exist */
-  auto_create?: boolean;
+  auto_create?: boolean | undefined;
 }
 
 /**
@@ -84,7 +84,7 @@ export interface ExecuteToolRequest {
   /** Tool arguments */
   arguments: Record<string, unknown>;
   /** Execution timeout in seconds */
-  timeout?: number;
+  timeout?: number | undefined;
 }
 
 /**
@@ -94,11 +94,11 @@ export interface ExecuteToolResponse {
   /** Whether execution succeeded */
   success: boolean;
   /** Tool output content */
-  content: Array<{ type: string; text?: string }>;
+  content: Array<{ type: string; text?: string | undefined }>;
   /** Whether tool returned an error */
   is_error: boolean;
   /** Execution time in milliseconds */
-  execution_time_ms?: number;
+  execution_time_ms?: number | undefined;
 }
 
 /**
@@ -118,7 +118,7 @@ export interface HealthCheckResponse {
 export interface SandboxActionResponse {
   success: boolean;
   message: string;
-  sandbox?: ProjectSandbox;
+  sandbox?: ProjectSandbox | undefined;
 }
 
 /**
@@ -132,14 +132,14 @@ export interface SandboxStats {
   memory_usage: number;
   memory_limit: number;
   memory_percent: number;
-  disk_usage?: number;
-  disk_limit?: number;
-  disk_percent?: number;
-  network_rx_bytes?: number;
-  network_tx_bytes?: number;
+  disk_usage?: number | undefined;
+  disk_limit?: number | undefined;
+  disk_percent?: number | undefined;
+  network_rx_bytes?: number | undefined;
+  network_tx_bytes?: number | undefined;
   pids: number;
-  uptime_seconds?: number;
-  created_at?: string;
+  uptime_seconds?: number | undefined;
+  created_at?: string | undefined;
   collected_at: string;
 }
 
@@ -150,16 +150,16 @@ export interface DesktopStatus {
   running: boolean;
   url: string | null;
   /** WebSocket URL for KasmVNC connection */
-  wsUrl?: string | null;
+  wsUrl?: string | null | undefined;
   display: string;
   resolution: string;
   port: number;
   /** Whether audio streaming is enabled */
-  audioEnabled?: boolean;
+  audioEnabled?: boolean | undefined;
   /** Whether dynamic resize is supported */
-  dynamicResize?: boolean;
+  dynamicResize?: boolean | undefined;
   /** Image encoding format (webp/jpeg/qoi) */
-  encoding?: string;
+  encoding?: string | undefined;
 }
 
 /**

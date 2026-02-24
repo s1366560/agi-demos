@@ -10,7 +10,7 @@ import { TaskList } from '../../components/tasks/TaskList';
 import { taskAPI } from '../../services/api';
 
 // Loading fallback for charts
-const ChartLoading: React.FC<{ height?: string }> = ({ height = '200px' }) => (
+const ChartLoading: React.FC<{ height?: string | undefined }> = ({ height = '200px' }) => (
   <div
     className={`w-full ${height} flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-lg`}
   >
@@ -26,19 +26,19 @@ const ChartLoading: React.FC<{ height?: string }> = ({ height = '200px' }) => (
 interface TaskStats {
   total: number;
   pending: number;
-  processing?: number;
-  running?: number;
+  processing?: number | undefined;
+  running?: number | undefined;
   completed: number;
   failed: number;
-  throughput_per_minute?: number;
-  error_rate?: number;
+  throughput_per_minute?: number | undefined;
+  error_rate?: number | undefined;
 }
 
 interface QueueDepth {
-  queues?: Record<string, number>;
-  total?: number;
-  depth?: number;
-  timestamp?: string;
+  queues?: Record<string, number> | undefined;
+  total?: number | undefined;
+  depth?: number | undefined;
+  timestamp?: string | undefined;
 }
 
 // Inner component that uses Chart.js
@@ -88,8 +88,8 @@ const TaskDashboardInner: React.FC<{
       // Update queue history for chart
       setQueueHistory((prev: { time: string; count: number }[]) => {
         const now = new Date();
-        const total = (queueData as { total?: number }).total;
-        const depth = (queueData as { depth?: number }).depth;
+        const total = (queueData as { total?: number | undefined }).total;
+        const depth = (queueData as { depth?: number | undefined }).depth;
         const count = total ?? depth ?? 0;
         const newPoint = {
           time: formatTimeOnly(now),

@@ -25,18 +25,18 @@ const { Text } = Typography;
 interface OutputFile {
   filename: string;
   url: string;
-  size?: number;
-  content_type?: string;
+  size?: number | undefined;
+  content_type?: string | undefined;
 }
 
 interface CodeExecutorResult {
   success: boolean;
-  stdout?: string;
-  stderr?: string;
+  stdout?: string | undefined;
+  stderr?: string | undefined;
   exit_code: number;
   execution_time_ms: number;
-  output_files?: OutputFile[];
-  error?: string;
+  output_files?: OutputFile[] | undefined;
+  error?: string | undefined;
 }
 
 interface CodeExecutorResultCardProps {

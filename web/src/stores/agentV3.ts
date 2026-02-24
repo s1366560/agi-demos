@@ -242,12 +242,12 @@ if (typeof window !== 'undefined') {
  * for external integrations (e.g., sandbox tool detection)
  */
 export interface AdditionalAgentHandlers {
-  onAct?: (event: AgentEvent<ActEventData>) => void;
-  onObserve?: (event: AgentEvent<ObserveEventData>) => void;
+  onAct?: ((event: AgentEvent<ActEventData>) => void) | undefined;
+  onObserve?: ((event: AgentEvent<ObserveEventData>) => void) | undefined;
   /** File metadata for files uploaded to sandbox */
-  fileMetadata?: FileMetadata[];
+  fileMetadata?: FileMetadata[] | undefined;
   /** Force execution of a specific skill by name */
-  forcedSkillName?: string;
+  forcedSkillName?: string | undefined;
 }
 
 /**
@@ -266,10 +266,10 @@ function updateHITLEventInTimeline(
   eventType: 'clarification_asked' | 'decision_asked' | 'env_var_requested' | 'permission_asked',
   updates: {
     answered: boolean;
-    answer?: string;
-    decision?: string;
-    values?: Record<string, string>;
-    granted?: boolean;
+    answer?: string | undefined;
+    decision?: string | undefined;
+    values?: Record<string, string> | undefined;
+    granted?: boolean | undefined;
   }
 ): TimelineEvent[] {
   return timeline.map((event) => {
@@ -447,7 +447,7 @@ interface AgentV3State {
     ToolCall & {
       status: 'preparing' | 'running' | 'success' | 'failed';
       startTime: number;
-      partialArguments?: string;
+      partialArguments?: string | undefined;
     }
   >;
   pendingToolsStack: string[]; // Track order of tool executions
@@ -1885,7 +1885,7 @@ function initTabSync(): void {
         const msg = message as TabSyncMessage & {
           conversationId: string;
           hasPendingHITL: boolean;
-          hitlType?: string;
+          hitlType?: string | undefined;
         };
         // Update HITL state for this conversation
         const convState = state.conversationStates.get(msg.conversationId);

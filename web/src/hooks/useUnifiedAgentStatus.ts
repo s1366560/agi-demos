@@ -78,7 +78,7 @@ export interface UnifiedAgentStatus {
   /** Plan mode status (deprecated - always inactive) */
   planMode: {
     isActive: boolean;
-    currentMode?: 'build' | 'plan' | 'explore';
+    currentMode?: 'build' | 'plan' | 'explore' | undefined;
   };
 
   /** Resource counts (legacy, kept for backward compatibility) */
@@ -111,7 +111,7 @@ export interface UseUnifiedAgentStatusOptions {
   /** Tenant ID for lifecycle state subscription */
   tenantId: string;
   /** Whether the hook is enabled */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
 }
 
 /**
@@ -177,7 +177,7 @@ function deriveLifecycleState(
  */
 function derivePlanModeInfo(): {
   isActive: boolean;
-  currentMode?: 'build' | 'plan' | 'explore';
+  currentMode?: 'build' | 'plan' | 'explore' | undefined;
 } {
   return { isActive: false };
 }

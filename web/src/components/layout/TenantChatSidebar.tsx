@@ -62,8 +62,8 @@ interface ConversationItemProps {
   isActive: boolean;
   onSelect: () => void;
   onDelete: (e: React.MouseEvent) => void;
-  onRename?: (e: React.MouseEvent) => void;
-  compact?: boolean;
+  onRename?: ((e: React.MouseEvent) => void) | undefined;
+  compact?: boolean | undefined;
 }
 
 // Constants for resize constraints
@@ -210,13 +210,13 @@ const Tooltip: React.FC<{ children: React.ReactNode; title: string }> = ({ child
 );
 
 export interface TenantChatSidebarProps {
-  tenantId?: string;
+  tenantId?: string | undefined;
   /** Controlled collapsed state */
-  collapsed?: boolean;
+  collapsed?: boolean | undefined;
   /** Callback when collapsed state changes */
-  onCollapsedChange?: (collapsed: boolean) => void;
+  onCollapsedChange?: ((collapsed: boolean) => void) | undefined;
   /** When true, always visible (used inside mobile drawer) */
-  mobile?: boolean;
+  mobile?: boolean | undefined;
 }
 
 export const TenantChatSidebar: React.FC<TenantChatSidebarProps> = ({

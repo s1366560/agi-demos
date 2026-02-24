@@ -34,10 +34,10 @@ import { TrendingEntities } from './chat/TrendingEntities';
 
 interface EmptyStateProps {
   onNewConversation: () => void;
-  onSendPrompt?: (prompt: string) => void;
-  lastConversation?: { id: string; title: string; updated_at?: string };
-  onResumeConversation?: (id: string) => void;
-  projectId?: string;
+  onSendPrompt?: ((prompt: string) => void) | undefined;
+  lastConversation?: { id: string; title: string; updated_at?: string | undefined } | undefined;
+  onResumeConversation?: ((id: string) => void) | undefined;
+  projectId?: string | undefined;
 }
 
 function formatRelativeTime(dateStr: string): string {

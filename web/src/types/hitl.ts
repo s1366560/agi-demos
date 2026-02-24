@@ -46,16 +46,16 @@ export interface HITLRequestBase {
   createdAt: number;
 
   /** When the request times out (optional) */
-  timeoutAt?: number;
+  timeoutAt?: number | undefined;
 
   /** Timeout in seconds (optional) */
-  timeoutSeconds?: number;
+  timeoutSeconds?: number | undefined;
 
   /** Conversation this request belongs to */
   conversationId: string;
 
   /** Additional context */
-  context?: string;
+  context?: string | undefined;
 }
 
 // =============================================================================
@@ -84,13 +84,13 @@ export interface ClarificationRequest extends HITLRequestBase {
   clarificationType: ClarificationType;
 
   /** Available options (for choice/multi_select) */
-  options?: string[];
+  options?: string[] | undefined;
 
   /** Whether custom input is allowed */
-  allowCustom?: boolean;
+  allowCustom?: boolean | undefined;
 
   /** Default value if timeout */
-  defaultValue?: string;
+  defaultValue?: string | undefined;
 }
 
 /**
@@ -124,13 +124,13 @@ export interface PermissionRequest extends HITLRequestBase {
   details: Record<string, unknown>;
 
   /** Human-readable description */
-  description?: string;
+  description?: string | undefined;
 
   /** Whether "remember this choice" is available */
-  allowRemember?: boolean;
+  allowRemember?: boolean | undefined;
 
   /** Default action if timeout */
-  defaultAction?: 'allow' | 'deny';
+  defaultAction?: 'allow' | 'deny' | undefined;
 }
 
 /**
@@ -139,7 +139,7 @@ export interface PermissionRequest extends HITLRequestBase {
 export interface PermissionResponse {
   requestId: string;
   allowed: boolean;
-  remember?: boolean; // Remember this choice for this tool
+  remember?: boolean | undefined; // Remember this choice for this tool
 }
 
 // =============================================================================
@@ -165,13 +165,13 @@ export interface DecisionOption {
   label: string;
 
   /** Optional description */
-  description?: string;
+  description?: string | undefined;
 
   /** Whether this is the recommended option */
-  recommended?: boolean;
+  recommended?: boolean | undefined;
 
   /** Risk level if applicable */
-  riskLevel?: RiskLevel;
+  riskLevel?: RiskLevel | undefined;
 }
 
 /**
@@ -190,13 +190,13 @@ export interface DecisionRequest extends HITLRequestBase {
   options: DecisionOption[];
 
   /** Whether custom input is allowed */
-  allowCustom?: boolean;
+  allowCustom?: boolean | undefined;
 
   /** Default option if timeout */
-  defaultOption?: string;
+  defaultOption?: string | undefined;
 
   /** Maximum selections (for multi_choice) */
-  maxSelections?: number;
+  maxSelections?: number | undefined;
 }
 
 /**
@@ -222,19 +222,19 @@ export interface EnvVarField {
   label: string;
 
   /** Field description */
-  description?: string;
+  description?: string | undefined;
 
   /** Whether this field is required */
   required: boolean;
 
   /** Whether to mask input (for secrets) */
-  secret?: boolean;
+  secret?: boolean | undefined;
 
   /** Default value */
-  defaultValue?: string;
+  defaultValue?: string | undefined;
 
   /** Validation pattern */
-  pattern?: string;
+  pattern?: string | undefined;
 }
 
 /**
@@ -253,7 +253,7 @@ export interface EnvVarRequest extends HITLRequestBase {
   message: string;
 
   /** Whether to save for future sessions */
-  allowSave?: boolean;
+  allowSave?: boolean | undefined;
 }
 
 /**
@@ -262,7 +262,7 @@ export interface EnvVarRequest extends HITLRequestBase {
 export interface EnvVarResponse {
   requestId: string;
   values: Record<string, string>;
-  save?: boolean; // Save for future sessions
+  save?: boolean | undefined; // Save for future sessions
 }
 
 // =============================================================================

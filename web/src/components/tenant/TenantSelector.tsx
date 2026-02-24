@@ -8,8 +8,8 @@ import { useTenantStore } from '../../stores/tenant';
 import { Tenant } from '../../types/memory';
 
 interface TenantSelectorProps {
-  onCreateTenant?: () => void;
-  onManageTenant?: (tenant: Tenant) => void;
+  onCreateTenant?: (() => void) | undefined;
+  onManageTenant?: ((tenant: Tenant) => void) | undefined;
 }
 
 export const TenantSelector: React.FC<TenantSelectorProps> = ({

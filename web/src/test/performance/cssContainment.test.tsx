@@ -16,7 +16,7 @@ import '@testing-library/jest-dom/vitest';
 
 // Test component wrapper for CSS containment utilities
 function createTestComponent(className: string) {
-  return function TestComponent({ content = 'Test Content' }: { content?: string }) {
+  return function TestComponent({ content = 'Test Content' }: { content?: string | undefined }) {
     return (
       <div className={className} data-testid="test-element">
         {content}

@@ -33,25 +33,25 @@ export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'rec
  */
 export interface EventBusClientOptions {
   /** WebSocket URL (default: ws://localhost:8000/api/v1/events/ws) */
-  url?: string;
+  url?: string | undefined;
 
   /** Enable automatic reconnection (default: true) */
-  autoReconnect?: boolean;
+  autoReconnect?: boolean | undefined;
 
   /** Maximum reconnect attempts (default: 5) */
-  maxReconnectAttempts?: number;
+  maxReconnectAttempts?: number | undefined;
 
   /** Base reconnect delay in ms (default: 1000) */
-  reconnectDelay?: number;
+  reconnectDelay?: number | undefined;
 
   /** Maximum reconnect delay in ms (default: 30000) */
-  maxReconnectDelay?: number;
+  maxReconnectDelay?: number | undefined;
 
   /** Heartbeat interval in ms (default: 30000) */
-  heartbeatInterval?: number;
+  heartbeatInterval?: number | undefined;
 
   /** Connection timeout in ms (default: 10000) */
-  connectionTimeout?: number;
+  connectionTimeout?: number | undefined;
 }
 
 /**
@@ -59,7 +59,7 @@ export interface EventBusClientOptions {
  */
 export interface SubscriptionOptions {
   /** Only receive events matching this correlation ID */
-  correlationId?: string;
+  correlationId?: string | undefined;
 }
 
 /**
@@ -71,7 +71,15 @@ export type Unsubscribe = () => void;
 // Default Configuration
 // =============================================================================
 
-const DEFAULT_OPTIONS: Required<EventBusClientOptions> = {
+const DEFAULT_OPTIONS: {
+  url: string;
+  autoReconnect: boolean;
+  maxReconnectAttempts: number;
+  reconnectDelay: number;
+  maxReconnectDelay: number;
+  heartbeatInterval: number;
+  connectionTimeout: number;
+} = {
   url: `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/v1/events/ws`,
   autoReconnect: true,
   maxReconnectAttempts: 5,
@@ -87,7 +95,7 @@ const DEFAULT_OPTIONS: Required<EventBusClientOptions> = {
 
 export class EventBusClient {
   private ws: WebSocket | null = null;
-  private options: Required<EventBusClientOptions>;
+  private options: typeof DEFAULT_OPTIONS;
   private subscriptions: Map<string, Set<EventHandler>> = new Map();
   private errorHandlers: Set<ErrorHandler> = new Set();
   private state: ConnectionState = 'disconnected';
@@ -101,7 +109,15 @@ export class EventBusClient {
   private stateListeners: Set<(state: ConnectionState) => void> = new Set();
 
   constructor(options: EventBusClientOptions = {}) {
-    this.options = { ...DEFAULT_OPTIONS, ...options };
+    this.options = {
+      url: options.url ?? DEFAULT_OPTIONS.url,
+      autoReconnect: options.autoReconnect ?? DEFAULT_OPTIONS.autoReconnect,
+      maxReconnectAttempts: options.maxReconnectAttempts ?? DEFAULT_OPTIONS.maxReconnectAttempts,
+      reconnectDelay: options.reconnectDelay ?? DEFAULT_OPTIONS.reconnectDelay,
+      maxReconnectDelay: options.maxReconnectDelay ?? DEFAULT_OPTIONS.maxReconnectDelay,
+      heartbeatInterval: options.heartbeatInterval ?? DEFAULT_OPTIONS.heartbeatInterval,
+      connectionTimeout: options.connectionTimeout ?? DEFAULT_OPTIONS.connectionTimeout,
+    };
   }
 
   // ===========================================================================

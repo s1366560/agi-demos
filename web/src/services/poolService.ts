@@ -156,10 +156,10 @@ export interface MetricsResponse {
  * 列表查询参数
  */
 export interface ListInstancesParams {
-  tier?: ProjectTier;
-  status?: InstanceStatus;
-  page?: number;
-  page_size?: number;
+  tier?: ProjectTier | undefined;
+  status?: InstanceStatus | undefined;
+  page?: number | undefined;
+  page_size?: number | undefined;
 }
 
 // ============================================================================

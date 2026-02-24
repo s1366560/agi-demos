@@ -19,9 +19,9 @@ export interface SidebarContextValue {
   /** Callback to toggle group */
   onGroupToggle: (groupId: string) => void;
   /** User information */
-  user?: NavUser;
+  user?: NavUser | undefined;
   /** Callback when user logs out */
-  onLogout?: () => void;
+  onLogout?: (() => void) | undefined;
   /** Translation function */
   t: (key: string) => string;
   /** Base path for navigation */

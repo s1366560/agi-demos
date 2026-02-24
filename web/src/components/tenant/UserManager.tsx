@@ -19,7 +19,7 @@ interface User {
   name: string;
   role: 'owner' | 'admin' | 'member' | 'viewer';
   created_at: string;
-  last_login?: string;
+  last_login?: string | undefined;
   is_active: boolean;
 }
 

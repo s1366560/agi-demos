@@ -33,13 +33,13 @@ export function TenantSidebar({
   onGroupToggle,
   t: externalT,
 }: TenantSidebarProps & {
-  collapsed?: boolean;
-  onCollapseToggle?: () => void;
-  user?: NavUser;
-  onLogout?: () => void;
-  openGroups?: Record<string, boolean>;
-  onGroupToggle?: (groupId: string) => void;
-  t?: (key: string) => string;
+  collapsed?: boolean | undefined;
+  onCollapseToggle?: (() => void) | undefined;
+  user?: NavUser | undefined;
+  onLogout?: (() => void) | undefined;
+  openGroups?: Record<string, boolean> | undefined;
+  onGroupToggle?: ((groupId: string) => void) | undefined;
+  t?: ((key: string) => string) | undefined;
 }) {
   const { t: useT } = useTranslation();
   const { user: authUser, logout: authLogout } = useAuthStore();

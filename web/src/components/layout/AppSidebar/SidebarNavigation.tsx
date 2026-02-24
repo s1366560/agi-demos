@@ -24,9 +24,9 @@ function NavGroupSection({
   isOpen,
   onToggle,
 }: {
-  group: { id: string; title: string; items: any[]; collapsible?: boolean; defaultOpen?: boolean };
+  group: { id: string; title: string; items: any[]; collapsible?: boolean | undefined; defaultOpen?: boolean | undefined };
   isOpen: boolean;
-  onToggle?: () => void;
+  onToggle?: (() => void) | undefined;
 }) {
   const { isCollapsed, basePath, t } = useSidebarContext();
 

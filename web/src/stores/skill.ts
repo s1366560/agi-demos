@@ -68,11 +68,11 @@ interface SkillState {
 
   // Actions - Skill CRUD
   listSkills: (params?: {
-    status?: string;
-    scope?: string;
-    trigger_type?: string;
-    skip?: number;
-    limit?: number;
+    status?: string | undefined;
+    scope?: string | undefined;
+    trigger_type?: string | undefined;
+    skip?: number | undefined;
+    limit?: number | undefined;
   }) => Promise<void>;
   listSystemSkills: () => Promise<void>;
   getSkill: (id: string) => Promise<SkillResponse>;

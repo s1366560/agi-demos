@@ -45,19 +45,19 @@ export interface Sandbox {
   /** ISO timestamp of creation */
   created_at: string;
   /** Docker container ID (if running) */
-  container_id?: string;
+  container_id?: string | undefined;
   /** Container image used */
-  image?: string;
+  image?: string | undefined;
   /** MCP WebSocket port on host */
-  mcp_port?: number;
+  mcp_port?: number | undefined;
   /** Desktop (KasmVNC) port on host */
-  desktop_port?: number;
+  desktop_port?: number | undefined;
   /** Terminal (ttyd) port on host */
-  terminal_port?: number;
+  terminal_port?: number | undefined;
   /** Desktop (KasmVNC) URL */
-  desktop_url?: string;
+  desktop_url?: string | undefined;
   /** Terminal (ttyd) URL */
-  terminal_url?: string;
+  terminal_url?: string | undefined;
 }
 
 /**
@@ -75,11 +75,11 @@ export interface DesktopStatus {
   /** KasmVNC port number */
   port: number;
   /** Whether audio streaming is enabled */
-  audioEnabled?: boolean;
+  audioEnabled?: boolean | undefined;
   /** Whether dynamic resize is supported */
-  dynamicResize?: boolean;
+  dynamicResize?: boolean | undefined;
   /** Image encoding format */
-  encoding?: string;
+  encoding?: string | undefined;
 }
 
 /**
@@ -105,12 +105,12 @@ export interface CreateSandboxRequest {
   /** Project ID to associate sandbox with */
   project_id: string;
   /** Optional custom image */
-  image?: string;
+  image?: string | undefined;
   /** Optional resource limits */
   resources?: {
-    cpu?: string; // e.g., "0.5" for 50% of one CPU
-    memory?: string; // e.g., "512m" for 512MB
-  };
+    cpu?: string | undefined; // e.g., "0.5" for 50% of one CPU
+    memory?: string | undefined; // e.g., "512m" for 512MB
+  } | undefined;
 }
 
 /**
@@ -121,9 +121,9 @@ export interface CreateSandboxResponse {
   sandbox: Sandbox;
   /** Initial access URLs (if services auto-started) */
   urls?: {
-    desktop?: string;
-    terminal?: string;
-  };
+    desktop?: string | undefined;
+    terminal?: string | undefined;
+  } | undefined;
 }
 
 /**

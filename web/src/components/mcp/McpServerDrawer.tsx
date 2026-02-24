@@ -141,7 +141,7 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
       }
       onSuccess();
     } catch (error: unknown) {
-      const err = error as { errorFields?: unknown };
+      const err = error as { errorFields?: unknown | undefined };
       if (!err.errorFields) {
         console.error('Submit error:', error);
       }
@@ -222,7 +222,7 @@ export const McpServerDrawer: React.FC<McpServerDrawerProps> = ({
             }}
             rows={10}
             className="font-mono text-sm"
-            status={jsonError ? 'error' : undefined}
+            status={jsonError ? 'error' : '' as const}
           />
           {jsonError && <Alert type="error" message={jsonError} showIcon className="mt-2" />}
         </Form.Item>

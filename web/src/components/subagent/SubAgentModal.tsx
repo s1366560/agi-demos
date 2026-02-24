@@ -220,7 +220,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
 
       onSuccess();
     } catch (error: unknown) {
-      const err = error as { errorFields?: Array<{ name?: string[] }> };
+      const err = error as { errorFields?: Array<{ name?: string[] | undefined }> | undefined };
       if (err.errorFields) {
         // Form validation error - switch to the tab with the error
         const firstErrorField = err.errorFields[0]?.name?.[0];
@@ -281,7 +281,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
 
   // Keyword Test State
   const [testQuery, setTestQuery] = useState('');
-  const [testResult, setTestResult] = useState<{ matched: boolean; keyword?: string } | null>(null);
+  const [testResult, setTestResult] = useState<{ matched: boolean; keyword?: string | undefined } | null>(null);
 
   const handleTestKeyword = useCallback(() => {
     if (!testQuery.trim()) {
@@ -599,7 +599,7 @@ export const SubAgentModal: React.FC<SubAgentModalProps> = ({
               options={(availableMcpServers || []).map((s) => ({
                 label: s.name,
                 value: s.name,
-                title: s.description,
+                title: s.description ?? '',
               }))}
             />
           </Form.Item>

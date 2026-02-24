@@ -8,14 +8,14 @@
 import { useRef, useEffect, useCallback } from 'react';
 
 interface SwipeGestureOptions {
-  onSwipeLeft?: () => void;
-  onSwipeRight?: () => void;
+  onSwipeLeft?: (() => void) | undefined;
+  onSwipeRight?: (() => void) | undefined;
   /** Minimum horizontal distance (px) to qualify as swipe */
-  threshold?: number;
+  threshold?: number | undefined;
   /** Maximum vertical distance (px) -- reject diagonal swipes */
-  maxVertical?: number;
+  maxVertical?: number | undefined;
   /** Only trigger on touch (not mouse) */
-  touchOnly?: boolean;
+  touchOnly?: boolean | undefined;
 }
 
 export function useSwipeGesture<T extends HTMLElement = HTMLDivElement>(

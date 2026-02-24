@@ -8,7 +8,7 @@ import { useProjectStore } from '../stores/project';
 interface MemoryCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (() => void) | undefined;
 }
 
 export const MemoryCreateModal: React.FC<MemoryCreateModalProps> = ({

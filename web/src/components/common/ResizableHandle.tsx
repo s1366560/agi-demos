@@ -7,9 +7,9 @@ import { Separator } from 'react-resizable-panels';
  */
 interface ResizableHandleProps {
   /** Optional className for additional styling */
-  className?: string;
+  className?: string | undefined;
   /** Unique id for the handle */
-  id?: string;
+  id?: string | undefined;
 }
 
 /**

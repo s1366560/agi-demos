@@ -31,19 +31,19 @@ export type DisplayMode = 'timeline' | 'simple-timeline' | 'direct';
 
 export interface ExecutionTimelineProps {
   /** Work plan (if present, enables full timeline mode) */
-  workPlan?: WorkPlan | null;
+  workPlan?: WorkPlan | null | undefined;
   /** Timeline steps with execution details */
   steps: TimelineStep[];
   /** Tool execution history (for simple-timeline mode) */
-  toolExecutionHistory?: ToolExecution[];
+  toolExecutionHistory?: ToolExecution[] | undefined;
   /** Final response content */
-  finalResponse?: string;
+  finalResponse?: string | undefined;
   /** Whether streaming is in progress */
   isStreaming: boolean;
   /** Current step number being executed */
-  currentStepNumber?: number | null;
+  currentStepNumber?: number | null | undefined;
   /** Matched workflow pattern info */
-  matchedPattern?: { id: string; similarity: number } | null;
+  matchedPattern?: { id: string; similarity: number } | null | undefined;
 }
 
 // ============================================
@@ -164,7 +164,7 @@ export function getDisplayMode(
 // ============================================
 
 interface HeaderProps {
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 export const Header: React.FC<HeaderProps> = ({ children }) => {
@@ -236,7 +236,7 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
 };
 
 interface ChecklistProps {
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
@@ -321,7 +321,7 @@ export const Checklist: React.FC<ChecklistProps> = ({ children }) => {
 };
 
 interface ControlsProps {
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 export const Controls: React.FC<ControlsProps> = ({ children }) => {
@@ -347,8 +347,8 @@ export const Controls: React.FC<ControlsProps> = ({ children }) => {
 };
 
 interface TimelineProps {
-  children?: React.ReactNode;
-  timelineRef?: React.RefObject<HTMLDivElement>;
+  children?: React.ReactNode | undefined;
+  timelineRef?: React.RefObject<HTMLDivElement> | undefined;
 }
 
 export const Timeline: React.FC<TimelineProps> = ({ children, timelineRef }) => {
@@ -390,7 +390,7 @@ export const Timeline: React.FC<TimelineProps> = ({ children, timelineRef }) => 
 };
 
 interface SimpleViewProps {
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 export const SimpleView: React.FC<SimpleViewProps> = ({ children }) => {

@@ -23,9 +23,9 @@ const api = httpClient;
  * Options for listing patterns
  */
 export interface ListPatternsOptions {
-  page?: number;
-  pageSize?: number;
-  minSuccessRate?: number;
+  page?: number | undefined;
+  pageSize?: number | undefined;
+  minSuccessRate?: number | undefined;
 }
 
 /**

@@ -28,11 +28,11 @@ export interface SearchResult {
   score: number;
   metadata: {
     type: string;
-    name?: string;
-    uuid?: string;
-    depth?: number;
-    created_at?: string;
-    tags?: string[];
+    name?: string | undefined;
+    uuid?: string | undefined;
+    depth?: number | undefined;
+    created_at?: string | undefined;
+    tags?: string[] | undefined;
     [key: string]: any;
   };
   source: string;
@@ -49,7 +49,7 @@ interface SearchResultsProps {
   onViewModeChange: (mode: 'grid' | 'list') => void;
   onResultClick: (result: SearchResult) => void;
   onCopyId: (id: string, e: React.MouseEvent) => void;
-  onSubgraphModeToggle?: () => void;
+  onSubgraphModeToggle?: (() => void) | undefined;
 }
 
 export const SearchResults = memo<SearchResultsProps>(

@@ -9,12 +9,12 @@ export interface GraphNode {
   label: string;
   type: 'Entity' | 'Episodic' | 'Community';
   name: string;
-  summary?: string;
-  entity_type?: string;
-  member_count?: number;
-  tenant_id?: string;
-  project_id?: string;
-  created_at?: string;
+  summary?: string | undefined;
+  entity_type?: string | undefined;
+  member_count?: number | undefined;
+  tenant_id?: string | undefined;
+  project_id?: string | undefined;
+  created_at?: string | undefined;
   [key: string]: unknown;
 }
 
@@ -23,7 +23,7 @@ export interface GraphEdge {
   source: string;
   target: string;
   label: string;
-  weight?: number;
+  weight?: number | undefined;
   [key: string]: unknown;
 }
 
@@ -39,9 +39,9 @@ export interface Entity {
   name: string;
   entity_type: string;
   summary: string;
-  tenant_id?: string;
-  project_id?: string;
-  created_at?: string;
+  tenant_id?: string | undefined;
+  project_id?: string | undefined;
+  created_at?: string | undefined;
 }
 
 export interface Community {
@@ -49,10 +49,10 @@ export interface Community {
   name: string;
   summary: string;
   member_count: number;
-  tenant_id?: string;
-  project_id?: string;
-  formed_at?: string;
-  created_at?: string;
+  tenant_id?: string | undefined;
+  project_id?: string | undefined;
+  formed_at?: string | undefined;
+  created_at?: string | undefined;
 }
 
 export interface PaginatedResponse<T> {
@@ -71,8 +71,8 @@ export interface EntityTypeStats {
 export interface EntityRelationships {
   relationships: Array<{
     relationship_type: string;
-    target_entity_name?: string;
-    target_entity_type?: string;
+    target_entity_name?: string | undefined;
+    target_entity_type?: string | undefined;
     source_entity_name: string;
     source_entity_type: string;
   }>;
@@ -86,8 +86,8 @@ export interface CommunityMembers {
 
 export interface TaskStatus {
   status: string;
-  message?: string;
-  task_id?: string;
+  message?: string | undefined;
+  task_id?: string | undefined;
 }
 
 export interface TaskList {
@@ -110,9 +110,9 @@ export interface SearchResults {
   results: unknown[];
   total: number;
   search_type: string;
-  strategy?: string;
-  time_range?: unknown;
-  facets?: unknown;
+  strategy?: string | undefined;
+  time_range?: unknown | undefined;
+  facets?: unknown | undefined;
 }
 
 export interface GraphStats {
@@ -126,19 +126,19 @@ export interface EpisodeData {
   name: string;
   content: string;
   project_id: string;
-  source_type?: string;
-  source_id?: string;
-  url?: string;
-  metadata?: Record<string, unknown>;
-  created_at?: string;
+  source_type?: string | undefined;
+  source_id?: string | undefined;
+  url?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
+  created_at?: string | undefined;
 }
 
 export interface EpisodeListData {
-  episodes?: unknown[];
-  items?: unknown[];
+  episodes?: unknown[] | undefined;
+  items?: unknown[] | undefined;
   total: number;
-  limit?: number;
-  offset?: number;
+  limit?: number | undefined;
+  offset?: number | undefined;
 }
 
 export interface DeleteResult {
@@ -169,22 +169,22 @@ export interface RefreshResult {
 }
 
 export interface DeduplicateResult {
-  status?: string;
+  status?: string | undefined;
   message: string;
-  task_id?: string;
+  task_id?: string | undefined;
   dry_run: boolean;
-  duplicates_found?: number;
-  duplicate_groups?: unknown[];
-  merged?: number;
+  duplicates_found?: number | undefined;
+  duplicate_groups?: unknown[] | undefined;
+  merged?: number | undefined;
 }
 
 export interface InvalidateEdgesResult {
   dry_run: boolean;
-  stale_edges_found?: number;
-  deleted?: number;
+  stale_edges_found?: number | undefined;
+  deleted?: number | undefined;
   cutoff_date: string;
   message: string;
-  stale_by_type?: Record<string, number>;
+  stale_by_type?: Record<string, number> | undefined;
 }
 
 export interface OptimizeResult {
@@ -220,10 +220,10 @@ export interface OptimizeContentResult {
 export const graphService = {
   // Graph Data
   async getGraphData(params: {
-    tenant_id?: string;
-    project_id?: string;
-    limit?: number;
-    since?: string;
+    tenant_id?: string | undefined;
+    project_id?: string | undefined;
+    limit?: number | undefined;
+    since?: string | undefined;
   }): Promise<GraphData> {
     const queryParams = new URLSearchParams();
     if (params.tenant_id) queryParams.append('tenant_id', params.tenant_id);
@@ -236,10 +236,10 @@ export const graphService = {
 
   async getSubgraph(params: {
     node_uuids: string[];
-    include_neighbors?: boolean;
-    limit?: number;
-    tenant_id?: string;
-    project_id?: string;
+    include_neighbors?: boolean | undefined;
+    limit?: number | undefined;
+    tenant_id?: string | undefined;
+    project_id?: string | undefined;
   }): Promise<GraphData> {
     return await apiClient.post<GraphData>('/graph/memory/graph/subgraph', params);
   },
@@ -250,11 +250,11 @@ export const graphService = {
   },
 
   async listEntities(params: {
-    tenant_id?: string;
-    project_id?: string;
-    entity_type?: string;
-    limit?: number;
-    offset?: number;
+    tenant_id?: string | undefined;
+    project_id?: string | undefined;
+    entity_type?: string | undefined;
+    limit?: number | undefined;
+    offset?: number | undefined;
   }): Promise<PaginatedResponse<Entity>> {
     const queryParams = new URLSearchParams();
     if (params.tenant_id) queryParams.append('tenant_id', params.tenant_id);
@@ -267,8 +267,8 @@ export const graphService = {
       entities: Entity[];
       items: Entity[];
       total: number;
-      limit?: number;
-      offset?: number;
+      limit?: number | undefined;
+      offset?: number | undefined;
     }>(`/graph/entities/?${queryParams.toString()}`);
     return {
       items: response.entities || response.items || [],
@@ -281,7 +281,7 @@ export const graphService = {
     };
   },
 
-  async getEntityTypes(params: { project_id?: string } = {}): Promise<EntityTypeStats> {
+  async getEntityTypes(params: { project_id?: string | undefined } = {}): Promise<EntityTypeStats> {
     const queryParams = new URLSearchParams();
     if (params.project_id) queryParams.append('project_id', params.project_id);
 
@@ -290,7 +290,7 @@ export const graphService = {
 
   async getEntityRelationships(
     entityId: string,
-    params: { relationship_type?: string; limit?: number } = {}
+    params: { relationship_type?: string | undefined; limit?: number | undefined } = {}
   ): Promise<EntityRelationships> {
     const queryParams = new URLSearchParams();
     if (params.relationship_type) queryParams.append('relationship_type', params.relationship_type);
@@ -307,12 +307,12 @@ export const graphService = {
   },
 
   async listCommunities(params: {
-    tenant_id?: string;
-    project_id?: string;
-    min_members?: number;
-    limit?: number;
-    offset?: number;
-  }): Promise<{ communities: Community[]; total: number; limit?: number; offset?: number }> {
+    tenant_id?: string | undefined;
+    project_id?: string | undefined;
+    min_members?: number | undefined;
+    limit?: number | undefined;
+    offset?: number | undefined;
+  }): Promise<{ communities: Community[]; total: number; limit?: number | undefined; offset?: number | undefined }> {
     const queryParams = new URLSearchParams();
     if (params.tenant_id) queryParams.append('tenant_id', params.tenant_id);
     if (params.project_id) queryParams.append('project_id', params.project_id);
@@ -323,8 +323,8 @@ export const graphService = {
     return await apiClient.get<{
       communities: Community[];
       total: number;
-      limit?: number;
-      offset?: number;
+      limit?: number | undefined;
+      offset?: number | undefined;
     }>(`/graph/communities/?${queryParams.toString()}`);
   },
 
@@ -340,10 +340,10 @@ export const graphService = {
   ): Promise<{
     status: string;
     message: string;
-    communities_count?: number;
-    edges_count?: number;
-    task_id?: string;
-    task_url?: string;
+    communities_count?: number | undefined;
+    edges_count?: number | undefined;
+    task_id?: string | undefined;
+    task_url?: string | undefined;
   }> {
     const params = new URLSearchParams();
     if (background) params.append('background', 'true');
@@ -374,53 +374,53 @@ export const graphService = {
   // Enhanced Search
   async advancedSearch(params: {
     query: string;
-    strategy?: string;
-    limit?: number;
-    focal_node_uuid?: string;
-    reranker?: string;
-    tenant_id?: string;
-    project_id?: string;
-    since?: string;
+    strategy?: string | undefined;
+    limit?: number | undefined;
+    focal_node_uuid?: string | undefined;
+    reranker?: string | undefined;
+    tenant_id?: string | undefined;
+    project_id?: string | undefined;
+    since?: string | undefined;
   }): Promise<SearchResults> {
     return await apiClient.post<SearchResults>('/search-enhanced/advanced', params);
   },
 
   async searchByGraphTraversal(params: {
     start_entity_uuid: string;
-    max_depth?: number;
-    relationship_types?: string[];
-    limit?: number;
-    tenant_id?: string;
+    max_depth?: number | undefined;
+    relationship_types?: string[] | undefined;
+    limit?: number | undefined;
+    tenant_id?: string | undefined;
   }): Promise<SearchResults> {
     return await apiClient.post<SearchResults>('/search-enhanced/graph-traversal', params);
   },
 
   async searchByCommunity(params: {
     community_uuid: string;
-    limit?: number;
-    include_episodes?: boolean;
+    limit?: number | undefined;
+    include_episodes?: boolean | undefined;
   }): Promise<SearchResults> {
     return await apiClient.post<SearchResults>('/search-enhanced/community', params);
   },
 
   async searchTemporal(params: {
     query: string;
-    since?: string;
-    until?: string;
-    limit?: number;
-    tenant_id?: string;
+    since?: string | undefined;
+    until?: string | undefined;
+    limit?: number | undefined;
+    tenant_id?: string | undefined;
   }): Promise<SearchResults> {
     return await apiClient.post<SearchResults>('/search-enhanced/temporal', params);
   },
 
   async searchWithFacets(params: {
     query: string;
-    entity_types?: string[];
-    tags?: string[];
-    since?: string;
-    limit?: number;
-    offset?: number;
-    tenant_id?: string;
+    entity_types?: string[] | undefined;
+    tags?: string[] | undefined;
+    since?: string | undefined;
+    limit?: number | undefined;
+    offset?: number | undefined;
+    tenant_id?: string | undefined;
   }): Promise<SearchResults & { limit: number; offset: number }> {
     return await apiClient.post<SearchResults & { limit: number; offset: number }>(
       '/search-enhanced/faceted',
@@ -434,11 +434,11 @@ export const graphService = {
 
   // Data Export
   async exportData(params: {
-    tenant_id?: string;
-    include_episodes?: boolean;
-    include_entities?: boolean;
-    include_relationships?: boolean;
-    include_communities?: boolean;
+    tenant_id?: string | undefined;
+    include_episodes?: boolean | undefined;
+    include_entities?: boolean | undefined;
+    include_relationships?: boolean | undefined;
+    include_communities?: boolean | undefined;
   }): Promise<unknown> {
     return await apiClient.post('/data/export', params);
   },
@@ -452,11 +452,11 @@ export const graphService = {
   async addEpisode(data: {
     content: string;
     project_id: string;
-    source_type?: string;
-    source_id?: string;
-    name?: string;
-    url?: string;
-    metadata?: Record<string, unknown>;
+    source_type?: string | undefined;
+    source_id?: string | undefined;
+    name?: string | undefined;
+    url?: string | undefined;
+    metadata?: Record<string, unknown> | undefined;
   }): Promise<EpisodeData> {
     return await apiClient.post<EpisodeData>('/episodes/', data);
   },
@@ -466,13 +466,13 @@ export const graphService = {
   },
 
   async listEpisodes(params: {
-    tenant_id?: string;
-    project_id?: string;
-    user_id?: string;
-    limit?: number;
-    offset?: number;
-    sort_by?: string;
-    sort_desc?: boolean;
+    tenant_id?: string | undefined;
+    project_id?: string | undefined;
+    user_id?: string | undefined;
+    limit?: number | undefined;
+    offset?: number | undefined;
+    sort_by?: string | undefined;
+    sort_desc?: boolean | undefined;
   }): Promise<PaginatedResponse<unknown>> {
     const queryParams = new URLSearchParams();
     if (params.tenant_id) queryParams.append('tenant_id', params.tenant_id);
@@ -506,29 +506,29 @@ export const graphService = {
   },
 
   async incrementalRefresh(params: {
-    episode_uuids?: string[];
-    rebuild_communities?: boolean;
+    episode_uuids?: string[] | undefined;
+    rebuild_communities?: boolean | undefined;
   }): Promise<RefreshResult> {
     return await apiClient.post<RefreshResult>('/maintenance/refresh/incremental', params);
   },
 
   async deduplicateEntities(params: {
-    similarity_threshold?: number;
-    dry_run?: boolean;
+    similarity_threshold?: number | undefined;
+    dry_run?: boolean | undefined;
   }): Promise<DeduplicateResult> {
     return await apiClient.post<DeduplicateResult>('/maintenance/deduplicate', params);
   },
 
   async invalidateStaleEdges(params: {
-    days_since_update?: number;
-    dry_run?: boolean;
+    days_since_update?: number | undefined;
+    dry_run?: boolean | undefined;
   }): Promise<InvalidateEdgesResult> {
     return await apiClient.post<InvalidateEdgesResult>('/maintenance/invalidate-edges', params);
   },
 
   async optimizeGraph(params: {
     operations: string[];
-    dry_run?: boolean;
+    dry_run?: boolean | undefined;
   }): Promise<OptimizeResult> {
     return await apiClient.post<OptimizeResult>('/maintenance/optimize', params);
   },
@@ -549,7 +549,7 @@ export const graphService = {
   // AI Tools
   async optimizeContent(data: {
     content: string;
-    instruction?: string;
+    instruction?: string | undefined;
   }): Promise<OptimizeContentResult> {
     return await apiClient.post<OptimizeContentResult>('/ai/optimize', data);
   },

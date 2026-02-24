@@ -49,11 +49,11 @@ interface MemoryState {
   listMemories: (
     projectId: string,
     params?: {
-      page?: number;
-      page_size?: number;
-      search?: string;
-      entity?: string;
-      relationship?: string;
+      page?: number | undefined;
+      page_size?: number | undefined;
+      search?: string | undefined;
+      entity?: string | undefined;
+      relationship?: string | undefined;
     }
   ) => Promise<void>;
   createMemory: (projectId: string, data: MemoryCreate) => Promise<void>;
@@ -65,7 +65,7 @@ interface MemoryState {
   // Graph operations
   getGraphData: (
     projectId: string,
-    options?: { limit?: number; entity_types?: string[] }
+    options?: { limit?: number | undefined; entity_types?: string[] | undefined }
   ) => Promise<GraphData>;
   extractEntities: (projectId: string, text: string) => Promise<Entity[]>;
   extractRelationships: (projectId: string, text: string) => Promise<Relationship[]>;

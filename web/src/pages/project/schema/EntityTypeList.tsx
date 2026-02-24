@@ -56,11 +56,11 @@ export interface Attribute {
   description: string;
   required: boolean;
   validation: {
-    ge?: number;
-    le?: number;
-    min_len?: number;
-    max_len?: number;
-    regex?: string;
+    ge?: number | undefined;
+    le?: number | undefined;
+    min_len?: number | undefined;
+    max_len?: number | undefined;
+    regex?: string | undefined;
   };
 }
 
@@ -216,7 +216,7 @@ const useEntityTypeListContextOptional = (): EntityTypeListContextType | null =>
 // ============================================================================
 
 interface EntityTypeListProps {
-  className?: string;
+  className?: string | undefined;
 }
 
 const EntityTypeListInternal: React.FC<EntityTypeListProps> = ({ className = '' }) => {
@@ -477,7 +477,7 @@ EntityTypeListInternal.displayName = 'EntityTypeList';
 // ============================================================================
 
 interface HeaderProps {
-  onCreate?: () => void;
+  onCreate?: (() => void) | undefined;
 }
 
 const HeaderInternal: React.FC<HeaderProps> = (props) => {
@@ -519,10 +519,10 @@ HeaderInternal.displayName = 'EntityTypeList.Header';
 // ============================================================================
 
 interface ToolbarProps {
-  search?: string;
-  onSearchChange?: (value: string) => void;
-  viewMode?: 'list' | 'grid';
-  onViewModeChange?: (mode: 'list' | 'grid') => void;
+  search?: string | undefined;
+  onSearchChange?: ((value: string) => void) | undefined;
+  viewMode?: 'list' | 'grid' | undefined;
+  onViewModeChange?: ((mode: 'list' | 'grid') => void) | undefined;
 }
 
 const ToolbarInternal: React.FC<ToolbarProps> = (props) => {

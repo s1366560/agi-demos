@@ -42,11 +42,11 @@ interface SerializedConversationState {
   doomLoopDetected: unknown;
   pendingHITLSummary: unknown;
   costTracking: unknown;
-  executionPathDecision?: unknown;
-  selectionTrace?: unknown;
-  policyFiltered?: unknown;
-  executionNarrative?: unknown;
-  latestToolsetChange?: unknown;
+  executionPathDecision?: unknown | undefined;
+  selectionTrace?: unknown | undefined;
+  policyFiltered?: unknown | undefined;
+  executionNarrative?: unknown | undefined;
+  latestToolsetChange?: unknown | undefined;
   // Metadata
   lastUpdated: number;
   conversationId: string;

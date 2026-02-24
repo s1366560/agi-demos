@@ -42,11 +42,11 @@ const DEFAULT_RECONNECTION_CONFIG: ReconnectionConfig = {
 
 export interface UseMCPClientOptions {
   /** Project ID to connect to */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Whether the connection should be active */
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   /** Custom reconnection configuration */
-  reconnectionConfig?: Partial<ReconnectionConfig>;
+  reconnectionConfig?: Partial<ReconnectionConfig> | undefined;
 }
 
 export interface UseMCPClientResult {

@@ -82,7 +82,7 @@ export function useAgentChatHandlers(options: {
   navigate: (path: string) => void;
   togglePlanPanel: () => void;
   activeConversationId: string | null;
-  planModeStatus: { current_plan_id?: string } | null;
+  planModeStatus: { current_plan_id?: string | undefined } | null;
   exitPlanMode: (conversationId: string, planId: string, approve: boolean) => Promise<void>;
   togglePlanMode: () => void;
   createNewConversation: (projectId: string) => Promise<string | undefined>;
@@ -93,7 +93,7 @@ export function useAgentChatHandlers(options: {
   ) => Promise<string | undefined>;
   onAct: unknown;
   onObserve: unknown;
-  loadEarlierMessages?: (conversationId: string, projectId: string) => void;
+  loadEarlierMessages?: ((conversationId: string, projectId: string) => void) | undefined;
 }) {
   const {
     projectId,

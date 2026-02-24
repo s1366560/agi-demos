@@ -27,11 +27,11 @@ interface ReportViewerProps {
   /** Report format type */
   format: 'markdown' | 'table' | 'code' | 'json' | 'yaml';
   /** Report title */
-  title?: string;
+  title?: string | undefined;
   /** Filename for download */
-  filename?: string;
+  filename?: string | undefined;
   /** Show download button */
-  showDownload?: boolean;
+  showDownload?: boolean | undefined;
 }
 
 /**

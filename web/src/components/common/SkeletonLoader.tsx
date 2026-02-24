@@ -3,9 +3,9 @@ import React from 'react';
 import { Skeleton, Card, Row, Col } from 'antd';
 
 export interface SkeletonLoaderProps {
-  type?: 'list' | 'card' | 'table' | 'form' | 'chat';
-  count?: number;
-  rows?: number;
+  type?: 'list' | 'card' | 'table' | 'form' | 'chat' | undefined;
+  count?: number | undefined;
+  rows?: number | undefined;
 }
 
 /**

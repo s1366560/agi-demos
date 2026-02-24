@@ -6,7 +6,7 @@ import { Pencil } from 'lucide-react';
 
 interface EditIndicatorProps {
   version: number;
-  editedAt?: string;
+  editedAt?: string | undefined;
 }
 
 export const EditIndicator = memo<EditIndicatorProps>(({ version, editedAt: _editedAt }) => {

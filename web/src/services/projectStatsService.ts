@@ -18,7 +18,7 @@ export interface TrendingEntity {
   name: string;
   entity_type: string;
   mention_count: number;
-  summary?: string;
+  summary?: string | undefined;
 }
 
 export interface RecentSkill {

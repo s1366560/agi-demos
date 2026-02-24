@@ -25,8 +25,8 @@ export type ResultsViewMode = 'grid' | 'list';
  * Custom time range definition
  */
 export interface CustomTimeRange {
-  since?: string;
-  until?: string;
+  since?: string | undefined;
+  until?: string | undefined;
 }
 
 /**
@@ -125,17 +125,17 @@ export interface EnhancedSearchContextValue {
  */
 export interface EnhancedSearchRootProps {
   /** Project ID from route */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Tenant ID */
-  tenantId?: string;
+  tenantId?: string | undefined;
   /** Children for compound component pattern */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
   /** Initial search mode */
-  defaultSearchMode?: SearchMode;
+  defaultSearchMode?: SearchMode | undefined;
   /** Initial view mode */
-  defaultViewMode?: ResultsViewMode;
+  defaultViewMode?: ResultsViewMode | undefined;
   /** Whether config is open by default */
-  defaultConfigOpen?: boolean;
+  defaultConfigOpen?: boolean | undefined;
 }
 
 /**
@@ -143,7 +143,7 @@ export interface EnhancedSearchRootProps {
  */
 export interface EnhancedSearchFormProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -151,7 +151,7 @@ export interface EnhancedSearchFormProps {
  */
 export interface EnhancedSearchConfigProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -159,7 +159,7 @@ export interface EnhancedSearchConfigProps {
  */
 export interface EnhancedSearchResultsProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -167,7 +167,7 @@ export interface EnhancedSearchResultsProps {
  */
 export interface EnhancedSearchGraphProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -175,7 +175,7 @@ export interface EnhancedSearchGraphProps {
  */
 export interface EnhancedSearchErrorProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -183,7 +183,7 @@ export interface EnhancedSearchErrorProps {
  */
 export interface EnhancedSearchHistoryProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**

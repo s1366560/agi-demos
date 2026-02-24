@@ -22,20 +22,26 @@ import { parseResponseError } from './ApiError';
  */
 export interface FetchRetryConfig {
   /** Maximum number of retry attempts (default: 2) */
-  maxRetries?: number;
+  maxRetries?: number | undefined;
   /** Initial delay in milliseconds (default: 1000) */
-  initialDelay?: number;
+  initialDelay?: number | undefined;
   /** Maximum delay between retries (default: 10000) */
-  maxDelay?: number;
+  maxDelay?: number | undefined;
   /** Backoff multiplier (default: 2) */
-  backoffMultiplier?: number;
+  backoffMultiplier?: number | undefined;
   /** Whether to add jitter (default: true) */
-  jitter?: boolean;
+  jitter?: boolean | undefined;
   /** Custom function to determine if an error is retryable */
-  isRetryable?: (error: unknown) => boolean;
+  isRetryable?: ((error: unknown) => boolean) | undefined;
 }
 
-const DEFAULT_FETCH_RETRY: Required<Omit<FetchRetryConfig, 'isRetryable'>> = {
+const DEFAULT_FETCH_RETRY: {
+  maxRetries: number;
+  initialDelay: number;
+  maxDelay: number;
+  backoffMultiplier: number;
+  jitter: boolean;
+} = {
   maxRetries: 2,
   initialDelay: 1000,
   maxDelay: 10000,
@@ -77,12 +83,16 @@ function delayWithJitter(ms: number): Promise<void> {
  */
 async function fetchWithRetry<T>(fn: () => Promise<T>, config: FetchRetryConfig = {}): Promise<T> {
   const {
-    maxRetries = DEFAULT_FETCH_RETRY.maxRetries,
-    initialDelay = DEFAULT_FETCH_RETRY.initialDelay,
-    maxDelay = DEFAULT_FETCH_RETRY.maxDelay,
-    backoffMultiplier = DEFAULT_FETCH_RETRY.backoffMultiplier,
+    maxRetries: _maxRetries = DEFAULT_FETCH_RETRY.maxRetries,
+    initialDelay: _initialDelay = DEFAULT_FETCH_RETRY.initialDelay,
+    maxDelay: _maxDelay = DEFAULT_FETCH_RETRY.maxDelay,
+    backoffMultiplier: _backoffMultiplier = DEFAULT_FETCH_RETRY.backoffMultiplier,
     isRetryable = isFetchErrorRetryable,
   } = config;
+  const maxRetries = _maxRetries ?? DEFAULT_FETCH_RETRY.maxRetries;
+  const initialDelay = _initialDelay ?? DEFAULT_FETCH_RETRY.initialDelay;
+  const maxDelay = _maxDelay ?? DEFAULT_FETCH_RETRY.maxDelay;
+  const backoffMultiplier = _backoffMultiplier ?? DEFAULT_FETCH_RETRY.backoffMultiplier;
 
   let lastError: unknown;
 
@@ -217,7 +227,7 @@ export function createWebSocketUrl(path: string, params?: Record<string, string>
  */
 export interface FetchOptions extends RequestInit {
   /** Enable retry for this request (default: false) */
-  retry?: FetchRetryConfig | boolean;
+  retry?: FetchRetryConfig | boolean | undefined;
 }
 
 /**
@@ -281,7 +291,7 @@ export const apiFetch = {
       ...options,
       method: 'POST',
       headers: mergedHeaders,
-      body: data !== undefined ? JSON.stringify(data) : undefined,
+      body: data !== undefined ? JSON.stringify(data) : null,
     });
     return handleResponse(response);
   },
@@ -294,7 +304,7 @@ export const apiFetch = {
       ...options,
       method: 'PUT',
       headers: mergedHeaders,
-      body: data !== undefined ? JSON.stringify(data) : undefined,
+      body: data !== undefined ? JSON.stringify(data) : null,
     });
     return handleResponse(response);
   },
@@ -307,7 +317,7 @@ export const apiFetch = {
       ...options,
       method: 'PATCH',
       headers: mergedHeaders,
-      body: data !== undefined ? JSON.stringify(data) : undefined,
+      body: data !== undefined ? JSON.stringify(data) : null,
     });
     return handleResponse(response);
   },

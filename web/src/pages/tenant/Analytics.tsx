@@ -16,9 +16,9 @@ const ChartComponents = lazy(() => import('./ChartComponents'));
 interface KPICardProps {
   label: string;
   value: string | number;
-  subtext?: string;
-  subtextIcon?: string;
-  subtextColorClass?: string;
+  subtext?: string | undefined;
+  subtextIcon?: string | undefined;
+  subtextColorClass?: string | undefined;
 }
 
 const KPICard = memo<KPICardProps>(({ label, value, subtext, subtextIcon, subtextColorClass }) => {

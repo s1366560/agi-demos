@@ -11,7 +11,7 @@
 export interface NavUser {
   name: string;
   email: string;
-  avatar?: string;
+  avatar?: string | undefined;
 }
 
 /**
@@ -32,11 +32,11 @@ export interface NavItem {
   icon: string;
   label: string;
   path: string;
-  exact?: boolean;
-  badge?: number;
-  permission?: string;
-  hidden?: boolean;
-  disabled?: boolean;
+  exact?: boolean | undefined;
+  badge?: number | undefined;
+  permission?: string | undefined;
+  hidden?: boolean | undefined;
+  disabled?: boolean | undefined;
 }
 
 /**
@@ -52,8 +52,8 @@ export interface NavGroup {
   id: string;
   title: string;
   items: NavItem[];
-  collapsible?: boolean;
-  defaultOpen?: boolean;
+  collapsible?: boolean | undefined;
+  defaultOpen?: boolean | undefined;
 }
 
 /**
@@ -68,7 +68,7 @@ export interface TabItem {
   id: string;
   label: string;
   path: string;
-  icon?: string;
+  icon?: string | undefined;
 }
 
 /**
@@ -93,10 +93,10 @@ export interface Breadcrumb {
  */
 export interface SidebarConfig {
   groups: NavGroup[];
-  bottom?: NavItem[];
-  showUser?: boolean;
-  width?: number;
-  collapsedWidth?: number;
+  bottom?: NavItem[] | undefined;
+  showUser?: boolean | undefined;
+  width?: number | undefined;
+  collapsedWidth?: number | undefined;
 }
 
 /**

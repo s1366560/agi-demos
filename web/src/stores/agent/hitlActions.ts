@@ -32,10 +32,10 @@ export interface HITLActionDeps {
     eventType: 'clarification_asked' | 'decision_asked' | 'env_var_requested' | 'permission_asked',
     updates: {
       answered: boolean;
-      answer?: string;
-      decision?: string;
-      values?: Record<string, string>;
-      granted?: boolean;
+      answer?: string | undefined;
+      decision?: string | undefined;
+      values?: Record<string, string> | undefined;
+      granted?: boolean | undefined;
     }
   ) => TimelineEvent[];
 }

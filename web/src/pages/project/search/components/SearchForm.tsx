@@ -43,7 +43,7 @@ interface SearchFormProps {
   onConfigToggle: () => void;
   onHistoryToggle: () => void;
   onHistoryItemClick: (item: { query: string; mode: string }) => void;
-  onExportResults?: () => void;
+  onExportResults?: (() => void) | undefined;
 }
 
 export const SearchForm = memo<SearchFormProps>(

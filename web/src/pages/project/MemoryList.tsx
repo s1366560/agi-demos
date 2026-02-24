@@ -170,7 +170,7 @@ const useMemoryListContextOptional = (): MemoryListContextType | null => {
 // ============================================================================
 
 interface MemoryListProps {
-  className?: string;
+  className?: string | undefined;
 }
 
 const MemoryListInternal: React.FC<MemoryListProps> = ({ className = '' }) => {
@@ -341,8 +341,8 @@ MemoryListInternal.displayName = 'MemoryList';
 // ============================================================================
 
 interface HeaderProps {
-  className?: string;
-  projectId?: string;
+  className?: string | undefined;
+  projectId?: string | undefined;
 }
 
 const HeaderInternal: React.FC<HeaderProps> = ({ className = '', projectId: propProjectId }) => {
@@ -374,9 +374,9 @@ HeaderInternal.displayName = 'MemoryList.Header';
 // ============================================================================
 
 interface ToolbarProps {
-  className?: string;
-  search?: string;
-  onSearchChange?: (value: string) => void;
+  className?: string | undefined;
+  search?: string | undefined;
+  onSearchChange?: ((value: string) => void) | undefined;
 }
 
 const ToolbarInternal: React.FC<ToolbarProps> = ({
@@ -428,7 +428,7 @@ interface VirtualListProps {
   virtualizer: ReturnType<typeof useVirtualizer<HTMLDivElement, Element>>;
   filteredMemories: Memory[];
   totalSize: number;
-  className?: string;
+  className?: string | undefined;
 }
 
 const VirtualListInternal: React.FC<VirtualListProps> = memo(
@@ -494,9 +494,9 @@ VirtualListInternal.displayName = 'MemoryList.VirtualList';
 // ============================================================================
 
 interface StatusBadgeProps {
-  status?: string;
-  progress?: number;
-  className?: string;
+  status?: string | undefined;
+  progress?: number | undefined;
+  className?: string | undefined;
 }
 
 const getStatusText = (status: string | undefined): string => {
@@ -548,8 +548,8 @@ StatusBadgeInternal.displayName = 'MemoryList.StatusBadge';
 interface MemoryRowProps {
   memory: Memory;
   index: number;
-  onDelete?: (memory: Memory) => void;
-  projectId?: string;
+  onDelete?: ((memory: Memory) => void) | undefined;
+  projectId?: string | undefined;
 }
 
 const MemoryRowInternal: React.FC<MemoryRowProps> = memo(
@@ -663,7 +663,7 @@ MemoryRowInternal.displayName = 'MemoryList.MemoryRow';
 // Empty Sub-Component
 // ============================================================================
 
-const EmptyInternal: React.FC<{ className?: string }> = ({ className = '' }) => (
+const EmptyInternal: React.FC<{ className?: string | undefined }> = ({ className = '' }) => (
   <div className={`p-8 text-center text-slate-500 ${className}`}>{TEXTS.noMemories}</div>
 );
 
@@ -673,7 +673,7 @@ EmptyInternal.displayName = 'MemoryList.Empty';
 // Loading Sub-Component
 // ============================================================================
 
-const LoadingInternal: React.FC<{ className?: string }> = ({ className = '' }) => (
+const LoadingInternal: React.FC<{ className?: string | undefined }> = ({ className = '' }) => (
   <div className={`p-10 text-center text-slate-500 ${className}`}>{TEXTS.loading}</div>
 );
 
@@ -685,8 +685,8 @@ LoadingInternal.displayName = 'MemoryList.Loading';
 
 interface ErrorProps {
   error: string;
-  onRetry?: () => void;
-  className?: string;
+  onRetry?: (() => void) | undefined;
+  className?: string | undefined;
 }
 
 const ErrorInternal: React.FC<ErrorProps> = ({ error, onRetry, className = '' }) => (
@@ -717,8 +717,8 @@ interface DeleteModalProps {
   onClose: () => void;
   onConfirm: () => void;
   memoryTitle: string;
-  isDeleting?: boolean;
-  className?: string;
+  isDeleting?: boolean | undefined;
+  className?: string | undefined;
 }
 
 const DeleteModalInternal: React.FC<DeleteModalProps> = memo(

@@ -27,17 +27,17 @@ export interface ArtifactGalleryProps {
   /** List of artifacts to display */
   artifacts: Artifact[];
   /** Title for the gallery */
-  title?: string;
+  title?: string | undefined;
   /** Initial view mode */
-  viewMode?: 'grid' | 'list';
+  viewMode?: 'grid' | 'list' | undefined;
   /** Filter by category */
-  categoryFilter?: ArtifactCategory[];
+  categoryFilter?: ArtifactCategory[] | undefined;
   /** Maximum items to show (with "show more" option) */
-  maxItems?: number;
+  maxItems?: number | undefined;
   /** Grid column count */
-  columns?: number;
+  columns?: number | undefined;
   /** Custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 // Category icons
@@ -81,7 +81,7 @@ export const ArtifactGallery: React.FC<ArtifactGalleryProps> = ({
       <Empty
         image={Empty.PRESENTED_IMAGE_SIMPLE}
         description="No artifacts"
-        className={className}
+        {...(className != null ? { className } : {})}
       />
     );
   }

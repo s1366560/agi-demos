@@ -12,7 +12,7 @@ import { projectStatsService, type TrendingEntity } from '@/services/projectStat
 
 interface TrendingEntitiesProps {
   projectId: string;
-  onEntityClick?: (entityName: string) => void;
+  onEntityClick?: ((entityName: string) => void) | undefined;
 }
 
 export const TrendingEntities = memo<TrendingEntitiesProps>(({ projectId, onEntityClick }) => {

@@ -8,11 +8,11 @@ import { MaterialIcon } from '../shared';
 
 export interface FollowUpPillsProps {
   /** Suggested follow-up questions */
-  suggestions?: string[];
+  suggestions?: string[] | undefined;
   /** Callback when a suggestion is clicked */
-  onSuggestionClick?: (suggestion: string) => void;
+  onSuggestionClick?: ((suggestion: string) => void) | undefined;
   /** Maximum number of suggestions to show */
-  maxSuggestions?: number;
+  maxSuggestions?: number | undefined;
 }
 
 /**

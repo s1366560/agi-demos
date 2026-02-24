@@ -14,16 +14,16 @@
  */
 export interface NodeData {
   id: string;
-  uuid?: string;
+  uuid?: string | undefined;
   name: string;
   type: 'Entity' | 'Episodic' | 'Community';
-  label?: string;
-  summary?: string;
-  entity_type?: string;
-  member_count?: number;
-  tenant_id?: string;
-  project_id?: string;
-  created_at?: string;
+  label?: string | undefined;
+  summary?: string | undefined;
+  entity_type?: string | undefined;
+  member_count?: number | undefined;
+  tenant_id?: string | undefined;
+  project_id?: string | undefined;
+  created_at?: string | undefined;
   [key: string]: unknown;
 }
 
@@ -34,8 +34,8 @@ export interface EdgeData {
   id: string;
   source: string;
   target: string;
-  label?: string;
-  weight?: number;
+  label?: string | undefined;
+  weight?: number | undefined;
   [key: string]: unknown;
 }
 
@@ -48,15 +48,15 @@ export interface EdgeData {
  */
 export interface GraphDataConfig {
   /** Project ID for data scoping */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Tenant ID for multi-tenant support */
-  tenantId?: string;
+  tenantId?: string | undefined;
   /** Include community nodes in the graph */
-  includeCommunities?: boolean;
+  includeCommunities?: boolean | undefined;
   /** Minimum number of connections for a node to be displayed */
-  minConnections?: number;
+  minConnections?: number | undefined;
   /** Specific node IDs to load as a subgraph */
-  subgraphNodeIds?: string[];
+  subgraphNodeIds?: string[] | undefined;
 }
 
 /**
@@ -64,15 +64,15 @@ export interface GraphDataConfig {
  */
 export interface GraphFeatureConfig {
   /** Show toolbar with actions */
-  showToolbar?: boolean;
+  showToolbar?: boolean | undefined;
   /** Show legend at the bottom */
-  showLegend?: boolean;
+  showLegend?: boolean | undefined;
   /** Show stats (node/edge counts) */
-  showStats?: boolean;
+  showStats?: boolean | undefined;
   /** Enable export functionality */
-  enableExport?: boolean;
+  enableExport?: boolean | undefined;
   /** Enable relayout button */
-  enableRelayout?: boolean;
+  enableRelayout?: boolean | undefined;
 }
 
 /**
@@ -80,49 +80,49 @@ export interface GraphFeatureConfig {
  */
 export interface GraphLayoutConfig {
   /** Layout algorithm: 'cose' | 'circle' | 'concentric' | 'grid' */
-  type?: 'cose' | 'circle' | 'concentric' | 'grid' | 'breadthfirst' | 'random';
+  type?: 'cose' | 'circle' | 'concentric' | 'grid' | 'breadthfirst' | 'random' | undefined;
   /** Animate layout transitions */
-  animate?: boolean;
+  animate?: boolean | undefined;
   /** Animation duration in milliseconds */
-  animationDuration?: number;
+  animationDuration?: number | undefined;
   /** Animation easing function */
-  animationEasing?: string;
+  animationEasing?: string | undefined;
   /** Ideal edge length for force-directed layouts */
-  idealEdgeLength?: number;
+  idealEdgeLength?: number | undefined;
   /** Node overlap amount */
-  nodeOverlap?: number;
+  nodeOverlap?: number | undefined;
   /** Component spacing */
-  componentSpacing?: number;
+  componentSpacing?: number | undefined;
   /** Gravity for force-directed layouts */
-  gravity?: number;
+  gravity?: number | undefined;
   /** Number of iterations */
-  numIter?: number;
+  numIter?: number | undefined;
   /** Initial temperature */
-  initialTemp?: number;
+  initialTemp?: number | undefined;
   /** Cooling factor */
-  coolingFactor?: number;
+  coolingFactor?: number | undefined;
   /** Minimum temperature */
-  minTemp?: number;
+  minTemp?: number | undefined;
 }
 
 /**
  * Theme color configuration
  */
 export interface GraphThemeConfig {
-  background?: string;
-  nodeBorder?: string;
-  edgeLine?: string;
-  edgeLabel?: string;
+  background?: string | undefined;
+  nodeBorder?: string | undefined;
+  edgeLine?: string | undefined;
+  edgeLabel?: string | undefined;
   colors?: {
-    episodic?: string;
-    community?: string;
-    person?: string;
-    organization?: string;
-    location?: string;
-    event?: string;
-    product?: string;
-    default?: string;
-  };
+    episodic?: string | undefined;
+    community?: string | undefined;
+    person?: string | undefined;
+    organization?: string | undefined;
+    location?: string | undefined;
+    event?: string | undefined;
+    product?: string | undefined;
+    default?: string | undefined;
+  } | undefined;
 }
 
 /**
@@ -132,11 +132,11 @@ export interface GraphConfig {
   /** Data loading configuration */
   data: GraphDataConfig;
   /** Feature flags */
-  features?: GraphFeatureConfig;
+  features?: GraphFeatureConfig | undefined;
   /** Layout configuration */
-  layout?: GraphLayoutConfig;
+  layout?: GraphLayoutConfig | undefined;
   /** Custom theme overrides */
-  theme?: GraphThemeConfig;
+  theme?: GraphThemeConfig | undefined;
 }
 
 // ========================================
@@ -148,9 +148,9 @@ export interface GraphConfig {
  */
 export interface CytoscapeGraphProps {
   /** Configuration object */
-  config?: GraphConfig;
+  config?: GraphConfig | undefined;
   /** Children for composite component pattern */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 /**
@@ -158,19 +158,19 @@ export interface CytoscapeGraphProps {
  */
 export interface ViewportProps {
   /** Project ID for data scoping */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Tenant ID for multi-tenant support */
-  tenantId?: string;
+  tenantId?: string | undefined;
   /** Include community nodes */
-  includeCommunities?: boolean;
+  includeCommunities?: boolean | undefined;
   /** Minimum connections threshold */
-  minConnections?: number;
+  minConnections?: number | undefined;
   /** Specific node IDs for subgraph */
-  subgraphNodeIds?: string[];
+  subgraphNodeIds?: string[] | undefined;
   /** Node click callback */
-  onNodeClick?: (node: NodeData | null) => void;
+  onNodeClick?: ((node: NodeData | null) => void) | undefined;
   /** Highlight specific nodes */
-  highlightNodeIds?: string[];
+  highlightNodeIds?: string[] | undefined;
 }
 
 /**
@@ -178,9 +178,9 @@ export interface ViewportProps {
  */
 export interface ControlsProps {
   /** Additional CSS class name */
-  className?: string;
+  className?: string | undefined;
   /** Custom render for toolbar content */
-  renderCustom?: React.ReactNode;
+  renderCustom?: React.ReactNode | undefined;
 }
 
 /**
@@ -190,11 +190,11 @@ export interface NodeInfoPanelProps {
   /** Currently selected node data */
   node: NodeData | null;
   /** Close callback */
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
   /** Panel position: 'right' | 'left' | 'float' */
-  position?: 'right' | 'left' | 'float';
+  position?: 'right' | 'left' | 'float' | undefined;
   /** Additional CSS class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -202,11 +202,11 @@ export interface NodeInfoPanelProps {
  */
 export interface StatsProps {
   /** Node count */
-  nodeCount?: number;
+  nodeCount?: number | undefined;
   /** Edge count */
-  edgeCount?: number;
+  edgeCount?: number | undefined;
   /** Loading state */
-  loading?: boolean;
+  loading?: boolean | undefined;
 }
 
 /**
@@ -214,9 +214,9 @@ export interface StatsProps {
  */
 export interface LegendProps {
   /** Include communities in legend */
-  includeCommunities?: boolean;
+  includeCommunities?: boolean | undefined;
   /** Custom legend items */
-  customItems?: Array<{ color: string; label: string; size?: string }>;
+  customItems?: Array<{ color: string; label: string; size?: string | undefined }> | undefined;
 }
 
 // ========================================
@@ -227,13 +227,13 @@ export interface LegendProps {
  * Legacy props for backward compatibility
  */
 export interface LegacyCytoscapeGraphProps {
-  projectId?: string;
-  tenantId?: string;
-  includeCommunities?: boolean;
-  minConnections?: number;
-  onNodeClick?: (node: NodeData | null) => void;
-  highlightNodeIds?: string[];
-  subgraphNodeIds?: string[];
+  projectId?: string | undefined;
+  tenantId?: string | undefined;
+  includeCommunities?: boolean | undefined;
+  minConnections?: number | undefined;
+  onNodeClick?: ((node: NodeData | null) => void) | undefined;
+  highlightNodeIds?: string[] | undefined;
+  subgraphNodeIds?: string[] | undefined;
 }
 
 // ========================================

@@ -12,7 +12,7 @@ interface TaskStatus {
   status: string;
   progress: number;
   message: string;
-  result?: any;
+  result?: any | undefined;
 }
 
 export const NewMemory: React.FC = () => {

@@ -24,13 +24,13 @@ export interface MessageErrorBoundaryProps {
   /** Child components */
   children: ReactNode;
   /** Custom fallback component */
-  fallback?: ReactNode;
+  fallback?: ReactNode | undefined;
   /** Error callback */
-  onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  onError?: ((error: Error, errorInfo: ErrorInfo) => void) | undefined;
   /** Whether to show retry button */
-  showRetry?: boolean;
+  showRetry?: boolean | undefined;
   /** Custom error message */
-  errorMessage?: string;
+  errorMessage?: string | undefined;
 }
 
 /** Error boundary state */

@@ -17,15 +17,15 @@ export interface SidebarNavItemProps {
   /** Navigation item configuration */
   item: NavItem;
   /** Whether the sidebar is collapsed (show tooltip) */
-  collapsed?: boolean;
+  collapsed?: boolean | undefined;
   /** Base path for generating links */
   basePath: string;
   /** Current location pathname (for testing) */
-  currentPathname?: string;
+  currentPathname?: string | undefined;
   /** Whether to show as active */
-  forceActive?: boolean;
+  forceActive?: boolean | undefined;
   /** Translation function (defaults to identity) */
-  t?: (key: string) => string;
+  t?: ((key: string) => string) | undefined;
 }
 
 /**

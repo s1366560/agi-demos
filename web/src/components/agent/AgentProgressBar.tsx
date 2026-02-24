@@ -31,11 +31,11 @@ interface AgentProgressBarProps {
     | 'observing'
     | 'completed'
     | 'failed';
-  label?: string;
-  estimatedTimeRemaining?: string;
-  showSteps?: boolean;
-  compact?: boolean;
-  animate?: boolean;
+  label?: string | undefined;
+  estimatedTimeRemaining?: string | undefined;
+  showSteps?: boolean | undefined;
+  compact?: boolean | undefined;
+  animate?: boolean | undefined;
 }
 
 const statusConfig: Record<

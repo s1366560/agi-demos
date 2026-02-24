@@ -12,8 +12,8 @@ import { Link } from 'react-router-dom';
 export interface PrimaryActionProps {
   label: string;
   to: string;
-  icon?: React.ReactNode;
-  variant?: 'primary' | 'secondary';
+  icon?: React.ReactNode | undefined;
+  variant?: 'primary' | 'secondary' | undefined;
 }
 
 export const PrimaryAction = React.memo(function PrimaryAction({

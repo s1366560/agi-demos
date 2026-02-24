@@ -15,15 +15,15 @@ export interface CodeViewerProps {
   /** Filename for language detection */
   filename: string;
   /** MIME type for format hint */
-  mimeType?: string;
+  mimeType?: string | undefined;
   /** Maximum height */
-  maxHeight?: number | string;
+  maxHeight?: number | string | undefined;
   /** Compact mode */
-  compact?: boolean;
+  compact?: boolean | undefined;
   /** Called when content loads */
-  onLoad?: () => void;
+  onLoad?: (() => void) | undefined;
   /** Called on error */
-  onError?: (error: string) => void;
+  onError?: ((error: string) => void) | undefined;
 }
 
 // Detect language from filename

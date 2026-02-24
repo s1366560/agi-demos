@@ -20,7 +20,7 @@ interface VariableInputModalProps {
   template: {
     title: string;
     content: string;
-    variables?: TemplateVariable[];
+    variables?: TemplateVariable[] | undefined;
   };
   visible: boolean;
   onClose: () => void;

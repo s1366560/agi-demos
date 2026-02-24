@@ -41,14 +41,14 @@ export type WebSocketStatus = 'connecting' | 'connected' | 'disconnected' | 'err
  */
 export interface UnifiedEvent<T = unknown> {
   type: string;
-  routing_key?: string;
-  conversation_id?: string;
-  project_id?: string;
-  data?: T;
-  event_id?: string;
-  event_time_us?: number;
-  event_counter?: number;
-  timestamp?: string;
+  routing_key?: string | undefined;
+  conversation_id?: string | undefined;
+  project_id?: string | undefined;
+  data?: T | undefined;
+  event_id?: string | undefined;
+  event_time_us?: number | undefined;
+  event_counter?: number | undefined;
+  timestamp?: string | undefined;
 }
 
 /**
@@ -61,15 +61,15 @@ export type EventHandler<T = unknown> = (event: UnifiedEvent<T>) => void;
  */
 interface ServerMessage {
   type: string;
-  routing_key?: string;
-  conversation_id?: string;
-  project_id?: string;
-  data?: unknown;
-  event_id?: string;
-  event_time_us?: number;
-  event_counter?: number;
-  timestamp?: string;
-  action?: string;
+  routing_key?: string | undefined;
+  conversation_id?: string | undefined;
+  project_id?: string | undefined;
+  data?: unknown | undefined;
+  event_id?: string | undefined;
+  event_time_us?: number | undefined;
+  event_counter?: number | undefined;
+  timestamp?: string | undefined;
+  action?: string | undefined;
 }
 
 // =============================================================================

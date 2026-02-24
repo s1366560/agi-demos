@@ -9,7 +9,7 @@ import * as React from 'react';
 import { ThemeToggle as BaseThemeToggle } from '@/components/shared/ui/ThemeToggle';
 
 export interface ThemeToggleProps {
-  as?: React.ElementType;
+  as?: React.ElementType | undefined;
 }
 
 export const ThemeToggle = React.memo(function ThemeToggle({

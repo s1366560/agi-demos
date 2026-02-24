@@ -16,8 +16,8 @@ interface Community {
   name: string;
   summary: string;
   member_count: number;
-  formed_at?: string;
-  created_at?: string;
+  formed_at?: string | undefined;
+  created_at?: string | undefined;
 }
 
 interface Entity {
@@ -32,12 +32,12 @@ interface BackgroundTask {
   task_type: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   created_at: string;
-  started_at?: string;
-  completed_at?: string;
+  started_at?: string | undefined;
+  completed_at?: string | undefined;
   progress: number;
   message: string;
-  result?: any;
-  error?: string;
+  result?: any | undefined;
+  error?: string | undefined;
 }
 
 // Color palette for community cards - defined outside component for stability

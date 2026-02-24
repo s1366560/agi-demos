@@ -414,19 +414,19 @@ function estimateMarkdownHeight(content: string): number {
 // These reference the same types as exported above
 interface _MessageAreaRootProps {
   timeline: TimelineEvent[];
-  streamingContent?: string;
-  streamingThought?: string;
+  streamingContent?: string | undefined;
+  streamingThought?: string | undefined;
   isStreaming: boolean;
-  isThinkingStreaming?: boolean;
+  isThinkingStreaming?: boolean | undefined;
   isLoading: boolean;
-  hasEarlierMessages?: boolean;
-  onLoadEarlier?: () => void;
-  isLoadingEarlier?: boolean;
-  preloadItemCount?: number;
-  conversationId?: string | null;
-  suggestions?: string[];
-  onSuggestionSelect?: (suggestion: string) => void;
-  children?: React.ReactNode;
+  hasEarlierMessages?: boolean | undefined;
+  onLoadEarlier?: (() => void) | undefined;
+  isLoadingEarlier?: boolean | undefined;
+  preloadItemCount?: number | undefined;
+  conversationId?: string | null | undefined;
+  suggestions?: string[] | undefined;
+  onSuggestionSelect?: ((suggestion: string) => void) | undefined;
+  children?: React.ReactNode | undefined;
 }
 
 interface _MessageAreaScrollState {
@@ -438,46 +438,46 @@ interface _MessageAreaScrollState {
 
 interface _MessageAreaContextValue {
   timeline: TimelineEvent[];
-  streamingContent?: string;
-  streamingThought?: string;
+  streamingContent?: string | undefined;
+  streamingThought?: string | undefined;
   isStreaming: boolean;
-  isThinkingStreaming?: boolean;
+  isThinkingStreaming?: boolean | undefined;
   isLoading: boolean;
   hasEarlierMessages: boolean;
-  onLoadEarlier?: () => void;
+  onLoadEarlier?: (() => void) | undefined;
   isLoadingEarlier: boolean;
   preloadItemCount: number;
-  conversationId?: string | null;
+  conversationId?: string | null | undefined;
   scroll: _MessageAreaScrollState;
 }
 
 interface _MessageAreaLoadingProps {
-  className?: string;
-  message?: string;
+  className?: string | undefined;
+  message?: string | undefined;
 }
 
 interface _MessageAreaEmptyProps {
-  className?: string;
-  title?: string;
-  subtitle?: string;
+  className?: string | undefined;
+  title?: string | undefined;
+  subtitle?: string | undefined;
 }
 
 interface _MessageAreaScrollIndicatorProps {
-  className?: string;
-  label?: string;
+  className?: string | undefined;
+  label?: string | undefined;
 }
 
 interface _MessageAreaScrollButtonProps {
-  className?: string;
-  title?: string;
+  className?: string | undefined;
+  title?: string | undefined;
 }
 
 interface _MessageAreaContentProps {
-  className?: string;
+  className?: string | undefined;
 }
 
 interface _MessageAreaStreamingContentProps {
-  className?: string;
+  className?: string | undefined;
 }
 
 interface _MessageAreaCompound extends React.FC<_MessageAreaRootProps> {
@@ -632,7 +632,7 @@ const StreamingToolPreparation: React.FC = memo(() => {
 });
 StreamingToolPreparation.displayName = 'StreamingToolPreparation';
 
-const StreamingToolCard: React.FC<{ toolName: string; partialArguments?: string }> = memo(
+const StreamingToolCard: React.FC<{ toolName: string; partialArguments?: string | undefined }> = memo(
   ({ toolName, partialArguments }) => {
     const argsRef = useRef<HTMLDivElement>(null);
 
@@ -684,7 +684,7 @@ StreamingToolCard.displayName = 'StreamingToolCard';
 // ========================================
 
 const ConversationSummaryCardWrapper: React.FC<{
-  conversationId?: string | null;
+  conversationId?: string | null | undefined;
 }> = memo(({ conversationId }) => {
   const currentConversation = useConversationsStore((s) => s.currentConversation);
   const generateConversationSummary = useConversationsStore((s) => s.generateConversationSummary);

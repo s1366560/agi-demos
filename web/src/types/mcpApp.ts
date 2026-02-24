@@ -8,27 +8,27 @@
 export type MCPAppDisplayMode = 'inline' | 'fullscreen' | 'pip';
 
 export interface MCPAppUIPermissions {
-  camera?: Record<string, never>;
-  microphone?: Record<string, never>;
-  geolocation?: Record<string, never>;
-  clipboardWrite?: Record<string, never>;
+  camera?: Record<string, never> | undefined;
+  microphone?: Record<string, never> | undefined;
+  geolocation?: Record<string, never> | undefined;
+  clipboardWrite?: Record<string, never> | undefined;
 }
 
 export interface MCPAppUIMetadata {
   resourceUri: string;
-  permissions?: MCPAppUIPermissions;
+  permissions?: MCPAppUIPermissions | undefined;
   csp?: {
-    connectDomains?: string[];
-    resourceDomains?: string[];
-    frameDomains?: string[];
-    baseUriDomains?: string[];
-  };
-  title?: string;
-  visibility?: Array<'model' | 'app'>;
-  prefersBorder?: boolean;
-  domain?: string;
+    connectDomains?: string[] | undefined;
+    resourceDomains?: string[] | undefined;
+    frameDomains?: string[] | undefined;
+    baseUriDomains?: string[] | undefined;
+  } | undefined;
+  title?: string | undefined;
+  visibility?: Array<'model' | 'app'> | undefined;
+  prefersBorder?: boolean | undefined;
+  domain?: string | undefined;
   /** Display mode preference (SEP-1865): inline (default), fullscreen, or pip */
-  displayMode?: MCPAppDisplayMode;
+  displayMode?: MCPAppDisplayMode | undefined;
 }
 
 export type MCPAppSource = 'user_added' | 'agent_developed';
@@ -45,12 +45,12 @@ export interface MCPApp {
   ui_metadata: MCPAppUIMetadata;
   source: MCPAppSource;
   status: MCPAppStatus;
-  lifecycle_metadata?: Record<string, unknown>;
-  error_message?: string;
+  lifecycle_metadata?: Record<string, unknown> | undefined;
+  error_message?: string | undefined;
   has_resource: boolean;
-  resource_size_bytes?: number;
-  created_at?: string;
-  updated_at?: string;
+  resource_size_bytes?: number | undefined;
+  created_at?: string | undefined;
+  updated_at?: string | undefined;
 }
 
 export interface MCPAppResource {
@@ -76,9 +76,9 @@ export interface MCPAppDirectToolCallRequest {
 }
 
 export interface MCPAppToolCallResponse {
-  content: Array<{ type: string; text?: string }>;
+  content: Array<{ type: string; text?: string | undefined }>;
   is_error: boolean;
-  error_message?: string;
+  error_message?: string | undefined;
 }
 
 /** SSE event data for mcp_app_result */
@@ -89,7 +89,7 @@ export interface MCPAppResultEventData {
   resource_html: string;
   resource_uri: string;
   ui_metadata: Record<string, unknown>;
-  tool_execution_id?: string;
+  tool_execution_id?: string | undefined;
 }
 
 /** SSE event data for mcp_app_registered */
@@ -99,5 +99,5 @@ export interface MCPAppRegisteredEventData {
   tool_name: string;
   source: MCPAppSource;
   resource_uri: string;
-  title?: string;
+  title?: string | undefined;
 }

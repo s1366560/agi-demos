@@ -68,7 +68,7 @@ interface PanelProps {
   title: string;
   messages: SimpleMessage[];
   loading: boolean;
-  placeholder?: React.ReactNode;
+  placeholder?: React.ReactNode | undefined;
 }
 
 const ComparePanel = memo(({ title, messages, loading, placeholder }: PanelProps) => {

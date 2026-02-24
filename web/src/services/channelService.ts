@@ -119,7 +119,7 @@ export const channelService = {
    */
   async listConfigs(
     projectId: string,
-    params?: { channel_type?: string; enabled_only?: boolean }
+    params?: { channel_type?: string | undefined; enabled_only?: boolean | undefined }
   ): Promise<ChannelConfig[]> {
     const response = await httpClient.get<ChannelConfigList>(
       `${BASE_URL}/projects/${projectId}/configs`,

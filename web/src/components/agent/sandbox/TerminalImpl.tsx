@@ -16,17 +16,17 @@ import { getAuthToken } from '../../../utils/tokenResolver';
 
 interface TerminalMessage {
   type: 'input' | 'output' | 'resize' | 'error' | 'connected' | 'pong';
-  data?: string;
-  message?: string;
-  session_id?: string;
-  cols?: number;
-  rows?: number;
+  data?: string | undefined;
+  message?: string | undefined;
+  session_id?: string | undefined;
+  cols?: number | undefined;
+  rows?: number | undefined;
 }
 
 interface TerminalImplProps {
   sandboxId: string;
-  projectId?: string;
-  sessionId?: string;
+  projectId?: string | undefined;
+  sessionId?: string | undefined;
   onConnect: (sessionId: string) => void;
   onDisconnect: () => void;
   onError: (error: string) => void;

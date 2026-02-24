@@ -69,8 +69,8 @@ export type EnvVarInputType = 'text' | 'password' | 'url' | 'api_key' | 'file_pa
 export interface ClarificationOption {
   id: string;
   label: string;
-  description?: string;
-  recommended?: boolean;
+  description?: string | undefined;
+  recommended?: boolean | undefined;
 }
 
 /**
@@ -79,12 +79,12 @@ export interface ClarificationOption {
 export interface DecisionOption {
   id: string;
   label: string;
-  description?: string;
-  recommended?: boolean;
-  riskLevel?: RiskLevel;
-  estimatedTime?: string;
-  estimatedCost?: string;
-  risks?: string[];
+  description?: string | undefined;
+  recommended?: boolean | undefined;
+  riskLevel?: RiskLevel | undefined;
+  estimatedTime?: string | undefined;
+  estimatedCost?: string | undefined;
+  risks?: string[] | undefined;
 }
 
 /**
@@ -93,13 +93,13 @@ export interface DecisionOption {
 export interface EnvVarField {
   name: string;
   label: string;
-  description?: string;
+  description?: string | undefined;
   required: boolean;
   secret: boolean;
   inputType: EnvVarInputType;
-  defaultValue?: string;
-  placeholder?: string;
-  pattern?: string;
+  defaultValue?: string | undefined;
+  placeholder?: string | undefined;
+  pattern?: string | undefined;
 }
 
 // =============================================================================
@@ -115,7 +115,7 @@ export interface ClarificationRequestData {
   options: ClarificationOption[];
   allowCustom: boolean;
   context: Record<string, unknown>;
-  defaultValue?: string;
+  defaultValue?: string | undefined;
 }
 
 /**
@@ -126,8 +126,8 @@ export interface DecisionRequestData {
   decisionType: DecisionType;
   options: DecisionOption[];
   allowCustom: boolean;
-  defaultOption?: string;
-  maxSelections?: number;
+  defaultOption?: string | undefined;
+  maxSelections?: number | undefined;
   context: Record<string, unknown>;
 }
 
@@ -137,7 +137,7 @@ export interface DecisionRequestData {
 export interface EnvVarRequestData {
   toolName: string;
   fields: EnvVarField[];
-  message?: string;
+  message?: string | undefined;
   allowSave: boolean;
   context: Record<string, unknown>;
 }
@@ -150,9 +150,9 @@ export interface PermissionRequestData {
   action: string;
   riskLevel: RiskLevel;
   details: Record<string, unknown>;
-  description?: string;
+  description?: string | undefined;
   allowRemember: boolean;
-  defaultAction?: PermissionAction;
+  defaultAction?: PermissionAction | undefined;
   context: Record<string, unknown>;
 }
 
@@ -168,24 +168,24 @@ export interface UnifiedHITLRequest {
   requestId: string;
   hitlType: HITLType;
   conversationId: string;
-  messageId?: string;
+  messageId?: string | undefined;
 
   // Type-specific data (only one will be set)
-  clarificationData?: ClarificationRequestData;
-  decisionData?: DecisionRequestData;
-  envVarData?: EnvVarRequestData;
-  permissionData?: PermissionRequestData;
+  clarificationData?: ClarificationRequestData | undefined;
+  decisionData?: DecisionRequestData | undefined;
+  envVarData?: EnvVarRequestData | undefined;
+  permissionData?: PermissionRequestData | undefined;
 
   // Common fields
   status: HITLStatus;
   timeoutSeconds: number;
   createdAt: string; // ISO timestamp
-  expiresAt?: string; // ISO timestamp
+  expiresAt?: string | undefined; // ISO timestamp
 
   // Tenant context
-  tenantId?: string;
-  projectId?: string;
-  userId?: string;
+  tenantId?: string | undefined;
+  projectId?: string | undefined;
+  userId?: string | undefined;
 
   // Computed property
   question: string;
@@ -252,7 +252,7 @@ export interface HITLRespondRequest {
  */
 export interface HITLCancelRequest {
   requestId: string;
-  reason?: string;
+  reason?: string | undefined;
 }
 
 /**
@@ -277,15 +277,15 @@ export interface PendingHITLResponse {
 export interface HITLRequestFromApi {
   id: string;
   conversation_id: string;
-  message_id?: string;
+  message_id?: string | undefined;
   request_type: string;
   question: string;
-  options?: unknown[];
-  context?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+  options?: unknown[] | undefined;
+  context?: Record<string, unknown> | undefined;
+  metadata?: Record<string, unknown> | undefined;
   status: string;
   created_at: string;
-  expires_at?: string;
+  expires_at?: string | undefined;
 }
 
 // =============================================================================
@@ -300,7 +300,7 @@ export interface HITLSignalPayload {
   requestId: string;
   hitlType: HITLType;
   responseData: Record<string, unknown>;
-  userId?: string;
+  userId?: string | undefined;
   timestamp: string;
 }
 

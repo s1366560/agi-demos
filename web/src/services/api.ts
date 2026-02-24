@@ -263,11 +263,11 @@ export const taskAPI = {
   },
   getRecentTasks: async (
     params: {
-      limit?: number;
-      offset?: number;
-      status?: string;
-      task_type?: string;
-      search?: string;
+      limit?: number | undefined;
+      offset?: number | undefined;
+      status?: string | undefined;
+      task_type?: string | undefined;
+      search?: string | undefined;
     } = {}
   ): Promise<RecentTask[]> => {
     return await api.get('/tasks/recent', { params });
@@ -285,7 +285,7 @@ export const taskAPI = {
 
 export const providerAPI = {
   list: async (
-    params: { is_active?: boolean; provider_type?: string } = {}
+    params: { is_active?: boolean | undefined; provider_type?: string | undefined } = {}
   ): Promise<ProviderConfig[]> => {
     return await api.get('/llm-providers/', { params });
   },
@@ -306,7 +306,7 @@ export const providerAPI = {
   },
   getUsage: async (
     id: string,
-    params: { start_date?: string; end_date?: string; tenant_id?: string } = {}
+    params: { start_date?: string | undefined; end_date?: string | undefined; tenant_id?: string | undefined } = {}
   ): Promise<ProviderUsageStats> => {
     return await api.get<ProviderUsageStats>(`/llm-providers/${id}/usage`, { params });
   },

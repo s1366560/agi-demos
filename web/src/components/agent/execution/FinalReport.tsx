@@ -13,19 +13,19 @@ import { MARKDOWN_PROSE_CLASSES } from '../styles';
 
 export interface FinalReportProps {
   /** Report content (markdown or plain text) */
-  content?: string;
+  content?: string | undefined;
   /** Report format */
-  format?: 'markdown' | 'text';
+  format?: 'markdown' | 'text' | undefined;
   /** Generation timestamp */
-  timestamp?: string;
+  timestamp?: string | undefined;
   /** Report version identifier */
-  version?: string;
+  version?: string | undefined;
   /** Whether to show export sidebar */
-  showExport?: boolean;
+  showExport?: boolean | undefined;
   /** Conversation ID for sharing */
-  conversationId?: string;
+  conversationId?: string | undefined;
   /** Element ID for PDF export */
-  elementId?: string;
+  elementId?: string | undefined;
 }
 
 /**

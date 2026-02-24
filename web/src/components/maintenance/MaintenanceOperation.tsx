@@ -5,11 +5,11 @@ interface MaintenanceOperationProps {
   description: React.ReactNode;
   icon: string;
   actionLabel: string;
-  secondaryActionLabel?: string;
+  secondaryActionLabel?: string | undefined;
   onAction: () => void;
-  onSecondaryAction?: () => void;
-  loading?: boolean;
-  warning?: boolean;
+  onSecondaryAction?: (() => void) | undefined;
+  loading?: boolean | undefined;
+  warning?: boolean | undefined;
 }
 
 export const MaintenanceOperation: React.FC<MaintenanceOperationProps> = ({

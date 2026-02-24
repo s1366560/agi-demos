@@ -8,9 +8,9 @@ import type { SidebarVariant } from './types';
 
 export interface SidebarBrandProps {
   /** Variant to determine branding style */
-  variant?: SidebarVariant;
+  variant?: SidebarVariant | undefined;
   /** Custom brand element (overrides default) */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 /**

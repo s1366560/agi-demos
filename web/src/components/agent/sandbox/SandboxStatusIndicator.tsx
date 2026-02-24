@@ -40,9 +40,9 @@ interface SandboxStatusIndicatorProps {
   /** Project ID */
   projectId: string;
   /** Tenant ID (reserved for future multi-tenant features) */
-  tenantId?: string;
+  tenantId?: string | undefined;
   /** Optional className */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -56,8 +56,8 @@ const statusConfig: Record<
     color: string;
     bgColor: string;
     description: string;
-    animate?: boolean;
-    clickable?: boolean;
+    animate?: boolean | undefined;
+    clickable?: boolean | undefined;
   }
 > = {
   none: {
@@ -153,8 +153,8 @@ function formatDuration(seconds: number): string {
 const SmoothProgressBar: FC<{
   percent: number;
   color: string;
-  highColor?: string;
-  threshold?: number;
+  highColor?: string | undefined;
+  threshold?: number | undefined;
 }> = memo(({ percent, color, highColor, threshold = 80 }) => {
   const barColor = highColor && percent > threshold ? highColor : color;
   return (
@@ -175,7 +175,7 @@ SmoothProgressBar.displayName = 'SmoothProgressBar';
 /**
  * Animated numeric display that transitions smoothly
  */
-const AnimatedValue: FC<{ children: React.ReactNode; className?: string }> = memo(
+const AnimatedValue: FC<{ children: React.ReactNode; className?: string | undefined }> = memo(
   ({ children, className }) => (
     <span className={className} style={{ transition: 'opacity 200ms ease' }}>
       {children}
@@ -369,7 +369,7 @@ export const SandboxStatusIndicator: FC<SandboxStatusIndicatorProps> = ({
       setSandbox(info);
     } catch (error) {
       // 404 means no sandbox exists - handle silently
-      const apiError = error as { statusCode?: number };
+      const apiError = error as { statusCode?: number | undefined };
       if (apiError?.statusCode !== 404) {
         logger.error('[SandboxStatusIndicator] Failed to fetch sandbox:', error);
       }

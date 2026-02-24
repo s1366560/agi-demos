@@ -23,20 +23,16 @@ import type {
   DecisionAskedEventData,
   EnvVarRequestedEventData,
   PermissionAskedEventData,
-  CostUpdateEventData,
+
   ToolCall,
   ActDeltaEventData,
   ReflectionCompleteEvent,
-  ArtifactReadyEventData,
-  ArtifactErrorEventData,
-  ArtifactCreatedEvent,
+
   MemoryRecalledEventData,
   MemoryCapturedEventData,
-  ExecutionPathDecidedEventData,
-  SelectionTraceEventData,
-  PolicyFilteredEventData,
+
   ExecutionNarrativeEntry,
-  ToolsetChangedEventData,
+
 } from '../../types/agent';
 import type { ConversationState, CostTrackingState } from '../../types/conversationState';
 import type { AdditionalAgentHandlers } from '../agentV3';
@@ -138,7 +134,7 @@ export function createStreamEventHandlers(
   return {
     onMessage: (event) => {
       const messageData = event.data as MessageEventData & {
-        metadata?: { source?: string };
+        metadata?: { source?: string | undefined } | undefined;
       };
       const source = messageData?.metadata?.source;
       if (source !== 'channel_inbound') {
@@ -269,7 +265,7 @@ export function createStreamEventHandlers(
         conversation_id: string;
         task_id: string;
         status: string;
-        content?: string;
+        content?: string | undefined;
       };
       console.log('[TaskSync] task_updated received:', {
         taskId: data.task_id,
@@ -1004,8 +1000,8 @@ export function createStreamEventHandlers(
         conversation_id: string;
         title: string;
         generated_at: string;
-        message_id?: string;
-        generated_by?: string;
+        message_id?: string | undefined;
+        generated_by?: string | undefined;
       };
 
       setState((state: any) => {
@@ -1185,10 +1181,10 @@ export function createStreamEventHandlers(
       const openMCPAppTab = (
         resolvedResourceUri?: string,
         options?: {
-          title?: string;
-          toolName?: string;
-          serverName?: string;
-          uiMetadata?: Record<string, unknown>;
+          title?: string | undefined;
+          toolName?: string | undefined;
+          serverName?: string | undefined;
+          uiMetadata?: Record<string, unknown> | undefined;
         }
       ) => {
         const tabKey = resolvedResourceUri || appId || `app-${Date.now()}`;

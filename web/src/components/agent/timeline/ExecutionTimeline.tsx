@@ -38,25 +38,25 @@ export interface TimelineStep {
   id: string;
   toolName: string;
   status: 'running' | 'success' | 'error';
-  input?: Record<string, unknown>;
-  output?: string | Record<string, unknown>;
-  isError?: boolean;
-  duration?: number;
-  timestamp?: number;
+  input?: Record<string, unknown> | undefined;
+  output?: string | Record<string, unknown> | undefined;
+  isError?: boolean | undefined;
+  duration?: number | undefined;
+  timestamp?: number | undefined;
   mcpUiMetadata?: {
-    resource_uri?: string;
-    server_name?: string;
-    app_id?: string;
-    title?: string;
-    project_id?: string;
-  };
+    resource_uri?: string | undefined;
+    server_name?: string | undefined;
+    app_id?: string | undefined;
+    title?: string | undefined;
+    project_id?: string | undefined;
+  } | undefined;
 }
 
 interface ExecutionTimelineProps {
   steps: TimelineStep[];
-  isStreaming?: boolean;
-  conversationId?: string;
-  onUndoRequest?: (stepId: string, toolName: string) => void;
+  isStreaming?: boolean | undefined;
+  conversationId?: string | undefined;
+  onUndoRequest?: ((stepId: string, toolName: string) => void) | undefined;
 }
 
 const getToolIcon = (toolName: string, size = 13, className = '') => {
@@ -155,8 +155,8 @@ const getInputPreview = (input?: Record<string, unknown>, toolName?: string): st
 const TimelineStepItem = memo<{
   step: TimelineStep;
   isLast: boolean;
-  defaultExpanded?: boolean;
-  onUndoRequest?: (stepId: string, toolName: string) => void;
+  defaultExpanded?: boolean | undefined;
+  onUndoRequest?: ((stepId: string, toolName: string) => void) | undefined;
 }>(({ step, isLast, defaultExpanded = false, onUndoRequest }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const { t } = useTranslation();

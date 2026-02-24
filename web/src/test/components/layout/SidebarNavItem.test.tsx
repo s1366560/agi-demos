@@ -27,10 +27,10 @@ vi.mock('antd', () => ({
 function renderItem(
   item: Partial<NavItem>,
   props: {
-    collapsed?: boolean;
-    basePath?: string;
-    currentPathname?: string;
-    forceActive?: boolean;
+    collapsed?: boolean | undefined;
+    basePath?: string | undefined;
+    currentPathname?: string | undefined;
+    forceActive?: boolean | undefined;
   } = {}
 ) {
   const fullItem: NavItem = {

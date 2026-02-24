@@ -936,13 +936,13 @@ export function isSupportedEventType(eventType: string): boolean {
  */
 export interface CorrelationMetadata {
   /** Event envelope ID (if from envelope) */
-  envelopeId?: string;
+  envelopeId?: string | undefined;
   /** Correlation ID for tracing related events */
-  correlationId?: string;
+  correlationId?: string | undefined;
   /** Causation ID (parent event that caused this) */
-  causationId?: string;
+  causationId?: string | undefined;
   /** Schema version of the source event */
-  schemaVersion?: string;
+  schemaVersion?: string | undefined;
 }
 
 /**
@@ -1015,7 +1015,7 @@ export function parseAndConvertEvent(rawData: unknown): TimelineEventWithCorrela
   }
 
   // Check if it's legacy format
-  const legacy = data as { type?: string; data?: unknown };
+  const legacy = data as { type?: string | undefined; data?: unknown | undefined };
   if (typeof legacy.type === 'string' && legacy.data !== undefined) {
     const event: AgentEvent<unknown> = {
       type: legacy.type as AgentEventType,

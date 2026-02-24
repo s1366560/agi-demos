@@ -19,22 +19,22 @@ export interface MaterialIconProps extends Omit<ComponentProps<'span'>, 'ref'> {
   /**
    * Icon size in pixels (default: 24)
    */
-  size?: number;
+  size?: number | undefined;
 
   /**
    * Icon weight (default: 400, regular)
    */
-  weight?: number;
+  weight?: number | undefined;
 
   /**
    * Whether the icon should be filled (default: false, outlined)
    */
-  filled?: boolean;
+  filled?: boolean | undefined;
 
   /**
    * Optional CSS class for additional styling
    */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**

@@ -8,7 +8,7 @@ import { useTenantStore } from '../../stores/tenant';
 interface ProjectCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess?: (() => void) | undefined;
 }
 
 export const ProjectCreateModal: React.FC<ProjectCreateModalProps> = ({

@@ -51,10 +51,10 @@ function SidebarContent({
   onLogout,
 }: {
   config: SidebarConfig;
-  variant?: SidebarVariant;
-  brand?: React.ReactNode;
-  user?: { name: string; email: string };
-  onLogout?: () => void;
+  variant?: SidebarVariant | undefined;
+  brand?: React.ReactNode | undefined;
+  user?: { name: string; email: string } | undefined;
+  onLogout?: (() => void) | undefined;
 }) {
   const { isCollapsed } = useSidebarContext();
 
@@ -116,7 +116,7 @@ export function AppSidebar({
   brand,
   t = (key: string) => key,
   children,
-}: AppSidebarProps & { children?: React.ReactNode }) {
+}: AppSidebarProps & { children?: React.ReactNode | undefined }) {
   // Use variant prop, fall back to context prop for backward compatibility
   const sidebarVariant: SidebarVariant = variant ?? context ?? 'tenant';
 

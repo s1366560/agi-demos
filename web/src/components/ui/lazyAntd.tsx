@@ -17,7 +17,7 @@ import { Spin, Empty as EmptyComponent } from 'antd';
 // Default Loading Fallback
 // ============================================================================
 
-export const DefaultFallback: React.FC<{ message?: string }> = ({ message = 'Loading...' }) => (
+export const DefaultFallback: React.FC<{ message?: string | undefined }> = ({ message = 'Loading...' }) => (
   <div className="flex items-center justify-center p-4">
     <span className="text-sm text-slate-500">{message}</span>
   </div>

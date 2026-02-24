@@ -29,9 +29,9 @@ export interface WorkflowPattern {
   status: PatternStatus;
   usageCount: number;
   successRate: number;
-  avgRuntime?: number;
-  lastUsed?: string;
-  pattern?: PatternDefinition;
+  avgRuntime?: number | undefined;
+  lastUsed?: string | undefined;
+  pattern?: PatternDefinition | undefined;
 }
 
 /**
@@ -50,33 +50,33 @@ export type PatternListSelectionPolicy = 'all' | 'active-only';
 
 export interface PatternListProps {
   /** List of patterns */
-  patterns?: WorkflowPattern[];
+  patterns?: WorkflowPattern[] | undefined;
   /** Currently selected pattern ID */
-  selectedId?: string;
+  selectedId?: string | undefined;
   /** Callback when pattern is selected */
-  onSelect?: (pattern: WorkflowPattern) => void;
+  onSelect?: ((pattern: WorkflowPattern) => void) | undefined;
   /** Callback when pattern is deprecated */
-  onDeprecate?: (patternId: string) => void;
+  onDeprecate?: ((patternId: string) => void) | undefined;
 
   /**
    * View mode configuration
    * Replaces boolean `showAllColumns` prop
    * @default 'detailed'
    */
-  viewMode?: PatternListViewMode;
+  viewMode?: PatternListViewMode | undefined;
 
   /**
    * Selection policy configuration
    * Replaces boolean `allowSelectDeprecated` prop
    * @default 'active-only'
    */
-  selectionPolicy?: PatternListSelectionPolicy;
+  selectionPolicy?: PatternListSelectionPolicy | undefined;
 
   // Legacy boolean props for backwards compatibility (deprecated)
   /** @deprecated Use viewMode='detailed' instead */
-  showAllColumns?: boolean;
+  showAllColumns?: boolean | undefined;
   /** @deprecated Use selectionPolicy='all' instead */
-  allowSelectDeprecated?: boolean;
+  allowSelectDeprecated?: boolean | undefined;
 }
 
 // Memoized status badge component

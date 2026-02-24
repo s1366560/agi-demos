@@ -4,8 +4,8 @@ import { ProviderType } from '../../types/memory';
 
 interface ProviderIconProps {
   providerType: ProviderType;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
-  className?: string;
+  size?: 'sm' | 'md' | 'lg' | 'xl' | undefined;
+  className?: string | undefined;
 }
 
 const PROVIDER_CONFIG: Record<

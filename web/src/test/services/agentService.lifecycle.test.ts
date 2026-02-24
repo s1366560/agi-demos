@@ -104,11 +104,11 @@ describe('LifecycleStateData', () => {
       lifecycleState: string | null;
       isInitialized: boolean;
       isActive: boolean;
-      toolCount?: number;
-      skillCount?: number;
-      subagentCount?: number;
-      conversationId?: string;
-      errorMessage?: string;
+      toolCount?: number | undefined;
+      skillCount?: number | undefined;
+      subagentCount?: number | undefined;
+      conversationId?: string | undefined;
+      errorMessage?: string | undefined;
     }
 
     const example: ExpectedLifecycleStateData = {

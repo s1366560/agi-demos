@@ -30,7 +30,7 @@ import type { Project } from '../../types/memory';
 export const AgentWorkspace: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { tenantId: urlTenantId } = useParams<{ tenantId?: string }>();
+  const { tenantId: urlTenantId } = useParams<{ tenantId?: string | undefined }>();
 
   // Store subscriptions - select only what we need
   const user = useAuthStore((state) => state.user);

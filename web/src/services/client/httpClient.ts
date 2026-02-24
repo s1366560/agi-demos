@@ -16,9 +16,9 @@ import { parseAxiosError } from './ApiError';
  */
 export interface HttpRequestConfig extends AxiosRequestConfig {
   /** Skip cache for this request (GET only) - DEPRECATED, ignored */
-  skipCache?: boolean;
+  skipCache?: boolean | undefined;
   /** Enable retry - DEPRECATED, ignored */
-  retry?: boolean;
+  retry?: boolean | undefined;
 }
 
 /**

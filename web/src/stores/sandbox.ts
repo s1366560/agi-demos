@@ -31,7 +31,7 @@ export type PanelMode = 'terminal' | 'output' | 'split';
 export interface CurrentTool {
   name: string;
   input: Record<string, unknown>;
-  callId?: string;
+  callId?: string | undefined;
   startTime: number;
 }
 

@@ -37,19 +37,19 @@ export interface ArtifactRendererRootProps {
   /** The artifact to render */
   artifact: Artifact;
   /** Children for compound component pattern */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
   /** Compact mode for inline display */
-  compact?: boolean;
+  compact?: boolean | undefined;
   /** Maximum width for the rendered content */
-  maxWidth?: number | string;
+  maxWidth?: number | string | undefined;
   /** Maximum height for the rendered content */
-  maxHeight?: number | string;
+  maxHeight?: number | string | undefined;
   /** Called when artifact is clicked for full-screen view */
-  onExpand?: (artifact: Artifact) => void;
+  onExpand?: ((artifact: Artifact) => void) | undefined;
   /** Show metadata information */
-  showMeta?: boolean;
+  showMeta?: boolean | undefined;
   /** Custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -57,7 +57,7 @@ export interface ArtifactRendererRootProps {
  */
 export interface ArtifactImageProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -65,7 +65,7 @@ export interface ArtifactImageProps {
  */
 export interface ArtifactVideoProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -73,7 +73,7 @@ export interface ArtifactVideoProps {
  */
 export interface ArtifactAudioProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -81,7 +81,7 @@ export interface ArtifactAudioProps {
  */
 export interface ArtifactCodeProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -89,7 +89,7 @@ export interface ArtifactCodeProps {
  */
 export interface ArtifactDocumentProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -97,7 +97,7 @@ export interface ArtifactDocumentProps {
  */
 export interface ArtifactDownloadProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -105,7 +105,7 @@ export interface ArtifactDownloadProps {
  */
 export interface ArtifactLoadingProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -113,7 +113,7 @@ export interface ArtifactLoadingProps {
  */
 export interface ArtifactErrorProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -121,7 +121,7 @@ export interface ArtifactErrorProps {
  */
 export interface ArtifactMetaProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -129,7 +129,7 @@ export interface ArtifactMetaProps {
  */
 export interface ArtifactHeaderProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -137,7 +137,7 @@ export interface ArtifactHeaderProps {
  */
 export interface ArtifactActionsProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -148,15 +148,15 @@ export interface LegacyArtifactRendererProps {
   /** The artifact to render */
   artifact: Artifact;
   /** Compact mode for inline display */
-  compact?: boolean;
+  compact?: boolean | undefined;
   /** Maximum width for the rendered content */
-  maxWidth?: number | string;
+  maxWidth?: number | string | undefined;
   /** Maximum height for the rendered content */
-  maxHeight?: number | string;
+  maxHeight?: number | string | undefined;
   /** Called when artifact is clicked for full-screen view */
-  onExpand?: (artifact: Artifact) => void;
+  onExpand?: ((artifact: Artifact) => void) | undefined;
   /** Show metadata information */
-  showMeta?: boolean;
+  showMeta?: boolean | undefined;
   /** Custom class name */
-  className?: string;
+  className?: string | undefined;
 }

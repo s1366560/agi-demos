@@ -15,20 +15,20 @@ export interface ArtifactApiResponse {
   id: string;
   project_id: string;
   tenant_id: string;
-  sandbox_id?: string;
-  tool_execution_id?: string;
-  conversation_id?: string;
+  sandbox_id?: string | undefined;
+  tool_execution_id?: string | undefined;
+  conversation_id?: string | undefined;
   filename: string;
   mime_type: string;
   category: string;
   size_bytes: number;
-  url?: string;
-  preview_url?: string;
+  url?: string | undefined;
+  preview_url?: string | undefined;
   status: string;
-  error_message?: string;
-  source_tool?: string;
-  source_path?: string;
-  metadata?: Record<string, unknown>;
+  error_message?: string | undefined;
+  source_tool?: string | undefined;
+  source_path?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
   created_at: string;
 }
 
@@ -64,9 +64,9 @@ function toArtifact(response: ArtifactApiResponse): Artifact {
 export async function listArtifacts(
   projectId: string,
   options?: {
-    category?: ArtifactCategory;
-    toolExecutionId?: string;
-    limit?: number;
+    category?: ArtifactCategory | undefined;
+    toolExecutionId?: string | undefined;
+    limit?: number | undefined;
   }
 ): Promise<{ artifacts: Artifact[]; total: number }> {
   const params: Record<string, string> = { project_id: projectId };
@@ -132,11 +132,11 @@ export async function listCategories(): Promise<
 export async function updateArtifactContent(
   artifactId: string,
   content: string
-): Promise<{ artifactId: string; sizeBytes: number; url?: string }> {
+): Promise<{ artifactId: string; sizeBytes: number; url?: string | undefined }> {
   const response = await httpClient.put<{
     artifact_id: string;
     size_bytes: number;
-    url?: string;
+    url?: string | undefined;
   }>(`/artifacts/${artifactId}/content`, { content });
   return {
     artifactId: response.artifact_id,

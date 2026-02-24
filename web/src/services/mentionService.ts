@@ -11,8 +11,8 @@ export interface MentionItem {
   id: string;
   name: string;
   type: 'entity' | 'memory' | 'episode' | 'subagent';
-  entityType?: string;
-  summary?: string;
+  entityType?: string | undefined;
+  summary?: string | undefined;
 }
 
 export const mentionService = {

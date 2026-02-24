@@ -12,65 +12,65 @@ export interface ChannelConfig {
   name: string;
   enabled: boolean;
   connection_mode: 'websocket' | 'webhook';
-  app_id?: string;
-  webhook_url?: string;
-  webhook_port?: number;
-  webhook_path?: string;
-  domain?: string;
-  extra_settings?: Record<string, any>;
+  app_id?: string | undefined;
+  webhook_url?: string | undefined;
+  webhook_port?: number | undefined;
+  webhook_path?: string | undefined;
+  domain?: string | undefined;
+  extra_settings?: Record<string, any> | undefined;
   dm_policy: DmPolicy;
   group_policy: GroupPolicy;
-  allow_from?: string[];
-  group_allow_from?: string[];
+  allow_from?: string[] | undefined;
+  group_allow_from?: string[] | undefined;
   rate_limit_per_minute: number;
   status: 'connected' | 'disconnected' | 'error' | 'circuit_open';
-  last_error?: string;
-  description?: string;
+  last_error?: string | undefined;
+  description?: string | undefined;
   created_at: string;
-  updated_at?: string;
+  updated_at?: string | undefined;
 }
 
 export interface CreateChannelConfig {
   channel_type: string;
   name: string;
-  enabled?: boolean;
-  connection_mode?: 'websocket' | 'webhook';
-  app_id?: string;
-  app_secret?: string;
-  encrypt_key?: string;
-  verification_token?: string;
-  webhook_url?: string;
-  webhook_port?: number;
-  webhook_path?: string;
-  domain?: string;
-  extra_settings?: Record<string, any>;
-  description?: string;
-  dm_policy?: DmPolicy;
-  group_policy?: GroupPolicy;
-  allow_from?: string[];
-  group_allow_from?: string[];
-  rate_limit_per_minute?: number;
+  enabled?: boolean | undefined;
+  connection_mode?: 'websocket' | 'webhook' | undefined;
+  app_id?: string | undefined;
+  app_secret?: string | undefined;
+  encrypt_key?: string | undefined;
+  verification_token?: string | undefined;
+  webhook_url?: string | undefined;
+  webhook_port?: number | undefined;
+  webhook_path?: string | undefined;
+  domain?: string | undefined;
+  extra_settings?: Record<string, any> | undefined;
+  description?: string | undefined;
+  dm_policy?: DmPolicy | undefined;
+  group_policy?: GroupPolicy | undefined;
+  allow_from?: string[] | undefined;
+  group_allow_from?: string[] | undefined;
+  rate_limit_per_minute?: number | undefined;
 }
 
 export interface UpdateChannelConfig {
-  name?: string;
-  enabled?: boolean;
-  connection_mode?: 'websocket' | 'webhook';
-  app_id?: string;
-  app_secret?: string;
-  encrypt_key?: string;
-  verification_token?: string;
-  webhook_url?: string;
-  webhook_port?: number;
-  webhook_path?: string;
-  domain?: string;
-  extra_settings?: Record<string, any>;
-  description?: string;
-  dm_policy?: DmPolicy;
-  group_policy?: GroupPolicy;
-  allow_from?: string[];
-  group_allow_from?: string[];
-  rate_limit_per_minute?: number;
+  name?: string | undefined;
+  enabled?: boolean | undefined;
+  connection_mode?: 'websocket' | 'webhook' | undefined;
+  app_id?: string | undefined;
+  app_secret?: string | undefined;
+  encrypt_key?: string | undefined;
+  verification_token?: string | undefined;
+  webhook_url?: string | undefined;
+  webhook_port?: number | undefined;
+  webhook_path?: string | undefined;
+  domain?: string | undefined;
+  extra_settings?: Record<string, any> | undefined;
+  description?: string | undefined;
+  dm_policy?: DmPolicy | undefined;
+  group_policy?: GroupPolicy | undefined;
+  allow_from?: string[] | undefined;
+  group_allow_from?: string[] | undefined;
+  rate_limit_per_minute?: number | undefined;
 }
 
 export interface PluginDiagnostic {
@@ -83,8 +83,8 @@ export interface PluginDiagnostic {
 export interface RuntimePlugin {
   name: string;
   source: string;
-  package?: string;
-  version?: string;
+  package?: string | undefined;
+  version?: string | undefined;
   enabled: boolean;
   discovered: boolean;
   channel_types: string[];
@@ -107,32 +107,32 @@ export interface PluginCapabilityCounts {
 export interface PluginControlPlaneTrace {
   trace_id: string;
   action: string;
-  plugin_name?: string | null;
-  requirement?: string | null;
-  tenant_id?: string | null;
+  plugin_name?: string | null | undefined;
+  requirement?: string | null | undefined;
+  tenant_id?: string | null | undefined;
   timestamp: string;
   capability_counts: PluginCapabilityCounts;
 }
 
 export interface PluginActionDetails {
-  diagnostics?: PluginDiagnostic[];
-  control_plane_trace?: PluginControlPlaneTrace;
-  channel_reload_plan?: Record<string, number>;
+  diagnostics?: PluginDiagnostic[] | undefined;
+  control_plane_trace?: PluginControlPlaneTrace | undefined;
+  channel_reload_plan?: Record<string, number> | undefined;
   [key: string]: unknown;
 }
 
 export interface PluginActionResponse {
   success: boolean;
   message: string;
-  details?: PluginActionDetails;
+  details?: PluginActionDetails | undefined;
 }
 
 export interface ChannelPluginCatalogItem {
   channel_type: string;
   plugin_name: string;
   source: string;
-  package?: string;
-  version?: string;
+  package?: string | undefined;
+  version?: string | undefined;
   enabled: boolean;
   discovered: boolean;
   schema_supported: boolean;
@@ -143,37 +143,37 @@ export interface ChannelPluginCatalog {
 }
 
 export interface ChannelPluginSchemaProperty {
-  type?: string;
-  title?: string;
-  description?: string;
-  enum?: Array<string | number | boolean>;
-  minimum?: number;
-  maximum?: number;
+  type?: string | undefined;
+  title?: string | undefined;
+  description?: string | undefined;
+  enum?: Array<string | number | boolean> | undefined;
+  minimum?: number | undefined;
+  maximum?: number | undefined;
 }
 
 export interface ChannelPluginConfigSchema {
   channel_type: string;
   plugin_name: string;
   source: string;
-  package?: string;
-  version?: string;
+  package?: string | undefined;
+  version?: string | undefined;
   schema_supported: boolean;
   config_schema?: {
-    type?: string;
-    properties?: Record<string, ChannelPluginSchemaProperty>;
-    required?: string[];
-  };
+    type?: string | undefined;
+    properties?: Record<string, ChannelPluginSchemaProperty> | undefined;
+    required?: string[] | undefined;
+  } | undefined;
   config_ui_hints?: Record<
     string,
     {
-      label?: string;
-      help?: string;
-      placeholder?: string;
-      sensitive?: boolean;
-      advanced?: boolean;
+      label?: string | undefined;
+      help?: string | undefined;
+      placeholder?: string | undefined;
+      sensitive?: boolean | undefined;
+      advanced?: boolean | undefined;
     }
-  >;
-  defaults?: Record<string, unknown>;
+  > | undefined;
+  defaults?: Record<string, unknown> | undefined;
   secret_paths: string[];
 }
 
@@ -188,8 +188,8 @@ export interface ChannelConnectionStatus {
   channel_type: string;
   status: string;
   connected: boolean;
-  last_heartbeat?: string;
-  last_error?: string;
+  last_heartbeat?: string | undefined;
+  last_error?: string | undefined;
   reconnect_attempts: number;
 }
 
@@ -208,12 +208,12 @@ export interface ChannelMessage {
   chat_id: string;
   chat_type: 'p2p' | 'group';
   sender_id: string;
-  sender_name?: string;
+  sender_name?: string | undefined;
   message_type: string;
-  content_text?: string;
-  content_data?: Record<string, any>;
-  reply_to?: string;
-  mentions?: string[];
+  content_text?: string | undefined;
+  content_data?: Record<string, any> | undefined;
+  reply_to?: string | undefined;
+  mentions?: string[] | undefined;
   direction: 'inbound' | 'outbound';
   created_at: string;
 }

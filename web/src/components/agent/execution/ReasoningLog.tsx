@@ -15,15 +15,15 @@ export interface ReasoningStep {
 
 export interface ReasoningLogProps {
   /** Agent's reasoning content */
-  reasoning?: string;
+  reasoning?: string | undefined;
   /** Structured reasoning steps */
-  steps?: ReasoningStep[];
+  steps?: ReasoningStep[] | undefined;
   /** Whether the log is complete */
-  complete?: boolean;
+  complete?: boolean | undefined;
   /** Default open state */
-  defaultOpen?: boolean;
+  defaultOpen?: boolean | undefined;
   /** Title for the reasoning log */
-  title?: string;
+  title?: string | undefined;
 }
 
 /**

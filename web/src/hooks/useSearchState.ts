@@ -21,11 +21,11 @@ export interface SearchResult {
   score: number;
   metadata: {
     type: string;
-    name?: string;
-    uuid?: string;
-    depth?: number;
-    created_at?: string;
-    tags?: string[];
+    name?: string | undefined;
+    uuid?: string | undefined;
+    depth?: number | undefined;
+    created_at?: string | undefined;
+    tags?: string[] | undefined;
     [key: string]: unknown;
   };
   source: string;
@@ -38,8 +38,8 @@ export interface SearchHistoryItem {
 }
 
 export interface CustomTimeRange {
-  since?: string;
-  until?: string;
+  since?: string | undefined;
+  until?: string | undefined;
 }
 
 /**

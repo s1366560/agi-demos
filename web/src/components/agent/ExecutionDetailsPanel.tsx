@@ -38,7 +38,7 @@ import {
 } from '../../utils/agentDataAdapters';
 
 import { ActivityTimeline } from './execution/ActivityTimeline';
-import { TokenUsageChart, type TokenData, type CostData } from './execution/TokenUsageChart';
+import { TokenUsageChart } from './execution/TokenUsageChart';
 import { ToolCallVisualization, type ToolExecutionItem } from './execution/ToolCallVisualization';
 import { ThinkingChain } from './ThinkingChain';
 
@@ -109,7 +109,7 @@ const ExecutionDetailsPanelInner: React.FC<ExecutionDetailsPanelRootProps> = ({
       isThinking: isStreaming && message.content.length === 0,
       toolExecutions: message.metadata?.tool_executions as Record<
         string,
-        { startTime?: number; endTime?: number; duration?: number }
+        { startTime?: number | undefined; endTime?: number | undefined; duration?: number | undefined }
       >,
       timeline: message.metadata?.timeline as any[],
     };

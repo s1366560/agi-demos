@@ -16,7 +16,7 @@ interface FileDownloadButtonProps {
   /** The presigned URL for download */
   url: string;
   /** Optional file size in bytes */
-  size?: number;
+  size?: number | undefined;
 }
 
 const formatFileSize = (bytes?: number): string => {

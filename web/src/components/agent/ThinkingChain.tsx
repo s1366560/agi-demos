@@ -21,19 +21,19 @@ import { ToolCard } from './ToolCard';
 interface TimelineItem {
   type: 'thought' | 'tool_call';
   id: string;
-  content?: string;
-  toolName?: string;
-  toolInput?: any;
+  content?: string | undefined;
+  toolName?: string | undefined;
+  toolInput?: any | undefined;
   timestamp: number;
 }
 
 interface ThinkingChainProps {
   thoughts: string[]; // Keep for backward compatibility or simple views
-  toolCalls?: ToolCall[];
-  toolResults?: ToolResult[];
-  isThinking?: boolean;
-  toolExecutions?: Record<string, { startTime?: number; endTime?: number; duration?: number }>;
-  timeline?: TimelineItem[]; // New prop for ordered display
+  toolCalls?: ToolCall[] | undefined;
+  toolResults?: ToolResult[] | undefined;
+  isThinking?: boolean | undefined;
+  toolExecutions?: Record<string, { startTime?: number | undefined; endTime?: number | undefined; duration?: number | undefined }> | undefined;
+  timeline?: TimelineItem[] | undefined; // New prop for ordered display
 }
 
 // Helper to format relative time
@@ -214,9 +214,9 @@ export const ThinkingChain: React.FC<ThinkingChainProps> = memo(
         // Fallback: Render thoughts then tools (with synthesized timeline)
         const fallbackItems: Array<{
           type: 'thought' | 'tool_call';
-          content?: string;
-          toolName?: string;
-          toolInput?: any;
+          content?: string | undefined;
+          toolName?: string | undefined;
+          toolInput?: any | undefined;
           timestamp: number;
         }> = [];
 

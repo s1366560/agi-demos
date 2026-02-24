@@ -46,12 +46,12 @@ import { apiFetch } from './client/urlUtils';
  * ```
  */
 interface MemoryUpdate {
-  title?: string;
-  content?: string;
-  tags?: string[];
-  entities?: any[];
-  relationships?: any[];
-  metadata?: Record<string, any>;
+  title?: string | undefined;
+  content?: string | undefined;
+  tags?: string[] | undefined;
+  entities?: any[] | undefined;
+  relationships?: any[] | undefined;
+  metadata?: Record<string, any> | undefined;
   version: number;
 }
 
@@ -74,7 +74,7 @@ interface MemoryShareCreate {
   target_type: 'user' | 'project';
   target_id: string;
   permission_level: 'view' | 'edit';
-  expires_at?: string;
+  expires_at?: string | undefined;
 }
 
 /**

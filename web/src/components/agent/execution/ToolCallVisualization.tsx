@@ -35,28 +35,28 @@ export interface ToolExecutionItem {
   id: string;
   toolName: string;
   input: Record<string, unknown>;
-  output?: string;
+  output?: string | undefined;
   status: 'running' | 'success' | 'failed';
   startTime: number;
-  endTime?: number;
-  duration?: number;
-  stepNumber?: number;
-  error?: string;
+  endTime?: number | undefined;
+  duration?: number | undefined;
+  stepNumber?: number | undefined;
+  error?: string | undefined;
 }
 
 export interface ToolCallVisualizationProps {
   /** Tool execution records */
   toolExecutions: ToolExecutionItem[];
   /** Display mode */
-  mode?: 'grid' | 'timeline' | 'flow';
+  mode?: 'grid' | 'timeline' | 'flow' | undefined;
   /** Show input/output details */
-  showDetails?: boolean;
+  showDetails?: boolean | undefined;
   /** Click handler for tool selection */
-  onToolClick?: (execution: ToolExecutionItem) => void;
+  onToolClick?: ((execution: ToolExecutionItem) => void) | undefined;
   /** Allow mode switching */
-  allowModeSwitch?: boolean;
+  allowModeSwitch?: boolean | undefined;
   /** Compact mode */
-  compact?: boolean;
+  compact?: boolean | undefined;
 }
 
 // Tool icon mapping
@@ -106,8 +106,8 @@ const StatusIcon: React.FC<{ status: 'running' | 'success' | 'failed' }> = ({ st
  */
 interface GridViewProps {
   executions: ToolExecutionItem[];
-  onToolClick?: (execution: ToolExecutionItem) => void;
-  compact?: boolean;
+  onToolClick?: ((execution: ToolExecutionItem) => void) | undefined;
+  compact?: boolean | undefined;
 }
 
 const GridView: React.FC<GridViewProps> = ({ executions, onToolClick, compact = false }) => {
@@ -172,7 +172,7 @@ const GridView: React.FC<GridViewProps> = ({ executions, onToolClick, compact = 
  */
 interface TimelineViewProps {
   executions: ToolExecutionItem[];
-  onToolClick?: (execution: ToolExecutionItem) => void;
+  onToolClick?: ((execution: ToolExecutionItem) => void) | undefined;
 }
 
 const TimelineView: React.FC<TimelineViewProps> = ({ executions, onToolClick }) => {
@@ -263,7 +263,7 @@ const TimelineView: React.FC<TimelineViewProps> = ({ executions, onToolClick }) 
  */
 interface FlowViewProps {
   executions: ToolExecutionItem[];
-  onToolClick?: (execution: ToolExecutionItem) => void;
+  onToolClick?: ((execution: ToolExecutionItem) => void) | undefined;
 }
 
 const FlowView: React.FC<FlowViewProps> = ({ executions, onToolClick }) => {

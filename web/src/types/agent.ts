@@ -27,11 +27,11 @@ export interface PendingHITLRequest {
   id: string;
   request_type: HITLRequestType;
   conversation_id: string;
-  message_id?: string;
+  message_id?: string | undefined;
   question: string;
-  options?: Array<Record<string, unknown>>;
-  context?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+  options?: Array<Record<string, unknown>> | undefined;
+  context?: Record<string, unknown> | undefined;
+  metadata?: Record<string, unknown> | undefined;
   status: HITLRequestStatus;
   created_at: string;
   expires_at: string;
@@ -106,9 +106,9 @@ export interface WorkPlan {
   status: PlanStatus;
   steps: PlanStep[];
   current_step_index: number;
-  workflow_pattern_id?: string;
+  workflow_pattern_id?: string | undefined;
   created_at: string;
-  updated_at?: string;
+  updated_at?: string | undefined;
 }
 
 // =============================================================================
@@ -138,7 +138,7 @@ export interface TaskUpdatedEventData {
   conversation_id: string;
   task_id: string;
   status: string;
-  content?: string;
+  content?: string | undefined;
 }
 
 export interface TaskStartEventData {
@@ -156,13 +156,13 @@ export interface TaskCompleteEventData {
 }
 
 export interface ExecutionPathDecidedEventData {
-  route_id?: string;
-  trace_id?: string;
+  route_id?: string | undefined;
+  trace_id?: string | undefined;
   path: string;
   confidence: number;
   reason: string;
-  target?: string | null;
-  metadata?: Record<string, unknown>;
+  target?: string | null | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 export interface SelectionTraceStageData {
@@ -171,47 +171,47 @@ export interface SelectionTraceStageData {
   after_count: number;
   removed_count: number;
   duration_ms: number;
-  explain?: Record<string, unknown>;
+  explain?: Record<string, unknown> | undefined;
 }
 
 export interface SelectionTraceEventData {
-  route_id?: string;
-  trace_id?: string;
+  route_id?: string | undefined;
+  trace_id?: string | undefined;
   initial_count: number;
   final_count: number;
   removed_total: number;
-  domain_lane?: string | null;
-  tool_budget?: number;
-  budget_exceeded_stages?: string[];
+  domain_lane?: string | null | undefined;
+  tool_budget?: number | undefined;
+  budget_exceeded_stages?: string[] | undefined;
   stages: SelectionTraceStageData[];
 }
 
 export interface PolicyFilteredEventData {
-  route_id?: string;
-  trace_id?: string;
+  route_id?: string | undefined;
+  trace_id?: string | undefined;
   removed_total: number;
   stage_count: number;
-  domain_lane?: string | null;
-  tool_budget?: number;
-  budget_exceeded_stages?: string[];
+  domain_lane?: string | null | undefined;
+  tool_budget?: number | undefined;
+  budget_exceeded_stages?: string[] | undefined;
 }
 
 export type ToolsetRefreshStatus = 'success' | 'failed' | 'skipped' | 'not_applicable';
 
 export interface ToolsetChangedEventData {
   source: string;
-  tenant_id?: string;
-  project_id?: string;
-  action?: string;
-  plugin_name?: string | null;
-  trace_id?: string;
-  mutation_fingerprint?: string | null;
-  reload_plan?: Record<string, unknown>;
-  details?: Record<string, unknown>;
-  lifecycle?: Record<string, unknown>;
-  refresh_source?: string;
-  refresh_status?: ToolsetRefreshStatus;
-  refreshed_tool_count?: number;
+  tenant_id?: string | undefined;
+  project_id?: string | undefined;
+  action?: string | undefined;
+  plugin_name?: string | null | undefined;
+  trace_id?: string | undefined;
+  mutation_fingerprint?: string | null | undefined;
+  reload_plan?: Record<string, unknown> | undefined;
+  details?: Record<string, unknown> | undefined;
+  lifecycle?: Record<string, unknown> | undefined;
+  refresh_source?: string | undefined;
+  refresh_status?: ToolsetRefreshStatus | undefined;
+  refreshed_tool_count?: number | undefined;
 }
 
 export type ExecutionNarrativeStage = 'routing' | 'selection' | 'policy' | 'toolset';
@@ -221,10 +221,10 @@ export interface ExecutionNarrativeEntry {
   stage: ExecutionNarrativeStage;
   summary: string;
   timestamp: number;
-  trace_id?: string;
-  route_id?: string;
-  domain_lane?: string | null;
-  metadata?: Record<string, unknown>;
+  trace_id?: string | undefined;
+  route_id?: string | undefined;
+  domain_lane?: string | null | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -233,7 +233,7 @@ export interface ExecutionNarrativeEntry {
 export interface ToolCall {
   name: string;
   arguments: Record<string, unknown>;
-  result?: string;
+  result?: string | undefined;
 }
 
 /**
@@ -241,19 +241,19 @@ export interface ToolCall {
  */
 export interface ToolResult {
   tool_name: string;
-  result?: string;
-  error?: string;
+  result?: string | undefined;
+  error?: string | undefined;
 }
 
 /**
  * Artifact reference (externalized payload)
  */
 export interface ArtifactReference {
-  object_key?: string;
+  object_key?: string | undefined;
   url: string;
-  mime_type?: string;
-  size_bytes?: number;
-  source?: string;
+  mime_type?: string | undefined;
+  size_bytes?: number | undefined;
+  source?: string | undefined;
 }
 
 /**
@@ -265,15 +265,15 @@ export interface Message {
   role: MessageRole;
   content: string;
   message_type: MessageType;
-  tool_calls?: ToolCall[];
-  tool_results?: ToolResult[];
-  artifacts?: ArtifactReference[];
-  metadata?: Record<string, unknown>;
+  tool_calls?: ToolCall[] | undefined;
+  tool_results?: ToolResult[] | undefined;
+  artifacts?: ArtifactReference[] | undefined;
+  metadata?: Record<string, unknown> | undefined;
   created_at: string;
-  traceUrl?: string; // Langfuse trace URL for observability
-  version?: number;
-  original_content?: string;
-  edited_at?: string;
+  traceUrl?: string | undefined; // Langfuse trace URL for observability
+  version?: number | undefined;
+  original_content?: string | undefined;
+  edited_at?: string | undefined;
 }
 
 /**
@@ -286,14 +286,14 @@ export interface Conversation {
   user_id: string;
   title: string;
   status: ConversationStatus;
-  agent_config?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+  agent_config?: Record<string, unknown> | undefined;
+  metadata?: Record<string, unknown> | undefined;
   message_count: number;
   created_at: string;
-  updated_at?: string;
-  summary?: string | null;
-  parent_conversation_id?: string | null;
-  branch_point_message_id?: string | null;
+  updated_at?: string | undefined;
+  summary?: string | null | undefined;
+  parent_conversation_id?: string | null | undefined;
+  branch_point_message_id?: string | null | undefined;
 }
 
 /**
@@ -315,15 +315,15 @@ export interface AgentExecution {
   conversation_id: string;
   message_id: string;
   status: ExecutionStatus;
-  thought?: string;
-  action?: string;
-  observation?: string;
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
-  tool_output?: string;
-  metadata?: Record<string, unknown>;
+  thought?: string | undefined;
+  action?: string | undefined;
+  observation?: string | undefined;
+  tool_name?: string | undefined;
+  tool_input?: Record<string, unknown> | undefined;
+  tool_output?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
   started_at: string;
-  completed_at?: string;
+  completed_at?: string | undefined;
 }
 
 /**
@@ -480,11 +480,11 @@ export interface AgentEvent<T = Record<string, unknown>> {
  * Message event data
  */
 export interface MessageEventData {
-  id?: string;
+  id?: string | undefined;
   role: MessageRole;
   content: string;
-  created_at?: string;
-  artifacts?: ArtifactReference[];
+  created_at?: string | undefined;
+  artifacts?: ArtifactReference[] | undefined;
 }
 
 /**
@@ -492,8 +492,8 @@ export interface MessageEventData {
  */
 export interface ThoughtEventData {
   thought: string;
-  thought_level?: ThoughtLevel;
-  step_number?: number;
+  thought_level?: ThoughtLevel | undefined;
+  step_number?: number | undefined;
 }
 
 /**
@@ -510,7 +510,7 @@ export interface WorkPlanEventData {
   total_steps: number;
   current_step: number;
   status: PlanStatus;
-  workflow_pattern_id?: string;
+  workflow_pattern_id?: string | undefined;
   thought_level: ThoughtLevel;
 }
 
@@ -520,9 +520,9 @@ export interface WorkPlanEventData {
 export interface ActEventData {
   tool_name: string;
   tool_input: Record<string, unknown>;
-  step_number?: number;
-  execution_id?: string; // Legacy alias
-  tool_execution_id?: string; // Backend field name for act/observe matching
+  step_number?: number | undefined;
+  execution_id?: string | undefined; // Legacy alias
+  tool_execution_id?: string | undefined; // Backend field name for act/observe matching
 }
 
 /**
@@ -530,7 +530,7 @@ export interface ActEventData {
  */
 export interface ActDeltaEventData {
   tool_name: string;
-  call_id?: string;
+  call_id?: string | undefined;
   arguments_fragment: string;
   accumulated_arguments: string;
   status: 'preparing';
@@ -540,12 +540,12 @@ export interface ActDeltaEventData {
  * Observe event data (tool result)
  */
 export interface ObserveEventData {
-  observation?: string; // Legacy field for observation text
-  tool_name?: string; // New: tool name
-  execution_id?: string; // Legacy alias
-  tool_execution_id?: string; // Backend field name for act/observe matching
-  error?: string; // Error message if tool execution failed
-  result?: unknown; // Raw result from tool execution (may be string or object)
+  observation?: string | undefined; // Legacy field for observation text
+  tool_name?: string | undefined; // New: tool name
+  execution_id?: string | undefined; // Legacy alias
+  tool_execution_id?: string | undefined; // Backend field name for act/observe matching
+  error?: string | undefined; // Error message if tool execution failed
+  result?: unknown | undefined; // Raw result from tool execution (may be string or object)
 }
 
 /**
@@ -553,11 +553,11 @@ export interface ObserveEventData {
  */
 export interface CompleteEventData {
   content: string;
-  trace_url?: string;
-  id?: string;
-  message_id?: string;
-  assistant_message_id?: string;
-  artifacts?: ArtifactReference[];
+  trace_url?: string | undefined;
+  id?: string | undefined;
+  message_id?: string | undefined;
+  assistant_message_id?: string | undefined;
+  artifacts?: ArtifactReference[] | undefined;
 }
 
 /**
@@ -565,8 +565,8 @@ export interface CompleteEventData {
  */
 export interface ErrorEventData {
   message: string;
-  isReconnectable?: boolean;
-  code?: string;
+  isReconnectable?: boolean | undefined;
+  code?: string | undefined;
 }
 
 /**
@@ -585,8 +585,8 @@ export interface TitleGeneratedEventData {
   conversation_id: string;
   title: string;
   generated_at: string;
-  message_id?: string;
-  generated_by?: string;
+  message_id?: string | undefined;
+  generated_by?: string | undefined;
 }
 
 /**
@@ -600,8 +600,8 @@ export type ClarificationType = 'scope' | 'approach' | 'prerequisite' | 'priorit
 export interface ClarificationOption {
   id: string;
   label: string;
-  description?: string;
-  recommended?: boolean;
+  description?: string | undefined;
+  recommended?: boolean | undefined;
 }
 
 /**
@@ -635,11 +635,11 @@ export type DecisionType = 'branch' | 'method' | 'confirmation' | 'risk' | 'cust
 export interface DecisionOption {
   id: string;
   label: string;
-  description?: string;
-  recommended?: boolean;
-  estimated_time?: string;
-  estimated_cost?: string;
-  risks?: string[];
+  description?: string | undefined;
+  recommended?: boolean | undefined;
+  estimated_time?: string | undefined;
+  estimated_cost?: string | undefined;
+  risks?: string[] | undefined;
 }
 
 /**
@@ -652,7 +652,7 @@ export interface DecisionAskedEventData {
   options: DecisionOption[];
   allow_custom: boolean;
   context: Record<string, unknown>;
-  default_option?: string;
+  default_option?: string | undefined;
 }
 
 /**
@@ -674,11 +674,11 @@ export type EnvVarInputType = 'text' | 'password' | 'textarea';
 export interface EnvVarField {
   name: string;
   label: string;
-  description?: string;
+  description?: string | undefined;
   required: boolean;
   input_type: EnvVarInputType;
-  default_value?: string;
-  placeholder?: string;
+  default_value?: string | undefined;
+  placeholder?: string | undefined;
 }
 
 /**
@@ -688,8 +688,8 @@ export interface EnvVarRequestedEventData {
   request_id: string;
   tool_name: string;
   fields: EnvVarField[];
-  message?: string;
-  context?: Record<string, unknown>;
+  message?: string | undefined;
+  context?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -713,7 +713,7 @@ export interface DoomLoopDetectedEventData {
     input: Record<string, unknown>;
     timestamp: string;
   }>;
-  context?: Record<string, unknown>;
+  context?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -732,8 +732,8 @@ export interface PermissionAskedEventData {
   tool_name: string;
   permission_type: 'allow' | 'deny' | 'ask';
   description: string;
-  risk_level?: 'low' | 'medium' | 'high';
-  context?: Record<string, unknown>;
+  risk_level?: 'low' | 'medium' | 'high' | undefined;
+  context?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -743,7 +743,7 @@ export interface PermissionRepliedEventData {
   request_id: string;
   tool_name: string;
   granted: boolean;
-  remember?: boolean;
+  remember?: boolean | undefined;
 }
 
 /**
@@ -751,14 +751,14 @@ export interface PermissionRepliedEventData {
  */
 export interface CostUpdateEventData {
   conversation_id: string;
-  message_id?: string;
+  message_id?: string | undefined;
   input_tokens: number;
   output_tokens: number;
   total_tokens: number;
   cost_usd: number;
   model: string;
-  cumulative_tokens?: number;
-  cumulative_cost_usd?: number;
+  cumulative_tokens?: number | undefined;
+  cumulative_cost_usd?: number | undefined;
 }
 
 /**
@@ -768,7 +768,7 @@ export interface PlanStatusChangedEventData {
   plan_id: string;
   old_status: string;
   new_status: string;
-  reason?: string;
+  reason?: string | undefined;
 }
 
 /**
@@ -789,8 +789,8 @@ export interface PlanStepCompleteEventData {
   step_id: string;
   step_number: number;
   status: 'completed' | 'failed' | 'skipped';
-  result?: unknown;
-  error?: string;
+  result?: unknown | undefined;
+  error?: string | undefined;
 }
 
 /**
@@ -838,15 +838,15 @@ export interface AdjustmentAppliedEventData {
  * Sandbox event data (unified for all sandbox events)
  */
 export interface SandboxEventData {
-  sandbox_id?: string;
+  sandbox_id?: string | undefined;
   project_id: string;
   event_type: string;
-  status?: 'creating' | 'running' | 'stopping' | 'stopped' | 'error';
-  endpoint?: string;
-  websocket_url?: string;
-  desktop_url?: string;
-  terminal_url?: string;
-  error_message?: string;
+  status?: 'creating' | 'running' | 'stopping' | 'stopped' | 'error' | undefined;
+  endpoint?: string | undefined;
+  websocket_url?: string | undefined;
+  desktop_url?: string | undefined;
+  terminal_url?: string | undefined;
+  error_message?: string | undefined;
   timestamp: string;
 }
 
@@ -855,8 +855,8 @@ export interface SandboxEventData {
  */
 export interface ThoughtDeltaEventData {
   delta: string;
-  thought_level?: ThoughtLevel;
-  step_number?: number;
+  thought_level?: ThoughtLevel | undefined;
+  step_number?: number | undefined;
 }
 
 /**
@@ -870,7 +870,7 @@ export interface TextDeltaEventData {
  * Text end event data (typewriter effect)
  */
 export interface TextEndEventData {
-  full_text?: string;
+  full_text?: string | undefined;
 }
 
 /**
@@ -900,8 +900,8 @@ export interface MemoryCapturedEventData {
  */
 export interface CreateConversationRequest {
   project_id: string;
-  title?: string;
-  agent_config?: Record<string, unknown>;
+  title?: string | undefined;
+  agent_config?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -915,18 +915,18 @@ export type CreateConversationResponse = Conversation;
 export interface ChatRequest {
   conversation_id: string;
   message: string;
-  project_id?: string;
+  project_id?: string | undefined;
   /** File metadata for files uploaded to sandbox */
   file_metadata?: Array<{
     filename: string;
     sandbox_path: string;
     mime_type: string;
     size_bytes: number;
-  }>;
+  }> | undefined;
   /** Force execution of a specific skill by name */
-  forced_skill_name?: string;
+  forced_skill_name?: string | undefined;
   /** Context injected by MCP Apps via ui/update-model-context (SEP-1865) */
-  app_model_context?: Record<string, unknown>;
+  app_model_context?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -967,22 +967,22 @@ export interface AgentExecutionWithDetails {
   message_id: string;
   status: ExecutionStatus;
   started_at: string;
-  completed_at?: string;
-  thought?: string;
-  action?: string;
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
-  tool_output?: string;
-  observation?: string;
+  completed_at?: string | undefined;
+  thought?: string | undefined;
+  action?: string | undefined;
+  tool_name?: string | undefined;
+  tool_input?: Record<string, unknown> | undefined;
+  tool_output?: string | undefined;
+  observation?: string | undefined;
   // Multi-level thinking fields
-  work_level_thought?: string;
-  task_level_thought?: string;
-  plan_steps?: PlanStep[];
-  current_step_index?: number;
-  workflow_pattern_id?: string;
-  work_plan_id?: string;
-  current_step?: number;
-  metadata?: Record<string, unknown>;
+  work_level_thought?: string | undefined;
+  task_level_thought?: string | undefined;
+  plan_steps?: PlanStep[] | undefined;
+  current_step_index?: number | undefined;
+  workflow_pattern_id?: string | undefined;
+  work_plan_id?: string | undefined;
+  current_step?: number | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -1022,14 +1022,14 @@ export interface ToolExecutionRecord {
   call_id: string;
   tool_name: string;
   tool_input: Record<string, unknown>;
-  tool_output?: string | null;
+  tool_output?: string | null | undefined;
   status: 'running' | 'success' | 'failed';
-  error?: string | null;
-  step_number?: number | null;
+  error?: string | null | undefined;
+  step_number?: number | null | undefined;
   sequence_number: number;
   started_at: string;
-  completed_at?: string | null;
-  duration_ms?: number | null;
+  completed_at?: string | null | undefined;
+  duration_ms?: number | null | undefined;
 }
 
 /**
@@ -1045,115 +1045,115 @@ export interface ToolExecutionsResponse {
  * Agent SSE stream handler (extended for multi-level thinking and typewriter effect)
  */
 export interface AgentStreamHandler {
-  onMessage?: (event: AgentEvent<MessageEventData>) => void;
-  onThought?: (event: AgentEvent<ThoughtEventData>) => void;
-  onThoughtDelta?: (event: AgentEvent<ThoughtDeltaEventData>) => void; // Streaming thought
-  onWorkPlan?: (event: AgentEvent<WorkPlanEventData>) => void;
-  onPatternMatch?: (event: AgentEvent<PatternMatchEventData>) => void; // T079
-  onAct?: (event: AgentEvent<ActEventData>) => void;
-  onActDelta?: (event: AgentEvent<ActDeltaEventData>) => void;
-  onObserve?: (event: AgentEvent<ObserveEventData>) => void;
-  onTextStart?: () => void; // Typewriter effect
-  onTextDelta?: (event: AgentEvent<TextDeltaEventData>) => void; // Typewriter effect
-  onTextEnd?: (event: AgentEvent<TextEndEventData>) => void; // Typewriter effect
-  onClarificationAsked?: (event: AgentEvent<ClarificationAskedEventData>) => void;
-  onClarificationAnswered?: (event: AgentEvent<ClarificationAnsweredEventData>) => void;
-  onDecisionAsked?: (event: AgentEvent<DecisionAskedEventData>) => void;
-  onDecisionAnswered?: (event: AgentEvent<DecisionAnsweredEventData>) => void;
-  onDoomLoopDetected?: (event: AgentEvent<DoomLoopDetectedEventData>) => void;
-  onDoomLoopIntervened?: (event: AgentEvent<DoomLoopIntervenedEventData>) => void;
+  onMessage?: ((event: AgentEvent<MessageEventData>) => void) | undefined;
+  onThought?: ((event: AgentEvent<ThoughtEventData>) => void) | undefined;
+  onThoughtDelta?: ((event: AgentEvent<ThoughtDeltaEventData>) => void) | undefined; // Streaming thought
+  onWorkPlan?: ((event: AgentEvent<WorkPlanEventData>) => void) | undefined;
+  onPatternMatch?: ((event: AgentEvent<PatternMatchEventData>) => void) | undefined; // T079
+  onAct?: ((event: AgentEvent<ActEventData>) => void) | undefined;
+  onActDelta?: ((event: AgentEvent<ActDeltaEventData>) => void) | undefined;
+  onObserve?: ((event: AgentEvent<ObserveEventData>) => void) | undefined;
+  onTextStart?: (() => void) | undefined; // Typewriter effect
+  onTextDelta?: ((event: AgentEvent<TextDeltaEventData>) => void) | undefined; // Typewriter effect
+  onTextEnd?: ((event: AgentEvent<TextEndEventData>) => void) | undefined; // Typewriter effect
+  onClarificationAsked?: ((event: AgentEvent<ClarificationAskedEventData>) => void) | undefined;
+  onClarificationAnswered?: ((event: AgentEvent<ClarificationAnsweredEventData>) => void) | undefined;
+  onDecisionAsked?: ((event: AgentEvent<DecisionAskedEventData>) => void) | undefined;
+  onDecisionAnswered?: ((event: AgentEvent<DecisionAnsweredEventData>) => void) | undefined;
+  onDoomLoopDetected?: ((event: AgentEvent<DoomLoopDetectedEventData>) => void) | undefined;
+  onDoomLoopIntervened?: ((event: AgentEvent<DoomLoopIntervenedEventData>) => void) | undefined;
   // Environment variable handlers
-  onEnvVarRequested?: (event: AgentEvent<EnvVarRequestedEventData>) => void;
-  onEnvVarProvided?: (event: AgentEvent<EnvVarProvidedEventData>) => void;
+  onEnvVarRequested?: ((event: AgentEvent<EnvVarRequestedEventData>) => void) | undefined;
+  onEnvVarProvided?: ((event: AgentEvent<EnvVarProvidedEventData>) => void) | undefined;
   // Skill execution handlers (L2 layer)
-  onSkillMatched?: (event: AgentEvent<SkillMatchedEventData>) => void;
-  onSkillExecutionStart?: (event: AgentEvent<SkillExecutionStartEventData>) => void;
-  onSkillToolStart?: (event: AgentEvent<SkillToolStartEventData>) => void;
-  onSkillToolResult?: (event: AgentEvent<SkillToolResultEventData>) => void;
-  onSkillExecutionComplete?: (event: AgentEvent<SkillExecutionCompleteEventData>) => void;
-  onSkillFallback?: (event: AgentEvent<SkillFallbackEventData>) => void;
+  onSkillMatched?: ((event: AgentEvent<SkillMatchedEventData>) => void) | undefined;
+  onSkillExecutionStart?: ((event: AgentEvent<SkillExecutionStartEventData>) => void) | undefined;
+  onSkillToolStart?: ((event: AgentEvent<SkillToolStartEventData>) => void) | undefined;
+  onSkillToolResult?: ((event: AgentEvent<SkillToolResultEventData>) => void) | undefined;
+  onSkillExecutionComplete?: ((event: AgentEvent<SkillExecutionCompleteEventData>) => void) | undefined;
+  onSkillFallback?: ((event: AgentEvent<SkillFallbackEventData>) => void) | undefined;
   // Artifact handlers
-  onArtifactCreated?: (event: AgentEvent<ArtifactCreatedEventData>) => void;
-  onArtifactReady?: (event: AgentEvent<ArtifactReadyEventData>) => void;
-  onArtifactError?: (event: AgentEvent<ArtifactErrorEventData>) => void;
+  onArtifactCreated?: ((event: AgentEvent<ArtifactCreatedEventData>) => void) | undefined;
+  onArtifactReady?: ((event: AgentEvent<ArtifactReadyEventData>) => void) | undefined;
+  onArtifactError?: ((event: AgentEvent<ArtifactErrorEventData>) => void) | undefined;
   // Suggestion handlers
-  onSuggestions?: (event: AgentEvent<SuggestionsEventData>) => void;
+  onSuggestions?: ((event: AgentEvent<SuggestionsEventData>) => void) | undefined;
   // Artifact lifecycle handlers
-  onArtifactOpen?: (event: AgentEvent<ArtifactOpenEventData>) => void;
-  onArtifactUpdate?: (event: AgentEvent<ArtifactUpdateEventData>) => void;
-  onArtifactClose?: (event: AgentEvent<ArtifactCloseEventData>) => void;
+  onArtifactOpen?: ((event: AgentEvent<ArtifactOpenEventData>) => void) | undefined;
+  onArtifactUpdate?: ((event: AgentEvent<ArtifactUpdateEventData>) => void) | undefined;
+  onArtifactClose?: ((event: AgentEvent<ArtifactCloseEventData>) => void) | undefined;
   // Context management handlers
-  onContextCompressed?: (event: AgentEvent<ContextCompressedEventData>) => void;
-  onContextStatus?: (event: AgentEvent<ContextStatusEventData>) => void;
+  onContextCompressed?: ((event: AgentEvent<ContextCompressedEventData>) => void) | undefined;
+  onContextStatus?: ((event: AgentEvent<ContextStatusEventData>) => void) | undefined;
   // Title generation handlers
-  onTitleGenerated?: (event: AgentEvent<TitleGeneratedEventData>) => void;
+  onTitleGenerated?: ((event: AgentEvent<TitleGeneratedEventData>) => void) | undefined;
   // Plan Mode execution handlers (deprecated - kept for backward compatibility)
-  onPlanExecutionStart?: (event: AgentEvent<PlanExecutionStartEvent>) => void;
-  onPlanExecutionComplete?: (event: AgentEvent<PlanExecutionCompleteEvent>) => void;
-  onReflectionComplete?: (event: AgentEvent<ReflectionCompleteEvent>) => void;
+  onPlanExecutionStart?: ((event: AgentEvent<PlanExecutionStartEvent>) => void) | undefined;
+  onPlanExecutionComplete?: ((event: AgentEvent<PlanExecutionCompleteEvent>) => void) | undefined;
+  onReflectionComplete?: ((event: AgentEvent<ReflectionCompleteEvent>) => void) | undefined;
   // Plan Mode change handler
-  onPlanModeChanged?: (event: AgentEvent) => void;
+  onPlanModeChanged?: ((event: AgentEvent) => void) | undefined;
   // Plan Mode HITL handlers (legacy, kept for backward compatibility)
-  onPlanSuggested?: (event: AgentEvent) => void;
-  onPlanExplorationStarted?: (event: AgentEvent) => void;
-  onPlanExplorationCompleted?: (event: AgentEvent) => void;
-  onPlanDraftCreated?: (event: AgentEvent) => void;
-  onPlanApproved?: (event: AgentEvent) => void;
-  onPlanRejected?: (event: AgentEvent) => void;
-  onPlanCancelled?: (event: AgentEvent) => void;
-  onWorkPlanCreated?: (event: AgentEvent) => void;
-  onWorkPlanStepStarted?: (event: AgentEvent) => void;
-  onWorkPlanStepCompleted?: (event: AgentEvent) => void;
-  onWorkPlanStepFailed?: (event: AgentEvent) => void;
-  onWorkPlanCompleted?: (event: AgentEvent) => void;
-  onWorkPlanFailed?: (event: AgentEvent) => void;
+  onPlanSuggested?: ((event: AgentEvent) => void) | undefined;
+  onPlanExplorationStarted?: ((event: AgentEvent) => void) | undefined;
+  onPlanExplorationCompleted?: ((event: AgentEvent) => void) | undefined;
+  onPlanDraftCreated?: ((event: AgentEvent) => void) | undefined;
+  onPlanApproved?: ((event: AgentEvent) => void) | undefined;
+  onPlanRejected?: ((event: AgentEvent) => void) | undefined;
+  onPlanCancelled?: ((event: AgentEvent) => void) | undefined;
+  onWorkPlanCreated?: ((event: AgentEvent) => void) | undefined;
+  onWorkPlanStepStarted?: ((event: AgentEvent) => void) | undefined;
+  onWorkPlanStepCompleted?: ((event: AgentEvent) => void) | undefined;
+  onWorkPlanStepFailed?: ((event: AgentEvent) => void) | undefined;
+  onWorkPlanCompleted?: ((event: AgentEvent) => void) | undefined;
+  onWorkPlanFailed?: ((event: AgentEvent) => void) | undefined;
   // Permission handlers
-  onPermissionAsked?: (event: AgentEvent<PermissionAskedEventData>) => void;
-  onPermissionReplied?: (event: AgentEvent<PermissionRepliedEventData>) => void;
+  onPermissionAsked?: ((event: AgentEvent<PermissionAskedEventData>) => void) | undefined;
+  onPermissionReplied?: ((event: AgentEvent<PermissionRepliedEventData>) => void) | undefined;
   // Cost tracking handlers
-  onCostUpdate?: (event: AgentEvent<CostUpdateEventData>) => void;
+  onCostUpdate?: ((event: AgentEvent<CostUpdateEventData>) => void) | undefined;
   // Sandbox handlers (unified WebSocket)
-  onSandboxCreated?: (event: AgentEvent<SandboxEventData>) => void;
-  onSandboxTerminated?: (event: AgentEvent<SandboxEventData>) => void;
-  onSandboxStatus?: (event: AgentEvent<SandboxEventData>) => void;
-  onDesktopStarted?: (event: AgentEvent<SandboxEventData>) => void;
-  onDesktopStopped?: (event: AgentEvent<SandboxEventData>) => void;
-  onTerminalStarted?: (event: AgentEvent<SandboxEventData>) => void;
-  onTerminalStopped?: (event: AgentEvent<SandboxEventData>) => void;
+  onSandboxCreated?: ((event: AgentEvent<SandboxEventData>) => void) | undefined;
+  onSandboxTerminated?: ((event: AgentEvent<SandboxEventData>) => void) | undefined;
+  onSandboxStatus?: ((event: AgentEvent<SandboxEventData>) => void) | undefined;
+  onDesktopStarted?: ((event: AgentEvent<SandboxEventData>) => void) | undefined;
+  onDesktopStopped?: ((event: AgentEvent<SandboxEventData>) => void) | undefined;
+  onTerminalStarted?: ((event: AgentEvent<SandboxEventData>) => void) | undefined;
+  onTerminalStopped?: ((event: AgentEvent<SandboxEventData>) => void) | undefined;
   // SubAgent handlers (L3 layer)
-  onSubAgentRouted?: (event: AgentEvent<SubAgentRoutedEventData>) => void;
-  onSubAgentStarted?: (event: AgentEvent<SubAgentStartedEventData>) => void;
-  onSubAgentCompleted?: (event: AgentEvent<SubAgentCompletedEventData>) => void;
-  onSubAgentFailed?: (event: AgentEvent<SubAgentFailedEventData>) => void;
-  onParallelStarted?: (event: AgentEvent<ParallelStartedEventData>) => void;
-  onParallelCompleted?: (event: AgentEvent<ParallelCompletedEventData>) => void;
-  onChainStarted?: (event: AgentEvent<ChainStartedEventData>) => void;
-  onChainStepStarted?: (event: AgentEvent<ChainStepStartedEventData>) => void;
-  onChainStepCompleted?: (event: AgentEvent<ChainStepCompletedEventData>) => void;
-  onChainCompleted?: (event: AgentEvent<ChainCompletedEventData>) => void;
-  onBackgroundLaunched?: (event: AgentEvent<BackgroundLaunchedEventData>) => void;
-  onExecutionPathDecided?: (event: AgentEvent<ExecutionPathDecidedEventData>) => void;
-  onSelectionTrace?: (event: AgentEvent<SelectionTraceEventData>) => void;
-  onPolicyFiltered?: (event: AgentEvent<PolicyFilteredEventData>) => void;
-  onToolsetChanged?: (event: AgentEvent<ToolsetChangedEventData>) => void;
+  onSubAgentRouted?: ((event: AgentEvent<SubAgentRoutedEventData>) => void) | undefined;
+  onSubAgentStarted?: ((event: AgentEvent<SubAgentStartedEventData>) => void) | undefined;
+  onSubAgentCompleted?: ((event: AgentEvent<SubAgentCompletedEventData>) => void) | undefined;
+  onSubAgentFailed?: ((event: AgentEvent<SubAgentFailedEventData>) => void) | undefined;
+  onParallelStarted?: ((event: AgentEvent<ParallelStartedEventData>) => void) | undefined;
+  onParallelCompleted?: ((event: AgentEvent<ParallelCompletedEventData>) => void) | undefined;
+  onChainStarted?: ((event: AgentEvent<ChainStartedEventData>) => void) | undefined;
+  onChainStepStarted?: ((event: AgentEvent<ChainStepStartedEventData>) => void) | undefined;
+  onChainStepCompleted?: ((event: AgentEvent<ChainStepCompletedEventData>) => void) | undefined;
+  onChainCompleted?: ((event: AgentEvent<ChainCompletedEventData>) => void) | undefined;
+  onBackgroundLaunched?: ((event: AgentEvent<BackgroundLaunchedEventData>) => void) | undefined;
+  onExecutionPathDecided?: ((event: AgentEvent<ExecutionPathDecidedEventData>) => void) | undefined;
+  onSelectionTrace?: ((event: AgentEvent<SelectionTraceEventData>) => void) | undefined;
+  onPolicyFiltered?: ((event: AgentEvent<PolicyFilteredEventData>) => void) | undefined;
+  onToolsetChanged?: ((event: AgentEvent<ToolsetChangedEventData>) => void) | undefined;
   // Task list handlers
-  onTaskListUpdated?: (event: AgentEvent<TaskListUpdatedEventData>) => void;
-  onTaskUpdated?: (event: AgentEvent<TaskUpdatedEventData>) => void;
+  onTaskListUpdated?: ((event: AgentEvent<TaskListUpdatedEventData>) => void) | undefined;
+  onTaskUpdated?: ((event: AgentEvent<TaskUpdatedEventData>) => void) | undefined;
   // Task timeline handlers
-  onTaskStart?: (event: AgentEvent<TaskStartEventData>) => void;
-  onTaskComplete?: (event: AgentEvent<TaskCompleteEventData>) => void;
+  onTaskStart?: ((event: AgentEvent<TaskStartEventData>) => void) | undefined;
+  onTaskComplete?: ((event: AgentEvent<TaskCompleteEventData>) => void) | undefined;
   // MCP App handlers
-  onMCPAppResult?: (event: AgentEvent) => void;
-  onMCPAppRegistered?: (event: AgentEvent) => void;
+  onMCPAppResult?: ((event: AgentEvent) => void) | undefined;
+  onMCPAppRegistered?: ((event: AgentEvent) => void) | undefined;
   // Memory handlers (auto-recall / auto-capture)
-  onMemoryRecalled?: (event: AgentEvent<MemoryRecalledEventData>) => void;
-  onMemoryCaptured?: (event: AgentEvent<MemoryCapturedEventData>) => void;
+  onMemoryRecalled?: ((event: AgentEvent<MemoryRecalledEventData>) => void) | undefined;
+  onMemoryCaptured?: ((event: AgentEvent<MemoryCapturedEventData>) => void) | undefined;
   // Terminal handlers
-  onComplete?: (event: AgentEvent<CompleteEventData>) => void;
-  onError?: (event: AgentEvent<ErrorEventData>) => void;
+  onComplete?: ((event: AgentEvent<CompleteEventData>) => void) | undefined;
+  onError?: ((event: AgentEvent<ErrorEventData>) => void) | undefined;
   /** Called when LLM is retrying after a transient error (e.g., rate limit) */
-  onRetry?: (event: AgentEvent<RetryEventData>) => void;
-  onClose?: () => void;
+  onRetry?: ((event: AgentEvent<RetryEventData>) => void) | undefined;
+  onClose?: (() => void) | undefined;
 }
 
 /**
@@ -1206,7 +1206,7 @@ export interface PatternStep {
   tool_name: string;
   expected_output_format: string;
   similarity_threshold: number;
-  tool_parameters?: Record<string, unknown>;
+  tool_parameters?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -1225,7 +1225,7 @@ export interface WorkflowPattern {
   usage_count: number;
   created_at: string;
   updated_at: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -1297,14 +1297,14 @@ export interface TenantAgentConfig {
  * Validation occurs on the backend.
  */
 export interface UpdateTenantAgentConfigRequest {
-  llm_model?: string;
-  llm_temperature?: number;
-  pattern_learning_enabled?: boolean;
-  multi_level_thinking_enabled?: boolean;
-  max_work_plan_steps?: number;
-  tool_timeout_seconds?: number;
-  enabled_tools?: string[];
-  disabled_tools?: string[];
+  llm_model?: string | undefined;
+  llm_temperature?: number | undefined;
+  pattern_learning_enabled?: boolean | undefined;
+  multi_level_thinking_enabled?: boolean | undefined;
+  max_work_plan_steps?: number | undefined;
+  tool_timeout_seconds?: number | undefined;
+  enabled_tools?: string[] | undefined;
+  disabled_tools?: string[] | undefined;
 }
 
 /**
@@ -1344,8 +1344,8 @@ export interface TenantAgentConfigService {
  */
 export interface ToolCompositionTemplate {
   type: 'sequential' | 'parallel' | 'conditional';
-  aggregation?: 'merge' | 'concatenate' | 'prioritize'; // For parallel compositions
-  condition?: string; // For conditional compositions
+  aggregation?: 'merge' | 'concatenate' | 'prioritize' | undefined; // For parallel compositions
+  condition?: string | undefined; // For conditional compositions
   fallback_alternatives: string[];
 }
 
@@ -1415,9 +1415,9 @@ export interface SubAgentResponse {
   success_rate: number;
   created_at: string;
   updated_at: string;
-  metadata?: Record<string, unknown>;
-  source?: 'filesystem' | 'database';
-  file_path?: string | null;
+  metadata?: Record<string, unknown> | undefined;
+  source?: 'filesystem' | 'database' | undefined;
+  file_path?: string | null | undefined;
 }
 
 /**
@@ -1428,39 +1428,39 @@ export interface SubAgentCreate {
   display_name: string;
   system_prompt: string;
   trigger_description: string;
-  trigger_examples?: string[];
-  trigger_keywords?: string[];
-  model?: string;
-  color?: string;
-  allowed_tools?: string[];
-  allowed_skills?: string[];
-  allowed_mcp_servers?: string[];
-  max_tokens?: number;
-  temperature?: number;
-  max_iterations?: number;
-  project_id?: string;
-  metadata?: Record<string, unknown>;
+  trigger_examples?: string[] | undefined;
+  trigger_keywords?: string[] | undefined;
+  model?: string | undefined;
+  color?: string | undefined;
+  allowed_tools?: string[] | undefined;
+  allowed_skills?: string[] | undefined;
+  allowed_mcp_servers?: string[] | undefined;
+  max_tokens?: number | undefined;
+  temperature?: number | undefined;
+  max_iterations?: number | undefined;
+  project_id?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
  * SubAgent update request
  */
 export interface SubAgentUpdate {
-  name?: string;
-  display_name?: string;
-  system_prompt?: string;
-  trigger_description?: string;
-  trigger_examples?: string[];
-  trigger_keywords?: string[];
-  model?: string;
-  color?: string;
-  allowed_tools?: string[];
-  allowed_skills?: string[];
-  allowed_mcp_servers?: string[];
-  max_tokens?: number;
-  temperature?: number;
-  max_iterations?: number;
-  metadata?: Record<string, unknown>;
+  name?: string | undefined;
+  display_name?: string | undefined;
+  system_prompt?: string | undefined;
+  trigger_description?: string | undefined;
+  trigger_examples?: string[] | undefined;
+  trigger_keywords?: string[] | undefined;
+  model?: string | undefined;
+  color?: string | undefined;
+  allowed_tools?: string[] | undefined;
+  allowed_skills?: string[] | undefined;
+  allowed_mcp_servers?: string[] | undefined;
+  max_tokens?: number | undefined;
+  temperature?: number | undefined;
+  max_iterations?: number | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -1470,7 +1470,7 @@ export interface SubAgentTemplate {
   name: string;
   display_name: string;
   description: string;
-  category?: string;
+  category?: string | undefined;
 }
 
 /**
@@ -1517,7 +1517,7 @@ export interface SubAgentMatchResponse {
 export interface TriggerPattern {
   pattern: string;
   weight: number;
-  examples?: string[];
+  examples?: string[] | undefined;
 }
 
 /**
@@ -1543,7 +1543,7 @@ export interface SkillResponse {
   usage_count: number;
   created_at: string;
   updated_at: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | undefined;
   current_version: number;
   version_label: string | null;
 }
@@ -1557,26 +1557,26 @@ export interface SkillCreate {
   trigger_type: 'keyword' | 'semantic' | 'hybrid';
   trigger_patterns: TriggerPattern[];
   tools: string[];
-  prompt_template?: string;
-  full_content?: string;
-  project_id?: string;
-  scope?: 'tenant' | 'project';
-  metadata?: Record<string, unknown>;
+  prompt_template?: string | undefined;
+  full_content?: string | undefined;
+  project_id?: string | undefined;
+  scope?: 'tenant' | 'project' | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
  * Skill update request
  */
 export interface SkillUpdate {
-  name?: string;
-  description?: string;
-  trigger_type?: 'keyword' | 'semantic' | 'hybrid';
-  trigger_patterns?: TriggerPattern[];
-  tools?: string[];
-  prompt_template?: string;
-  full_content?: string;
-  status?: 'active' | 'disabled' | 'deprecated';
-  metadata?: Record<string, unknown>;
+  name?: string | undefined;
+  description?: string | undefined;
+  trigger_type?: 'keyword' | 'semantic' | 'hybrid' | undefined;
+  trigger_patterns?: TriggerPattern[] | undefined;
+  tools?: string[] | undefined;
+  prompt_template?: string | undefined;
+  full_content?: string | undefined;
+  status?: 'active' | 'disabled' | 'deprecated' | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -1686,8 +1686,8 @@ export interface SkillToolResultEventData {
   skill_id: string;
   skill_name: string;
   tool_name: string;
-  result?: unknown;
-  error?: string;
+  result?: unknown | undefined;
+  error?: string | undefined;
   duration_ms: number;
   step_index: number;
   total_steps: number;
@@ -1700,10 +1700,10 @@ export interface SkillToolResultEventData {
 export interface SkillToolExecution {
   tool_name: string;
   tool_input: Record<string, unknown>;
-  result?: unknown;
-  error?: string;
+  result?: unknown | undefined;
+  error?: string | undefined;
   status: 'running' | 'completed' | 'error';
-  duration_ms?: number;
+  duration_ms?: number | undefined;
   step_index: number;
 }
 
@@ -1717,7 +1717,7 @@ export interface SkillExecutionCompleteEventData {
   summary: string;
   tool_results: SkillToolExecution[];
   execution_time_ms: number;
-  error?: string;
+  error?: string | undefined;
 }
 
 /**
@@ -1726,7 +1726,7 @@ export interface SkillExecutionCompleteEventData {
 export interface SkillFallbackEventData {
   skill_name: string;
   reason: 'execution_failed' | 'execution_error';
-  error?: string;
+  error?: string | undefined;
 }
 
 /**
@@ -1777,11 +1777,11 @@ export interface SkillExecutionState {
   tool_executions: SkillToolExecution[];
   current_step: number;
   total_steps: number;
-  summary?: string;
-  error?: string;
-  execution_time_ms?: number;
-  started_at?: string;
-  completed_at?: string;
+  summary?: string | undefined;
+  error?: string | undefined;
+  execution_time_ms?: number | undefined;
+  started_at?: string | undefined;
+  completed_at?: string | undefined;
 }
 
 // ============================================
@@ -1806,12 +1806,12 @@ export interface ToolExecution {
   toolName: string;
   input: Record<string, unknown>;
   status: ToolExecutionStatus;
-  result?: string;
-  error?: string;
+  result?: string | undefined;
+  error?: string | undefined;
   startTime: string;
-  endTime?: string;
-  duration?: number;
-  stepNumber?: number;
+  endTime?: string | undefined;
+  duration?: number | undefined;
+  stepNumber?: number | undefined;
 }
 
 /**
@@ -1821,9 +1821,9 @@ export interface TimelineStep {
   stepNumber: number;
   description: string;
   status: TimelineStepStatus;
-  startTime?: string;
-  endTime?: string;
-  duration?: number;
+  startTime?: string | undefined;
+  endTime?: string | undefined;
+  duration?: number | undefined;
   thoughts: string[];
   toolExecutions: ToolExecution[];
 }
@@ -1847,9 +1847,9 @@ export type MCPServerType = 'stdio' | 'sse' | 'http' | 'websocket';
  */
 export interface MCPToolInfo {
   name: string;
-  description?: string;
-  input_schema?: Record<string, unknown>;
-  is_error?: boolean;
+  description?: string | undefined;
+  input_schema?: Record<string, unknown> | undefined;
+  is_error?: boolean | undefined;
 }
 
 /**
@@ -1858,17 +1858,17 @@ export interface MCPToolInfo {
 export interface MCPServerResponse {
   id: string;
   tenant_id: string;
-  project_id?: string;
+  project_id?: string | undefined;
   name: string;
-  description?: string;
+  description?: string | undefined;
   server_type: MCPServerType;
   transport_config: Record<string, unknown>;
   enabled: boolean;
-  runtime_status?: string;
-  runtime_metadata?: Record<string, unknown>;
+  runtime_status?: string | undefined;
+  runtime_metadata?: Record<string, unknown> | undefined;
   discovered_tools: MCPToolInfo[];
-  last_sync_at?: string;
-  sync_error?: string;
+  last_sync_at?: string | undefined;
+  sync_error?: string | undefined;
   created_at: string;
   updated_at: string;
 }
@@ -1878,10 +1878,10 @@ export interface MCPServerResponse {
  */
 export interface MCPServerCreate {
   name: string;
-  description?: string;
+  description?: string | undefined;
   server_type: MCPServerType;
   transport_config: Record<string, unknown>;
-  enabled?: boolean;
+  enabled?: boolean | undefined;
   project_id: string;
 }
 
@@ -1889,11 +1889,11 @@ export interface MCPServerCreate {
  * MCP server update request
  */
 export interface MCPServerUpdate {
-  name?: string;
-  description?: string;
-  server_type?: MCPServerType;
-  transport_config?: Record<string, unknown>;
-  enabled?: boolean;
+  name?: string | undefined;
+  description?: string | undefined;
+  server_type?: MCPServerType | undefined;
+  transport_config?: Record<string, unknown> | undefined;
+  enabled?: boolean | undefined;
 }
 
 /**
@@ -1919,10 +1919,10 @@ export interface MCPServerSyncResponse {
 export interface MCPServerTestResponse {
   success: boolean;
   message: string;
-  tools_discovered?: number;
-  connection_time_ms?: number;
-  latency_ms?: number; // Backward compatibility
-  errors?: string[];
+  tools_discovered?: number | undefined;
+  connection_time_ms?: number | undefined;
+  latency_ms?: number | undefined; // Backward compatibility
+  errors?: string[] | undefined;
 }
 
 /**
@@ -1939,8 +1939,8 @@ export interface MCPToolCallRequest {
  */
 export interface MCPToolCallResponse {
   success: boolean;
-  result?: unknown;
-  error?: string;
+  result?: unknown | undefined;
+  error?: string | undefined;
   execution_time_ms: number;
 }
 
@@ -1949,8 +1949,8 @@ export interface MCPToolCallResponse {
  */
 export interface StdioTransportConfig {
   command: string;
-  args?: string[];
-  env?: Record<string, string>;
+  args?: string[] | undefined;
+  env?: Record<string, string> | undefined;
 }
 
 /**
@@ -1958,7 +1958,7 @@ export interface StdioTransportConfig {
  */
 export interface HttpTransportConfig {
   url: string;
-  headers?: Record<string, string>;
+  headers?: Record<string, string> | undefined;
 }
 
 /**
@@ -2013,7 +2013,7 @@ export interface PlanModeStatus {
 export interface EnterPlanModeRequest {
   conversation_id: string;
   title: string;
-  description?: string;
+  description?: string | undefined;
 }
 
 /**
@@ -2022,22 +2022,22 @@ export interface EnterPlanModeRequest {
 export interface ExitPlanModeRequest {
   conversation_id: string;
   plan_id: string;
-  approve?: boolean;
-  summary?: string;
+  approve?: boolean | undefined;
+  summary?: string | undefined;
 }
 
 /**
  * Update plan request
  */
 export interface UpdatePlanRequest {
-  content?: string;
-  title?: string;
-  explored_files?: string[];
+  content?: string | undefined;
+  title?: string | undefined;
+  explored_files?: string[] | undefined;
   critical_files?: Array<{
     path: string;
     type: 'create' | 'modify' | 'delete';
-  }>;
-  metadata?: Record<string, unknown>;
+  }> | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -2149,7 +2149,7 @@ export interface BaseTimelineEvent {
   eventTimeUs: number;
   eventCounter: number;
   timestamp: number; // Unix timestamp in milliseconds (derived from eventTimeUs / 1000)
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -2168,7 +2168,7 @@ export interface AssistantMessageEvent extends BaseTimelineEvent {
   type: 'assistant_message';
   content: string;
   role: 'assistant';
-  artifacts?: ArtifactReference[];
+  artifacts?: ArtifactReference[] | undefined;
 }
 
 /**
@@ -2186,12 +2186,12 @@ export interface ActEvent extends BaseTimelineEvent {
   type: 'act';
   toolName: string;
   toolInput: Record<string, unknown>;
-  execution_id?: string; // New: unique ID for act/observe matching
+  execution_id?: string | undefined; // New: unique ID for act/observe matching
   execution?: {
     startTime: number;
     endTime: number;
     duration: number;
-  };
+  } | undefined;
 }
 
 /**
@@ -2200,15 +2200,15 @@ export interface ActEvent extends BaseTimelineEvent {
 export interface ObserveEvent extends BaseTimelineEvent {
   type: 'observe';
   toolName: string;
-  toolOutput?: string; // May be undefined if result is not a string or empty
+  toolOutput?: string | undefined; // May be undefined if result is not a string or empty
   isError: boolean;
-  execution_id?: string; // New: matches act event's execution_id
+  execution_id?: string | undefined; // New: matches act event's execution_id
   mcpUiMetadata?: {
-    resource_uri?: string;
-    server_name?: string;
-    app_id?: string;
-    title?: string;
-  };
+    resource_uri?: string | undefined;
+    server_name?: string | undefined;
+    app_id?: string | undefined;
+    title?: string | undefined;
+  } | undefined;
 }
 
 /**
@@ -2283,7 +2283,7 @@ export interface TextStartEvent extends BaseTimelineEvent {
  */
 export interface TextEndEvent extends BaseTimelineEvent {
   type: 'text_end';
-  fullText?: string;
+  fullText?: string | undefined;
 }
 
 // ============================================
@@ -2300,9 +2300,9 @@ export interface ClarificationAskedTimelineEvent extends BaseTimelineEvent {
   clarificationType: ClarificationType;
   options: ClarificationOption[];
   allowCustom: boolean;
-  context?: Record<string, unknown>;
-  answered?: boolean;
-  answer?: string;
+  context?: Record<string, unknown> | undefined;
+  answered?: boolean | undefined;
+  answer?: string | undefined;
 }
 
 /**
@@ -2324,10 +2324,10 @@ export interface DecisionAskedTimelineEvent extends BaseTimelineEvent {
   decisionType: DecisionType;
   options: DecisionOption[];
   allowCustom: boolean;
-  context?: Record<string, unknown>;
-  defaultOption?: string;
-  answered?: boolean;
-  decision?: string;
+  context?: Record<string, unknown> | undefined;
+  defaultOption?: string | undefined;
+  answered?: boolean | undefined;
+  decision?: string | undefined;
 }
 
 /**
@@ -2347,10 +2347,10 @@ export interface EnvVarRequestedTimelineEvent extends BaseTimelineEvent {
   requestId: string;
   toolName: string;
   fields: EnvVarField[];
-  message?: string;
-  context?: Record<string, unknown>;
-  answered?: boolean;
-  providedVariables?: string[];
+  message?: string | undefined;
+  context?: Record<string, unknown> | undefined;
+  answered?: boolean | undefined;
+  providedVariables?: string[] | undefined;
 }
 
 /**
@@ -2371,11 +2371,11 @@ export interface PermissionAskedTimelineEvent extends BaseTimelineEvent {
   requestId: string;
   toolName: string;
   description: string;
-  riskLevel?: 'low' | 'medium' | 'high';
-  parameters?: Record<string, unknown>;
-  context?: Record<string, unknown>;
-  answered?: boolean;
-  granted?: boolean;
+  riskLevel?: 'low' | 'medium' | 'high' | undefined;
+  parameters?: Record<string, unknown> | undefined;
+  context?: Record<string, unknown> | undefined;
+  answered?: boolean | undefined;
+  granted?: boolean | undefined;
 }
 
 /**
@@ -2384,13 +2384,13 @@ export interface PermissionAskedTimelineEvent extends BaseTimelineEvent {
 export interface PermissionRequestedTimelineEvent extends BaseTimelineEvent {
   type: 'permission_requested';
   requestId: string;
-  action?: string;
-  resource?: string;
-  reason?: string;
-  riskLevel?: 'low' | 'medium' | 'high';
-  context?: Record<string, unknown>;
-  answered?: boolean;
-  granted?: boolean;
+  action?: string | undefined;
+  resource?: string | undefined;
+  reason?: string | undefined;
+  riskLevel?: 'low' | 'medium' | 'high' | undefined;
+  context?: Record<string, unknown> | undefined;
+  answered?: boolean | undefined;
+  granted?: boolean | undefined;
 }
 
 /**
@@ -2492,17 +2492,17 @@ export interface SubAgentStartedTimelineEvent extends BaseTimelineEvent {
 export interface SubAgentCompletedTimelineEvent extends BaseTimelineEvent {
   type: 'subagent_completed';
   subagentId: string;
-  subagentName?: string;
+  subagentName?: string | undefined;
   summary: string;
   tokensUsed: number;
   executionTimeMs: number;
-  success?: boolean;
+  success?: boolean | undefined;
 }
 
 export interface SubAgentFailedTimelineEvent extends BaseTimelineEvent {
   type: 'subagent_failed';
   subagentId: string;
-  subagentName?: string;
+  subagentName?: string | undefined;
   error: string;
 }
 
@@ -2535,14 +2535,14 @@ export interface ChainStepCompletedTimelineEvent extends BaseTimelineEvent {
   type: 'chain_step_completed';
   stepIndex: number;
   summary: string;
-  success?: boolean;
+  success?: boolean | undefined;
 }
 
 export interface ChainCompletedTimelineEvent extends BaseTimelineEvent {
   type: 'chain_completed';
   totalSteps: number;
   totalTimeMs: number;
-  success?: boolean;
+  success?: boolean | undefined;
 }
 
 export interface BackgroundLaunchedTimelineEvent extends BaseTimelineEvent {
@@ -2572,18 +2572,18 @@ export interface DesktopStatus {
   running: boolean;
   url: string | null;
   /** WebSocket URL for KasmVNC connection */
-  wsUrl?: string | null;
+  wsUrl?: string | null | undefined;
   display: string;
   resolution: string;
   port: number;
   /** KasmVNC process ID */
-  kasmvncPid?: number | null;
+  kasmvncPid?: number | null | undefined;
   /** Whether audio streaming is enabled */
-  audioEnabled?: boolean;
+  audioEnabled?: boolean | undefined;
   /** Whether dynamic resize is supported */
-  dynamicResize?: boolean;
+  dynamicResize?: boolean | undefined;
   /** Image encoding format (webp/jpeg/qoi) */
-  encoding?: string;
+  encoding?: string | undefined;
 }
 
 /**
@@ -2593,8 +2593,8 @@ export interface TerminalStatus {
   running: boolean;
   url: string | null;
   port: number;
-  pid?: number | null;
-  sessionId?: string | null;
+  pid?: number | null | undefined;
+  sessionId?: string | null | undefined;
 }
 
 /**
@@ -2637,7 +2637,7 @@ export interface TerminalStartedEventData {
  */
 export interface TerminalStoppedEventData {
   sandbox_id: string;
-  sessionId?: string;
+  sessionId?: string | undefined;
 }
 
 /**
@@ -2663,8 +2663,8 @@ export interface SandboxCreatedEventData {
   sandbox_id: string;
   project_id: string;
   status: string;
-  endpoint?: string;
-  websocket_url?: string;
+  endpoint?: string | undefined;
+  websocket_url?: string | undefined;
 }
 
 /**
@@ -2732,7 +2732,7 @@ export interface TerminalStartedEvent extends BaseTimelineEvent {
 export interface TerminalStoppedEvent extends BaseTimelineEvent {
   type: 'terminal_stopped';
   sandboxId: string;
-  sessionId?: string;
+  sessionId?: string | undefined;
 }
 
 /**
@@ -2744,7 +2744,7 @@ export interface TerminalStatusEvent extends BaseTimelineEvent {
   running: boolean;
   url: string | null;
   port: number;
-  sessionId?: string;
+  sessionId?: string | undefined;
 }
 
 /**
@@ -2764,8 +2764,8 @@ export interface SandboxCreatedEvent extends BaseTimelineEvent {
   sandboxId: string;
   projectId: string;
   status: string;
-  endpoint?: string;
-  websocketUrl?: string;
+  endpoint?: string | undefined;
+  websocketUrl?: string | undefined;
 }
 
 /**
@@ -2814,25 +2814,25 @@ export interface Artifact {
   id: string;
   projectId: string;
   tenantId: string;
-  sandboxId?: string;
-  toolExecutionId?: string;
-  conversationId?: string;
+  sandboxId?: string | undefined;
+  toolExecutionId?: string | undefined;
+  conversationId?: string | undefined;
 
   filename: string;
   mimeType: string;
   category: ArtifactCategory;
   sizeBytes: number;
 
-  url?: string;
-  previewUrl?: string;
+  url?: string | undefined;
+  previewUrl?: string | undefined;
 
   status: ArtifactStatus;
-  errorMessage?: string;
+  errorMessage?: string | undefined;
 
-  sourceTool?: string;
-  sourcePath?: string;
+  sourceTool?: string | undefined;
+  sourcePath?: string | undefined;
 
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> | undefined;
   createdAt: string;
 }
 
@@ -2841,16 +2841,16 @@ export interface Artifact {
  */
 export interface ArtifactCreatedEventData {
   artifact_id: string;
-  sandbox_id?: string;
-  tool_execution_id?: string;
+  sandbox_id?: string | undefined;
+  tool_execution_id?: string | undefined;
   filename: string;
   mime_type: string;
   category: string;
   size_bytes: number;
-  url?: string;
-  preview_url?: string;
-  source_tool?: string;
-  source_path?: string;
+  url?: string | undefined;
+  preview_url?: string | undefined;
+  source_tool?: string | undefined;
+  source_path?: string | undefined;
 }
 
 /**
@@ -2859,15 +2859,15 @@ export interface ArtifactCreatedEventData {
 export interface ArtifactReadyEventData {
   artifact_id: string;
   sandbox_id: string;
-  tool_execution_id?: string;
+  tool_execution_id?: string | undefined;
   filename: string;
   mime_type: string;
   category: string;
   size_bytes: number;
   url: string;
-  preview_url?: string;
-  source_tool?: string;
-  metadata?: Record<string, unknown>;
+  preview_url?: string | undefined;
+  source_tool?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -2876,7 +2876,7 @@ export interface ArtifactReadyEventData {
 export interface ArtifactErrorEventData {
   artifact_id: string;
   sandbox_id: string;
-  tool_execution_id?: string;
+  tool_execution_id?: string | undefined;
   filename: string;
   error: string;
 }
@@ -2890,10 +2890,10 @@ export interface ArtifactInfo {
   mimeType: string;
   category: string;
   sizeBytes: number;
-  url?: string;
-  previewUrl?: string;
-  sourceTool?: string;
-  metadata?: Record<string, unknown>;
+  url?: string | undefined;
+  previewUrl?: string | undefined;
+  sourceTool?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -2901,9 +2901,9 @@ export interface ArtifactInfo {
  */
 export interface ArtifactsBatchEventData {
   sandbox_id: string;
-  tool_execution_id?: string;
+  tool_execution_id?: string | undefined;
   artifacts: ArtifactInfo[];
-  source_tool?: string;
+  source_tool?: string | undefined;
 }
 
 /**
@@ -2921,7 +2921,7 @@ export interface ArtifactOpenEventData {
   title: string;
   content: string;
   content_type: 'code' | 'markdown' | 'preview' | 'data';
-  language?: string;
+  language?: string | undefined;
 }
 
 /**
@@ -2946,16 +2946,16 @@ export interface ArtifactCloseEventData {
 export interface ArtifactCreatedEvent extends BaseTimelineEvent {
   type: 'artifact_created';
   artifactId: string;
-  sandboxId?: string;
-  toolExecutionId?: string;
+  sandboxId?: string | undefined;
+  toolExecutionId?: string | undefined;
   filename: string;
   mimeType: string;
   category: ArtifactCategory;
   sizeBytes: number;
-  url?: string;
-  previewUrl?: string;
-  sourceTool?: string;
-  sourcePath?: string;
+  url?: string | undefined;
+  previewUrl?: string | undefined;
+  sourceTool?: string | undefined;
+  sourcePath?: string | undefined;
 }
 
 /**
@@ -2965,15 +2965,15 @@ export interface ArtifactReadyEvent extends BaseTimelineEvent {
   type: 'artifact_ready';
   artifactId: string;
   sandboxId: string;
-  toolExecutionId?: string;
+  toolExecutionId?: string | undefined;
   filename: string;
   mimeType: string;
   category: ArtifactCategory;
   sizeBytes: number;
   url: string;
-  previewUrl?: string;
-  sourceTool?: string;
-  metadata?: Record<string, unknown>;
+  previewUrl?: string | undefined;
+  sourceTool?: string | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 /**
@@ -2983,7 +2983,7 @@ export interface ArtifactErrorEvent extends BaseTimelineEvent {
   type: 'artifact_error';
   artifactId: string;
   sandboxId: string;
-  toolExecutionId?: string;
+  toolExecutionId?: string | undefined;
   filename: string;
   error: string;
 }
@@ -2994,9 +2994,9 @@ export interface ArtifactErrorEvent extends BaseTimelineEvent {
 export interface ArtifactsBatchEvent extends BaseTimelineEvent {
   type: 'artifacts_batch';
   sandboxId: string;
-  toolExecutionId?: string;
+  toolExecutionId?: string | undefined;
   artifacts: ArtifactInfo[];
-  sourceTool?: string;
+  sourceTool?: string | undefined;
 }
 
 // ===========================================================================
@@ -3051,10 +3051,10 @@ export interface ExecutionStep {
   tool_input: Record<string, unknown>;
   dependencies: string[];
   status: ExecutionStepStatus;
-  result?: string;
-  error?: string;
-  started_at?: string;
-  completed_at?: string;
+  result?: string | undefined;
+  error?: string | undefined;
+  started_at?: string | undefined;
+  completed_at?: string | undefined;
 }
 
 /**
@@ -3064,9 +3064,9 @@ export interface StepAdjustment {
   step_id: string;
   adjustment_type: AdjustmentType;
   reason: string;
-  new_tool_input?: Record<string, unknown>;
-  new_tool_name?: string;
-  new_step?: ExecutionStep;
+  new_tool_input?: Record<string, unknown> | undefined;
+  new_tool_name?: string | undefined;
+  new_step?: ExecutionStep | undefined;
 }
 
 /**
@@ -3076,10 +3076,10 @@ export interface ReflectionResult {
   assessment: ReflectionAssessment;
   reasoning: string;
   adjustments: StepAdjustment[];
-  suggested_next_steps?: string[];
-  confidence?: number;
-  final_summary?: string;
-  error_type?: string;
+  suggested_next_steps?: string[] | undefined;
+  confidence?: number | undefined;
+  final_summary?: string | undefined;
+  error_type?: string | undefined;
   reflection_metadata: Record<string, unknown>;
   is_terminal: boolean;
 }
@@ -3090,10 +3090,10 @@ export interface ReflectionResult {
 export interface StepState {
   step_id: string;
   status: string;
-  result?: string;
-  error?: string;
-  started_at?: string;
-  completed_at?: string;
+  result?: string | undefined;
+  error?: string | undefined;
+  started_at?: string | undefined;
+  completed_at?: string | undefined;
   tool_input: Record<string, unknown>;
 }
 
@@ -3104,7 +3104,7 @@ export interface PlanSnapshot {
   id: string;
   plan_id: string;
   name: string;
-  description?: string;
+  description?: string | undefined;
   step_states: Record<string, StepState>;
   auto_created: boolean;
   snapshot_type: string;
@@ -3124,10 +3124,10 @@ export interface ExecutionPlan {
   max_reflection_cycles: number;
   completed_steps: string[];
   failed_steps: string[];
-  snapshot?: PlanSnapshot;
-  started_at?: string;
-  completed_at?: string;
-  error?: string;
+  snapshot?: PlanSnapshot | undefined;
+  started_at?: string | undefined;
+  completed_at?: string | undefined;
+  error?: string | undefined;
   progress_percentage: number;
   is_complete: boolean;
 }
@@ -3187,7 +3187,7 @@ export interface PlanStepCompleteEvent {
     plan_id: string;
     step_id: string;
     status: ExecutionStepStatus;
-    result?: string;
+    result?: string | undefined;
   };
   timestamp: string;
 }
@@ -3297,20 +3297,20 @@ export interface LifecycleStateData {
   isInitialized: boolean;
   isActive: boolean;
   /** Total tool count (builtin + mcp) */
-  toolCount?: number;
+  toolCount?: number | undefined;
   /** Number of built-in tools */
-  builtinToolCount?: number;
+  builtinToolCount?: number | undefined;
   /** Number of MCP tools */
-  mcpToolCount?: number;
+  mcpToolCount?: number | undefined;
   /** Deprecated, use loadedSkillCount */
-  skillCount?: number;
+  skillCount?: number | undefined;
   /** Total number of skills available in registry */
-  totalSkillCount?: number;
+  totalSkillCount?: number | undefined;
   /** Number of skills loaded into current context */
-  loadedSkillCount?: number;
-  subagentCount?: number;
-  conversationId?: string;
-  errorMessage?: string;
+  loadedSkillCount?: number | undefined;
+  subagentCount?: number | undefined;
+  conversationId?: string | undefined;
+  errorMessage?: string | undefined;
 }
 
 /**
@@ -3338,23 +3338,23 @@ export interface SandboxStateData {
   /** Current sandbox status */
   status: SandboxStatus | null;
   /** MCP WebSocket endpoint URL */
-  endpoint?: string;
+  endpoint?: string | undefined;
   /** WebSocket URL for MCP connection */
-  websocketUrl?: string;
+  websocketUrl?: string | undefined;
   /** MCP server port */
-  mcpPort?: number;
+  mcpPort?: number | undefined;
   /** Desktop (noVNC) port */
-  desktopPort?: number;
+  desktopPort?: number | undefined;
   /** Terminal (ttyd) port */
-  terminalPort?: number;
+  terminalPort?: number | undefined;
   /** Desktop access URL */
-  desktopUrl?: string;
+  desktopUrl?: string | undefined;
   /** Terminal access URL */
-  terminalUrl?: string;
+  terminalUrl?: string | undefined;
   /** Whether sandbox is healthy */
   isHealthy: boolean;
   /** Error message if in error state */
-  errorMessage?: string;
+  errorMessage?: string | undefined;
 }
 
 /**
@@ -3372,13 +3372,13 @@ export interface LifecycleStatus {
 // ============================================
 
 export interface SubAgentRoutedEventData {
-  route_id?: string;
-  trace_id?: string;
-  session_id?: string;
+  route_id?: string | undefined;
+  trace_id?: string | undefined;
+  session_id?: string | undefined;
   subagent_id: string;
   subagent_name: string;
   confidence: number;
-  reason?: string;
+  reason?: string | undefined;
 }
 
 export interface SubAgentStartedEventData {
@@ -3391,8 +3391,8 @@ export interface SubAgentCompletedEventData {
   subagent_id: string;
   subagent_name: string;
   summary: string;
-  tokens_used?: number;
-  execution_time_ms?: number;
+  tokens_used?: number | undefined;
+  execution_time_ms?: number | undefined;
   success: boolean;
 }
 
@@ -3408,11 +3408,11 @@ export interface SubAgentRunEventData {
   subagent_name: string;
   task: string;
   status: string;
-  summary?: string | null;
-  error?: string | null;
-  execution_time_ms?: number | null;
-  tokens_used?: number | null;
-  metadata?: Record<string, unknown>;
+  summary?: string | null | undefined;
+  error?: string | null | undefined;
+  execution_time_ms?: number | null | undefined;
+  tokens_used?: number | null | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 export interface SubAgentSessionSpawnedEventData {
@@ -3446,53 +3446,53 @@ export interface SubAgentAnnounceGiveupEventData {
 }
 
 export interface ParallelStartedEventData {
-  route_id?: string;
-  trace_id?: string;
-  session_id?: string;
+  route_id?: string | undefined;
+  trace_id?: string | undefined;
+  session_id?: string | undefined;
   task_count: number;
   subtasks: Array<{ subagent_name: string; task: string }>;
 }
 
 export interface ParallelCompletedEventData {
-  route_id?: string;
-  trace_id?: string;
-  session_id?: string;
+  route_id?: string | undefined;
+  trace_id?: string | undefined;
+  session_id?: string | undefined;
   results: Array<{ subagent_name: string; summary: string; success: boolean }>;
-  total_time_ms?: number;
+  total_time_ms?: number | undefined;
 }
 
 export interface ChainStartedEventData {
-  route_id?: string;
-  trace_id?: string;
-  session_id?: string;
+  route_id?: string | undefined;
+  trace_id?: string | undefined;
+  session_id?: string | undefined;
   step_count: number;
-  chain_name?: string;
+  chain_name?: string | undefined;
 }
 
 export interface ChainStepStartedEventData {
-  route_id?: string;
-  trace_id?: string;
-  session_id?: string;
+  route_id?: string | undefined;
+  trace_id?: string | undefined;
+  session_id?: string | undefined;
   step_index: number;
-  step_name?: string;
+  step_name?: string | undefined;
   subagent_name: string;
 }
 
 export interface ChainStepCompletedEventData {
-  route_id?: string;
-  trace_id?: string;
-  session_id?: string;
+  route_id?: string | undefined;
+  trace_id?: string | undefined;
+  session_id?: string | undefined;
   step_index: number;
   summary: string;
   success: boolean;
 }
 
 export interface ChainCompletedEventData {
-  route_id?: string;
-  trace_id?: string;
-  session_id?: string;
+  route_id?: string | undefined;
+  trace_id?: string | undefined;
+  session_id?: string | undefined;
   total_steps: number;
-  total_time_ms?: number;
+  total_time_ms?: number | undefined;
   success: boolean;
 }
 

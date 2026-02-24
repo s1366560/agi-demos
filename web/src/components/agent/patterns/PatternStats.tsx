@@ -8,19 +8,19 @@ import { MaterialIcon } from '../shared';
 
 export interface PatternStatsProps {
   /** Total number of patterns */
-  totalPatterns?: number;
+  totalPatterns?: number | undefined;
   /** Total patterns trend (percentage change) */
-  totalTrend?: number;
+  totalTrend?: number | undefined;
   /** Average success rate percentage */
-  successRate?: number;
+  successRate?: number | undefined;
   /** Success rate trend */
-  successTrend?: number;
+  successTrend?: number | undefined;
   /** Number of deprecated patterns */
-  deprecatedCount?: number;
+  deprecatedCount?: number | undefined;
   /** Deprecated trend */
-  deprecatedTrend?: number;
+  deprecatedTrend?: number | undefined;
   /** Whether to show compact version */
-  compact?: boolean;
+  compact?: boolean | undefined;
 }
 
 interface StatCard {
@@ -29,7 +29,7 @@ interface StatCard {
   value: string | number;
   icon: string;
   color: string;
-  trend?: number;
+  trend?: number | undefined;
 }
 
 /**

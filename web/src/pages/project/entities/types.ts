@@ -12,7 +12,7 @@ export interface Entity {
   name: string;
   entity_type: string;
   summary: string;
-  created_at?: string;
+  created_at?: string | undefined;
 }
 
 /**
@@ -32,7 +32,7 @@ export interface Relationship {
   direction: string;
   fact: string;
   score: number;
-  created_at?: string;
+  created_at?: string | undefined;
   related_entity: {
     uuid: string;
     name: string;
@@ -51,13 +51,13 @@ export type SortOption = 'name' | 'created_at';
  */
 export interface EntitiesListRootProps {
   /** Project ID from route */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Children for compound component pattern */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
   /** Default sort option */
-  defaultSortBy?: SortOption;
+  defaultSortBy?: SortOption | undefined;
   /** Items per page */
-  limit?: number;
+  limit?: number | undefined;
 }
 
 /**
@@ -65,7 +65,7 @@ export interface EntitiesListRootProps {
  */
 export interface EntitiesListHeaderProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -73,7 +73,7 @@ export interface EntitiesListHeaderProps {
  */
 export interface EntitiesListFiltersProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -81,7 +81,7 @@ export interface EntitiesListFiltersProps {
  */
 export interface EntitiesListStatsProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -89,7 +89,7 @@ export interface EntitiesListStatsProps {
  */
 export interface EntitiesListListProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -97,7 +97,7 @@ export interface EntitiesListListProps {
  */
 export interface EntitiesListPaginationProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -105,7 +105,7 @@ export interface EntitiesListPaginationProps {
  */
 export interface EntitiesListDetailProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**

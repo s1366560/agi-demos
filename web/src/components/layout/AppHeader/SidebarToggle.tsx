@@ -11,9 +11,9 @@ import { PanelLeft, PanelRight } from 'lucide-react';
 export interface SidebarToggleProps {
   collapsed: boolean;
   onToggle: () => void;
-  ariaLabel?: string;
+  ariaLabel?: string | undefined;
   /** @internal Slot for positioning */
-  slot?: 'left' | 'right';
+  slot?: 'left' | 'right' | undefined;
 }
 
 export const SidebarToggle = React.memo(function SidebarToggle({

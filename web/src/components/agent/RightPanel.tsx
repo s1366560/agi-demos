@@ -26,30 +26,30 @@ import type {
 } from '../../types/agent';
 
 export interface RightPanelProps {
-  tasks?: AgentTask[];
-  sandboxId?: string | null;
-  executionPathDecision?: ExecutionPathDecidedEventData | null;
-  selectionTrace?: SelectionTraceEventData | null;
-  policyFiltered?: PolicyFilteredEventData | null;
-  executionNarrative?: ExecutionNarrativeEntry[];
-  latestToolsetChange?: ToolsetChangedEventData | null;
-  onClose?: () => void;
-  onFileClick?: (filePath: string) => void;
-  collapsed?: boolean;
-  width?: number;
-  onWidthChange?: (width: number) => void;
-  minWidth?: number;
-  maxWidth?: number;
+  tasks?: AgentTask[] | undefined;
+  sandboxId?: string | null | undefined;
+  executionPathDecision?: ExecutionPathDecidedEventData | null | undefined;
+  selectionTrace?: SelectionTraceEventData | null | undefined;
+  policyFiltered?: PolicyFilteredEventData | null | undefined;
+  executionNarrative?: ExecutionNarrativeEntry[] | undefined;
+  latestToolsetChange?: ToolsetChangedEventData | null | undefined;
+  onClose?: (() => void) | undefined;
+  onFileClick?: ((filePath: string) => void) | undefined;
+  collapsed?: boolean | undefined;
+  width?: number | undefined;
+  onWidthChange?: ((width: number) => void) | undefined;
+  minWidth?: number | undefined;
+  maxWidth?: number | undefined;
 }
 
 type PanelTab = 'tasks' | 'insights';
 
 interface ExecutionInsightsProps {
-  executionPathDecision?: ExecutionPathDecidedEventData | null;
-  selectionTrace?: SelectionTraceEventData | null;
-  policyFiltered?: PolicyFilteredEventData | null;
-  executionNarrative?: ExecutionNarrativeEntry[];
-  latestToolsetChange?: ToolsetChangedEventData | null;
+  executionPathDecision?: ExecutionPathDecidedEventData | null | undefined;
+  selectionTrace?: SelectionTraceEventData | null | undefined;
+  policyFiltered?: PolicyFilteredEventData | null | undefined;
+  executionNarrative?: ExecutionNarrativeEntry[] | undefined;
+  latestToolsetChange?: ToolsetChangedEventData | null | undefined;
 }
 
 const ExecutionInsights = memo<ExecutionInsightsProps>(

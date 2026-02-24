@@ -14,9 +14,9 @@ import { User, Settings, LogOut, ChevronDown } from 'lucide-react';
 import { useUser, useAuthActions } from '@/stores/auth';
 
 export interface UserMenuProps {
-  profilePath?: string;
-  settingsPath?: string;
-  as?: React.ElementType;
+  profilePath?: string | undefined;
+  settingsPath?: string | undefined;
+  as?: React.ElementType | undefined;
 }
 
 export const UserMenu = React.memo(function UserMenu({

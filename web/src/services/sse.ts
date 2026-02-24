@@ -136,16 +136,16 @@ export const sseEmitter = new SSEEmitter();
  * @deprecated Use AgentStreamHandler from types/agent instead
  */
 export interface PlanModeEventHandlers {
-  onPlanModeEntered?: (data: {
+  onPlanModeEntered?: ((data: {
     conversation_id: string;
     plan_id: string;
     plan_title: string;
-  }) => void;
-  onPlanGenerated?: (data: { plan: unknown }) => void;
-  onStepUpdated?: (data: { step_id: string; step: unknown }) => void;
-  onReflectionComplete?: (data: { reflection: unknown }) => void;
-  onPlanAdjusted?: (data: { adjustments: unknown[] }) => void;
-  onPlanCompleted?: (data: { plan_id: string; status: string }) => void;
+  }) => void) | undefined;
+  onPlanGenerated?: ((data: { plan: unknown }) => void) | undefined;
+  onStepUpdated?: ((data: { step_id: string; step: unknown }) => void) | undefined;
+  onReflectionComplete?: ((data: { reflection: unknown }) => void) | undefined;
+  onPlanAdjusted?: ((data: { adjustments: unknown[] }) => void) | undefined;
+  onPlanCompleted?: ((data: { plan_id: string; status: string }) => void) | undefined;
 }
 
 // Export AgentEvent for use in tests

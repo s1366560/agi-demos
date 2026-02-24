@@ -13,9 +13,9 @@ import { MarkdownContent } from './MarkdownContent';
 
 export interface MessageStreamProps {
   /** Messages to display */
-  children?: ReactNode;
+  children?: ReactNode | undefined;
   /** Padding for content area */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -46,7 +46,7 @@ export const MessageStream = memo(function MessageStream({
  */
 export interface UserMessageFileMetadata {
   filename: string;
-  sandbox_path?: string;
+  sandbox_path?: string | undefined;
   mime_type: string;
   size_bytes: number;
 }
@@ -55,9 +55,9 @@ export interface UserMessageProps {
   /** Message content */
   content: string;
   /** Skill name if triggered via /skill */
-  forcedSkillName?: string;
+  forcedSkillName?: string | undefined;
   /** Attached files metadata */
-  fileMetadata?: UserMessageFileMetadata[];
+  fileMetadata?: UserMessageFileMetadata[] | undefined;
 }
 
 function formatFileSize(bytes: number): string {
@@ -158,13 +158,13 @@ export function UserMessage({ content, forcedSkillName, fileMetadata }: UserMess
  */
 export interface AgentSectionProps {
   /** Icon type */
-  icon?: 'psychology' | 'construction' | 'auto_awesome';
+  icon?: 'psychology' | 'construction' | 'auto_awesome' | undefined;
   /** Icon background color */
-  iconBg?: string;
+  iconBg?: string | undefined;
   /** Icon color */
-  iconColor?: string;
+  iconColor?: string | undefined;
   /** Opacity for completed state */
-  opacity?: boolean;
+  opacity?: boolean | undefined;
   children: ReactNode;
 }
 
@@ -195,9 +195,9 @@ export interface ReasoningLogCardProps {
   /** Summary text */
   summary: string;
   /** Whether completed */
-  completed?: boolean;
+  completed?: boolean | undefined;
   /** Whether expanded by default */
-  expanded?: boolean;
+  expanded?: boolean | undefined;
 }
 
  
@@ -344,19 +344,19 @@ export interface ToolExecutionCardDisplayProps {
   /** Execution status */
   status: 'preparing' | 'running' | 'success' | 'error';
   /** Query parameters (input) */
-  parameters?: Record<string, unknown>;
+  parameters?: Record<string, unknown> | undefined;
   /** Partial arguments string (streaming) */
-  partialArguments?: string;
+  partialArguments?: string | undefined;
   /** Execution mode */
-  executionMode?: string;
+  executionMode?: string | undefined;
   /** Execution duration in milliseconds */
-  duration?: number;
+  duration?: number | undefined;
   /** Execution result - can be string or object */
-  result?: string | unknown;
+  result?: string | unknown | undefined;
   /** Error message */
-  error?: string;
+  error?: string | undefined;
   /** Whether to show details expanded by default */
-  defaultExpanded?: boolean;
+  defaultExpanded?: boolean | undefined;
 }
 
 export function ToolExecutionCardDisplay({

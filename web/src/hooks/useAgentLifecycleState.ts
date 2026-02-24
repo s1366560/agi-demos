@@ -36,7 +36,7 @@ const globalSubscriptionLock = new Set<string>();
 export interface UseAgentLifecycleStateOptions {
   projectId: string;
   tenantId: string;
-  enabled?: boolean;
+  enabled?: boolean | undefined;
 }
 
 export interface UseAgentLifecycleStateResult {

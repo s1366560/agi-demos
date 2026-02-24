@@ -14,7 +14,7 @@ import { ArrowUpRight } from 'lucide-react';
 interface SuggestionChipsProps {
   suggestions: string[];
   onSelect: (suggestion: string) => void;
-  visible?: boolean;
+  visible?: boolean | undefined;
 }
 
 export const SuggestionChips: React.FC<SuggestionChipsProps> = memo(

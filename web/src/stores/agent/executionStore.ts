@@ -48,7 +48,7 @@ export interface CurrentToolExecution {
   id: string;
   toolName: string;
   input: Record<string, unknown>;
-  stepNumber?: number;
+  stepNumber?: number | undefined;
   startTime: string;
 }
 

@@ -194,7 +194,7 @@ const useEdgeTypeListContextOptional = (): EdgeTypeListContextType | null => {
 // ============================================================================
 
 interface EdgeTypeListProps {
-  className?: string;
+  className?: string | undefined;
 }
 
 const EdgeTypeListInternal: React.FC<EdgeTypeListProps> = ({ className = '' }) => {
@@ -435,7 +435,7 @@ EdgeTypeListInternal.displayName = 'EdgeTypeList';
 // ============================================================================
 
 interface HeaderProps {
-  onCreate?: () => void;
+  onCreate?: (() => void) | undefined;
 }
 
 const HeaderInternal: React.FC<HeaderProps> = () => {
@@ -469,9 +469,9 @@ HeaderInternal.displayName = 'EdgeTypeList.Header';
 // ============================================================================
 
 interface ToolbarProps {
-  search?: string;
-  onSearchChange?: (value: string) => void;
-  onCreate?: () => void;
+  search?: string | undefined;
+  onSearchChange?: ((value: string) => void) | undefined;
+  onCreate?: (() => void) | undefined;
 }
 
 const ToolbarInternal: React.FC<ToolbarProps> = (props) => {
@@ -577,7 +577,7 @@ SourceBadgeInternal.displayName = 'EdgeTypeList.SourceBadge';
 
 interface MasterPaneProps {
   edges: EdgeType[];
-  selectedEdgeId?: string | null;
+  selectedEdgeId?: string | null | undefined;
   onSelect: (id: string | null) => void;
 }
 

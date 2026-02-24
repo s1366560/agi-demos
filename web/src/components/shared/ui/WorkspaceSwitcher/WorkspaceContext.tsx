@@ -10,8 +10,8 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 export interface WorkspaceProviderProps {
   mode: WorkspaceMode;
-  defaultOpen?: boolean;
-  onOpenChange?: (open: boolean) => void;
+  defaultOpen?: boolean | undefined;
+  onOpenChange?: ((open: boolean) => void) | undefined;
   children: React.ReactNode;
 }
 

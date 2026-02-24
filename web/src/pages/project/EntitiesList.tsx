@@ -57,7 +57,7 @@ interface Entity {
   name: string;
   entity_type: string;
   summary: string;
-  created_at?: string;
+  created_at?: string | undefined;
 }
 
 interface EntityType {
@@ -71,7 +71,7 @@ interface Relationship {
   direction: string;
   fact: string;
   score: number;
-  created_at?: string;
+  created_at?: string | undefined;
   related_entity: {
     uuid: string;
     name: string;

@@ -1,0 +1,987 @@
+src/components/agent/AgentChatContent.tsx(426,66): error TS2379: Argument of type '{ onAct: (event: { data: { tool_name: string; tool_input: Record<string, unknown>; call_id?: string; }; }) => void; onObserve: (event: { data: { call_id?: string; observation?: string; result?: unknown; error?: string; duration_ms?: number; }; }) => void; fileMetadata: FileMetadata[] | undefined; forcedSkillName: st...' is not assignable to parameter of type 'AdditionalAgentHandlers' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'fileMetadata' are incompatible.
+    Type 'FileMetadata[] | undefined' is not assignable to type 'FileMetadata[]'.
+      Type 'undefined' is not assignable to type 'FileMetadata[]'.
+src/components/agent/AgentChatContent.tsx(460,13): error TS2412: Type '{ id: string; title: string; updated_at: string | undefined; } | undefined' is not assignable to type '{ id: string; title: string; updated_at?: string; } | undefined' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+src/components/agent/AgentChatContent.tsx(596,12): error TS2375: Type '{ onSend: (content: string, fileMetadata?: FileMetadata[] | undefined, forcedSkillName?: string | undefined, forcedSubAgentName?: string | undefined) => Promise<void>; ... 5 more ...; isPlanMode: boolean; }' is not assignable to type 'InputBarProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/AgentChatInputArea.tsx(85,8): error TS2375: Type '{ onSend: (content: string, fileMetadata?: FileMetadata[] | undefined, forcedSkillName?: string | undefined, forcedSubAgentName?: string | undefined) => void | Promise<...>; onAbort: () => void; isStreaming: boolean; disabled: boolean; projectId: string | undefined; }' is not assignable to type 'InputBarProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/canvas/CanvasPanel.tsx(86,15): error TS2379: Argument of type '{ id: string; title: string; type: "code"; content: string; language: undefined; }' is not assignable to parameter of type 'Omit<CanvasTab, "history" | "dirty" | "createdAt" | "historyIndex">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'language' are incompatible.
+    Type 'undefined' is not assignable to type 'string'.
+src/components/agent/canvas/CanvasPanel.tsx(286,10): error TS2375: Type '{ ref: Ref<StandardMCPAppRendererHandle> | undefined; toolName: string; resourceUri: string | undefined; html: string | undefined; toolInput: Record<...> | undefined; ... 7 more ...; height: string; }' is not assignable to type 'StandardMCPAppRendererProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'resourceUri' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/canvas/CanvasPanel.tsx(362,41): error TS2379: Argument of type '{ artifactUrl: string | undefined; id: string; title: string; type: CanvasContentType; content: string; language?: string; dirty: boolean; createdAt: number; history: string[]; historyIndex: number; ... 9 more ...; mcpServerName?: string; }' is not assignable to parameter of type 'Omit<CanvasTab, "history" | "dirty" | "createdAt" | "historyIndex">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'artifactUrl' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/canvas/CanvasPanel.tsx(538,15): error TS2379: Argument of type '{ id: string; title: string; type: CanvasContentType; content: string; language: undefined; }' is not assignable to parameter of type 'Omit<CanvasTab, "history" | "dirty" | "createdAt" | "historyIndex">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'language' are incompatible.
+    Type 'undefined' is not assignable to type 'string'.
+src/components/agent/canvas/CanvasPanel.tsx(647,12): error TS2375: Type '{ type: CanvasContentType; content: string; onSendPrompt: ((prompt: string) => void) | undefined; }' is not assignable to type '{ type: CanvasContentType; content: string; onSendPrompt?: (prompt: string) => void; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onSendPrompt' are incompatible.
+    Type '((prompt: string) => void) | undefined' is not assignable to type '(prompt: string) => void'.
+      Type 'undefined' is not assignable to type '(prompt: string) => void'.
+src/components/agent/canvas/CanvasPanel.tsx(656,14): error TS2375: Type '{ tab: CanvasTab; editMode: boolean; onContentChange: (content: string) => void; onSendPrompt: ((prompt: string) => void) | undefined; onUpdateModelContext: ((context: Record<string, unknown>) => void) | undefined; mcpAppRef: RefObject<...>; }' is not assignable to type '{ tab: CanvasTab; editMode: boolean; onContentChange: (content: string) => void; onSendPrompt?: (prompt: string) => void; onUpdateModelContext?: (context: Record<string, unknown>) => void; mcpAppRef?: Ref<...>; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onSendPrompt' are incompatible.
+    Type '((prompt: string) => void) | undefined' is not assignable to type '(prompt: string) => void'.
+      Type 'undefined' is not assignable to type '(prompt: string) => void'.
+src/components/agent/chat/AssistantMessage.tsx(67,8): error TS2375: Type '{ content: string; generatedAt: string | undefined; isStreaming: boolean; }' is not assignable to type 'FinalResponseDisplayProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'generatedAt' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/chat/CodeBlock.tsx(33,5): error TS2375: Type '{ text: string; language: string | undefined; }' is not assignable to type '{ text: string; language?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'language' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/chat/CodeBlock.tsx(101,39): error TS2379: Argument of type '{ id: string; title: string; type: "code"; content: string; language: string | undefined; }' is not assignable to parameter of type 'Omit<CanvasTab, "history" | "dirty" | "createdAt" | "historyIndex">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'language' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/chat/MessageRenderer.tsx(70,7): error TS2412: Type '{ filename: string; sandbox_path: string | undefined; mime_type: string; size_bytes: number; }[] | undefined' is not assignable to type 'UserMessageFileMetadata[] | undefined' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+src/components/agent/chat/MessageRenderer.tsx(82,6): error TS2375: Type '{ content: string; isReport: boolean | undefined; isStreaming: boolean | undefined; generatedAt: string | undefined; }' is not assignable to type 'AssistantMessageProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'isReport' are incompatible.
+    Type 'boolean | undefined' is not assignable to type 'boolean'.
+      Type 'undefined' is not assignable to type 'boolean'.
+src/components/agent/chat/VirtualizedMessageList.tsx(247,16): error TS2375: Type '{ message: ChatMessage; isLatest: boolean; onRetry: ((messageId: string) => void) | undefined; onCopy: ((messageId: string) => void) | undefined; onDelete: ((messageId: string) => void) | undefined; onClick: ((message: ChatMessage) => void) | undefined; }' is not assignable to type 'MessageRendererProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onClick' are incompatible.
+    Type '((message: ChatMessage) => void) | undefined' is not assignable to type '(message: ChatMessage) => void'.
+      Type 'undefined' is not assignable to type '(message: ChatMessage) => void'.
+src/components/agent/CodeExecutorResultCard.tsx(153,18): error TS2375: Type '{ key: number; filename: string; url: string; size: number | undefined; }' is not assignable to type 'FileDownloadButtonProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'size' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/components/agent/ConversationSidebar.tsx(626,14): error TS2375: Type '{ key: string; conversation: Conversation; isActive: boolean; onSelect: () => void; onDelete: (e: MouseEvent<Element, MouseEvent>) => void; onRename: (() => void) | undefined; compact: boolean; status: ConversationStatus | undefined; }' is not assignable to type 'ConversationItemProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onRename' are incompatible.
+    Type '(() => void) | undefined' is not assignable to type '() => void'.
+      Type 'undefined' is not assignable to type '() => void'.
+src/components/agent/EmptyState.tsx(261,14): error TS2375: Type '{ projectId: string; onEntityClick: ((prompt: string) => void) | undefined; }' is not assignable to type 'TrendingEntitiesProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onEntityClick' are incompatible.
+    Type '((prompt: string) => void) | undefined' is not assignable to type '(entityName: string) => void'.
+      Type 'undefined' is not assignable to type '(entityName: string) => void'.
+src/components/agent/EmptyState.tsx(262,14): error TS2375: Type '{ projectId: string; onSkillClick: ((prompt: string) => void) | undefined; }' is not assignable to type 'RecentSkillsProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onSkillClick' are incompatible.
+    Type '((prompt: string) => void) | undefined' is not assignable to type '(skillName: string) => void'.
+      Type 'undefined' is not assignable to type '(skillName: string) => void'.
+src/components/agent/execution/ActivityTimeline.tsx(479,22): error TS2375: Type '{ children: Element; key: string; type: "tool_call"; sequence: number; timestamp: number; isLast: boolean; status: "success" | "failed" | "running" | undefined; duration: number | undefined; compact: boolean; }' is not assignable to type 'ActivityNodeProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'status' are incompatible.
+    Type '"success" | "failed" | "running" | undefined' is not assignable to type '"success" | "failed" | "running"'.
+      Type 'undefined' is not assignable to type '"success" | "failed" | "running"'.
+src/components/agent/execution/ActivityTimeline.tsx(489,24): error TS2375: Type '{ toolName: string; input: Record<string, unknown> | undefined; result: string | undefined; error: string | undefined; status: "success" | "failed" | "running"; compact: boolean; }' is not assignable to type 'ToolCardInlineProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'input' are incompatible.
+    Type 'Record<string, unknown> | undefined' is not assignable to type 'Record<string, unknown>'.
+      Type 'undefined' is not assignable to type 'Record<string, unknown>'.
+src/components/agent/execution/FinalReport.tsx(181,14): error TS2375: Type '{ content: string | undefined; conversationId: string | undefined; elementId: string | undefined; showLabels: false; variant: "sidebar"; }' is not assignable to type 'ExportActionsProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'content' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/execution/TokenUsageChart.tsx(242,14): error TS2375: Type '{ maxTokens: number | undefined; input: number; output: number; reasoning?: number; total: number; }' is not assignable to type 'StackedBarProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'maxTokens' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/components/agent/execution/TokenUsageChart.tsx(283,10): error TS2375: Type '{ maxTokens: number | undefined; showLabels: boolean; input: number; output: number; reasoning?: number; total: number; }' is not assignable to type 'StackedBarProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'maxTokens' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/components/agent/ExecutionDetailsPanel.tsx(231,35): error TS2375: Type '{ thoughts: string[]; toolCalls: ToolCall[] | undefined; toolResults: ToolResult[] | undefined; isThinking: boolean; toolExecutions: Record<string, { startTime?: number; endTime?: number; duration?: number; }>; timeline: any[]; }' is not assignable to type 'ThinkingChainProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'toolCalls' are incompatible.
+    Type 'ToolCall[] | undefined' is not assignable to type 'ToolCall[]'.
+      Type 'undefined' is not assignable to type 'ToolCall[]'.
+src/components/agent/ExecutionDetailsPanel.tsx(258,12): error TS2375: Type '{ tokenData: TokenData; costData: CostData | undefined; variant: "compact" | "detailed"; }' is not assignable to type 'TokenUsageChartProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'costData' are incompatible.
+    Type 'CostData | undefined' is not assignable to type 'CostData'.
+      Type 'undefined' is not assignable to type 'CostData'.
+src/components/agent/ExecutionDetailsPanel.tsx(266,17): error TS2375: Type '{ thoughts: string[]; toolCalls: ToolCall[] | undefined; toolResults: ToolResult[] | undefined; isThinking: boolean; toolExecutions: Record<string, { startTime?: number; endTime?: number; duration?: number; }>; timeline: any[]; }' is not assignable to type 'ThinkingChainProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'toolCalls' are incompatible.
+    Type 'ToolCall[] | undefined' is not assignable to type 'ToolCall[]'.
+      Type 'undefined' is not assignable to type 'ToolCall[]'.
+src/components/agent/FileUploader.tsx(138,22): error TS2345: Argument of type '(prev: PendingAttachment[]) => (PendingAttachment | { id: string; status: "uploading"; progress: number; error: undefined; file: File; filename: string; mimeType: string; sizeBytes: number; fileMetadata?: FileMetadata; })[]' is not assignable to parameter of type 'SetStateAction<PendingAttachment[]>'.
+  Type '(prev: PendingAttachment[]) => (PendingAttachment | { id: string; status: "uploading"; progress: number; error: undefined; file: File; filename: string; mimeType: string; sizeBytes: number; fileMetadata?: FileMetadata; })[]' is not assignable to type '(prevState: PendingAttachment[]) => PendingAttachment[]'.
+    Type '(PendingAttachment | { id: string; status: "uploading"; progress: number; error: undefined; file: File; filename: string; mimeType: string; sizeBytes: number; fileMetadata?: FileMetadata; })[]' is not assignable to type 'PendingAttachment[]'.
+      Type 'PendingAttachment | { id: string; status: "uploading"; progress: number; error: undefined; file: File; filename: string; mimeType: string; sizeBytes: number; fileMetadata?: FileMetadata; }' is not assignable to type 'PendingAttachment' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+        Type '{ id: string; status: "uploading"; progress: number; error: undefined; file: File; filename: string; mimeType: string; sizeBytes: number; fileMetadata?: FileMetadata; }' is not assignable to type 'PendingAttachment' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+          Types of property 'error' are incompatible.
+            Type 'undefined' is not assignable to type 'string'.
+src/components/agent/InlineHITLCard.tsx(990,18): error TS2375: Type '{ expiresAt: string | undefined; timeoutSeconds: number; color: string; }' is not assignable to type '{ expiresAt?: string; timeoutSeconds?: number; color?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'expiresAt' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/InlineHITLCard.tsx(1001,18): error TS2375: Type '{ data: ClarificationAskedEventData; onSubmit: (responseData: HITLResponseData) => Promise<void>; isSubmitting: boolean; isAnswered: boolean; answeredValue: string | undefined; }' is not assignable to type '{ data: ClarificationAskedEventData; onSubmit: (response: HITLResponseData) => void; isSubmitting: boolean; isAnswered?: boolean; answeredValue?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'answeredValue' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/InlineHITLCard.tsx(1010,18): error TS2375: Type '{ data: DecisionAskedEventData; onSubmit: (responseData: HITLResponseData) => Promise<void>; isSubmitting: boolean; isAnswered: boolean; answeredValue: string | undefined; }' is not assignable to type '{ data: DecisionAskedEventData; onSubmit: (response: HITLResponseData) => void; isSubmitting: boolean; isAnswered?: boolean; answeredValue?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'answeredValue' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/InlineHITLCard.tsx(1027,18): error TS2375: Type '{ data: PermissionAskedEventData; onSubmit: (responseData: HITLResponseData) => Promise<void>; isSubmitting: boolean; isAnswered: boolean; answeredValue: string | undefined; }' is not assignable to type '{ data: PermissionAskedEventData; onSubmit: (response: HITLResponseData) => void; isSubmitting: boolean; isAnswered?: boolean; answeredValue?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'answeredValue' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/InputBar.tsx(105,98): error TS2379: Argument of type '{ projectId: string | undefined; maxFiles: number; maxSizeMB: number; }' is not assignable to parameter of type 'UseFileUploadOptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/MessageArea.tsx(165,13): error TS2375: Type '{ id: any; toolName: any; status: "error" | "success" | "running"; input: any; output: any; isError: any; duration: number | undefined; mcpUiMetadata: any; }' is not assignable to type 'TimelineStep' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'duration' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/components/agent/MessageArea.tsx(624,10): error TS2375: Type '{ key: string; toolName: string; partialArguments: string | undefined; }' is not assignable to type '{ toolName: string; partialArguments?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'partialArguments' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/MessageArea.tsx(808,11): error TS2375: Type '{ timeline: TimelineEvent[]; streamingContent: string; streamingThought: string; isStreaming: boolean; isThinkingStreaming: boolean; isLoading: boolean; hasEarlierMessages: boolean; ... 4 more ...; scroll: { ...; }; }' is not assignable to type '_MessageAreaContextValue' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onLoadEarlier' are incompatible.
+    Type '(() => void) | undefined' is not assignable to type '() => void'.
+      Type 'undefined' is not assignable to type '() => void'.
+src/components/agent/MessageArea.tsx(1291,16): error TS2375: Type '{ conversationId: string | null | undefined; }' is not assignable to type '{ conversationId?: string | null; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'conversationId' are incompatible.
+    Type 'string | null | undefined' is not assignable to type 'string | null'.
+      Type 'undefined' is not assignable to type 'string | null'.
+src/components/agent/messageBubble/MessageBubble.tsx(111,3): error TS2375: Type '{ request_id: string; question: string; decision_type: DecisionAskedEventData["decision_type"]; options: DecisionAskedEventData["options"]; allow_custom: boolean; context: Record<string, unknown>; default_option: string | undefined; }' is not assignable to type 'DecisionAskedEventData' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'default_option' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/messageBubble/MessageBubble.tsx(134,3): error TS2375: Type '{ request_id: string; tool_name: string; fields: EnvVarField[]; message: string | undefined; context: Record<string, unknown> | undefined; }' is not assignable to type 'EnvVarRequestedEventData' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'message' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/messageBubble/MessageBubble.tsx(152,5): error TS2375: Type '{ request_id: string; tool_name: string; permission_type: "ask"; description: string; risk_level: "high" | "low" | "medium" | undefined; context: Record<string, unknown> | undefined; }' is not assignable to type 'PermissionAskedEventData' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'risk_level' are incompatible.
+    Type '"high" | "low" | "medium" | undefined' is not assignable to type '"high" | "low" | "medium"'.
+      Type 'undefined' is not assignable to type '"high" | "low" | "medium"'.
+src/components/agent/messageBubble/MessageBubble.tsx(162,5): error TS2375: Type '{ request_id: string; tool_name: string; permission_type: "ask"; description: string; risk_level: "high" | "low" | "medium" | undefined; context: Record<string, unknown> | undefined; }' is not assignable to type 'PermissionAskedEventData' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'risk_level' are incompatible.
+    Type '"high" | "low" | "medium" | undefined' is not assignable to type '"high" | "low" | "medium"'.
+      Type 'undefined' is not assignable to type '"high" | "low" | "medium"'.
+src/components/agent/messageBubble/MessageBubble.tsx(335,18): error TS2375: Type '{ role: "user"; content: string; onReply: (() => void) | undefined; }' is not assignable to type 'MessageActionBarProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onReply' are incompatible.
+    Type '(() => void) | undefined' is not assignable to type '() => void'.
+      Type 'undefined' is not assignable to type '() => void'.
+src/components/agent/messageBubble/MessageBubble.tsx(414,18): error TS2375: Type '{ role: "assistant"; content: string; isPinned: boolean | undefined; onPin: (() => void) | undefined; onReply: (() => void) | undefined; onSaveAsTemplate: () => void; }' is not assignable to type 'MessageActionBarProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onPin' are incompatible.
+    Type '(() => void) | undefined' is not assignable to type '() => void'.
+      Type 'undefined' is not assignable to type '() => void'.
+src/components/agent/messageBubble/MessageBubble.tsx(737,14): error TS2375: Type '{ role: "assistant"; content: string; isPinned: boolean | undefined; onPin: (() => void) | undefined; onReply: (() => void) | undefined; onSaveAsTemplate: () => void; }' is not assignable to type 'MessageActionBarProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onPin' are incompatible.
+    Type '(() => void) | undefined' is not assignable to type '() => void'.
+      Type 'undefined' is not assignable to type '() => void'.
+src/components/agent/messageBubble/MessageBubble.tsx(833,23): error TS2379: Argument of type '{ id: string; title: string; type: "data" | "code" | "markdown"; content: string; language: string | undefined; artifactId: string; artifactUrl: string; }' is not assignable to parameter of type 'Omit<CanvasTab, "history" | "dirty" | "createdAt" | "historyIndex">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'language' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/messageBubble/MessageBubble.tsx(1061,12): error TS2375: Type '{ content: string; onReply: (() => void) | undefined; forcedSkillName: string | undefined; forcedSubAgentName: string | undefined; fileMetadata: { filename: string; sandbox_path?: string; mime_type: string; size_bytes: number; }[] | undefined; }' is not assignable to type 'UserMessageProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onReply' are incompatible.
+    Type '(() => void) | undefined' is not assignable to type '() => void'.
+      Type 'undefined' is not assignable to type '() => void'.
+src/components/agent/messageBubble/MessageBubble.tsx(1082,12): error TS2375: Type '{ content: string; isStreaming: boolean | undefined; isPinned: boolean | undefined; onPin: (() => void) | undefined; onReply: (() => void) | undefined; }' is not assignable to type 'AssistantMessageProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'isStreaming' are incompatible.
+    Type 'boolean | undefined' is not assignable to type 'boolean'.
+      Type 'undefined' is not assignable to type 'boolean'.
+src/components/agent/messageBubble/MessageBubble.tsx(1105,17): error TS2375: Type '{ event: ActEvent; observeEvent: ObserveEvent | undefined; }' is not assignable to type 'ToolExecutionProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'observeEvent' are incompatible.
+    Type 'ObserveEvent | undefined' is not assignable to type 'ObserveEvent'.
+      Type 'undefined' is not assignable to type 'ObserveEvent'.
+src/components/agent/messageBubble/MessageBubble.tsx(1116,17): error TS2375: Type '{ event: TextEndEvent; isPinned: boolean | undefined; onPin: (() => void) | undefined; onReply: (() => void) | undefined; }' is not assignable to type 'TextEndProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'isPinned' are incompatible.
+    Type 'boolean | undefined' is not assignable to type 'boolean'.
+      Type 'undefined' is not assignable to type 'boolean'.
+src/components/agent/messageBubble/MessageBubble.tsx(1138,12): error TS2375: Type '{ hitlType: "clarification"; requestId: string; clarificationData: ClarificationAskedEventData | undefined; isAnswered: boolean; answeredValue: string | undefined; expiresAt: string | undefined; createdAt: string; }' is not assignable to type 'InlineHITLCardProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'clarificationData' are incompatible.
+    Type 'ClarificationAskedEventData | undefined' is not assignable to type 'ClarificationAskedEventData'.
+      Type 'undefined' is not assignable to type 'ClarificationAskedEventData'.
+src/components/agent/messageBubble/MessageBubble.tsx(1157,12): error TS2375: Type '{ hitlType: "clarification"; requestId: string; isAnswered: true; answeredValue: string | undefined; createdAt: string; }' is not assignable to type 'InlineHITLCardProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'answeredValue' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/messageBubble/MessageBubble.tsx(1177,12): error TS2375: Type '{ hitlType: "decision"; requestId: string; decisionData: DecisionAskedEventData | undefined; isAnswered: boolean; answeredValue: string | undefined; expiresAt: string | undefined; createdAt: string; }' is not assignable to type 'InlineHITLCardProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'decisionData' are incompatible.
+    Type 'DecisionAskedEventData | undefined' is not assignable to type 'DecisionAskedEventData'.
+      Type 'undefined' is not assignable to type 'DecisionAskedEventData'.
+src/components/agent/messageBubble/MessageBubble.tsx(1196,12): error TS2375: Type '{ hitlType: "decision"; requestId: string; isAnswered: true; answeredValue: string | undefined; createdAt: string; }' is not assignable to type 'InlineHITLCardProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'answeredValue' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/messageBubble/MessageBubble.tsx(1222,12): error TS2375: Type '{ hitlType: "env_var"; requestId: string; envVarData: EnvVarRequestedEventData | undefined; isAnswered: boolean; answeredValue: string | undefined; expiresAt: string | undefined; createdAt: string; }' is not assignable to type 'InlineHITLCardProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'envVarData' are incompatible.
+    Type 'EnvVarRequestedEventData | undefined' is not assignable to type 'EnvVarRequestedEventData'.
+      Type 'undefined' is not assignable to type 'EnvVarRequestedEventData'.
+src/components/agent/messageBubble/MessageBubble.tsx(1241,12): error TS2375: Type '{ hitlType: "env_var"; requestId: string; isAnswered: true; answeredValue: string | undefined; createdAt: string; }' is not assignable to type 'InlineHITLCardProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'answeredValue' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/messageBubble/MessageBubble.tsx(1261,12): error TS2375: Type '{ hitlType: "permission"; requestId: string; permissionData: PermissionAskedEventData | undefined; isAnswered: boolean; answeredValue: string | undefined; expiresAt: string | undefined; createdAt: string; }' is not assignable to type 'InlineHITLCardProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'permissionData' are incompatible.
+    Type 'PermissionAskedEventData | undefined' is not assignable to type 'PermissionAskedEventData'.
+      Type 'undefined' is not assignable to type 'PermissionAskedEventData'.
+src/components/agent/messageBubble/MessageBubble.tsx(1300,12): error TS2375: Type '{ hitlType: "permission"; requestId: string; permissionData: PermissionAskedEventData | undefined; isAnswered: boolean; answeredValue: string | undefined; expiresAt: string | undefined; createdAt: string; }' is not assignable to type 'InlineHITLCardProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'permissionData' are incompatible.
+    Type 'PermissionAskedEventData | undefined' is not assignable to type 'PermissionAskedEventData'.
+      Type 'undefined' is not assignable to type 'PermissionAskedEventData'.
+src/components/agent/ProjectSelector.tsx(152,8): error TS2375: Type '{ placeholder: string; disabled: true; className: string | undefined; style: { width: number; }; "aria-label": string; }' is not assignable to type 'SelectProps<any, DefaultOptionType>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'className' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/ProjectSelector.tsx(167,8): error TS2375: Type '{ children: Element[]; value: string | undefined; placeholder: string; onChange: (projectId: string) => void; loading: boolean; disabled: boolean; className: string | undefined; ... 4 more ...; notFoundContent: string | Element; }' is not assignable to type 'SelectProps<string, DefaultOptionType>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'className' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/ProjectSelector.tsx(249,4): error TS2375: Type '{ placeholder: string; disabled: true; className: string | undefined; style: { width: number; }; "aria-label": string; }' is not assignable to type 'SelectProps<any, DefaultOptionType>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'className' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/RightPanel.tsx(336,16): error TS2375: Type '{ executionPathDecision: ExecutionPathDecidedEventData | null | undefined; selectionTrace: SelectionTraceEventData | null | undefined; policyFiltered: PolicyFilteredEventData | ... 1 more ... | undefined; executionNarrative: ExecutionNarrativeEntry[] | undefined; latestToolsetChange: ToolsetChangedEventData | ... 1 ...' is not assignable to type 'ExecutionInsightsProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'executionPathDecision' are incompatible.
+    Type 'ExecutionPathDecidedEventData | null | undefined' is not assignable to type 'ExecutionPathDecidedEventData | null'.
+      Type 'undefined' is not assignable to type 'ExecutionPathDecidedEventData | null'.
+src/components/agent/sandbox/RemoteDesktopViewer.tsx(68,6): error TS2375: Type '{ wsUrl: string; resolution: string; audioEnabled: boolean | undefined; dynamicResize: boolean | undefined; onConnect: (() => void) | undefined; onError: ((error: string) => void) | undefined; onResolutionChange: ((resolution: string) => void) | undefined; showToolbar: boolean; }' is not assignable to type 'KasmVNCViewerProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'audioEnabled' are incompatible.
+    Type 'boolean | undefined' is not assignable to type 'boolean'.
+      Type 'undefined' is not assignable to type 'boolean'.
+src/components/agent/sandbox/SandboxOutputViewer.tsx(134,12): error TS2375: Type '{ children: string; icon: ReactNode; color: string | undefined; }' is not assignable to type 'TagProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'color' are incompatible.
+    Type 'string | undefined' is not assignable to type 'LiteralUnion<"error" | "default" | "success" | "warning" | "processing" | PresetColorType>'.
+      Type 'undefined' is not assignable to type 'LiteralUnion<"error" | "default" | "success" | "warning" | "processing" | PresetColorType>'.
+src/components/agent/sandbox/SandboxOutputViewer.tsx(207,16): error TS2375: Type '{ key: string; artifact: Artifact; compact: true; maxHeight: number; onExpand: ((artifact: Artifact) => void) | undefined; }' is not assignable to type 'ArtifactRendererRootProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onExpand' are incompatible.
+    Type '((artifact: Artifact) => void) | undefined' is not assignable to type '(artifact: Artifact) => void'.
+      Type 'undefined' is not assignable to type '(artifact: Artifact) => void'.
+src/components/agent/sandbox/SandboxOutputViewer.tsx(244,12): error TS2375: Type '{ children: string; icon: ReactNode; color: string | undefined; className: string; }' is not assignable to type 'TagProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'color' are incompatible.
+    Type 'string | undefined' is not assignable to type 'LiteralUnion<"error" | "default" | "success" | "warning" | "processing" | PresetColorType>'.
+      Type 'undefined' is not assignable to type 'LiteralUnion<"error" | "default" | "success" | "warning" | "processing" | PresetColorType>'.
+src/components/agent/sandbox/SandboxOutputViewer.tsx(257,10): error TS2375: Type '{ execution: ToolExecution; onFileClick: ((filePath: string) => void) | undefined; onArtifactExpand: ((artifact: Artifact) => void) | undefined; }' is not assignable to type '{ execution: ToolExecution; onFileClick?: (filePath: string) => void; onArtifactExpand?: (artifact: Artifact) => void; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onFileClick' are incompatible.
+    Type '((filePath: string) => void) | undefined' is not assignable to type '(filePath: string) => void'.
+      Type 'undefined' is not assignable to type '(filePath: string) => void'.
+src/components/agent/sandbox/SandboxOutputViewer.tsx(279,10): error TS2375: Type '{ key: string; execution: ToolExecution; onFileClick: ((filePath: string) => void) | undefined; onArtifactExpand: ((artifact: Artifact) => void) | undefined; }' is not assignable to type '{ execution: ToolExecution; onFileClick?: (filePath: string) => void; onArtifactExpand?: (artifact: Artifact) => void; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onFileClick' are incompatible.
+    Type '((filePath: string) => void) | undefined' is not assignable to type '(filePath: string) => void'.
+      Type 'undefined' is not assignable to type '(filePath: string) => void'.
+src/components/agent/sandbox/SandboxPanel.tsx(160,8): error TS2375: Type '{ sandboxId: string; sessionId: string | undefined; onConnect: (sessionId: string) => void; onDisconnect: () => void; height: string; showToolbar: true; }' is not assignable to type 'SandboxTerminalProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'sessionId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/sandbox/SandboxPanel.tsx(178,8): error TS2375: Type '{ sandboxId: string; projectId: string | undefined; desktopStatus: any; height: string; showToolbar: true; }' is not assignable to type 'RemoteDesktopViewerProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/sandbox/SandboxPanel.tsx(211,8): error TS2375: Type '{ sandboxId: string; desktopStatus: any; terminalStatus: any; onDesktopStart: (() => void) | undefined; onDesktopStop: (() => void) | undefined; onTerminalStart: (() => void) | undefined; onTerminalStop: (() => void) | undefined; isDesktopLoading: boolean | undefined; isTerminalLoading: boolean | undefined; }' is not assignable to type 'SandboxControlPanelProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onDesktopStart' are incompatible.
+    Type '(() => void) | undefined' is not assignable to type '() => void'.
+      Type 'undefined' is not assignable to type '() => void'.
+src/components/agent/sandbox/SandboxPanel.tsx(230,6): error TS2375: Type '{ executions: any[]; onFileClick: ((filePath: string) => void) | undefined; maxHeight: string; }' is not assignable to type 'SandboxOutputViewerProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onFileClick' are incompatible.
+    Type '((filePath: string) => void) | undefined' is not assignable to type '(filePath: string) => void'.
+      Type 'undefined' is not assignable to type '(filePath: string) => void'.
+src/components/agent/sandbox/SandboxPanel.tsx(343,10): error TS2375: Type '{ sandboxId: string | null; desktopStatus: DesktopStatus | null; terminalStatus: TerminalStatus | null; onDesktopStart: (() => void) | undefined; ... 4 more ...; isTerminalLoading: boolean; }' is not assignable to type '{ isDesktopLoading?: boolean; isTerminalLoading?: boolean; onDesktopStart?: () => void; onDesktopStop?: () => void; onTerminalStart?: () => void; onTerminalStop?: () => void; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onDesktopStart' are incompatible.
+    Type '(() => void) | undefined' is not assignable to type '() => void'.
+      Type 'undefined' is not assignable to type '() => void'.
+src/components/agent/sandbox/SandboxPanel.tsx(370,18): error TS2375: Type '{ toolExecutions: SandboxPanelToolExecution[]; onFileClick: ((filePath: string) => void) | undefined; }' is not assignable to type 'TabContentProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onFileClick' are incompatible.
+    Type '((filePath: string) => void) | undefined' is not assignable to type '(filePath: string) => void'.
+      Type 'undefined' is not assignable to type '(filePath: string) => void'.
+src/components/agent/sandbox/SandboxPanel.tsx(375,6): error TS2375: Type '{ children: Element; sandboxId: string | null; defaultTab: SandboxTabKey; toolExecutions: SandboxPanelToolExecution[]; currentTool: { ...; } | null; ... 9 more ...; onClose: (() => void) | undefined; }' is not assignable to type 'SandboxProviderProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onDesktopStart' are incompatible.
+    Type '(() => void) | undefined' is not assignable to type '() => void'.
+      Type 'undefined' is not assignable to type '() => void'.
+src/components/agent/sandbox/SandboxPanel.tsx(394,12): error TS2375: Type '{ currentTool: { name: string; input: Record<string, unknown>; } | null; sandboxId: string | null; onClose: (() => void) | undefined; }' is not assignable to type 'HeaderRenderProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onClose' are incompatible.
+    Type '(() => void) | undefined' is not assignable to type '() => void'.
+      Type 'undefined' is not assignable to type '() => void'.
+src/components/agent/sandbox/SandboxPanelContext.tsx(56,9): error TS2375: Type '{ sandboxId: string | null; activeTab: SandboxTabKey; setActiveTab: (tab: SandboxTabKey) => void; toolExecutions: SandboxPanelToolExecution[]; ... 10 more ...; onClose: (() => void) | undefined; }' is not assignable to type 'SandboxPanelContextValue' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onDesktopStart' are incompatible.
+    Type '(() => void) | undefined' is not assignable to type '() => void'.
+      Type 'undefined' is not assignable to type '() => void'.
+src/components/agent/sandbox/SandboxStatusIndicator.tsx(519,26): error TS2345: Argument of type '(prev: ProjectSandbox | null) => { status: ProjectSandboxStatus; sandbox_id: string; endpoint: string | undefined; websocket_url: string | undefined; ... 10 more ...; error_message?: string; } | null' is not assignable to parameter of type 'SetStateAction<ProjectSandbox | null>'.
+  Type '(prev: ProjectSandbox | null) => { status: ProjectSandboxStatus; sandbox_id: string; endpoint: string | undefined; websocket_url: string | undefined; ... 10 more ...; error_message?: string; } | null' is not assignable to type '(prevState: ProjectSandbox | null) => ProjectSandbox | null'.
+    Type '{ status: ProjectSandboxStatus; sandbox_id: string; endpoint: string | undefined; websocket_url: string | undefined; mcp_port: number | undefined; desktop_port: number | undefined; ... 8 more ...; error_message?: string; } | null' is not assignable to type 'ProjectSandbox | null'.
+      Type '{ status: ProjectSandboxStatus; sandbox_id: string; endpoint: string | undefined; websocket_url: string | undefined; mcp_port: number | undefined; desktop_port: number | undefined; ... 8 more ...; error_message?: string; }' is not assignable to type 'ProjectSandbox' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+        Types of property 'endpoint' are incompatible.
+          Type 'string | undefined' is not assignable to type 'string'.
+            Type 'undefined' is not assignable to type 'string'.
+src/components/agent/sandbox/SandboxTerminal.tsx(173,12): error TS2375: Type '{ sandboxId: string; projectId: string | undefined; sessionId: string | undefined; onConnect: (newSessionId: string) => void; onDisconnect: () => void; onError: (errorMsg: string) => void; status: ConnectionStatus; isFullscreen: boolean; }' is not assignable to type 'TerminalImplProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/SandboxSection.tsx(116,10): error TS2375: Type '{ sandboxId: string; projectId: string | undefined; sessionId: string | undefined; onConnect: (id: string) => void; onDisconnect: () => void; height: string; showToolbar: false; }' is not assignable to type 'SandboxTerminalProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/SandboxSection.tsx(217,10): error TS2375: Type '{ sandboxId: string; projectId: string | undefined; desktopStatus: any; height: string; showToolbar: false; }' is not assignable to type 'RemoteDesktopViewerProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/SandboxSection.tsx(253,10): error TS2375: Type '{ sandboxId: string; projectId: string | undefined; terminalStatus: TerminalStatus | null; onStartTerminal: () => Promise<void>; isTerminalLoading: boolean; }' is not assignable to type '{ sandboxId: string; projectId?: string; terminalStatus: any; onStartTerminal: () => Promise<void>; isTerminalLoading: boolean; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/SandboxSection.tsx(276,10): error TS2375: Type '{ sandboxId: string; projectId: string | undefined; desktopStatus: DesktopStatus | null; onStartDesktop: (resolution?: string | undefined) => Promise<void>; onStopDesktop: () => Promise<...>; isDesktopLoading: boolean; }' is not assignable to type '{ sandboxId: string; projectId?: string; desktopStatus: any; onStartDesktop: () => Promise<void>; onStopDesktop: () => Promise<void>; isDesktopLoading: boolean; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/TenantAgentConfigEditor.tsx(186,13): error TS2375: Type '{ llm_model: string | undefined; llm_temperature: number | undefined; pattern_learning_enabled: boolean | undefined; multi_level_thinking_enabled: boolean | undefined; max_work_plan_steps: number | undefined; tool_timeout_seconds: number | undefined; enabled_tools: string[]; disabled_tools: string[]; }' is not assignable to type 'UpdateTenantAgentConfigRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'llm_model' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/ThinkingChain.tsx(199,18): error TS2375: Type '{ toolName: string; input: any; result: string | undefined; status: "success" | "failed" | "running"; startTime: number | undefined; endTime: number | undefined; duration: number | undefined; embedded: true; }' is not assignable to type 'ToolCardProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'result' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/ThinkingChain.tsx(268,18): error TS2375: Type '{ toolName: string; input: any; result: string | undefined; status: "success" | "failed" | "running"; startTime: number | undefined; endTime: number | undefined; duration: number | undefined; embedded: true; }' is not assignable to type 'ToolCardProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'result' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/timeline/ExecutionTimeline.tsx(298,37): error TS2379: Argument of type '{ id: string; title: string; type: "mcp-app"; content: string; mcpResourceUri: string; mcpAppHtml: string | undefined; mcpToolName: string; mcpProjectId: string; mcpAppToolResult: string | Record<...> | undefined; mcpServerName: string | undefined; mcpAppId: string | undefined; }' is not assignable to parameter of type 'Omit<CanvasTab, "history" | "dirty" | "createdAt" | "historyIndex">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'mcpAppId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/timeline/ExecutionTimeline.tsx(356,35): error TS2379: Argument of type '{ id: string; title: string; type: "mcp-app"; content: string; mcpResourceUri: string | undefined; mcpAppHtml: string | undefined; mcpToolName: string; mcpProjectId: string; mcpAppToolResult: string | ... 1 more ... | undefined; mcpAppUiMetadata: Record<string, unknown> | undefined; mcpServerName: string | undefined...' is not assignable to parameter of type 'Omit<CanvasTab, "history" | "dirty" | "createdAt" | "historyIndex">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'mcpAppId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/timeline/ExecutionTimeline.tsx(476,16): error TS2375: Type '{ key: string; step: TimelineStep; isLast: boolean; defaultExpanded: boolean; onUndoRequest: ((stepId: string, toolName: string) => void) | undefined; }' is not assignable to type '{ step: TimelineStep; isLast: boolean; defaultExpanded?: boolean; onUndoRequest?: (stepId: string, toolName: string) => void; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onUndoRequest' are incompatible.
+    Type '((stepId: string, toolName: string) => void) | undefined' is not assignable to type '(stepId: string, toolName: string) => void'.
+      Type 'undefined' is not assignable to type '(stepId: string, toolName: string) => void'.
+src/components/agent/timeline/SubAgentTimeline.tsx(267,10): error TS2375: Type '{ mode: "parallel" | "single" | "chain" | undefined; size: number; }' is not assignable to type '{ mode?: string; size?: number; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'mode' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/TimelineEventItem.tsx(171,10): error TS2375: Type '{ toolName: string; status: "error" | "success"; parameters: Record<string, unknown>; result: string | undefined; error: string | undefined; duration: number; defaultExpanded: false; }' is not assignable to type 'ToolExecutionCardDisplayProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'error' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/TimelineEventItem.tsx(226,10): error TS2375: Type '{ toolName: string; status: "error" | "success"; result: string | undefined; error: string | undefined; defaultExpanded: false; }' is not assignable to type 'ToolExecutionCardDisplayProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'error' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/TimelineEventItem.tsx(472,20): error TS2375: Type '{ key: string; option: ClarificationOption; isSelected: boolean; isRecommended: boolean | undefined; onClick: () => void; disabled: boolean; }' is not assignable to type '{ option: { id: string; label: string; description?: string; }; isSelected?: boolean; isRecommended?: boolean; onClick: () => void; disabled?: boolean; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'isRecommended' are incompatible.
+    Type 'boolean | undefined' is not assignable to type 'boolean'.
+      Type 'undefined' is not assignable to type 'boolean'.
+src/components/agent/TimelineEventItem.tsx(571,20): error TS2375: Type '{ key: string; option: DecisionOption; isSelected: boolean; isRecommended: boolean | undefined; onClick: () => void; disabled: boolean; }' is not assignable to type '{ option: { id: string; label: string; description?: string; }; isSelected?: boolean; isRecommended?: boolean; onClick: () => void; disabled?: boolean; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'isRecommended' are incompatible.
+    Type 'boolean | undefined' is not assignable to type 'boolean'.
+      Type 'undefined' is not assignable to type 'boolean'.
+src/components/agent/TimelineEventItem.tsx(828,43): error TS2379: Argument of type '{ id: string; title: string; type: CanvasContentType; content: string; language: string | undefined; artifactId: string; artifactUrl: string; }' is not assignable to parameter of type 'Omit<CanvasTab, "history" | "dirty" | "createdAt" | "historyIndex">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'language' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/TimelineEventItem.tsx(1021,18): error TS2375: Type '{ content: string; forcedSkillName: string | undefined; fileMetadata: { filename: string; sandbox_path?: string; mime_type: string; size_bytes: number; }[] | undefined; }' is not assignable to type 'UserMessageProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'forcedSkillName' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/agent/UnifiedHITLPanel.tsx(544,10): error TS2375: Type '{ children: string; type: "primary" | "default"; danger: boolean | undefined; icon: Element; onClick: () => void; disabled: boolean; loading: boolean; }' is not assignable to type 'ButtonProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'danger' are incompatible.
+    Type 'boolean | undefined' is not assignable to type 'boolean'.
+      Type 'undefined' is not assignable to type 'boolean'.
+src/components/agent/UnifiedHITLPanel.tsx(821,12): error TS2375: Type '{ children: string | undefined; color: string | undefined; icon: ReactNode; }' is not assignable to type 'TagProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'color' are incompatible.
+    Type 'string | undefined' is not assignable to type 'LiteralUnion<"error" | "default" | "success" | "warning" | "processing" | PresetColorType>'.
+      Type 'undefined' is not assignable to type 'LiteralUnion<"error" | "default" | "success" | "warning" | "processing" | PresetColorType>'.
+src/components/artifact/ArtifactGallery.tsx(81,8): error TS2375: Type '{ image: ReactNode; description: string; className: string | undefined; }' is not assignable to type 'EmptyProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'className' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/artifact/ArtifactRenderer.tsx(209,6): error TS2375: Type '{ src: string; alt: string; previewSrc: string | undefined; maxHeight: string | number; compact: boolean; onLoad: () => void; onError: () => void; }' is not assignable to type 'ImageViewerProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'previewSrc' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/common/ErrorBoundary.tsx(112,19): error TS2345: Argument of type '{ hasError: false; error: undefined; }' is not assignable to parameter of type 'State | ((prevState: Readonly<State>, props: Readonly<Props>) => State | Pick<State, "hasError" | "error"> | null) | Pick<...> | null'.
+  Type '{ hasError: false; error: undefined; }' is not assignable to type 'Pick<State, "hasError" | "error">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'error' are incompatible.
+      Type 'undefined' is not assignable to type 'Error'.
+src/components/common/ErrorBoundary.tsx(127,10): error TS2375: Type '{ error: Error | undefined; onReset: () => void; showHomeButton: boolean; }' is not assignable to type 'ErrorFallbackProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'error' are incompatible.
+    Type 'Error | undefined' is not assignable to type 'Error'.
+      Type 'undefined' is not assignable to type 'Error'.
+src/components/common/RouteErrorBoundary.tsx(139,10): error TS2375: Type '{ error: undefined; context: string; fallbackPath: string; onReset: () => void; }' is not assignable to type '{ error?: Error; context: string; fallbackPath?: string; onReset: () => void; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'error' are incompatible.
+    Type 'undefined' is not assignable to type 'Error'.
+src/components/graph/CytoscapeGraph/Config.ts(22,14): error TS2375: Type '{ projectId: undefined; tenantId: undefined; includeCommunities: true; minConnections: number; subgraphNodeIds: undefined; }' is not assignable to type 'GraphDataConfig' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'undefined' is not assignable to type 'string'.
+src/components/graph/CytoscapeGraph/Config.ts(63,3): error TS2375: Type '{ data: { projectId?: string; tenantId?: string; includeCommunities?: boolean; minConnections?: number; subgraphNodeIds?: string[]; }; features: { showToolbar?: boolean; showLegend?: boolean; showStats?: boolean; enableExport?: boolean; enableRelayout?: boolean; }; layout: { ...; }; theme: GraphThemeConfig | undefin...' is not assignable to type 'GraphConfig' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'theme' are incompatible.
+    Type 'GraphThemeConfig | undefined' is not assignable to type 'GraphThemeConfig'.
+      Type 'undefined' is not assignable to type 'GraphThemeConfig'.
+src/components/graph/CytoscapeGraph/Config.ts(81,5): error TS2375: Type '{ projectId: string | undefined; tenantId: string | undefined; includeCommunities: boolean | undefined; minConnections: number | undefined; subgraphNodeIds?: string[]; }' is not assignable to type 'GraphDataConfig' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/graph/CytoscapeGraph/CytoscapeGraph.tsx(145,27): error TS2379: Argument of type '{ projectId: string | undefined; tenantId: string | undefined; includeCommunities: boolean | undefined; minConnections: number | undefined; }' is not assignable to parameter of type '{ projectId?: string; tenantId?: string; includeCommunities?: boolean; minConnections?: number; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/graph/CytoscapeGraph/CytoscapeGraph.tsx(291,14): error TS2375: Type '{ includeCommunities: boolean | undefined; }' is not assignable to type 'GraphLegendProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'includeCommunities' are incompatible.
+    Type 'boolean | undefined' is not assignable to type 'boolean'.
+      Type 'undefined' is not assignable to type 'boolean'.
+src/components/graph/CytoscapeGraph/CytoscapeGraph.tsx(317,12): error TS2375: Type '{ includeCommunities: boolean | undefined; }' is not assignable to type 'GraphLegendProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'includeCommunities' are incompatible.
+    Type 'boolean | undefined' is not assignable to type 'boolean'.
+      Type 'undefined' is not assignable to type 'boolean'.
+src/components/graph/CytoscapeGraph/Viewport.tsx(112,47): error TS2379: Argument of type '{ node_uuids: string[]; include_neighbors: true; limit: number; tenant_id: string | undefined; project_id: string | undefined; }' is not assignable to parameter of type '{ node_uuids: string[]; include_neighbors?: boolean; limit?: number; tenant_id?: string; project_id?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'tenant_id' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/graph/CytoscapeGraph/Viewport.tsx(120,48): error TS2379: Argument of type '{ tenant_id: string | undefined; project_id: string | undefined; limit: number; }' is not assignable to parameter of type '{ tenant_id?: string; project_id?: string; limit?: number; since?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'tenant_id' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/layout/AppHeader/AppHeader.tsx(121,10): error TS2375: Type '{ variant: "minimal" | "compact" | "full"; breadcrumbs: Breadcrumb[] | undefined; context: "tenant" | "project" | "agent"; }' is not assignable to type '{ variant: HeaderVariant; breadcrumbs?: Breadcrumb[]; context?: "tenant" | "project" | "agent"; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'breadcrumbs' are incompatible.
+    Type 'Breadcrumb[] | undefined' is not assignable to type 'Breadcrumb[]'.
+      Type 'undefined' is not assignable to type 'Breadcrumb[]'.
+src/components/layout/AppHeader/AppHeader.tsx(128,8): error TS2375: Type '{ children: string | number | bigint | true | ReactElement<unknown, string | JSXElementConstructor<any>> | Iterable<ReactNode> | ReactPortal | Promise<...>; breadcrumbs: Breadcrumb[] | undefined; context: "tenant" | ... 1 more ... | "agent"; }' is not assignable to type '{ children: ReactNode; breadcrumbs?: Breadcrumb[]; context?: "tenant" | "project" | "agent"; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'breadcrumbs' are incompatible.
+    Type 'Breadcrumb[] | undefined' is not assignable to type 'Breadcrumb[]'.
+      Type 'undefined' is not assignable to type 'Breadcrumb[]'.
+src/components/layout/AppSidebar/AgentSidebar.tsx(67,6): error TS2375: Type '{ config: SidebarConfig; basePath: string; variant: "agent"; collapsed: boolean; onCollapseToggle: ((() => void) & (() => void)) | undefined; user: NavUser; onLogout: (() => void) & (() => void); t: TFunction<...> | (((key: string) => string) & ((key: string) => string)); }' is not assignable to type 'AppSidebarProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onCollapseToggle' are incompatible.
+    Type '((() => void) & (() => void)) | undefined' is not assignable to type '() => void'.
+      Type 'undefined' is not assignable to type '() => void'.
+src/components/layout/AppSidebar/AppSidebar.tsx(80,22): error TS2375: Type '{ variant: SidebarVariant | undefined; }' is not assignable to type 'SidebarBrandProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'variant' are incompatible.
+    Type 'SidebarVariant | undefined' is not assignable to type 'SidebarVariant'.
+      Type 'undefined' is not assignable to type 'SidebarVariant'.
+src/components/layout/AppSidebar/AppSidebar.tsx(88,36): error TS2375: Type '{ user: { name: string; email: string; }; onLogout: (() => void) | undefined; }' is not assignable to type 'SidebarUserProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onLogout' are incompatible.
+    Type '(() => void) | undefined' is not assignable to type '() => void'.
+      Type 'undefined' is not assignable to type '() => void'.
+src/components/layout/AppSidebar/AppSidebar.tsx(175,22): error TS2375: Type '{ isCollapsed: boolean; onCollapseToggle: () => void; openGroups: Record<string, boolean>; onGroupToggle: (groupId: string) => void; user: NavUser | undefined; onLogout: (() => void) | undefined; t: (key: string) => string; basePath: string; }' is not assignable to type 'SidebarContextValue' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'user' are incompatible.
+    Type 'NavUser | undefined' is not assignable to type 'NavUser'.
+      Type 'undefined' is not assignable to type 'NavUser'.
+src/components/layout/AppSidebar/AppSidebar.tsx(177,10): error TS2375: Type '{ config: SidebarConfig; variant: SidebarVariant; brand: ReactNode; user: NavUser | undefined; onLogout: (() => void) | undefined; }' is not assignable to type '{ config: SidebarConfig; variant?: SidebarVariant; brand?: ReactNode; user?: { name: string; email: string; }; onLogout?: () => void; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'user' are incompatible.
+    Type 'NavUser | undefined' is not assignable to type '{ name: string; email: string; }'.
+      Type 'undefined' is not assignable to type '{ name: string; email: string; }'.
+src/components/mcp-app/StandardMCPAppRenderer.tsx(168,22): error TS2379: Argument of type '{ projectId: string | undefined; enabled: boolean; reconnectionConfig: { maxAttempts: number; initialDelayMs: number; maxDelayMs: number; gracePeriodMs: number; }; }' is not assignable to parameter of type 'UseMCPClientOptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/mcp-app/StandardMCPAppRenderer.tsx(547,14): error TS2375: Type '{ key: string; ref: RefObject<any>; toolName: string; sandbox: { appPermissions?: MCPAppUIPermissions; csp?: { connectDomains?: string[]; resourceDomains?: string[]; frameDomains?: string[]; baseUriDomains?: string[]; }; url: URL; permissions: string; }; ... 13 more ...; onOpenLink: ({ url }: { ...; }) => Promise<.....' is not assignable to type 'AppRendererProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'toolResourceUri' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/mcp/McpServerDrawer.tsx(217,12): error TS2375: Type '{ value: string; onChange: (e: ChangeEvent<HTMLTextAreaElement>) => void; rows: number; className: string; status: "error" | undefined; }' is not assignable to type 'TextAreaProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'status' are incompatible.
+    Type '"error" | undefined' is not assignable to type '"" | "error" | "success" | "warning" | "validating"'.
+      Type 'undefined' is not assignable to type '"" | "error" | "success" | "warning" | "validating"'.
+src/components/provider/ProviderConfigModal.tsx(355,15): error TS2375: Type '{ name: string; provider_type: ProviderType; base_url: string | undefined; llm_model: string; llm_small_model: string | undefined; embedding_model: string | undefined; ... 4 more ...; is_default: boolean; }' is not assignable to type 'ProviderUpdate' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'base_url' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/provider/ProviderConfigModal.tsx(373,15): error TS2375: Type '{ name: string; provider_type: ProviderType; api_key: string; base_url: string | undefined; llm_model: string; llm_small_model: string | undefined; embedding_model: string | undefined; ... 4 more ...; is_default: boolean; }' is not assignable to type 'ProviderCreate' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'base_url' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/shared/ui/WorkspaceSwitcher/WorkspaceSwitcherRoot.tsx(17,6): error TS2375: Type '{ children: ReactNode; mode: WorkspaceMode; defaultOpen: boolean; onOpenChange: ((open: boolean) => void) | undefined; }' is not assignable to type 'WorkspaceProviderProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onOpenChange' are incompatible.
+    Type '((open: boolean) => void) | undefined' is not assignable to type '(open: boolean) => void'.
+      Type 'undefined' is not assignable to type '(open: boolean) => void'.
+src/components/subagent/SubAgentGrid.tsx(24,10): error TS2375: Type '{ key: string; subagent: SubAgentResponse; onToggle: (id: string, enabled: boolean) => void; onEdit: (subagent: SubAgentResponse) => void; onDelete: (id: string) => void; onExport: ((subagent: SubAgentResponse) => void) | undefined; onImport: ((name: string) => void) | undefined; }' is not assignable to type 'SubAgentCardProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onExport' are incompatible.
+    Type '((subagent: SubAgentResponse) => void) | undefined' is not assignable to type '(subagent: SubAgentResponse) => void'.
+      Type 'undefined' is not assignable to type '(subagent: SubAgentResponse) => void'.
+src/components/subagent/SubAgentModal.tsx(599,15): error TS2322: Type '{ label: string; value: string; title: string | undefined; }[]' is not assignable to type '(DefaultOptionType | BaseOptionType)[]'.
+  Type '{ label: string; value: string; title: string | undefined; }' is not assignable to type 'DefaultOptionType | BaseOptionType' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Type '{ label: string; value: string; title: string | undefined; }' is not assignable to type 'BaseOptionType' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+      Types of property 'title' are incompatible.
+        Type 'string | undefined' is not assignable to type 'string'.
+          Type 'undefined' is not assignable to type 'string'.
+src/components/tasks/TaskList.tsx(288,49): error TS2379: Argument of type '{ limit: number; offset: number; search: string | undefined; status: string | undefined; task_type: string | undefined; }' is not assignable to parameter of type '{ limit?: number; offset?: number; status?: string; task_type?: string; search?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'status' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/tasks/TaskList.tsx(384,9): error TS2375: Type '{ tasks: Task[]; loading: boolean; refreshing: boolean; searchQuery: string; setSearchQuery: React.Dispatch<React.SetStateAction<string>>; statusFilter: string; setStatusFilter: React.Dispatch<...>; ... 8 more ...; embedded: boolean; }' is not assignable to type 'TaskListContextValue' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'entityId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/tenant/ProjectManager/ProjectManager.tsx(98,55): error TS2379: Argument of type '{ name: string; description: string | undefined; is_public: boolean; }' is not assignable to parameter of type 'Partial<Project>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'description' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/tenant/ProjectManager/ProjectManager.tsx(239,37): error TS2375: Type '{ projects: Project[]; currentProject: Project | null; isLoading: boolean; error: string | null; currentTenant: Tenant | null; searchTerm: string; setSearchTerm: React.Dispatch<...>; ... 14 more ...; onProjectSelect: ((project: Project) => void) | undefined; }' is not assignable to type 'ProjectManagerContextValue' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'onProjectSelect' are incompatible.
+    Type '((project: Project) => void) | undefined' is not assignable to type '(project: Project) => void'.
+      Type 'undefined' is not assignable to type '(project: Project) => void'.
+src/components/tenant/ProviderModal.tsx(187,15): error TS2375: Type '{ name: string; provider_type: ProviderType; base_url: string | undefined; llm_model: string; llm_small_model: string | undefined; embedding_model: string | undefined; reranker_model: string | undefined; is_active: boolean; is_default: boolean; }' is not assignable to type 'ProviderUpdate' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'base_url' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/components/tenant/ProviderModal.tsx(204,15): error TS2375: Type '{ name: string; provider_type: ProviderType; api_key: string; base_url: string | undefined; llm_model: string; llm_small_model: string | undefined; embedding_model: string | undefined; reranker_model: string | undefined; is_active: boolean; is_default: boolean; }' is not assignable to type 'ProviderCreate' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'base_url' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/hooks/useSandboxDetection.ts(152,66): error TS2379: Argument of type '{ sandboxId: string | null | undefined; autoOpenPanel: true; autoSwitchToOutput: true; }' is not assignable to parameter of type 'UseSandboxDetectionOptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'sandboxId' are incompatible.
+    Type 'string | null | undefined' is not assignable to type 'string | null'.
+      Type 'undefined' is not assignable to type 'string | null'.
+src/layouts/AgentLayout.tsx(88,8): error TS2375: Type '{ projectId: string | undefined; conversationId: string | undefined; collapsed: boolean; onCollapseToggle: () => void; }' is not assignable to type 'AgentSidebarProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/layouts/ProjectLayout.tsx(83,8): error TS2375: Type '{ projectId: string | undefined; }' is not assignable to type 'ProjectSidebarProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/layouts/SchemaLayout.tsx(26,16): error TS2375: Type '{ children: (string | Element)[]; key: string; to: string; end: boolean | undefined; className: ({ isActive }: NavLinkRenderProps) => string; }' is not assignable to type 'NavLinkProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'end' are incompatible.
+    Type 'boolean | undefined' is not assignable to type 'boolean'.
+      Type 'undefined' is not assignable to type 'boolean'.
+src/layouts/TenantLayout.tsx(270,10): error TS2375: Type '{ tenantId: string | undefined; collapsed: boolean; onCollapsedChange: Dispatch<SetStateAction<boolean>>; }' is not assignable to type 'TenantChatSidebarProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'tenantId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/layouts/TenantLayout.tsx(278,12): error TS2375: Type '{ tenantId: string | undefined; mobile: true; }' is not assignable to type 'TenantChatSidebarProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'tenantId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/pages/admin/DeadLetterQueue.tsx(144,50): error TS2379: Argument of type '{ status: DLQMessageStatus | undefined; event_type: string | undefined; error_type: string | undefined; limit: number; offset: number; }' is not assignable to parameter of type 'ListMessagesParams' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'status' are incompatible.
+    Type 'DLQMessageStatus | undefined' is not assignable to type 'DLQMessageStatus'.
+      Type 'undefined' is not assignable to type 'DLQMessageStatus'.
+src/pages/admin/DeadLetterQueue.tsx(317,10): error TS2375: Type '{ children: (string | number)[]; type: "danger" | undefined; }' is not assignable to type 'TextProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'type' are incompatible.
+    Type '"danger" | undefined' is not assignable to type 'BaseType'.
+      Type 'undefined' is not assignable to type 'BaseType'.
+src/pages/project/ChannelConfig.tsx(607,14): error TS2375: Type '{ style: { width: string; }; min: number | undefined; max: number | undefined; placeholder: string | undefined; }' is not assignable to type 'InputNumberProps<ValueType>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'min' are incompatible.
+    Type 'number | undefined' is not assignable to type 'ValueType'.
+      Type 'undefined' is not assignable to type 'ValueType'.
+src/pages/project/communities/index.tsx(170,59): error TS2379: Argument of type '{ tenant_id: undefined; project_id: string; min_members: number; limit: number; offset: number; }' is not assignable to parameter of type '{ tenant_id?: string; project_id?: string; min_members?: number; limit?: number; offset?: number; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'tenant_id' are incompatible.
+    Type 'undefined' is not assignable to type 'string'.
+src/pages/project/communities/index.tsx(926,6): error TS2375: Type '{ children: string | number | bigint | boolean | Iterable<ReactNode> | Promise<AwaitedReactNode> | Element; projectId: string | undefined; limit: number | undefined; }' is not assignable to type 'CommunitiesListProviderProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/pages/project/EnhancedSearch.legacy.tsx(208,52): error TS2379: Argument of type '{ query: string; strategy: string; project_id: string | undefined; focal_node_uuid: string | undefined; reranker: string; since: string | undefined; }' is not assignable to parameter of type '{ query: string; strategy?: string; limit?: number; focal_node_uuid?: string; reranker?: string; tenant_id?: string; project_id?: string; since?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'focal_node_uuid' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/pages/project/EnhancedSearch.legacy.tsx(220,60): error TS2379: Argument of type '{ start_entity_uuid: string; max_depth: number; relationship_types: string[] | undefined; limit: number; }' is not assignable to parameter of type '{ start_entity_uuid: string; max_depth?: number; relationship_types?: string[]; limit?: number; tenant_id?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'relationship_types' are incompatible.
+    Type 'string[] | undefined' is not assignable to type 'string[]'.
+      Type 'undefined' is not assignable to type 'string[]'.
+src/pages/project/EnhancedSearch.legacy.tsx(230,52): error TS2379: Argument of type '{ query: string; since: string | undefined; until: string | undefined; limit: number; }' is not assignable to parameter of type '{ query: string; since?: string; until?: string; limit?: number; tenant_id?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'since' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/pages/project/EnhancedSearch.legacy.tsx(239,54): error TS2379: Argument of type '{ query: string; entity_types: string[] | undefined; tags: string[] | undefined; since: string | undefined; limit: number; }' is not assignable to parameter of type '{ query: string; entity_types?: string[]; tags?: string[]; since?: string; limit?: number; offset?: number; tenant_id?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'entity_types' are incompatible.
+    Type 'string[] | undefined' is not assignable to type 'string[]'.
+      Type 'undefined' is not assignable to type 'string[]'.
+src/pages/project/EnhancedSearch.legacy.tsx(505,18): error TS2375: Type '{ projectId: string | undefined; tenantId: string | undefined; highlightNodeIds: string[]; subgraphNodeIds: string[] | undefined; includeCommunities: true; onNodeClick: (node: NodeData | null) => void; }' is not assignable to type 'CytoscapeGraphProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/pages/project/EnhancedSearch.tsx(328,54): error TS2379: Argument of type '{ query: string; strategy: string; project_id: string | undefined; focal_node_uuid: string | undefined; reranker: string; since: string | undefined; }' is not assignable to parameter of type '{ query: string; strategy?: string; limit?: number; focal_node_uuid?: string; reranker?: string; tenant_id?: string; project_id?: string; since?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'focal_node_uuid' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/pages/project/EnhancedSearch.tsx(341,62): error TS2379: Argument of type '{ start_entity_uuid: string; max_depth: number; relationship_types: string[] | undefined; limit: number; }' is not assignable to parameter of type '{ start_entity_uuid: string; max_depth?: number; relationship_types?: string[]; limit?: number; tenant_id?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'relationship_types' are incompatible.
+    Type 'string[] | undefined' is not assignable to type 'string[]'.
+      Type 'undefined' is not assignable to type 'string[]'.
+src/pages/project/EnhancedSearch.tsx(351,54): error TS2379: Argument of type '{ query: string; since: string | undefined; until: string | undefined; limit: number; }' is not assignable to parameter of type '{ query: string; since?: string; until?: string; limit?: number; tenant_id?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'since' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/pages/project/EnhancedSearch.tsx(360,56): error TS2379: Argument of type '{ query: string; entity_types: string[] | undefined; tags: string[] | undefined; since: string | undefined; limit: number; }' is not assignable to parameter of type '{ query: string; entity_types?: string[]; tags?: string[]; since?: string; limit?: number; offset?: number; tenant_id?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'entity_types' are incompatible.
+    Type 'string[] | undefined' is not assignable to type 'string[]'.
+      Type 'undefined' is not assignable to type 'string[]'.
+src/pages/project/EnhancedSearch.tsx(634,22): error TS2375: Type '{ projectId: string | undefined; tenantId: string | undefined; highlightNodeIds: string[]; subgraphNodeIds: string[] | undefined; includeCommunities: true; onNodeClick: (node: NodeData | null) => void; }' is not assignable to type 'CytoscapeGraphProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/pages/project/EntitiesList.tsx(191,58): error TS2379: Argument of type '{ project_id: string | undefined; }' is not assignable to parameter of type '{ project_id?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'project_id' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/pages/project/EntitiesList.tsx(205,56): error TS2379: Argument of type '{ tenant_id: undefined; project_id: string | undefined; entity_type: string | undefined; limit: number; offset: number; }' is not assignable to parameter of type '{ tenant_id?: string; project_id?: string; entity_type?: string; limit?: number; offset?: number; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'tenant_id' are incompatible.
+    Type 'undefined' is not assignable to type 'string'.
+src/pages/project/EntitiesList.tsx(226,15): error TS2322: Type '{ edge_id: string; relation_type: string; direction: string; fact: string; score: number; created_at: undefined; related_entity: { uuid: string; name: string; entity_type: string; summary: string; }; }[]' is not assignable to type 'Relationship[]'.
+  Type '{ edge_id: string; relation_type: string; direction: string; fact: string; score: number; created_at: undefined; related_entity: { uuid: string; name: string; entity_type: string; summary: string; }; }' is not assignable to type 'Relationship' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'created_at' are incompatible.
+      Type 'undefined' is not assignable to type 'string'.
+src/pages/project/MemoryDetail.tsx(159,17): error TS2345: Argument of type '(prev: Memory | null) => { processing_status: "PENDING"; task_id: string | undefined; id: string; project_id: string; title: string; content: string; content_type: "document" | "text" | "video" | "image"; ... 10 more ...; updated_at?: string; } | null' is not assignable to parameter of type 'SetStateAction<Memory | null>'.
+  Type '(prev: Memory | null) => { processing_status: "PENDING"; task_id: string | undefined; id: string; project_id: string; title: string; content: string; content_type: "document" | "text" | "video" | "image"; ... 10 more ...; updated_at?: string; } | null' is not assignable to type '(prevState: Memory | null) => Memory | null'.
+    Type '{ processing_status: "PENDING"; task_id: string | undefined; id: string; project_id: string; title: string; content: string; content_type: "document" | "text" | "video" | "image"; tags: string[]; ... 9 more ...; updated_at?: string; } | null' is not assignable to type 'Memory | null'.
+      Type '{ processing_status: "PENDING"; task_id: string | undefined; id: string; project_id: string; title: string; content: string; content_type: "text" | "document" | "image" | "video"; ... 10 more ...; updated_at?: string; }' is not assignable to type 'Memory' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+        Types of property 'task_id' are incompatible.
+          Type 'string | undefined' is not assignable to type 'string'.
+            Type 'undefined' is not assignable to type 'string'.
+src/pages/project/MemoryGraph.tsx(19,8): error TS2375: Type '{ projectId: string | undefined; includeCommunities: true; minConnections: number; onNodeClick: (node: any) => void; }' is not assignable to type 'CytoscapeGraphProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'projectId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/pages/project/MemoryList.tsx(614,12): error TS2375: Type '{ status: ProcessingStatus; progress: number | undefined; }' is not assignable to type 'StatusBadgeProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'progress' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/pages/project/search/components/SearchConfig.tsx(552,41): error TS2379: Argument of type '{ since: string | undefined; until?: string; }' is not assignable to parameter of type '{ since?: string; until?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'since' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/pages/project/search/components/SearchConfig.tsx(568,41): error TS2379: Argument of type '{ until: string | undefined; since?: string; }' is not assignable to parameter of type '{ since?: string; until?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'until' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/pages/tenant/PluginHub.tsx(531,7): error TS2412: Type '{ [x: string]: unknown; } | undefined' is not assignable to type 'Record<string, any>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+  Type 'undefined' is not assignable to type 'Record<string, any>'.
+src/pages/tenant/PluginHub.tsx(608,14): error TS2375: Type '{ children: Element; key: string; name: string | string[]; label: string; rules: { required: boolean; message: string; }[] | undefined; }' is not assignable to type 'FormItemProps<string | string[]>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'rules' are incompatible.
+    Type '{ required: boolean; message: string; }[] | undefined' is not assignable to type 'Rule[]'.
+      Type 'undefined' is not assignable to type 'Rule[]'.
+src/pages/tenant/PluginHub.tsx(621,14): error TS2375: Type '{ children: Element; key: string; name: string | string[]; label: string; rules: { required: boolean; message: string; }[] | undefined; }' is not assignable to type 'FormItemProps<string | string[]>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'rules' are incompatible.
+    Type '{ required: boolean; message: string; }[] | undefined' is not assignable to type 'Rule[]'.
+      Type 'undefined' is not assignable to type 'Rule[]'.
+src/pages/tenant/PluginHub.tsx(622,16): error TS2375: Type '{ style: { width: string; }; min: number | undefined; max: number | undefined; placeholder: string | undefined; }' is not assignable to type 'InputNumberProps<ValueType>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'min' are incompatible.
+    Type 'number | undefined' is not assignable to type 'ValueType'.
+      Type 'undefined' is not assignable to type 'ValueType'.
+src/pages/tenant/PluginHub.tsx(633,12): error TS2375: Type '{ children: Element; key: string; name: string | string[]; label: string; rules: { required: boolean; message: string; }[] | undefined; }' is not assignable to type 'FormItemProps<string | string[]>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'rules' are incompatible.
+    Type '{ required: boolean; message: string; }[] | undefined' is not assignable to type 'Rule[]'.
+      Type 'undefined' is not assignable to type 'Rule[]'.
+src/pages/tenant/PluginHub.tsx(843,57): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'SetStateAction<string | null>'.
+  Type 'undefined' is not assignable to type 'SetStateAction<string | null>'.
+src/pages/tenant/ProviderList.tsx(672,8): error TS2375: Type '{ isOpen: boolean; onClose: () => void; onSuccess: () => void; provider: ProviderConfig | null; initialProviderType: ProviderType | undefined; }' is not assignable to type 'ProviderConfigModalProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'initialProviderType' are incompatible.
+    Type 'ProviderType | undefined' is not assignable to type 'ProviderType'.
+      Type 'undefined' is not assignable to type 'ProviderType'.
+src/pages/tenant/TemplateMarketplace.tsx(42,40): error TS2379: Argument of type '{ category: string | undefined; search: string | undefined; }' is not assignable to parameter of type '{ category?: string; search?: string; page?: number; page_size?: number; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'category' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/pages/tenant/TemplateMarketplace.tsx(146,12): error TS2375: Type '{ children: string; color: "blue" | undefined; className: string; onClick: () => void; }' is not assignable to type 'TagProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'color' are incompatible.
+    Type '"blue" | undefined' is not assignable to type 'LiteralUnion<"error" | "default" | "success" | "warning" | "processing" | PresetColorType>'.
+      Type 'undefined' is not assignable to type 'LiteralUnion<"error" | "default" | "success" | "warning" | "processing" | PresetColorType>'.
+src/pages/tenant/TemplateMarketplace.tsx(154,14): error TS2375: Type '{ children: string; key: string; color: string | undefined; className: string; onClick: () => void; }' is not assignable to type 'TagProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'color' are incompatible.
+    Type 'string | undefined' is not assignable to type 'LiteralUnion<"error" | "default" | "success" | "warning" | "processing" | PresetColorType>'.
+      Type 'undefined' is not assignable to type 'LiteralUnion<"error" | "default" | "success" | "warning" | "processing" | PresetColorType>'.
+src/pages/tenant/WorkflowPatterns.tsx(43,3): error TS2375: Type '{ id: string; name: string; signature: string; status: PatternStatus; usageCount: number; successRate: number; avgRuntime: number | undefined; lastUsed: string; pattern: { name: string; description: string; tools: string[]; steps: { ...; }[]; }; }' is not assignable to type 'WorkflowPattern' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'avgRuntime' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/pages/tenant/WorkflowPatterns.tsx(299,14): error TS2375: Type '{ patterns: WorkflowPattern[]; selectedId: string | undefined; onSelect: (pattern: WorkflowPattern) => void; onDeprecate: (patternId: string) => Promise<...>; showAllColumns: true; }' is not assignable to type 'PatternListProps' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'selectedId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/services/agentService.ts(605,5): error TS2375: Type '{ lifecycleState: LifecycleState | null; isInitialized: boolean; isActive: boolean; toolCount: number | undefined; builtinToolCount: number | undefined; mcpToolCount: number | undefined; ... 5 more ...; errorMessage: string | undefined; }' is not assignable to type 'LifecycleStateData' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'toolCount' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/services/agentService.ts(649,5): error TS2375: Type '{ eventType: string; sandboxId: string | null; status: SandboxStatus | null; endpoint: string | undefined; websocketUrl: string | undefined; mcpPort: number | undefined; ... 5 more ...; errorMessage: string | undefined; }' is not assignable to type 'SandboxStateData' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'endpoint' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/services/agentService.ts(734,13): error TS2375: Type '{ run_id: string; conversation_id: string; subagent_name: string; task: string; status: string; summary: string | undefined; }' is not assignable to type 'SubAgentRunEventData' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'summary' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string | null'.
+      Type 'undefined' is not assignable to type 'string | null'.
+src/services/artifactService.ts(39,3): error TS2375: Type '{ id: string; projectId: string; tenantId: string; sandboxId: string | undefined; toolExecutionId: string | undefined; conversationId: string | undefined; filename: string; mimeType: string; ... 9 more ...; createdAt: string; }' is not assignable to type 'Artifact' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'sandboxId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/services/artifactService.ts(141,3): error TS2375: Type '{ artifactId: string; sizeBytes: number; url: string | undefined; }' is not assignable to type '{ artifactId: string; sizeBytes: number; url?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'url' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/services/client/ApiError.ts(215,5): error TS2375: Type '{ type: ApiErrorType; code: string; message: string; statusCode: number | undefined; details: unknown; userMessage: string; }' is not assignable to type '{ type: ApiErrorType; code: string; message: string; statusCode?: number; details?: unknown; userMessage: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'statusCode' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/services/client/urlUtils.ts(280,69): error TS2379: Argument of type '{ method: string; headers: {}; body: string | undefined; retry?: FetchRetryConfig | boolean; cache?: RequestCache; credentials?: RequestCredentials; integrity?: string; keepalive?: boolean; ... 6 more ...; window?: null; }' is not assignable to parameter of type 'FetchOptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'body' are incompatible.
+    Type 'string | undefined' is not assignable to type 'BodyInit | null'.
+      Type 'undefined' is not assignable to type 'BodyInit | null'.
+src/services/client/urlUtils.ts(293,69): error TS2379: Argument of type '{ method: string; headers: {}; body: string | undefined; retry?: FetchRetryConfig | boolean; cache?: RequestCache; credentials?: RequestCredentials; integrity?: string; keepalive?: boolean; ... 6 more ...; window?: null; }' is not assignable to parameter of type 'FetchOptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'body' are incompatible.
+    Type 'string | undefined' is not assignable to type 'BodyInit | null'.
+      Type 'undefined' is not assignable to type 'BodyInit | null'.
+src/services/client/urlUtils.ts(306,69): error TS2379: Argument of type '{ method: string; headers: {}; body: string | undefined; retry?: FetchRetryConfig | boolean; cache?: RequestCache; credentials?: RequestCredentials; integrity?: string; keepalive?: boolean; ... 6 more ...; window?: null; }' is not assignable to parameter of type 'FetchOptions' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'body' are incompatible.
+    Type 'string | undefined' is not assignable to type 'BodyInit | null'.
+      Type 'undefined' is not assignable to type 'BodyInit | null'.
+src/services/eventQueue.ts(123,11): error TS2375: Type '{ type: string; data: unknown; timestamp: number; conversationId: string | undefined; }' is not assignable to type 'QueuedEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'conversationId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/services/eventQueue.ts(221,25): error TS2379: Argument of type '{ type: string; data: unknown; conversationId: string | undefined; }' is not assignable to parameter of type '{ type: string; data: unknown; conversationId?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'conversationId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/services/hitlService.unified.ts(114,11): error TS2375: Type '{ requestId: string; reason: string | undefined; }' is not assignable to type 'HITLCancelRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'reason' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/services/unifiedEventService.ts(451,15): error TS2375: Type '{ type: string; routing_key: string | undefined; conversation_id: string | undefined; project_id: string | undefined; data: unknown; event_id: string | undefined; event_time_us: number | undefined; event_counter: number | undefined; timestamp: string | undefined; }' is not assignable to type 'UnifiedEvent<unknown>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'routing_key' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/services/unifiedEventService.ts(476,13): error TS2375: Type '{ type: string; routing_key: string | undefined; data: unknown; }' is not assignable to type 'UnifiedEvent<unknown>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'routing_key' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/stores/agent/executionStore.ts(201,13): error TS2345: Argument of type '(state: ExecutionState) => { currentStepStatus: "failed" | "completed"; currentWorkPlan: { current_step_index: number; id: string; conversation_id: string; status: PlanStatus; steps: PlanStep[]; workflow_pattern_id?: string; created_at: string; updated_at?: string; } | null; executionTimeline: (TimelineStep | { ...;...' is not assignable to parameter of type 'ExecutionState | Partial<ExecutionState> | ((state: ExecutionState) => ExecutionState | Partial<ExecutionState>)'.
+  Type '(state: ExecutionState) => { currentStepStatus: "failed" | "completed"; currentWorkPlan: { current_step_index: number; id: string; conversation_id: string; status: PlanStatus; steps: PlanStep[]; workflow_pattern_id?: string; created_at: string; updated_at?: string; } | null; executionTimeline: (TimelineStep | { ...;...' is not assignable to type '(state: ExecutionState) => ExecutionState | Partial<ExecutionState>'.
+    Type '{ currentStepStatus: "failed" | "completed"; currentWorkPlan: { current_step_index: number; id: string; conversation_id: string; status: PlanStatus; steps: PlanStep[]; workflow_pattern_id?: string; created_at: string; updated_at?: string; } | null; executionTimeline: (TimelineStep | { ...; })[]; toolExecutionHistory...' is not assignable to type 'ExecutionState | Partial<ExecutionState>'.
+      Type '{ currentStepStatus: "failed" | "completed"; currentWorkPlan: { current_step_index: number; id: string; conversation_id: string; status: PlanStatus; steps: PlanStep[]; workflow_pattern_id?: string; created_at: string; updated_at?: string; } | null; executionTimeline: (TimelineStep | { ...; })[]; toolExecutionHistory...' is not assignable to type 'Partial<ExecutionState>'.
+        Types of property 'executionTimeline' are incompatible.
+          Type '(TimelineStep | { status: "failed" | "completed"; endTime: string; duration: number | undefined; toolExecutions: ToolExecution[]; stepNumber: number; description: string; startTime?: string; thoughts: string[]; })[]' is not assignable to type 'TimelineStep[]'.
+            Type 'TimelineStep | { status: "failed" | "completed"; endTime: string; duration: number | undefined; toolExecutions: ToolExecution[]; stepNumber: number; description: string; startTime?: string; thoughts: string[]; }' is not assignable to type 'TimelineStep' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+              Type '{ status: "failed" | "completed"; endTime: string; duration: number | undefined; toolExecutions: ToolExecution[]; stepNumber: number; description: string; startTime?: string; thoughts: string[]; }' is not assignable to type 'TimelineStep' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+                Types of property 'duration' are incompatible.
+                  Type 'number | undefined' is not assignable to type 'number'.
+                    Type 'undefined' is not assignable to type 'number'.
+src/stores/agent/executionStore.ts(306,13): error TS2345: Argument of type '(state: ExecutionState) => { currentToolExecution: { id: string; toolName: string; input: Record<string, unknown>; startTime: string; stepNumber: number | undefined; }; executionTimeline: TimelineStep[]; toolExecutionHistory: ToolExecution[]; }' is not assignable to parameter of type 'ExecutionState | Partial<ExecutionState> | ((state: ExecutionState) => ExecutionState | Partial<ExecutionState>)'.
+  Type '(state: ExecutionState) => { currentToolExecution: { id: string; toolName: string; input: Record<string, unknown>; startTime: string; stepNumber: number | undefined; }; executionTimeline: TimelineStep[]; toolExecutionHistory: ToolExecution[]; }' is not assignable to type '(state: ExecutionState) => ExecutionState | Partial<ExecutionState>'.
+    Type '{ currentToolExecution: { id: string; toolName: string; input: Record<string, unknown>; startTime: string; stepNumber: number | undefined; }; executionTimeline: TimelineStep[]; toolExecutionHistory: ToolExecution[]; }' is not assignable to type 'ExecutionState | Partial<ExecutionState>'.
+      Type '{ currentToolExecution: { id: string; toolName: string; input: Record<string, unknown>; startTime: string; stepNumber: number | undefined; }; executionTimeline: TimelineStep[]; toolExecutionHistory: ToolExecution[]; }' is not assignable to type 'Partial<ExecutionState>'.
+        The types of 'currentToolExecution.stepNumber' are incompatible between these types.
+          Type 'number | undefined' is not assignable to type 'number'.
+            Type 'undefined' is not assignable to type 'number'.
+src/stores/agent/executionStore.ts(321,19): error TS2375: Type '{ id: string; toolName: string; input: Record<string, unknown>; status: "running"; startTime: string; stepNumber: number | undefined; }' is not assignable to type 'ToolExecution' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'stepNumber' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/stores/agent/executionStore.ts(371,13): error TS2345: Argument of type '(state: ExecutionState) => { currentToolExecution?: never; executionTimeline?: never; toolExecutionHistory?: never; } | { currentToolExecution: CurrentToolExecution | null; executionTimeline: TimelineStep[]; toolExecutionHistory: (ToolExecution | { ...; })[]; }' is not assignable to parameter of type 'ExecutionState | Partial<ExecutionState> | ((state: ExecutionState) => ExecutionState | Partial<ExecutionState>)'.
+  Type '(state: ExecutionState) => { currentToolExecution?: never; executionTimeline?: never; toolExecutionHistory?: never; } | { currentToolExecution: CurrentToolExecution | null; executionTimeline: TimelineStep[]; toolExecutionHistory: (ToolExecution | { ...; })[]; }' is not assignable to type '(state: ExecutionState) => ExecutionState | Partial<ExecutionState>'.
+    Type '{ currentToolExecution?: never; executionTimeline?: never; toolExecutionHistory?: never; } | { currentToolExecution: CurrentToolExecution | null; executionTimeline: TimelineStep[]; toolExecutionHistory: (ToolExecution | { ...; })[]; }' is not assignable to type 'ExecutionState | Partial<ExecutionState>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+      Type '{ currentToolExecution: CurrentToolExecution | null; executionTimeline: TimelineStep[]; toolExecutionHistory: (ToolExecution | { ...; })[]; }' is not assignable to type 'ExecutionState | Partial<ExecutionState>'.
+        Type '{ currentToolExecution: CurrentToolExecution | null; executionTimeline: TimelineStep[]; toolExecutionHistory: (ToolExecution | { ...; })[]; }' is not assignable to type 'Partial<ExecutionState>'.
+          Types of property 'toolExecutionHistory' are incompatible.
+            Type '(ToolExecution | { status: "success" | "failed"; result: string | undefined; error: string | undefined; endTime: string; duration: number | undefined; id: string; toolName: string; input: Record<...>; startTime: string; stepNumber?: number; })[]' is not assignable to type 'ToolExecution[]'.
+              Type 'ToolExecution | { status: "success" | "failed"; result: string | undefined; error: string | undefined; endTime: string; duration: number | undefined; id: string; toolName: string; input: Record<...>; startTime: string; stepNumber?: number; }' is not assignable to type 'ToolExecution' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+                Type '{ status: "success" | "failed"; result: string | undefined; error: string | undefined; endTime: string; duration: number | undefined; id: string; toolName: string; input: Record<string, unknown>; startTime: string; stepNumber?: number; }' is not assignable to type 'ToolExecution' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+                  Types of property 'result' are incompatible.
+                    Type 'string | undefined' is not assignable to type 'string'.
+                      Type 'undefined' is not assignable to type 'string'.
+src/stores/agent/executionStore.ts(414,13): error TS2322: Type '{ toolExecutions: (ToolExecution | { status: "success" | "failed"; result: string | undefined; error: string | undefined; endTime: string; duration: number | undefined; ... 4 more ...; stepNumber?: number; })[]; ... 6 more ...; thoughts: string[]; }[]' is not assignable to type 'TimelineStep[]'.
+  Type '{ toolExecutions: (ToolExecution | { status: "success" | "failed"; result: string | undefined; error: string | undefined; endTime: string; duration: number | undefined; ... 4 more ...; stepNumber?: number; })[]; ... 6 more ...; thoughts: string[]; }' is not assignable to type 'TimelineStep' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'toolExecutions' are incompatible.
+      Type '(ToolExecution | { status: "success" | "failed"; result: string | undefined; error: string | undefined; endTime: string; duration: number | undefined; id: string; toolName: string; input: Record<...>; startTime: string; stepNumber?: number; })[]' is not assignable to type 'ToolExecution[]'.
+        Type 'ToolExecution | { status: "success" | "failed"; result: string | undefined; error: string | undefined; endTime: string; duration: number | undefined; id: string; toolName: string; input: Record<...>; startTime: string; stepNumber?: number; }' is not assignable to type 'ToolExecution' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+          Type '{ status: "success" | "failed"; result: string | undefined; error: string | undefined; endTime: string; duration: number | undefined; id: string; toolName: string; input: Record<string, unknown>; startTime: string; stepNumber?: number; }' is not assignable to type 'ToolExecution' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+            Types of property 'result' are incompatible.
+              Type 'string | undefined' is not assignable to type 'string'.
+                Type 'undefined' is not assignable to type 'string'.
+src/stores/agent/streamEventHandlers.ts(313,13): error TS2375: Type '{ id: string; stage: "routing"; summary: string; timestamp: number; trace_id: string | undefined; route_id: string | undefined; domain_lane: string | null; metadata: { target: string | null | undefined; confidence: number; }; }' is not assignable to type 'ExecutionNarrativeEntry' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'trace_id' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/stores/agent/streamEventHandlers.ts(348,13): error TS2375: Type '{ id: string; stage: "selection"; summary: string; timestamp: number; trace_id: string | undefined; route_id: string | undefined; domain_lane: string | null; metadata: { stage_count: number; budget_exceeded_stages: string[]; }; }' is not assignable to type 'ExecutionNarrativeEntry' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'trace_id' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/stores/agent/streamEventHandlers.ts(378,13): error TS2375: Type '{ id: string; stage: "policy"; summary: string; timestamp: number; trace_id: string | undefined; route_id: string | undefined; domain_lane: string | null; metadata: { budget_exceeded_stages: string[]; tool_budget: number | undefined; }; }' is not assignable to type 'ExecutionNarrativeEntry' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'trace_id' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/stores/agent/streamEventHandlers.ts(415,13): error TS2375: Type '{ id: string; stage: "toolset"; summary: string; timestamp: number; trace_id: string | undefined; metadata: { source: string; action: string | undefined; plugin_name: string | null | undefined; refresh_status: ToolsetRefreshStatus | undefined; refreshed_tool_count: number | undefined; }; }' is not assignable to type 'ExecutionNarrativeEntry' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'trace_id' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/stores/agent/streamEventHandlers.ts(552,32): error TS2379: Argument of type '{ status: "success"; result: string | undefined; name: string; arguments: Record<string, unknown>; startTime: number; partialArguments?: string; }' is not assignable to parameter of type 'ToolCall & { status: "success" | "failed" | "preparing" | "running"; startTime: number; partialArguments?: string; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Type '{ status: "success"; result: string | undefined; name: string; arguments: Record<string, unknown>; startTime: number; partialArguments?: string; }' is not assignable to type 'ToolCall' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'result' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/stores/agent/streamEventHandlers.ts(926,56): error TS2322: Type '(UserMessageEvent | AssistantMessageEvent | ThoughtEvent | ActEvent | ObserveEvent | WorkPlanTimelineEvent | ... 42 more ... | { ...; })[]' is not assignable to type 'TimelineEvent[]'.
+  Type 'UserMessageEvent | AssistantMessageEvent | ThoughtEvent | ActEvent | ObserveEvent | WorkPlanTimelineEvent | ... 42 more ... | { ...; }' is not assignable to type 'TimelineEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Type '{ url: string; previewUrl: string | undefined; type: "artifact_created"; artifactId: string; sandboxId?: string; toolExecutionId?: string; filename: string; mimeType: string; category: ArtifactCategory; ... 7 more ...; metadata?: Record<string, unknown>; }' is not assignable to type 'TimelineEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+      Type '{ url: string; previewUrl: string | undefined; type: "artifact_created"; artifactId: string; sandboxId?: string; toolExecutionId?: string; filename: string; mimeType: string; category: ArtifactCategory; ... 7 more ...; metadata?: Record<string, unknown>; }' is not assignable to type 'ArtifactCreatedEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+        Types of property 'previewUrl' are incompatible.
+          Type 'string | undefined' is not assignable to type 'string'.
+            Type 'undefined' is not assignable to type 'string'.
+src/stores/agent/streamEventHandlers.ts(1196,43): error TS2379: Argument of type '{ id: string; title: any; type: "mcp-app"; content: string; mcpAppId: any; mcpAppHtml: any; mcpAppToolResult: any; mcpAppToolInput: any; mcpAppUiMetadata: any; mcpResourceUri: string | undefined; mcpToolName: any; mcpProjectId: any; mcpServerName: any; }' is not assignable to parameter of type 'Omit<CanvasTab, "history" | "dirty" | "createdAt" | "historyIndex">' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'mcpResourceUri' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/stores/agentV3.ts(1591,17): error TS2379: Argument of type '{ conversation_id: string; message: string; project_id: string; file_metadata: FileMetadata[] | undefined; forced_skill_name: string | undefined; app_model_context: Record<...> | undefined; }' is not assignable to parameter of type 'ChatRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'file_metadata' are incompatible.
+    Type 'FileMetadata[] | undefined' is not assignable to type '{ filename: string; sandbox_path: string; mime_type: string; size_bytes: number; }[]'.
+      Type 'undefined' is not assignable to type '{ filename: string; sandbox_path: string; mime_type: string; size_bytes: number; }[]'.
+src/stores/agentV3.ts(1624,15): error TS2379: Argument of type '{ conversation_id: string; message: string; project_id: string; file_metadata: FileMetadata[] | undefined; forced_skill_name: string | undefined; app_model_context: Record<...> | undefined; }' is not assignable to parameter of type 'ChatRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'file_metadata' are incompatible.
+    Type 'FileMetadata[] | undefined' is not assignable to type '{ filename: string; sandbox_path: string; mime_type: string; size_bytes: number; }[]'.
+      Type 'undefined' is not assignable to type '{ filename: string; sandbox_path: string; mime_type: string; size_bytes: number; }[]'.
+src/stores/backgroundStore.ts(67,35): error TS2379: Argument of type '{ status: "completed"; completedAt: number; summary: string; tokensUsed: number | undefined; executionTimeMs: number | undefined; executionId: string; subagentName: string; task: string; startedAt: number; error?: string; }' is not assignable to parameter of type 'BackgroundSubAgent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'tokensUsed' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/stores/hitlStore.unified.ts(431,9): error TS2375: Type '{ requestId: string; hitlType: HITLType; conversationId: string; messageId: string | undefined; status: "pending"; timeoutSeconds: number; createdAt: string; expiresAt: string; question: string; }' is not assignable to type 'UnifiedHITLRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'messageId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/stores/hitlStore.unified.ts(448,9): error TS2375: Type '{ question: string; clarificationType: any; options: ClarificationOption[]; allowCustom: boolean; context: Record<string, unknown>; defaultValue: string | undefined; }' is not assignable to type 'ClarificationRequestData' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'defaultValue' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/stores/hitlStore.unified.ts(464,9): error TS2375: Type '{ question: string; decisionType: any; options: DecisionOption[]; allowCustom: boolean; defaultOption: string | undefined; maxSelections: number | undefined; context: Record<...>; }' is not assignable to type 'DecisionRequestData' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'defaultOption' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/stores/pool.ts(147,60): error TS2379: Argument of type '{ page: number; page_size: number; tier: ProjectTier | undefined; status: InstanceStatus | undefined; }' is not assignable to parameter of type 'ListInstancesParams' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'tier' are incompatible.
+    Type 'ProjectTier | undefined' is not assignable to type 'ProjectTier'.
+      Type 'undefined' is not assignable to type 'ProjectTier'.
+src/stores/pool.ts(182,30): error TS2379: Argument of type '{ page: number; tier: ProjectTier | undefined; }' is not assignable to parameter of type 'ListInstancesParams' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'tier' are incompatible.
+    Type 'ProjectTier | undefined' is not assignable to type 'ProjectTier'.
+      Type 'undefined' is not assignable to type 'ProjectTier'.
+src/stores/pool.ts(187,30): error TS2379: Argument of type '{ page: number; status: InstanceStatus | undefined; }' is not assignable to parameter of type 'ListInstancesParams' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'status' are incompatible.
+    Type 'InstanceStatus | undefined' is not assignable to type 'InstanceStatus'.
+      Type 'undefined' is not assignable to type 'InstanceStatus'.
+src/stores/sandbox.ts(677,17): error TS2375: Type '{ name: string; input: Record<string, unknown>; callId: string | undefined; startTime: number; }' is not assignable to type 'CurrentTool' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'callId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/stores/sandbox.ts(714,45): error TS2379: Argument of type '{ output: string | undefined; error: string | undefined; durationMs: number | undefined; artifacts: Artifact[] | undefined; }' is not assignable to parameter of type 'Partial<ToolExecution>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'output' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/stores/skill.ts(147,48): error TS2379: Argument of type '{ status: "disabled" | "active" | "deprecated" | undefined; scope: "system" | "tenant" | "project" | undefined; trigger_type: "keyword" | "semantic" | "hybrid" | undefined; skip?: number; limit?: number; }' is not assignable to parameter of type 'SkillListParams' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'status' are incompatible.
+    Type '"disabled" | "active" | "deprecated" | undefined' is not assignable to type '"disabled" | "active" | "deprecated" | null'.
+      Type 'undefined' is not assignable to type '"disabled" | "active" | "deprecated" | null'.
+src/stores/subagent.ts(138,51): error TS2379: Argument of type '{ enabled_only: boolean | undefined; skip?: number; limit?: number; }' is not assignable to parameter of type 'SubAgentListParams' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'enabled_only' are incompatible.
+    Type 'boolean | undefined' is not assignable to type 'boolean'.
+      Type 'undefined' is not assignable to type 'boolean'.
+src/types/generated/eventEnvelope.ts(115,3): error TS2375: Type '{ schema_version: string; event_id: string; event_type: AgentEventType; timestamp: string; source: string; correlation_id: string | undefined; causation_id: string | undefined; payload: T; metadata: Record<...> | undefined; }' is not assignable to type 'EventEnvelope<T>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'correlation_id' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/types/generated/eventEnvelope.ts(152,3): error TS2375: Type '{ schema_version: string; event_id: string; event_type: AgentEventType; timestamp: string; source: string; correlation_id: string | undefined; causation_id: string; payload: T; metadata: { ...; }; }' is not assignable to type 'EventEnvelope<T>' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'correlation_id' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/types/hitl.ts(366,9): error TS2375: Type '{ requestId: string; requestType: HITLRequestType; status: "pending"; createdAt: number; conversationId: string; context: string | undefined; timeoutSeconds: number | undefined; timeoutAt: number | undefined; }' is not assignable to type 'HITLRequestBase' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'timeoutAt' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/types/hitl.ts(381,7): error TS2322: Type '{ requestType: "clarification"; question: string; clarificationType: ClarificationType; options: string[] | undefined; allowCustom: boolean | undefined; defaultValue: string | undefined; ... 6 more ...; context?: string; }' is not assignable to type 'HITLRequest | null'.
+  Type '{ requestType: "clarification"; question: string; clarificationType: ClarificationType; options: string[] | undefined; allowCustom: boolean | undefined; defaultValue: string | undefined; ... 6 more ...; context?: string; }' is not assignable to type 'ClarificationRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'options' are incompatible.
+      Type 'string[] | undefined' is not assignable to type 'string[]'.
+        Type 'undefined' is not assignable to type 'string[]'.
+src/types/hitl.ts(392,7): error TS2322: Type '{ requestType: "permission"; toolName: string; action: string; riskLevel: RiskLevel; details: Record<string, unknown>; description: string | undefined; allowRemember: boolean | undefined; ... 7 more ...; context?: string; }' is not assignable to type 'HITLRequest | null'.
+  Type '{ requestType: "permission"; toolName: string; action: string; riskLevel: RiskLevel; details: Record<string, unknown>; description: string | undefined; allowRemember: boolean | undefined; ... 7 more ...; context?: string; }' is not assignable to type 'PermissionRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'description' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/types/hitl.ts(405,7): error TS2322: Type '{ requestType: "decision"; question: string; decisionType: DecisionType; options: DecisionOption[]; allowCustom: boolean | undefined; defaultOption: string | undefined; ... 7 more ...; context?: string; }' is not assignable to type 'HITLRequest | null'.
+  Type '{ requestType: "decision"; question: string; decisionType: DecisionType; options: DecisionOption[]; allowCustom: boolean | undefined; defaultOption: string | undefined; ... 7 more ...; context?: string; }' is not assignable to type 'DecisionRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'allowCustom' are incompatible.
+      Type 'boolean | undefined' is not assignable to type 'boolean'.
+        Type 'undefined' is not assignable to type 'boolean'.
+src/types/hitl.ts(417,7): error TS2322: Type '{ requestType: "env_var"; toolName: string; fields: EnvVarField[]; message: string; allowSave: boolean | undefined; requestId: string; status: HITLRequestStatus; createdAt: number; timeoutAt?: number; timeoutSeconds?: number; conversationId: string; context?: string; }' is not assignable to type 'HITLRequest | null'.
+  Type '{ requestType: "env_var"; toolName: string; fields: EnvVarField[]; message: string; allowSave: boolean | undefined; requestId: string; status: HITLRequestStatus; createdAt: number; timeoutAt?: number; timeoutSeconds?: number; conversationId: string; context?: string; }' is not assignable to type 'EnvVarRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'allowSave' are incompatible.
+      Type 'boolean | undefined' is not assignable to type 'boolean'.
+        Type 'undefined' is not assignable to type 'boolean'.
+src/types/hitl.unified.ts(359,3): error TS2375: Type '{ requestId: string; hitlType: HITLType; conversationId: string; messageId: string | undefined; status: HITLStatus; timeoutSeconds: number; createdAt: string; expiresAt: string | undefined; ... 4 more ...; permissionData: { ...; } | undefined; }' is not assignable to type 'UnifiedHITLRequest' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'messageId' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+src/utils/agentDataAdapters.ts(47,5): error TS2322: Type '{ id: string; toolName: string; input: Record<string, unknown>; output: string | undefined; status: "success" | "failed" | "running"; startTime: number; endTime: number | undefined; duration: number | undefined; stepNumber: number; error: string | undefined; }[]' is not assignable to type 'ToolExecutionItem[]'.
+  Type '{ id: string; toolName: string; input: Record<string, unknown>; output: string | undefined; status: "success" | "failed" | "running"; startTime: number; endTime: number | undefined; duration: number | undefined; stepNumber: number; error: string | undefined; }' is not assignable to type 'ToolExecutionItem' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'output' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/utils/agentDataAdapters.ts(70,3): error TS2322: Type '{ id: string; toolName: string; input: Record<string, unknown>; output: string | undefined; status: "success" | "failed" | "running"; startTime: number; endTime: number | undefined; duration: number | undefined; stepNumber: number; error: string | undefined; }[]' is not assignable to type 'ToolExecutionItem[]'.
+  Type '{ id: string; toolName: string; input: Record<string, unknown>; output: string | undefined; status: "success" | "failed" | "running"; startTime: number; endTime: number | undefined; duration: number | undefined; stepNumber: number; error: string | undefined; }' is not assignable to type 'ToolExecutionItem' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'output' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/utils/agentDataAdapters.ts(128,9): error TS2375: Type '{ input: number; output: number; reasoning: number | undefined; total: number; }' is not assignable to type 'TokenData' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'reasoning' are incompatible.
+    Type 'number | undefined' is not assignable to type 'number'.
+      Type 'undefined' is not assignable to type 'number'.
+src/utils/agentDataAdapters.ts(163,7): error TS2412: Type '{ input_cost: number; output_cost: number; reasoning_cost: number | undefined; } | undefined' is not assignable to type '{ input_cost: number; output_cost: number; reasoning_cost?: number; } | undefined' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the type of the target.
+src/utils/agentDataAdapters.ts(167,3): error TS2375: Type '{ tokenData: TokenData; costData: CostData | undefined; }' is not assignable to type '{ tokenData?: TokenData; costData?: CostData; }' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+  Types of property 'costData' are incompatible.
+    Type 'CostData | undefined' is not assignable to type 'CostData'.
+      Type 'undefined' is not assignable to type 'CostData'.
+src/utils/sseEventAdapter.ts(159,9): error TS2322: Type '{ type: "assistant_message"; content: string; role: "assistant"; artifacts: ArtifactReference[] | undefined; metadata: { artifacts: ArtifactReference[]; } | undefined; id: string; eventTimeUs: number; eventCounter: number; timestamp: number; }' is not assignable to type 'TimelineEvent | null'.
+  Type '{ type: "assistant_message"; content: string; role: "assistant"; artifacts: ArtifactReference[] | undefined; metadata: { artifacts: ArtifactReference[]; } | undefined; id: string; eventTimeUs: number; eventCounter: number; timestamp: number; }' is not assignable to type 'AssistantMessageEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'artifacts' are incompatible.
+      Type 'ArtifactReference[] | undefined' is not assignable to type 'ArtifactReference[]'.
+        Type 'undefined' is not assignable to type 'ArtifactReference[]'.
+src/utils/sseEventAdapter.ts(184,7): error TS2322: Type '{ id: string; type: "act"; eventTimeUs: number; eventCounter: number; timestamp: number; toolName: string; toolInput: Record<string, unknown>; execution_id: string | undefined; execution: { ...; }; }' is not assignable to type 'TimelineEvent | null'.
+  Type '{ id: string; type: "act"; eventTimeUs: number; eventCounter: number; timestamp: number; toolName: string; toolInput: Record<string, unknown>; execution_id: string | undefined; execution: { ...; }; }' is not assignable to type 'ActEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'execution_id' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/utils/sseEventAdapter.ts(245,7): error TS2322: Type '{ id: string; type: "observe"; eventTimeUs: number; eventCounter: number; timestamp: number; toolName: string; execution_id: string | undefined; toolOutput: string | undefined; isError: boolean; mcpUiMetadata: { ...; } | undefined; }' is not assignable to type 'TimelineEvent | null'.
+  Type '{ id: string; type: "observe"; eventTimeUs: number; eventCounter: number; timestamp: number; toolName: string; execution_id: string | undefined; toolOutput: string | undefined; isError: boolean; mcpUiMetadata: { ...; } | undefined; }' is not assignable to type 'ObserveEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'toolOutput' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/utils/sseEventAdapter.ts(278,7): error TS2322: Type '{ id: string; type: "assistant_message"; eventTimeUs: number; eventCounter: number; timestamp: number; content: string; role: "assistant"; artifacts: ArtifactReference[] | undefined; metadata: { ...; } | { ...; }; }' is not assignable to type 'TimelineEvent | null'.
+  Type '{ id: string; type: "assistant_message"; eventTimeUs: number; eventCounter: number; timestamp: number; content: string; role: "assistant"; artifacts: ArtifactReference[] | undefined; metadata: { ...; } | { ...; }; }' is not assignable to type 'AssistantMessageEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'artifacts' are incompatible.
+      Type 'ArtifactReference[] | undefined' is not assignable to type 'ArtifactReference[]'.
+        Type 'undefined' is not assignable to type 'ArtifactReference[]'.
+src/utils/sseEventAdapter.ts(317,7): error TS2322: Type '{ id: string; type: "text_end"; eventTimeUs: number; eventCounter: number; timestamp: number; fullText: string | undefined; }' is not assignable to type 'TimelineEvent | null'.
+  Type '{ id: string; type: "text_end"; eventTimeUs: number; eventCounter: number; timestamp: number; fullText: string | undefined; }' is not assignable to type 'TextEndEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'fullText' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/utils/sseEventAdapter.ts(390,7): error TS2322: Type '{ id: string; type: "terminal_stopped"; eventTimeUs: number; eventCounter: number; timestamp: number; sandboxId: string; sessionId: string | undefined; }' is not assignable to type 'TimelineEvent | null'.
+  Type '{ id: string; type: "terminal_stopped"; eventTimeUs: number; eventCounter: number; timestamp: number; sandboxId: string; sessionId: string | undefined; }' is not assignable to type 'TerminalStoppedEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'sessionId' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/utils/sseEventAdapter.ts(403,7): error TS2322: Type '{ id: string; type: "terminal_status"; eventTimeUs: number; eventCounter: number; timestamp: number; sandboxId: string; running: boolean; url: string | null; port: number; sessionId: string | undefined; }' is not assignable to type 'TimelineEvent | null'.
+  Type '{ id: string; type: "terminal_status"; eventTimeUs: number; eventCounter: number; timestamp: number; sandboxId: string; running: boolean; url: string | null; port: number; sessionId: string | undefined; }' is not assignable to type 'TerminalStatusEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'sessionId' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/utils/sseEventAdapter.ts(420,7): error TS2322: Type '{ id: string; type: "sandbox_created"; eventTimeUs: number; eventCounter: number; timestamp: number; sandboxId: string; projectId: string; status: string; endpoint: string | undefined; websocketUrl: string | undefined; }' is not assignable to type 'TimelineEvent | null'.
+  Type '{ id: string; type: "sandbox_created"; eventTimeUs: number; eventCounter: number; timestamp: number; sandboxId: string; projectId: string; status: string; endpoint: string | undefined; websocketUrl: string | undefined; }' is not assignable to type 'SandboxCreatedEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'endpoint' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/utils/sseEventAdapter.ts(506,7): error TS2322: Type '{ id: string; type: "decision_asked"; eventTimeUs: number; eventCounter: number; timestamp: number; requestId: string; question: string; decisionType: DecisionType; options: DecisionOption[]; allowCustom: boolean; context: Record<...>; defaultOption: string | undefined; answered: false; }' is not assignable to type 'TimelineEvent | null'.
+  Type '{ id: string; type: "decision_asked"; eventTimeUs: number; eventCounter: number; timestamp: number; requestId: string; question: string; decisionType: DecisionType; options: DecisionOption[]; allowCustom: boolean; context: Record<...>; defaultOption: string | undefined; answered: false; }' is not assignable to type 'DecisionAskedTimelineEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'defaultOption' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/utils/sseEventAdapter.ts(538,7): error TS2322: Type '{ id: string; type: "env_var_requested"; eventTimeUs: number; eventCounter: number; timestamp: number; requestId: string; toolName: string; fields: EnvVarField[]; message: string | undefined; context: Record<...> | undefined; answered: false; }' is not assignable to type 'TimelineEvent | null'.
+  Type '{ id: string; type: "env_var_requested"; eventTimeUs: number; eventCounter: number; timestamp: number; requestId: string; toolName: string; fields: EnvVarField[]; message: string | undefined; context: Record<...> | undefined; answered: false; }' is not assignable to type 'EnvVarRequestedTimelineEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'message' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/utils/sseEventAdapter.ts(569,7): error TS2322: Type '{ id: string; type: "artifact_created"; eventTimeUs: number; eventCounter: number; timestamp: number; artifactId: string; filename: string; mimeType: string; category: ArtifactCategory; sizeBytes: number; url: string | undefined; previewUrl: string | undefined; toolExecutionId: string | undefined; sourceTool: string...' is not assignable to type 'TimelineEvent | null'.
+  Type '{ id: string; type: "artifact_created"; eventTimeUs: number; eventCounter: number; timestamp: number; artifactId: string; filename: string; mimeType: string; category: ArtifactCategory; sizeBytes: number; url: string | undefined; previewUrl: string | undefined; toolExecutionId: string | undefined; sourceTool: string...' is not assignable to type 'ArtifactCreatedEvent' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+    Types of property 'toolExecutionId' are incompatible.
+      Type 'string | undefined' is not assignable to type 'string'.
+        Type 'undefined' is not assignable to type 'string'.
+src/utils/sseEventAdapter.ts(979,3): error TS2322: Type '{ envelopeId: string; correlationId: string | undefined; causationId: string | undefined; schemaVersion: string; type: "user_message"; content: string; role: "user"; id: string; eventTimeUs: number; eventCounter: number; timestamp: number; metadata?: Record<...>; } | ... 46 more ... | { ...; }' is not assignable to type 'TimelineEventWithCorrelation | null'.
+  Type '{ envelopeId: string; correlationId: string | undefined; causationId: string | undefined; schemaVersion: string; type: "user_message"; content: string; role: "user"; id: string; eventTimeUs: number; eventCounter: number; timestamp: number; metadata?: Record<string, unknown>; }' is not assignable to type 'TimelineEventWithCorrelation | null'.
+    Type '{ envelopeId: string; correlationId: string | undefined; causationId: string | undefined; schemaVersion: string; type: "user_message"; content: string; role: "user"; id: string; eventTimeUs: number; eventCounter: number; timestamp: number; metadata?: Record<string, unknown>; }' is not assignable to type 'UserMessageEvent & CorrelationMetadata' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+      Type '{ envelopeId: string; correlationId: string | undefined; causationId: string | undefined; schemaVersion: string; type: "user_message"; content: string; role: "user"; id: string; eventTimeUs: number; eventCounter: number; timestamp: number; metadata?: Record<string, unknown>; }' is not assignable to type 'CorrelationMetadata' with 'exactOptionalPropertyTypes: true'. Consider adding 'undefined' to the types of the target's properties.
+        Types of property 'correlationId' are incompatible.
+          Type 'string | undefined' is not assignable to type 'string'.
+            Type 'undefined' is not assignable to type 'string'.

@@ -19,8 +19,8 @@ const { Text } = Typography;
 
 interface CostTrackerProps {
   costTracking: CostTrackingState | null;
-  compact?: boolean;
-  showModel?: boolean;
+  compact?: boolean | undefined;
+  showModel?: boolean | undefined;
 }
 
 /**

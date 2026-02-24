@@ -9,9 +9,9 @@ import * as React from 'react';
 import { Bell } from 'lucide-react';
 
 export interface NotificationsProps {
-  count?: number;
-  onClick?: () => void;
-  ariaLabel?: string;
+  count?: number | undefined;
+  onClick?: (() => void) | undefined;
+  ariaLabel?: string | undefined;
 }
 
 export const Notifications = React.memo(function Notifications({

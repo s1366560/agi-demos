@@ -7,15 +7,15 @@ export interface TaskStatus {
   status: 'pending' | 'running' | 'completed' | 'failed';
   progress: number;
   message: string;
-  result?: unknown;
-  error?: string;
+  result?: unknown | undefined;
+  error?: string | undefined;
 }
 
 interface UseTaskSSEOptions {
-  onProgress?: (task: TaskStatus) => void;
-  onCompleted?: (task: TaskStatus) => void;
-  onFailed?: (task: TaskStatus) => void;
-  onError?: (error: Error) => void;
+  onProgress?: ((task: TaskStatus) => void) | undefined;
+  onCompleted?: ((task: TaskStatus) => void) | undefined;
+  onFailed?: ((task: TaskStatus) => void) | undefined;
+  onError?: ((error: Error) => void) | undefined;
 }
 
 /**

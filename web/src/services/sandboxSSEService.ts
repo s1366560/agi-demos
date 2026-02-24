@@ -45,14 +45,14 @@ export interface BaseSandboxSSEEvent {
  * Event handler for sandbox events
  */
 export interface SandboxEventHandler {
-  onSandboxCreated?: (event: BaseSandboxSSEEvent) => void;
-  onSandboxTerminated?: (event: BaseSandboxSSEEvent) => void;
-  onDesktopStarted?: (event: BaseSandboxSSEEvent) => void;
-  onDesktopStopped?: (event: BaseSandboxSSEEvent) => void;
-  onTerminalStarted?: (event: BaseSandboxSSEEvent) => void;
-  onTerminalStopped?: (event: BaseSandboxSSEEvent) => void;
-  onStatusUpdate?: (event: BaseSandboxSSEEvent) => void;
-  onError?: (error: Error) => void;
+  onSandboxCreated?: ((event: BaseSandboxSSEEvent) => void) | undefined;
+  onSandboxTerminated?: ((event: BaseSandboxSSEEvent) => void) | undefined;
+  onDesktopStarted?: ((event: BaseSandboxSSEEvent) => void) | undefined;
+  onDesktopStopped?: ((event: BaseSandboxSSEEvent) => void) | undefined;
+  onTerminalStarted?: ((event: BaseSandboxSSEEvent) => void) | undefined;
+  onTerminalStopped?: ((event: BaseSandboxSSEEvent) => void) | undefined;
+  onStatusUpdate?: ((event: BaseSandboxSSEEvent) => void) | undefined;
+  onError?: ((error: Error) => void) | undefined;
 }
 
 /**

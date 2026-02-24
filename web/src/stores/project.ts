@@ -21,9 +21,9 @@ import type { Project, ProjectCreate, ProjectUpdate, ProjectListResponse } from 
 interface ApiError {
   response?: {
     data?: {
-      detail?: string | Record<string, unknown>;
-    };
-  };
+      detail?: string | Record<string, unknown> | undefined;
+    } | undefined;
+  } | undefined;
 }
 
 interface ProjectState {
@@ -38,7 +38,7 @@ interface ProjectState {
   // Actions
   listProjects: (
     tenantId: string,
-    params?: { page?: number; page_size?: number; search?: string }
+    params?: { page?: number | undefined; page_size?: number | undefined; search?: string | undefined }
   ) => Promise<void>;
   createProject: (tenantId: string, data: ProjectCreate) => Promise<void>;
   updateProject: (tenantId: string, projectId: string, data: ProjectUpdate) => Promise<void>;

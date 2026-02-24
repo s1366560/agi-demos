@@ -10,17 +10,17 @@ import { MaterialIcon } from '../shared';
 
 export interface ExportActionsProps {
   /** Content to export */
-  content?: string;
+  content?: string | undefined;
   /** Element to capture for PDF export */
-  elementId?: string;
+  elementId?: string | undefined;
   /** Conversation ID for sharing */
-  conversationId?: string;
+  conversationId?: string | undefined;
   /** Filename for PDF export */
-  filename?: string;
+  filename?: string | undefined;
   /** Whether to show labels alongside icons */
-  showLabels?: boolean;
+  showLabels?: boolean | undefined;
   /** Position variant (sidebar | inline) */
-  variant?: 'sidebar' | 'inline';
+  variant?: 'sidebar' | 'inline' | undefined;
 }
 
 /**

@@ -12,7 +12,7 @@ import { MemoryCreateModal } from '../MemoryCreateModal';
 import { MemoryDetailModal } from './MemoryDetailModal';
 
 interface MemoryManagerProps {
-  onMemorySelect?: (memory: Memory) => void;
+  onMemorySelect?: ((memory: Memory) => void) | undefined;
 }
 
 export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) => {
@@ -32,7 +32,7 @@ export const MemoryManager: React.FC<MemoryManagerProps> = ({ onMemorySelect }) 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<string>('all');
   const [filterUser, setFilterUser] = useState<string>('');
-  const [dateRange, setDateRange] = useState<{ start?: Date; end?: Date }>({});
+  const [dateRange, setDateRange] = useState<{ start?: Date | undefined; end?: Date | undefined }>({});
 
   const loadMemories = useCallback(async () => {
     if (!currentProject) return;

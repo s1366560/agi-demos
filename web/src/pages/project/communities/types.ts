@@ -13,8 +13,8 @@ export interface Community {
   name: string;
   summary: string;
   member_count: number;
-  formed_at?: string;
-  created_at?: string;
+  formed_at?: string | undefined;
+  created_at?: string | undefined;
 }
 
 export interface Entity {
@@ -29,15 +29,15 @@ export interface BackgroundTask {
   task_type: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
   created_at: string;
-  started_at?: string;
-  completed_at?: string;
+  started_at?: string | undefined;
+  completed_at?: string | undefined;
   progress: number;
   message: string;
   result?: {
-    communities_count?: number;
-    edges_count?: number;
-  };
-  error?: string;
+    communities_count?: number | undefined;
+    edges_count?: number | undefined;
+  } | undefined;
+  error?: string | undefined;
 }
 
 // ========================================
@@ -49,7 +49,7 @@ export interface BackgroundTask {
  */
 export interface CommunitiesListRootProps {
   /** Children for compound component pattern */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 /**
@@ -57,7 +57,7 @@ export interface CommunitiesListRootProps {
  */
 export interface CommunitiesListHeaderProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -65,7 +65,7 @@ export interface CommunitiesListHeaderProps {
  */
 export interface CommunitiesListStatsProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -73,7 +73,7 @@ export interface CommunitiesListStatsProps {
  */
 export interface CommunitiesListListProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -81,7 +81,7 @@ export interface CommunitiesListListProps {
  */
 export interface CommunitiesListPaginationProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -89,7 +89,7 @@ export interface CommunitiesListPaginationProps {
  */
 export interface CommunitiesListDetailProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -97,7 +97,7 @@ export interface CommunitiesListDetailProps {
  */
 export interface CommunitiesListTaskStatusProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -105,7 +105,7 @@ export interface CommunitiesListTaskStatusProps {
  */
 export interface CommunitiesListErrorProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**

@@ -13,13 +13,13 @@ export interface AudioPlayerProps {
   /** Audio source URL */
   src: string;
   /** Filename for display */
-  filename?: string;
+  filename?: string | undefined;
   /** Compact mode */
-  compact?: boolean;
+  compact?: boolean | undefined;
   /** Called when audio loads */
-  onLoad?: () => void;
+  onLoad?: (() => void) | undefined;
   /** Called on error */
-  onError?: () => void;
+  onError?: (() => void) | undefined;
 }
 
 export const AudioPlayer: React.FC<AudioPlayerProps> = ({

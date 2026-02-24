@@ -26,13 +26,13 @@ type SandboxTab = 'terminal' | 'desktop';
 
 interface SandboxSectionProps {
   sandboxId: string | null;
-  className?: string;
+  className?: string | undefined;
 }
 
 // Terminal Tab Content
 const TerminalTab: React.FC<{
   sandboxId: string;
-  projectId?: string;
+  projectId?: string | undefined;
   terminalStatus: any;
   onStartTerminal: () => Promise<void>;
   isTerminalLoading: boolean;
@@ -133,7 +133,7 @@ const TerminalTab: React.FC<{
 // Desktop Tab Content
 const DesktopTab: React.FC<{
   sandboxId: string;
-  projectId?: string;
+  projectId?: string | undefined;
   desktopStatus: any;
   onStartDesktop: () => Promise<void>;
   onStopDesktop: () => Promise<void>;

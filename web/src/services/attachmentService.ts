@@ -43,9 +43,9 @@ export interface AttachmentResponse {
   size_bytes: number;
   purpose: AttachmentPurpose;
   status: AttachmentStatus;
-  sandbox_path?: string;
+  sandbox_path?: string | undefined;
   created_at: string;
-  error_message?: string;
+  error_message?: string | undefined;
 }
 
 export interface InitiateUploadRequest {

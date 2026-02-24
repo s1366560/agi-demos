@@ -52,7 +52,7 @@ interface User {
   name: string;
   role: 'owner' | 'admin' | 'member' | 'viewer';
   created_at: string;
-  last_login?: string;
+  last_login?: string | undefined;
   is_active: boolean;
 }
 
@@ -79,13 +79,13 @@ interface User {
 interface Project {
   id: string;
   name: string;
-  description?: string;
+  description?: string | undefined;
   tenant_id: string;
   owner_id: string;
   member_ids: string[];
   is_public: boolean;
   created_at: string;
-  updated_at?: string;
+  updated_at?: string | undefined;
 }
 
 export const projectService = {

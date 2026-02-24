@@ -36,13 +36,13 @@ export interface AgentChatInputAreaProps {
   /** Whether agent is currently streaming */
   isStreaming: boolean;
   /** Whether input is disabled */
-  disabled?: boolean;
+  disabled?: boolean | undefined;
   /** Minimum height constraint */
-  minHeight?: typeof INPUT_MIN_HEIGHT;
+  minHeight?: typeof INPUT_MIN_HEIGHT | undefined;
   /** Maximum height constraint */
-  maxHeight?: typeof INPUT_MAX_HEIGHT;
+  maxHeight?: typeof INPUT_MAX_HEIGHT | undefined;
   /** Current project ID for file attachments */
-  projectId?: string;
+  projectId?: string | undefined;
 }
 
 /**

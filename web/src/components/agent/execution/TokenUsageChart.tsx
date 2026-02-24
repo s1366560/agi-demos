@@ -19,7 +19,7 @@ import { Tooltip } from 'antd';
 export interface TokenData {
   input: number;
   output: number;
-  reasoning?: number;
+  reasoning?: number | undefined;
   total: number;
 }
 
@@ -31,23 +31,23 @@ export interface CostData {
   breakdown?: {
     input_cost: number;
     output_cost: number;
-    reasoning_cost?: number;
-  };
+    reasoning_cost?: number | undefined;
+  } | undefined;
 }
 
 export interface TokenUsageChartProps {
   /** Token usage data */
   tokenData: TokenData;
   /** Cost data (optional) */
-  costData?: CostData;
+  costData?: CostData | undefined;
   /** Display mode */
-  variant?: 'compact' | 'detailed';
+  variant?: 'compact' | 'detailed' | undefined;
   /** Maximum tokens for percentage calculation (optional) */
-  maxTokens?: number;
+  maxTokens?: number | undefined;
   /** Show trend indicator (requires historical data) */
-  showTrend?: boolean;
+  showTrend?: boolean | undefined;
   /** Threshold percentage for warning state */
-  warningThreshold?: number;
+  warningThreshold?: number | undefined;
 }
 
 // Color scheme for token types - aligned with design tokens
@@ -94,10 +94,10 @@ const formatCost = (cost: number): string => {
 interface StackedBarProps {
   input: number;
   output: number;
-  reasoning?: number;
+  reasoning?: number | undefined;
   total: number;
-  maxTokens?: number;
-  showLabels?: boolean;
+  maxTokens?: number | undefined;
+  showLabels?: boolean | undefined;
 }
 
 const StackedBar: React.FC<StackedBarProps> = ({

@@ -22,7 +22,7 @@ export interface Entity {
   name: string;
   entity_type: string;
   summary: string;
-  created_at?: string;
+  created_at?: string | undefined;
 }
 
 export interface EntityCardProps {
@@ -31,7 +31,7 @@ export interface EntityCardProps {
   /** Click handler for the card */
   onClick: (entity: Entity) => void;
   /** Whether this entity is currently selected */
-  isSelected?: boolean;
+  isSelected?: boolean | undefined;
 }
 
 // Predefined colors for common entity types (matching EntitiesList)

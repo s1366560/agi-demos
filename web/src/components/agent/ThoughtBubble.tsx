@@ -19,9 +19,9 @@ const { Text } = Typography;
 interface ThoughtBubbleProps {
   thought: string;
   level: ThoughtLevel;
-  stepNumber?: number;
-  stepDescription?: string;
-  isThinking?: boolean;
+  stepNumber?: number | undefined;
+  stepDescription?: string | undefined;
+  isThinking?: boolean | undefined;
 }
 
 const levelConfig: Record<ThoughtLevel, { color: string; label: string; class: string }> = {

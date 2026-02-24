@@ -9,11 +9,11 @@ import * as React from 'react';
 import { Search as SearchIcon } from 'lucide-react';
 
 export interface SearchProps {
-  value?: string;
-  onChange?: (value: string) => void;
-  onSubmit?: (value: string) => void;
-  placeholder?: string;
-  ariaLabel?: string;
+  value?: string | undefined;
+  onChange?: ((value: string) => void) | undefined;
+  onSubmit?: ((value: string) => void) | undefined;
+  placeholder?: string | undefined;
+  ariaLabel?: string | undefined;
 }
 
 export const Search = React.memo(function Search({

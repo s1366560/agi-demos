@@ -29,7 +29,7 @@ interface TabSyncMessageBase {
   type: TabSyncMessageType;
   senderId: string; // Unique ID of the sending tab
   timestamp: number;
-  conversationId?: string;
+  conversationId?: string | undefined;
 }
 
 /**
@@ -67,7 +67,7 @@ export interface HITLStateChangedMessage extends TabSyncMessageBase {
   type: 'HITL_STATE_CHANGED';
   conversationId: string;
   hasPendingHITL: boolean;
-  hitlType?: 'clarification' | 'decision' | 'env_var' | 'permission';
+  hitlType?: 'clarification' | 'decision' | 'env_var' | 'permission' | undefined;
 }
 
 /**

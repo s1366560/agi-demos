@@ -23,11 +23,11 @@ export interface ThinkingBlockProps {
   content: string;
   isStreaming: boolean;
   /** Start time for duration tracking (epoch ms) */
-  startTime?: number;
+  startTime?: number | undefined;
   /** Reasoning steps for progress indication */
-  steps?: string[];
+  steps?: string[] | undefined;
   /** Current step index */
-  currentStep?: number;
+  currentStep?: number | undefined;
 }
 
 export const ThinkingBlock = memo<ThinkingBlockProps>(

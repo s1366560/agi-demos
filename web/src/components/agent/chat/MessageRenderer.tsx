@@ -35,19 +35,19 @@ export interface MessageRendererProps {
   /** Message to render */
   message: ChatMessage;
   /** Whether this is the latest message */
-  isLatest?: boolean;
+  isLatest?: boolean | undefined;
   /** Click handler */
-  onClick?: (message: ChatMessage) => void;
+  onClick?: ((message: ChatMessage) => void) | undefined;
   /** Retry handler */
-  onRetry?: (messageId: string) => void;
+  onRetry?: ((messageId: string) => void) | undefined;
   /** Copy handler */
-  onCopy?: (messageId: string) => void;
+  onCopy?: ((messageId: string) => void) | undefined;
   /** Delete handler */
-  onDelete?: (messageId: string) => void;
+  onDelete?: ((messageId: string) => void) | undefined;
   /** Edit handler */
-  onEdit?: (messageId: string, content: string) => void;
+  onEdit?: ((messageId: string, content: string) => void) | undefined;
   /** Custom class names */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**

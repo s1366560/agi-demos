@@ -11,17 +11,17 @@ import { MaterialIcon } from '../shared';
 
 export interface WorkspaceSidebarProps {
   /** Currently active navigation item */
-  activeItem?: 'workspaces' | 'projects' | 'memory' | 'analytics' | 'settings';
+  activeItem?: 'workspaces' | 'projects' | 'memory' | 'analytics' | 'settings' | undefined;
   /** Callback when navigation item is clicked */
-  onNavigate?: (item: string) => void;
+  onNavigate?: ((item: string) => void) | undefined;
   /** User display name */
-  userName?: string;
+  userName?: string | undefined;
   /** User avatar URL */
-  userAvatar?: string;
+  userAvatar?: string | undefined;
   /** Application version */
-  version?: string;
+  version?: string | undefined;
   /** Whether sidebar is collapsed (64px) */
-  collapsed?: boolean;
+  collapsed?: boolean | undefined;
 }
 
 interface NavItem {

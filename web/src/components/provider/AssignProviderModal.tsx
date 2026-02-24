@@ -10,8 +10,8 @@ interface AssignProviderModalProps {
   onSuccess: () => void;
   provider: ProviderConfig;
   tenantId: string;
-  initialOperationType?: 'llm' | 'embedding' | 'rerank';
-  initialPriority?: number;
+  initialOperationType?: 'llm' | 'embedding' | 'rerank' | undefined;
+  initialPriority?: number | undefined;
 }
 
 export const AssignProviderModal: React.FC<AssignProviderModalProps> = ({

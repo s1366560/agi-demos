@@ -6,7 +6,7 @@ interface DeleteConfirmationModalProps {
   onConfirm: () => void;
   title: string;
   message: string;
-  isDeleting?: boolean;
+  isDeleting?: boolean | undefined;
 }
 
 export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = ({

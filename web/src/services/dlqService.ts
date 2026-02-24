@@ -68,12 +68,12 @@ export interface CleanupResponse {
 }
 
 export interface ListMessagesParams {
-  status?: DLQMessageStatus;
-  event_type?: string;
-  error_type?: string;
-  routing_key?: string;
-  limit?: number;
-  offset?: number;
+  status?: DLQMessageStatus | undefined;
+  event_type?: string | undefined;
+  error_type?: string | undefined;
+  routing_key?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
 }
 
 // =============================================================================

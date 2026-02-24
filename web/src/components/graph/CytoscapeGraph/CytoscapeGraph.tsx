@@ -57,25 +57,25 @@ const CONTROLS_SYMBOL = Symbol('CytoscapeGraphControls');
 const NODE_INFO_PANEL_SYMBOL = Symbol('CytoscapeGraphNodeInfoPanel');
 
 interface ViewportMarkerProps {
-  projectId?: string;
-  tenantId?: string;
-  includeCommunities?: boolean;
-  minConnections?: number;
-  subgraphNodeIds?: string[];
-  onNodeClick?: (node: NodeData | null) => void;
-  highlightNodeIds?: string[];
+  projectId?: string | undefined;
+  tenantId?: string | undefined;
+  includeCommunities?: boolean | undefined;
+  minConnections?: number | undefined;
+  subgraphNodeIds?: string[] | undefined;
+  onNodeClick?: ((node: NodeData | null) => void) | undefined;
+  highlightNodeIds?: string[] | undefined;
 }
 
 interface ControlsMarkerProps {
-  className?: string;
-  renderCustom?: React.ReactNode;
+  className?: string | undefined;
+  renderCustom?: React.ReactNode | undefined;
 }
 
 interface NodeInfoPanelMarkerProps {
-  node?: NodeData | null;
-  onClose?: () => void;
-  position?: 'right' | 'left' | 'float';
-  className?: string;
+  node?: NodeData | null | undefined;
+  onClose?: (() => void) | undefined;
+  position?: 'right' | 'left' | 'float' | undefined;
+  className?: string | undefined;
 }
 
 CytoscapeGraph.Viewport = function CytoscapeGraphViewportMarker(_props: ViewportMarkerProps) {
@@ -109,17 +109,17 @@ CytoscapeGraph.NodeInfoPanel = function CytoscapeGraphNodeInfoPanelMarker(
 
 interface CytoscapeGraphProps {
   /** Configuration object (new API) */
-  config?: Partial<GraphConfig>;
+  config?: Partial<GraphConfig> | undefined;
   /** Children for composite component pattern */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
   /** Legacy props for backward compatibility */
-  projectId?: string;
-  tenantId?: string;
-  includeCommunities?: boolean;
-  minConnections?: number;
-  onNodeClick?: (node: NodeData | null) => void;
-  highlightNodeIds?: string[];
-  subgraphNodeIds?: string[];
+  projectId?: string | undefined;
+  tenantId?: string | undefined;
+  includeCommunities?: boolean | undefined;
+  minConnections?: number | undefined;
+  onNodeClick?: ((node: NodeData | null) => void) | undefined;
+  highlightNodeIds?: string[] | undefined;
+  subgraphNodeIds?: string[] | undefined;
 }
 
 export function CytoscapeGraph(props: CytoscapeGraphProps) {
@@ -327,7 +327,7 @@ export function CytoscapeGraph(props: CytoscapeGraphProps) {
 // ========================================
 
 interface GraphLegendProps {
-  includeCommunities?: boolean;
+  includeCommunities?: boolean | undefined;
 }
 
 function GraphLegend({ includeCommunities }: GraphLegendProps) {

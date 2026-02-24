@@ -72,10 +72,10 @@ export function createGraphConfig(userConfig?: Partial<GraphConfig>): GraphConfi
  * Merge legacy props into GraphConfig
  */
 export function legacyPropsToConfig(props: {
-  projectId?: string;
-  tenantId?: string;
-  includeCommunities?: boolean;
-  minConnections?: number;
+  projectId?: string | undefined;
+  tenantId?: string | undefined;
+  includeCommunities?: boolean | undefined;
+  minConnections?: number | undefined;
 }): GraphConfig {
   return {
     data: {

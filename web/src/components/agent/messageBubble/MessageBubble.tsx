@@ -82,7 +82,7 @@ const toClarificationData = (event: TimelineEvent): ClarificationAskedEventData 
     clarificationType: string;
     options: unknown[];
     allowCustom: boolean;
-    context?: Record<string, unknown>;
+    context?: Record<string, unknown> | undefined;
   };
   return {
     request_id: e.requestId,
@@ -104,9 +104,9 @@ const toDecisionData = (event: TimelineEvent): DecisionAskedEventData | undefine
     question: string;
     decisionType: string;
     options: unknown[];
-    allowCustom?: boolean;
-    context?: Record<string, unknown>;
-    defaultOption?: string;
+    allowCustom?: boolean | undefined;
+    context?: Record<string, unknown> | undefined;
+    defaultOption?: string | undefined;
   };
   return {
     request_id: e.requestId,
@@ -128,8 +128,8 @@ const toEnvVarData = (event: TimelineEvent): EnvVarRequestedEventData | undefine
     requestId: string;
     toolName: string;
     fields: EnvVarRequestedEventData['fields'];
-    message?: string;
-    context?: Record<string, unknown>;
+    message?: string | undefined;
+    context?: Record<string, unknown> | undefined;
   };
   return {
     request_id: e.requestId,
@@ -1067,7 +1067,7 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
               event.metadata?.fileMetadata as
                 | Array<{
                     filename: string;
-                    sandbox_path?: string;
+                    sandbox_path?: string | undefined;
                     mime_type: string;
                     size_bytes: number;
                   }>
@@ -1121,18 +1121,18 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
 
       case 'artifact_created':
         return (
-          <ArtifactCreated event={event as unknown as ArtifactCreatedEvent & { error?: string }} />
+          <ArtifactCreated event={event as unknown as ArtifactCreatedEvent & { error?: string | undefined }} />
         );
 
       // HITL Events - Render inline cards
       case 'clarification_asked': {
         const clarificationData = toClarificationData(event);
         const e = event as TimelineEvent & {
-          requestId?: string;
-          expiresAt?: string;
-          createdAt?: string;
-          answered?: boolean;
-          answer?: string;
+          requestId?: string | undefined;
+          expiresAt?: string | undefined;
+          createdAt?: string | undefined;
+          answered?: boolean | undefined;
+          answer?: string | undefined;
         };
         return (
           <InlineHITLCard
@@ -1149,9 +1149,9 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
 
       case 'clarification_answered': {
         const e = event as TimelineEvent & {
-          requestId?: string;
-          answer?: string;
-          createdAt?: string;
+          requestId?: string | undefined;
+          answer?: string | undefined;
+          createdAt?: string | undefined;
         };
         return (
           <InlineHITLCard
@@ -1167,11 +1167,11 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
       case 'decision_asked': {
         const decisionData = toDecisionData(event);
         const e = event as TimelineEvent & {
-          requestId?: string;
-          expiresAt?: string;
-          createdAt?: string;
-          answered?: boolean;
-          decision?: string;
+          requestId?: string | undefined;
+          expiresAt?: string | undefined;
+          createdAt?: string | undefined;
+          answered?: boolean | undefined;
+          decision?: string | undefined;
         };
         return (
           <InlineHITLCard
@@ -1188,9 +1188,9 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
 
       case 'decision_answered': {
         const e = event as TimelineEvent & {
-          requestId?: string;
-          decision?: string;
-          createdAt?: string;
+          requestId?: string | undefined;
+          decision?: string | undefined;
+          createdAt?: string | undefined;
         };
         return (
           <InlineHITLCard
@@ -1206,12 +1206,12 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
       case 'env_var_requested': {
         const envVarData = toEnvVarData(event);
         const e = event as TimelineEvent & {
-          requestId?: string;
-          expiresAt?: string;
-          createdAt?: string;
-          answered?: boolean;
-          values?: Record<string, string>;
-          providedVariables?: string[];
+          requestId?: string | undefined;
+          expiresAt?: string | undefined;
+          createdAt?: string | undefined;
+          answered?: boolean | undefined;
+          values?: Record<string, string> | undefined;
+          providedVariables?: string[] | undefined;
         };
         const answeredVal = e.values
           ? Object.keys(e.values).join(', ')
@@ -1233,9 +1233,9 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
 
       case 'env_var_provided': {
         const e = event as TimelineEvent & {
-          requestId?: string;
-          variableNames?: string[];
-          createdAt?: string;
+          requestId?: string | undefined;
+          variableNames?: string[] | undefined;
+          createdAt?: string | undefined;
         };
         return (
           <InlineHITLCard
@@ -1251,11 +1251,11 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
       case 'permission_asked': {
         const permissionData = toPermissionData(event);
         const e = event as TimelineEvent & {
-          requestId?: string;
-          expiresAt?: string;
-          createdAt?: string;
-          answered?: boolean;
-          granted?: boolean;
+          requestId?: string | undefined;
+          expiresAt?: string | undefined;
+          createdAt?: string | undefined;
+          answered?: boolean | undefined;
+          granted?: boolean | undefined;
         };
         return (
           <InlineHITLCard
@@ -1272,9 +1272,9 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
 
       case 'permission_replied': {
         const e = event as TimelineEvent & {
-          requestId?: string;
-          granted?: boolean;
-          createdAt?: string;
+          requestId?: string | undefined;
+          granted?: boolean | undefined;
+          createdAt?: string | undefined;
         };
         return (
           <InlineHITLCard
@@ -1290,11 +1290,11 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
       case 'permission_requested': {
         const permissionData = toPermissionData(event);
         const e = event as TimelineEvent & {
-          requestId?: string;
-          expiresAt?: string;
-          createdAt?: string;
-          answered?: boolean;
-          granted?: boolean;
+          requestId?: string | undefined;
+          expiresAt?: string | undefined;
+          createdAt?: string | undefined;
+          answered?: boolean | undefined;
+          granted?: boolean | undefined;
         };
         return (
           <InlineHITLCard
@@ -1311,9 +1311,9 @@ const MessageBubbleRoot: React.FC<MessageBubbleRootProps> = memo(
 
       case 'permission_granted': {
         const e = event as TimelineEvent & {
-          requestId?: string;
-          granted?: boolean;
-          createdAt?: string;
+          requestId?: string | undefined;
+          granted?: boolean | undefined;
+          createdAt?: string | undefined;
         };
         return (
           <InlineHITLCard

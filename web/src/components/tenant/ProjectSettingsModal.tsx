@@ -7,7 +7,7 @@ import { formatDateOnly } from '@/utils/date';
 interface Project {
   id: string;
   name: string;
-  description?: string;
+  description?: string | undefined;
   tenant_id: string;
   owner_id: string;
   is_public: boolean;
@@ -19,7 +19,7 @@ interface ProjectSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (projectId: string, updates: Partial<Project>) => void;
-  onDelete?: (projectId: string) => void;
+  onDelete?: ((projectId: string) => void) | undefined;
 }
 
 export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({

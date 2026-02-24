@@ -12,7 +12,7 @@ import { projectStatsService, type RecentSkill } from '@/services/projectStatsSe
 
 interface RecentSkillsProps {
   projectId: string;
-  onSkillClick?: (skillName: string) => void;
+  onSkillClick?: ((skillName: string) => void) | undefined;
 }
 
 export const RecentSkills = memo<RecentSkillsProps>(({ projectId, onSkillClick }) => {

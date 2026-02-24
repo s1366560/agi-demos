@@ -15,15 +15,15 @@ export interface SearchResult {
   url: string;
   content: string;
   score: number;
-  published_date?: string;
+  published_date?: string | undefined;
 }
 
 export interface WebSearchResultCardProps {
   results: SearchResult[];
   query: string;
   totalResults: number;
-  cached?: boolean;
-  timestamp?: string;
+  cached?: boolean | undefined;
+  timestamp?: string | undefined;
 }
 
 export function WebSearchResultCard({

@@ -11,7 +11,7 @@ import { Sparkles, RefreshCw, ChevronDown, ChevronUp, Loader2 } from 'lucide-rea
 interface ConversationSummaryCardProps {
   summary: string | null;
   conversationId: string;
-  onRegenerate?: () => Promise<void>;
+  onRegenerate?: (() => Promise<void>) | undefined;
 }
 
 export const ConversationSummaryCard = memo<ConversationSummaryCardProps>(

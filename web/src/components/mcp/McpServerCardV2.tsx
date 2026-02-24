@@ -29,9 +29,9 @@ export interface McpServerCardV2Props {
   onEdit: (server: MCPServerResponse) => void;
   onDelete: (id: string) => void;
   onShowTools: (server: MCPServerResponse) => void;
-  appCount?: number;
-  readyAppCount?: number;
-  errorAppCount?: number;
+  appCount?: number | undefined;
+  readyAppCount?: number | undefined;
+  errorAppCount?: number | undefined;
 }
 
 function formatLastSync(dateStr?: string): string {

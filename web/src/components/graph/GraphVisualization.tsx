@@ -7,31 +7,31 @@ import { useProjectStore } from '../../stores/project';
 import { useThemeStore } from '../../stores/theme';
 
 interface GraphVisualizationProps {
-  width?: number;
-  height?: number;
-  showControls?: boolean;
+  width?: number | undefined;
+  height?: number | undefined;
+  showControls?: boolean | undefined;
 }
 
 interface GraphNode {
   id: string;
   label: string;
   type: string;
-  x?: number;
-  y?: number;
-  size?: number;
-  color?: string;
-  entity?: any;
+  x?: number | undefined;
+  y?: number | undefined;
+  size?: number | undefined;
+  color?: string | undefined;
+  entity?: any | undefined;
 }
 
 interface GraphEdge {
   id: string;
   source: string;
   target: string;
-  label?: string;
-  type?: string;
-  weight?: number;
-  color?: string;
-  relationship?: any;
+  label?: string | undefined;
+  type?: string | undefined;
+  weight?: number | undefined;
+  color?: string | undefined;
+  relationship?: any | undefined;
 }
 
 const getNodeColor = (type: string): string => {

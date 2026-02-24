@@ -21,24 +21,24 @@ import { taskAPI } from '../../services/api';
 
 interface Task {
   id: string;
-  task_type?: string;
+  task_type?: string | undefined;
   name: string;
   status: string;
   created_at: string;
-  completed_at?: string | null;
-  error?: string | null;
-  worker_id?: string | null;
-  retries?: number;
-  duration?: string | null;
-  entity_id?: string;
-  entity_type?: string;
+  completed_at?: string | null | undefined;
+  error?: string | null | undefined;
+  worker_id?: string | null | undefined;
+  retries?: number | undefined;
+  duration?: string | null | undefined;
+  entity_id?: string | undefined;
+  entity_type?: string | undefined;
   // Computed properties
-  statusColor?: string;
-  statusDot?: string;
-  formattedDate?: string;
-  shortId?: string;
-  canRetry?: boolean;
-  canStop?: boolean;
+  statusColor?: string | undefined;
+  statusDot?: string | undefined;
+  formattedDate?: string | undefined;
+  shortId?: string | undefined;
+  canRetry?: boolean | undefined;
+  canStop?: boolean | undefined;
 }
 
 interface TaskListContextValue {
@@ -55,9 +55,9 @@ interface TaskListContextValue {
   handleRefresh: () => void;
   handleRetry: (taskId: string) => Promise<void>;
   handleStop: (taskId: string) => Promise<void>;
-  entityId?: string;
-  entityType?: string;
-  embedded?: boolean;
+  entityId?: string | undefined;
+  entityType?: string | undefined;
+  embedded?: boolean | undefined;
 }
 
 const TaskListContext = createContext<TaskListContextValue | null>(null);
@@ -71,9 +71,9 @@ const useTaskListContext = () => {
 };
 
 interface TaskListProps {
-  entityId?: string;
-  entityType?: string;
-  embedded?: boolean;
+  entityId?: string | undefined;
+  entityType?: string | undefined;
+  embedded?: boolean | undefined;
 }
 
 // ============================================
@@ -81,7 +81,7 @@ interface TaskListProps {
 // ============================================
 
 interface HeaderProps {
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 export const Header: React.FC<HeaderProps> = ({ children }) => {
@@ -139,7 +139,7 @@ export const Header: React.FC<HeaderProps> = ({ children }) => {
 
 interface ItemProps {
   task: Task;
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 export const Item: React.FC<ItemProps> = ({ task, children }) => {
@@ -208,7 +208,7 @@ export const Item: React.FC<ItemProps> = ({ task, children }) => {
 // ============================================
 
 interface PaginationProps {
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 export const Pagination: React.FC<PaginationProps> = ({ children }) => {
@@ -249,8 +249,8 @@ export const Pagination: React.FC<PaginationProps> = ({ children }) => {
 // ============================================
 
 interface EmptyStateProps {
-  children?: React.ReactNode;
-  colSpan?: number;
+  children?: React.ReactNode | undefined;
+  colSpan?: number | undefined;
 }
 
 export const EmptyState: React.FC<EmptyStateProps> = ({ children, colSpan = 6 }) => {

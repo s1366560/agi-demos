@@ -36,13 +36,13 @@ export interface MarkdownContentProps {
   /** Markdown content to render */
   content: string;
   /** Additional CSS classes for the container */
-  className?: string;
+  className?: string | undefined;
   /** Whether to enable full prose styling */
-  prose?: boolean;
+  prose?: boolean | undefined;
   /** Whether to show code block actions (copy, open in canvas) */
-  codeActions?: boolean;
+  codeActions?: boolean | undefined;
   /** Loading fallback for lazy components */
-  loadingFallback?: React.ReactNode;
+  loadingFallback?: React.ReactNode | undefined;
 }
 
 /**
@@ -69,9 +69,9 @@ const LazyCodeBlock = lazy(() =>
 );
 
 const CodeBlockWithSuspense: React.FC<{
-  children?: React.ReactNode;
-  codeActions?: boolean;
-  loadingFallback?: React.ReactNode;
+  children?: React.ReactNode | undefined;
+  codeActions?: boolean | undefined;
+  loadingFallback?: React.ReactNode | undefined;
 }> = ({ children, codeActions = false, loadingFallback }) => {
   return (
     <Suspense fallback={loadingFallback || <CodeBlockLoadingFallback />}>

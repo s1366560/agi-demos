@@ -77,7 +77,7 @@ interface SearchParamsRef {
   selectedTags: string[];
   includeEpisodes: boolean;
   timeRange: string;
-  customTimeRange: { since?: string; until?: string };
+  customTimeRange: { since?: string | undefined; until?: string | undefined };
   projectId: string | undefined;
 }
 
@@ -190,7 +190,7 @@ const EnhancedSearchInner: React.FC<EnhancedSearchRootProps> = memo(
     const [focalNode, setFocalNode] = useState('');
     const [crossEncoder, setCrossEncoder] = useState('bge');
     const [timeRange, setTimeRange] = useState('last30');
-    const [customTimeRange, setCustomTimeRange] = useState<{ since?: string; until?: string }>({});
+    const [customTimeRange, setCustomTimeRange] = useState<{ since?: string | undefined; until?: string | undefined }>({});
     const [configTab, setConfigTab] = useState<'params' | 'filters'>('params');
     const [showMobileConfig, setShowMobileConfig] = useState(false);
     const [isConfigOpen, setIsConfigOpen] = useState(defaultConfigOpen);

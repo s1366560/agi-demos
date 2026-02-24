@@ -20,9 +20,9 @@ interface FocusDesktopOverlayProps {
   /** Chat messages content (compact version) */
   chatContent: React.ReactNode;
   /** Input handler */
-  onSend?: (content: string) => void;
+  onSend?: ((content: string) => void) | undefined;
   /** Whether agent is streaming */
-  isStreaming?: boolean;
+  isStreaming?: boolean | undefined;
 }
 
 export const FocusDesktopOverlay: FC<FocusDesktopOverlayProps> = ({

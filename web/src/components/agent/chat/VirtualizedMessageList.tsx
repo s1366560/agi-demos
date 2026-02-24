@@ -30,31 +30,31 @@ export interface VirtualizedMessageListProps {
   /** Messages to render */
   messages: ChatMessage[];
   /** Container height (required for virtualization) */
-  height?: number | string;
+  height?: number | string | undefined;
   /** Estimated message height for initial render */
-  estimatedHeight?: number;
+  estimatedHeight?: number | undefined;
   /** Number of messages to render outside visible area */
-  overscan?: number;
+  overscan?: number | undefined;
   /** Custom CSS classes */
-  className?: string;
+  className?: string | undefined;
   /** Whether to auto-scroll to bottom on new messages */
-  autoScroll?: boolean;
+  autoScroll?: boolean | undefined;
   /** Scroll offset threshold for auto-scroll */
-  scrollThreshold?: number;
+  scrollThreshold?: number | undefined;
   /** Message click handler */
-  onMessageClick?: (message: ChatMessage) => void;
+  onMessageClick?: ((message: ChatMessage) => void) | undefined;
   /** Message retry handler */
-  onRetry?: (messageId: string) => void;
+  onRetry?: ((messageId: string) => void) | undefined;
   /** Message copy handler */
-  onCopy?: (messageId: string) => void;
+  onCopy?: ((messageId: string) => void) | undefined;
   /** Message delete handler */
-  onDelete?: (messageId: string) => void;
+  onDelete?: ((messageId: string) => void) | undefined;
   /** Loading state */
-  isLoading?: boolean;
+  isLoading?: boolean | undefined;
   /** Empty state content */
-  emptyState?: React.ReactNode;
+  emptyState?: React.ReactNode | undefined;
   /** Loading state content */
-  loadingState?: React.ReactNode;
+  loadingState?: React.ReactNode | undefined;
 }
 
 /**

@@ -27,12 +27,12 @@ const { Text } = Typography;
 interface ToolCardProps {
   toolName: string;
   input: Record<string, unknown>;
-  result?: string;
+  result?: string | undefined;
   status: 'running' | 'success' | 'failed';
-  startTime?: number;
-  endTime?: number;
-  duration?: number;
-  embedded?: boolean; // When true, use compact styling for timeline embedding
+  startTime?: number | undefined;
+  endTime?: number | undefined;
+  duration?: number | undefined;
+  embedded?: boolean | undefined; // When true, use compact styling for timeline embedding
 }
 
 export const ToolCard: React.FC<ToolCardProps> = memo(

@@ -12,7 +12,7 @@ export interface SidebarUserProps {
   /** User information */
   user: NavUser;
   /** Callback when user logs out */
-  onLogout?: () => void;
+  onLogout?: (() => void) | undefined;
 }
 
 /**

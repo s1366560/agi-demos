@@ -9,8 +9,8 @@ import { useEffect, useRef, memo } from 'react';
 
 interface VoiceWaveformProps {
   active: boolean;
-  barCount?: number;
-  className?: string;
+  barCount?: number | undefined;
+  className?: string | undefined;
 }
 
 export const VoiceWaveform = memo<VoiceWaveformProps>(

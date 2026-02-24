@@ -13,23 +13,23 @@ export interface Conversation {
   id: string;
   title: string;
   status: SidebarConversationStatus;
-  messageCount?: number;
-  timestamp?: string;
+  messageCount?: number | undefined;
+  timestamp?: string | undefined;
 }
 
 export interface ChatHistorySidebarProps {
   /** List of conversations */
-  conversations?: Conversation[];
+  conversations?: Conversation[] | undefined;
   /** Currently selected conversation ID */
-  selectedConversationId?: string;
+  selectedConversationId?: string | undefined;
   /** Callback when conversation is clicked */
-  onSelectConversation?: (conversationId: string) => void;
+  onSelectConversation?: ((conversationId: string) => void) | undefined;
   /** Callback when "New Chat" is clicked */
-  onNewChat?: () => void;
+  onNewChat?: (() => void) | undefined;
   /** Search query */
-  searchQuery?: string;
+  searchQuery?: string | undefined;
   /** Callback when search query changes */
-  onSearchChange?: (query: string) => void;
+  onSearchChange?: ((query: string) => void) | undefined;
 }
 
 /**

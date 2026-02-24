@@ -52,7 +52,7 @@ import type { AppHeaderRootProps, HeaderVariant, Breadcrumb } from './types';
  */
 interface AppHeaderContextValue {
   basePath: string;
-  context?: 'tenant' | 'project' | 'agent';
+  context?: 'tenant' | 'project' | 'agent' | undefined;
 }
 
 const AppHeaderContext = React.createContext<AppHeaderContextValue | null>(null);
@@ -96,8 +96,8 @@ function BreadcrumbNav({ breadcrumbs }: { breadcrumbs: Breadcrumb[] }) {
  * Root AppHeader component
  */
 interface AppHeaderProps extends AppHeaderRootProps {
-  children?: React.ReactNode;
-  breadcrumbs?: Breadcrumb[];
+  children?: React.ReactNode | undefined;
+  breadcrumbs?: Breadcrumb[] | undefined;
 }
 
 export const AppHeaderRoot = React.memo(function AppHeader({
@@ -142,8 +142,8 @@ function HeaderWrapper({
   context = 'tenant',
 }: {
   children: React.ReactNode;
-  breadcrumbs?: Breadcrumb[];
-  context?: 'tenant' | 'project' | 'agent';
+  breadcrumbs?: Breadcrumb[] | undefined;
+  context?: 'tenant' | 'project' | 'agent' | undefined;
 }) {
   // Get breadcrumbs from hook if not provided
   const hookBreadcrumbs = useBreadcrumbs(context);
@@ -205,8 +205,8 @@ function HeaderContent({
   context = 'tenant',
 }: {
   variant: HeaderVariant;
-  breadcrumbs?: Breadcrumb[];
-  context?: 'tenant' | 'project' | 'agent';
+  breadcrumbs?: Breadcrumb[] | undefined;
+  context?: 'tenant' | 'project' | 'agent' | undefined;
 }) {
   // Get breadcrumbs from hook if not provided
   const hookBreadcrumbs2 = useBreadcrumbs(context);

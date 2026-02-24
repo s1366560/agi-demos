@@ -49,15 +49,15 @@ export interface VirtualGridProps<T> {
   /** Fixed height of the scroll container in pixels */
   containerHeight: number;
   /** Number of items to render outside visible area for smoother scrolling (default: 5) */
-  overscan?: number;
+  overscan?: number | undefined;
   /** Message to display when items array is empty */
-  emptyMessage?: string;
+  emptyMessage?: string | undefined;
   /** Custom component to render when empty - takes precedence over emptyMessage */
-  emptyComponent?: React.ReactNode;
+  emptyComponent?: React.ReactNode | undefined;
   /** Number of columns: 1, 2, or 'responsive' for 1 on mobile, 2 on desktop */
-  columns?: 1 | 2 | 'responsive';
+  columns?: 1 | 2 | 'responsive' | undefined;
   /** Optional className for the grid container */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**

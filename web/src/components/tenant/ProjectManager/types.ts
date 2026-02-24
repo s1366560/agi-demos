@@ -14,23 +14,23 @@ export interface ProjectManagerProps {
   /**
    * Callback when a project is selected
    */
-  onProjectSelect?: (project: Project) => void;
+  onProjectSelect?: ((project: Project) => void) | undefined;
 
   /**
    * Variant preset - 'full' renders all sub-components automatically
    * @default 'controlled'
    */
-  variant?: 'controlled' | 'full';
+  variant?: 'controlled' | 'full' | undefined;
 
   /**
    * Additional CSS class names
    */
-  className?: string;
+  className?: string | undefined;
 
   /**
    * Child components for compound pattern
    */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 // ============================================================================
@@ -41,28 +41,28 @@ export interface ProjectManagerSearchProps {
   /**
    * Current search term value (controlled)
    */
-  value?: string;
+  value?: string | undefined;
 
   /**
    * Initial search term value (uncontrolled)
    */
-  defaultValue?: string;
+  defaultValue?: string | undefined;
 
   /**
    * Callback when search term changes
    */
-  onChange?: (term: string) => void;
+  onChange?: ((term: string) => void) | undefined;
 
   /**
    * Search input placeholder
    * @default 'Search projects...'
    */
-  placeholder?: string;
+  placeholder?: string | undefined;
 
   /**
    * Additional CSS class names
    */
-  className?: string;
+  className?: string | undefined;
 }
 
 // ============================================================================
@@ -73,28 +73,28 @@ export interface ProjectManagerFiltersProps {
   /**
    * Current filter status (controlled)
    */
-  value?: string;
+  value?: string | undefined;
 
   /**
    * Initial filter status (uncontrolled)
    */
-  defaultValue?: string;
+  defaultValue?: string | undefined;
 
   /**
    * Callback when filter changes
    */
-  onChange?: (filter: string) => void;
+  onChange?: ((filter: string) => void) | undefined;
 
   /**
    * Available filter options
    * @default [{ value: 'all', label: 'All' }]
    */
-  options?: Array<{ value: string; label: string }>;
+  options?: Array<{ value: string; label: string }> | undefined;
 
   /**
    * Additional CSS class names
    */
-  className?: string;
+  className?: string | undefined;
 }
 
 // ============================================================================
@@ -105,39 +105,39 @@ export interface ProjectManagerListProps {
   /**
    * Custom render function for each project item
    */
-  children?: (project: Project, index: number) => React.ReactNode;
+  children?: ((project: Project, index: number) => React.ReactNode) | undefined;
 
   /**
    * Callback when a project is clicked
    */
-  onProjectClick?: (project: Project) => void;
+  onProjectClick?: ((project: Project) => void) | undefined;
 
   /**
    * Callback when settings button is clicked
    */
-  onSettingsClick?: (project: Project, e: React.MouseEvent) => void;
+  onSettingsClick?: ((project: Project, e: React.MouseEvent) => void) | undefined;
 
   /**
    * Callback when delete button is clicked
    */
-  onDeleteClick?: (project: Project, e: React.MouseEvent) => void;
+  onDeleteClick?: ((project: Project, e: React.MouseEvent) => void) | undefined;
 
   /**
    * Layout variant
    * @default 'grid'
    */
-  layout?: 'grid' | 'list';
+  layout?: 'grid' | 'list' | undefined;
 
   /**
    * Grid columns (for grid layout)
    * @default 'md:grid-cols-2 lg:grid-cols-3'
    */
-  gridCols?: string;
+  gridCols?: string | undefined;
 
   /**
    * Additional CSS class names
    */
-  className?: string;
+  className?: string | undefined;
 }
 
 // ============================================================================
@@ -153,33 +153,33 @@ export interface ProjectManagerItemProps {
   /**
    * Whether this project is currently selected
    */
-  isSelected?: boolean;
+  isSelected?: boolean | undefined;
 
   /**
    * Callback when item is clicked
    */
-  onClick?: (project: Project) => void;
+  onClick?: ((project: Project) => void) | undefined;
 
   /**
    * Callback when settings button is clicked
    */
-  onSettingsClick?: (project: Project, e: React.MouseEvent) => void;
+  onSettingsClick?: ((project: Project, e: React.MouseEvent) => void) | undefined;
 
   /**
    * Callback when delete button is clicked
    */
-  onDeleteClick?: (project: Project, e: React.MouseEvent) => void;
+  onDeleteClick?: ((project: Project, e: React.MouseEvent) => void) | undefined;
 
   /**
    * Display variant
    * @default 'card'
    */
-  variant?: 'card' | 'compact';
+  variant?: 'card' | 'compact' | undefined;
 
   /**
    * Additional CSS class names
    */
-  className?: string;
+  className?: string | undefined;
 }
 
 // ============================================================================
@@ -190,22 +190,22 @@ export interface ProjectManagerCreateModalProps {
   /**
    * Whether the modal is open (controlled)
    */
-  isOpen?: boolean;
+  isOpen?: boolean | undefined;
 
   /**
    * Callback when modal is closed
    */
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
 
   /**
    * Callback when project is created successfully
    */
-  onSuccess?: () => void;
+  onSuccess?: (() => void) | undefined;
 
   /**
    * Additional CSS class names
    */
-  className?: string;
+  className?: string | undefined;
 }
 
 export interface ProjectManagerSettingsModalProps {
@@ -217,27 +217,27 @@ export interface ProjectManagerSettingsModalProps {
   /**
    * Whether the modal is open (controlled)
    */
-  isOpen?: boolean;
+  isOpen?: boolean | undefined;
 
   /**
    * Callback when modal is closed
    */
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
 
   /**
    * Callback when settings are saved
    */
-  onSave?: (projectId: string, updates: Partial<Project>) => void | Promise<void>;
+  onSave?: ((projectId: string, updates: Partial<Project>) => void | Promise<void>) | undefined;
 
   /**
    * Callback when project is deleted from settings
    */
-  onDelete?: (projectId: string) => void | Promise<void>;
+  onDelete?: ((projectId: string) => void | Promise<void>) | undefined;
 
   /**
    * Additional CSS class names
    */
-  className?: string;
+  className?: string | undefined;
 }
 
 // ============================================================================
@@ -248,40 +248,40 @@ export interface ProjectManagerLoadingProps {
   /**
    * Custom loading message
    */
-  message?: string;
+  message?: string | undefined;
 
   /**
    * Additional CSS class names
    */
-  className?: string;
+  className?: string | undefined;
 }
 
 export interface ProjectManagerEmptyProps {
   /**
    * Empty state message
    */
-  message?: string;
+  message?: string | undefined;
 
   /**
    * Whether to show create button
    */
-  showCreateButton?: boolean;
+  showCreateButton?: boolean | undefined;
 
   /**
    * Callback when create button is clicked
    */
-  onCreateClick?: () => void;
+  onCreateClick?: (() => void) | undefined;
 
   /**
    * Empty state variant
    * @default 'no-projects'
    */
-  variant?: 'no-projects' | 'no-results' | 'no-tenant';
+  variant?: 'no-projects' | 'no-results' | 'no-tenant' | undefined;
 
   /**
    * Additional CSS class names
    */
-  className?: string;
+  className?: string | undefined;
 }
 
 // ============================================================================
@@ -292,17 +292,17 @@ export interface ProjectManagerErrorProps {
   /**
    * Error message to display
    */
-  error?: string | null;
+  error?: string | null | undefined;
 
   /**
    * Callback when error is dismissed
    */
-  onDismiss?: () => void;
+  onDismiss?: (() => void) | undefined;
 
   /**
    * Additional CSS class names
    */
-  className?: string;
+  className?: string | undefined;
 }
 
 // ============================================================================
@@ -342,7 +342,7 @@ export interface ProjectManagerContextValue {
   handleDeleteFromSettings: (projectId: string) => Promise<void>;
 
   // External callback
-  onProjectSelect?: (project: Project) => void;
+  onProjectSelect?: ((project: Project) => void) | undefined;
 }
 
 // ============================================================================

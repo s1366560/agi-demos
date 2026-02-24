@@ -30,14 +30,14 @@ interface ProjectSelectorProps {
   /** Callback when project changes */
   onProjectChange: (projectId: string) => void;
   /** Optional CSS class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 interface ProjectOption {
   id: string;
   name: string;
   tenant_id: string;
-  tenant_name?: string;
+  tenant_name?: string | undefined;
 }
 
 /**
@@ -152,7 +152,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       <Select
         placeholder="No projects available"
         disabled
-        className={className}
+        {...(className != null ? { className } : {})}
         style={{ width: 250 }}
         aria-label="Select project for agent conversation"
       />
@@ -165,12 +165,12 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   return (
     <>
       <Select
-        value={currentProjectId || undefined}
+        {...(currentProjectId ? { value: currentProjectId } : {})}
         placeholder="Select a project"
         onChange={handleProjectSelect}
         loading={projectsLoading}
         disabled={projectOptions.length === 1}
-        className={className}
+        {...(className != null ? { className } : {})}
         style={{ width: 250 }}
         aria-label="Select project for agent conversation"
         showSearch
@@ -235,8 +235,8 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
 /**
  * Loading indicator component for async operations
  */
-export const ProjectSelectorLoading: React.FC<{ className?: string }> = ({ className }) => (
-  <div className={className} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+export const ProjectSelectorLoading: React.FC<{ className?: string | undefined }> = ({ className }) => (
+  <div {...(className != null ? { className } : {})} style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
     <Spin indicator={<LoadingOutlined spin />} size="small" />
     <span data-testid="loading-indicator">Loading...</span>
   </div>
@@ -245,11 +245,11 @@ export const ProjectSelectorLoading: React.FC<{ className?: string }> = ({ class
 /**
  * Empty state component when no projects are available
  */
-export const ProjectSelectorEmpty: React.FC<{ className?: string }> = ({ className }) => (
+export const ProjectSelectorEmpty: React.FC<{ className?: string | undefined }> = ({ className }) => (
   <Select
     placeholder="No projects available"
     disabled
-    className={className}
+    {...(className != null ? { className } : {})}
     style={{ width: 250 }}
     aria-label="Select project for agent conversation"
   />

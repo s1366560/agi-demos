@@ -96,7 +96,7 @@ function getStateConfig(
 }
 
 interface AgentStatePillProps {
-  className?: string;
+  className?: string | undefined;
 }
 
 export const AgentStatePill: React.FC<AgentStatePillProps> = memo(({ className = '' }) => {

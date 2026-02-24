@@ -23,17 +23,17 @@ import type {
 const api = httpClient;
 
 export interface SkillListParams {
-  status?: 'active' | 'disabled' | 'deprecated' | null;
-  scope?: 'system' | 'tenant' | 'project' | null;
-  trigger_type?: 'keyword' | 'semantic' | 'hybrid' | null;
-  skip?: number;
-  limit?: number;
+  status?: 'active' | 'disabled' | 'deprecated' | null | undefined;
+  scope?: 'system' | 'tenant' | 'project' | null | undefined;
+  trigger_type?: 'keyword' | 'semantic' | 'hybrid' | null | undefined;
+  skip?: number | undefined;
+  limit?: number | undefined;
 }
 
 export interface SkillMatchParams {
   query: string;
-  threshold?: number;
-  limit?: number;
+  threshold?: number | undefined;
+  limit?: number | undefined;
 }
 
 export const skillAPI = {
@@ -47,7 +47,7 @@ export const skillAPI = {
   /**
    * List system skills
    */
-  listSystemSkills: async (params: { status?: string } = {}): Promise<SkillsListResponse> => {
+  listSystemSkills: async (params: { status?: string | undefined } = {}): Promise<SkillsListResponse> => {
     return await api.get<SkillsListResponse>('/skills/system/list', { params });
   },
 

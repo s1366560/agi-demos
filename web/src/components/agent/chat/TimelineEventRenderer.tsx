@@ -19,11 +19,11 @@ interface TimelineEventRendererProps {
   /** Timeline events to render */
   events: TimelineEvent[];
   /** Whether currently streaming (affects live updates) */
-  isStreaming?: boolean;
+  isStreaming?: boolean | undefined;
   /** Whether to show execution details inline */
-  showExecutionDetails?: boolean;
+  showExecutionDetails?: boolean | undefined;
   /** Additional CSS class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**

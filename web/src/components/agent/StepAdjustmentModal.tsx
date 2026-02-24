@@ -43,7 +43,7 @@ export interface StepAdjustmentModalProps {
   /** Callback when modal is closed */
   onClose: () => void;
   /** Optional CSS class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**

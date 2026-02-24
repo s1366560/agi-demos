@@ -208,8 +208,8 @@ export class ApiError extends Error {
     type: ApiErrorType;
     code: string;
     message: string;
-    statusCode?: number;
-    details?: unknown;
+    statusCode?: number | undefined;
+    details?: unknown | undefined;
     userMessage: string;
   } {
     return {
@@ -229,8 +229,8 @@ export class ApiError extends Error {
     type: ApiErrorType;
     code: string;
     message: string;
-    statusCode?: number;
-    details?: unknown;
+    statusCode?: number | undefined;
+    details?: unknown | undefined;
   }): ApiError {
     return new ApiError(data.type, data.code, data.message, data.statusCode, data.details);
   }
@@ -298,16 +298,16 @@ export function parseAxiosError(error: unknown): ApiError {
 
   const err = error as {
     response?: {
-      status?: number;
+      status?: number | undefined;
       data?: {
-        detail?: string;
-        code?: string;
-        message?: string;
-        error?: string;
-      };
-    };
-    message?: string;
-    code?: string;
+        detail?: string | undefined;
+        code?: string | undefined;
+        message?: string | undefined;
+        error?: string | undefined;
+      } | undefined;
+    } | undefined;
+    message?: string | undefined;
+    code?: string | undefined;
   };
 
   // Handle axios response errors

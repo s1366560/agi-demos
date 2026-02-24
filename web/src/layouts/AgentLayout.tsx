@@ -38,7 +38,7 @@ const TOP_TABS = [
 ];
 
 export const AgentLayout: React.FC = () => {
-  const { projectId, conversationId } = useParams<{ projectId: string; conversationId?: string }>();
+  const { projectId, conversationId } = useParams<{ projectId: string; conversationId?: string | undefined }>();
   const currentProject = useProjectStore((state) => state.currentProject);
   const setCurrentProject = useProjectStore((state) => state.setCurrentProject);
   const projects = useProjectStore((state) => state.projects);

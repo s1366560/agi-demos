@@ -144,7 +144,7 @@ export const TemplateMarketplace: React.FC = () => {
         />
         <div className="flex gap-1.5 flex-wrap">
           <Tag
-            color={selectedCategory === '' ? 'blue' : undefined}
+            {...(selectedCategory === '' ? { color: 'blue' as const } : {})}
             className="cursor-pointer"
             onClick={() => { setSelectedCategory(''); }}
           >
@@ -153,7 +153,7 @@ export const TemplateMarketplace: React.FC = () => {
           {categories.map((cat) => (
             <Tag
               key={cat}
-              color={selectedCategory === cat ? CATEGORY_COLORS[cat] || 'blue' : undefined}
+              {...(selectedCategory === cat ? { color: CATEGORY_COLORS[cat] || 'blue' } : {})}
               className="cursor-pointer"
               onClick={() => { setSelectedCategory(cat); }}
             >

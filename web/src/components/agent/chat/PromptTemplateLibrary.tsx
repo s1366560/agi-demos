@@ -40,7 +40,7 @@ export interface PromptTemplate {
   promptKey: string;
   promptFallback: string;
   category: TemplateCategory;
-  icon?: string;
+  icon?: string | undefined;
 }
 
 export type TemplateCategory = 'analysis' | 'code' | 'writing' | 'general';
@@ -191,7 +191,7 @@ export const PromptTemplateLibrary = memo<PromptTemplateLibraryProps>(
         description: string;
         default_value: string;
         required: boolean;
-      }>;
+      }> | undefined;
     } | null>(null);
     const searchRef = useRef<HTMLInputElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);

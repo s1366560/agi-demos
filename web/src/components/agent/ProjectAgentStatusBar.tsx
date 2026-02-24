@@ -79,9 +79,9 @@ interface ProjectAgentStatusBarProps {
   /** Tenant ID */
   tenantId: string;
   /** Number of messages */
-  messageCount?: number;
+  messageCount?: number | undefined;
   /** Enable pool management integration */
-  enablePoolManagement?: boolean;
+  enablePoolManagement?: boolean | undefined;
 }
 
 /**
@@ -124,7 +124,7 @@ const lifecycleConfig: Record<
     color: string;
     bgColor: string;
     description: string;
-    animate?: boolean;
+    animate?: boolean | undefined;
   }
 > = {
   uninitialized: {

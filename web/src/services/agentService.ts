@@ -191,13 +191,13 @@ export type WebSocketStatus = 'connecting' | 'connected' | 'disconnected' | 'err
  */
 interface ServerMessage {
   type: string;
-  conversation_id?: string;
-  project_id?: string;
-  data?: unknown;
-  event_time_us?: number;
-  event_counter?: number;
-  timestamp?: string;
-  action?: string;
+  conversation_id?: string | undefined;
+  project_id?: string | undefined;
+  data?: unknown | undefined;
+  event_time_us?: number | undefined;
+  event_counter?: number | undefined;
+  timestamp?: string | undefined;
+  action?: string | undefined;
 }
 
 /**
@@ -510,7 +510,7 @@ class AgentServiceImpl implements AgentService {
 
     // Enhanced logging for debugging TEXT_DELTA issues
     if (type === 'text_delta') {
-      const delta = (data as { delta?: string } | undefined)?.delta || '';
+      const delta = (data as { delta?: string | undefined } | undefined)?.delta || '';
       logger.debug(
         `[AgentWS] TEXT_DELTA: timeUs=${message.event_time_us}, len=${delta.length}, preview="${delta.substring(0, 30)}..."`
       );
@@ -553,7 +553,7 @@ class AgentServiceImpl implements AgentService {
     if (type === 'status_update') {
       if (
         this.statusSubscriber &&
-        (data as { project_id?: string })?.project_id === this.statusSubscriber.projectId
+        (data as { project_id?: string | undefined })?.project_id === this.statusSubscriber.projectId
       ) {
         this.statusSubscriber.callback(data);
       }
@@ -562,7 +562,7 @@ class AgentServiceImpl implements AgentService {
 
     // Handle lifecycle state changes
     if (type === 'lifecycle_state_change') {
-      const projectId = (message as { project_id?: string }).project_id;
+      const projectId = (message as { project_id?: string | undefined }).project_id;
       if (this.lifecycleStateSubscriber && projectId === this.lifecycleStateSubscriber.projectId) {
         this.lifecycleStateSubscriber.callback(this.parseLifecycleStateData(message));
       }
@@ -572,7 +572,7 @@ class AgentServiceImpl implements AgentService {
     // Handle sandbox state changes (replaces SSE-based sandbox events)
     // Two message types: sandbox_state_change (from broadcast_sandbox_state) and sandbox_event (from Redis stream)
     if (type === 'sandbox_state_change' || type === 'sandbox_event') {
-      const projectId = (message as { project_id?: string }).project_id;
+      const projectId = (message as { project_id?: string | undefined }).project_id;
       if (this.sandboxStateSubscriber && projectId === this.sandboxStateSubscriber.projectId) {
         this.sandboxStateSubscriber.callback(this.parseSandboxStateData(message));
       }
@@ -601,7 +601,7 @@ class AgentServiceImpl implements AgentService {
    * @private
    */
   private parseLifecycleStateData(message: ServerMessage): LifecycleStateData {
-    const data = (message as { data?: Record<string, unknown> }).data || {};
+    const data = (message as { data?: Record<string, unknown> | undefined }).data || {};
     return {
       lifecycleState: data.lifecycle_state as LifecycleState | null,
       isInitialized: Boolean(data.is_initialized),
@@ -631,18 +631,18 @@ class AgentServiceImpl implements AgentService {
    * @private
    */
   private parseSandboxStateData(message: ServerMessage): SandboxStateData {
-    const messageType = (message as { type?: string }).type;
+    const messageType = (message as { type?: string | undefined }).type;
     let data: Record<string, unknown>;
     let eventType: string;
 
     if (messageType === 'sandbox_event') {
       // Redis stream format: data contains { type, data, timestamp }
-      const outerData = (message as { data?: Record<string, unknown> }).data || {};
+      const outerData = (message as { data?: Record<string, unknown> | undefined }).data || {};
       eventType = typeof outerData.type === 'string' ? outerData.type : 'unknown';
       data = (outerData.data as Record<string, unknown>) || {};
     } else {
       // broadcast_sandbox_state format: data contains event fields directly
-      data = (message as { data?: Record<string, unknown> }).data || {};
+      data = (message as { data?: Record<string, unknown> | undefined }).data || {};
       eventType = typeof data.event_type === 'string' ? data.event_type : 'unknown';
     }
 
@@ -1120,7 +1120,7 @@ class AgentServiceImpl implements AgentService {
         break;
       }
       case 'subagent_steered': {
-        const data = event.data as SubAgentRunEventData & { instruction?: string };
+        const data = event.data as SubAgentRunEventData & { instruction?: string | undefined };
         handler.onSubAgentStarted?.({
           ...event,
           type: 'subagent_started',
@@ -1867,11 +1867,11 @@ class AgentServiceImpl implements AgentService {
 
     const response = await api.get<
       {
-        has_more?: boolean;
-        first_time_us?: number | null;
-        first_counter?: number | null;
-        last_time_us?: number | null;
-        last_counter?: number | null;
+        has_more?: boolean | undefined;
+        first_time_us?: number | null | undefined;
+        first_counter?: number | null | undefined;
+        last_time_us?: number | null | undefined;
+        last_counter?: number | null | undefined;
       } & Omit<
         ConversationMessagesResponse,
         'has_more' | 'first_time_us' | 'first_counter' | 'last_time_us' | 'last_counter'
@@ -2305,7 +2305,7 @@ class AgentServiceImpl implements AgentService {
       can_recover: boolean;
       stream_exists: boolean;
       recovery_source: string;
-    };
+    } | undefined;
   }> {
     const response = await api.get<{
       is_running: boolean;
@@ -2317,7 +2317,7 @@ class AgentServiceImpl implements AgentService {
         can_recover: boolean;
         stream_exists: boolean;
         recovery_source: string;
-      };
+      } | undefined;
     }>(`/agent/conversations/${conversationId}/execution-status`, {
       params: {
         include_recovery: includeRecovery,

@@ -35,15 +35,15 @@ const ViewportLoading: React.FC = () => (
 
 interface ViewportProps {
   config: GraphConfig;
-  onNodeClick?: (node: NodeData | null) => void;
-  onStateChange?: (state: {
+  onNodeClick?: ((node: NodeData | null) => void) | undefined;
+  onStateChange?: ((state: {
     nodeCount: number;
     edgeCount: number;
     loading: boolean;
     error: string | null;
-  }) => void;
-  setCyInstance?: (cy: any) => void;
-  onNodeSelect?: (node: NodeData | null) => void;
+  }) => void) | undefined;
+  setCyInstance?: ((cy: any) => void) | undefined;
+  onNodeSelect?: ((node: NodeData | null) => void) | undefined;
 }
 
 // ========================================

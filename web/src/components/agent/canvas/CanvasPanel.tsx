@@ -73,7 +73,7 @@ const typeIcon = (type: CanvasContentType, size = 14) => {
 };
 
 // Tab bar
-const CanvasTabBar = memo<{ onBeforeCloseTab?: (tabId: string) => void }>(
+const CanvasTabBar = memo<{ onBeforeCloseTab?: ((tabId: string) => void) | undefined }>(
   ({ onBeforeCloseTab }) => {
     const tabs = useCanvasStore((s) => s.tabs);
     const activeTabId = useCanvasStore((s) => s.activeTabId);
@@ -228,9 +228,9 @@ const CanvasContent = memo<{
   tab: CanvasTab;
   editMode: boolean;
   onContentChange: (content: string) => void;
-  onSendPrompt?: (prompt: string) => void;
-  onUpdateModelContext?: (context: Record<string, unknown>) => void;
-  mcpAppRef?: React.Ref<StandardMCPAppRendererHandle>;
+  onSendPrompt?: ((prompt: string) => void) | undefined;
+  onUpdateModelContext?: ((context: Record<string, unknown>) => void) | undefined;
+  mcpAppRef?: React.Ref<StandardMCPAppRendererHandle> | undefined;
 }>(({ tab, editMode, onContentChange, onSendPrompt, onUpdateModelContext, mcpAppRef }) => {
   const { remarkPlugins, rehypePlugins } = useMarkdownPlugins(
     tab.type === 'markdown' ? tab.content : undefined
@@ -456,7 +456,7 @@ CanvasToolbar.displayName = 'CanvasToolbar';
 const QuickActions = memo<{
   type: CanvasContentType;
   content: string;
-  onSendPrompt?: (prompt: string) => void;
+  onSendPrompt?: ((prompt: string) => void) | undefined;
 }>(({ type, content, onSendPrompt }) => {
   const { t } = useTranslation();
 
@@ -587,8 +587,8 @@ CanvasEmptyState.displayName = 'CanvasEmptyState';
 
 // Main CanvasPanel component
 export const CanvasPanel = memo<{
-  onSendPrompt?: (prompt: string) => void;
-  onUpdateModelContext?: (context: Record<string, unknown>) => void;
+  onSendPrompt?: ((prompt: string) => void) | undefined;
+  onUpdateModelContext?: ((context: Record<string, unknown>) => void) | undefined;
 }>(({ onSendPrompt, onUpdateModelContext }) => {
   const activeTab = useActiveCanvasTab();
   const { updateContent } = useCanvasActions();

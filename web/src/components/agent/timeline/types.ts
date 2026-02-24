@@ -37,9 +37,9 @@ export interface EventItemProps {
   /** The timeline event to render */
   event: TimelineEvent;
   /** Whether currently streaming */
-  isStreaming?: boolean;
+  isStreaming?: boolean | undefined;
   /** All timeline events (for finding related events) */
-  allEvents?: TimelineEvent[];
+  allEvents?: TimelineEvent[] | undefined;
 }
 
 /**
@@ -47,7 +47,7 @@ export interface EventItemProps {
  */
 export interface TimelineEventItemRootProps extends EventItemProps {
   /** Children for compound component pattern */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 /**

@@ -103,7 +103,7 @@ SandboxPanel.Header = function SandboxPanelHeaderMarker(_props: SandboxHeaderPro
 interface HeaderRenderProps {
   currentTool: { name: string; input: Record<string, unknown> } | null;
   sandboxId: string | null;
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
 }
 
 function SandboxHeaderRender({ currentTool, sandboxId, onClose }: HeaderRenderProps) {
@@ -135,11 +135,11 @@ function SandboxHeaderRender({ currentTool, sandboxId, onClose }: HeaderRenderPr
 }
 
 interface TabContentProps {
-  sandboxId?: string | null;
-  desktopStatus?: any;
-  terminalStatus?: any;
-  toolExecutions?: any[];
-  onFileClick?: (filePath: string) => void;
+  sandboxId?: string | null | undefined;
+  desktopStatus?: any | undefined;
+  terminalStatus?: any | undefined;
+  toolExecutions?: any[] | undefined;
+  onFileClick?: ((filePath: string) => void) | undefined;
 }
 
 function TerminalTabContent({ sandboxId }: TabContentProps) {
@@ -199,12 +199,12 @@ function ControlTabContent({
   isDesktopLoading,
   isTerminalLoading,
 }: TabContentProps & {
-  isDesktopLoading?: boolean;
-  isTerminalLoading?: boolean;
-  onDesktopStart?: () => void;
-  onDesktopStop?: () => void;
-  onTerminalStart?: () => void;
-  onTerminalStop?: () => void;
+  isDesktopLoading?: boolean | undefined;
+  isTerminalLoading?: boolean | undefined;
+  onDesktopStart?: (() => void) | undefined;
+  onDesktopStop?: (() => void) | undefined;
+  onTerminalStart?: (() => void) | undefined;
+  onTerminalStop?: (() => void) | undefined;
 }) {
   return sandboxId ? (
     <div className="h-full overflow-y-auto p-4">

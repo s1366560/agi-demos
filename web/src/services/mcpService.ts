@@ -21,10 +21,10 @@ import type {
 const api = httpClient;
 
 export interface MCPServerListParams {
-  project_id?: string;
-  enabled_only?: boolean;
-  skip?: number;
-  limit?: number;
+  project_id?: string | undefined;
+  enabled_only?: boolean | undefined;
+  skip?: number | undefined;
+  limit?: number | undefined;
 }
 
 export interface MCPReconcileResult {

@@ -38,40 +38,40 @@ export interface SubAgentTemplateDetail extends SubAgentTemplateListItem {
 
 export interface SubAgentTemplateCreateRequest {
   name: string;
-  display_name?: string;
-  description?: string;
-  category?: string;
-  tags?: string[];
+  display_name?: string | undefined;
+  description?: string | undefined;
+  category?: string | undefined;
+  tags?: string[] | undefined;
   system_prompt: string;
-  trigger_description?: string;
-  trigger_keywords?: string[];
-  trigger_examples?: string[];
-  model?: string;
-  max_tokens?: number;
-  temperature?: number;
-  max_iterations?: number;
-  allowed_tools?: string[];
-  author?: string;
-  is_published?: boolean;
-  metadata?: Record<string, unknown>;
+  trigger_description?: string | undefined;
+  trigger_keywords?: string[] | undefined;
+  trigger_examples?: string[] | undefined;
+  model?: string | undefined;
+  max_tokens?: number | undefined;
+  temperature?: number | undefined;
+  max_iterations?: number | undefined;
+  allowed_tools?: string[] | undefined;
+  author?: string | undefined;
+  is_published?: boolean | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 export interface SubAgentTemplateUpdateRequest {
-  display_name?: string;
-  description?: string;
-  category?: string;
-  tags?: string[];
-  system_prompt?: string;
-  trigger_description?: string;
-  trigger_keywords?: string[];
-  trigger_examples?: string[];
-  model?: string;
-  max_tokens?: number;
-  temperature?: number;
-  max_iterations?: number;
-  allowed_tools?: string[];
-  is_published?: boolean;
-  metadata?: Record<string, unknown>;
+  display_name?: string | undefined;
+  description?: string | undefined;
+  category?: string | undefined;
+  tags?: string[] | undefined;
+  system_prompt?: string | undefined;
+  trigger_description?: string | undefined;
+  trigger_keywords?: string[] | undefined;
+  trigger_examples?: string[] | undefined;
+  model?: string | undefined;
+  max_tokens?: number | undefined;
+  temperature?: number | undefined;
+  max_iterations?: number | undefined;
+  allowed_tools?: string[] | undefined;
+  is_published?: boolean | undefined;
+  metadata?: Record<string, unknown> | undefined;
 }
 
 export interface SubAgentTemplateListResponse {
@@ -83,10 +83,10 @@ export interface SubAgentTemplateListResponse {
 
 export const subagentTemplateService = {
   list: async (params?: {
-    category?: string;
-    search?: string;
-    page?: number;
-    page_size?: number;
+    category?: string | undefined;
+    search?: string | undefined;
+    page?: number | undefined;
+    page_size?: number | undefined;
   }): Promise<SubAgentTemplateListResponse> => {
     const query = new URLSearchParams();
     if (params?.category) query.set('category', params.category);

@@ -80,7 +80,7 @@ interface PluginActionTimelineEntry {
 }
 
 export const PluginHub: React.FC = () => {
-  const { tenantId: urlTenantId } = useParams<{ tenantId?: string }>();
+  const { tenantId: urlTenantId } = useParams<{ tenantId?: string | undefined }>();
   const [searchParams] = useSearchParams();
   const projectIdFromQuery = searchParams.get('projectId');
   const currentTenant = useTenantStore((state) => state.currentTenant);
@@ -539,7 +539,7 @@ export const PluginHub: React.FC = () => {
 
       setConfigActionKey('save');
       if (editingConfig) {
-        const updatePayload = { ...payload } as UpdateChannelConfig & { channel_type?: string };
+        const updatePayload = { ...payload } as UpdateChannelConfig & { channel_type?: string | undefined };
         delete updatePayload.channel_type;
         await channelService.updateConfig(editingConfig.id, updatePayload);
         message.success('Configuration updated');
@@ -605,7 +605,7 @@ export const PluginHub: React.FC = () => {
 
         if (schema.enum && schema.enum.length > 0) {
           return (
-            <Form.Item key={fieldName} name={formName} label={label} rules={rules}>
+            <Form.Item key={fieldName} name={formName} label={label} {...(rules != null ? { rules } : {})}>
               <Select
                 options={schema.enum.map((value) => ({
                   value,
@@ -618,11 +618,11 @@ export const PluginHub: React.FC = () => {
 
         if (schema.type === 'integer' || schema.type === 'number') {
           return (
-            <Form.Item key={fieldName} name={formName} label={label} rules={rules}>
+            <Form.Item key={fieldName} name={formName} label={label} {...(rules != null ? { rules } : {})}>
               <InputNumber
                 style={{ width: '100%' }}
-                min={schema.minimum}
-                max={schema.maximum}
+                {...(schema.minimum != null ? { min: schema.minimum } : {})}
+                {...(schema.maximum != null ? { max: schema.maximum } : {})}
                 placeholder={placeholder}
               />
             </Form.Item>
@@ -630,7 +630,7 @@ export const PluginHub: React.FC = () => {
         }
 
         return (
-          <Form.Item key={fieldName} name={formName} label={label} rules={rules}>
+            <Form.Item key={fieldName} name={formName} label={label} {...(rules != null ? { rules } : {})}>
             {sensitive ? (
               <Input.Password
                 placeholder={
@@ -840,7 +840,7 @@ export const PluginHub: React.FC = () => {
               placeholder="Select project context for channel configs"
               value={selectedProjectId || undefined}
               options={projectOptions}
-              onChange={(value) => { setSelectedProjectId(value); }}
+              onChange={(value) => { setSelectedProjectId(value ?? null); }}
               loading={projectLoading}
             />
             <Input

@@ -21,11 +21,11 @@ import type {
 const api = httpClient;
 
 export interface SubAgentListParams {
-  enabled_only?: boolean;
-  source?: 'filesystem' | 'database';
-  include_filesystem?: boolean;
-  skip?: number;
-  limit?: number;
+  enabled_only?: boolean | undefined;
+  source?: 'filesystem' | 'database' | undefined;
+  include_filesystem?: boolean | undefined;
+  skip?: number | undefined;
+  limit?: number | undefined;
 }
 
 export interface FilesystemSubAgent {

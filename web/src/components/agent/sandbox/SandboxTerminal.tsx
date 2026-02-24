@@ -20,19 +20,19 @@ export interface SandboxTerminalProps {
   /** Sandbox container ID */
   sandboxId: string;
   /** Project ID for project-scoped WebSocket */
-  projectId?: string;
+  projectId?: string | undefined;
   /** Optional existing session ID to reconnect */
-  sessionId?: string;
+  sessionId?: string | undefined;
   /** Called when terminal connects */
-  onConnect?: (sessionId: string) => void;
+  onConnect?: ((sessionId: string) => void) | undefined;
   /** Called when terminal disconnects */
-  onDisconnect?: () => void;
+  onDisconnect?: (() => void) | undefined;
   /** Called on terminal error */
-  onError?: (error: string) => void;
+  onError?: ((error: string) => void) | undefined;
   /** Terminal height (default: 100%) */
-  height?: string | number;
+  height?: string | number | undefined;
   /** Show toolbar (default: true) */
-  showToolbar?: boolean;
+  showToolbar?: boolean | undefined;
 }
 
 type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';

@@ -36,15 +36,15 @@ export interface ExecutionDetailsPanelRootProps {
   /** Message data from store containing execution metadata */
   message: Message;
   /** Children for compound component pattern */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
   /** Whether the message is currently streaming */
-  isStreaming?: boolean;
+  isStreaming?: boolean | undefined;
   /** Compact mode for smaller displays (reduced padding, smaller text) */
-  compact?: boolean;
+  compact?: boolean | undefined;
   /** Default view to show on first render */
-  defaultView?: ViewType;
+  defaultView?: ViewType | undefined;
   /** Whether to show the view selector tabs */
-  showViewSelector?: boolean;
+  showViewSelector?: boolean | undefined;
 }
 
 /**
@@ -52,7 +52,7 @@ export interface ExecutionDetailsPanelRootProps {
  */
 export interface ExecutionThinkingProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -60,7 +60,7 @@ export interface ExecutionThinkingProps {
  */
 export interface ExecutionActivityProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -68,7 +68,7 @@ export interface ExecutionActivityProps {
  */
 export interface ExecutionToolsProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -76,7 +76,7 @@ export interface ExecutionToolsProps {
  */
 export interface ExecutionTokensProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -84,7 +84,7 @@ export interface ExecutionTokensProps {
  */
 export interface ExecutionViewSelectorProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -95,13 +95,13 @@ export interface LegacyExecutionDetailsPanelProps {
   /** Message data from store containing execution metadata */
   message: Message;
   /** Whether the message is currently streaming */
-  isStreaming?: boolean;
+  isStreaming?: boolean | undefined;
   /** Compact mode for smaller displays (reduced padding, smaller text) */
-  compact?: boolean;
+  compact?: boolean | undefined;
   /** Default view to show on first render */
-  defaultView?: ViewType;
+  defaultView?: ViewType | undefined;
   /** Whether to show the view selector tabs */
-  showViewSelector?: boolean;
+  showViewSelector?: boolean | undefined;
 }
 
 /**

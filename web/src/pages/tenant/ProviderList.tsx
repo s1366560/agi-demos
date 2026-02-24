@@ -70,7 +70,7 @@ export const ProviderList: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const params: { provider_type?: string } = {};
+      const params: { provider_type?: string | undefined } = {};
       if (typeFilter !== 'all') {
         params.provider_type = typeFilter;
       }

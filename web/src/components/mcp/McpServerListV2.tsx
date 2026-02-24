@@ -21,7 +21,7 @@ import { McpServerTabV2 } from './McpServerTabV2';
 import { McpToolsTabV2 } from './McpToolsTabV2';
 import { getRuntimeStatus } from './types';
 
-import type { MCPToolInfo } from '@/types/agent';
+
 
 import type { McpTabKey, ServerStats, AppStats, ToolStats } from './types';
 
@@ -36,7 +36,7 @@ interface StatsCardProps {
   bgColor: string;
   textColor: string;
   iconBg: string;
-  subtitle?: string;
+  subtitle?: string | undefined;
 }
 
 const StatsCard: React.FC<StatsCardProps> = ({

@@ -10,17 +10,17 @@ export interface VideoPlayerProps {
   /** Video source URL */
   src: string;
   /** MIME type for format hint */
-  mimeType?: string;
+  mimeType?: string | undefined;
   /** Maximum height */
-  maxHeight?: number | string;
+  maxHeight?: number | string | undefined;
   /** Compact mode */
-  compact?: boolean;
+  compact?: boolean | undefined;
   /** Autoplay (muted by default) */
-  autoPlay?: boolean;
+  autoPlay?: boolean | undefined;
   /** Called when video loads */
-  onLoad?: () => void;
+  onLoad?: (() => void) | undefined;
   /** Called on error */
-  onError?: () => void;
+  onError?: (() => void) | undefined;
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({

@@ -15,8 +15,8 @@ import type { NodeData } from './types';
 // ========================================
 
 interface NodeInfoPanelProps {
-  node?: NodeData | null;
-  onClose?: () => void;
+  node?: NodeData | null | undefined;
+  onClose?: (() => void) | undefined;
 }
 
 // ========================================

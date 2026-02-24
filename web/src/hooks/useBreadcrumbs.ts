@@ -36,13 +36,13 @@ export type BreadcrumbContext = 'tenant' | 'project' | 'agent' | 'schema';
  */
 export interface BreadcrumbOptions {
   /** Custom label mapping for path segments */
-  labels?: Record<string, string>;
+  labels?: Record<string, string> | undefined;
   /** Maximum number of breadcrumbs to show (null for unlimited) */
-  maxDepth?: number | null;
+  maxDepth?: number | null | undefined;
   /** Whether to make the last breadcrumb non-clickable (empty path) */
-  hideLast?: boolean;
+  hideLast?: boolean | undefined;
   /** Custom home breadcrumb label */
-  homeLabel?: string;
+  homeLabel?: string | undefined;
 }
 
 /**

@@ -164,7 +164,7 @@ export function useProjectStats(
  */
 export function useMemories(
   projectId: string | null | undefined,
-  params: { page?: number; page_size?: number; [key: string]: unknown } = {},
+  params: { page?: number | undefined; page_size?: number | undefined; [key: string]: unknown } = {},
   config?: SWRConfiguration
 ): SwrHookResponse<MemoryListResponse> {
   const cacheKey = generateCacheKey('/memories/', projectId, params);

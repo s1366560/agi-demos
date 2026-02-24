@@ -30,9 +30,9 @@ import type { ToolCall, ToolResult } from '../../../types/agent';
 export interface TimelineItem {
   type: 'thought' | 'tool_call';
   id: string;
-  content?: string;
-  toolName?: string;
-  toolInput?: Record<string, unknown>;
+  content?: string | undefined;
+  toolName?: string | undefined;
+  toolInput?: Record<string, unknown> | undefined;
   timestamp: number;
 }
 
@@ -40,28 +40,28 @@ export interface TimelineItem {
  * Tool execution timing information
  */
 export interface ToolExecutionInfo {
-  startTime?: number;
-  endTime?: number;
-  duration?: number;
+  startTime?: number | undefined;
+  endTime?: number | undefined;
+  duration?: number | undefined;
 }
 
 export interface ActivityTimelineProps {
   /** Timeline items (from agent store) */
   timeline: TimelineItem[];
   /** Tool execution details with timing */
-  toolExecutions?: Record<string, ToolExecutionInfo>;
+  toolExecutions?: Record<string, ToolExecutionInfo> | undefined;
   /** Tool call list */
-  toolCalls?: ToolCall[];
+  toolCalls?: ToolCall[] | undefined;
   /** Tool result list */
-  toolResults?: ToolResult[];
+  toolResults?: ToolResult[] | undefined;
   /** Whether execution is in progress */
-  isActive?: boolean;
+  isActive?: boolean | undefined;
   /** Compact mode for sidebar display */
-  compact?: boolean;
+  compact?: boolean | undefined;
   /** Maximum items to show before "show more" */
-  maxItems?: number;
+  maxItems?: number | undefined;
   /** Auto-scroll to latest activity */
-  autoScroll?: boolean;
+  autoScroll?: boolean | undefined;
 }
 
 // Helper to format relative time
@@ -115,9 +115,9 @@ interface ActivityNodeProps {
   timestamp: number;
   children: React.ReactNode;
   isLast: boolean;
-  status?: 'running' | 'success' | 'failed';
-  duration?: number;
-  compact?: boolean;
+  status?: 'running' | 'success' | 'failed' | undefined;
+  duration?: number | undefined;
+  compact?: boolean | undefined;
 }
 
 const ActivityNode: React.FC<ActivityNodeProps> = ({
@@ -252,11 +252,11 @@ const ActivityNode: React.FC<ActivityNodeProps> = ({
  */
 interface ToolCardInlineProps {
   toolName: string;
-  input?: Record<string, unknown>;
-  result?: string;
-  error?: string;
+  input?: Record<string, unknown> | undefined;
+  result?: string | undefined;
+  error?: string | undefined;
   status: 'running' | 'success' | 'failed';
-  compact?: boolean;
+  compact?: boolean | undefined;
 }
 
 const ToolCardInline: React.FC<ToolCardInlineProps> = ({
@@ -479,7 +479,7 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
                       sequence={sequence > 0 ? sequence : index + 1}
                       timestamp={item.timestamp}
                       isLast={isLast && !isActive}
-                      status={item.status}
+                      status={item.status as 'running' | 'success' | 'failed' | undefined}
                       duration={item.duration}
                       compact={compact}
                     >
@@ -488,7 +488,7 @@ const ActivityTimelineInternal: React.FC<ActivityTimelineProps> = ({
                         input={item.toolInput}
                         result={item.result}
                         error={item.error}
-                        status={item.status || 'running'}
+                        status={(item.status || 'running') as 'running' | 'success' | 'failed'}
                         compact={compact}
                       />
                     </ActivityNode>

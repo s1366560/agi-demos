@@ -59,23 +59,23 @@ export interface InlineHITLCardProps {
   /** Request ID for submission */
   requestId: string;
   /** Clarification data (if type is clarification) */
-  clarificationData?: ClarificationAskedEventData;
+  clarificationData?: ClarificationAskedEventData | undefined;
   /** Decision data (if type is decision) */
-  decisionData?: DecisionAskedEventData;
+  decisionData?: DecisionAskedEventData | undefined;
   /** EnvVar data (if type is env_var) */
-  envVarData?: EnvVarRequestedEventData;
+  envVarData?: EnvVarRequestedEventData | undefined;
   /** Permission data (if type is permission) */
-  permissionData?: PermissionAskedEventData;
+  permissionData?: PermissionAskedEventData | undefined;
   /** Whether already answered */
-  isAnswered?: boolean;
+  isAnswered?: boolean | undefined;
   /** The answer that was provided (for answered state) */
-  answeredValue?: string;
+  answeredValue?: string | undefined;
   /** Created timestamp */
-  createdAt?: string;
+  createdAt?: string | undefined;
   /** Expires timestamp */
-  expiresAt?: string;
+  expiresAt?: string | undefined;
   /** Timeout in seconds */
-  timeoutSeconds?: number;
+  timeoutSeconds?: number | undefined;
 }
 
 // =============================================================================
@@ -208,9 +208,9 @@ const formatTimeAgo = (timestamp: string) => {
 
 /** Countdown timer display - Unified with MessageBubble style */
 const CountdownTimer: React.FC<{
-  expiresAt?: string;
-  timeoutSeconds?: number;
-  color?: string;
+  expiresAt?: string | undefined;
+  timeoutSeconds?: number | undefined;
+  color?: string | undefined;
 }> = memo(({ expiresAt, timeoutSeconds = 300, color = 'blue' }) => {
   // Calculate initial remaining time
   const calculateRemaining = useCallback((): number | null => {
@@ -274,8 +274,8 @@ const ClarificationContent: React.FC<{
   data: ClarificationAskedEventData;
   onSubmit: (response: HITLResponseData) => void;
   isSubmitting: boolean;
-  isAnswered?: boolean;
-  answeredValue?: string;
+  isAnswered?: boolean | undefined;
+  answeredValue?: string | undefined;
 }> = memo(({ data, onSubmit, isSubmitting, isAnswered, answeredValue }) => {
   const [selected, setSelected] = useState<string | null>(
     isAnswered ? answeredValue || null : null
@@ -411,8 +411,8 @@ const DecisionContent: React.FC<{
   data: DecisionAskedEventData;
   onSubmit: (response: HITLResponseData) => void;
   isSubmitting: boolean;
-  isAnswered?: boolean;
-  answeredValue?: string;
+  isAnswered?: boolean | undefined;
+  answeredValue?: string | undefined;
 }> = memo(({ data, onSubmit, isSubmitting, isAnswered, answeredValue }) => {
   const [selected, setSelected] = useState<string | null>(
     isAnswered ? answeredValue || null : data.default_option || null
@@ -587,7 +587,7 @@ const EnvVarContent: React.FC<{
   data: EnvVarRequestedEventData;
   onSubmit: (response: HITLResponseData) => void;
   isSubmitting: boolean;
-  isAnswered?: boolean;
+  isAnswered?: boolean | undefined;
 }> = memo(({ data, onSubmit, isSubmitting, isAnswered }) => {
   const [form] = Form.useForm();
   const [saveForLater, setSaveForLater] = useState(true);
@@ -701,8 +701,8 @@ const PermissionContent: React.FC<{
   data: PermissionAskedEventData;
   onSubmit: (response: HITLResponseData) => void;
   isSubmitting: boolean;
-  isAnswered?: boolean;
-  answeredValue?: string;
+  isAnswered?: boolean | undefined;
+  answeredValue?: string | undefined;
 }> = memo(({ data, onSubmit, isSubmitting, isAnswered, answeredValue }) => {
   const [remember, setRemember] = useState(false);
 

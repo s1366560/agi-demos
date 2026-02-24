@@ -64,13 +64,13 @@ import type {
 
 interface AgentChatContentProps {
   /** Optional className for styling */
-  className?: string;
+  className?: string | undefined;
   /** External project ID (overrides URL param) */
-  externalProjectId?: string;
+  externalProjectId?: string | undefined;
   /** Base path for navigation (default: /project/{projectId}/agent) */
-  basePath?: string;
+  basePath?: string | undefined;
   /** Extra content to show in header area */
-  headerExtra?: React.ReactNode;
+  headerExtra?: React.ReactNode | undefined;
 }
 
 // Constants for resize constraints
@@ -84,7 +84,7 @@ export const AgentChatContent: React.FC<AgentChatContentProps> = React.memo(
     const notification = useLazyNotification();
     const { projectId: urlProjectId, conversation: conversationId } = useParams<{
       projectId: string;
-      conversation?: string;
+      conversation?: string | undefined;
     }>();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();

@@ -11,11 +11,11 @@ import { useSandboxStore, isSandboxTool } from '../stores/sandbox';
 
 export interface UseSandboxDetectionOptions {
   /** Automatically open panel when sandbox tool is detected */
-  autoOpenPanel?: boolean;
+  autoOpenPanel?: boolean | undefined;
   /** Automatically switch to output tab on tool execution */
-  autoSwitchToOutput?: boolean;
+  autoSwitchToOutput?: boolean | undefined;
   /** Sandbox ID to associate with detections */
-  sandboxId?: string | null;
+  sandboxId?: string | null | undefined;
 }
 
 export interface SandboxDetectionResult {
@@ -158,7 +158,7 @@ export function useSandboxAgentHandlers(sandboxId?: string | null) {
   // Create handlers for agent events
   const onAct = useCallback(
     (event: {
-      data: { tool_name: string; tool_input: Record<string, unknown>; call_id?: string };
+      data: { tool_name: string; tool_input: Record<string, unknown>; call_id?: string | undefined };
     }) => {
       handleToolStart(event.data.tool_name, event.data.tool_input, event.data.call_id);
     },
@@ -168,11 +168,11 @@ export function useSandboxAgentHandlers(sandboxId?: string | null) {
   const onObserve = useCallback(
     (event: {
       data: {
-        call_id?: string;
-        observation?: string;
-        result?: unknown;
-        error?: string;
-        duration_ms?: number;
+        call_id?: string | undefined;
+        observation?: string | undefined;
+        result?: unknown | undefined;
+        error?: string | undefined;
+        duration_ms?: number | undefined;
       };
     }) => {
       // call_id may be missing, pass empty string to let store handle it

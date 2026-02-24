@@ -557,7 +557,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       }, 1000);
     } catch (error) {
       console.error('Failed to save settings:', error);
-      const err = error as { response?: { data?: { detail?: string } }; message?: string };
+      const err = error as { response?: { data?: { detail?: string | undefined } | undefined } | undefined; message?: string | undefined };
       setMessage({
         type: 'error',
         text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}`,
@@ -585,7 +585,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       setMessage({ type: 'success', text: TEXTS.messages.saved });
     } catch (error) {
       console.error('Failed to save memory rules:', error);
-      const err = error as { response?: { data?: { detail?: string } }; message?: string };
+      const err = error as { response?: { data?: { detail?: string | undefined } | undefined } | undefined; message?: string | undefined };
       setMessage({
         type: 'error',
         text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}`,
@@ -613,7 +613,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> & {
       setMessage({ type: 'success', text: TEXTS.messages.saved });
     } catch (error) {
       console.error('Failed to save graph config:', error);
-      const err = error as { response?: { data?: { detail?: string } }; message?: string };
+      const err = error as { response?: { data?: { detail?: string | undefined } | undefined } | undefined; message?: string | undefined };
       setMessage({
         type: 'error',
         text: `${TEXTS.messages.failed}: ${err.response?.data?.detail || err.message}`,

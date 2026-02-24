@@ -35,8 +35,8 @@ export interface SandboxCreatedEventData {
   sandbox_id: string;
   project_id: string;
   status: string;
-  endpoint?: string;
-  websocket_url?: string;
+  endpoint?: string | undefined;
+  websocket_url?: string | undefined;
 }
 
 /**
@@ -83,13 +83,13 @@ export interface SandboxStatusSSEEvent extends BaseSandboxSSEEvent {
  */
 export interface DesktopStartedEventData {
   sandbox_id: string;
-  url?: string;
+  url?: string | undefined;
   display: string;
   resolution: string;
   port: number;
-  audio_enabled?: boolean;
-  dynamic_resize?: boolean;
-  encoding?: string;
+  audio_enabled?: boolean | undefined;
+  dynamic_resize?: boolean | undefined;
+  encoding?: string | undefined;
 }
 
 /**
@@ -121,13 +121,13 @@ export interface DesktopStoppedSSEEvent extends BaseSandboxSSEEvent {
 export interface DesktopStatusEventData {
   sandbox_id: string;
   running: boolean;
-  url?: string;
+  url?: string | undefined;
   display: string;
   resolution: string;
   port: number;
-  audio_enabled?: boolean;
-  dynamic_resize?: boolean;
-  encoding?: string;
+  audio_enabled?: boolean | undefined;
+  dynamic_resize?: boolean | undefined;
+  encoding?: string | undefined;
 }
 
 /**
@@ -143,10 +143,10 @@ export interface DesktopStatusSSEEvent extends BaseSandboxSSEEvent {
  */
 export interface TerminalStartedEventData {
   sandbox_id: string;
-  url?: string;
+  url?: string | undefined;
   port: number;
-  session_id?: string;
-  pid?: number;
+  session_id?: string | undefined;
+  pid?: number | undefined;
 }
 
 /**
@@ -162,7 +162,7 @@ export interface TerminalStartedSSEEvent extends BaseSandboxSSEEvent {
  */
 export interface TerminalStoppedEventData {
   sandbox_id: string;
-  session_id?: string;
+  session_id?: string | undefined;
 }
 
 /**
@@ -179,10 +179,10 @@ export interface TerminalStoppedSSEEvent extends BaseSandboxSSEEvent {
 export interface TerminalStatusEventData {
   sandbox_id: string;
   running: boolean;
-  url?: string;
+  url?: string | undefined;
   port: number;
-  session_id?: string;
-  pid?: number;
+  session_id?: string | undefined;
+  pid?: number | undefined;
 }
 
 /**
@@ -267,27 +267,27 @@ export interface ProjectSandbox {
   /** Current lifecycle status */
   status: ProjectSandboxStatus;
   /** MCP WebSocket endpoint */
-  endpoint?: string;
+  endpoint?: string | undefined;
   /** WebSocket URL */
-  websocket_url?: string;
+  websocket_url?: string | undefined;
   /** MCP server port */
-  mcp_port?: number;
+  mcp_port?: number | undefined;
   /** Desktop (KasmVNC) port */
-  desktop_port?: number;
+  desktop_port?: number | undefined;
   /** Terminal (ttyd) port */
-  terminal_port?: number;
+  terminal_port?: number | undefined;
   /** Desktop access URL */
-  desktop_url?: string;
+  desktop_url?: string | undefined;
   /** Terminal access URL */
-  terminal_url?: string;
+  terminal_url?: string | undefined;
   /** Creation timestamp */
-  created_at?: string;
+  created_at?: string | undefined;
   /** Last access timestamp */
-  last_accessed_at?: string;
+  last_accessed_at?: string | undefined;
   /** Whether sandbox is healthy */
   is_healthy: boolean;
   /** Error message if in error state */
-  error_message?: string;
+  error_message?: string | undefined;
 }
 
 /**
@@ -299,7 +299,7 @@ export interface ExecuteToolRequest {
   /** Tool arguments */
   arguments: Record<string, unknown>;
   /** Execution timeout in seconds */
-  timeout?: number;
+  timeout?: number | undefined;
 }
 
 /**
@@ -309,11 +309,11 @@ export interface ExecuteToolResponse {
   /** Whether execution succeeded */
   success: boolean;
   /** Tool output content */
-  content: Array<{ type: string; text?: string }>;
+  content: Array<{ type: string; text?: string | undefined }>;
   /** Whether tool returned an error */
   is_error: boolean;
   /** Execution time in milliseconds */
-  execution_time_ms?: number;
+  execution_time_ms?: number | undefined;
 }
 
 /**

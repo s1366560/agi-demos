@@ -33,19 +33,19 @@ export interface SandboxPanelContextValue {
   /** Terminal status information */
   terminalStatus: TerminalStatus | null;
   /** Project ID for constructing proxy URLs */
-  projectId?: string | null;
+  projectId?: string | null | undefined;
   /** Callbacks for desktop/terminal control */
-  onDesktopStart?: () => void;
-  onDesktopStop?: () => void;
-  onTerminalStart?: () => void;
-  onTerminalStop?: () => void;
+  onDesktopStart?: (() => void) | undefined;
+  onDesktopStop?: (() => void) | undefined;
+  onTerminalStart?: (() => void) | undefined;
+  onTerminalStop?: (() => void) | undefined;
   /** Loading states */
   isDesktopLoading: boolean;
   isTerminalLoading: boolean;
   /** File click handler */
-  onFileClick?: (filePath: string) => void;
+  onFileClick?: ((filePath: string) => void) | undefined;
   /** Close handler */
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
 }
 
 /**
@@ -57,7 +57,7 @@ export interface SandboxPanelToolExecution {
   input: Record<string, unknown>;
   output: string | unknown;
   timestamp: number;
-  status?: 'pending' | 'running' | 'success' | 'error';
+  status?: 'pending' | 'running' | 'success' | 'error' | undefined;
 }
 
 /**
@@ -67,33 +67,33 @@ export interface SandboxPanelRootProps {
   /** Active sandbox ID */
   sandboxId: string | null;
   /** Default active tab (default: "terminal") */
-  defaultTab?: SandboxTabKey;
+  defaultTab?: SandboxTabKey | undefined;
   /** Tool execution history */
-  toolExecutions?: SandboxPanelToolExecution[];
+  toolExecutions?: SandboxPanelToolExecution[] | undefined;
   /** Current tool being executed */
-  currentTool?: { name: string; input: Record<string, unknown> } | null;
+  currentTool?: { name: string; input: Record<string, unknown> } | null | undefined;
   /** Called when panel is closed */
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
   /** Called when file is clicked in output */
-  onFileClick?: (filePath: string) => void;
+  onFileClick?: ((filePath: string) => void) | undefined;
   /** Desktop status information */
-  desktopStatus?: DesktopStatus | null;
+  desktopStatus?: DesktopStatus | null | undefined;
   /** Terminal status information */
-  terminalStatus?: TerminalStatus | null;
+  terminalStatus?: TerminalStatus | null | undefined;
   /** Called when start desktop is requested */
-  onDesktopStart?: () => void;
+  onDesktopStart?: (() => void) | undefined;
   /** Called when stop desktop is requested */
-  onDesktopStop?: () => void;
+  onDesktopStop?: (() => void) | undefined;
   /** Called when start terminal is requested */
-  onTerminalStart?: () => void;
+  onTerminalStart?: (() => void) | undefined;
   /** Called when stop terminal is requested */
-  onTerminalStop?: () => void;
+  onTerminalStop?: (() => void) | undefined;
   /** Loading state for desktop operations */
-  isDesktopLoading?: boolean;
+  isDesktopLoading?: boolean | undefined;
   /** Loading state for terminal operations */
-  isTerminalLoading?: boolean;
+  isTerminalLoading?: boolean | undefined;
   /** Children for compound component pattern */
-  children?: React.ReactNode;
+  children?: React.ReactNode | undefined;
 }
 
 /**
@@ -101,7 +101,7 @@ export interface SandboxPanelRootProps {
  */
 export interface SandboxTerminalProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -109,7 +109,7 @@ export interface SandboxTerminalProps {
  */
 export interface SandboxDesktopProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -117,7 +117,7 @@ export interface SandboxDesktopProps {
  */
 export interface SandboxControlProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -125,7 +125,7 @@ export interface SandboxControlProps {
  */
 export interface SandboxOutputProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -133,7 +133,7 @@ export interface SandboxOutputProps {
  */
 export interface SandboxHeaderProps {
   /** Optional custom class name */
-  className?: string;
+  className?: string | undefined;
 }
 
 /**
@@ -144,29 +144,29 @@ export interface LegacySandboxPanelProps {
   /** Active sandbox ID */
   sandboxId: string | null;
   /** Tool execution history */
-  toolExecutions?: SandboxPanelToolExecution[];
+  toolExecutions?: SandboxPanelToolExecution[] | undefined;
   /** Current tool being executed */
-  currentTool?: { name: string; input: Record<string, unknown> } | null;
+  currentTool?: { name: string; input: Record<string, unknown> } | null | undefined;
   /** Called when panel is closed */
-  onClose?: () => void;
+  onClose?: (() => void) | undefined;
   /** Called when file is clicked in output */
-  onFileClick?: (filePath: string) => void;
+  onFileClick?: ((filePath: string) => void) | undefined;
   /** Default tab (default: "terminal") */
-  defaultTab?: SandboxTabKey;
+  defaultTab?: SandboxTabKey | undefined;
   /** Desktop status information */
-  desktopStatus?: DesktopStatus | null;
+  desktopStatus?: DesktopStatus | null | undefined;
   /** Terminal status information */
-  terminalStatus?: TerminalStatus | null;
+  terminalStatus?: TerminalStatus | null | undefined;
   /** Called when start desktop is requested */
-  onDesktopStart?: () => void;
+  onDesktopStart?: (() => void) | undefined;
   /** Called when stop desktop is requested */
-  onDesktopStop?: () => void;
+  onDesktopStop?: (() => void) | undefined;
   /** Called when start terminal is requested */
-  onTerminalStart?: () => void;
+  onTerminalStart?: (() => void) | undefined;
   /** Called when stop terminal is requested */
-  onTerminalStop?: () => void;
+  onTerminalStop?: (() => void) | undefined;
   /** Loading state for desktop operations */
-  isDesktopLoading?: boolean;
+  isDesktopLoading?: boolean | undefined;
   /** Loading state for terminal operations */
-  isTerminalLoading?: boolean;
+  isTerminalLoading?: boolean | undefined;
 }

@@ -48,8 +48,6 @@ import type {
   DecisionOption,
   EnvVarField,
   ArtifactCreatedEvent,
-  TaskStartTimelineEvent,
-  TaskCompleteTimelineEvent,
 } from '../../types/agent';
 
 // Lazy load ReactMarkdown to reduce initial bundle size (bundle-dynamic-imports)
@@ -98,9 +96,9 @@ export interface TimelineEventItemProps {
   /** The timeline event to render */
   event: TimelineEvent;
   /** Whether currently streaming */
-  isStreaming?: boolean;
+  isStreaming?: boolean | undefined;
   /** All timeline events (for looking ahead to find observe events) */
-  allEvents?: TimelineEvent[];
+  allEvents?: TimelineEvent[] | undefined;
 }
 
 /**
@@ -159,7 +157,7 @@ function ThoughtItem({ event, isStreaming }: { event: TimelineEvent; isStreaming
  * Render act (tool call) event
  * 工具调用事件渲染 - 带状态跟踪
  */
-function ActItem({ event, allEvents }: { event: TimelineEvent; allEvents?: TimelineEvent[] }) {
+function ActItem({ event, allEvents }: { event: TimelineEvent; allEvents?: TimelineEvent[] | undefined }) {
   if (event.type !== 'act') return null;
 
   const observeEvent = allEvents ? findMatchingObserve(event, allEvents) : undefined;
@@ -203,7 +201,7 @@ function ActItem({ event, allEvents }: { event: TimelineEvent; allEvents?: Timel
  * Render observe (tool result) event
  * 工具结果事件渲染 - 孤儿observe（无对应act）时显示
  */
-function ObserveItem({ event, allEvents }: { event: TimelineEvent; allEvents?: TimelineEvent[] }) {
+function ObserveItem({ event, allEvents }: { event: TimelineEvent; allEvents?: TimelineEvent[] | undefined }) {
   if (event.type !== 'observe') return null;
 
   const hasMatchingAct = allEvents
@@ -387,11 +385,11 @@ function OptionButton({
   onClick,
   disabled,
 }: {
-  option: { id: string; label: string; description?: string };
-  isSelected?: boolean;
-  isRecommended?: boolean;
+  option: { id: string; label: string; description?: string | undefined };
+  isSelected?: boolean | undefined;
+  isRecommended?: boolean | undefined;
   onClick: () => void;
-  disabled?: boolean;
+  disabled?: boolean | undefined;
 }) {
   return (
     <button
@@ -739,7 +737,7 @@ function EnvVarRequestedItem({ event }: { event: EnvVarRequestedTimelineEvent })
  * Render artifact created event
  * 显示工具生成的文件（图片、视频、文档等）
  */
-function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?: string } }) {
+function ArtifactCreatedItem({ event }: { event: ArtifactCreatedEvent & { error?: string | undefined } }) {
   const { t } = useTranslation();
   const [imageError, setImageError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
@@ -1025,7 +1023,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
                     event.metadata?.fileMetadata as
                       | Array<{
                           filename: string;
-                          sandbox_path?: string;
+                          sandbox_path?: string | undefined;
                           mime_type: string;
                           size_bytes: number;
                         }>
@@ -1142,7 +1140,7 @@ export const TimelineEventItem: React.FC<TimelineEventItemProps> = memo(
       case 'artifact_created':
         return (
           <div className="my-3 animate-slide-up">
-            <ArtifactCreatedItem event={event as ArtifactCreatedEvent & { error?: string }} />
+            <ArtifactCreatedItem event={event as ArtifactCreatedEvent & { error?: string | undefined }} />
           </div>
         );
 

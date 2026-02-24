@@ -27,17 +27,17 @@ export interface SandboxControlPanelProps {
   /** Terminal status information */
   terminalStatus: TerminalStatus | null;
   /** Called when start desktop is requested */
-  onDesktopStart?: () => void;
+  onDesktopStart?: (() => void) | undefined;
   /** Called when stop desktop is requested */
-  onDesktopStop?: () => void;
+  onDesktopStop?: (() => void) | undefined;
   /** Called when start terminal is requested */
-  onTerminalStart?: () => void;
+  onTerminalStart?: (() => void) | undefined;
   /** Called when stop terminal is requested */
-  onTerminalStop?: () => void;
+  onTerminalStop?: (() => void) | undefined;
   /** Loading state for desktop operations */
-  isDesktopLoading?: boolean;
+  isDesktopLoading?: boolean | undefined;
   /** Loading state for terminal operations */
-  isTerminalLoading?: boolean;
+  isTerminalLoading?: boolean | undefined;
 }
 
 interface ServiceStatusProps {

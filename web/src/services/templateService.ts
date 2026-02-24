@@ -14,7 +14,7 @@ export interface TemplateVariable {
 export interface PromptTemplateData {
   id: string;
   tenant_id: string;
-  project_id?: string;
+  project_id?: string | undefined;
   created_by: string;
   title: string;
   content: string;
@@ -29,16 +29,16 @@ export interface PromptTemplateData {
 export interface CreateTemplateRequest {
   title: string;
   content: string;
-  category?: string;
-  project_id?: string;
-  variables?: TemplateVariable[];
+  category?: string | undefined;
+  project_id?: string | undefined;
+  variables?: TemplateVariable[] | undefined;
 }
 
 export interface UpdateTemplateRequest {
-  title?: string;
-  content?: string;
-  category?: string;
-  variables?: TemplateVariable[];
+  title?: string | undefined;
+  content?: string | undefined;
+  category?: string | undefined;
+  variables?: TemplateVariable[] | undefined;
 }
 
 export const templateService = {

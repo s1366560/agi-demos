@@ -68,10 +68,10 @@ interface MCPState {
 
   // Actions - Server CRUD
   listServers: (params?: {
-    project_id?: string;
-    enabled_only?: boolean;
-    skip?: number;
-    limit?: number;
+    project_id?: string | undefined;
+    enabled_only?: boolean | undefined;
+    skip?: number | undefined;
+    limit?: number | undefined;
   }) => Promise<void>;
   getServer: (id: string) => Promise<MCPServerResponse>;
   createServer: (data: MCPServerCreate) => Promise<MCPServerResponse>;

@@ -11,13 +11,13 @@ interface Props {
   /** Child components to be wrapped by the error boundary */
   children: ReactNode;
   /** Custom fallback UI to render when an error is caught */
-  fallback?: ReactNode;
+  fallback?: ReactNode | undefined;
   /** Optional context identifier for error source (e.g., "Agent", "Project", "Tenant") */
-  context?: string;
+  context?: string | undefined;
   /** Optional custom error handler callback */
-  onError?: (error: Error, errorInfo: ErrorInfo) => void;
+  onError?: ((error: Error, errorInfo: ErrorInfo) => void) | undefined;
   /** Whether to show the home button in the fallback UI */
-  showHomeButton?: boolean;
+  showHomeButton?: boolean | undefined;
 }
 
 /**
@@ -27,7 +27,7 @@ interface State {
   /** Whether an error has been caught */
   hasError: boolean;
   /** The error that was caught, if any */
-  error?: Error;
+  error?: Error | undefined;
 }
 
 /**
@@ -137,11 +137,11 @@ export class ErrorBoundary extends Component<Props, State> {
  */
 interface ErrorFallbackProps {
   /** The error that occurred */
-  error?: Error;
+  error?: Error | undefined;
   /** Callback to reset the error boundary and retry */
   onReset: () => void;
   /** Whether to show the home button */
-  showHomeButton?: boolean;
+  showHomeButton?: boolean | undefined;
 }
 
 /**

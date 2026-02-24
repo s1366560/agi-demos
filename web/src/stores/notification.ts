@@ -8,9 +8,9 @@ interface Notification {
   message: string;
   data: Record<string, unknown>;
   is_read: boolean;
-  action_url?: string;
+  action_url?: string | undefined;
   created_at: string;
-  expires_at?: string;
+  expires_at?: string | undefined;
 }
 
 interface NotificationState {

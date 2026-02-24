@@ -62,13 +62,13 @@ interface TenantAgentConfigEditorProps {
    * Callback after successful save
    * Parent should reload config in view component
    */
-  onSave?: () => void;
+  onSave?: (() => void) | undefined;
 
   /**
    * Optional initial config to populate form
    * If not provided, will fetch from API
    */
-  initialConfig?: TenantAgentConfig;
+  initialConfig?: TenantAgentConfig | undefined;
 }
 
 /**
@@ -117,12 +117,12 @@ export function TenantAgentConfigEditor({
 }: TenantAgentConfigEditorProps) {
   // Form values include string versions of tool lists (comma-separated)
   interface FormValues {
-    llm_model?: string;
-    llm_temperature?: number;
-    pattern_learning_enabled?: boolean;
-    multi_level_thinking_enabled?: boolean;
-    max_work_plan_steps?: number;
-    tool_timeout_seconds?: number;
+    llm_model?: string | undefined;
+    llm_temperature?: number | undefined;
+    pattern_learning_enabled?: boolean | undefined;
+    multi_level_thinking_enabled?: boolean | undefined;
+    max_work_plan_steps?: number | undefined;
+    tool_timeout_seconds?: number | undefined;
     enabled_tools: string;
     disabled_tools: string;
   }

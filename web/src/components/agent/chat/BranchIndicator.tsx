@@ -5,8 +5,8 @@ import { useTranslation } from 'react-i18next';
 import { GitBranch } from 'lucide-react';
 
 interface BranchIndicatorProps {
-  parentTitle?: string;
-  onNavigateToParent?: () => void;
+  parentTitle?: string | undefined;
+  onNavigateToParent?: (() => void) | undefined;
 }
 
 export const BranchIndicator = memo<BranchIndicatorProps>(({ parentTitle, onNavigateToParent }) => {

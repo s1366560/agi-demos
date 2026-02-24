@@ -6,8 +6,8 @@ import { MemoryRouter, MemoryRouterProps } from 'react-router-dom';
 import { render, RenderOptions } from '@testing-library/react';
 
 interface CustomRenderOptions extends RenderOptions {
-  route?: string;
-  routerProps?: MemoryRouterProps;
+  route?: string | undefined;
+  routerProps?: MemoryRouterProps | undefined;
 }
 
 const customRender = (

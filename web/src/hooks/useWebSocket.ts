@@ -19,13 +19,13 @@ export type WebSocketStatus = 'connecting' | 'open' | 'closing' | 'closed';
 
 export interface UseWebSocketOptions {
   url: string | (() => string);
-  onMessage?: (event: MessageEvent) => void;
-  onError?: (event: Event) => void;
-  onOpen?: (event: Event) => void;
-  onClose?: (event: CloseEvent) => void;
-  reconnect?: boolean;
-  reconnectInterval?: number;
-  maxReconnectAttempts?: number;
+  onMessage?: ((event: MessageEvent) => void) | undefined;
+  onError?: ((event: Event) => void) | undefined;
+  onOpen?: ((event: Event) => void) | undefined;
+  onClose?: ((event: CloseEvent) => void) | undefined;
+  reconnect?: boolean | undefined;
+  reconnectInterval?: number | undefined;
+  maxReconnectAttempts?: number | undefined;
 }
 
 export interface UseWebSocketReturn {

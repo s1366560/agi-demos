@@ -606,8 +606,8 @@ const ChannelConfigPage: React.FC = () => {
           <Form.Item key={fieldName} name={formFieldName} label={label} rules={rules}>
             <InputNumber
               style={{ width: '100%' }}
-              min={fieldSchema.minimum}
-              max={fieldSchema.maximum}
+              {...(fieldSchema.minimum != null ? { min: fieldSchema.minimum } : {})}
+              {...(fieldSchema.maximum != null ? { max: fieldSchema.maximum } : {})}
               placeholder={placeholder}
             />
           </Form.Item>

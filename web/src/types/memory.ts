@@ -40,14 +40,14 @@ export interface GraphData {
 export interface Tenant {
   id: string;
   name: string;
-  description?: string;
+  description?: string | undefined;
   owner_id: string;
   plan: 'free' | 'basic' | 'premium' | 'enterprise';
   max_projects: number;
   max_users: number;
   max_storage: number;
   created_at: string;
-  updated_at?: string;
+  updated_at?: string | undefined;
 }
 
 export interface ProjectStats {
@@ -62,15 +62,15 @@ export interface Project {
   id: string;
   tenant_id: string;
   name: string;
-  description?: string;
+  description?: string | undefined;
   owner_id: string;
   member_ids: string[];
   memory_rules: MemoryRulesConfig;
   graph_config: GraphConfig;
   is_public: boolean;
   created_at: string;
-  updated_at?: string;
-  stats?: ProjectStats;
+  updated_at?: string | undefined;
+  stats?: ProjectStats | undefined;
 }
 
 export interface Memory {
@@ -90,48 +90,48 @@ export interface Memory {
   processing_status: ProcessingStatus;
   metadata: Record<string, any>;
   created_at: string;
-  updated_at?: string;
-  task_id?: string; // Task ID for SSE progress tracking
+  updated_at?: string | undefined;
+  task_id?: string | undefined; // Task ID for SSE progress tracking
 }
 
 export interface MemoryCreate {
   title: string;
   content: string;
-  content_type?: string;
+  content_type?: string | undefined;
   project_id: string;
-  tags?: string[];
-  entities?: Entity[];
-  relationships?: Relationship[];
-  collaborators?: string[];
-  is_public?: boolean;
-  metadata?: Record<string, any>;
+  tags?: string[] | undefined;
+  entities?: Entity[] | undefined;
+  relationships?: Relationship[] | undefined;
+  collaborators?: string[] | undefined;
+  is_public?: boolean | undefined;
+  metadata?: Record<string, any> | undefined;
 }
 
 export interface MemoryUpdate {
-  title?: string;
-  content?: string;
-  tags?: string[];
-  entities?: Entity[];
-  relationships?: Relationship[];
-  collaborators?: string[];
-  is_public?: boolean;
-  metadata?: Record<string, any>;
+  title?: string | undefined;
+  content?: string | undefined;
+  tags?: string[] | undefined;
+  entities?: Entity[] | undefined;
+  relationships?: Relationship[] | undefined;
+  collaborators?: string[] | undefined;
+  is_public?: boolean | undefined;
+  metadata?: Record<string, any> | undefined;
   version: number; // Required for optimistic locking
 }
 
 export interface MemoryQuery {
   query: string;
-  project_id?: string;
-  tenant_id?: string;
-  limit?: number;
-  content_type?: string;
-  tags?: string[];
-  author_id?: string;
-  is_public?: boolean;
-  created_after?: string;
-  created_before?: string;
-  include_entities?: boolean;
-  include_relationships?: boolean;
+  project_id?: string | undefined;
+  tenant_id?: string | undefined;
+  limit?: number | undefined;
+  content_type?: string | undefined;
+  tags?: string[] | undefined;
+  author_id?: string | undefined;
+  is_public?: boolean | undefined;
+  created_after?: string | undefined;
+  created_before?: string | undefined;
+  include_entities?: boolean | undefined;
+  include_relationships?: boolean | undefined;
 }
 
 export interface MemoryItem {
@@ -151,7 +151,7 @@ export interface MemoryItem {
   score: number;
   metadata: Record<string, any>;
   created_at: string;
-  updated_at?: string;
+  updated_at?: string | undefined;
 }
 
 export interface MemorySearchResponse {
@@ -171,20 +171,20 @@ export interface MemoryListResponse {
 
 export interface TenantCreate {
   name: string;
-  description?: string;
-  plan?: string;
-  max_projects?: number;
-  max_users?: number;
-  max_storage?: number;
+  description?: string | undefined;
+  plan?: string | undefined;
+  max_projects?: number | undefined;
+  max_users?: number | undefined;
+  max_storage?: number | undefined;
 }
 
 export interface TenantUpdate {
-  name?: string;
-  description?: string;
-  plan?: string;
-  max_projects?: number;
-  max_users?: number;
-  max_storage?: number;
+  name?: string | undefined;
+  description?: string | undefined;
+  plan?: string | undefined;
+  max_projects?: number | undefined;
+  max_users?: number | undefined;
+  max_storage?: number | undefined;
 }
 
 export interface TenantListResponse {
@@ -196,19 +196,19 @@ export interface TenantListResponse {
 
 export interface ProjectCreate {
   name: string;
-  description?: string;
+  description?: string | undefined;
   tenant_id: string;
-  memory_rules?: MemoryRulesConfig;
-  graph_config?: GraphConfig;
-  is_public?: boolean;
+  memory_rules?: MemoryRulesConfig | undefined;
+  graph_config?: GraphConfig | undefined;
+  is_public?: boolean | undefined;
 }
 
 export interface ProjectUpdate {
-  name?: string;
-  description?: string;
-  memory_rules?: MemoryRulesConfig;
-  graph_config?: GraphConfig;
-  is_public?: boolean;
+  name?: string | undefined;
+  description?: string | undefined;
+  memory_rules?: MemoryRulesConfig | undefined;
+  graph_config?: GraphConfig | undefined;
+  is_public?: boolean | undefined;
 }
 
 export interface ProjectListResponse {
@@ -219,19 +219,19 @@ export interface ProjectListResponse {
 }
 
 export interface UserProfile {
-  job_title?: string;
-  department?: string;
-  bio?: string;
-  phone?: string;
-  location?: string;
-  language?: string;
-  timezone?: string;
-  avatar_url?: string;
+  job_title?: string | undefined;
+  department?: string | undefined;
+  bio?: string | undefined;
+  phone?: string | undefined;
+  location?: string | undefined;
+  language?: string | undefined;
+  timezone?: string | undefined;
+  avatar_url?: string | undefined;
 }
 
 export interface UserUpdate {
-  name?: string;
-  profile?: UserProfile;
+  name?: string | undefined;
+  profile?: UserProfile | undefined;
 }
 
 export interface User {
@@ -241,8 +241,8 @@ export interface User {
   roles: string[];
   is_active: boolean;
   created_at: string;
-  tenant_id?: string; // Keep for compatibility if needed, but backend removed it from response? No, backend removed it.
-  profile?: UserProfile;
+  tenant_id?: string | undefined; // Keep for compatibility if needed, but backend removed it from response? No, backend removed it.
+  profile?: UserProfile | undefined;
 }
 
 export interface UserTenant {
@@ -284,12 +284,12 @@ export type ProviderType =
 export type ProviderStatus = 'healthy' | 'degraded' | 'unhealthy';
 
 export interface EmbeddingConfig {
-  model?: string;
-  dimensions?: number;
-  encoding_format?: 'float' | 'base64';
-  user?: string;
-  timeout?: number;
-  provider_options?: Record<string, any>;
+  model?: string | undefined;
+  dimensions?: number | undefined;
+  encoding_format?: 'float' | 'base64' | undefined;
+  user?: string | undefined;
+  timeout?: number | undefined;
+  provider_options?: Record<string, any> | undefined;
 }
 
 // Circuit breaker state enum
@@ -301,7 +301,7 @@ export interface RateLimitStats {
   max_concurrent: number;
   total_requests: number;
   requests_per_minute: number;
-  max_rpm?: number;
+  max_rpm?: number | undefined;
 }
 
 // Provider resilience status
@@ -317,54 +317,54 @@ export interface ProviderConfig {
   id: string;
   name: string;
   provider_type: ProviderType;
-  base_url?: string;
+  base_url?: string | undefined;
   llm_model: string;
-  llm_small_model?: string;
-  embedding_model?: string;
-  embedding_config?: EmbeddingConfig;
-  reranker_model?: string;
+  llm_small_model?: string | undefined;
+  embedding_model?: string | undefined;
+  embedding_config?: EmbeddingConfig | undefined;
+  reranker_model?: string | undefined;
   config: Record<string, any>;
   is_active: boolean;
   is_default: boolean;
   api_key_masked: string;
   created_at: string;
   updated_at: string;
-  health_status?: ProviderStatus;
-  health_last_check?: string;
-  response_time_ms?: number;
-  error_message?: string;
+  health_status?: ProviderStatus | undefined;
+  health_last_check?: string | undefined;
+  response_time_ms?: number | undefined;
+  error_message?: string | undefined;
   // Resilience status (circuit breaker + rate limiter)
-  resilience?: ResilienceStatus;
+  resilience?: ResilienceStatus | undefined;
 }
 
 export interface ProviderCreate {
   name: string;
   provider_type: ProviderType;
   api_key: string;
-  base_url?: string;
+  base_url?: string | undefined;
   llm_model: string;
-  llm_small_model?: string;
-  embedding_model?: string;
-  embedding_config?: EmbeddingConfig;
-  reranker_model?: string;
-  config?: Record<string, any>;
-  is_active?: boolean;
-  is_default?: boolean;
+  llm_small_model?: string | undefined;
+  embedding_model?: string | undefined;
+  embedding_config?: EmbeddingConfig | undefined;
+  reranker_model?: string | undefined;
+  config?: Record<string, any> | undefined;
+  is_active?: boolean | undefined;
+  is_default?: boolean | undefined;
 }
 
 export interface ProviderUpdate {
-  name?: string;
-  provider_type?: ProviderType;
-  api_key?: string;
-  base_url?: string;
-  llm_model?: string;
-  llm_small_model?: string;
-  embedding_model?: string;
-  embedding_config?: EmbeddingConfig;
-  reranker_model?: string;
-  config?: Record<string, any>;
-  is_active?: boolean;
-  is_default?: boolean;
+  name?: string | undefined;
+  provider_type?: ProviderType | undefined;
+  api_key?: string | undefined;
+  base_url?: string | undefined;
+  llm_model?: string | undefined;
+  llm_small_model?: string | undefined;
+  embedding_model?: string | undefined;
+  embedding_config?: EmbeddingConfig | undefined;
+  reranker_model?: string | undefined;
+  config?: Record<string, any> | undefined;
+  is_active?: boolean | undefined;
+  is_default?: boolean | undefined;
 }
 
 export interface ProviderListResponse {
@@ -397,16 +397,16 @@ export interface SystemResilienceStatus {
 
 export interface ProviderUsageStats {
   provider_id: string;
-  tenant_id?: string;
-  operation_type?: string;
+  tenant_id?: string | undefined;
+  operation_type?: string | undefined;
   total_requests: number;
   total_prompt_tokens: number;
   total_completion_tokens: number;
   total_tokens: number;
-  total_cost_usd?: number;
-  avg_response_time_ms?: number;
-  first_request_at?: string;
-  last_request_at?: string;
+  total_cost_usd?: number | undefined;
+  avg_response_time_ms?: number | undefined;
+  first_request_at?: string | undefined;
+  last_request_at?: string | undefined;
 }
 
 export interface TenantProviderMapping {
@@ -448,17 +448,17 @@ export interface StatusBreakdown {
 export interface SchemaEntityType {
   id: string;
   name: string;
-  display_name?: string;
-  description?: string;
-  properties?: Record<string, unknown>;
+  display_name?: string | undefined;
+  description?: string | undefined;
+  properties?: Record<string, unknown> | undefined;
   project_id: string;
 }
 
 export interface SchemaEdgeType {
   id: string;
   name: string;
-  display_name?: string;
-  description?: string;
+  display_name?: string | undefined;
+  description?: string | undefined;
   source_entity_type: string;
   target_entity_type: string;
   project_id: string;

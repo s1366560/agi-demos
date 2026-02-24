@@ -17,7 +17,7 @@ export interface RouteErrorBoundaryProps {
   /** Route context name (required) - identifies the source of the error */
   context: string;
   /** Optional fallback path for navigation recovery */
-  fallbackPath?: string;
+  fallbackPath?: string | undefined;
 }
 
 /**
@@ -32,9 +32,9 @@ function RouteErrorFallback({
   fallbackPath,
   onReset,
 }: {
-  error?: Error;
+  error?: Error | undefined;
   context: string;
-  fallbackPath?: string;
+  fallbackPath?: string | undefined;
   onReset: () => void;
 }) {
   const { t } = useTranslation();
