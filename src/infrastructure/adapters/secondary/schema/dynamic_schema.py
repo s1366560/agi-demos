@@ -152,7 +152,7 @@ async def _fetch_edge_maps(session: Any, project_id: str) -> dict[tuple[str, str
     return edge_type_map
 
 
-async def get_project_schema(project_id: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+async def get_project_schema(project_id: str) -> tuple[dict[str, Any], dict[str, Any], dict[tuple[str, str], list[str]]]:
     """
     Get dynamic schema for a project.
     Returns: (entity_types, edge_types, edge_type_map)

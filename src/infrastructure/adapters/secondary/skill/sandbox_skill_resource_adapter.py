@@ -237,9 +237,9 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
         if resources is None:
             resources = await self.list_resources(context)
 
-        synced = []
-        failed = []
-        errors = []
+        synced: list[SkillResource] = []
+        failed: list[str] = []
+        errors: list[str] = []
         cache_key = (context.sandbox_id, context.skill_name)
 
         # Check version to avoid redundant sync
@@ -298,6 +298,7 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
             relative_path = self._resolve_relative_path(resource, context)
 
             # Write to container via MCP
+            assert context.sandbox_id is not None, "sandbox_id required for MCP call"
             result = await self._sandbox_adapter.call_tool(
                 sandbox_id=context.sandbox_id,
                 tool_name="write",

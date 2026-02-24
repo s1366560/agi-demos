@@ -2146,8 +2146,8 @@ async def get_or_create_skill_loader_tool(
         async def update(self, skill: Skill) -> Skill:
             return skill
 
-        async def delete(self, skill_id: str) -> None:
-            pass
+        async def delete(self, skill_id: str) -> bool:
+            return False
 
         async def find_matching_skills(
             self,

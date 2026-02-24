@@ -61,7 +61,7 @@ class ToolComposition:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate the composition."""
         if not self.tenant_id:
             raise ValueError("tenant_id cannot be empty")
@@ -271,7 +271,7 @@ DEFAULT_PARALLEL_TEMPLATE = {
     "fallback_alternatives": [],
 }
 
-DEFAULT_CONDITIONAL_TEMPLATE = {
+DEFAULT_CONDITIONAL_TEMPLATE: dict[str, Any] = {
     "type": "conditional",
     "condition": None,  # To be filled with specific condition
     "fallback_alternatives": [],

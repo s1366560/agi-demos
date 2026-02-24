@@ -195,7 +195,7 @@ class UnifiedEventBusPort(ABC):
         """
 
     @abstractmethod
-    async def subscribe(
+    def subscribe(
         self,
         pattern: str,
         options: SubscriptionOptions | None = None,

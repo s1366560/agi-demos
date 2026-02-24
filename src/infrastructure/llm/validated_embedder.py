@@ -64,11 +64,11 @@ class ValidatedEmbedder(EmbedderClient):
         return self._embedding_dim
 
     @property
-    def config(self) -> EmbedderConfig:
+    def config(self) -> EmbedderConfig:  # type: ignore[override]
         """Get the embedder configuration."""
         return self._base_config
 
-    async def create(
+    async def create(  # type: ignore[override]
         self, input_data: str | list[str] | list[int] | list[list[int]]
     ) -> list[float]:
         """

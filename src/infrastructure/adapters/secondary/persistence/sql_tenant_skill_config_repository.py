@@ -106,7 +106,7 @@ class SqlTenantSkillConfigRepository(
 
         return config
 
-    async def delete(self, config_id: str) -> None:
+    async def delete(self, config_id: str) -> bool:
         """Delete a config by ID."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             TenantSkillConfig as DBConfig,
@@ -116,7 +116,7 @@ class SqlTenantSkillConfigRepository(
 
         if cast(CursorResult[Any], result).rowcount == 0:
             raise ValueError(f"TenantSkillConfig not found: {config_id}")
-
+        return True
     async def delete_by_tenant_and_skill(
         self,
         tenant_id: str,

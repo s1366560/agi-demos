@@ -1,6 +1,11 @@
 import uuid
 from datetime import datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.secondary.persistence.channel_models import (
+        ChannelConfigModel,
+    )
 
 from sqlalchemy import (
     JSON,

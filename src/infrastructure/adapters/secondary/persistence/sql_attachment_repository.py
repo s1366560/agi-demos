@@ -59,7 +59,7 @@ class SqlAttachmentRepository(
 
     # === Interface implementation (attachment-specific queries) ===
 
-    async def save(self, attachment: Attachment) -> None:
+    async def save(self, attachment: Attachment) -> Attachment:
         """
         Save an attachment to the repository.
 
@@ -94,6 +94,7 @@ class SqlAttachmentRepository(
             await self._session.rollback()
             logger.error(f"Failed to save attachment {attachment.id}: {e}")
             raise
+        return attachment
 
     async def get(self, attachment_id: str) -> Attachment | None:
         """Get an attachment by ID."""

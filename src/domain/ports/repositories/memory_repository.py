@@ -5,7 +5,7 @@ from src.domain.model.memory.memory import Memory
 
 class MemoryRepository(ABC):
     @abstractmethod
-    async def save(self, memory: Memory) -> None:
+    async def save(self, memory: Memory) -> Memory:
         pass
 
     @abstractmethod
@@ -19,5 +19,5 @@ class MemoryRepository(ABC):
         pass
 
     @abstractmethod
-    async def delete(self, memory_id: str) -> None:
+    async def delete(self, memory_id: str) -> bool:
         pass

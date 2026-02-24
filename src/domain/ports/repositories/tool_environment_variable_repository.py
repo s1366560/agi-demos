@@ -145,7 +145,7 @@ class ToolEnvironmentVariableRepositoryPort(ABC):
         """
 
     @abstractmethod
-    async def delete(self, env_var_id: str) -> None:
+    async def delete(self, env_var_id: str) -> bool:
         """
         Delete an environment variable by ID.
 

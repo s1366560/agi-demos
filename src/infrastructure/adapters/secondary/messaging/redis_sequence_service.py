@@ -117,7 +117,7 @@ class RedisSequenceService:
                         current_int = int(current_val) if current_val else 0
 
                         if db_last_seq > current_int:
-                            pipe.multi()
+                            pipe.multi()  # type: ignore[no-untyped-call]  # redis stubs incomplete
                             pipe.set(key, db_last_seq)
                             pipe.expire(key, self.SEQUENCE_TTL)
                             await pipe.execute()

@@ -15,6 +15,7 @@ Migration Benefits:
 """
 
 import logging
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,10 +57,10 @@ class SqlUserRepository(BaseRepository[User, DBUser], UserRepository):
         db_user = result.scalar_one_or_none()
         return self._to_domain(db_user)
 
-    async def list_all(self, limit: int = 50, offset: int = 0) -> list[User]:
+    async def list_all(self, limit: int = 50, offset: int = 0, **filters: Any) -> list[User]:
         """List all users with pagination."""
         # Use the parent class list_all method via super() to avoid recursion
-        return await super().list_all(limit=limit, offset=offset)
+        return await super().list_all(limit=limit, offset=offset, **filters)
 
     # === Conversion methods ===
 

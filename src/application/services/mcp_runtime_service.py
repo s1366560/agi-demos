@@ -364,9 +364,9 @@ class MCPRuntimeService:
             self._error_runtime_metadata("test_connection")
             if result.error
             else {
-                "last_error": existing_runtime_metadata.get("last_error"),
-                "last_error_code": existing_runtime_metadata.get("last_error_code"),
-                "last_error_message": existing_runtime_metadata.get("last_error_message"),
+                "last_error": existing_runtime_metadata.get("last_error") or "",
+                "last_error_code": existing_runtime_metadata.get("last_error_code") or "",
+                "last_error_message": existing_runtime_metadata.get("last_error_message") or "",
             }
         )
         await self._server_repo.update_runtime_metadata(

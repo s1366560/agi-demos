@@ -138,7 +138,7 @@ class HITLChannelResponder:
 
             import redis.asyncio as aioredis
 
-            redis_client = aioredis.from_url(
+            redis_client = aioredis.from_url(  # type: ignore[no-untyped-call]  # redis stubs incomplete
                 f"redis://{settings.redis_host}:{settings.redis_port}",
                 decode_responses=True,
             )

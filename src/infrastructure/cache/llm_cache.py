@@ -61,7 +61,7 @@ class LLMCache:
             import redis.asyncio as redis
 
             settings = get_settings()
-            self._redis_client = redis.from_url(
+            self._redis_client = redis.from_url(  # type: ignore[no-untyped-call]  # redis stubs incomplete
                 settings.redis_url,
                 encoding="utf-8",
                 decode_responses=True,

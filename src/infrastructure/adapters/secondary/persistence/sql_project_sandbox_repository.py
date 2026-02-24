@@ -73,7 +73,7 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
             metadata_json=domain.metadata,
         )
 
-    async def save(self, association: ProjectSandbox) -> None:
+    async def save(self, association: ProjectSandbox) -> ProjectSandbox:
         """Save or update a project-sandbox association."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             ProjectSandbox as ProjectSandboxORM,
@@ -99,6 +99,7 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
             self._session.add(orm)
 
         await self._session.commit()
+        return association
 
     async def find_by_id(self, association_id: str) -> ProjectSandbox | None:
         """Find a project-sandbox association by its ID."""

@@ -17,7 +17,7 @@ class ProjectSandboxRepository(ABC):
     """
 
     @abstractmethod
-    async def save(self, association: ProjectSandbox) -> None:
+    async def save(self, association: ProjectSandbox) -> ProjectSandbox:
         """Save or update a project-sandbox association.
 
         Args:

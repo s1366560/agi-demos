@@ -53,7 +53,7 @@ class SqlAgentExecutionRepository(
 
     # === Interface implementation (agent execution-specific queries) ===
 
-    async def save(self, execution: AgentExecution) -> None:
+    async def save(self, execution: AgentExecution) -> AgentExecution:
         """
         Save an agent execution (create or update).
 
@@ -86,7 +86,7 @@ class SqlAgentExecutionRepository(
             self._session.add(db_execution)
 
         await self._session.flush()
-
+        return execution
     async def list_by_message(self, message_id: str) -> list[AgentExecution]:
         """List executions for a message."""
         result = await self._session.execute(

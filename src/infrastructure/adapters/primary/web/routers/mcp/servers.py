@@ -476,7 +476,7 @@ async def get_mcp_server_health(
     server_id: str,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-) -> _compute_server_health:
+) -> MCPServerHealthStatus:
     """Get health status for a single MCP server (lightweight, no connection test)."""
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
         SqlMCPServerRepository,

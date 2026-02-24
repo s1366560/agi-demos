@@ -162,7 +162,7 @@ class SandboxPort(ABC):
         """
 
     @abstractmethod
-    async def stream_execute(
+    def stream_execute(
         self,
         request: CodeExecutionRequest,
     ) -> AsyncIterator[dict[str, Any]]:

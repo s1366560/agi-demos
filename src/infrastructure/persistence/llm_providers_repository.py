@@ -497,7 +497,7 @@ class SQLAlchemyProviderRepository(ProviderRepository):
             resolution_source=resolution_source,
         )
 
-    async def create_health_check(self, health: ProviderHealthCreate) -> ProviderHealth:
+    async def create_health_check(self, health: ProviderHealth) -> ProviderHealth:
         """Create a health check entry."""
         session = await self._get_session()
 

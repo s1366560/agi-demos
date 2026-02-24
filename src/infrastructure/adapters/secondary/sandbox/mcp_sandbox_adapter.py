@@ -946,9 +946,9 @@ class MCPSandboxAdapter(SandboxPort):
             instance = self._active_sandboxes.get(sandbox_id)
             if instance:
                 ports_to_release = [
-                    instance.mcp_port,
-                    instance.desktop_port,
-                    instance.terminal_port,
+                    instance.mcp_port or 0,
+                    instance.desktop_port or 0,
+                    instance.terminal_port or 0,
                 ]
                 ports_to_release = [p for p in ports_to_release if p is not None]
                 instance.status = SandboxStatus.TERMINATED
@@ -1286,10 +1286,10 @@ class MCPSandboxAdapter(SandboxPort):
     async def list_sandboxes(
         self,
         status: SandboxStatus | None = None,
-    ) -> list[MCPSandboxInstance]:
+    ) -> list[SandboxInstance]:
         """List all sandbox instances (thread-safe)."""
         async with self._instance_lock:
-            result = []
+            result: list[SandboxInstance] = []
             for instance in list(self._active_sandboxes.values()):
                 if status is None or instance.status == status:
                     result.append(instance)
@@ -2623,7 +2623,7 @@ class MCPSandboxAdapter(SandboxPort):
                 logger.info(f"Cleaned up orphan container: {container_name}")
             except Exception as e:
                 logger.warning(f"Failed to cleanup container {container_name}: {e}")
-                self._cleanup_stats["errors"] += 1
+                self._cleanup_stats["errors"] = int(self._cleanup_stats["errors"] or 0) + 1
         return count
 
     async def cleanup_orphans(
@@ -2679,8 +2679,8 @@ class MCPSandboxAdapter(SandboxPort):
         count = await self._remove_containers_batch(containers_to_remove, loop)
 
         if count > 0:
-            self._cleanup_stats["total_cleanups"] += 1
-            self._cleanup_stats["containers_removed"] += count
+            self._cleanup_stats["total_cleanups"] = int(self._cleanup_stats["total_cleanups"] or 0) + 1
+            self._cleanup_stats["containers_removed"] = int(self._cleanup_stats["containers_removed"] or 0) + count
             self._cleanup_stats["last_cleanup_at"] = datetime.now().isoformat()
             logger.info(f"Cleaned up {count} orphan container(s)")
 
@@ -2788,7 +2788,7 @@ class MCPSandboxAdapter(SandboxPort):
                     break
                 except Exception as e:
                     logger.error(f"MCP server health check error: {e}")
-                    self._health_check_stats["errors"] += 1
+        self._health_check_stats["errors"] = int(self._health_check_stats["errors"] or 0) + 1
 
         self._health_check_task = asyncio.create_task(health_check_loop())
         logger.info(f"Started MCP server health check task (interval={interval_seconds}s)")
@@ -2804,7 +2804,7 @@ class MCPSandboxAdapter(SandboxPort):
 
     async def _run_health_check_cycle(self) -> None:
         """Run a single health check cycle for all active sandboxes."""
-        self._health_check_stats["total_checks"] += 1
+        self._health_check_stats["total_checks"] = int(self._health_check_stats["total_checks"] or 0) + 1
         self._health_check_stats["last_check_at"] = datetime.now().isoformat()
 
         for sandbox_id, _instance in list(self._active_sandboxes.items()):
@@ -2832,7 +2832,7 @@ class MCPSandboxAdapter(SandboxPort):
         if not instance or not instance.mcp_client:
             return {"running": [], "crashed": [], "restarted": []}
 
-        result = {"running": [], "crashed": [], "restarted": []}
+        result: dict[str, list[str]] = {"running": [], "crashed": [], "restarted": []}
 
         try:
             # Call mcp_server_list to get server status
@@ -2854,7 +2854,7 @@ class MCPSandboxAdapter(SandboxPort):
                         restarted = await self._restart_crashed_server(sandbox_id, server_name)
                         if restarted:
                             result["restarted"].append(server_name)
-                            self._health_check_stats["restarts_triggered"] += 1
+                            self._health_check_stats["restarts_triggered"] = int(self._health_check_stats["restarts_triggered"] or 0) + 1
 
         except Exception as e:
             logger.warning(f"Failed to check MCP servers health: {e}")

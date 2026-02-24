@@ -131,7 +131,7 @@ async def get_tenant_skill_config(
     system_skill_name: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> config_to_response:
+) -> TenantSkillConfigResponse:
     """
     Get a specific tenant skill configuration.
 
@@ -158,7 +158,7 @@ async def disable_system_skill(
     data: DisableSkillRequest,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> config_to_response:
+) -> TenantSkillConfigResponse:
     """
     Disable a system skill for this tenant.
 
@@ -206,7 +206,7 @@ async def override_system_skill(
     data: OverrideSkillRequest,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> config_to_response:
+) -> TenantSkillConfigResponse:
     """
     Override a system skill with a tenant skill.
 

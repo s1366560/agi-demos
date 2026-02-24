@@ -8,7 +8,7 @@ class APIKeyRepository(ABC):
     """Repository interface for APIKey entity"""
 
     @abstractmethod
-    async def save(self, api_key: APIKey) -> None:
+    async def save(self, api_key: APIKey) -> APIKey:
         """Save an API key (create or update)"""
 
     @abstractmethod
@@ -24,7 +24,7 @@ class APIKeyRepository(ABC):
         """List all API keys for a user"""
 
     @abstractmethod
-    async def delete(self, key_id: str) -> None:
+    async def delete(self, key_id: str) -> bool:
         """Delete an API key"""
 
     @abstractmethod

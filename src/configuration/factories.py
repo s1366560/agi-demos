@@ -7,7 +7,10 @@ for each provider, and the NativeGraphAdapter for knowledge graph operations.
 
 import logging
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from src.infrastructure.graph import NativeGraphAdapter
 
 from src.configuration.config import get_settings
 from src.domain.llm_providers.llm_types import LLMClient
@@ -71,9 +74,9 @@ async def create_native_graph_adapter(
     # Let's check if LiteLLMEmbedder is an EmbeddingService or needs wrapping.
     # Looking at provider_factory.py, create_embedder returns LiteLLMEmbedder.
     # Looking at old code, it wrapped it: embedding_service = EmbeddingService(embedder=embedder)
-    from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
+    from src.infrastructure.graph.embedding.embedding_service import EmbedderProtocol, EmbeddingService
 
-    embedding_service = EmbeddingService(embedder=embedder)
+    embedding_service = EmbeddingService(embedder=cast(EmbedderProtocol, embedder))
 
     # Determine embedding dimension: use config override or auto-detect
     auto_detected_dim = embedding_service.embedding_dim

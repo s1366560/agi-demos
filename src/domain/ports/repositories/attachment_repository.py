@@ -14,7 +14,7 @@ class AttachmentRepositoryPort(ABC):
     """
 
     @abstractmethod
-    async def save(self, attachment: Attachment) -> None:
+    async def save(self, attachment: Attachment) -> Attachment:
         """
         Save an attachment to the repository.
 

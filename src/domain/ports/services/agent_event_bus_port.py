@@ -126,7 +126,7 @@ class AgentEventBusPort(ABC):
         """
 
     @abstractmethod
-    async def subscribe_events(
+    def subscribe_events(
         self,
         conversation_id: str,
         message_id: str,

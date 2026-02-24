@@ -21,7 +21,7 @@ async def initialize_redis_client() -> object | None:
     try:
         import redis.asyncio as redis
 
-        redis_client = redis.from_url(settings.redis_url, decode_responses=True)
+        redis_client = redis.from_url(settings.redis_url, decode_responses=True)  # type: ignore[no-untyped-call]  # redis stubs incomplete
         logger.info("Redis client initialized for event bus")
 
         # Clean up stale agent running states on startup

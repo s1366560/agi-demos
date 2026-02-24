@@ -141,12 +141,13 @@ class SqlSkillRepository(BaseRepository[Skill, DBSkill], SkillRepositoryPort):
 
         return skill
 
-    async def delete(self, skill_id: str) -> None:
+    async def delete(self, skill_id: str) -> bool:
         """Delete a skill by ID."""
         result = await self._session.execute(delete(DBSkill).where(DBSkill.id == skill_id))
 
         if cast(CursorResult[Any], result).rowcount == 0:
             raise ValueError(f"Skill not found: {skill_id}")
+        return True
 
     async def list_by_tenant(
         self,

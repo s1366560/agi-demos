@@ -266,7 +266,7 @@ async def create_subagent(
     data: SubAgentCreate,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> subagent_to_response:
+) -> SubAgentResponse:
     """
     Create a new subagent.
 
@@ -460,7 +460,7 @@ async def import_filesystem_subagent(
     project_id: str | None = Query(None, description="Optional project to scope to"),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> subagent_to_response:
+) -> SubAgentResponse:
     """
     Import a filesystem SubAgent into the database for customization.
 
@@ -708,7 +708,7 @@ async def install_template(
     template_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> subagent_to_response:
+) -> SubAgentResponse:
     """
     Create a SubAgent from a template (install).
     """
@@ -812,7 +812,7 @@ async def get_subagent(
     subagent_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> subagent_to_response:
+) -> SubAgentResponse:
     """
     Get a specific subagent by ID.
     """
@@ -843,7 +843,7 @@ async def update_subagent(
     data: SubAgentUpdate,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> subagent_to_response:
+) -> SubAgentResponse:
     """
     Update an existing subagent.
     """
@@ -966,7 +966,7 @@ async def toggle_subagent_enabled(
     enabled: bool = Query(..., description="Enable or disable"),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> subagent_to_response:
+) -> SubAgentResponse:
     """
     Enable or disable a subagent.
     """

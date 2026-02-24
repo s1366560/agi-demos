@@ -7,7 +7,14 @@ This model represents file attachments in conversations, supporting:
 """
 
 from datetime import datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from src.infrastructure.adapters.secondary.persistence.models import (
+        Conversation,
+        Project,
+        Tenant,
+    )
 
 from sqlalchemy import (
     JSON,

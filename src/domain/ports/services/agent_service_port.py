@@ -20,7 +20,7 @@ class AgentServicePort(ABC):
     """
 
     @abstractmethod
-    async def stream_chat_v2(
+    def stream_chat_v2(
         self,
         conversation_id: str,
         user_message: str,
@@ -28,6 +28,8 @@ class AgentServicePort(ABC):
         user_id: str,
         tenant_id: str,
         attachment_ids: list[str] | None = None,
+        file_metadata: list[dict[str, Any]] | None = None,
+        forced_skill_name: str | None = None,
         app_model_context: dict[str, Any] | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
@@ -88,9 +90,9 @@ class AgentServicePort(ABC):
     async def create_conversation(
         self,
         project_id: str,
-        tenant_id: str,
         user_id: str,
-        title: str,
+        tenant_id: str,
+        title: str | None = None,
         agent_config: dict[str, Any] | None = None,
     ) -> Conversation:
         """

@@ -105,7 +105,7 @@ class SqlWorkflowPatternRepository(
 
         return pattern
 
-    async def delete(self, pattern_id: str) -> None:
+    async def delete(self, pattern_id: str) -> bool:
         """
         Delete a pattern by ID.
 
@@ -123,6 +123,7 @@ class SqlWorkflowPatternRepository(
 
         await self._session.delete(db_pattern)
         await self._session.flush()
+        return True
 
     async def list_by_tenant(
         self,

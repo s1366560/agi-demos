@@ -25,6 +25,7 @@ from typing import Any, cast
 from neo4j import AsyncDriver
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ class PostgresHealthChecker:
         try:
             async with asyncio.timeout(self._timeout):
                 async with self._engine.connect() as conn:
-                    result = await conn.execute(self._query)
+                    result = await conn.execute(text(self._query))
                     value = result.scalar()
 
             latency_ms = (time.time() - start_time) * 1000
@@ -118,7 +119,7 @@ class PostgresHealthChecker:
             # Try to get version information
             try:
                 async with self._engine.connect() as conn:
-                    version_result = await conn.execute("SELECT version()")
+                    version_result = await conn.execute(text("SELECT version()"))
                     version = version_result.scalar()
                     details["version"] = version.split()[1] if version else "unknown"
             except Exception:
@@ -285,7 +286,7 @@ class Neo4jHealthChecker:
                 async with asyncio.timeout(self._timeout):
                     await verify_fn()
             else:
-                verify_fn()
+                await verify_fn()  # sync driver called in async context
 
             # Execute simple query (may be sync or async)
             execute_fn = self._driver.execute_query

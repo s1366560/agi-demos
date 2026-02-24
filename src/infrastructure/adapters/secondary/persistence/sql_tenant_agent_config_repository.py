@@ -98,7 +98,7 @@ class SqlTenantAgentConfigRepository(
         await self._session.commit()
         return config
 
-    async def delete(self, tenant_id: str) -> None:
+    async def delete(self, tenant_id: str) -> bool:
         """Delete configuration for a tenant."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             TenantAgentConfig as DBConfig,
@@ -110,7 +110,7 @@ class SqlTenantAgentConfigRepository(
 
         if cast(CursorResult[Any], result).rowcount == 0:
             raise ValueError(f"Configuration not found for tenant: {tenant_id}")
-
+        return True
     async def exists(self, tenant_id: str) -> bool:
         """Check if a tenant has custom configuration."""
         from src.infrastructure.adapters.secondary.persistence.models import (

@@ -89,7 +89,7 @@ class HITLRequest(Entity):
     expires_at: datetime | None = None
     answered_at: datetime | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate the entity after initialization."""
         if not self.conversation_id:
             raise ValueError("conversation_id is required")

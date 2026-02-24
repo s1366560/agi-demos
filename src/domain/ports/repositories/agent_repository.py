@@ -27,7 +27,7 @@ class ConversationRepository(ABC):
     """
 
     @abstractmethod
-    async def save(self, conversation: Conversation) -> None:
+    async def save(self, conversation: Conversation) -> Conversation:
         """
         Save a conversation (create or update).
 
@@ -90,7 +90,7 @@ class ConversationRepository(ABC):
         """
 
     @abstractmethod
-    async def delete(self, conversation_id: str) -> None:
+    async def delete(self, conversation_id: str) -> bool:
         """
         Delete a conversation by ID.
 
@@ -122,7 +122,7 @@ class MessageRepository(ABC):
     """
 
     @abstractmethod
-    async def save(self, message: Message) -> None:
+    async def save(self, message: Message) -> Message:
         """
         Save a message (create or update).
 
@@ -208,7 +208,7 @@ class AgentExecutionRepository(ABC):
     """
 
     @abstractmethod
-    async def save(self, execution: AgentExecution) -> None:
+    async def save(self, execution: AgentExecution) -> AgentExecution:
         """
         Save an agent execution (create or update).
 
@@ -275,7 +275,7 @@ class ToolExecutionRecordRepository(ABC):
     """
 
     @abstractmethod
-    async def save(self, record: ToolExecutionRecord) -> None:
+    async def save(self, record: ToolExecutionRecord) -> ToolExecutionRecord:
         """
         Save a tool execution record (create or update).
 
@@ -388,7 +388,7 @@ class AgentExecutionEventRepository(ABC):
     """
 
     @abstractmethod
-    async def save(self, event: AgentExecutionEvent) -> None:
+    async def save(self, event: AgentExecutionEvent) -> AgentExecutionEvent:
         """
         Save an agent execution event.
 
@@ -566,7 +566,7 @@ class ExecutionCheckpointRepository(ABC):
     """
 
     @abstractmethod
-    async def save(self, checkpoint: ExecutionCheckpoint) -> None:
+    async def save(self, checkpoint: ExecutionCheckpoint) -> ExecutionCheckpoint:
         """
         Save an execution checkpoint.
 

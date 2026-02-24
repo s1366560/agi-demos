@@ -394,7 +394,7 @@ class EventSchemaRegistry:
         # BFS
         from collections import deque
 
-        queue = deque([(from_version, [])])
+        queue: deque[tuple[str, list[tuple[str, str]]]] = deque([(from_version, [])])
         visited = {from_version}
 
         while queue:

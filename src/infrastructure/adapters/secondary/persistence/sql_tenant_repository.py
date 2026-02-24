@@ -4,6 +4,8 @@ V2 SQLAlchemy implementation of TenantRepository using BaseRepository.
 
 import logging
 import re
+from typing import Any
+import re
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -50,17 +52,18 @@ class SqlTenantRepository(BaseRepository[Tenant, DBTenant], TenantRepository):
         db_tenant = result.scalar_one_or_none()
         return self._to_domain(db_tenant)
 
-    async def list_all(self, limit: int = 50, offset: int = 0) -> list[Tenant]:
+    async def list_all(self, limit: int = 50, offset: int = 0, **filters: Any) -> list[Tenant]:
         """List all tenants with pagination."""
-        return await super().list_all(limit=limit, offset=offset)
+        return await super().list_all(limit=limit, offset=offset, **filters)
 
-    async def delete(self, tenant_id: str) -> None:
+    async def delete(self, tenant_id: str) -> bool:
         """Delete a tenant."""
         db_tenant = await self._find_db_model_by_id(tenant_id)
         if db_tenant:
             await self._session.delete(db_tenant)
             await self._session.flush()
-
+            return True
+        return False
     # === Conversion methods ===
 
     def _to_domain(self, db_tenant: DBTenant | None) -> Tenant | None:

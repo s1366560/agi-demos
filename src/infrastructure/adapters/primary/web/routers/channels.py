@@ -1132,7 +1132,7 @@ async def create_config(
     data: ChannelConfigCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> to_response:
+) -> ChannelConfigResponse:
     """Create a new channel configuration for a project."""
     # Verify project access (requires admin or owner role)
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
@@ -1242,7 +1242,7 @@ async def get_config(
     config_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> to_response:
+) -> ChannelConfigResponse:
     """Get a channel configuration by ID."""
     repo = ChannelConfigRepository(db)
     config = await repo.get_by_id(config_id)
@@ -1262,7 +1262,7 @@ async def update_config(
     data: ChannelConfigUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> to_response:
+) -> ChannelConfigResponse:
     """Update a channel configuration."""
     repo = ChannelConfigRepository(db)
     config = await repo.get_by_id(config_id)

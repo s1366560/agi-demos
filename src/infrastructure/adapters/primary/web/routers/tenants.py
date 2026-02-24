@@ -495,7 +495,7 @@ async def get_tenant_stats(
     # This is a bit complex for SQL, so we might skip or approximate.
     # For now, let's just return a placeholder or calculate real data if efficient.
     # We'll use a placeholder for history as it requires time-series aggregation.
-    memory_usage_history = []
+    memory_usage_history: list[Any] = []
     # Placeholder: mock trend based on real total?
     # Or just empty list if no data.
 

@@ -1008,7 +1008,7 @@ async def _connect_desktop_upstream(ws_target: str, desktop_url: str) -> Any:
     ssl_context = _create_desktop_ssl_context()
     return await websockets.connect(
         ws_target,
-        subprotocols=["binary"],
+        subprotocols=["binary"],  # type: ignore[list-item]  # websockets expects Subprotocol
         additional_headers={"Origin": desktop_url},
         max_size=2**23,  # 8MB max frame for desktop data
         open_timeout=10,

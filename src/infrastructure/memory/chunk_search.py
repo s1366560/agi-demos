@@ -134,10 +134,10 @@ class ChunkHybridSearch:
             vector_results = await chunk_repo.vector_search(
                 query_embedding, project_id, fetch_limit
             )
-        elif not self._config.enable_fts_fallback:
+        elif not self._config.enable_fts_fallback:  # type: ignore[unreachable]  # embed_text may fail at runtime
             logger.error("Embedding failed and FTS fallback disabled")
             return []
-
+        # Fall through to FTS search below
         # 2. FTS search with keyword extraction
         keywords = extract_keywords(query)
         fts_query = " ".join(keywords) if keywords else query

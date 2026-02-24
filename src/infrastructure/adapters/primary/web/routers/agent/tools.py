@@ -197,17 +197,17 @@ async def get_tool_composition(
             raise HTTPException(status_code=404, detail="Tool composition not found")
 
         return ToolCompositionResponse(
-            id=composition.id,  # type: ignore[attr-defined]
-            name=composition.name,  # type: ignore[attr-defined]
-            description=composition.description,  # type: ignore[attr-defined]
-            tools=list(composition.tools),  # type: ignore[attr-defined]
-            execution_template=dict(composition.execution_template),  # type: ignore[attr-defined]
-            success_rate=composition.success_rate,  # type: ignore[attr-defined]
-            success_count=composition.success_count,  # type: ignore[attr-defined]
-            failure_count=composition.failure_count,  # type: ignore[attr-defined]
-            usage_count=composition.usage_count,  # type: ignore[attr-defined]
-            created_at=composition.created_at.isoformat(),  # type: ignore[attr-defined]
-            updated_at=composition.updated_at.isoformat(),  # type: ignore[attr-defined]
+            id=composition.id,
+            name=composition.name,
+            description=composition.description,
+            tools=list(composition.tools),
+            execution_template=dict(composition.execution_template),
+            success_rate=composition.success_rate,
+            success_count=composition.success_count,
+            failure_count=composition.failure_count,
+            usage_count=composition.usage_count,
+            created_at=composition.created_at.isoformat(),
+            updated_at=composition.updated_at.isoformat(),
         )
 
     except HTTPException:

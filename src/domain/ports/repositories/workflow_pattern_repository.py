@@ -64,7 +64,7 @@ class WorkflowPatternRepositoryPort(ABC):
         """
 
     @abstractmethod
-    async def delete(self, pattern_id: str) -> None:
+    async def delete(self, pattern_id: str) -> bool:
         """
         Delete a pattern by ID.
 

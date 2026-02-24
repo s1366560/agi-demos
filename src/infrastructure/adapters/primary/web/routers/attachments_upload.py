@@ -7,7 +7,7 @@ Provides REST API endpoints for:
 """
 
 import logging
-from typing import Any, cast
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import RedirectResponse
@@ -40,7 +40,7 @@ router = APIRouter(prefix="/api/v1/attachments", tags=["attachments"])
 _storage_service = None
 
 
-def _get_storage_service() -> None:
+def _get_storage_service() -> Any:
     """Get or create the storage service singleton (stateless)."""
     global _storage_service
     if _storage_service is None:
@@ -48,7 +48,7 @@ def _get_storage_service() -> None:
 
         container = DIContainer()
         _storage_service = container.storage_service()
-    return cast(None, _storage_service)
+    return _storage_service
 
 
 async def get_attachment_service(
@@ -247,7 +247,7 @@ async def complete_multipart_upload(
     request: CompleteUploadRequest,
     current_user: User = Depends(get_current_user),
     attachment_service: AttachmentService = Depends(get_attachment_service),
-) -> _attachment_to_response:
+) -> AttachmentResponse:
     """
     Complete a multipart upload.
 
@@ -313,7 +313,7 @@ async def upload_simple(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     attachment_service: AttachmentService = Depends(get_attachment_service),
-) -> _attachment_to_response:
+) -> AttachmentResponse:
     """
     Upload a small file directly (recommended for files ≤10MB).
 
@@ -375,7 +375,7 @@ async def get_attachment(
     attachment_id: str,
     current_user: User = Depends(get_current_user),
     attachment_service: AttachmentService = Depends(get_attachment_service),
-) -> _attachment_to_response:
+) -> AttachmentResponse:
     """
     Get attachment details by ID.
     """

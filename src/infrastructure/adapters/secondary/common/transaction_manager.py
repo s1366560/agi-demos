@@ -17,6 +17,7 @@ from typing import Any
 
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession as SQLAlchemyAsyncSession
+from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
 
@@ -266,17 +267,17 @@ class TransactionManager:
         """
         try:
             # Create savepoint
-            await self._session.execute(f"SAVEPOINT {name}")
+            await self._session.execute(text(f"SAVEPOINT {name}"))
             yield
         except Exception:
             # Rollback to savepoint
-            await self._session.execute(f"ROLLBACK TO SAVEPOINT {name}")
+            await self._session.execute(text(f"ROLLBACK TO SAVEPOINT {name}"))
             raise
         finally:
             # Release savepoint
             # Release savepoint (may have been rolled back)
             with contextlib.suppress(Exception):
-                await self._session.execute(f"RELEASE SAVEPOINT {name}")
+                await self._session.execute(text(f"RELEASE SAVEPOINT {name}"))
 
     # === Error handling ===
 

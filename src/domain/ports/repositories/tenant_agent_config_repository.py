@@ -45,7 +45,7 @@ class TenantAgentConfigRepositoryPort(ABC):
         """
 
     @abstractmethod
-    async def delete(self, tenant_id: str) -> None:
+    async def delete(self, tenant_id: str) -> bool:
         """
         Delete configuration for a tenant.
 

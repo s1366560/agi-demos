@@ -27,7 +27,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from src.domain.llm_providers.llm_types import LLMClient, Message
+from src.domain.llm_providers.llm_types import LLMClient, Message, ModelSize
 
 logger = logging.getLogger(__name__)
 
@@ -143,9 +143,9 @@ def _inject_schema_into_messages(
         if role == "system":
             content = msg.get("content") if isinstance(msg, dict) else msg.content
             if isinstance(msg, dict):
-                result[i] = {"role": "system", "content": content + schema_prompt}
+                result[i] = {"role": "system", "content": (content or "") + schema_prompt}
             else:
-                result[i] = Message(role="system", content=content + schema_prompt)
+                result[i] = Message(role="system", content=(content or "") + schema_prompt)
             return result
 
     # No system message found -- insert one

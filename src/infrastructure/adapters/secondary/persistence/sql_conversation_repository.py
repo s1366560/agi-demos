@@ -60,7 +60,7 @@ class SqlConversationRepository(
 
     # === Interface implementation (conversation-specific operations) ===
 
-    async def save(self, conversation: Conversation) -> None:
+    async def save(self, conversation: Conversation) -> Conversation:
         """
         Save a conversation using PostgreSQL upsert (ON CONFLICT DO UPDATE).
 
@@ -114,7 +114,7 @@ class SqlConversationRepository(
 
         await self._session.execute(stmt)
         await self._session.flush()
-
+        return conversation
     async def save_and_commit(self, conversation: Conversation) -> None:
         """
         Save a conversation and immediately commit to database.
@@ -204,7 +204,7 @@ class SqlConversationRepository(
         db_conversations = result.scalars().all()
         return [d for c in db_conversations if (d := self._to_domain(c)) is not None]
 
-    async def delete(self, conversation_id: str) -> None:
+    async def delete(self, conversation_id: str) -> bool:
         """
         Delete a conversation by ID.
 
@@ -219,7 +219,7 @@ class SqlConversationRepository(
             delete(DBConversation).where(DBConversation.id == conversation_id)
         )
         await self._session.flush()
-
+        return True
     async def count_by_project(
         self, project_id: str, status: ConversationStatus | None = None
     ) -> int:

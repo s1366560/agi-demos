@@ -599,7 +599,7 @@ class ChannelMessageRouter:
                 raw_data = self._to_json_safe(message.raw_data)
 
                 # Build content_data with media metadata
-                content_data_dict = {
+                content_data_dict: dict[str, Any] = {
                     "conversation_id": conversation_id,
                     "channel_config_id": channel_config_id,
                     "reply_to": message.reply_to,

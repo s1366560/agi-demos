@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 if TYPE_CHECKING:
+    import httpx
+
     from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.provider_resolution_service import get_provider_resolution_service

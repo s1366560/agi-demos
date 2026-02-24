@@ -75,7 +75,7 @@ class CardBuilder:
         }
 
         if actions:
-            card["body"]["elements"].extend(actions)
+            card["body"]["elements"].extend(actions)  # type: ignore[index]  # card["body"] is a dict
 
         return card
 

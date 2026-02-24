@@ -49,7 +49,7 @@ class TenantSkillConfig:
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate the config."""
         if not self.id:
             raise ValueError("id cannot be empty")

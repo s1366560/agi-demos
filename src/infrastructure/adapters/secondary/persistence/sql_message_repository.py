@@ -53,7 +53,7 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
 
     # === Interface implementation (message-specific queries) ===
 
-    async def save(self, message: Message) -> None:
+    async def save(self, message: Message) -> Message:
         """Save a message using PostgreSQL upsert (ON CONFLICT DO UPDATE)."""
         # Convert tool_calls and tool_results to database format
         tool_calls_db = [
@@ -102,7 +102,7 @@ class SqlMessageRepository(BaseRepository[Message, DBMessage], MessageRepository
 
         await self._session.execute(stmt)
         await self._session.flush()
-
+        return message
     async def save_and_commit(self, message: Message) -> None:
         """Save a message and immediately commit to database."""
         await self.save(message)

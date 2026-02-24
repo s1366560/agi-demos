@@ -132,7 +132,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
 
         return subagent
 
-    async def delete(self, subagent_id: str) -> None:
+    async def delete(self, subagent_id: str) -> bool:
         """Delete a subagent by ID."""
         from src.infrastructure.adapters.secondary.persistence.models import SubAgent as DBSubAgent
 
@@ -140,7 +140,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
 
         if cast(CursorResult[Any], result).rowcount == 0:
             raise ValueError(f"SubAgent not found: {subagent_id}")
-
+        return True
     async def list_by_tenant(
         self,
         tenant_id: str,
@@ -201,7 +201,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
         self,
         subagent_id: str,
         enabled: bool,
-    ) -> SubAgent | None:
+    ) -> SubAgent:
         """Enable or disable a subagent."""
         from src.infrastructure.adapters.secondary.persistence.models import SubAgent as DBSubAgent
 
@@ -216,7 +216,7 @@ class SqlSubAgentRepository(BaseRepository[SubAgent, object], SubAgentRepository
 
         await self._session.flush()
 
-        return self._to_domain(db_subagent) if db_subagent else None
+        return self._to_domain(db_subagent)  # type: ignore[return-value]
 
     async def update_statistics(
         self,

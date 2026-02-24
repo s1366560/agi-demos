@@ -119,7 +119,7 @@ class Attachment:
     # Error tracking
     error_message: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate attachment after initialization."""
         if not self.filename:
             raise ValueError("Filename cannot be empty")

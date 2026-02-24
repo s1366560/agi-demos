@@ -23,7 +23,7 @@ class SqlTaskRepository(BaseRepository[TaskLog, DBTaskLog], TaskRepository):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
 
-    async def save(self, task: TaskLog) -> None:
+    async def save(self, task: TaskLog) -> TaskLog:
         """Save a task log (create or update)."""
         result = await self._session.execute(select(DBTaskLog).where(DBTaskLog.id == task.id))
         db_task = result.scalar_one_or_none()
@@ -43,6 +43,7 @@ class SqlTaskRepository(BaseRepository[TaskLog, DBTaskLog], TaskRepository):
             self._session.add(db_task)
 
         await self._session.flush()
+        return task
 
     async def find_by_id(self, task_id: str) -> TaskLog | None:
         """Find a task by ID."""
@@ -71,9 +72,9 @@ class SqlTaskRepository(BaseRepository[TaskLog, DBTaskLog], TaskRepository):
         db_tasks = result.scalars().all()
         return [d for t in db_tasks if (d := self._to_domain(t)) is not None]
 
-    async def delete(self, task_id: str) -> None:
+    async def delete(self, task_id: str) -> bool:
         """Delete a task."""
-        await super().delete(task_id)
+        return await super().delete(task_id)
 
     def _to_domain(self, db_task: DBTaskLog | None) -> TaskLog | None:
         """Convert database model to domain model."""

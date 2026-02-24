@@ -79,7 +79,7 @@ class SubAgentRepositoryPort(ABC):
         """
 
     @abstractmethod
-    async def delete(self, subagent_id: str) -> None:
+    async def delete(self, subagent_id: str) -> bool:
         """
         Delete a subagent by ID.
 

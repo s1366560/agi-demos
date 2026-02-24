@@ -48,7 +48,7 @@ class SkillPermissionRule:
     action: SkillPermissionAction
     description: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate the rule."""
         if not self.pattern:
             raise ValueError("pattern cannot be empty")

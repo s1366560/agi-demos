@@ -561,7 +561,7 @@ class LocalSandboxAdapter(SandboxPort):
 
         return instances
 
-    async def get_output_files(
+    async def get_output_files(  # type: ignore[override]
         self,
         sandbox_id: str,
         pattern: str = "*",

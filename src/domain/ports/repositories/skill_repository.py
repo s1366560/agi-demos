@@ -85,7 +85,7 @@ class SkillRepositoryPort(ABC):
         """
 
     @abstractmethod
-    async def delete(self, skill_id: str) -> None:
+    async def delete(self, skill_id: str) -> bool:
         """
         Delete a skill by ID.
 

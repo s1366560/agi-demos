@@ -391,7 +391,7 @@ class ChannelEventBridge:
             card = RichCardBuilder().build_task_progress_card(tasks)
             if not card:
                 # Fallback to plain text
-                self._send_task_text_fallback(adapter, chat_id, tasks)
+                await self._send_task_text_fallback(adapter, chat_id, tasks)
                 return
 
             # Check if we have an existing task card to update
@@ -428,12 +428,12 @@ class ChannelEventBridge:
             except Exception as e:
                 logger.warning(f"[EventBridge] Send card failed: {e}")
                 # Fallback to plain text
-                self._send_task_text_fallback(adapter, chat_id, tasks)
+                await self._send_task_text_fallback(adapter, chat_id, tasks)
 
         except Exception as e:
             logger.warning(f"[EventBridge] Task update handling failed: {e}")
             # Fallback to plain text
-            self._send_task_text_fallback(adapter, chat_id, tasks)
+            await self._send_task_text_fallback(adapter, chat_id, tasks)
 
     async def _send_task_text_fallback(
         self,

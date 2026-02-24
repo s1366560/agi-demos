@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class RedisQueueAdapter(QueuePort):
     def __init__(self, redis_client: redis.Redis | None = None) -> None:
         self._settings = get_settings()
-        self._redis = redis_client or redis.from_url(
+        self._redis = redis_client or redis.from_url(  # type: ignore[no-untyped-call]  # redis stubs incomplete
             self._settings.redis_url, encoding="utf-8", decode_responses=True
         )
 

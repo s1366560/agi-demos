@@ -88,7 +88,7 @@ class Message(Entity):
     task_step_index: int | None = None  # Which step this message is for
     thought_level: ThoughtLevel | None = None  # WORK or TASK
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate message consistency."""
         self._validate_tool_matching()
 

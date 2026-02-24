@@ -31,7 +31,7 @@ class FeishuClient:
         self._drive: Any | None = None
         self._bitable: Any | None = None
 
-    def _get_client(self) -> None:
+    def _get_client(self) -> Any:
         """Lazy load Feishu client."""
         if self._client is None:
             try:
@@ -43,7 +43,7 @@ class FeishuClient:
                 )
             except ImportError:
                 raise ImportError("lark_oapi not installed. Run: pip install lark_oapi") from None
-        return cast(None, self._client)
+        return self._client
 
     @property
     def media(self) -> Any:

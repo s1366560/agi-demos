@@ -7,7 +7,7 @@ class TaskRepository(ABC):
     """Repository interface for TaskLog entity"""
 
     @abstractmethod
-    async def save(self, task: TaskLog) -> None:
+    async def save(self, task: TaskLog) -> TaskLog:
         """Save a task log (create or update)"""
 
     @abstractmethod
@@ -27,5 +27,5 @@ class TaskRepository(ABC):
         """List tasks by status"""
 
     @abstractmethod
-    async def delete(self, task_id: str) -> None:
+    async def delete(self, task_id: str) -> bool:
         """Delete a task"""

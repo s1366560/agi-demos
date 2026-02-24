@@ -357,7 +357,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
             List of pending messages
         """
         stream_key = self._get_stream_key(request_id)
-        messages = []
+        messages: list[HITLMessage] = []
 
         try:
             # XPENDING returns summary info, use XPENDING with range for details

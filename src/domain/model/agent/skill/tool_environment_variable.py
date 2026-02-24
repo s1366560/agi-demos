@@ -52,7 +52,7 @@ class ToolEnvironmentVariable(Entity):
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate the entity after initialization."""
         if not self.tenant_id:
             raise ValueError("tenant_id is required")

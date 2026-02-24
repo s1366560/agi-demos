@@ -98,7 +98,8 @@ class RequestQueue:
 
             # Process the request
             self._processing[request.request_id] = request
-            request.started_at = datetime.now(UTC)
+            started = datetime.now(UTC)
+            request.started_at = started
 
             try:
                 # Execute with timeout
@@ -109,7 +110,7 @@ class RequestQueue:
                 request.future.set_result(result)
                 logger.debug(
                     f"Request {request.request_id} completed in "
-                    f"{(request.completed_at - request.started_at).total_seconds():.2f}s"
+                    f"{(datetime.now(UTC) - started).total_seconds():.2f}s"
                 )
             except TimeoutError:
                 request.future.set_exception(TimeoutError("Request timed out"))

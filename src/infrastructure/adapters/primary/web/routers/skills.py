@@ -61,7 +61,7 @@ class SkillCreate(BaseModel):
     trigger_patterns: list[TriggerPatternCreate] = Field(
         default_factory=list, description="Trigger patterns"
     )
-    tools: list[str] = Field(..., min_items=1, description="List of tool names")
+    tools: list[str] = Field(..., min_length=1, description="List of tool names")
     prompt_template: str | None = Field(None, description="Optional prompt template")
     full_content: str | None = Field(None, description="Full SKILL.md content")
     project_id: str | None = Field(
@@ -80,7 +80,7 @@ class SkillUpdate(BaseModel):
     description: str | None = Field(None, min_length=1)
     trigger_type: str | None = Field(None)
     trigger_patterns: list[TriggerPatternCreate] | None = Field(None)
-    tools: list[str] | None = Field(None, min_items=1)
+    tools: list[str] | None = Field(None, min_length=1)
     prompt_template: str | None = Field(None)
     full_content: str | None = Field(None, description="Full SKILL.md content")
     status: str | None = Field(None)
@@ -169,7 +169,7 @@ async def create_skill(
     data: SkillCreate,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> skill_to_response:
+) -> SkillResponse:
     """
     Create a new skill.
 
@@ -300,7 +300,7 @@ async def get_skill(
     skill_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> skill_to_response:
+) -> SkillResponse:
     """
     Get a specific skill by ID.
     """
@@ -331,7 +331,7 @@ async def update_skill(
     data: SkillUpdate,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> skill_to_response:
+) -> SkillResponse:
     """
     Update an existing skill.
     """
@@ -453,7 +453,7 @@ async def update_skill_status(
     status_value: str = Query(..., alias="status", description="New status"),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> skill_to_response:
+) -> SkillResponse:
     """
     Update skill status (active, disabled, deprecated).
     """
@@ -657,7 +657,7 @@ async def update_skill_content(
     data: SkillContentUpdate,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-) -> skill_to_response:
+) -> SkillResponse:
     """
     Update the full content of a skill.
 
@@ -840,7 +840,7 @@ async def rollback_skill(
     request_body: SkillRollbackRequest,
     db: AsyncSession = Depends(get_db),
     tenant: dict[str, Any] = Depends(get_current_user_tenant),
-) -> skill_to_response:
+) -> SkillResponse:
     """Rollback a skill to a specific version. Creates a new version entry."""
     from pathlib import Path
 

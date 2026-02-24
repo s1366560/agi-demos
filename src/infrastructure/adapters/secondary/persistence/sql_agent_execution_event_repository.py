@@ -55,7 +55,7 @@ class SqlAgentExecutionEventRepository(
 
     # === Interface implementation (event-specific queries) ===
 
-    async def save(self, event: AgentExecutionEvent) -> None:
+    async def save(self, event: AgentExecutionEvent) -> AgentExecutionEvent:
         """Save an agent execution event with idempotency guarantee."""
         stmt = (
             insert(DBAgentExecutionEvent)
@@ -75,7 +75,7 @@ class SqlAgentExecutionEventRepository(
         )
         await self._session.execute(stmt)
         await self._session.flush()
-
+        return event
     async def save_and_commit(self, event: AgentExecutionEvent) -> None:
         """Save an event and commit immediately."""
         await self.save(event)

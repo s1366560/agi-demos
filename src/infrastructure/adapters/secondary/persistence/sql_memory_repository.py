@@ -23,7 +23,7 @@ class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
 
-    async def save(self, memory: Memory) -> None:
+    async def save(self, memory: Memory) -> Memory:
         """Save a memory (create or update)."""
         result = await self._session.execute(select(DBMemory).where(DBMemory.id == memory.id))
         db_memory = result.scalar_one_or_none()
@@ -49,6 +49,7 @@ class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
             self._session.add(db_memory)
 
         await self._session.flush()
+        return memory
 
     async def find_by_id(self, memory_id: str) -> Memory | None:
         """Find a memory by ID."""
@@ -60,9 +61,9 @@ class SqlMemoryRepository(BaseRepository[Memory, DBMemory], MemoryRepository):
         """List all memories for a project."""
         return await self.list_all(limit=limit, offset=offset, project_id=project_id)
 
-    async def delete(self, memory_id: str) -> None:
+    async def delete(self, memory_id: str) -> bool:
         """Delete a memory."""
-        await super().delete(memory_id)
+        return await super().delete(memory_id)
 
     def _to_domain(self, db_memory: DBMemory | None) -> Memory | None:
         """Convert database model to domain model."""

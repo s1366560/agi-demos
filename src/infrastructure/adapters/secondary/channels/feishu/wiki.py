@@ -1,6 +1,7 @@
 """Feishu Wiki (Knowledge Base) operations."""
 
 import logging
+from collections.abc import Iterator
 from typing import Any, cast
 
 from src.infrastructure.adapters.secondary.channels.feishu.client import FeishuClient
@@ -224,7 +225,7 @@ class WikiSearchResult:
         self.has_more = data.get("has_more", False)
         self.items = data.get("items", [])
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Any]:
         return iter(self.items)
 
     def __len__(self) -> int:

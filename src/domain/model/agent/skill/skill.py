@@ -84,7 +84,7 @@ class TriggerPattern:
     weight: float = 1.0
     examples: list[str] = field(default_factory=list)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate the trigger pattern."""
         if not self.pattern:
             raise ValueError("pattern cannot be empty")
@@ -187,7 +187,7 @@ class Skill:
     _DESCRIPTION_MAX_LENGTH = 1024
     _COMPATIBILITY_MAX_LENGTH = 500
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate the skill."""
         if not self.id:
             raise ValueError("id cannot be empty")

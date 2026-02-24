@@ -47,11 +47,12 @@ class SqlExecutionCheckpointRepository(
 
     # === Interface implementation (checkpoint-specific queries) ===
 
-    async def save(self, checkpoint: ExecutionCheckpoint) -> None:
+    async def save(self, checkpoint: ExecutionCheckpoint) -> ExecutionCheckpoint:
         """Save an execution checkpoint."""
         db_checkpoint = self._to_db(checkpoint)
         self._session.add(db_checkpoint)
         await self._session.flush()
+        return checkpoint
 
     async def save_and_commit(self, checkpoint: ExecutionCheckpoint) -> None:
         """Save a checkpoint and commit immediately."""

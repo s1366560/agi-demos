@@ -46,7 +46,7 @@ class SkillResource:
     content_hash: str | None = None
     is_binary: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate resource data."""
         if not self.virtual_path:
             raise ValueError("virtual_path is required")

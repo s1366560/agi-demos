@@ -247,7 +247,7 @@ class SqlToolEnvironmentVariableRepository(
         )
         return env_var
 
-    async def delete(self, env_var_id: str) -> None:
+    async def delete(self, env_var_id: str) -> bool:
         """Delete an environment variable by ID."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             ToolEnvironmentVariableRecord,
@@ -263,7 +263,7 @@ class SqlToolEnvironmentVariableRepository(
             raise ValueError(f"Environment variable not found: {env_var_id}")
 
         logger.info(f"Deleted env var: {env_var_id}")
-
+        return True
     async def delete_by_tool(
         self,
         tenant_id: str,

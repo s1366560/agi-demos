@@ -124,7 +124,7 @@ class HITLMessageBusPort(ABC):
         """
 
     @abstractmethod
-    async def subscribe_for_response(
+    def subscribe_for_response(
         self,
         request_id: str,
         consumer_group: str,

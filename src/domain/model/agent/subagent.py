@@ -52,7 +52,7 @@ class AgentTrigger:
     examples: list[str] = field(default_factory=list)
     keywords: list[str] = field(default_factory=list)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate the trigger."""
         if not self.description:
             raise ValueError("description cannot be empty")
@@ -146,7 +146,7 @@ class SubAgent:
     source: SubAgentSource = SubAgentSource.DATABASE
     file_path: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate the subagent."""
         if not self.id:
             raise ValueError("id cannot be empty")

@@ -279,7 +279,7 @@ class Artifact(Entity):
     metadata: dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Auto-detect category from mime_type if not set."""
         if self.category == ArtifactCategory.OTHER and self.mime_type:
             self.category = get_category_from_mime(self.mime_type)

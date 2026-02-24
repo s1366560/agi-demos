@@ -109,7 +109,7 @@ class SandboxArtifactIntegration:
         Returns:
             List of artifact IDs created
         """
-        artifact_ids = []
+        artifact_ids: list[str] = []
 
         # Get known files for this sandbox
         known = self._known_files.get(sandbox_id, set())
@@ -373,7 +373,7 @@ async def extract_artifacts_from_text(
     import base64
     import re
 
-    artifacts = []
+    artifacts: list[dict[str, Any]] = []
 
     # Pattern for base64 data URLs (e.g., data:image/png;base64,...)
     data_url_pattern = r"data:([a-zA-Z0-9]+/[a-zA-Z0-9\-+.]+);base64,([A-Za-z0-9+/=]+)"
@@ -438,7 +438,7 @@ def extract_artifacts_from_mcp_result(
     """
     import base64
 
-    artifacts = []
+    artifacts: list[dict[str, Any]] = []
     content_items = result.get("content", [])
 
     if not content_items:

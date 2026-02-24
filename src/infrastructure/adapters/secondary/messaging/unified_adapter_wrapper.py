@@ -172,7 +172,7 @@ class UnifiedAgentEventBusAdapter(AgentEventBusPort):
         # Use pattern matching for this specific stream
         pattern = f"{self._prefix}.{conversation_id}.{message_id}"
 
-        async for event_with_meta in await self._unified.subscribe(pattern, options):
+        async for event_with_meta in self._unified.subscribe(pattern, options):
             agent_event = self._envelope_to_agent_event(
                 event_with_meta.envelope,
                 event_with_meta.sequence_id,

@@ -12,6 +12,14 @@ multi-tenant isolation.
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.infrastructure.graph.embedding.embedding_service import EmbeddingService
+    from src.infrastructure.llm.litellm.litellm_client import LiteLLMClient
+    from src.infrastructure.llm.litellm.litellm_embedder import LiteLLMEmbedder
+    from src.infrastructure.llm.litellm.litellm_reranker import LiteLLMReranker
+    from src.infrastructure.llm.litellm.unified_llm_client import UnifiedLLMClient
 
 from src.application.services.provider_resolution_service import (
     ProviderResolutionService,
@@ -70,7 +78,7 @@ class AIServiceFactory:
     def create_llm_client(
         provider_config: ProviderConfig,
         cache: bool | None = None,
-    ):
+    ) -> "LiteLLMClient":
         """Create a ``LiteLLMClient`` from a resolved provider config.
 
         Returns:
@@ -84,7 +92,7 @@ class AIServiceFactory:
     def create_unified_llm_client(
         provider_config: ProviderConfig,
         temperature: float = 0.7,
-    ):
+    ) -> "UnifiedLLMClient":
         """Create a ``UnifiedLLMClient`` that wraps LiteLLMClient.
 
         Returns:
@@ -94,7 +102,7 @@ class AIServiceFactory:
         from src.infrastructure.llm.litellm.unified_llm_client import UnifiedLLMClient
 
         litellm_client = create_litellm_client(provider_config)
-        return UnifiedLLMClient(litellm_client=litellm_client, temperature=temperature)
+        return UnifiedLLMClient(litellm_client=litellm_client, temperature=temperature)  # type: ignore[abstract]  # UnifiedLLMClient implements all abstract methods via delegation
 
     # ------------------------------------------------------------------
     # Embedder
@@ -104,7 +112,7 @@ class AIServiceFactory:
     def create_embedder(
         provider_config: ProviderConfig,
         embedding_dim: int | None = None,
-    ):
+    ) -> "LiteLLMEmbedder":
         """Create a ``LiteLLMEmbedder`` from a resolved provider config.
 
         The embedder uses ``ProviderConfig.embedding_model`` (falls back to
@@ -122,7 +130,7 @@ class AIServiceFactory:
     def create_embedding_service(
         provider_config: ProviderConfig,
         embedding_dim: int | None = None,
-    ):
+    ) -> "EmbeddingService":
         """Create an ``EmbeddingService`` wrapping a LiteLLM embedder.
 
         Returns:
@@ -141,7 +149,7 @@ class AIServiceFactory:
     @staticmethod
     def create_reranker(
         provider_config: ProviderConfig,
-    ):
+    ) -> "LiteLLMReranker":
         """Create a ``LiteLLMReranker`` from a resolved provider config.
 
         Returns:

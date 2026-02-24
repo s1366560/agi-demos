@@ -20,7 +20,7 @@ class EventBusPort(ABC):
         """
 
     @abstractmethod
-    async def subscribe(self, channel: str) -> AsyncIterator[dict[str, Any]]:
+    def subscribe(self, channel: str) -> AsyncIterator[dict[str, Any]]:
         """
         Subscribe to a channel (Pub/Sub).
 
@@ -55,7 +55,7 @@ class EventBusPort(ABC):
         """
 
     @abstractmethod
-    async def stream_read(
+    def stream_read(
         self,
         stream_key: str,
         last_id: str = "0",
@@ -76,7 +76,7 @@ class EventBusPort(ABC):
         """
 
     @abstractmethod
-    async def stream_read_group(
+    def stream_read_group(
         self,
         stream_key: str,
         group_name: str,

@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis
@@ -466,7 +467,7 @@ class DistributedTransaction:
             raise RuntimeError("PostgreSQL not configured")
 
         self._context.operations.append(f"postgres:{query[:50]}")
-        return await self._context.pg_session.execute(query, params)
+        return await self._context.pg_session.execute(text(query), params)
 
     async def execute_neo4j(self, query: str, **params: Any) -> Any:
         """

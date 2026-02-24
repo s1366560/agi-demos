@@ -57,7 +57,7 @@ class TransportConfig:
     heartbeat_interval: int = 30  # seconds
     reconnect_attempts: int = 3
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate configuration based on transport type."""
         if self.transport_type in (TransportType.LOCAL, TransportType.STDIO):
             if not self.command:

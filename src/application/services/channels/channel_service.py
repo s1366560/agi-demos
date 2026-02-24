@@ -182,7 +182,8 @@ class ChannelService:
 
     def _handle_message(self, message: Message) -> None:
         """Internal handler for incoming messages."""
-        logger.debug(f"Received message from {message.channel}: {message.content.text[:50]}")
+        text = message.content.text or ""
+        logger.debug(f"Received message from {message.channel}: {text[:50]}")
 
         for handler in self._message_handlers:
             try:

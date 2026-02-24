@@ -89,7 +89,7 @@ class CachedWorkflowPatternRepository(WorkflowPatternRepositoryPort):
 
         return updated
 
-    async def delete(self, pattern_id: str) -> None:
+    async def delete(self, pattern_id: str) -> bool:
         """Delete a pattern and remove from cache."""
         # Get pattern first to invalidate tenant list
         pattern = await self.get_by_id(pattern_id)
@@ -105,6 +105,8 @@ class CachedWorkflowPatternRepository(WorkflowPatternRepositoryPort):
         # Invalidate tenant list cache
         if tenant_id:
             await self._invalidate_tenant_list(tenant_id)
+
+        return True
 
     async def list_by_tenant(
         self,

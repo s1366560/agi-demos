@@ -30,7 +30,7 @@ class SqlToolExecutionRecordRepository(
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
 
-    async def save(self, record: ToolExecutionRecord) -> None:
+    async def save(self, record: ToolExecutionRecord) -> ToolExecutionRecord:
         """Save a tool execution record (create or update)."""
         result = await self._session.execute(
             select(DBToolExecutionRecord).where(DBToolExecutionRecord.id == record.id)
@@ -65,6 +65,7 @@ class SqlToolExecutionRecordRepository(
             self._session.add(db_record)
 
         await self._session.flush()
+        return record
 
     async def save_and_commit(self, record: ToolExecutionRecord) -> None:
         """Save a tool execution record and commit immediately."""
@@ -100,7 +101,7 @@ class SqlToolExecutionRecordRepository(
             .limit(limit)
         )
         db_records = result.scalars().all()
-        return [self._to_domain(r) for r in db_records]
+        return [d for r in db_records if (d := self._to_domain(r)) is not None]
 
     async def list_by_conversation(
         self,
@@ -115,7 +116,7 @@ class SqlToolExecutionRecordRepository(
             .limit(limit)
         )
         db_records = result.scalars().all()
-        return [self._to_domain(r) for r in db_records]
+        return [d for r in db_records if (d := self._to_domain(r)) is not None]
 
     async def delete_by_conversation(self, conversation_id: str) -> None:
         """Delete all tool execution records in a conversation."""
@@ -154,8 +155,10 @@ class SqlToolExecutionRecordRepository(
         await self._session.commit()
 
     @staticmethod
-    def _to_domain(db_record: DBToolExecutionRecord) -> ToolExecutionRecord:
+    def _to_domain(db_record: DBToolExecutionRecord | None) -> ToolExecutionRecord | None:
         """Convert database model to domain model."""
+        if db_record is None:
+            return None
         return ToolExecutionRecord(
             id=db_record.id,
             conversation_id=db_record.conversation_id,

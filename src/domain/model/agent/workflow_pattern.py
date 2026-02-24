@@ -34,7 +34,7 @@ class PatternStep:
     similarity_threshold: float = 0.8
     tool_parameters: dict[str, Any] | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate the pattern step."""
         if self.step_number < 1:
             raise ValueError("step_number must be >= 1")
@@ -104,7 +104,7 @@ class WorkflowPattern:
     updated_at: datetime
     metadata: dict[str, Any] | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate the workflow pattern."""
         if not self.id:
             raise ValueError("id cannot be empty")

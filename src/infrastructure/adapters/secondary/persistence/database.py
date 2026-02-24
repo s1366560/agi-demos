@@ -29,7 +29,7 @@ async_session_factory = async_sessionmaker(engine, expire_on_commit=False, class
 # Read replica support for read scaling (optional)
 # If a read replica is configured, create a separate engine for read operations
 read_engine: None | object = None
-read_session_factory: None | object = None
+read_session_factory: async_sessionmaker[AsyncSession] | None = None
 
 if settings.postgres_read_replica_host:
     read_url = (

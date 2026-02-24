@@ -3,26 +3,23 @@ V2 SQLAlchemy implementation of ToolCompositionRepositoryPort using BaseReposito
 """
 
 import logging
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import Any, Optional, cast
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.engine import CursorResult
 
+from src.domain.model.agent import ToolComposition
 from src.domain.ports.repositories.tool_composition_repository import ToolCompositionRepositoryPort
 from src.infrastructure.adapters.secondary.common.base_repository import BaseRepository
 from src.infrastructure.adapters.secondary.persistence.models import (
     ToolComposition as DBToolComposition,
 )
-
-if TYPE_CHECKING:
-    from src.domain.model.agent import ToolComposition
-
 logger = logging.getLogger(__name__)
 
 
 class SqlToolCompositionRepository(
-    BaseRepository[object, DBToolComposition], ToolCompositionRepositoryPort
+    BaseRepository[ToolComposition, DBToolComposition], ToolCompositionRepositoryPort
 ):
     """V2 SQLAlchemy implementation of ToolCompositionRepositoryPort using BaseRepository."""
 
@@ -68,7 +65,9 @@ class SqlToolCompositionRepository(
         await self._session.flush()
         await self._session.refresh(db_composition)
 
-        return self._to_domain(db_composition)
+        result_domain = self._to_domain(db_composition)
+        assert result_domain is not None  # db_composition was just refreshed
+        return result_domain
 
     async def get_by_id(self, composition_id: str) -> Optional["ToolComposition"]:
         """Get a tool composition by its ID."""
@@ -100,15 +99,15 @@ class SqlToolCompositionRepository(
             if tool_name_set.intersection(comp_tools):
                 matching_compositions.append(comp)
 
-        return [self._to_domain(c) for c in matching_compositions]
+        return [d for c in matching_compositions if (d := self._to_domain(c)) is not None]
 
-    async def list_all(self, limit: int = 100) -> list["ToolComposition"]:
+    async def list_all(self, limit: int = 100, offset: int = 0, **filters: Any) -> list["ToolComposition"]:
         """List all tool compositions."""
         result = await self._session.execute(
             select(DBToolComposition).order_by(DBToolComposition.usage_count.desc()).limit(limit)
         )
         db_compositions = result.scalars().all()
-        return [self._to_domain(c) for c in db_compositions]
+        return [d for c in db_compositions if (d := self._to_domain(c)) is not None]
 
     async def update_usage(
         self,
@@ -144,9 +143,10 @@ class SqlToolCompositionRepository(
         return cast(CursorResult[Any], result).rowcount > 0
 
     @staticmethod
-    def _to_domain(db_composition: DBToolComposition) -> "ToolComposition":
+    def _to_domain(db_composition: DBToolComposition | None) -> ToolComposition | None:
         """Convert database model to domain model."""
-        from src.domain.model.agent import ToolComposition
+        if db_composition is None:
+            return None
 
         return ToolComposition(
             id=db_composition.id,

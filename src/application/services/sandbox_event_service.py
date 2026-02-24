@@ -4,7 +4,7 @@ Publishes sandbox lifecycle and status events to Redis streams.
 """
 
 import logging
-from typing import Any, cast
+from typing import Any
 
 from src.domain.events.agent_events import (
     AgentDesktopStartedEvent,
@@ -193,7 +193,7 @@ class SandboxEventPublisher:
         message_id = await self._event_bus.stream_add(stream_key, event_data, maxlen=1000)
 
         # Also publish to Pub/Sub for real-time
-        await self._event_bus.publish(stream_key, cast(dict[str, Any], event_dict))
+        await self._event_bus.publish(stream_key, event_data)
 
         logger.info(
             f"[SandboxEvent] Published {event.event_type.value} "

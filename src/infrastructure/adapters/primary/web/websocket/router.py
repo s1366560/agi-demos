@@ -27,6 +27,7 @@ from src.infrastructure.adapters.primary.web.routers.event_dispatcher import (
 )
 from src.infrastructure.adapters.primary.web.websocket.auth import authenticate_websocket
 from src.infrastructure.adapters.primary.web.websocket.connection_manager import (
+    ConnectionManager,
     get_connection_manager,
 )
 from src.infrastructure.adapters.primary.web.websocket.message_context import MessageContext
@@ -205,6 +206,6 @@ async def get_dispatcher_stats() -> dict[str, Any]:
 
 
 # Export manager for use in other modules (e.g., websocket_notifier.py)
-def get_ws_connection_manager() -> get_connection_manager:
+def get_ws_connection_manager() -> ConnectionManager:
     """Get the global connection manager instance for external use."""
     return get_connection_manager()

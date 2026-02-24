@@ -1,6 +1,7 @@
 """Feishu Drive (Cloud Storage) operations."""
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, BinaryIO, cast
 
@@ -328,7 +329,7 @@ class DriveSearchResult:
         self.has_more = data.get("has_more", False)
         self.files = data.get("files", [])
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Any]:
         return iter(self.files)
 
     def __len__(self) -> int:

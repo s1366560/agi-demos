@@ -583,7 +583,7 @@ class AgentService(AgentServicePort):
             )
             for me in msg_events:
                 if me.event_type == "user_message":
-                    return (
+                    return str(
                         me.event_data.get("content", "") if isinstance(me.event_data, dict) else ""
                     )
         except Exception:
@@ -1095,7 +1095,7 @@ class AgentService(AgentServicePort):
 
             provider_config = await get_or_create_provider_config()
             litellm_client = await get_or_create_llm_client(provider_config)
-            return UnifiedLLMClient(litellm_client=litellm_client)
+            return UnifiedLLMClient(litellm_client=litellm_client)  # type: ignore[abstract]  # UnifiedLLMClient implements all abstract methods via delegation
         except Exception as e:
             logger.warning(
                 f"[AgentService] Failed to get DB provider for title generation, "

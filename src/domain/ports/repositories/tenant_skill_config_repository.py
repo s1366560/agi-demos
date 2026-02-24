@@ -78,7 +78,7 @@ class TenantSkillConfigRepositoryPort(ABC):
         """
 
     @abstractmethod
-    async def delete(self, config_id: str) -> None:
+    async def delete(self, config_id: str) -> bool:
         """
         Delete a config by ID.
 

@@ -50,12 +50,13 @@ class SqlAlchemyMemoryRepository(MemoryRepository):
             updated_at=entity.updated_at,
         )
 
-    async def save(self, memory: Memory) -> None:
+    async def save(self, memory: Memory) -> Memory:
         model = self._to_model(memory)
         # Check if exists to merge or add
         # Simple merge for now
         await self._session.merge(model)
         await self._session.commit()
+        return memory
 
     async def find_by_id(self, memory_id: str) -> Memory | None:
         result = await self._session.execute(select(MemoryModel).where(MemoryModel.id == memory_id))
@@ -74,6 +75,7 @@ class SqlAlchemyMemoryRepository(MemoryRepository):
         models = result.scalars().all()
         return [self._to_domain(m) for m in models]
 
-    async def delete(self, memory_id: str) -> None:
+    async def delete(self, memory_id: str) -> bool:
         await self._session.execute(delete(MemoryModel).where(MemoryModel.id == memory_id))
         await self._session.commit()
+        return True

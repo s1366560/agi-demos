@@ -1070,7 +1070,7 @@ async def migrate_embeddings(
         # Get existing embeddings info
         result = await _query_entity_embeddings(neo4j_client, project_id)
         total_count = 0
-        dimension_groups = {}
+        dimension_groups: dict[str, int] = {}
         for record in result.records:
             count = record.get("count", 0)
             dim = record.get("dim") or record.get("actual_dim")

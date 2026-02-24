@@ -390,8 +390,9 @@ class ReflexionChecker:
             return []
 
         # Generate embeddings in batch
+        embeddings: list[list[float] | None]
         try:
-            embeddings = await self._embedding_service.embed_batch(names)
+            embeddings = cast(list[list[float] | None], await self._embedding_service.embed_batch(names))
         except Exception as e:
             logger.error(f"Failed to generate embeddings: {e}")
             embeddings = [None] * len(names)

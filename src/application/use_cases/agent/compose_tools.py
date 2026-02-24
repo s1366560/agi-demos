@@ -389,7 +389,7 @@ class ComposeToolsUseCase:
         if not tool_condition:
             return True  # No condition = always execute
         return self._check_condition_type(
-            condition_type, tool_condition, current_output, execution_context
+            tool_condition.get("type", "always"), tool_condition, current_output, execution_context
         )
 
     def _check_condition_type(

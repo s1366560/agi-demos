@@ -90,7 +90,7 @@ class SqlPromptTemplateRepository(PromptTemplateRepository):
         db_model = await self._session.get(PromptTemplateModel, template_id)
         if not db_model:
             return False
-        self._session.delete(db_model)
+        await self._session.delete(db_model)
         await self._session.flush()
         return True
 

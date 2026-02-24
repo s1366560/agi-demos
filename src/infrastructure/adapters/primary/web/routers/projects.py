@@ -205,11 +205,11 @@ async def list_projects(
             .group_by(UserProject.project_id)
         )
         member_stats: dict[str, int] = {
-            row.project_id: int(row.count) for row in member_stats_result.fetchall()
+            row.project_id: int(row._mapping["count"]) for row in member_stats_result.fetchall()
         }
 
         # Graph stats for active nodes
-        node_stats = {}
+        node_stats: dict[str, int] = {}
         # TODO: Implement bulk stats fetch if possible, or skip for performance
         # For now we assume we might skip or do it individually if critical
         # The original code called graphiti_service.get_graph_stats(project_id)

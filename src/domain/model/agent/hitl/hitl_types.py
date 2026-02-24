@@ -314,7 +314,7 @@ class HITLRequest:
     project_id: str | None = None
     user_id: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if self.expires_at is None:
             from datetime import timedelta
 

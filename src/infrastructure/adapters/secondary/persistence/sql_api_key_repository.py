@@ -45,13 +45,14 @@ class SqlAPIKeyRepository(BaseRepository[APIKey, DBAPIKey], APIKeyRepository):
         db_keys = result.scalars().all()
         return [d for k in db_keys if (d := self._to_domain(k)) is not None]
 
-    async def delete(self, key_id: str) -> None:
+    async def delete(self, key_id: str) -> bool:
         """Delete an API key."""
         db_key = await self._find_db_model_by_id(key_id)
         if db_key:
             await self._session.delete(db_key)
             await self._session.flush()
-
+            return True
+        return False
     async def update_last_used(self, key_id: str, timestamp: datetime) -> None:
         """Update the last_used_at timestamp."""
         db_key = await self._find_db_model_by_id(key_id)

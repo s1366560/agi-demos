@@ -112,7 +112,7 @@ class MCPServerConfig:
     # Common config
     timeout: int = 30000  # milliseconds
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validate configuration based on transport type."""
         if self.transport_type == TransportType.LOCAL:
             if not self.command:
