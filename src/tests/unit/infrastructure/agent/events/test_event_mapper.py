@@ -554,7 +554,7 @@ class TestEventIntegration:
 
     def test_filtered_stream(self) -> None:
         """Should create filtered SSE stream."""
-        bus = EventBus()  # noqa: F841
+        bus = EventBus()
         mapper = EventMapper()
 
         # Filter out thought events

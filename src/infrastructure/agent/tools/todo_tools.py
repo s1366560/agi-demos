@@ -247,41 +247,51 @@ class TodoWriteTool(AgentTool):
                 }
 
             elif action == "update":
-                if not todo_id:
-                    result = {"success": False, "error": "todo_id required for update"}
-                else:
-                    updates = {}
-                    if todos and len(todos) > 0:
-                        updates = {k: v for k, v in todos[0].items() if k != "id"}
-                    updated = await repo.update(todo_id, **updates)
-                    await session.commit()
-
-                    if updated:
-                        self._pending_events.append(
-                            {
-                                "type": "task_updated",
-                                "conversation_id": session_id,
-                                "task_id": todo_id,
-                                "status": updated.status.value,
-                                "content": updated.content,
-                            }
-                        )
-                        result = {
-                            "success": True,
-                            "action": "update",
-                            "todo_id": todo_id,
-                            "message": f"Updated task {todo_id}",
-                        }
-                    else:
-                        result = {
-                            "success": False,
-                            "action": "update",
-                            "todo_id": todo_id,
-                            "message": f"Task {todo_id} not found",
-                        }
+                result = await self._handle_update(repo, session, session_id, todo_id, todos)
 
         logger.info(f"todowrite: {action} completed for {session_id}")
         return json.dumps(result, indent=2)
+
+    async def _handle_update(
+        self,
+        repo: Any,
+        session: Any,
+        session_id: str,
+        todo_id: str | None,
+        todos: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Handle the 'update' action for a single task."""
+        if not todo_id:
+            return {"success": False, "error": "todo_id required for update"}
+
+        updates = {}
+        if todos and len(todos) > 0:
+            updates = {k: v for k, v in todos[0].items() if k != "id"}
+        updated = await repo.update(todo_id, **updates)
+        await session.commit()
+
+        if updated:
+            self._pending_events.append(
+                {
+                    "type": "task_updated",
+                    "conversation_id": session_id,
+                    "task_id": todo_id,
+                    "status": updated.status.value,
+                    "content": updated.content,
+                }
+            )
+            return {
+                "success": True,
+                "action": "update",
+                "todo_id": todo_id,
+                "message": f"Updated task {todo_id}",
+            }
+        return {
+            "success": False,
+            "action": "update",
+            "todo_id": todo_id,
+            "message": f"Task {todo_id} not found",
+        }
 
 
 # =============================================================================

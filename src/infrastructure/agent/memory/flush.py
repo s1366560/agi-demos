@@ -108,6 +108,26 @@ class MemoryFlushService:
 
         # Store via chunk repo
         chunk_repo = await self._get_chunk_repo()
+        flushed = await self._process_and_store_items(
+            items, chunk_repo, project_id, conversation_id
+        )
+
+        self.last_flush_count = flushed
+        if flushed > 0:
+            logger.info(
+                f"[MemoryFlush] Flushed {flushed} memories before compaction "
+                f"(conversation={conversation_id})"
+            )
+        return flushed
+
+    async def _process_and_store_items(
+        self,
+        items: list[dict],
+        chunk_repo: Any | None,
+        project_id: str,
+        conversation_id: str,
+    ) -> int:
+        """Process extracted items and store valid ones. Returns count stored."""
         flushed = 0
         session_to_close = None
 
@@ -116,27 +136,8 @@ class MemoryFlushService:
                 session_to_close = getattr(chunk_repo, "_session", None)
 
             for item in items:
-                content = item.get("content", "").strip()
-                category = item.get("category", "other")
-                if category not in VALID_CATEGORIES:
-                    category = "other"
-                if not content or len(content) < 3:
-                    continue
-                if looks_like_prompt_injection(content):
-                    continue
-
-                embedding = None
-                if self._embedding:
-                    try:
-                        embedding = await self._embedding.embed_text_safe(content)
-                        if embedding and chunk_repo:
-                            if await self._is_duplicate(chunk_repo, embedding, project_id):
-                                continue
-                    except Exception:
-                        pass
-
-                stored = await self._store_chunk(
-                    chunk_repo, content, category, embedding, project_id, conversation_id
+                stored = await self._process_flush_item(
+                    item, chunk_repo, project_id, conversation_id
                 )
                 if stored:
                     flushed += 1
@@ -152,13 +153,56 @@ class MemoryFlushService:
             if session_to_close:
                 await session_to_close.close()
 
-        self.last_flush_count = flushed
-        if flushed > 0:
-            logger.info(
-                f"[MemoryFlush] Flushed {flushed} memories before compaction "
-                f"(conversation={conversation_id})"
-            )
         return flushed
+
+    async def _process_flush_item(
+        self,
+        item: dict,
+        chunk_repo: Any | None,
+        project_id: str,
+        conversation_id: str,
+    ) -> bool:
+        """Process a single flush item. Returns True if stored."""
+        content = item.get("content", "").strip()
+        category = item.get("category", "other")
+        if category not in VALID_CATEGORIES:
+            category = "other"
+        if not content or len(content) < 3:
+            return False
+        if looks_like_prompt_injection(content):
+            return False
+
+        embedding = await self._get_embedding_with_dedup(content, chunk_repo, project_id)
+        if embedding is False:
+            return False
+
+        return await self._store_chunk(
+            chunk_repo, content, category, embedding, project_id, conversation_id
+        )
+
+    async def _get_embedding_with_dedup(
+        self,
+        content: str,
+        chunk_repo: Any | None,
+        project_id: str,
+    ) -> list[float] | None | bool:
+        """Get embedding and check for duplicates.
+
+        Returns:
+            list[float]: embedding vector if available
+            None: no embedding service or embedding failed
+            False: duplicate detected, should skip this item
+        """
+        if not self._embedding:
+            return None
+        try:
+            embedding = await self._embedding.embed_text_safe(content)
+            if embedding and chunk_repo:
+                if await self._is_duplicate(chunk_repo, embedding, project_id):
+                    return False
+            return embedding
+        except Exception:
+            return None
 
     def _format_conversation(self, messages: list[dict], max_chars: int = 8000) -> str:
         """Format messages into a compact text for LLM analysis."""

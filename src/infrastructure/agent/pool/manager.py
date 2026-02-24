@@ -299,13 +299,10 @@ class AgentPoolManager:
         metrics: ProjectMetrics | None = None,
     ) -> ProjectTier:
         """对项目进行分级.
-
         Args:
             tenant_id: 租户ID
             project_id: 项目ID
             metrics: 项目指标 (可选)
-
-        Returns:
             项目分级
         """
         if metrics is None:
@@ -313,41 +310,7 @@ class AgentPoolManager:
             # TODO: 从数据库获取历史指标
             return ProjectTier.WARM
 
-        # 计算综合得分
-        score = 0
-
-        # 请求频率 (权重 40%)
-        if metrics.daily_requests > 1000:
-            score += 40
-        elif metrics.daily_requests > 100:
-            score += 25
-        else:
-            score += 10
-
-        # 付费等级 (权重 30%)
-        subscription_scores = {
-            "enterprise": 30,
-            "professional": 20,
-            "basic": 10,
-            "free": 5,
-        }
-        score += subscription_scores.get(metrics.subscription_tier, 5)
-
-        # SLA要求 (权重 20%)
-        if metrics.sla_requirement >= 0.999:
-            score += 20
-        elif metrics.sla_requirement >= 0.995:
-            score += 15
-        else:
-            score += 5
-
-        # 并发要求 (权重 10%)
-        if metrics.max_concurrent > 10:
-            score += 10
-        elif metrics.max_concurrent > 3:
-            score += 7
-        else:
-            score += 3
+        score = self._compute_project_score(metrics)
 
         # 分级
         if score >= 80:
@@ -356,6 +319,37 @@ class AgentPoolManager:
             return ProjectTier.WARM
         else:
             return ProjectTier.COLD
+    @staticmethod
+    def _compute_project_score(metrics: ProjectMetrics) -> int:
+        """Compute composite score from project metrics."""
+        score = 0
+        if metrics.daily_requests > 1000:
+            score += 40
+        elif metrics.daily_requests > 100:
+            score += 25
+        else:
+            score += 10
+        # 付费等级 (权重 30%)
+        subscription_scores = {
+            "enterprise": 30,
+            "professional": 20,
+            "basic": 10,
+            "free": 5,
+        }
+        score += subscription_scores.get(metrics.subscription_tier, 5)
+        if metrics.sla_requirement >= 0.999:
+            score += 20
+        elif metrics.sla_requirement >= 0.995:
+            score += 15
+        else:
+            score += 5
+        if metrics.max_concurrent > 10:
+            score += 10
+        elif metrics.max_concurrent > 3:
+            score += 7
+        else:
+            score += 3
+        return score
 
     async def get_instance(
         self,

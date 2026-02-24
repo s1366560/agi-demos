@@ -135,47 +135,36 @@ class MemoryCapturePostprocessor:
         # Get chunk repo (may create a new DB session)
         chunk_repo = await self._get_chunk_repo()
 
+        captured, categories = await self._process_and_store_items(
+            items, chunk_repo, project_id, conversation_id
+        )
+
+        self.last_categories = categories
+        return captured
+
+    async def _process_and_store_items(
+        self,
+        items: list[dict],
+        chunk_repo: Any,
+        project_id: str,
+        conversation_id: str,
+    ) -> tuple[int, list[str]]:
+        """Process extracted items and store valid ones as memory chunks."""
         captured = 0
-        categories = []
+        categories: list[str] = []
         session_to_close = None
         try:
-            # Track if we created a new session that needs commit/close
             if chunk_repo and chunk_repo is not self._chunk_repo:
                 session_to_close = getattr(chunk_repo, "_session", None)
 
             for item in items:
-                content = item.get("content", "").strip()
-                category = item.get("category", "other")
-                if category not in VALID_CATEGORIES:
-                    category = "other"
-
-                if not content or len(content) < 3:
-                    continue
-
-                if looks_like_prompt_injection(content):
-                    continue
-
-                # Deduplication via embedding similarity
-                embedding = None
-                if self._embedding:
-                    try:
-                        embedding = await self._embedding.embed_text_safe(content)
-                        if embedding and chunk_repo:
-                            if await self._is_duplicate(chunk_repo, embedding, project_id):
-                                logger.debug(f"Skipping duplicate memory: {content[:50]}")
-                                continue
-                    except Exception as e:
-                        logger.debug(f"Dedup check failed: {e}")
-
-                # Store as chunk
-                stored = await self._store_chunk(
-                    chunk_repo, content, category, embedding, project_id, conversation_id
+                result = await self._process_capture_item(
+                    item, chunk_repo, project_id, conversation_id
                 )
-                if stored:
+                if result:
                     captured += 1
-                    categories.append(category)
+                    categories.append(result)
 
-            # Commit if we created a new session
             if session_to_close and captured > 0:
                 await session_to_close.commit()
         except Exception as e:
@@ -187,8 +176,61 @@ class MemoryCapturePostprocessor:
             if session_to_close:
                 await session_to_close.close()
 
-        self.last_categories = categories
-        return captured
+        return captured, categories
+
+    async def _process_capture_item(
+        self,
+        item: dict,
+        chunk_repo: Any,
+        project_id: str,
+        conversation_id: str,
+    ) -> str | None:
+        """Process a single memory item. Returns category if stored, None otherwise."""
+        content = item.get("content", "").strip()
+        category = item.get("category", "other")
+        if category not in VALID_CATEGORIES:
+            category = "other"
+
+        if not content or len(content) < 3:
+            return None
+
+        if looks_like_prompt_injection(content):
+            return None
+
+        embedding = await self._get_embedding_with_dedup(content, chunk_repo, project_id)
+        if embedding is False:
+            return None
+
+        stored = await self._store_chunk(
+            chunk_repo, content, category, embedding, project_id, conversation_id
+        )
+        return category if stored else None
+
+    async def _get_embedding_with_dedup(
+        self,
+        content: str,
+        chunk_repo: Any,
+        project_id: str,
+    ) -> list[float] | None | bool:
+        """Get embedding and check for duplicates.
+
+        Returns:
+            list[float]: embedding vector if available
+            None: no embedding service or embedding failed
+            False: duplicate detected, should skip this item
+        """
+        if not self._embedding:
+            return None
+        try:
+            embedding = await self._embedding.embed_text_safe(content)
+            if embedding and chunk_repo:
+                if await self._is_duplicate(chunk_repo, embedding, project_id):
+                    logger.debug(f"Skipping duplicate memory: {content[:50]}")
+                    return False
+            return embedding
+        except Exception as e:
+            logger.debug(f"Dedup check failed: {e}")
+            return None
 
     async def _extract_memories(
         self,

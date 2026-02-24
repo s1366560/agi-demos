@@ -885,6 +885,226 @@ async def stop_project_terminal(
 # ============================================================================
 
 
+def _rewrite_desktop_content(
+    content_bytes: bytes,
+    content_type: str,
+    project_id: str,
+    token_param: str,
+) -> bytes:
+    """Rewrite URLs in HTML/JS content to use the desktop proxy path."""
+    import re
+
+    if not (
+        content_type.startswith("text/html") or content_type.startswith("application/javascript")
+    ):
+        return content_bytes
+
+    content_str = content_bytes.decode("utf-8", errors="replace")
+    proxy_prefix = f"/api/v1/projects/{project_id}/sandbox/desktop/proxy/"
+
+    def rewrite_url(match: re.Match) -> str:
+        """Rewrite URL with proxy prefix and token."""
+        attr = match.group(1)
+        quote = match.group(2)
+        path_part = match.group(3)
+        new_url = f"{proxy_prefix}{path_part}"
+        if token_param and "?" not in path_part:
+            new_url = f"{new_url}?token={token_param}"
+        elif token_param and "?" in path_part:
+            new_url = f"{new_url}&token={token_param}"
+        return f"{attr}={quote}{new_url}"
+
+    content_str = re.sub(r'(href|src)=(["\'])/([^"\']*)', rewrite_url, content_str)
+
+    ws_proxy_url = f"/api/v1/projects/{project_id}/sandbox/desktop/proxy/websockify"
+    if token_param:
+        ws_proxy_url += f"?token={token_param}"
+    content_str = content_str.replace(
+        'ws://" + location.host + "/', f'ws://" + location.host + "{ws_proxy_url}'
+    )
+    content_str = content_str.replace(
+        'wss://" + location.host + "/', f'wss://" + location.host + "{ws_proxy_url}'
+    )
+
+    return content_str.encode("utf-8")
+
+
+async def _run_ws_relay_pair(
+    browser_to_upstream: Any,
+    upstream_to_browser: Any,
+) -> None:
+    """Run a pair of WebSocket relay coroutines, cancelling pending on first completion."""
+    browser_task = asyncio.create_task(browser_to_upstream())
+    upstream_task = asyncio.create_task(upstream_to_browser())
+
+    _done, pending = await asyncio.wait(
+        [browser_task, upstream_task],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    for task in pending:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+async def _handle_terminal_input(
+    websocket: WebSocket,
+    proxy: Any,
+    session_id: str,
+) -> None:
+    """Process incoming terminal WebSocket messages (input, resize, ping)."""
+    while True:
+        msg = await websocket.receive_json()
+        msg_type = msg.get("type")
+
+        if msg_type == "input":
+            data = msg.get("data", "")
+            await proxy.send_input(session_id, data)
+        elif msg_type == "resize":
+            cols = msg.get("cols", 80)
+            rows = msg.get("rows", 24)
+            await proxy.resize(session_id, cols, rows)
+        elif msg_type == "ping":
+            await websocket.send_json({"type": "pong"})
+
+
+async def _read_terminal_output_loop(
+    websocket: WebSocket,
+    proxy: Any,
+    session: Any,
+) -> None:
+    """Background task to read and forward terminal output."""
+    while session and session.is_active:
+        try:
+            output = await proxy.read_output(session.session_id)
+            if output is None:
+                break
+            if output:
+                await websocket.send_json({"type": "output", "data": output})
+        except Exception as e:
+            logger.error(f"Output reader error: {e}")
+            break
+        await asyncio.sleep(0.01)
+
+
+def _create_desktop_ssl_context() -> Any:
+    """Create an SSL context that skips certificate verification (for local containers)."""
+    import ssl as ssl_module
+
+    ctx = ssl_module.SSLContext(ssl_module.PROTOCOL_TLS_CLIENT)
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl_module.CERT_NONE
+    return ctx
+
+
+async def _connect_desktop_upstream(ws_target: str, desktop_url: str) -> Any:
+    """Connect to KasmVNC upstream WebSocket with TLS and binary subprotocol."""
+    import websockets
+
+    ssl_context = _create_desktop_ssl_context()
+    return await websockets.connect(
+        ws_target,
+        subprotocols=["binary"],
+        additional_headers={"Origin": desktop_url},
+        max_size=2**23,  # 8MB max frame for desktop data
+        open_timeout=10,
+        ping_interval=30,
+        ping_timeout=10,
+        proxy=None,  # bypass http_proxy env var for local container connections
+        ssl=ssl_context,
+    )
+
+
+async def _relay_binary_browser_to_upstream(websocket: WebSocket, upstream_ws: Any) -> None:
+    """Forward binary/text frames from browser to KasmVNC."""
+    frame_count = 0
+    try:
+        while True:
+            data = await websocket.receive()
+            msg_type = data.get("type", "")
+            if msg_type == "websocket.disconnect":
+                logger.info("Browser disconnected normally")
+                break
+            if data.get("bytes"):
+                frame_count += 1
+                await upstream_ws.send(data["bytes"])
+            elif data.get("text"):
+                frame_count += 1
+                await upstream_ws.send(data["text"])
+    except WebSocketDisconnect:
+        logger.info(f"Browser WebSocket disconnected after {frame_count} frames")
+    except Exception as e:
+        logger.warning(
+            f"Browser->upstream relay ended after {frame_count} frames: {type(e).__name__}: {e}"
+        )
+
+
+async def _relay_binary_upstream_to_browser(websocket: WebSocket, upstream_ws: Any) -> None:
+    """Forward binary/text frames from KasmVNC to browser."""
+    frame_count = 0
+    try:
+        async for message in upstream_ws:
+            frame_count += 1
+            if isinstance(message, bytes):
+                await websocket.send_bytes(message)
+            else:
+                await websocket.send_text(message)
+    except Exception as e:
+        logger.warning(
+            f"Upstream->browser relay ended after {frame_count} frames: {type(e).__name__}: {e}"
+        )
+
+
+async def _connect_mcp_upstream(ws_target: str) -> Any:
+    """Connect to MCP upstream WebSocket."""
+    import websockets
+
+    return await websockets.connect(
+        ws_target,
+        open_timeout=10,
+        ping_interval=30,
+        ping_timeout=10,
+        max_size=2**22,  # 4MB max frame for MCP messages
+        proxy=None,  # bypass http_proxy env var for local container connections
+    )
+
+
+async def _relay_mcp_browser_to_upstream(websocket: WebSocket, upstream_ws: Any) -> None:
+    """Forward JSON-RPC messages from browser to MCP server."""
+    try:
+        while True:
+            data = await websocket.receive()
+            msg_type = data.get("type", "")
+            if msg_type == "websocket.disconnect":
+                break
+            if data.get("text"):
+                await upstream_ws.send(data["text"])
+    except WebSocketDisconnect:
+        logger.debug("MCP proxy: browser disconnected")
+    except Exception as e:
+        logger.warning(f"MCP proxy browser->upstream: {type(e).__name__}: {e}")
+    finally:
+        # Signal upstream to close when browser disconnects
+        with contextlib.suppress(Exception):
+            await upstream_ws.close()
+
+
+async def _relay_mcp_upstream_to_browser(websocket: WebSocket, upstream_ws: Any) -> None:
+    """Forward JSON-RPC messages from MCP server to browser."""
+    try:
+        async for message in upstream_ws:
+            if isinstance(message, str):
+                await websocket.send_text(message)
+            else:
+                await websocket.send_bytes(message)
+    except Exception as e:
+        logger.warning(f"MCP proxy upstream->browser: {type(e).__name__}: {e}")
+    finally:
+        # Signal browser to close when upstream disconnects
+        with contextlib.suppress(Exception):
+            await websocket.close(code=1001, reason="Upstream disconnected")
+
+
 @router.get("/{project_id}/sandbox/desktop/proxy/{path:path}")
 async def proxy_project_desktop(
     project_id: str,
@@ -914,7 +1134,6 @@ async def proxy_project_desktop(
         )
 
     # Build target URL from the desktop service URL
-    import re
 
     import httpx
 
@@ -942,45 +1161,9 @@ async def proxy_project_desktop(
 
             content_type = response.headers.get("content-type", "application/octet-stream")
 
-            # For HTML/JS/CSS, rewrite URLs to use proxy path with token
-            content = response.content
-            if content_type.startswith("text/html") or content_type.startswith(
-                "application/javascript"
-            ):
-                content_str = content.decode("utf-8", errors="replace")
-
-                proxy_prefix = f"/api/v1/projects/{project_id}/sandbox/desktop/proxy/"
-
-                def rewrite_url(match: re.Match) -> str:
-                    """Rewrite URL with proxy prefix and token."""
-                    attr = match.group(1)  # href or src
-                    quote = match.group(2)  # " or '
-                    path_part = match.group(3)  # the path after /
-
-                    new_url = f"{proxy_prefix}{path_part}"
-
-                    if token_param and "?" not in path_part:
-                        new_url = f"{new_url}?token={token_param}"
-                    elif token_param and "?" in path_part:
-                        new_url = f"{new_url}&token={token_param}"
-
-                    return f"{attr}={quote}{new_url}"
-
-                # Rewrite href="/" and src="/" patterns
-                content_str = re.sub(r'(href|src)=(["\'])/([^"\']*)', rewrite_url, content_str)
-
-                # Rewrite WebSocket URLs for KasmVNC
-                ws_proxy_url = f"/api/v1/projects/{project_id}/sandbox/desktop/proxy/websockify"
-                if token_param:
-                    ws_proxy_url += f"?token={token_param}"
-                content_str = content_str.replace(
-                    'ws://" + location.host + "/', f'ws://" + location.host + "{ws_proxy_url}'
-                )
-                content_str = content_str.replace(
-                    'wss://" + location.host + "/', f'wss://" + location.host + "{ws_proxy_url}'
-                )
-
-                content = content_str.encode("utf-8")
+            content = _rewrite_desktop_content(
+                response.content, content_type, project_id, token_param
+            )
 
             resp_headers = {"content-type": content_type}
 
@@ -1025,7 +1208,6 @@ async def proxy_project_desktop_websocket(
     relaying binary VNC frames bidirectionally. This enables the KasmVNC
     web client to connect to the remote desktop through the API server.
     """
-    import websockets
 
     info = await service.get_project_sandbox(project_id)
 
@@ -1053,78 +1235,14 @@ async def proxy_project_desktop_websocket(
 
     upstream_ws = None
     try:
-        import ssl as ssl_module
-
-        ssl_context = ssl_module.SSLContext(ssl_module.PROTOCOL_TLS_CLIENT)
-        ssl_context.check_hostname = False
-        ssl_context.verify_mode = ssl_module.CERT_NONE
-
-        upstream_ws = await websockets.connect(
-            ws_target,
-            subprotocols=["binary"],
-            additional_headers={"Origin": info.desktop_url},
-            max_size=2**23,  # 8MB max frame for desktop data
-            open_timeout=10,
-            ping_interval=30,
-            ping_timeout=10,
-            proxy=None,  # bypass http_proxy env var for local container connections
-            ssl=ssl_context,
-        )
+        upstream_ws = await _connect_desktop_upstream(ws_target, info.desktop_url)
 
         logger.info(f"Desktop WS proxy: upstream connected to {ws_target}")
 
-        async def relay_browser_to_upstream() -> None:
-            """Forward frames from browser to KasmVNC."""
-            frame_count = 0
-            try:
-                while True:
-                    data = await websocket.receive()
-                    msg_type = data.get("type", "")
-                    if msg_type == "websocket.disconnect":
-                        logger.info("Browser disconnected normally")
-                        break
-                    if data.get("bytes"):
-                        frame_count += 1
-                        await upstream_ws.send(data["bytes"])
-                    elif data.get("text"):
-                        frame_count += 1
-                        await upstream_ws.send(data["text"])
-            except WebSocketDisconnect:
-                logger.info(f"Browser WebSocket disconnected after {frame_count} frames")
-            except Exception as e:
-                logger.warning(
-                    f"Browser->upstream relay ended after {frame_count} frames: "
-                    f"{type(e).__name__}: {e}"
-                )
-
-        async def relay_upstream_to_browser() -> None:
-            """Forward frames from KasmVNC to browser."""
-            frame_count = 0
-            try:
-                async for message in upstream_ws:
-                    frame_count += 1
-                    if isinstance(message, bytes):
-                        await websocket.send_bytes(message)
-                    else:
-                        await websocket.send_text(message)
-            except Exception as e:
-                logger.warning(
-                    f"Upstream->browser relay ended after {frame_count} frames: "
-                    f"{type(e).__name__}: {e}"
-                )
-
-        browser_task = asyncio.create_task(relay_browser_to_upstream())
-        upstream_task = asyncio.create_task(relay_upstream_to_browser())
-
-        # Wait for either direction to finish
-        _done, pending = await asyncio.wait(
-            [browser_task, upstream_task],
-            return_when=asyncio.FIRST_COMPLETED,
+        await _run_ws_relay_pair(
+            lambda: _relay_binary_browser_to_upstream(websocket, upstream_ws),
+            lambda: _relay_binary_upstream_to_browser(websocket, upstream_ws),
         )
-        for task in pending:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
 
     except Exception as e:
         logger.error(f"Desktop WebSocket proxy error for project {project_id}: {e}")
@@ -1201,41 +1319,10 @@ async def proxy_project_terminal_websocket(
             }
         )
 
-        # Start output reader task
-        async def read_output() -> None:
-            """Background task to read and forward output."""
-            while session and session.is_active:
-                try:
-                    output = await proxy.read_output(session.session_id)
-                    if output is None:
-                        break
-                    if output:
-                        await websocket.send_json({"type": "output", "data": output})
-                except Exception as e:
-                    logger.error(f"Output reader error: {e}")
-                    break
-                await asyncio.sleep(0.01)  # Small delay to prevent CPU spin
-
-        output_task = asyncio.create_task(read_output())
-
+        output_task = asyncio.create_task(_read_terminal_output_loop(websocket, proxy, session))
         # Process incoming messages
         try:
-            while True:
-                msg = await websocket.receive_json()
-                msg_type = msg.get("type")
-
-                if msg_type == "input":
-                    data = msg.get("data", "")
-                    await proxy.send_input(session.session_id, data)
-
-                elif msg_type == "resize":
-                    cols = msg.get("cols", 80)
-                    rows = msg.get("rows", 24)
-                    await proxy.resize(session.session_id, cols, rows)
-
-                elif msg_type == "ping":
-                    await websocket.send_json({"type": "pong"})
-
+            await _handle_terminal_input(websocket, proxy, session.session_id)
         except WebSocketDisconnect:
             logger.info(f"WebSocket disconnected for session {session.session_id}")
 
@@ -1269,7 +1356,6 @@ async def proxy_project_mcp_websocket(
     Enables direct MCP client connections from the frontend (Mode A) for
     low-latency tool calls without HTTP round-trips.
     """
-    import websockets
 
     info = await service.get_project_sandbox(project_id)
 
@@ -1292,62 +1378,14 @@ async def proxy_project_mcp_websocket(
 
     upstream_ws = None
     try:
-        upstream_ws = await websockets.connect(
-            ws_target,
-            open_timeout=10,
-            ping_interval=30,
-            ping_timeout=10,
-            max_size=2**22,  # 4MB max frame for MCP messages
-            proxy=None,  # bypass http_proxy env var for local container connections
-        )
+        upstream_ws = await _connect_mcp_upstream(ws_target)
 
         logger.info(f"MCP WS proxy: upstream connected to {ws_target}")
 
-        async def relay_browser_to_upstream() -> None:
-            """Forward JSON-RPC messages from browser to MCP server."""
-            try:
-                while True:
-                    data = await websocket.receive()
-                    msg_type = data.get("type", "")
-                    if msg_type == "websocket.disconnect":
-                        break
-                    if data.get("text"):
-                        await upstream_ws.send(data["text"])
-            except WebSocketDisconnect:
-                logger.debug("MCP proxy: browser disconnected")
-            except Exception as e:
-                logger.warning(f"MCP proxy browser->upstream: {type(e).__name__}: {e}")
-            finally:
-                # Signal upstream to close when browser disconnects
-                with contextlib.suppress(Exception):
-                    await upstream_ws.close()
-
-        async def relay_upstream_to_browser() -> None:
-            """Forward JSON-RPC messages from MCP server to browser."""
-            try:
-                async for message in upstream_ws:
-                    if isinstance(message, str):
-                        await websocket.send_text(message)
-                    else:
-                        await websocket.send_bytes(message)
-            except Exception as e:
-                logger.warning(f"MCP proxy upstream->browser: {type(e).__name__}: {e}")
-            finally:
-                # Signal browser to close when upstream disconnects
-                with contextlib.suppress(Exception):
-                    await websocket.close(code=1001, reason="Upstream disconnected")
-
-        browser_task = asyncio.create_task(relay_browser_to_upstream())
-        upstream_task = asyncio.create_task(relay_upstream_to_browser())
-
-        _done, pending = await asyncio.wait(
-            [browser_task, upstream_task],
-            return_when=asyncio.FIRST_COMPLETED,
+        await _run_ws_relay_pair(
+            lambda: _relay_mcp_browser_to_upstream(websocket, upstream_ws),
+            lambda: _relay_mcp_upstream_to_browser(websocket, upstream_ws),
         )
-        for task in pending:
-            task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await task
 
     except Exception as e:
         logger.error(f"MCP WebSocket proxy error for project {project_id}: {e}")

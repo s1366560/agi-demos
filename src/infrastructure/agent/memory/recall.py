@@ -64,57 +64,12 @@ class MemoryRecallPreprocessor:
         all_results: list[dict] = []
 
         # Search chunk index (PostgreSQL)
-        if self._chunk_search:
-            try:
-                chunk_results = await self._chunk_search.search(query, project_id, max_results)
-                for r in chunk_results:
-                    date_str = r.created_at.strftime("%Y-%m-%d") if r.created_at else ""
-                    all_results.append(
-                        {
-                            "content": r.content,
-                            "score": r.score,
-                            "source": "memory_index",
-                            "category": r.category,
-                            "source_type": r.source_type or "chunk",
-                            "source_id": r.source_id or "",
-                            "date": date_str,
-                        }
-                    )
-            except Exception as e:
-                logger.warning(f"Chunk search failed during recall: {e}")
+        chunk_results = await self._search_chunks(query, project_id, max_results)
+        all_results.extend(chunk_results)
 
         # Search knowledge graph (Neo4j)
-        if self._graph_search:
-            try:
-                graph_results = await self._graph_search.search(
-                    query,
-                    project_id=project_id,
-                    limit=max_results,
-                )
-                for r in graph_results:
-                    content = ""
-                    if hasattr(r, "fact"):
-                        content = r.fact
-                    elif hasattr(r, "content"):
-                        content = r.content
-                    elif isinstance(r, dict):
-                        content = r.get("fact", r.get("content", str(r)))
-                    if content:
-                        created = getattr(r, "created_at", None)
-                        date_str = created.strftime("%Y-%m-%d") if created else ""
-                        all_results.append(
-                            {
-                                "content": content,
-                                "score": getattr(r, "score", 0.5),
-                                "source": "knowledge_graph",
-                                "category": "entity",
-                                "source_type": "graph",
-                                "source_id": getattr(r, "uuid", ""),
-                                "date": date_str,
-                            }
-                        )
-            except Exception as e:
-                logger.warning(f"Graph search failed during recall: {e}")
+        graph_results = await self._search_graph(query, project_id, max_results)
+        all_results.extend(graph_results)
 
         if not all_results:
             self.last_results = []
@@ -130,20 +85,92 @@ class MemoryRecallPreprocessor:
             return None
 
         # Sort by score and deduplicate
-        safe_results.sort(key=lambda x: x["score"], reverse=True)
-        seen_content: set[str] = set()
-        unique_results: list[dict] = []
-        for r in safe_results:
-            content_key = r["content"].strip().lower()
-            if content_key not in seen_content:
-                seen_content.add(content_key)
-                unique_results.append(r)
+        unique_results = self._deduplicate_results(safe_results)
 
         # Track for event emission
         self.last_results = unique_results
         self.last_search_ms = int((time.monotonic() - start) * 1000)
 
         return self._format_context(unique_results)
+
+    async def _search_chunks(self, query: str, project_id: str, max_results: int) -> list[dict]:
+        """Search chunk index (PostgreSQL) for relevant memories."""
+        if not self._chunk_search:
+            return []
+        try:
+            chunk_results = await self._chunk_search.search(query, project_id, max_results)
+            results = []
+            for r in chunk_results:
+                date_str = r.created_at.strftime("%Y-%m-%d") if r.created_at else ""
+                results.append(
+                    {
+                        "content": r.content,
+                        "score": r.score,
+                        "source": "memory_index",
+                        "category": r.category,
+                        "source_type": r.source_type or "chunk",
+                        "source_id": r.source_id or "",
+                        "date": date_str,
+                    }
+                )
+            return results
+        except Exception as e:
+            logger.warning(f"Chunk search failed during recall: {e}")
+            return []
+
+    async def _search_graph(self, query: str, project_id: str, max_results: int) -> list[dict]:
+        """Search knowledge graph (Neo4j) for relevant entities."""
+        if not self._graph_search:
+            return []
+        try:
+            graph_results = await self._graph_search.search(
+                query,
+                project_id=project_id,
+                limit=max_results,
+            )
+            results = []
+            for r in graph_results:
+                content = self._extract_graph_content(r)
+                if content:
+                    created = getattr(r, "created_at", None)
+                    date_str = created.strftime("%Y-%m-%d") if created else ""
+                    results.append(
+                        {
+                            "content": content,
+                            "score": getattr(r, "score", 0.5),
+                            "source": "knowledge_graph",
+                            "category": "entity",
+                            "source_type": "graph",
+                            "source_id": getattr(r, "uuid", ""),
+                            "date": date_str,
+                        }
+                    )
+            return results
+        except Exception as e:
+            logger.warning(f"Graph search failed during recall: {e}")
+            return []
+
+    def _extract_graph_content(self, result: Any) -> str:
+        """Extract content string from a graph search result."""
+        if hasattr(result, "fact"):
+            return result.fact
+        if hasattr(result, "content"):
+            return result.content
+        if isinstance(result, dict):
+            return result.get("fact", result.get("content", str(result)))
+        return ""
+
+    def _deduplicate_results(self, results: list[dict]) -> list[dict]:
+        """Sort by score and remove duplicate content."""
+        results.sort(key=lambda x: x["score"], reverse=True)
+        seen_content: set[str] = set()
+        unique_results: list[dict] = []
+        for r in results:
+            content_key = r["content"].strip().lower()
+            if content_key not in seen_content:
+                seen_content.add(content_key)
+                unique_results.append(r)
+        return unique_results
 
     def _format_context(self, results: list[dict]) -> str:
         """Format memory results with citations for system prompt injection."""

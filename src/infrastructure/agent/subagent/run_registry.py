@@ -121,9 +121,11 @@ class SubAgentRunRegistry:
             conversation_id=conversation_id,
             run_id=run_id,
             expected_statuses=expected_statuses,
-            mutator=lambda run: replace(run.start(), metadata={**run.metadata, **(metadata or {})})
-            if metadata
-            else run.start(),
+            mutator=lambda run: (
+                replace(run.start(), metadata={**run.metadata, **(metadata or {})})
+                if metadata
+                else run.start()
+            ),
         )
 
     def mark_completed(
@@ -496,14 +498,22 @@ class SubAgentRunRegistry:
 
     def _load_from_disk_unlocked(self, *, recover_inflight: bool) -> None:
         if self._repository is not None:
-            try:
-                self._runs_by_conversation = self._repository.load_runs()
-            except Exception as exc:
-                logger.warning(f"[SubAgentRunRegistry] Failed to load repository runs: {exc}")
-                self._runs_by_conversation = {}
-            if recover_inflight:
-                self._recover_inflight_runs()
-            return
+            self._load_from_repository()
+        else:
+            self._load_from_json_file()
+        if recover_inflight:
+            self._recover_inflight_runs()
+
+    def _load_from_repository(self) -> None:
+        """Load runs from the repository adapter."""
+        try:
+            self._runs_by_conversation = self._repository.load_runs()
+        except Exception as exc:
+            logger.warning(f"[SubAgentRunRegistry] Failed to load repository runs: {exc}")
+            self._runs_by_conversation = {}
+
+    def _load_from_json_file(self) -> None:
+        """Load runs from the JSON persistence file."""
         if not self._persistence_path or not self._persistence_path.exists():
             return
         try:
@@ -519,6 +529,12 @@ class SubAgentRunRegistry:
         if not isinstance(conversations, dict):
             return
 
+        self._runs_by_conversation = self._deserialize_conversations(conversations)
+
+    def _deserialize_conversations(
+        self, conversations: dict[str, Any]
+    ) -> dict[str, dict[str, SubAgentRun]]:
+        """Deserialize conversation run buckets from raw dict."""
         loaded: dict[str, dict[str, SubAgentRun]] = {}
         for conversation_id, runs in conversations.items():
             if not isinstance(runs, dict):
@@ -531,10 +547,7 @@ class SubAgentRunRegistry:
                 bucket[run_id] = run
             if bucket:
                 loaded[conversation_id] = bucket
-        self._runs_by_conversation = loaded
-
-        if recover_inflight:
-            self._recover_inflight_runs()
+        return loaded
 
     def _recover_inflight_runs(self) -> None:
         updated = False

@@ -1,3 +1,3 @@
 """Backward compatibility re-export."""
 
-from src.infrastructure.adapters.secondary.sandbox.url_service import *  # noqa: F403
+from src.infrastructure.adapters.secondary.sandbox.url_service import *

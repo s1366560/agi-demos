@@ -134,142 +134,32 @@ class RegisterMCPServerTool(AgentTool):
         args = kwargs.get("args", [])
         url = kwargs.get("url", "")
 
-        # Validation
-        if not server_name:
-            return "Error: server_name is required."
-        if server_type not in ("stdio", "sse", "http", "websocket"):
-            return (
-                f"Error: Invalid server_type '{server_type}'. "
-                "Must be 'stdio', 'sse', 'http', or 'websocket'."
-            )
-        if server_type == "stdio" and not command:
-            return "Error: 'command' is required for stdio servers."
-        if server_type in ("sse", "http", "websocket") and not url:
-            return f"Error: 'url' is required for {server_type} servers."
+        validation_error = self._validate_execute_params(server_name, server_type, command, url)
+        if validation_error:
+            return validation_error
 
-        if not self._sandbox_adapter or not self._sandbox_id:
-            return (
-                "Error: Sandbox not available. "
-                "This tool requires a running sandbox with MCP support."
-            )
-
-        # Build transport config
-        if server_type == "stdio":
-            transport_config = {"command": command, "args": args}
-        else:
-            transport_config = {"url": url}
-
+        transport_config = (
+            {"command": command, "args": args} if server_type == "stdio" else {"url": url}
+        )
         config_json = json.dumps(transport_config)
 
         try:
-            # Step 1: Install the MCP server
-            install_result = await self._sandbox_adapter.call_tool(
-                sandbox_id=self._sandbox_id,
-                tool_name="mcp_server_install",
-                arguments={
-                    "name": server_name,
-                    "server_type": server_type,
-                    "transport_config": config_json,
-                },
-                timeout=120.0,
+            install_error = await self._install_and_start_server(
+                server_name, server_type, config_json
             )
-            install_data = self._parse_result(install_result)
-            if not install_data.get("success", False):
-                error = install_data.get("error", "Installation failed")
-                return f"Error: Failed to install MCP server '{server_name}':\n{error}"
+            if install_error:
+                return install_error
 
-            # Step 2: Start the MCP server
-            start_result = await self._sandbox_adapter.call_tool(
-                sandbox_id=self._sandbox_id,
-                tool_name="mcp_server_start",
-                arguments={
-                    "name": server_name,
-                    "server_type": server_type,
-                    "transport_config": config_json,
-                },
-                timeout=60.0,
-            )
-            start_data = self._parse_result(start_result)
-            if not start_data.get("success", False):
-                error = start_data.get("error", "Start failed")
-                return f"Error: Failed to start MCP server '{server_name}':\n{error}"
-
-            # Step 3: Discover tools
-            discover_result = await self._sandbox_adapter.call_tool(
-                sandbox_id=self._sandbox_id,
-                tool_name="mcp_server_discover_tools",
-                arguments={"name": server_name},
-                timeout=20.0,  # Fast fail for tool discovery
-            )
-            if discover_result.get("is_error") or discover_result.get("isError"):
-                error_text = self._extract_error_text(discover_result)
-                return (
-                    f"Error: MCP server '{server_name}' was installed and started, "
-                    f"but tool discovery failed: {error_text}"
-                )
-            tools = self._parse_result(discover_result)
-            if not isinstance(tools, list):
-                tools = []
+            tools, discover_error = await self._discover_tools(server_name)
+            if discover_error:
+                return discover_error
 
             tool_names = [t.get("name", "unknown") for t in tools]
-
-            # Step 4: Auto-detect MCP Apps and persist
             app_tools = await self._detect_and_persist_apps(server_name, tools)
-
-            # Step 4.5: Emit tools updated event for real-time frontend update
-            # Namespaced tool names for frontend display
             namespaced_tool_names = [f"mcp__{server_name}__{name}" for name in tool_names]
-            from src.domain.events.agent_events import AgentToolsUpdatedEvent
 
-            self._pending_events.append(
-                AgentToolsUpdatedEvent(
-                    project_id=self._project_id,
-                    tool_names=namespaced_tool_names,
-                    server_name=server_name,
-                    requires_refresh=True,
-                )
-            )
-            logger.info(
-                "Queued AgentToolsUpdatedEvent for server %s with %d tools",
-                server_name,
-                len(namespaced_tool_names),
-            )
-
-            # Step 5: Invalidate all caches for this project so new tools are available
-            # This clears: tools_cache, agent_sessions, tool_definitions, mcp_tools.
-            from src.infrastructure.agent.tools.self_modifying_lifecycle import (
-                SelfModifyingLifecycleOrchestrator,
-            )
-
-            lifecycle_result = SelfModifyingLifecycleOrchestrator.run_post_change(
-                source=TOOL_NAME,
-                tenant_id=self._tenant_id,
-                project_id=self._project_id,
-                clear_tool_definitions=True,
-                expected_tool_names=namespaced_tool_names,
-                metadata={
-                    "server_name": server_name,
-                },
-            )
-            logger.info(
-                "register_mcp_server lifecycle completed for project %s: %s",
-                self._project_id,
-                lifecycle_result["cache_invalidation"],
-            )
-            self._pending_events.append(
-                {
-                    "type": "toolset_changed",
-                    "data": {
-                        "source": TOOL_NAME,
-                        "project_id": self._project_id,
-                        "tenant_id": self._tenant_id,
-                        "server_name": server_name,
-                        "tool_names": namespaced_tool_names,
-                        "lifecycle": lifecycle_result,
-                    },
-                    "timestamp": datetime.now(UTC).isoformat(),
-                }
-            )
+            self._emit_tools_updated_event(server_name, namespaced_tool_names)
+            lifecycle_result = self._run_lifecycle_and_emit(server_name, namespaced_tool_names)
 
             if lifecycle_result["probe"].get("status") == "missing_tools":
                 logger.warning(
@@ -291,6 +181,145 @@ class RegisterMCPServerTool(AgentTool):
         except Exception as e:
             logger.error("Failed to register MCP server '%s': %s", server_name, e)
             return f"Error: Failed to register MCP server '{server_name}':\n{e}"
+
+    def _validate_execute_params(
+        self,
+        server_name: str,
+        server_type: str,
+        command: str,
+        url: str,
+    ) -> str | None:
+        """Validate execute parameters. Returns error string or None."""
+        if not server_name:
+            return "Error: server_name is required."
+        if server_type not in ("stdio", "sse", "http", "websocket"):
+            return (
+                f"Error: Invalid server_type '{server_type}'. "
+                "Must be 'stdio', 'sse', 'http', or 'websocket'."
+            )
+        if server_type == "stdio" and not command:
+            return "Error: 'command' is required for stdio servers."
+        if server_type in ("sse", "http", "websocket") and not url:
+            return f"Error: 'url' is required for {server_type} servers."
+        if not self._sandbox_adapter or not self._sandbox_id:
+            return (
+                "Error: Sandbox not available. "
+                "This tool requires a running sandbox with MCP support."
+            )
+        return None
+
+    async def _install_and_start_server(
+        self,
+        server_name: str,
+        server_type: str,
+        config_json: str,
+    ) -> str | None:
+        """Install and start the MCP server. Returns error string or None."""
+        install_result = await self._sandbox_adapter.call_tool(
+            sandbox_id=self._sandbox_id,
+            tool_name="mcp_server_install",
+            arguments={
+                "name": server_name,
+                "server_type": server_type,
+                "transport_config": config_json,
+            },
+            timeout=120.0,
+        )
+        install_data = self._parse_result(install_result)
+        if not install_data.get("success", False):
+            error = install_data.get("error", "Installation failed")
+            return f"Error: Failed to install MCP server '{server_name}':\n{error}"
+
+        start_result = await self._sandbox_adapter.call_tool(
+            sandbox_id=self._sandbox_id,
+            tool_name="mcp_server_start",
+            arguments={
+                "name": server_name,
+                "server_type": server_type,
+                "transport_config": config_json,
+            },
+            timeout=60.0,
+        )
+        start_data = self._parse_result(start_result)
+        if not start_data.get("success", False):
+            error = start_data.get("error", "Start failed")
+            return f"Error: Failed to start MCP server '{server_name}':\n{error}"
+
+        return None
+
+    async def _discover_tools(self, server_name: str) -> tuple[list[dict[str, Any]], str | None]:
+        """Discover tools from the server. Returns (tools, error_string_or_None)."""
+        discover_result = await self._sandbox_adapter.call_tool(
+            sandbox_id=self._sandbox_id,
+            tool_name="mcp_server_discover_tools",
+            arguments={"name": server_name},
+            timeout=20.0,
+        )
+        if discover_result.get("is_error") or discover_result.get("isError"):
+            error_text = self._extract_error_text(discover_result)
+            return [], (
+                f"Error: MCP server '{server_name}' was installed and started, "
+                f"but tool discovery failed: {error_text}"
+            )
+        tools = self._parse_result(discover_result)
+        if not isinstance(tools, list):
+            tools = []
+        return tools, None
+
+    def _emit_tools_updated_event(self, server_name: str, namespaced_tool_names: list[str]) -> None:
+        """Emit AgentToolsUpdatedEvent for real-time frontend update."""
+        from src.domain.events.agent_events import AgentToolsUpdatedEvent
+
+        self._pending_events.append(
+            AgentToolsUpdatedEvent(
+                project_id=self._project_id,
+                tool_names=namespaced_tool_names,
+                server_name=server_name,
+                requires_refresh=True,
+            )
+        )
+        logger.info(
+            "Queued AgentToolsUpdatedEvent for server %s with %d tools",
+            server_name,
+            len(namespaced_tool_names),
+        )
+
+    def _run_lifecycle_and_emit(
+        self, server_name: str, namespaced_tool_names: list[str]
+    ) -> dict[str, Any]:
+        """Run lifecycle orchestrator and emit toolset_changed event."""
+        from src.infrastructure.agent.tools.self_modifying_lifecycle import (
+            SelfModifyingLifecycleOrchestrator,
+        )
+
+        lifecycle_result = SelfModifyingLifecycleOrchestrator.run_post_change(
+            source=TOOL_NAME,
+            tenant_id=self._tenant_id,
+            project_id=self._project_id,
+            clear_tool_definitions=True,
+            expected_tool_names=namespaced_tool_names,
+            metadata={"server_name": server_name},
+        )
+        logger.info(
+            "register_mcp_server lifecycle completed for project %s: %s",
+            self._project_id,
+            lifecycle_result["cache_invalidation"],
+        )
+        self._pending_events.append(
+            {
+                "type": "toolset_changed",
+                "data": {
+                    "source": TOOL_NAME,
+                    "project_id": self._project_id,
+                    "tenant_id": self._tenant_id,
+                    "server_name": server_name,
+                    "tool_names": namespaced_tool_names,
+                    "lifecycle": lifecycle_result,
+                },
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
+        return lifecycle_result
 
     async def _detect_and_persist_apps(self, server_name: str, tools: list[dict]) -> list[str]:
         """Detect tools with UI metadata and persist as MCP Apps."""

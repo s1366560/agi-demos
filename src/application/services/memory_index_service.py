@@ -142,29 +142,47 @@ class MemoryIndexService:
         category: str,
     ) -> int:
         """Common chunk indexing logic with batch operations."""
-        from src.infrastructure.adapters.secondary.persistence.models import MemoryChunk
-
         if not chunks:
             return 0
 
-        # Batch dedup: single query for all hashes
+        new_chunks = await self._dedup_chunks(chunks, project_id)
+        if not new_chunks:
+            logger.info(f"All {len(chunks)} chunks already exist for {source_type}/{source_id}")
+            return 0
+
+        embeddings = await self._embed_chunks(new_chunks)
+        db_chunks = self._build_chunk_models(
+            new_chunks, embeddings, project_id, source_type, source_id, category
+        )
+        await self._save_chunks(db_chunks)
+
+        created = len(db_chunks)
+        logger.info(f"Indexed {created}/{len(chunks)} chunks for {source_type}/{source_id}")
+        return created
+
+    async def _dedup_chunks(
+        self,
+        chunks: list[TextChunk],
+        project_id: str,
+    ) -> list[TextChunk]:
+        """Filter out chunks that already exist in the repository."""
         all_hashes = [c.content_hash for c in chunks]
         existing_hashes: set[str] = set()
         if hasattr(self._chunk_repo, "find_existing_hashes"):
             existing_hashes = await self._chunk_repo.find_existing_hashes(all_hashes, project_id)
         else:
-            # Fallback to per-chunk lookup
             for h in all_hashes:
                 if await self._chunk_repo.find_by_hash(h, project_id):
                     existing_hashes.add(h)
 
-        new_chunks = [c for c in chunks if c.content_hash not in existing_hashes]
-        if not new_chunks:
-            logger.info(f"All {len(chunks)} chunks already exist for {source_type}/{source_id}")
-            return 0
+        return [c for c in chunks if c.content_hash not in existing_hashes]
 
-        # Batch embedding
-        texts = [c.text for c in new_chunks]
+    async def _embed_chunks(
+        self,
+        chunks: list[TextChunk],
+    ) -> list[list[float] | None]:
+        """Compute embeddings for a list of chunks."""
+        texts = [c.text for c in chunks]
         embeddings: list[list[float] | None] = [None] * len(texts)
         try:
             if hasattr(self._embedding, "embed_batch"):
@@ -177,36 +195,45 @@ class MemoryIndexService:
                     embeddings[i] = await self._embedding.embed_text(text)
         except Exception as e:
             logger.warning(f"Batch embedding failed: {e}")
+        return embeddings
 
-        # Build chunk models
-        db_chunks = []
-        for i, chunk in enumerate(new_chunks):
-            db_chunks.append(
-                MemoryChunk(
-                    id=str(uuid.uuid4()),
-                    project_id=project_id,
-                    source_type=source_type,
-                    source_id=source_id,
-                    chunk_index=chunk.chunk_index,
-                    content=chunk.text,
-                    content_hash=chunk.content_hash,
-                    embedding=embeddings[i],
-                    metadata_={
-                        "start_line": chunk.start_line,
-                        "end_line": chunk.end_line,
-                    },
-                    category=category,
-                )
+    @staticmethod
+    def _build_chunk_models(
+        chunks: list[TextChunk],
+        embeddings: list[list[float] | None],
+        project_id: str,
+        source_type: str,
+        source_id: str,
+        category: str,
+    ) -> list:
+        """Build MemoryChunk ORM instances from chunks and embeddings."""
+        from src.infrastructure.adapters.secondary.persistence.models import MemoryChunk
+
+        return [
+            MemoryChunk(
+                id=str(uuid.uuid4()),
+                project_id=project_id,
+                source_type=source_type,
+                source_id=source_id,
+                chunk_index=chunk.chunk_index,
+                content=chunk.text,
+                content_hash=chunk.content_hash,
+                embedding=embeddings[i],
+                metadata_={
+                    "start_line": chunk.start_line,
+                    "end_line": chunk.end_line,
+                },
+                category=category,
             )
+            for i, chunk in enumerate(chunks)
+        ]
 
-        # Batch save
-        if db_chunks:
-            if hasattr(self._chunk_repo, "save_batch"):
-                await self._chunk_repo.save_batch(db_chunks)
-            else:
-                for c in db_chunks:
-                    await self._chunk_repo.save(c)
-
-        created = len(db_chunks)
-        logger.info(f"Indexed {created}/{len(chunks)} chunks for {source_type}/{source_id}")
-        return created
+    async def _save_chunks(self, db_chunks: list) -> None:
+        """Persist chunk models to the repository."""
+        if not db_chunks:
+            return
+        if hasattr(self._chunk_repo, "save_batch"):
+            await self._chunk_repo.save_batch(db_chunks)
+        else:
+            for c in db_chunks:
+                await self._chunk_repo.save(c)

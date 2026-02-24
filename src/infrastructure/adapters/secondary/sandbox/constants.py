@@ -5,7 +5,7 @@ Domain constants are re-exported from the domain layer for backwards compatibili
 Infrastructure-specific constants (ports) are defined here.
 """
 
-from src.domain.model.sandbox.constants import DEFAULT_SANDBOX_IMAGE  # noqa: F401
+from src.domain.model.sandbox.constants import DEFAULT_SANDBOX_IMAGE
 
 # WebSocket ports inside container
 MCP_WEBSOCKET_PORT = 8765

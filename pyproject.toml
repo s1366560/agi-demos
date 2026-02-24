@@ -104,7 +104,7 @@ select = [
     "C4",     # flake8-comprehensions
     "SIM",    # flake8-simplify
     "RUF",    # Ruff-specific
-    # Type annotation rules (new)
+    # Type annotation rules
     "ANN001", # function parameter type annotation missing
     "ANN002", # *args type annotation missing
     "ANN003", # **kwargs type annotation missing
@@ -156,17 +156,20 @@ ignore = [
 "src/infrastructure/llm/litellm/litellm_client.py" = ["E402", "ANN401"]
 "src/tests/unit/infrastructure/llm/conftest.py" = ["E402"]
 
-# Test files relaxed
-"src/tests/**" = ["ANN001", "ANN002", "ANN003", "ANN201", "ANN202", "N802", "N803", "E741", "B017", "B023", "RUF043", "S", "PT"]
+# Test files relaxed (assert allowed, annotations optional, broad exceptions OK)
+"src/tests/**" = [
+    "ANN001", "ANN002", "ANN003", "ANN201", "ANN202",
+    "N802", "N803", "E741", "B017", "B023", "RUF043",
+    "S101",   # assert is expected in tests
+    "S105", "S106", "S107", "S108",  # hardcoded passwords/paths in test fixtures
+    "PT",     # pytest style rules relaxed for existing tests
+]
 
 # Alembic migration files
 "src/alembic/**" = ["ANN", "N999"]
 
 # Legacy modules (progressively tighten)
-"src/memstack_agent/**" = ["ANN", "UP007", "UP045"]
-
-# TCH: type-checking imports (suppress globally, fix in Wave 2)
-"src/**" = ["TCH"]
+"src/memstack_agent/**" = ["ANN", "UP007", "UP045", "S", "PIE", "TCH"]
 
 # DDD marker base classes (ABC without abstract methods is intentional)
 "src/domain/shared_kernel.py" = ["B024"]
@@ -188,7 +191,7 @@ ignore = [
 "src/application/services/channels/channel_message_router.py" = ["S110", "ANN401"]
 "src/application/services/channels/media_import_service.py" = ["TC002", "PIE790"]
 "src/application/services/mcp_runtime_service.py" = ["TC001", "TC002", "TC003", "S110"]
-"src/application/services/project_sandbox_lifecycle_service.py" = ["S108"]
+"src/application/services/project_sandbox_lifecycle_service.py" = ["S108", "ANN401"]
 "src/application/services/sandbox_health_service.py" = ["S110"]
 "src/application/services/sandbox_mcp_server_manager.py" = ["TC001", "ANN401"]
 "src/application/services/sandbox_orchestrator.py" = ["TC001"]
@@ -292,6 +295,7 @@ ignore = [
 "src/infrastructure/agent/pool/ha/auto_scaling.py" = ["ANN401"]
 "src/infrastructure/agent/pool/ha/failure_recovery.py" = ["ANN401"]
 "src/infrastructure/agent/pool/orchestrator.py" = ["ANN401"]
+"src/infrastructure/agent/pool/api/router.py" = ["ANN401"]
 
 # Infrastructure - agent prompts
 "src/infrastructure/agent/prompts/manager.py" = ["ANN401"]
@@ -309,6 +313,8 @@ ignore = [
 "src/infrastructure/channels/connection_manager.py" = ["ANN401"]
 "src/infrastructure/graph/distributed_transaction_coordinator.py" = ["ANN401"]
 "src/infrastructure/graph/extraction/reflexion.py" = ["ANN401"]
+"src/infrastructure/graph/extraction/entity_extractor.py" = ["ANN401"]
+"src/infrastructure/graph/extraction/relationship_extractor.py" = ["ANN401"]
 "src/infrastructure/graph/neo4j_client.py" = ["ANN401"]
 "src/infrastructure/llm/cache.py" = ["ANN401"]
 "src/infrastructure/llm/litellm/litellm_embedder.py" = ["ANN401"]
@@ -318,6 +324,7 @@ ignore = [
 
 # Infrastructure - MCP and queue
 "src/infrastructure/mcp/health_monitor.py" = ["ANN401"]
+"src/infrastructure/mcp/clients/http_client.py" = ["ANN401"]
 "src/infrastructure/queue/request_queue.py" = ["ANN401"]
 
 # Infrastructure - skill and telemetry
@@ -353,6 +360,8 @@ ignore = [
 "src/infrastructure/adapters/primary/web/routers/mcp/servers.py" = ["ANN401"]
 "src/infrastructure/adapters/primary/web/routers/mcp/utils.py" = ["ANN401"]
 "src/infrastructure/adapters/primary/web/routers/recall.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/tasks.py" = ["ANN401"]
+"src/infrastructure/adapters/primary/web/routers/terminal.py" = ["ANN401"]
 "src/infrastructure/adapters/primary/web/websocket/message_context.py" = ["ANN401"]
 
 # Infrastructure - secondary adapters (additional)
@@ -372,6 +381,7 @@ ignore = [
 "src/infrastructure/adapters/secondary/sandbox/health_monitor.py" = ["ANN401"]
 "src/infrastructure/adapters/secondary/sandbox/reconciler.py" = ["ANN401"]
 "src/infrastructure/adapters/secondary/storage/s3_storage_adapter.py" = ["ANN401"]
+"src/infrastructure/adapters/secondary/schema/dynamic_schema.py" = ["ANN401"]
 
 # Infrastructure - agent core and actor (additional)
 "src/infrastructure/agent/actor/actor_manager.py" = ["ANN401"]
@@ -431,6 +441,12 @@ ignore = [
 "src/tests/unit/infrastructure/agent/routing/test_execution_router.py" = ["ANN401"]
 "src/tests/unit/infrastructure/agent/tools/test_base.py" = ["ANN401"]
 "src/tests/unit/infrastructure/agent/tools/test_tool_registry.py" = ["ANN401"]
+
+# Security false positives: config defaults use 0.0.0.0 and hardcoded values intentionally
+"src/configuration/config.py" = ["S104"]
+
+# TCH (type-checking imports) - suppress globally for now, enable file-by-file in Wave 2
+"src/**" = ["TCH"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["src"]

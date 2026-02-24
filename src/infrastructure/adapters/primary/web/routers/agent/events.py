@@ -33,6 +33,58 @@ from .utils import get_container_with_db
 logger = logging.getLogger(__name__)
 
 
+async def _check_redis_running(redis_client: Any, conversation_id: str) -> tuple[bool, str | None]:
+    """Check Redis for active execution state."""
+    if not redis_client:
+        return False, None
+    running_key = f"agent:running:{conversation_id}"
+    running_message_id = await redis_client.get(running_key)
+    logger.warning(
+        f"[ExecutionStatus] Redis check for {running_key}: "
+        f"value={running_message_id}, is_running={bool(running_message_id)}"
+    )
+    if not running_message_id:
+        return False, None
+    msg_id = (
+        running_message_id.decode() if isinstance(running_message_id, bytes) else running_message_id
+    )
+    return True, msg_id
+
+
+async def _check_stream_recovery(
+    redis_client: Any,
+    conversation_id: str,
+    current_message_id: str | None,
+    last_event_time_us: int,
+    recovery_info: RecoveryInfo,
+) -> None:
+    """Check Redis Stream for live events and update recovery_info in place."""
+    if not (redis_client and current_message_id):
+        return
+    import redis.asyncio as redis
+
+    if not isinstance(redis_client, redis.Redis):
+        return
+    stream_key = f"agent:events:{conversation_id}"
+    try:
+        stream_info = await redis_client.xinfo_stream(stream_key)
+        if not stream_info:
+            return
+        recovery_info.stream_exists = True
+        recovery_info.recovery_source = "stream"
+        last_entry = await redis_client.xrevrange(stream_key, count=1)
+        if not last_entry:
+            return
+        _, fields = last_entry[0]
+        time_us_raw = fields.get(b"event_time_us") or fields.get("event_time_us")
+        if time_us_raw:
+            stream_time_us = int(time_us_raw)
+            if stream_time_us > last_event_time_us:
+                recovery_info.can_recover = True
+    except redis.ResponseError:
+        pass
+
+
 async def _get_resume_service(db: AsyncSession) -> Any:
     """Build ExecutionResumeService with per-request DB session."""
     from src.application.services.agent.execution_resume_service import (
@@ -140,24 +192,7 @@ async def get_execution_status(
         )
 
         # Check Redis for active execution
-        is_running = False
-        current_message_id = None
-
-        if redis_client:
-            running_key = f"agent:running:{conversation_id}"
-            running_message_id = await redis_client.get(running_key)
-            logger.warning(
-                f"[ExecutionStatus] Redis check for {running_key}: "
-                f"value={running_message_id}, is_running={bool(running_message_id)}"
-            )
-            if running_message_id:
-                is_running = True
-                current_message_id = (
-                    running_message_id.decode()
-                    if isinstance(running_message_id, bytes)
-                    else running_message_id
-                )
-
+        is_running, current_message_id = await _check_redis_running(redis_client, conversation_id)
         # If not running from Redis check, get current message ID from last event
         if not current_message_id and last_event_time_us > 0:
             events = await event_repo.get_events(
@@ -166,8 +201,6 @@ async def get_execution_status(
             )
             if events:
                 current_message_id = events[-1].message_id
-
-        # Build response
         response = ExecutionStatusResponse(
             is_running=is_running,
             last_event_time_us=last_event_time_us,
@@ -175,42 +208,20 @@ async def get_execution_status(
             current_message_id=current_message_id,
             conversation_id=conversation_id,
         )
-
         # Include recovery info if requested
         if include_recovery:
             recovery_info = RecoveryInfo(
                 can_recover=last_event_time_us > from_time_us,
                 recovery_source="database" if last_event_time_us > 0 else "none",
-                missed_events_count=0,  # Cannot compute count from time comparison
+                missed_events_count=0,
             )
-
-            # Check Redis Stream for live events
-            if redis_client and current_message_id:
-                import redis.asyncio as redis
-
-                if isinstance(redis_client, redis.Redis):
-                    stream_key = f"agent:events:{conversation_id}"
-                    try:
-                        # Check if stream exists
-                        stream_info = await redis_client.xinfo_stream(stream_key)
-                        if stream_info:
-                            recovery_info.stream_exists = True
-                            recovery_info.recovery_source = "stream"
-                            # Get last entry to find last event time
-                            last_entry = await redis_client.xrevrange(stream_key, count=1)
-                            if last_entry:
-                                _, fields = last_entry[0]
-                                time_us_raw = fields.get(b"event_time_us") or fields.get(
-                                    "event_time_us"
-                                )
-                                if time_us_raw:
-                                    stream_time_us = int(time_us_raw)
-                                    if stream_time_us > last_event_time_us:
-                                        recovery_info.can_recover = True
-                    except redis.ResponseError:
-                        # Stream doesn't exist
-                        pass
-
+            await _check_stream_recovery(
+                redis_client,
+                conversation_id,
+                current_message_id,
+                last_event_time_us,
+                recovery_info,
+            )
             response.recovery = recovery_info
 
         return response

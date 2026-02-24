@@ -1,14 +1,10 @@
 import pytest
 
 
-@pytest.mark.integration
-@pytest.mark.asyncio
-async def test_project_flow(authenticated_async_client, test_user):
-    AC = authenticated_async_client
-
-    # 1. Get/Create Tenant
+async def _get_or_create_tenant(ac) -> str:
+    """Get or create a tenant and return its ID."""
     print("\n1. Creating Tenant...")
-    tenant_response = await AC.post(
+    tenant_response = await ac.post(
         "/api/v1/tenants/",
         json={
             "name": "Integration Test Tenant",
@@ -17,26 +13,25 @@ async def test_project_flow(authenticated_async_client, test_user):
         },
     )
 
-    tenant_id = ""
     if tenant_response.status_code == 201:
         tenant_id = tenant_response.json()["id"]
         print(f"✅ Created Tenant: {tenant_id}")
-    elif (
-        tenant_response.status_code == 400 and "User already owns a tenant" in tenant_response.text
-    ):
-        # List tenants
-        list_response = await AC.get("/api/v1/tenants/")
+        return tenant_id
+
+    if tenant_response.status_code == 400 and "User already owns a tenant" in tenant_response.text:
+        list_response = await ac.get("/api/v1/tenants/")
         if list_response.status_code == 200 and list_response.json()["tenants"]:
             tenant_id = list_response.json()["tenants"][0]["id"]
             print(f"✅ Using existing Tenant: {tenant_id}")
-        else:
-            pytest.fail("Failed to get existing tenant")
-    else:
-        pytest.fail(
-            f"❌ Failed to get tenant: {tenant_response.status_code} - {tenant_response.text}"
-        )
+            return tenant_id
+        pytest.fail("Failed to get existing tenant")
 
-    # 2. Create Project with complex config
+    pytest.fail(f"❌ Failed to get tenant: {tenant_response.status_code} - {tenant_response.text}")
+    return ""  # unreachable
+
+
+async def _create_project(ac, tenant_id: str) -> dict:
+    """Create a project with complex config and return its data."""
     print("\n2. Creating Project with Memory Rules Config...")
     project_data = {
         "name": "Test Project",
@@ -57,57 +52,83 @@ async def test_project_flow(authenticated_async_client, test_user):
         "is_public": False,
     }
 
-    response = await AC.post("/api/v1/projects/", json=project_data)
+    response = await ac.post("/api/v1/projects/", json=project_data)
 
     if response.status_code == 201:
         project = response.json()
         print(f"✅ Project created successfully: {project['id']}")
         print(f"   Memory Rules: {project['memory_rules']}")
         print(f"   Graph Config: {project['graph_config']}")
+        return project
 
-        # Verify structure
-        assert isinstance(project["memory_rules"], dict)
-        assert project["memory_rules"]["max_episodes"] == 1000
-        assert project["graph_config"]["community_detection"] is True
+    pytest.fail(f"❌ Create Project failed: {response.status_code} - {response.text}")
+    return {}  # unreachable
 
-    else:
-        pytest.fail(f"❌ Create Project failed: {response.status_code} - {response.text}")
 
-    project_id = project["id"]
+def _verify_project_structure(project: dict) -> None:
+    """Verify the created project has the expected structure."""
+    assert isinstance(project["memory_rules"], dict)
+    assert project["memory_rules"]["max_episodes"] == 1000
+    assert project["graph_config"]["community_detection"] is True
 
-    # 3. List Projects
+
+async def _verify_list_projects(ac, tenant_id: str) -> None:
+    """Verify projects can be listed for the tenant."""
     print("\n3. Listing Projects...")
-    response = await AC.get(f"/api/v1/projects/?tenant_id={tenant_id}")
+    response = await ac.get(f"/api/v1/projects/?tenant_id={tenant_id}")
     assert response.status_code == 200
     projects_list = response.json()["projects"]
     assert len(projects_list) >= 1
     print(f"✅ Listed {len(projects_list)} projects")
 
-    # 4. Get Project Details
+
+async def _verify_get_project(ac, project_id: str) -> None:
+    """Verify a project can be retrieved by ID."""
     print("\n4. Getting Project Details...")
-    response = await AC.get(f"/api/v1/projects/{project_id}")
+    response = await ac.get(f"/api/v1/projects/{project_id}")
     assert response.status_code == 200
     project_details = response.json()
     assert project_details["id"] == project_id
     print("✅ Retrieved project details")
 
-    # 5. Update Project
+
+async def _update_and_verify_project(ac, project_id: str) -> None:
+    """Update a project and verify the changes."""
     print("\n5. Updating Project...")
     update_data = {"description": "Updated Description", "is_public": True}
-    response = await AC.put(f"/api/v1/projects/{project_id}", json=update_data)
+    response = await ac.put(f"/api/v1/projects/{project_id}", json=update_data)
     assert response.status_code == 200
     updated_project = response.json()
     assert updated_project["description"] == "Updated Description"
     assert updated_project["is_public"] is True
     print("✅ Updated project")
 
-    # 6. Delete Project
+
+async def _delete_and_verify_project(ac, project_id: str) -> None:
+    """Delete a project and verify it is no longer accessible."""
     print("\n6. Deleting Project...")
-    response = await AC.delete(f"/api/v1/projects/{project_id}")
+    response = await ac.delete(f"/api/v1/projects/{project_id}")
     assert response.status_code in [200, 204]
     print("✅ Deleted project")
 
-    # Verify deletion
-    response = await AC.get(f"/api/v1/projects/{project_id}")
+    response = await ac.get(f"/api/v1/projects/{project_id}")
     assert response.status_code in [403, 404]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_project_flow(authenticated_async_client, test_user):
+    AC = authenticated_async_client
+
+    tenant_id = await _get_or_create_tenant(AC)
+
+    project = await _create_project(AC, tenant_id)
+    _verify_project_structure(project)
+    project_id = project["id"]
+
+    await _verify_list_projects(AC, tenant_id)
+    await _verify_get_project(AC, project_id)
+    await _update_and_verify_project(AC, project_id)
+    await _delete_and_verify_project(AC, project_id)
+
     print("\n✅ All Project Integration Tests Passed!")

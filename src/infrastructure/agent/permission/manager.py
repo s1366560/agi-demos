@@ -326,92 +326,93 @@ class PermissionManager:
         del self.pending[request_id]
 
         if reply == "reject":
-            pending.result["result"] = "reject"
-            pending.event.set()
-
-            # Reject all pending requests for the same session
-            session_id = pending.request.session_id
-            for pid, p in list(self.pending.items()):
-                if p.request.session_id == session_id:
-                    del self.pending[pid]
-                    p.result["result"] = "reject"
-                    p.event.set()
-
-                    # Publish rejection event
-                    if self._event_publisher:
-                        try:
-                            await self._event_publisher(
-                                {
-                                    "type": "permission_replied",
-                                    "data": {
-                                        "request_id": pid,
-                                        "reply": "reject",
-                                        "session_id": session_id,
-                                    },
-                                }
-                            )
-                        except Exception as e:
-                            logger.error(f"Failed to publish rejection event: {e}")
-
-            logger.info(f"Permission rejected for session {session_id}")
-
+            await self._handle_reject_reply(pending)
         elif reply == "once":
             pending.result["result"] = "allow"
             pending.event.set()
             logger.info(f"Permission granted once: {pending.request.permission}")
-
         elif reply == "always":
-            # Add permanent rules for the always_patterns
-            for pattern in pending.request.always_patterns:
-                self.approved.append(
-                    PermissionRule(
-                        pending.request.permission,
-                        pattern,
-                        PermissionAction.ALLOW,
-                    )
+            await self._handle_always_reply(pending)
+
+    async def _handle_reject_reply(self, pending: _PendingRequest) -> None:
+        """Handle rejection: reject the pending request and all session peers."""
+        pending.result["result"] = "reject"
+        pending.event.set()
+
+        session_id = pending.request.session_id
+        for pid, p in list(self.pending.items()):
+            if p.request.session_id == session_id:
+                del self.pending[pid]
+                p.result["result"] = "reject"
+                p.event.set()
+
+                if self._event_publisher:
+                    try:
+                        await self._event_publisher(
+                            {
+                                "type": "permission_replied",
+                                "data": {
+                                    "request_id": pid,
+                                    "reply": "reject",
+                                    "session_id": session_id,
+                                },
+                            }
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to publish rejection event: {e}")
+
+        logger.info(f"Permission rejected for session {session_id}")
+
+    async def _handle_always_reply(self, pending: _PendingRequest) -> None:
+        """Handle always-allow: add permanent rules and auto-approve matching peers."""
+        for pattern in pending.request.always_patterns:
+            self.approved.append(
+                PermissionRule(
+                    pending.request.permission,
+                    pattern,
+                    PermissionAction.ALLOW,
                 )
-
-            pending.result["result"] = "allow"
-            pending.event.set()
-
-            # Check if other pending requests now pass
-            session_id = pending.request.session_id
-            for pid, p in list(self.pending.items()):
-                if p.request.session_id != session_id:
-                    continue
-
-                # Check if all patterns now pass
-                all_allowed = all(
-                    self.evaluate(p.request.permission, pat).action == PermissionAction.ALLOW
-                    for pat in p.request.patterns
-                )
-
-                if all_allowed:
-                    del self.pending[pid]
-                    p.result["result"] = "allow"
-                    p.event.set()
-
-                    # Publish auto-approval event
-                    if self._event_publisher:
-                        try:
-                            await self._event_publisher(
-                                {
-                                    "type": "permission_replied",
-                                    "data": {
-                                        "request_id": pid,
-                                        "reply": "always",
-                                        "session_id": session_id,
-                                        "auto_approved": True,
-                                    },
-                                }
-                            )
-                        except Exception as e:
-                            logger.error(f"Failed to publish auto-approval event: {e}")
-
-            logger.info(
-                f"Permission granted always: {pending.request.permission} "
-                f"for patterns {pending.request.always_patterns}"
             )
+
+        pending.result["result"] = "allow"
+        pending.event.set()
+
+        session_id = pending.request.session_id
+        for pid, p in list(self.pending.items()):
+            if p.request.session_id != session_id:
+                continue
+
+            # Check if all patterns now pass
+            all_allowed = all(
+                self.evaluate(p.request.permission, pat).action == PermissionAction.ALLOW
+                for pat in p.request.patterns
+            )
+
+            if all_allowed:
+                del self.pending[pid]
+                p.result["result"] = "allow"
+                p.event.set()
+
+                if self._event_publisher:
+                    try:
+                        await self._event_publisher(
+                            {
+                                "type": "permission_replied",
+                                "data": {
+                                    "request_id": pid,
+                                    "reply": "always",
+                                    "session_id": session_id,
+                                    "auto_approved": True,
+                                },
+                            }
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to publish auto-approval event: {e}")
+
+        logger.info(
+            f"Permission granted always: {pending.request.permission} "
+            f"for patterns {pending.request.always_patterns}"
+        )
 
     def get_pending_requests(self, session_id: str | None = None) -> list[PermissionRequest]:
         """

@@ -88,61 +88,58 @@ class ConnectionManager:
         """Clean up a disconnected session."""
         async with self._lock:
             user_id = self.session_users.get(session_id)
-
-            # Cancel bridge tasks
-            if session_id in self.bridge_tasks:
-                for task in self.bridge_tasks[session_id].values():
-                    task.cancel()
-                del self.bridge_tasks[session_id]
-
-            # Cancel status monitoring tasks
-            if session_id in self.status_tasks:
-                for task in self.status_tasks[session_id].values():
-                    task.cancel()
-                del self.status_tasks[session_id]
-
-            # Remove status subscriptions
-            if session_id in self.status_subscriptions:
-                del self.status_subscriptions[session_id]
-
-            # Remove lifecycle state subscriptions
-            if session_id in self.session_project_subscriptions:
-                for tenant_id, project_id in self.session_project_subscriptions[session_id]:
-                    if (
-                        tenant_id in self.project_subscriptions
-                        and project_id in self.project_subscriptions[tenant_id]
-                    ):
-                        self.project_subscriptions[tenant_id][project_id].discard(session_id)
-                        if not self.project_subscriptions[tenant_id][project_id]:
-                            del self.project_subscriptions[tenant_id][project_id]
-                        if not self.project_subscriptions[tenant_id]:
-                            del self.project_subscriptions[tenant_id]
-                del self.session_project_subscriptions[session_id]
-
-            # Remove from conversation subscribers
-            if session_id in self.subscriptions:
-                for conv_id in self.subscriptions[session_id]:
-                    if conv_id in self.conversation_subscribers:
-                        self.conversation_subscribers[conv_id].discard(session_id)
-                        if not self.conversation_subscribers[conv_id]:
-                            del self.conversation_subscribers[conv_id]
-                del self.subscriptions[session_id]
-
-            # Remove session from user's session set
-            if user_id and user_id in self.user_sessions:
-                self.user_sessions[user_id].discard(session_id)
-                if not self.user_sessions[user_id]:
-                    del self.user_sessions[user_id]
-
-            # Remove connection and session mappings
+            self._cancel_session_tasks(session_id)
+            self.status_subscriptions.pop(session_id, None)
+            self._remove_project_subscriptions(session_id)
+            self._remove_conversation_subscriptions(session_id)
+            self._remove_user_session(user_id, session_id)
             self.active_connections.pop(session_id, None)
             self.session_users.pop(session_id, None)
-
-        # Clean up event dispatcher (outside lock to avoid deadlock)
         await self.dispatcher_manager.cleanup_session(session_id)
-
         total_sessions = len(self.active_connections)
         logger.info(f"[WS] Session {session_id[:8]}... disconnected. Total: {total_sessions}")
+
+    def _cancel_session_tasks(self, session_id: str) -> None:
+        """Cancel bridge and status monitoring tasks for a session."""
+        for task_dict_name in ("bridge_tasks", "status_tasks"):
+            task_dict = getattr(self, task_dict_name)
+            if session_id in task_dict:
+                for task in task_dict[session_id].values():
+                    task.cancel()
+                del task_dict[session_id]
+
+    def _remove_project_subscriptions(self, session_id: str) -> None:
+        """Remove lifecycle state subscriptions for a session."""
+        if session_id not in self.session_project_subscriptions:
+            return
+        for tenant_id, project_id in self.session_project_subscriptions[session_id]:
+            tenant_subs = self.project_subscriptions.get(tenant_id, {})
+            if project_id in tenant_subs:
+                tenant_subs[project_id].discard(session_id)
+                if not tenant_subs[project_id]:
+                    del tenant_subs[project_id]
+                if not tenant_subs:
+                    self.project_subscriptions.pop(tenant_id, None)
+                del self.session_project_subscriptions[session_id]
+
+    def _remove_conversation_subscriptions(self, session_id: str) -> None:
+        """Remove conversation subscriptions for a session."""
+        if session_id not in self.subscriptions:
+            return
+        for conv_id in self.subscriptions[session_id]:
+            if conv_id in self.conversation_subscribers:
+                self.conversation_subscribers[conv_id].discard(session_id)
+                if not self.conversation_subscribers[conv_id]:
+                    del self.conversation_subscribers[conv_id]
+                del self.subscriptions[session_id]
+
+    def _remove_user_session(self, user_id: str | None, session_id: str) -> None:
+        """Remove session from user's session set."""
+        if not user_id or user_id not in self.user_sessions:
+            return
+        self.user_sessions[user_id].discard(session_id)
+        if not self.user_sessions[user_id]:
+            del self.user_sessions[user_id]
 
     # ==========================================================================
     # Conversation Subscriptions

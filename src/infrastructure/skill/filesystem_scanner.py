@@ -223,29 +223,39 @@ class FileSystemSkillScanner:
 
         # Scan global directories (can override system)
         if should_include_global:
-            for global_dir_pattern in self.GLOBAL_SKILL_DIRS:
-                # Expand ~ to user home directory
-                expanded_path = Path(os.path.expanduser(global_dir_pattern))
-
-                if not expanded_path.exists():
-                    continue
-
-                if not expanded_path.is_dir():
-                    result.errors.append(f"Not a directory: {expanded_path}")
-                    continue
-
-                result.scanned_dirs.add(str(expanded_path))
-                source_type = self._determine_source_type(global_dir_pattern) + "_global"
-
-                try:
-                    self._scan_directory(expanded_path, source_type, result, is_system=False)
-                    logger.debug(f"Scanned global skill directory: {expanded_path}")
-                except PermissionError as e:
-                    result.errors.append(f"Permission denied: {expanded_path} - {e}")
-                except OSError as e:
-                    result.errors.append(f"Error scanning {expanded_path}: {e}")
+            self._scan_global_dirs(result)
 
         # Scan project directories (highest priority - can override global and system)
+        self._scan_project_dirs(base_path, result)
+
+        return result
+
+    def _scan_global_dirs(self, result: ScanResult) -> None:
+        """Scan global skill directories and append results."""
+        for global_dir_pattern in self.GLOBAL_SKILL_DIRS:
+            # Expand ~ to user home directory
+            expanded_path = Path(os.path.expanduser(global_dir_pattern))
+
+            if not expanded_path.exists():
+                continue
+
+            if not expanded_path.is_dir():
+                result.errors.append(f"Not a directory: {expanded_path}")
+                continue
+
+            result.scanned_dirs.add(str(expanded_path))
+            source_type = self._determine_source_type(global_dir_pattern) + "_global"
+
+            try:
+                self._scan_directory(expanded_path, source_type, result, is_system=False)
+                logger.debug(f"Scanned global skill directory: {expanded_path}")
+            except PermissionError as e:
+                result.errors.append(f"Permission denied: {expanded_path} - {e}")
+            except OSError as e:
+                result.errors.append(f"Error scanning {expanded_path}: {e}")
+
+    def _scan_project_dirs(self, base_path: Path, result: ScanResult) -> None:
+        """Scan project-level skill directories and append results."""
         for skill_dir_pattern in self.skill_dirs:
             skill_dir = base_path / skill_dir_pattern
 
@@ -265,8 +275,6 @@ class FileSystemSkillScanner:
                 result.errors.append(f"Permission denied: {skill_dir} - {e}")
             except OSError as e:
                 result.errors.append(f"Error scanning {skill_dir}: {e}")
-
-        return result
 
     def scan_system_only(self) -> ScanResult:
         """

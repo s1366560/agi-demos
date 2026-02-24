@@ -385,6 +385,106 @@ async def stop_task_endpoint(
     return {"message": "Task marked as stopped"}
 
 
+def _serialize_task_response_dict(task: Any) -> dict:
+    """Convert task to a JSON-serializable dict with ISO datetime strings."""
+    response_dict = task_to_response(task).model_dump()
+    response_dict["created_at"] = response_dict["created_at"].isoformat()
+    if response_dict.get("started_at"):
+        response_dict["started_at"] = response_dict["started_at"].isoformat()
+    if response_dict.get("completed_at"):
+        response_dict["completed_at"] = response_dict["completed_at"].isoformat()
+    return response_dict
+
+
+def _build_progress_event(task: Any) -> dict:
+    """Build a progress SSE event dict from a task."""
+    return {
+        "event": "progress",
+        "data": json.dumps(
+            {
+                "id": task.id,
+                "status": task.status.lower(),
+                "progress": getattr(task, "progress", 0),
+                "message": getattr(task, "message", None),
+                "result": getattr(task, "result", None),
+                "error": task.error_message,
+            }
+        ),
+    }
+
+
+async def _poll_task_updates(
+    task_id: str,
+    last_progress: int,
+    last_status: str,
+) -> AsyncGenerator[dict[str, Any], None]:
+    """Poll database for task updates, yielding SSE events on changes."""
+    from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
+
+    retry_count = 0
+    max_retries = 3
+    poll_iteration = 0
+
+    while True:
+        poll_iteration += 1
+        logger.info(f"Polling iteration {poll_iteration} for task {task_id}")
+        try:
+            async with async_session_factory() as session:
+                result = await session.execute(select(DBTaskLog).where(DBTaskLog.id == task_id))
+                task = result.scalar_one_or_none()
+
+                if not task:
+                    yield {
+                        "event": "error",
+                        "data": json.dumps({"error": "Task disappeared from database"}),
+                    }
+                    return
+
+                current_progress = getattr(task, "progress", 0)
+                current_status = task.status
+
+                logger.info(
+                    f"Polling task {task_id}: status={current_status}, "
+                    f"progress={current_progress}, last_status={last_status}, "
+                    f"last_progress={last_progress}"
+                )
+
+                if current_progress != last_progress or current_status != last_status:
+                    logger.info(
+                        f"Task {task_id} status changed: "
+                        f"{last_status}->{current_status}, "
+                        f"progress: {last_progress}->{current_progress}"
+                    )
+                    yield _build_progress_event(task)
+                    last_progress = current_progress
+                    last_status = current_status
+
+                if current_status in ("COMPLETED", "FAILED"):
+                    event_type = "completed" if current_status == "COMPLETED" else "failed"
+                    yield {
+                        "event": event_type,
+                        "data": json.dumps(_serialize_task_response_dict(task)),
+                    }
+                    logger.info(f"SSE stream {event_type} for task {task_id}")
+                    return
+
+            retry_count = 0
+            await asyncio.sleep(1)
+
+        except Exception as e:
+            retry_count += 1
+            logger.error(f"Error in SSE stream for task {task_id}: {e}")
+
+            if retry_count >= max_retries:
+                yield {
+                    "event": "error",
+                    "data": json.dumps({"error": "Stream error", "message": str(e)}),
+                }
+                return
+
+            await asyncio.sleep(2)
+
+
 @router.get("/{task_id}/stream", response_class=EventSourceResponse, response_model=None)
 async def stream_task_status(
     task_id: str, db: AsyncSession = Depends(get_db)
@@ -414,167 +514,43 @@ async def stream_task_status(
     async def event_generator() -> AsyncGenerator[Any, None]:
         """Generate SSE events for task status updates."""
         logger.info(f"Event generator started for task {task_id}")
-
-        # Create a new session for the generator to avoid session closure issues
         from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 
         try:
-            # Get initial task state with a fresh session
             async with async_session_factory() as session:
                 result = await session.execute(select(DBTaskLog).where(DBTaskLog.id == task_id))
                 task = result.scalar_one_or_none()
 
                 if not task:
-                    # Send error event and close
                     logger.error(f"Task {task_id} not found in database")
                     yield {"event": "error", "data": json.dumps({"error": "Task not found"})}
                     return
 
                 logger.info(f"Task {task_id} found with status: {task.status}")
-
                 # If task is already in a final state, send final event directly
                 if task.status in (TaskLogStatus.COMPLETED, TaskLogStatus.FAILED):
                     event_type = "completed" if task.status == TaskLogStatus.COMPLETED else "failed"
-                    logger.info(
-                        f"Task {task_id} is already in final state: {task.status}, sending {event_type} event"
-                    )
-                    response_dict = task_to_response(task).model_dump()
-                    # Convert datetime objects to ISO format strings
-                    response_dict["created_at"] = response_dict["created_at"].isoformat()
-                    if response_dict.get("started_at"):
-                        response_dict["started_at"] = response_dict["started_at"].isoformat()
-                    if response_dict.get("completed_at"):
-                        response_dict["completed_at"] = response_dict["completed_at"].isoformat()
-                    yield {"event": event_type, "data": json.dumps(response_dict)}
-                    logger.info(f"Sent {event_type} event for task {task_id}")
+                    logger.info(f"Task {task_id} already in final state: {task.status}")
+                    yield {
+                        "event": event_type,
+                        "data": json.dumps(_serialize_task_response_dict(task)),
+                    }
                     return
-
                 # Send initial state for active tasks
                 logger.info(f"Task {task_id} is active, sending initial progress event")
-                yield {
-                    "event": "progress",
-                    "data": json.dumps(
-                        {
-                            "id": task.id,
-                            "status": task.status.lower(),
-                            "progress": getattr(task, "progress", 0),
-                            "message": getattr(task, "message", None),
-                            "result": getattr(task, "result", None),
-                            "error": task.error_message,
-                        }
-                    ),
-                }
+                yield _build_progress_event(task)
 
-            # Small delay to prevent rapid-fire events
             await asyncio.sleep(0.5)
-
-            # Poll for updates (check every 1 second)
             last_progress = getattr(task, "progress", 0)
             last_status = task.status
-            retry_count = 0
-            max_retries = 3  # Allow 3 consecutive DB errors before giving up
-
             logger.info(
-                f"Starting polling loop for task {task_id}: initial status={last_status}, initial progress={last_progress}"
+                f"Starting polling loop for task {task_id}: "
+                f"initial status={last_status}, initial progress={last_progress}"
             )
 
-            poll_iteration = 0
-            while True:
-                poll_iteration += 1
-                logger.info(f"Polling iteration {poll_iteration} for task {task_id}")
-                try:
-                    # Refresh task from database - use fresh session each time
-                    async with async_session_factory() as session:
-                        result = await session.execute(
-                            select(DBTaskLog).where(DBTaskLog.id == task_id)
-                        )
-                        task = result.scalar_one_or_none()
+            async for event in _poll_task_updates(task_id, last_progress, last_status):
+                yield event
 
-                        if not task:
-                            yield {
-                                "event": "error",
-                                "data": json.dumps({"error": "Task disappeared from database"}),
-                            }
-                            return
-
-                        current_progress = getattr(task, "progress", 0)
-                        current_status = task.status
-
-                        logger.info(
-                            f"Polling task {task_id}: status={current_status}, progress={current_progress}, last_status={last_status}, last_progress={last_progress}"
-                        )
-
-                        # Send progress update if changed
-                        if current_progress != last_progress or current_status != last_status:
-                            logger.info(
-                                f"Task {task_id} status changed: {last_status}→{current_status}, progress: {last_progress}→{current_progress}"
-                            )
-                            yield {
-                                "event": "progress",
-                                "data": json.dumps(
-                                    {
-                                        "id": task.id,
-                                        "status": current_status.lower(),
-                                        "progress": current_progress,
-                                        "message": getattr(task, "message", None),
-                                        "result": getattr(task, "result", None),
-                                        "error": task.error_message,
-                                    }
-                                ),
-                            }
-                            last_progress = current_progress
-                            last_status = current_status
-
-                        # Check for terminal states
-                        if current_status == "COMPLETED":
-                            response_dict = task_to_response(task).model_dump()
-                            response_dict["created_at"] = response_dict["created_at"].isoformat()
-                            if response_dict.get("started_at"):
-                                response_dict["started_at"] = response_dict[
-                                    "started_at"
-                                ].isoformat()
-                            if response_dict.get("completed_at"):
-                                response_dict["completed_at"] = response_dict[
-                                    "completed_at"
-                                ].isoformat()
-                            yield {"event": "completed", "data": json.dumps(response_dict)}
-                            logger.info(f"SSE stream completed for task {task_id}")
-                            return
-
-                        if current_status == "FAILED":
-                            response_dict = task_to_response(task).model_dump()
-                            response_dict["created_at"] = response_dict["created_at"].isoformat()
-                            if response_dict.get("started_at"):
-                                response_dict["started_at"] = response_dict[
-                                    "started_at"
-                                ].isoformat()
-                            if response_dict.get("completed_at"):
-                                response_dict["completed_at"] = response_dict[
-                                    "completed_at"
-                                ].isoformat()
-                            yield {"event": "failed", "data": json.dumps(response_dict)}
-                            logger.info(f"SSE stream failed for task {task_id}")
-                            return
-
-                    # Reset retry count on success
-                    retry_count = 0
-
-                    # Wait before next poll (1 second)
-                    await asyncio.sleep(1)
-
-                except Exception as e:
-                    retry_count += 1
-                    logger.error(f"Error in SSE stream for task {task_id}: {e}")
-
-                    if retry_count >= max_retries:
-                        yield {
-                            "event": "error",
-                            "data": json.dumps({"error": "Stream error", "message": str(e)}),
-                        }
-                        return
-
-                    # Wait before retry (2 seconds)
-                    await asyncio.sleep(2)
         except Exception as e:
             logger.error(f"Exception in event generator for task {task_id}: {e}", exc_info=True)
             yield {

@@ -7,6 +7,7 @@ import json
 import logging
 import time as time_module
 import uuid
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
@@ -42,6 +43,297 @@ _background_tasks: set[asyncio.Task[Any]] = set()
 # so they survive service restarts.
 _PERSIST_INTERVAL_SECONDS = 30
 
+# TTL refresh interval for agent running state (seconds).
+_TTL_REFRESH_INTERVAL_SECONDS = 60
+
+
+# ---------------------------------------------------------------------------
+# Shared dataclass / helpers used by both execute_ and continue_ flows
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _EventSideEffects:
+    """Side effects extracted from a single streaming event."""
+
+    final_content: str | None = None
+    is_error: bool = False
+    error_message: str | None = None
+    summary_data: dict[str, Any] | None = None
+
+
+@dataclass
+class _StreamState:
+    """Mutable accumulator for the streaming event loop."""
+
+    events: list[dict[str, Any]] = field(default_factory=list)
+    final_content: str = ""
+    is_error: bool = False
+    error_message: str | None = None
+    summary_save_data: dict[str, Any] | None = None
+    persisted_count: int = 0
+    last_refresh: float = 0.0
+    last_persist: float = 0.0
+
+    def apply_side_effects(self, side: _EventSideEffects) -> None:
+        """Merge side effects from a single event into the accumulator."""
+        if side.final_content is not None:
+            self.final_content = side.final_content
+        if side.is_error:
+            self.is_error = True
+            self.error_message = side.error_message
+        if side.summary_data is not None:
+            self.summary_save_data = side.summary_data
+
+
+def _extract_event_side_effects(event: dict[str, Any]) -> _EventSideEffects:
+    """Extract side-effect information from a streaming event.
+
+    Also fires a background task when an ``mcp_app_result`` event
+    carries HTML content that should be persisted.
+    """
+    side = _EventSideEffects()
+    event_type = event.get("type")
+
+    if event_type == "complete":
+        side.final_content = event.get("data", {}).get("content", "")
+    elif event_type == "error":
+        side.is_error = True
+        side.error_message = event.get("data", {}).get("message", "Unknown error")
+    elif event_type == "context_summary_generated":
+        side.summary_data = event.get("data")
+    elif event_type == "mcp_app_result":
+        _maybe_persist_mcp_app_html(event)
+
+    return side
+
+
+def _maybe_persist_mcp_app_html(event: dict[str, Any]) -> None:
+    """Fire-and-forget background task to persist MCP App HTML (D2 fix)."""
+    event_data = event.get("data", {})
+    app_id = event_data.get("app_id")
+    resource_html = event_data.get("resource_html", "")
+    resource_uri = event_data.get("resource_uri", "")
+    if app_id and resource_html:
+        task = asyncio.create_task(_save_mcp_app_html(app_id, resource_uri, resource_html))
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
+
+
+async def _maybe_refresh_ttl(
+    now: float,
+    last_refresh: float,
+    conversation_id: str,
+) -> float:
+    """Refresh agent-running TTL if sufficient time has elapsed.
+
+    Returns the (possibly updated) ``last_refresh`` timestamp.
+    """
+    if now - last_refresh > _TTL_REFRESH_INTERVAL_SECONDS:
+        await refresh_agent_running_ttl(conversation_id)
+        return now
+    return last_refresh
+
+
+async def _maybe_incremental_persist(
+    now: float,
+    last_persist: float,
+    events: list[dict[str, Any]],
+    persisted_count: int,
+    conversation_id: str,
+    message_id: str,
+    correlation_id: str | None,
+) -> tuple[int, float]:
+    """Persist events to DB if the persist interval has elapsed.
+
+    Returns ``(new_persisted_count, new_last_persist)``.
+    """
+    if now - last_persist > _PERSIST_INTERVAL_SECONDS:
+        batch = events[persisted_count:]
+        if batch:
+            await _persist_events(
+                conversation_id=conversation_id,
+                message_id=message_id,
+                events=batch,
+                correlation_id=correlation_id,
+            )
+            persisted_count = len(events)
+        last_persist = now
+    return persisted_count, last_persist
+
+
+async def _flush_remaining_events(
+    events: list[dict[str, Any]],
+    persisted_count: int,
+    conversation_id: str,
+    message_id: str,
+    correlation_id: str | None,
+) -> None:
+    """Persist any events not yet flushed to DB."""
+    remaining = events[persisted_count:]
+    if remaining:
+        await _persist_events(
+            conversation_id=conversation_id,
+            message_id=message_id,
+            events=remaining,
+            correlation_id=correlation_id,
+        )
+
+
+def _record_chat_metrics(
+    project_id: str,
+    execution_time_ms: float,
+    is_error: bool,
+) -> None:
+    """Record Prometheus-style metrics for a completed chat."""
+    agent_metrics.increment(
+        "project_agent.chat_total",
+        labels={"project_id": project_id},
+    )
+    agent_metrics.observe(
+        "project_agent.chat_latency_ms",
+        execution_time_ms,
+        labels={"project_id": project_id},
+    )
+    if is_error:
+        agent_metrics.increment(
+            "project_agent.chat_errors",
+            labels={"project_id": project_id},
+        )
+
+
+async def _handle_chat_error(
+    error: Exception,
+    events: list[dict[str, Any]],
+    persisted_count: int,
+    conversation_id: str,
+    message_id: str,
+    correlation_id: str | None,
+    start_time: float,
+    *,
+    publish_error: bool = True,
+) -> ProjectChatResult:
+    """Handle an exception during chat execution.
+
+    Persists remaining events, optionally publishes an error event to
+    Redis, and returns an error ``ProjectChatResult``.
+    """
+    execution_time_ms = (time_module.time() - start_time) * 1000
+    agent_metrics.increment("project_agent.chat_errors")
+    logger.error(f"[ActorExecution] Chat error: {error}", exc_info=True)
+
+    remaining = events[persisted_count:] if events else []
+    if remaining:
+        try:
+            await _persist_events(
+                conversation_id=conversation_id,
+                message_id=message_id,
+                events=remaining,
+                correlation_id=correlation_id,
+            )
+        except Exception as persist_err:
+            logger.warning(f"[ActorExecution] Failed to persist events on error: {persist_err}")
+
+    if publish_error:
+        try:
+            await _publish_error_event(
+                conversation_id=conversation_id,
+                message_id=message_id,
+                error_message=str(error),
+                correlation_id=correlation_id,
+            )
+        except Exception as pub_error:
+            logger.warning(f"[ActorExecution] Failed to publish error event: {pub_error}")
+
+    return ProjectChatResult(
+        conversation_id=conversation_id,
+        message_id=message_id,
+        content="",
+        last_event_time_us=0,
+        last_event_counter=0,
+        is_error=True,
+        error_message=str(error),
+        execution_time_ms=execution_time_ms,
+        event_count=0,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Helpers specific to continue_project_chat
+# ---------------------------------------------------------------------------
+
+
+async def _load_hitl_state(
+    state_store: HITLStateStore,
+    request_id: str,
+) -> HITLAgentState | None:
+    """Load HITL state with retry, checking both Redis and snapshot."""
+    state: HITLAgentState | None = None
+    for attempt in range(10):
+        state = await state_store.load_state_by_request(request_id)
+        if not state:
+            state = await load_hitl_snapshot(request_id)
+        if state:
+            break
+        if attempt < 9:
+            await asyncio.sleep(0.2)
+    return state
+
+
+def _hitl_state_not_found_result(start_time: float) -> ProjectChatResult:
+    """Build an error result when HITL state cannot be found."""
+    return ProjectChatResult(
+        conversation_id="",
+        message_id="",
+        content="",
+        last_event_time_us=0,
+        last_event_counter=0,
+        is_error=True,
+        error_message="HITL state not found or expired",
+        execution_time_ms=(time_module.time() - start_time) * 1000,
+        event_count=0,
+    )
+
+
+def _init_continue_time_gen(
+    state: HITLAgentState,
+    db_event_time: tuple[int, int],
+) -> EventTimeGenerator:
+    """Create an EventTimeGenerator from the max of state and DB times."""
+    db_time_us, db_counter = db_event_time
+    if db_time_us > state.last_event_time_us or (
+        db_time_us == state.last_event_time_us and db_counter > state.last_event_counter
+    ):
+        return EventTimeGenerator(db_time_us, db_counter)
+    return EventTimeGenerator(state.last_event_time_us, state.last_event_counter)
+
+
+def _build_hitl_context(
+    state: HITLAgentState,
+    response_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Build conversation context with HITL tool result appended."""
+    conversation_context = list(state.messages)
+    if state.pending_tool_call_id:
+        tool_result_content = _format_hitl_response_as_tool_result(
+            hitl_type=state.hitl_type,
+            response_data=response_data,
+        )
+        conversation_context = [
+            *conversation_context,
+            {
+                "role": "tool",
+                "tool_call_id": state.pending_tool_call_id,
+                "content": tool_result_content,
+            },
+        ]
+    return conversation_context
+
+
+# ---------------------------------------------------------------------------
+# Public API entry points
+# ---------------------------------------------------------------------------
+
 
 def _inject_app_model_context(
     conversation_context: list[dict[str, Any]],
@@ -74,23 +366,15 @@ async def execute_project_chat(
 ) -> ProjectChatResult:
     """Execute a chat request and publish events to Redis/DB."""
     start_time = time_module.time()
-    events: list[dict[str, Any]] = []
-    final_content = ""
-    is_error = False
-    error_message = None
-    summary_save_data: dict[str, Any] | None = None
+    ss = _StreamState(last_refresh=time_module.time(), last_persist=time_module.time())
 
     await set_agent_running(request.conversation_id, request.message_id)
 
-    # Initialize EventTimeGenerator from last DB event time to avoid collisions
     last_time_us, last_counter = await _get_last_db_event_time(request.conversation_id)
     time_gen = EventTimeGenerator(last_time_us, last_counter)
 
     try:
         redis_client = await _get_redis_client()
-        last_refresh = time_module.time()
-        last_persist = time_module.time()
-        persisted_count = 0
 
         async for event in agent.execute_chat(
             conversation_id=request.conversation_id,
@@ -110,7 +394,7 @@ async def execute_project_chat(
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us
             event["event_counter"] = evt_counter
-            events.append(event)
+            ss.events.append(event)
 
             await _publish_event_to_stream(
                 conversation_id=request.conversation_id,
@@ -122,132 +406,63 @@ async def execute_project_chat(
                 redis_client=redis_client,
             )
 
-            event_type = event.get("type")
-            if event_type == "complete":
-                final_content = event.get("data", {}).get("content", "")
-            elif event_type == "error":
-                is_error = True
-                error_message = event.get("data", {}).get("message", "Unknown error")
-            elif event_type == "context_summary_generated":
-                summary_save_data = event.get("data")
-            elif event_type == "mcp_app_result":
-                # Persist agent-generated HTML to DB so page refreshes can load it (D2 fix)
-                event_data = event.get("data", {})
-                _app_id = event_data.get("app_id")
-                _resource_html = event_data.get("resource_html", "")
-                _resource_uri = event_data.get("resource_uri", "")
-                if _app_id and _resource_html:
-                    _save_task = asyncio.create_task(
-                        _save_mcp_app_html(_app_id, _resource_uri, _resource_html)
-                    )
-                    _background_tasks.add(_save_task)
-                    _save_task.add_done_callback(_background_tasks.discard)
+            ss.apply_side_effects(_extract_event_side_effects(event))
 
             now = time_module.time()
-            if now - last_refresh > 60:
-                await refresh_agent_running_ttl(request.conversation_id)
-                last_refresh = now
-
-            # Incremental persistence: flush to DB periodically so events
-            # survive service restarts mid-stream.
-            if now - last_persist > _PERSIST_INTERVAL_SECONDS:
-                batch = events[persisted_count:]
-                if batch:
-                    await _persist_events(
-                        conversation_id=request.conversation_id,
-                        message_id=request.message_id,
-                        events=batch,
-                        correlation_id=request.correlation_id,
-                    )
-                    persisted_count = len(events)
-                last_persist = now
-
-        # Final flush for any remaining events
-        remaining = events[persisted_count:]
-        if remaining:
-            await _persist_events(
-                conversation_id=request.conversation_id,
-                message_id=request.message_id,
-                events=remaining,
-                correlation_id=request.correlation_id,
+            ss.last_refresh = await _maybe_refresh_ttl(
+                now,
+                ss.last_refresh,
+                request.conversation_id,
+            )
+            ss.persisted_count, ss.last_persist = await _maybe_incremental_persist(
+                now,
+                ss.last_persist,
+                ss.events,
+                ss.persisted_count,
+                request.conversation_id,
+                request.message_id,
+                request.correlation_id,
             )
 
-        # Save context summary if compression generated one
-        if summary_save_data and not is_error:
+        await _flush_remaining_events(
+            ss.events,
+            ss.persisted_count,
+            request.conversation_id,
+            request.message_id,
+            request.correlation_id,
+        )
+
+        if ss.summary_save_data and not ss.is_error:
             await _save_context_summary(
                 conversation_id=request.conversation_id,
-                summary_data=summary_save_data,
+                summary_data=ss.summary_save_data,
                 last_event_time_us=time_gen.last_time_us,
             )
 
         execution_time_ms = (time_module.time() - start_time) * 1000
-
-        agent_metrics.increment(
-            "project_agent.chat_total",
-            labels={"project_id": agent.config.project_id},
-        )
-        agent_metrics.observe(
-            "project_agent.chat_latency_ms",
-            execution_time_ms,
-            labels={"project_id": agent.config.project_id},
-        )
-
-        if is_error:
-            agent_metrics.increment(
-                "project_agent.chat_errors",
-                labels={"project_id": agent.config.project_id},
-            )
+        _record_chat_metrics(agent.config.project_id, execution_time_ms, ss.is_error)
 
         return ProjectChatResult(
             conversation_id=request.conversation_id,
             message_id=request.message_id,
-            content=final_content,
+            content=ss.final_content,
             last_event_time_us=time_gen.last_time_us,
             last_event_counter=time_gen.last_counter,
-            is_error=is_error,
-            error_message=error_message,
+            is_error=ss.is_error,
+            error_message=ss.error_message,
             execution_time_ms=execution_time_ms,
-            event_count=len(events),
+            event_count=len(ss.events),
         )
 
     except Exception as e:
-        execution_time_ms = (time_module.time() - start_time) * 1000
-        agent_metrics.increment("project_agent.chat_errors")
-        logger.error(f"[ActorExecution] Chat error: {e}", exc_info=True)
-
-        # Persist events collected before the error so they survive restarts
-        remaining = events[persisted_count:] if events else []
-        if remaining:
-            try:
-                await _persist_events(
-                    conversation_id=request.conversation_id,
-                    message_id=request.message_id,
-                    events=remaining,
-                    correlation_id=request.correlation_id,
-                )
-            except Exception as persist_err:
-                logger.warning(f"[ActorExecution] Failed to persist events on error: {persist_err}")
-
-        try:
-            await _publish_error_event(
-                conversation_id=request.conversation_id,
-                message_id=request.message_id,
-                error_message=str(e),
-                correlation_id=request.correlation_id,
-            )
-        except Exception as pub_error:
-            logger.warning(f"[ActorExecution] Failed to publish error event: {pub_error}")
-
-        return ProjectChatResult(
-            conversation_id=request.conversation_id,
-            message_id=request.message_id,
-            content="",
-            last_event_time_us=0,
-            last_event_counter=0,
-            is_error=True,
-            error_message=str(e),
-            execution_time_ms=execution_time_ms,
-            event_count=0,
+        return await _handle_chat_error(
+            e,
+            ss.events,
+            ss.persisted_count,
+            request.conversation_id,
+            request.message_id,
+            request.correlation_id,
+            start_time,
         )
     finally:
         await clear_agent_running(request.conversation_id)
@@ -327,10 +542,7 @@ async def continue_project_chat(
 ) -> ProjectChatResult:
     """Resume an HITL-paused chat using stored state."""
     start_time = time_module.time()
-    events: list[dict[str, Any]] = []
-    final_content = ""
-    is_error = False
-    error_message = None
+    ss = _StreamState(last_refresh=time_module.time(), last_persist=time_module.time())
 
     redis_client = await _get_redis_client()
     state_store = HITLStateStore(redis_client)
@@ -340,29 +552,10 @@ async def continue_project_chat(
         f"response_keys={list(response_data.keys()) if response_data else 'None'}"
     )
 
-    state = None
-    for attempt in range(10):
-        state = await state_store.load_state_by_request(request_id)
-        if not state:
-            state = await load_hitl_snapshot(request_id)
-        if state:
-            break
-        if attempt < 9:
-            await asyncio.sleep(0.2)
-
+    state = await _load_hitl_state(state_store, request_id)
     if not state:
         logger.error(f"[ActorExecution] HITL state not found for request_id={request_id}")
-        return ProjectChatResult(
-            conversation_id="",
-            message_id="",
-            content="",
-            last_event_time_us=0,
-            last_event_counter=0,
-            is_error=True,
-            error_message="HITL state not found or expired",
-            execution_time_ms=(time_module.time() - start_time) * 1000,
-            event_count=0,
-        )
+        return _hitl_state_not_found_result(start_time)
 
     logger.info(
         f"[ActorExecution] Loaded HITL state: conversation_id={state.conversation_id}, "
@@ -371,40 +564,15 @@ async def continue_project_chat(
         f"last_event_counter={state.last_event_counter}"
     )
 
-    # Use the greater of HITL state event time and actual DB event time
-    # to avoid collisions with events saved by other paths
-    db_last_time_us, db_last_counter = await _get_last_db_event_time(state.conversation_id)
-    if db_last_time_us > state.last_event_time_us or (
-        db_last_time_us == state.last_event_time_us and db_last_counter > state.last_event_counter
-    ):
-        init_time_us, init_counter = db_last_time_us, db_last_counter
-    else:
-        init_time_us, init_counter = state.last_event_time_us, state.last_event_counter
-    time_gen = EventTimeGenerator(init_time_us, init_counter)
+    db_event_time = await _get_last_db_event_time(state.conversation_id)
+    time_gen = _init_continue_time_gen(state, db_event_time)
     await set_agent_running(state.conversation_id, state.message_id)
 
     try:
-        conversation_context = list(state.messages)
-        if state.pending_tool_call_id:
-            tool_result_content = _format_hitl_response_as_tool_result(
-                hitl_type=state.hitl_type,
-                response_data=response_data,
-            )
-            conversation_context = [
-                *conversation_context,
-                {
-                    "role": "tool",
-                    "tool_call_id": state.pending_tool_call_id,
-                    "content": tool_result_content,
-                },
-            ]
+        conversation_context = _build_hitl_context(state, response_data)
 
         await state_store.delete_state_by_request(request_id)
         await delete_hitl_snapshot(request_id)
-
-        last_refresh = time_module.time()
-        last_persist = time_module.time()
-        persisted_count = 0
 
         async for event in agent.execute_chat(
             conversation_id=state.conversation_id,
@@ -417,7 +585,7 @@ async def continue_project_chat(
             evt_time_us, evt_counter = time_gen.next()
             event["event_time_us"] = evt_time_us
             event["event_counter"] = evt_counter
-            events.append(event)
+            ss.events.append(event)
 
             await _publish_event_to_stream(
                 conversation_id=state.conversation_id,
@@ -429,82 +597,64 @@ async def continue_project_chat(
                 redis_client=redis_client,
             )
 
-            event_type = event.get("type")
-            if event_type == "complete":
-                final_content = event.get("data", {}).get("content", "")
-            elif event_type == "error":
-                is_error = True
-                error_message = event.get("data", {}).get("message", "Unknown error")
+            ss.apply_side_effects(_extract_event_side_effects(event))
 
             now = time_module.time()
-            if now - last_refresh > 60:
-                await refresh_agent_running_ttl(state.conversation_id)
-                last_refresh = now
-
-            if now - last_persist > _PERSIST_INTERVAL_SECONDS:
-                batch = events[persisted_count:]
-                if batch:
-                    await _persist_events(
-                        conversation_id=state.conversation_id,
-                        message_id=state.message_id,
-                        events=batch,
-                        correlation_id=state.correlation_id,
-                    )
-                    persisted_count = len(events)
-                last_persist = now
-
-        remaining = events[persisted_count:]
-        if remaining:
-            await _persist_events(
-                conversation_id=state.conversation_id,
-                message_id=state.message_id,
-                events=remaining,
-                correlation_id=state.correlation_id,
+            ss.last_refresh = await _maybe_refresh_ttl(
+                now,
+                ss.last_refresh,
+                state.conversation_id,
             )
+            ss.persisted_count, ss.last_persist = await _maybe_incremental_persist(
+                now,
+                ss.last_persist,
+                ss.events,
+                ss.persisted_count,
+                state.conversation_id,
+                state.message_id,
+                state.correlation_id,
+            )
+
+        await _flush_remaining_events(
+            ss.events,
+            ss.persisted_count,
+            state.conversation_id,
+            state.message_id,
+            state.correlation_id,
+        )
 
         execution_time_ms = (time_module.time() - start_time) * 1000
 
         return ProjectChatResult(
             conversation_id=state.conversation_id,
             message_id=state.message_id,
-            content=final_content,
+            content=ss.final_content,
             last_event_time_us=time_gen.last_time_us,
             last_event_counter=time_gen.last_counter,
-            is_error=is_error,
-            error_message=error_message,
+            is_error=ss.is_error,
+            error_message=ss.error_message,
             execution_time_ms=execution_time_ms,
-            event_count=len(events),
+            event_count=len(ss.events),
         )
 
     except Exception as e:
-        execution_time_ms = (time_module.time() - start_time) * 1000
-        logger.error(f"[ActorExecution] Continue chat error: {e}", exc_info=True)
-
-        remaining = events[persisted_count:] if events else []
-        if remaining:
-            try:
-                await _persist_events(
-                    conversation_id=state.conversation_id,
-                    message_id=state.message_id,
-                    events=remaining,
-                    correlation_id=state.correlation_id,
-                )
-            except Exception as persist_err:
-                logger.warning(f"[ActorExecution] Failed to persist events on error: {persist_err}")
-
-        return ProjectChatResult(
-            conversation_id=state.conversation_id,
-            message_id=state.message_id,
-            content="",
-            last_event_time_us=0,
-            last_event_counter=0,
-            is_error=True,
-            error_message=str(e),
-            execution_time_ms=execution_time_ms,
-            event_count=0,
+        return await _handle_chat_error(
+            e,
+            ss.events,
+            ss.persisted_count,
+            state.conversation_id,
+            state.message_id,
+            state.correlation_id,
+            start_time,
+            publish_error=False,
         )
     finally:
         await clear_agent_running(state.conversation_id)
+
+
+# ---------------------------------------------------------------------------
+# Infrastructure helpers (DB, Redis, metrics)
+# ---------------------------------------------------------------------------
 
 
 async def _get_last_db_event_time(conversation_id: str) -> tuple[int, int]:
@@ -753,6 +903,67 @@ async def _get_redis_client() -> aioredis.Redis:
     return await get_redis_client()
 
 
+# ---------------------------------------------------------------------------
+# HITL response formatting (dispatch-dict pattern)
+# ---------------------------------------------------------------------------
+
+
+def _format_clarification_response(response_data: dict[str, Any]) -> str:
+    """Format clarification HITL response."""
+    selected = (
+        response_data.get("selected_option_id")
+        or response_data.get("selected_options")
+        or response_data.get("answer")
+    )
+    custom = response_data.get("custom_input") or response_data.get("answer")
+    if custom:
+        return f"User clarification: {custom}"
+    if selected:
+        if isinstance(selected, list):
+            return f"User selected options: {', '.join(selected)}"
+        return f"User selected: {selected}"
+    return "User provided clarification (no specific selection)"
+
+
+def _format_decision_response(response_data: dict[str, Any]) -> str:
+    """Format decision HITL response."""
+    selected = response_data.get("selected_option_id") or response_data.get("decision")
+    custom = response_data.get("custom_input") or response_data.get("decision")
+    if custom:
+        return f"User decision (custom): {custom}"
+    if selected:
+        return f"User chose: {selected}"
+    return "User made a decision (no specific selection)"
+
+
+def _format_env_var_response(response_data: dict[str, Any]) -> str:
+    """Format env_var HITL response."""
+    values = response_data.get("values", {})
+    provided_vars = list(values.keys()) if values else []
+    if provided_vars:
+        return f"User provided environment variables: {', '.join(provided_vars)}"
+    return "User provided environment variable values"
+
+
+def _format_permission_response(response_data: dict[str, Any]) -> str:
+    """Format permission HITL response."""
+    granted = response_data.get("granted")
+    if granted is None:
+        granted = response_data.get("action") == "allow"
+    scope = response_data.get("scope", "once")
+    if granted:
+        return f"User granted permission (scope: {scope})"
+    return "User denied permission"
+
+
+_HITL_FORMATTERS: dict[str, Any] = {
+    "clarification": _format_clarification_response,
+    "decision": _format_decision_response,
+    "env_var": _format_env_var_response,
+    "permission": _format_permission_response,
+}
+
+
 def _format_hitl_response_as_tool_result(
     hitl_type: str,
     response_data: dict[str, Any],
@@ -760,55 +971,22 @@ def _format_hitl_response_as_tool_result(
     """Format HITL response data as a tool result content string."""
     if response_data.get("cancelled") or response_data.get("timeout"):
         return f"User did not complete {hitl_type} request"
-
-    if hitl_type == "clarification":
-        selected = (
-            response_data.get("selected_option_id")
-            or response_data.get("selected_options")
-            or response_data.get("answer")
-        )
-        custom = response_data.get("custom_input") or response_data.get("answer")
-        if custom:
-            return f"User clarification: {custom}"
-        if selected:
-            if isinstance(selected, list):
-                return f"User selected options: {', '.join(selected)}"
-            return f"User selected: {selected}"
-        return "User provided clarification (no specific selection)"
-
-    if hitl_type == "decision":
-        selected = response_data.get("selected_option_id") or response_data.get("decision")
-        custom = response_data.get("custom_input") or response_data.get("decision")
-        if custom:
-            return f"User decision (custom): {custom}"
-        if selected:
-            return f"User chose: {selected}"
-        return "User made a decision (no specific selection)"
-
-    if hitl_type == "env_var":
-        values = response_data.get("values", {})
-        provided_vars = list(values.keys()) if values else []
-        if provided_vars:
-            return f"User provided environment variables: {', '.join(provided_vars)}"
-        return "User provided environment variable values"
-
-    if hitl_type == "permission":
-        granted = response_data.get("granted")
-        if granted is None:
-            granted = response_data.get("action") == "allow"
-        scope = response_data.get("scope", "once")
-        if granted:
-            return f"User granted permission (scope: {scope})"
-        return "User denied permission"
-
+    formatter = _HITL_FORMATTERS.get(hitl_type)
+    if formatter:
+        return formatter(response_data)
     return f"User responded to {hitl_type} request"
+
+
+# ---------------------------------------------------------------------------
+# Background tasks
+# ---------------------------------------------------------------------------
 
 
 async def _save_mcp_app_html(app_id: str, resource_uri: str, html_content: str) -> None:
     """Persist agent-generated MCPApp HTML to the database (D2 fix).
 
     Called as a fire-and-forget background task when the agent emits a
-    `mcp_app_result` event with non-empty `resource_html`. Persisting the
+    ``mcp_app_result`` event with non-empty ``resource_html``. Persisting the
     HTML ensures the app can be loaded after page refreshes without requiring
     a live sandbox round-trip.
 

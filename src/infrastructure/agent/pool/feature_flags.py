@@ -177,42 +177,27 @@ class FeatureFlags:
     ) -> bool:
         """
         Check if a feature is enabled.
-
         Args:
             name: Feature flag name
             tenant_id: Optional tenant ID for per-tenant checks
             project_id: Optional project ID for per-project checks
-
-        Returns:
             True if feature is enabled
         """
         flag = self._flags.get(name)
-        if not flag:
+        if not flag or not flag.enabled:
             return False
 
-        if not flag.enabled:
-            return False
-
-        # Check strategy
-        if flag.strategy == RolloutStrategy.ALL:
-            return True
-
-        if flag.strategy == RolloutStrategy.NONE:
-            return False
-
-        if flag.strategy == RolloutStrategy.ALLOWLIST:
-            return self._check_allowlist(flag, tenant_id, project_id)
-
-        if flag.strategy == RolloutStrategy.DENYLIST:
-            return self._check_denylist(flag, tenant_id, project_id)
-
-        if flag.strategy == RolloutStrategy.PERCENTAGE:
-            return self._check_percentage(flag, tenant_id, project_id)
-
-        if flag.strategy == RolloutStrategy.GRADUAL:
-            return self._check_gradual(flag, tenant_id, project_id)
-
-        return False
+        # Dispatch strategy check
+        strategy_handlers = {
+            RolloutStrategy.ALL: lambda _f, _t, _p: True,
+            RolloutStrategy.NONE: lambda _f, _t, _p: False,
+            RolloutStrategy.ALLOWLIST: self._check_allowlist,
+            RolloutStrategy.DENYLIST: self._check_denylist,
+            RolloutStrategy.PERCENTAGE: self._check_percentage,
+            RolloutStrategy.GRADUAL: self._check_gradual,
+        }
+        handler = strategy_handlers.get(flag.strategy)
+        return handler(flag, tenant_id, project_id) if handler else False
 
     async def get_all_flags(self) -> dict[str, dict[str, Any]]:
         """Get all flags as dictionary."""

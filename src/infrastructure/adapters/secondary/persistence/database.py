@@ -99,7 +99,7 @@ async def initialize_database() -> None:
     """
     # Import attachment model to ensure its table is created
     # (Models must be imported before create_all is called)
-    import src.infrastructure.adapters.secondary.persistence.attachment_model  # noqa: F401
+    import src.infrastructure.adapters.secondary.persistence.attachment_model
     from src.infrastructure.adapters.secondary.persistence.models import Base
 
     logger.info("Initializing database schema...")

@@ -119,7 +119,7 @@ class SubAgentChain:
     def result(self) -> ChainResult | None:
         return self._result
 
-    async def execute(  # noqa: PLR0913
+    async def execute(
         self,
         user_message: str,
         tools: list[Any],

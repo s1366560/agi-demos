@@ -32,6 +32,20 @@ NATIVE_RERANK_PROVIDERS = {
     ProviderType.COHERE,
 }
 
+# Provider prefix mappings for LiteLLM model names
+_RERANKER_PROVIDER_PREFIXES: dict[str, str] = {
+    "gemini": "gemini",
+    "anthropic": "anthropic",
+    "mistral": "mistral",
+    "deepseek": "deepseek",
+    "dashscope": "openai",
+    "kimi": "openai",
+    "minimax": "minimax",
+    "zai": "zai",
+    "ollama": "ollama",
+    "lmstudio": "openai",
+}
+
 # Default rerank models by provider
 DEFAULT_RERANK_MODELS = {
     ProviderType.COHERE: "rerank-english-v3.0",
@@ -346,31 +360,9 @@ class LiteLLMReranker(BaseReranker):
         """Get model name in LiteLLM format."""
         model = self._model
         provider_type = self._provider_type.value if self._provider_type else None
-
-        # Add provider prefix if needed
-        if provider_type == "gemini" and not model.startswith("gemini/"):
-            return f"gemini/{model}"
-        elif provider_type == "anthropic" and not model.startswith("anthropic/"):
-            return f"anthropic/{model}"
-        elif provider_type == "mistral" and not model.startswith("mistral/"):
-            return f"mistral/{model}"
-        elif provider_type == "deepseek" and not model.startswith("deepseek/"):
-            return f"deepseek/{model}"
-        elif provider_type in {"dashscope", "kimi"}:
-            if not model.startswith("openai/"):
-                return f"openai/{model}"
-        elif provider_type == "minimax":
-            if not model.startswith("minimax/"):
-                return f"minimax/{model}"
-        elif provider_type == "zai":
-            # ZhipuAI uses 'zai/' prefix in LiteLLM
-            if not model.startswith("zai/"):
-                return f"zai/{model}"
-        elif provider_type == "ollama" and not model.startswith("ollama/"):
-            return f"ollama/{model}"
-        elif provider_type == "lmstudio" and not model.startswith("openai/"):
-            return f"openai/{model}"
-
+        prefix = _RERANKER_PROVIDER_PREFIXES.get(provider_type)
+        if prefix and not model.startswith(f"{prefix}/"):
+            return f"{prefix}/{model}"
         return model
 
     def _build_rerank_prompt(self, query: str, passages: list[str]) -> str:
@@ -409,75 +401,76 @@ Ensure:
 
         return prompt
 
+    def _strip_markdown_code_block(self, text: str) -> str:
+        """Strip markdown code block markers from response."""
+        cleaned = text.strip()
+        if cleaned.startswith("```"):
+            lines = cleaned.split("\n")
+            lines = lines[1:]
+            for i in range(len(lines) - 1, -1, -1):
+                if lines[i].strip() == "```":
+                    lines = lines[:i]
+                    break
+            cleaned = "\n".join(lines).strip()
+        return cleaned
+
+    def _normalize_scores(
+        self, scores: list, expected_count: int
+    ) -> tuple[list[float], bool]:
+        """Normalize and validate scores list."""
+        padded = False
+        if len(scores) != expected_count:
+            logger.warning(
+                f"Expected {expected_count} scores, got {len(scores)}. "
+                "Padding or truncating..."
+            )
+            while len(scores) < expected_count:
+                scores.append(0.5)
+            scores = scores[:expected_count]
+            padded = True
+
+        normalized_scores = []
+        for score in scores:
+            try:
+                score_float = float(score)
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid score {score}, using 0.5")
+                score_float = 0.5
+            score_float = max(0.0, min(1.0, score_float))
+            normalized_scores.append(score_float)
+
+        return normalized_scores, padded
+
+    def _extract_scores_from_data(self, data: Any) -> list:
+        """Extract scores list from parsed JSON data."""
+        if isinstance(data, dict):
+            if "scores" in data:
+                return data["scores"]
+            if "score" in data:
+                return data["score"]
+            raise ValueError("No scores found in response")
+        if isinstance(data, list):
+            return data
+        raise ValueError(f"Unexpected response format: {type(data)}")
+
     def _parse_rerank_response(
         self, response: str, expected_count: int
     ) -> tuple[list[float], bool]:
         """
         Parse LLM response into scores.
-
         Args:
             response: LLM response string (JSON)
             expected_count: Expected number of scores
-
         Returns:
             Tuple of (scores list, was_padded bool)
         """
         try:
-            # Strip markdown code blocks if present
-            cleaned_response = response.strip()
-            if cleaned_response.startswith("```"):
-                lines = cleaned_response.split("\n")
-                lines = lines[1:]
-                for i in range(len(lines) - 1, -1, -1):
-                    if lines[i].strip() == "```":
-                        lines = lines[:i]
-                        break
-                cleaned_response = "\n".join(lines).strip()
-
-            # Try parsing as JSON
+            cleaned_response = self._strip_markdown_code_block(response)
             data = json.loads(cleaned_response)
-
-            # Handle different response formats
-            if isinstance(data, dict):
-                if "scores" in data:
-                    scores = data["scores"]
-                elif "score" in data:
-                    scores = data["score"]
-                else:
-                    raise ValueError("No scores found in response")
-            elif isinstance(data, list):
-                scores = data
-            else:
-                raise ValueError(f"Unexpected response format: {type(data)}")
-
-            # Validate count
-            padded = False
-            if len(scores) != expected_count:
-                logger.warning(
-                    f"Expected {expected_count} scores, got {len(scores)}. Padding or truncating..."
-                )
-                while len(scores) < expected_count:
-                    scores.append(0.5)
-                scores = scores[:expected_count]
-                padded = True
-
-            # Validate score values
-            normalized_scores = []
-            for score in scores:
-                try:
-                    score_float = float(score)
-                except (ValueError, TypeError):
-                    logger.warning(f"Invalid score {score}, using 0.5")
-                    score_float = 0.5
-                score_float = max(0.0, min(1.0, score_float))
-                normalized_scores.append(score_float)
-
-            return normalized_scores, padded
-
-        except json.JSONDecodeError as e:
+            scores = self._extract_scores_from_data(data)
+            return self._normalize_scores(scores, expected_count)
             logger.error(f"Failed to parse JSON response: {e}")
             return [0.5] * expected_count, True
-
         except Exception as e:
             logger.error(f"Error parsing rerank response: {e}")
             return [0.5] * expected_count, True

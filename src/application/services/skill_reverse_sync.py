@@ -244,33 +244,14 @@ class SkillReverseSync:
                 logger.warning(f"No files found in sandbox at {container_path}")
                 return files
 
-            # The MCP glob tool returns paths relative to /workspace,
-            # e.g. ".memstack/skills/my-skill/SKILL.md" when path="/workspace/.memstack/skills/my-skill".
-            # We need to: (1) build correct absolute read paths,
-            # (2) extract relative paths within the skill directory.
             container_path_stripped = container_path.rstrip("/")
-            # Prefix to strip: relative form of container_path from /workspace
-            # e.g. container_path="/workspace/.memstack/skills/my-skill" -> rel_prefix=".memstack/skills/my-skill"
-            workspace_root = "/workspace"
-            if container_path_stripped.startswith(workspace_root):
-                rel_prefix = container_path_stripped[len(workspace_root) :].lstrip("/")
-            else:
-                rel_prefix = ""
+            rel_prefix = self._compute_rel_prefix(container_path_stripped)
 
             for file_path in file_paths:
                 try:
-                    # Build absolute path for reading
-                    if file_path.startswith("/"):
-                        abs_path = file_path
-                    elif rel_prefix and file_path.startswith(rel_prefix + "/"):
-                        # Glob returned workspace-relative path including skill dir
-                        abs_path = f"{workspace_root}/{file_path}"
-                    elif rel_prefix and file_path.startswith(rel_prefix):
-                        abs_path = f"{workspace_root}/{file_path}"
-                    else:
-                        # Assume relative to container_path
-                        abs_path = f"{container_path_stripped}/{file_path}"
-
+                    abs_path = self._resolve_read_path(
+                        file_path, container_path_stripped, rel_prefix
+                    )
                     read_result = await sandbox_adapter.call_tool(
                         sandbox_id=sandbox_id,
                         tool_name="read",
@@ -278,17 +259,9 @@ class SkillReverseSync:
                     )
                     content = self._extract_content(read_result)
                     if content is not None:
-                        # Extract relative path within the skill directory
-                        if file_path.startswith("/"):
-                            # Absolute path: strip container_path prefix
-                            rel_path = file_path.replace(container_path_stripped + "/", "", 1)
-                        elif rel_prefix and file_path.startswith(rel_prefix + "/"):
-                            # Workspace-relative: strip rel_prefix
-                            rel_path = file_path[len(rel_prefix) + 1 :]
-                        elif rel_prefix and file_path == rel_prefix:
-                            rel_path = file_path
-                        else:
-                            rel_path = file_path
+                        rel_path = self._resolve_rel_path(
+                            file_path, container_path_stripped, rel_prefix
+                        )
                         files[rel_path] = content
                 except Exception as e:
                     logger.warning(f"Failed to read file {file_path}: {e}")
@@ -298,6 +271,45 @@ class SkillReverseSync:
 
         logger.debug(f"Read {len(files)} files from sandbox, keys: {list(files.keys())}")
         return files
+
+    @staticmethod
+    def _compute_rel_prefix(container_path_stripped: str) -> str:
+        """Compute the workspace-relative prefix for path resolution."""
+        workspace_root = "/workspace"
+        if container_path_stripped.startswith(workspace_root):
+            return container_path_stripped[len(workspace_root) :].lstrip("/")
+        return ""
+
+    @staticmethod
+    def _resolve_read_path(
+        file_path: str,
+        container_path_stripped: str,
+        rel_prefix: str,
+    ) -> str:
+        """Build an absolute path for reading a file from the sandbox."""
+        workspace_root = "/workspace"
+        if file_path.startswith("/"):
+            return file_path
+        if rel_prefix and file_path.startswith(rel_prefix + "/"):
+            return f"{workspace_root}/{file_path}"
+        if rel_prefix and file_path.startswith(rel_prefix):
+            return f"{workspace_root}/{file_path}"
+        return f"{container_path_stripped}/{file_path}"
+
+    @staticmethod
+    def _resolve_rel_path(
+        file_path: str,
+        container_path_stripped: str,
+        rel_prefix: str,
+    ) -> str:
+        """Extract a relative path within the skill directory."""
+        if file_path.startswith("/"):
+            return file_path.replace(container_path_stripped + "/", "", 1)
+        if rel_prefix and file_path.startswith(rel_prefix + "/"):
+            return file_path[len(rel_prefix) + 1 :]
+        if rel_prefix and file_path == rel_prefix:
+            return file_path
+        return file_path
 
     async def _upsert_skill(
         self,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -23,6 +24,25 @@ from src.infrastructure.agent.tools.tool_mutation_guard import build_mutation_fi
 logger = logging.getLogger(__name__)
 
 TOOL_NAME = "plugin_manager"
+
+
+@dataclass
+class _MutationContext:
+    """Shared state accumulated during a mutation action."""
+
+    action: str
+    plugin_name: str | None
+    requirement: str | None
+    dry_run: bool
+    manager: Any
+    before_snapshot: list[dict[str, Any]] = field(default_factory=list)
+    trace_id: str = ""
+    transaction: MutationTransaction | None = None
+    mutation_fingerprint: str | None = None
+    mutation_guard: dict[str, Any] = field(default_factory=dict)
+    rollback: dict[str, Any] = field(default_factory=dict)
+    reload_plan: dict[str, Any] = field(default_factory=dict)
+    mutation_audit: dict[str, Any] = field(default_factory=dict)
 
 
 class PluginManagerTool(AgentTool):
@@ -93,792 +113,441 @@ class PluginManagerTool(AgentTool):
         manager = get_plugin_runtime_manager()
 
         if action == "list":
-            plugins, diagnostics = manager.list_plugins(tenant_id=self._tenant_id)
-            return {
-                "title": "Plugin runtime status",
-                "output": self._format_plugin_list(plugins),
-                "metadata": {
-                    "action": action,
-                    "plugins": plugins,
-                    "diagnostics": [_serialize_diagnostic(item) for item in diagnostics],
-                },
-            }
+            return self._handle_list(manager)
 
-        if action == "install":
-            requirement = str(kwargs.get("requirement", "")).strip()
-            if not requirement:
-                return self._error_response("requirement is required for install action")
-            before_snapshot = self._snapshot_plugin_inventory(manager)
+        handler = self._get_mutation_handler(action)
+        if handler is None:
+            return self._error_response(f"Unsupported action: {action}")
 
-            trace_id = self._build_trace_id()
-            transaction = self._start_mutation_transaction(
-                trace_id=trace_id,
-                action=action,
-                plugin_name=None,
-                requirement=requirement,
-            )
-            mutation_fingerprint = self._build_mutation_fingerprint(
-                action=action,
-                plugin_name=None,
-                requirement=requirement,
-            )
-            mutation_guard = self._evaluate_mutation_guard(mutation_fingerprint)
-            rollback = self._build_rollback_metadata(
-                action=action,
-                plugin_name=None,
-                requirement=requirement,
-                before_snapshot=before_snapshot,
-            )
-            if mutation_guard["blocked"] and not dry_run:
-                transaction.add_phase(
-                    MutationTransactionStatus.BLOCKED,
-                    details={"mutation_guard": mutation_guard},
-                )
-                mutation_audit = self._record_mutation_audit(
-                    trace_id=trace_id,
-                    action=action,
-                    plugin_name=None,
-                    requirement=requirement,
-                    mutation_fingerprint=mutation_fingerprint,
-                    status="blocked",
-                    dry_run=False,
-                    rollback=rollback,
-                    message="mutation blocked by loop guard",
-                    details={
-                        "mutation_guard": mutation_guard,
-                        "mutation_transaction": transaction.to_dict(),
-                    },
-                )
-                return self._error_response(
-                    "mutation blocked by loop guard",
-                    action=action,
-                    requirement=requirement,
-                    trace_id=trace_id,
-                    mutation_fingerprint=mutation_fingerprint,
-                    mutation_guard=mutation_guard,
-                    mutation_audit=mutation_audit,
-                    rollback=rollback,
-                    mutation_transaction=transaction.to_dict(),
-                )
-            reload_plan = self._build_reload_plan(
-                manager=manager,
-                action=action,
-                plugin_name=None,
-                dry_run=dry_run,
-                reason=f"install requirement {requirement}",
-            )
-            if dry_run:
-                transaction.add_phase(
-                    MutationTransactionStatus.DRY_RUN,
-                    details={"reload_plan": reload_plan, "rollback": rollback},
-                )
-                mutation_audit = self._record_mutation_audit(
-                    trace_id=trace_id,
-                    action=action,
-                    plugin_name=None,
-                    requirement=requirement,
-                    mutation_fingerprint=mutation_fingerprint,
-                    status="dry_run",
-                    dry_run=True,
-                    rollback=rollback,
-                    message="dry_run",
-                    details={
-                        "reload_plan": reload_plan,
-                        "mutation_transaction": transaction.to_dict(),
-                    },
-                )
-                return {
-                    "title": "Plugin install plan",
-                    "output": f"[dry-run] Would install requirement: {requirement}",
-                    "metadata": {
-                        "action": action,
-                        "dry_run": True,
-                        "requirement": requirement,
-                        "trace_id": trace_id,
-                        "mutation_fingerprint": mutation_fingerprint,
-                        "mutation_guard": mutation_guard,
-                        "mutation_audit": mutation_audit,
-                        "reload_plan": reload_plan,
-                        "rollback": rollback,
-                        "mutation_transaction": transaction.to_dict(),
-                        "provenance_preview": {
-                            "before_count": len(before_snapshot),
-                        },
-                    },
-                }
+        return await handler(manager, dry_run, kwargs)
 
-            result = await manager.install_plugin(requirement)
-            if not result.get("success"):
-                transaction.add_phase(
-                    MutationTransactionStatus.FAILED,
-                    details={"result": result},
-                )
-                mutation_audit = self._record_mutation_audit(
-                    trace_id=trace_id,
-                    action=action,
-                    plugin_name=None,
-                    requirement=requirement,
-                    mutation_fingerprint=mutation_fingerprint,
-                    status="failed",
-                    dry_run=False,
-                    rollback=rollback,
-                    message="plugin install failed",
-                    details={
-                        "result": result,
-                        "mutation_transaction": transaction.to_dict(),
-                    },
-                )
-                return self._error_response(
-                    "plugin install failed",
-                    action=action,
-                    requirement=requirement,
-                    details=result,
-                    trace_id=trace_id,
-                    mutation_fingerprint=mutation_fingerprint,
-                    mutation_guard=mutation_guard,
-                    mutation_audit=mutation_audit,
-                    rollback=rollback,
-                    mutation_transaction=transaction.to_dict(),
-                )
-            after_snapshot = self._snapshot_plugin_inventory(manager)
-            provenance = self._build_provenance_summary(
-                before_snapshot=before_snapshot,
-                after_snapshot=after_snapshot,
-            )
-            rollback = self._build_rollback_metadata(
-                action=action,
-                plugin_name=None,
-                requirement=requirement,
-                before_snapshot=before_snapshot,
-                provenance=provenance,
-            )
-            mutation_audit = self._record_mutation_audit(
-                trace_id=trace_id,
-                action=action,
-                plugin_name=None,
-                requirement=requirement,
-                mutation_fingerprint=mutation_fingerprint,
-                status="applied",
-                dry_run=False,
-                rollback=rollback,
-                message="plugin installed",
-                details={
-                    "provenance": provenance,
-                    "mutation_transaction": transaction.to_dict(),
-                },
-            )
-            details = dict(result)
-            details["provenance"] = provenance
-            details["mutation_guard"] = mutation_guard
-            details["mutation_audit"] = mutation_audit
-            details["rollback"] = rollback
-
-            lifecycle = self._run_lifecycle(
-                action=action,
-                plugin_name=None,
-                trace_id=trace_id,
-                mutation_fingerprint=mutation_fingerprint,
-                reload_plan=reload_plan,
-                rollback=rollback,
-            )
-            transaction.add_phase(
-                MutationTransactionStatus.APPLIED,
-                details={"provenance": provenance},
-            )
-            transaction.add_phase(
-                MutationTransactionStatus.VERIFIED,
-                details={"probe": lifecycle.get("probe", {})},
-            )
-            details["mutation_transaction"] = transaction.to_dict()
-            self._append_toolset_changed_event(
-                action=action,
-                plugin_name=None,
-                lifecycle=lifecycle,
-                trace_id=trace_id,
-                mutation_fingerprint=mutation_fingerprint,
-                reload_plan=reload_plan,
-                details=details,
-            )
-            return {
-                "title": "Plugin installed",
-                "output": (
-                    f"Installed requirement: {requirement}\n"
-                    f"Discovered plugins: {', '.join(result.get('new_plugins', [])) or '(none)'}"
-                ),
-                "metadata": {
-                    "action": action,
-                    "requirement": requirement,
-                    "result": details,
-                    "lifecycle": lifecycle,
-                    "trace_id": trace_id,
-                    "mutation_fingerprint": mutation_fingerprint,
-                    "mutation_guard": mutation_guard,
-                    "mutation_audit": mutation_audit,
-                    "reload_plan": reload_plan,
-                    "rollback": rollback,
-                    "provenance": provenance,
-                    "mutation_transaction": transaction.to_dict(),
-                },
-            }
-
-        if action in {"enable", "disable"}:
-            plugin_name = str(kwargs.get("plugin_name", "")).strip()
-            if not plugin_name:
-                return self._error_response("plugin_name is required for enable/disable actions")
-            before_snapshot = self._snapshot_plugin_inventory(manager)
-
-            enabled = action == "enable"
-            trace_id = self._build_trace_id()
-            transaction = self._start_mutation_transaction(
-                trace_id=trace_id,
-                action=action,
-                plugin_name=plugin_name,
-                requirement=None,
-            )
-            mutation_fingerprint = self._build_mutation_fingerprint(
-                action=action,
-                plugin_name=plugin_name,
-            )
-            mutation_guard = self._evaluate_mutation_guard(mutation_fingerprint)
-            rollback = self._build_rollback_metadata(
-                action=action,
-                plugin_name=plugin_name,
-                before_snapshot=before_snapshot,
-            )
-            if mutation_guard["blocked"] and not dry_run:
-                transaction.add_phase(
-                    MutationTransactionStatus.BLOCKED,
-                    details={"mutation_guard": mutation_guard},
-                )
-                mutation_audit = self._record_mutation_audit(
-                    trace_id=trace_id,
-                    action=action,
-                    plugin_name=plugin_name,
-                    requirement=None,
-                    mutation_fingerprint=mutation_fingerprint,
-                    status="blocked",
-                    dry_run=False,
-                    rollback=rollback,
-                    message="mutation blocked by loop guard",
-                    details={
-                        "mutation_guard": mutation_guard,
-                        "mutation_transaction": transaction.to_dict(),
-                    },
-                )
-                return self._error_response(
-                    "mutation blocked by loop guard",
-                    action=action,
-                    plugin_name=plugin_name,
-                    trace_id=trace_id,
-                    mutation_fingerprint=mutation_fingerprint,
-                    mutation_guard=mutation_guard,
-                    mutation_audit=mutation_audit,
-                    rollback=rollback,
-                    mutation_transaction=transaction.to_dict(),
-                )
-            reload_plan = self._build_reload_plan(
-                manager=manager,
-                action=action,
-                plugin_name=plugin_name,
-                dry_run=dry_run,
-                reason=f"{action} plugin {plugin_name}",
-            )
-            if dry_run:
-                transaction.add_phase(
-                    MutationTransactionStatus.DRY_RUN,
-                    details={"reload_plan": reload_plan, "rollback": rollback},
-                )
-                mutation_audit = self._record_mutation_audit(
-                    trace_id=trace_id,
-                    action=action,
-                    plugin_name=plugin_name,
-                    requirement=None,
-                    mutation_fingerprint=mutation_fingerprint,
-                    status="dry_run",
-                    dry_run=True,
-                    rollback=rollback,
-                    message="dry_run",
-                    details={
-                        "reload_plan": reload_plan,
-                        "mutation_transaction": transaction.to_dict(),
-                    },
-                )
-                return {
-                    "title": f"Plugin {action} plan",
-                    "output": f"[dry-run] Would set plugin '{plugin_name}' to enabled={enabled}.",
-                    "metadata": {
-                        "action": action,
-                        "plugin_name": plugin_name,
-                        "dry_run": True,
-                        "trace_id": trace_id,
-                        "mutation_fingerprint": mutation_fingerprint,
-                        "mutation_guard": mutation_guard,
-                        "mutation_audit": mutation_audit,
-                        "reload_plan": reload_plan,
-                        "rollback": rollback,
-                        "mutation_transaction": transaction.to_dict(),
-                        "provenance_preview": {
-                            "before_count": len(before_snapshot),
-                        },
-                    },
-                }
-
-            diagnostics = await manager.set_plugin_enabled(
-                plugin_name,
-                enabled=enabled,
-                tenant_id=self._tenant_id,
-            )
-            after_snapshot = self._snapshot_plugin_inventory(manager)
-            provenance = self._build_provenance_summary(
-                before_snapshot=before_snapshot,
-                after_snapshot=after_snapshot,
-            )
-            mutation_audit = self._record_mutation_audit(
-                trace_id=trace_id,
-                action=action,
-                plugin_name=plugin_name,
-                requirement=None,
-                mutation_fingerprint=mutation_fingerprint,
-                status="applied",
-                dry_run=False,
-                rollback=rollback,
-                message=f"plugin {action}d",
-                details={
-                    "provenance": provenance,
-                    "mutation_transaction": transaction.to_dict(),
-                },
-            )
-            details = {
+    def _handle_list(self, manager: Any) -> dict[str, Any]:
+        plugins, diagnostics = manager.list_plugins(tenant_id=self._tenant_id)
+        return {
+            "title": "Plugin runtime status",
+            "output": self._format_plugin_list(plugins),
+            "metadata": {
+                "action": "list",
+                "plugins": plugins,
                 "diagnostics": [_serialize_diagnostic(item) for item in diagnostics],
+            },
+        }
+
+    def _get_mutation_handler(self, action: str) -> Any:
+        handlers: dict[str, Any] = {
+            "install": self._handle_install,
+            "enable": self._handle_enable_disable,
+            "disable": self._handle_enable_disable,
+            "uninstall": self._handle_uninstall,
+            "reload": self._handle_reload,
+        }
+        return handlers.get(action)
+
+    # ------------------------------------------------------------------
+    # Mutation lifecycle helpers (shared across all mutation actions)
+    # ------------------------------------------------------------------
+
+    def _init_mutation_context(
+        self,
+        manager: Any,
+        action: str,
+        dry_run: bool,
+        plugin_name: str | None,
+        requirement: str | None,
+    ) -> _MutationContext:
+        ctx = _MutationContext(
+            action=action,
+            plugin_name=plugin_name,
+            requirement=requirement,
+            dry_run=dry_run,
+            manager=manager,
+        )
+        ctx.before_snapshot = self._snapshot_plugin_inventory(manager)
+        ctx.trace_id = self._build_trace_id()
+        ctx.transaction = self._start_mutation_transaction(
+            trace_id=ctx.trace_id,
+            action=action,
+            plugin_name=plugin_name,
+            requirement=requirement,
+        )
+        ctx.mutation_fingerprint = self._build_mutation_fingerprint(
+            action=action,
+            plugin_name=plugin_name,
+            requirement=requirement,
+        )
+        ctx.mutation_guard = self._evaluate_mutation_guard(ctx.mutation_fingerprint)
+        ctx.rollback = self._build_rollback_metadata(
+            action=action,
+            plugin_name=plugin_name,
+            before_snapshot=ctx.before_snapshot,
+            requirement=requirement,
+        )
+        return ctx
+
+    def _check_guard_blocked(self, ctx: _MutationContext) -> dict[str, Any] | None:
+        if not (ctx.mutation_guard["blocked"] and not ctx.dry_run):
+            return None
+        assert ctx.transaction is not None
+        ctx.transaction.add_phase(
+            MutationTransactionStatus.BLOCKED,
+            details={"mutation_guard": ctx.mutation_guard},
+        )
+        ctx.mutation_audit = self._record_mutation_audit(
+            trace_id=ctx.trace_id,
+            action=ctx.action,
+            plugin_name=ctx.plugin_name,
+            requirement=ctx.requirement,
+            mutation_fingerprint=ctx.mutation_fingerprint,
+            status="blocked",
+            dry_run=False,
+            rollback=ctx.rollback,
+            message="mutation blocked by loop guard",
+            details={
+                "mutation_guard": ctx.mutation_guard,
+                "mutation_transaction": ctx.transaction.to_dict(),
+            },
+        )
+        extra: dict[str, Any] = {
+            "action": ctx.action,
+            "trace_id": ctx.trace_id,
+            "mutation_fingerprint": ctx.mutation_fingerprint,
+            "mutation_guard": ctx.mutation_guard,
+            "mutation_audit": ctx.mutation_audit,
+            "rollback": ctx.rollback,
+            "mutation_transaction": ctx.transaction.to_dict(),
+        }
+        if ctx.plugin_name:
+            extra["plugin_name"] = ctx.plugin_name
+        if ctx.requirement:
+            extra["requirement"] = ctx.requirement
+        return self._error_response("mutation blocked by loop guard", **extra)
+
+    def _build_reload_plan_for_ctx(self, ctx: _MutationContext, reason: str) -> None:
+        ctx.reload_plan = self._build_reload_plan(
+            manager=ctx.manager,
+            action=ctx.action,
+            plugin_name=ctx.plugin_name,
+            dry_run=ctx.dry_run,
+            reason=reason,
+        )
+
+    def _handle_dry_run(
+        self,
+        ctx: _MutationContext,
+        title: str,
+        output: str,
+    ) -> dict[str, Any]:
+        assert ctx.transaction is not None
+        ctx.transaction.add_phase(
+            MutationTransactionStatus.DRY_RUN,
+            details={"reload_plan": ctx.reload_plan, "rollback": ctx.rollback},
+        )
+        ctx.mutation_audit = self._record_mutation_audit(
+            trace_id=ctx.trace_id,
+            action=ctx.action,
+            plugin_name=ctx.plugin_name,
+            requirement=ctx.requirement,
+            mutation_fingerprint=ctx.mutation_fingerprint,
+            status="dry_run",
+            dry_run=True,
+            rollback=ctx.rollback,
+            message="dry_run",
+            details={
+                "reload_plan": ctx.reload_plan,
+                "mutation_transaction": ctx.transaction.to_dict(),
+            },
+        )
+        metadata: dict[str, Any] = {
+            "action": ctx.action,
+            "dry_run": True,
+            "trace_id": ctx.trace_id,
+            "mutation_fingerprint": ctx.mutation_fingerprint,
+            "mutation_guard": ctx.mutation_guard,
+            "mutation_audit": ctx.mutation_audit,
+            "reload_plan": ctx.reload_plan,
+            "rollback": ctx.rollback,
+            "mutation_transaction": ctx.transaction.to_dict(),
+            "provenance_preview": {"before_count": len(ctx.before_snapshot)},
+        }
+        if ctx.plugin_name:
+            metadata["plugin_name"] = ctx.plugin_name
+        if ctx.requirement:
+            metadata["requirement"] = ctx.requirement
+        return {"title": title, "output": output, "metadata": metadata}
+
+    def _finalize_mutation(
+        self,
+        ctx: _MutationContext,
+        result_details: dict[str, Any],
+        title: str,
+        output: str,
+        success_message: str,
+    ) -> dict[str, Any]:
+        assert ctx.transaction is not None
+        after_snapshot = self._snapshot_plugin_inventory(ctx.manager)
+        provenance = self._build_provenance_summary(
+            before_snapshot=ctx.before_snapshot,
+            after_snapshot=after_snapshot,
+        )
+        ctx.rollback = self._build_rollback_metadata(
+            action=ctx.action,
+            plugin_name=ctx.plugin_name,
+            before_snapshot=ctx.before_snapshot,
+            requirement=ctx.requirement,
+            provenance=provenance,
+        )
+        ctx.mutation_audit = self._record_mutation_audit(
+            trace_id=ctx.trace_id,
+            action=ctx.action,
+            plugin_name=ctx.plugin_name,
+            requirement=ctx.requirement,
+            mutation_fingerprint=ctx.mutation_fingerprint,
+            status="applied",
+            dry_run=False,
+            rollback=ctx.rollback,
+            message=success_message,
+            details={
                 "provenance": provenance,
-                "mutation_guard": mutation_guard,
-                "mutation_audit": mutation_audit,
-                "rollback": rollback,
-            }
-            lifecycle = self._run_lifecycle(
-                action=action,
-                plugin_name=plugin_name,
-                trace_id=trace_id,
-                mutation_fingerprint=mutation_fingerprint,
-                reload_plan=reload_plan,
-                rollback=rollback,
-            )
-            transaction.add_phase(
-                MutationTransactionStatus.APPLIED,
-                details={"provenance": provenance},
-            )
-            transaction.add_phase(
-                MutationTransactionStatus.VERIFIED,
-                details={"probe": lifecycle.get("probe", {})},
-            )
-            details["mutation_transaction"] = transaction.to_dict()
-            self._append_toolset_changed_event(
-                action=action,
-                plugin_name=plugin_name,
-                lifecycle=lifecycle,
-                trace_id=trace_id,
-                mutation_fingerprint=mutation_fingerprint,
-                reload_plan=reload_plan,
-                details=details,
-            )
-            return {
-                "title": f"Plugin {action}d",
-                "output": f"Plugin '{plugin_name}' is now {'enabled' if enabled else 'disabled'}.",
-                "metadata": {
-                    "action": action,
-                    "plugin_name": plugin_name,
-                    "diagnostics": [_serialize_diagnostic(item) for item in diagnostics],
-                    "provenance": provenance,
-                    "lifecycle": lifecycle,
-                    "trace_id": trace_id,
-                    "mutation_fingerprint": mutation_fingerprint,
-                    "mutation_guard": mutation_guard,
-                    "mutation_audit": mutation_audit,
-                    "reload_plan": reload_plan,
-                    "rollback": rollback,
-                    "mutation_transaction": transaction.to_dict(),
-                },
-            }
+                "mutation_transaction": ctx.transaction.to_dict(),
+            },
+        )
+        details = dict(result_details)
+        details["provenance"] = provenance
+        details["mutation_guard"] = ctx.mutation_guard
+        details["mutation_audit"] = ctx.mutation_audit
+        details["rollback"] = ctx.rollback
 
-        if action == "uninstall":
-            plugin_name = str(kwargs.get("plugin_name", "")).strip()
-            if not plugin_name:
-                return self._error_response("plugin_name is required for uninstall action")
-            before_snapshot = self._snapshot_plugin_inventory(manager)
+        lifecycle = self._run_lifecycle(
+            action=ctx.action,
+            plugin_name=ctx.plugin_name,
+            trace_id=ctx.trace_id,
+            mutation_fingerprint=ctx.mutation_fingerprint,
+            reload_plan=ctx.reload_plan,
+            rollback=ctx.rollback,
+        )
+        ctx.transaction.add_phase(
+            MutationTransactionStatus.APPLIED,
+            details={"provenance": provenance},
+        )
+        ctx.transaction.add_phase(
+            MutationTransactionStatus.VERIFIED,
+            details={"probe": lifecycle.get("probe", {})},
+        )
+        details["mutation_transaction"] = ctx.transaction.to_dict()
+        self._append_toolset_changed_event(
+            action=ctx.action,
+            plugin_name=ctx.plugin_name,
+            lifecycle=lifecycle,
+            trace_id=ctx.trace_id,
+            mutation_fingerprint=ctx.mutation_fingerprint,
+            reload_plan=ctx.reload_plan,
+            details=details,
+        )
+        metadata: dict[str, Any] = {
+            "action": ctx.action,
+            "result": details,
+            "lifecycle": lifecycle,
+            "trace_id": ctx.trace_id,
+            "mutation_fingerprint": ctx.mutation_fingerprint,
+            "mutation_guard": ctx.mutation_guard,
+            "mutation_audit": ctx.mutation_audit,
+            "reload_plan": ctx.reload_plan,
+            "rollback": ctx.rollback,
+            "provenance": provenance,
+            "mutation_transaction": ctx.transaction.to_dict(),
+        }
+        if ctx.plugin_name:
+            metadata["plugin_name"] = ctx.plugin_name
+        if ctx.requirement:
+            metadata["requirement"] = ctx.requirement
+        return {"title": title, "output": output, "metadata": metadata}
 
-            trace_id = self._build_trace_id()
-            transaction = self._start_mutation_transaction(
-                trace_id=trace_id,
-                action=action,
-                plugin_name=plugin_name,
-                requirement=None,
-            )
-            mutation_fingerprint = self._build_mutation_fingerprint(
-                action=action,
-                plugin_name=plugin_name,
-            )
-            mutation_guard = self._evaluate_mutation_guard(mutation_fingerprint)
-            rollback = self._build_rollback_metadata(
-                action=action,
-                plugin_name=plugin_name,
-                before_snapshot=before_snapshot,
-            )
-            if mutation_guard["blocked"] and not dry_run:
-                transaction.add_phase(
-                    MutationTransactionStatus.BLOCKED,
-                    details={"mutation_guard": mutation_guard},
-                )
-                mutation_audit = self._record_mutation_audit(
-                    trace_id=trace_id,
-                    action=action,
-                    plugin_name=plugin_name,
-                    requirement=None,
-                    mutation_fingerprint=mutation_fingerprint,
-                    status="blocked",
-                    dry_run=False,
-                    rollback=rollback,
-                    message="mutation blocked by loop guard",
-                    details={
-                        "mutation_guard": mutation_guard,
-                        "mutation_transaction": transaction.to_dict(),
-                    },
-                )
-                return self._error_response(
-                    "mutation blocked by loop guard",
-                    action=action,
-                    plugin_name=plugin_name,
-                    trace_id=trace_id,
-                    mutation_fingerprint=mutation_fingerprint,
-                    mutation_guard=mutation_guard,
-                    mutation_audit=mutation_audit,
-                    rollback=rollback,
-                    mutation_transaction=transaction.to_dict(),
-                )
-            reload_plan = self._build_reload_plan(
-                manager=manager,
-                action=action,
-                plugin_name=plugin_name,
-                dry_run=dry_run,
-                reason=f"uninstall plugin {plugin_name}",
-            )
-            if dry_run:
-                transaction.add_phase(
-                    MutationTransactionStatus.DRY_RUN,
-                    details={"reload_plan": reload_plan, "rollback": rollback},
-                )
-                mutation_audit = self._record_mutation_audit(
-                    trace_id=trace_id,
-                    action=action,
-                    plugin_name=plugin_name,
-                    requirement=None,
-                    mutation_fingerprint=mutation_fingerprint,
-                    status="dry_run",
-                    dry_run=True,
-                    rollback=rollback,
-                    message="dry_run",
-                    details={
-                        "reload_plan": reload_plan,
-                        "mutation_transaction": transaction.to_dict(),
-                    },
-                )
-                return {
-                    "title": "Plugin uninstall plan",
-                    "output": f"[dry-run] Would uninstall plugin '{plugin_name}'.",
-                    "metadata": {
-                        "action": action,
-                        "plugin_name": plugin_name,
-                        "dry_run": True,
-                        "trace_id": trace_id,
-                        "mutation_fingerprint": mutation_fingerprint,
-                        "mutation_guard": mutation_guard,
-                        "mutation_audit": mutation_audit,
-                        "reload_plan": reload_plan,
-                        "rollback": rollback,
-                        "mutation_transaction": transaction.to_dict(),
-                        "provenance_preview": {
-                            "before_count": len(before_snapshot),
-                        },
-                    },
-                }
+    def _handle_action_failure(
+        self,
+        ctx: _MutationContext,
+        result: dict[str, Any],
+        fail_message: str,
+    ) -> dict[str, Any]:
+        assert ctx.transaction is not None
+        ctx.transaction.add_phase(
+            MutationTransactionStatus.FAILED,
+            details={"result": result},
+        )
+        ctx.mutation_audit = self._record_mutation_audit(
+            trace_id=ctx.trace_id,
+            action=ctx.action,
+            plugin_name=ctx.plugin_name,
+            requirement=ctx.requirement,
+            mutation_fingerprint=ctx.mutation_fingerprint,
+            status="failed",
+            dry_run=False,
+            rollback=ctx.rollback,
+            message=fail_message,
+            details={
+                "result": result,
+                "mutation_transaction": ctx.transaction.to_dict(),
+            },
+        )
+        extra: dict[str, Any] = {
+            "action": ctx.action,
+            "details": result,
+            "trace_id": ctx.trace_id,
+            "mutation_fingerprint": ctx.mutation_fingerprint,
+            "mutation_guard": ctx.mutation_guard,
+            "mutation_audit": ctx.mutation_audit,
+            "rollback": ctx.rollback,
+            "mutation_transaction": ctx.transaction.to_dict(),
+        }
+        if ctx.plugin_name:
+            extra["plugin_name"] = ctx.plugin_name
+        if ctx.requirement:
+            extra["requirement"] = ctx.requirement
+        return self._error_response(fail_message, **extra)
 
-            result = await manager.uninstall_plugin(plugin_name)
-            if not result.get("success"):
-                transaction.add_phase(
-                    MutationTransactionStatus.FAILED,
-                    details={"result": result},
-                )
-                mutation_audit = self._record_mutation_audit(
-                    trace_id=trace_id,
-                    action=action,
-                    plugin_name=plugin_name,
-                    requirement=None,
-                    mutation_fingerprint=mutation_fingerprint,
-                    status="failed",
-                    dry_run=False,
-                    rollback=rollback,
-                    message="plugin uninstall failed",
-                    details={
-                        "result": result,
-                        "mutation_transaction": transaction.to_dict(),
-                    },
-                )
-                return self._error_response(
-                    "plugin uninstall failed",
-                    action=action,
-                    plugin_name=plugin_name,
-                    details=result,
-                    trace_id=trace_id,
-                    mutation_fingerprint=mutation_fingerprint,
-                    mutation_guard=mutation_guard,
-                    mutation_audit=mutation_audit,
-                    rollback=rollback,
-                    mutation_transaction=transaction.to_dict(),
-                )
-            after_snapshot = self._snapshot_plugin_inventory(manager)
-            provenance = self._build_provenance_summary(
-                before_snapshot=before_snapshot,
-                after_snapshot=after_snapshot,
-            )
-            rollback = self._build_rollback_metadata(
-                action=action,
-                plugin_name=plugin_name,
-                before_snapshot=before_snapshot,
-                provenance=provenance,
-            )
-            mutation_audit = self._record_mutation_audit(
-                trace_id=trace_id,
-                action=action,
-                plugin_name=plugin_name,
-                requirement=None,
-                mutation_fingerprint=mutation_fingerprint,
-                status="applied",
-                dry_run=False,
-                rollback=rollback,
-                message="plugin uninstalled",
-                details={
-                    "provenance": provenance,
-                    "mutation_transaction": transaction.to_dict(),
-                },
-            )
-            details = dict(result)
-            details["provenance"] = provenance
-            details["mutation_guard"] = mutation_guard
-            details["mutation_audit"] = mutation_audit
-            details["rollback"] = rollback
+    # ------------------------------------------------------------------
+    # Per-action handlers
+    # ------------------------------------------------------------------
 
-            lifecycle = self._run_lifecycle(
-                action=action,
-                plugin_name=plugin_name,
-                trace_id=trace_id,
-                mutation_fingerprint=mutation_fingerprint,
-                reload_plan=reload_plan,
-                rollback=rollback,
-            )
-            transaction.add_phase(
-                MutationTransactionStatus.APPLIED,
-                details={"provenance": provenance},
-            )
-            transaction.add_phase(
-                MutationTransactionStatus.VERIFIED,
-                details={"probe": lifecycle.get("probe", {})},
-            )
-            details["mutation_transaction"] = transaction.to_dict()
-            self._append_toolset_changed_event(
-                action=action,
-                plugin_name=plugin_name,
-                lifecycle=lifecycle,
-                trace_id=trace_id,
-                mutation_fingerprint=mutation_fingerprint,
-                reload_plan=reload_plan,
-                details=details,
-            )
-            return {
-                "title": "Plugin uninstalled",
-                "output": f"Uninstalled plugin '{plugin_name}'",
-                "metadata": {
-                    "action": action,
-                    "plugin_name": plugin_name,
-                    "result": details,
-                    "lifecycle": lifecycle,
-                    "trace_id": trace_id,
-                    "mutation_fingerprint": mutation_fingerprint,
-                    "mutation_guard": mutation_guard,
-                    "mutation_audit": mutation_audit,
-                    "reload_plan": reload_plan,
-                    "rollback": rollback,
-                    "provenance": provenance,
-                    "mutation_transaction": transaction.to_dict(),
-                },
-            }
+    async def _handle_install(
+        self, manager: Any, dry_run: bool, kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        requirement = str(kwargs.get("requirement", "")).strip()
+        if not requirement:
+            return self._error_response("requirement is required for install action")
 
-        if action == "reload":
-            before_snapshot = self._snapshot_plugin_inventory(manager)
-            trace_id = self._build_trace_id()
-            transaction = self._start_mutation_transaction(
-                trace_id=trace_id,
-                action=action,
-                plugin_name=None,
-                requirement=None,
-            )
-            mutation_fingerprint = self._build_mutation_fingerprint(
-                action=action,
-                plugin_name=None,
-            )
-            mutation_guard = self._evaluate_mutation_guard(mutation_fingerprint)
-            rollback = self._build_rollback_metadata(
-                action=action,
-                plugin_name=None,
-                before_snapshot=before_snapshot,
-            )
-            if mutation_guard["blocked"] and not dry_run:
-                transaction.add_phase(
-                    MutationTransactionStatus.BLOCKED,
-                    details={"mutation_guard": mutation_guard},
-                )
-                mutation_audit = self._record_mutation_audit(
-                    trace_id=trace_id,
-                    action=action,
-                    plugin_name=None,
-                    requirement=None,
-                    mutation_fingerprint=mutation_fingerprint,
-                    status="blocked",
-                    dry_run=False,
-                    rollback=rollback,
-                    message="mutation blocked by loop guard",
-                    details={
-                        "mutation_guard": mutation_guard,
-                        "mutation_transaction": transaction.to_dict(),
-                    },
-                )
-                return self._error_response(
-                    "mutation blocked by loop guard",
-                    action=action,
-                    trace_id=trace_id,
-                    mutation_fingerprint=mutation_fingerprint,
-                    mutation_guard=mutation_guard,
-                    mutation_audit=mutation_audit,
-                    rollback=rollback,
-                    mutation_transaction=transaction.to_dict(),
-                )
-            reload_plan = self._build_reload_plan(
-                manager=manager,
-                action=action,
-                plugin_name=None,
-                dry_run=dry_run,
-                reason="manual reload request",
-            )
-            if dry_run:
-                transaction.add_phase(
-                    MutationTransactionStatus.DRY_RUN,
-                    details={"reload_plan": reload_plan, "rollback": rollback},
-                )
-                mutation_audit = self._record_mutation_audit(
-                    trace_id=trace_id,
-                    action=action,
-                    plugin_name=None,
-                    requirement=None,
-                    mutation_fingerprint=mutation_fingerprint,
-                    status="dry_run",
-                    dry_run=True,
-                    rollback=rollback,
-                    message="dry_run",
-                    details={
-                        "reload_plan": reload_plan,
-                        "mutation_transaction": transaction.to_dict(),
-                    },
-                )
-                return {
-                    "title": "Plugin reload plan",
-                    "output": "[dry-run] Plugin runtime reload plan generated.",
-                    "metadata": {
-                        "action": action,
-                        "dry_run": True,
-                        "trace_id": trace_id,
-                        "mutation_fingerprint": mutation_fingerprint,
-                        "mutation_guard": mutation_guard,
-                        "mutation_audit": mutation_audit,
-                        "reload_plan": reload_plan,
-                        "rollback": rollback,
-                        "mutation_transaction": transaction.to_dict(),
-                        "provenance_preview": {
-                            "before_count": len(before_snapshot),
-                        },
-                    },
-                }
+        ctx = self._init_mutation_context(manager, "install", dry_run, None, requirement)
 
-            diagnostics = await manager.reload()
-            after_snapshot = self._snapshot_plugin_inventory(manager)
-            provenance = self._build_provenance_summary(
-                before_snapshot=before_snapshot,
-                after_snapshot=after_snapshot,
-            )
-            mutation_audit = self._record_mutation_audit(
-                trace_id=trace_id,
-                action=action,
-                plugin_name=None,
-                requirement=None,
-                mutation_fingerprint=mutation_fingerprint,
-                status="applied",
-                dry_run=False,
-                rollback=rollback,
-                message="plugin runtime reloaded",
-                details={
-                    "provenance": provenance,
-                    "mutation_transaction": transaction.to_dict(),
-                },
-            )
-            details = {
-                "diagnostics": [_serialize_diagnostic(item) for item in diagnostics],
-                "provenance": provenance,
-                "mutation_guard": mutation_guard,
-                "mutation_audit": mutation_audit,
-                "rollback": rollback,
-            }
-            lifecycle = self._run_lifecycle(
-                action=action,
-                plugin_name=None,
-                trace_id=trace_id,
-                mutation_fingerprint=mutation_fingerprint,
-                reload_plan=reload_plan,
-                rollback=rollback,
-            )
-            transaction.add_phase(
-                MutationTransactionStatus.APPLIED,
-                details={"provenance": provenance},
-            )
-            transaction.add_phase(
-                MutationTransactionStatus.VERIFIED,
-                details={"probe": lifecycle.get("probe", {})},
-            )
-            details["mutation_transaction"] = transaction.to_dict()
-            self._append_toolset_changed_event(
-                action=action,
-                plugin_name=None,
-                lifecycle=lifecycle,
-                trace_id=trace_id,
-                mutation_fingerprint=mutation_fingerprint,
-                reload_plan=reload_plan,
-                details=details,
-            )
-            return {
-                "title": "Plugin runtime reloaded",
-                "output": "Plugin runtime discovery and registry reload completed.",
-                "metadata": {
-                    "action": action,
-                    "diagnostics": [_serialize_diagnostic(item) for item in diagnostics],
-                    "provenance": provenance,
-                    "lifecycle": lifecycle,
-                    "trace_id": trace_id,
-                    "mutation_fingerprint": mutation_fingerprint,
-                    "mutation_guard": mutation_guard,
-                    "mutation_audit": mutation_audit,
-                    "reload_plan": reload_plan,
-                    "rollback": rollback,
-                    "mutation_transaction": transaction.to_dict(),
-                },
-            }
+        blocked = self._check_guard_blocked(ctx)
+        if blocked:
+            return blocked
 
-        return self._error_response(f"Unsupported action: {action}")
+        self._build_reload_plan_for_ctx(ctx, f"install requirement {requirement}")
+
+        if dry_run:
+            return self._handle_dry_run(
+                ctx,
+                title="Plugin install plan",
+                output=f"[dry-run] Would install requirement: {requirement}",
+            )
+
+        result = await manager.install_plugin(requirement)
+        if not result.get("success"):
+            return self._handle_action_failure(ctx, result, "plugin install failed")
+
+        new_plugins = ", ".join(result.get("new_plugins", [])) or "(none)"
+        return self._finalize_mutation(
+            ctx,
+            result_details=dict(result),
+            title="Plugin installed",
+            output=f"Installed requirement: {requirement}\nDiscovered plugins: {new_plugins}",
+            success_message="plugin installed",
+        )
+
+    async def _handle_enable_disable(
+        self, manager: Any, dry_run: bool, kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        action = str(kwargs.get("action", "enable")).strip().lower()
+        plugin_name = str(kwargs.get("plugin_name", "")).strip()
+        if not plugin_name:
+            return self._error_response("plugin_name is required for enable/disable actions")
+
+        enabled = action == "enable"
+        ctx = self._init_mutation_context(manager, action, dry_run, plugin_name, None)
+
+        blocked = self._check_guard_blocked(ctx)
+        if blocked:
+            return blocked
+
+        self._build_reload_plan_for_ctx(ctx, f"{action} plugin {plugin_name}")
+
+        if dry_run:
+            return self._handle_dry_run(
+                ctx,
+                title=f"Plugin {action} plan",
+                output=f"[dry-run] Would set plugin '{plugin_name}' to enabled={enabled}.",
+            )
+
+        diagnostics = await manager.set_plugin_enabled(
+            plugin_name, enabled=enabled, tenant_id=self._tenant_id
+        )
+        result_details = {
+            "diagnostics": [_serialize_diagnostic(item) for item in diagnostics],
+        }
+        return self._finalize_mutation(
+            ctx,
+            result_details=result_details,
+            title=f"Plugin {action}d",
+            output=f"Plugin '{plugin_name}' is now {'enabled' if enabled else 'disabled'}.",
+            success_message=f"plugin {action}d",
+        )
+
+    async def _handle_uninstall(
+        self, manager: Any, dry_run: bool, kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        plugin_name = str(kwargs.get("plugin_name", "")).strip()
+        if not plugin_name:
+            return self._error_response("plugin_name is required for uninstall action")
+
+        ctx = self._init_mutation_context(manager, "uninstall", dry_run, plugin_name, None)
+
+        blocked = self._check_guard_blocked(ctx)
+        if blocked:
+            return blocked
+
+        self._build_reload_plan_for_ctx(ctx, f"uninstall plugin {plugin_name}")
+
+        if dry_run:
+            return self._handle_dry_run(
+                ctx,
+                title="Plugin uninstall plan",
+                output=f"[dry-run] Would uninstall plugin '{plugin_name}'.",
+            )
+
+        result = await manager.uninstall_plugin(plugin_name)
+        if not result.get("success"):
+            return self._handle_action_failure(ctx, result, "plugin uninstall failed")
+
+        return self._finalize_mutation(
+            ctx,
+            result_details=dict(result),
+            title="Plugin uninstalled",
+            output=f"Uninstalled plugin '{plugin_name}'",
+            success_message="plugin uninstalled",
+        )
+
+    async def _handle_reload(
+        self, manager: Any, dry_run: bool, _kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        ctx = self._init_mutation_context(manager, "reload", dry_run, None, None)
+
+        blocked = self._check_guard_blocked(ctx)
+        if blocked:
+            return blocked
+
+        self._build_reload_plan_for_ctx(ctx, "manual reload request")
+
+        if dry_run:
+            return self._handle_dry_run(
+                ctx,
+                title="Plugin reload plan",
+                output="[dry-run] Plugin runtime reload plan generated.",
+            )
+
+        diagnostics = await manager.reload()
+        result_details = {
+            "diagnostics": [_serialize_diagnostic(item) for item in diagnostics],
+        }
+        return self._finalize_mutation(
+            ctx,
+            result_details=result_details,
+            title="Plugin runtime reloaded",
+            output="Plugin runtime discovery and registry reload completed.",
+            success_message="plugin runtime reloaded",
+        )
+
+    # ------------------------------------------------------------------
+    # Existing helpers (unchanged)
+    # ------------------------------------------------------------------
 
     def _run_lifecycle(
         self,

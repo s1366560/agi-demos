@@ -319,70 +319,86 @@ class EntityExtractor:
     ) -> list[dict[str, Any]]:
         """
         Parse LLM response to extract entities.
-
         Args:
             response: LLM response text (should be JSON)
-
         Returns:
             List of entity dictionaries
         """
         try:
-            # Try to parse as JSON
             data = json.loads(response)
-
-            # Handle different response formats
-            if isinstance(data, dict):
-                if "entities" in data:
-                    return data["entities"]
-                elif "extracted_entities" in data:
-                    return data["extracted_entities"]
-                else:
-                    # Single entity?
-                    if "name" in data:
-                        return [data]
-                    return []
-
-            elif isinstance(data, list):
-                return data
-
-            return []
-
+            return self._extract_entities_from_parsed(data)
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse entity extraction response as JSON: {e}")
-            # Try to extract JSON from response
             return self._extract_json_from_text(response)
-
+    @staticmethod
+    def _extract_entities_from_parsed(data: Any) -> list[dict[str, Any]]:
+        """Extract entity list from already-parsed JSON data."""
+        if isinstance(data, dict):
+            if "entities" in data:
+                return data["entities"]
+            if "extracted_entities" in data:
+                return data["extracted_entities"]
+            if "name" in data:
+                return [data]
+            return []
+        if isinstance(data, list):
+            return data
+        return []
     def _extract_json_from_text(self, text: str) -> list[dict[str, Any]]:
         """
         Try to extract JSON from text that may contain non-JSON content.
         Uses stack-based matching to support nested JSON objects.
-
-        Args:
-            text: Text that may contain JSON
-
-        Returns:
-            List of entity dictionaries
         """
+        result = self._try_code_block_json(text)
+        if result is not None:
+            return result
+
+        result = self._try_stack_based_json(text)
+        if result is not None:
+            return result
+
+        result = self._try_regex_json(text)
+        if result is not None:
+            return result
+        logger.warning("Could not extract JSON from LLM response")
+        return []
+
+    def _try_code_block_json(self, text: str) -> list[dict[str, Any]] | None:
+        """Strategy 1: Try markdown code blocks."""
         import re
-
-        # Strategy 1: Try to find markdown code blocks first
         code_block_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
-        if code_block_match:
-            try:
-                data = json.loads(code_block_match.group(1))
-                if isinstance(data, dict) and "entities" in data:
-                    return data["entities"]
-                elif isinstance(data, list):
+        if not code_block_match:
+            return None
+        try:
+            data = json.loads(code_block_match.group(1))
+            if isinstance(data, dict) and "entities" in data:
+                return data["entities"]
+            if isinstance(data, list):
+                return data
+        except json.JSONDecodeError:
+            pass
+        return None
+
+    def _try_stack_based_json(self, text: str) -> list[dict[str, Any]] | None:
+        """Strategy 2: Use stack-based matching for nested JSON."""
+        json_objects = self._find_json_objects(text)
+        for data in json_objects:
+            if isinstance(data, dict) and "entities" in data:
+                return data["entities"]
+            if isinstance(data, list) and len(data) > 0:
+                if isinstance(data[0], dict) and ("name" in data[0] or "entity_type" in data[0]):
                     return data
-            except json.JSONDecodeError:
-                pass
+            if isinstance(data, dict) and "name" in data:
+                return [data]
 
-        # Strategy 2: Use stack-based matching for nested JSON
-        # Find the outermost JSON object or array
-        json_objects = []
-        stack = []
-        start_idx = None
+        return None
 
+    @staticmethod
+    def _find_json_objects(text: str) -> list[Any]:
+        """Find all top-level JSON objects/arrays in text using stack matching."""
+        json_objects: list[Any] = []
+        stack: list[str] = []
+        start_idx: int | None = None
         for i, char in enumerate(text):
             if char == "{":
                 if not stack:
@@ -406,29 +422,20 @@ class EntityExtractor:
                         pass
                     start_idx = None
 
-        # Process found JSON objects
-        for data in json_objects:
-            if isinstance(data, dict) and "entities" in data:
-                return data["entities"]
-            elif isinstance(data, list) and len(data) > 0:
-                # Check if it's a list of entity dicts
-                if isinstance(data[0], dict) and ("name" in data[0] or "entity_type" in data[0]):
-                    return data
-            elif isinstance(data, dict) and "name" in data:
-                return [data]
+        return json_objects
 
-        # Strategy 3: Fallback to simple regex patterns (for non-nested cases)
+    @staticmethod
+    def _try_regex_json(text: str) -> list[dict[str, Any]] | None:
+        """Strategy 3: Fallback to regex patterns."""
+        import re
         json_patterns = [
-            r'\{[^{}]*"entities"\s*:\s*\[',  # Find start of entities array
+            r'\{[^{}]*"entities"\s*:\s*\[',
         ]
-
         for pattern in json_patterns:
             match = re.search(pattern, text)
             if match:
-                # Try to parse from this position
                 remaining = text[match.start() :]
                 try:
-                    # Use JSONDecoder to parse partial string
                     decoder = json.JSONDecoder()
                     data, _ = decoder.raw_decode(remaining)
                     if isinstance(data, dict) and "entities" in data:
@@ -436,8 +443,7 @@ class EntityExtractor:
                 except (json.JSONDecodeError, ValueError):
                     pass
 
-        logger.warning("Could not extract JSON from LLM response")
-        return []
+        return None
 
     async def _create_entity_nodes(
         self,

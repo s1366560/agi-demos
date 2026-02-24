@@ -453,6 +453,73 @@ def _extract_server_name_from_uri(uri: str) -> str | None:
     return None
 
 
+async def _retry_resource_after_reinstall(
+    body: MCPResourceReadRequest,
+    server_name: str,
+    tenant_id: str,
+    db: AsyncSession,
+    mcp_manager: Any,
+    read_fn: Any,
+) -> Any:
+    """Reinstall an MCP server and retry the resource read."""
+    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
+        SqlMCPServerRepository,
+    )
+
+    try:
+        mcp_repo = SqlMCPServerRepository(db)
+        mcp_server = await mcp_repo.get_by_name(body.project_id, server_name)
+        if mcp_server and mcp_server.transport_config:
+            logger.info(
+                "resources/read failed -- reinstalling server '%s' and retrying",
+                server_name,
+            )
+            await mcp_manager.install_and_start(
+                project_id=body.project_id,
+                tenant_id=tenant_id,
+                server_name=server_name,
+                server_type=mcp_server.server_type,
+                transport_config=mcp_server.transport_config,
+            )
+            return await read_fn()
+        raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}")
+    except HTTPException:
+        raise
+    except TimeoutError:
+        logger.warning("resources/read retry timed out after reinstall: uri=%s", body.uri)
+        raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}") from None
+    except Exception as reinstall_err:
+        logger.warning("resources/read reinstall failed for '%s': %s", server_name, reinstall_err)
+        raise HTTPException(
+            status_code=404, detail=f"Resource not found: {body.uri}"
+        ) from reinstall_err
+
+
+def _extract_html_from_result(result: Any, uri: str) -> str:
+    """Extract HTML content from an MCP resource read result."""
+    if result.is_error:
+        error_text = ""
+        for item in result.content:
+            if isinstance(item, dict) and item.get("type") == "text":
+                error_text = item.get("text", "")
+                break
+        logger.warning("resources/read proxy error: %s", error_text)
+        raise HTTPException(status_code=404, detail=f"Resource not found: {uri}")
+
+    html_content = None
+    for item in result.content:
+        if isinstance(item, dict):
+            if item.get("uri") == uri:
+                html_content = item.get("text", "")
+                break
+            if item.get("type") == "text" and not html_content:
+                html_content = item.get("text", "")
+
+    if not html_content:
+        raise HTTPException(status_code=404, detail=f"No content found for resource: {uri}")
+    return html_content
+
+
 @router.post("/resources/read", response_model=MCPResourceReadResponse)
 async def proxy_resource_read(
     request: Request,
@@ -528,74 +595,11 @@ async def proxy_resource_read(
             need_retry = True
 
         if need_retry:
-            # Attempt to reinstall + restart the server, then retry once.
-            try:
-                from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-                    SqlMCPServerRepository,
-                )
-
-                mcp_repo = SqlMCPServerRepository(db)
-                mcp_server = await mcp_repo.get_by_name(body.project_id, server_name)
-                if mcp_server and mcp_server.transport_config:
-                    logger.info(
-                        "resources/read failed — reinstalling server '%s' and retrying",
-                        server_name,
-                    )
-                    await mcp_manager.install_and_start(
-                        project_id=body.project_id,
-                        tenant_id=tenant_id,
-                        server_name=server_name,
-                        server_type=mcp_server.server_type,
-                        transport_config=mcp_server.transport_config,
-                    )
-                    result = await _read_resource()
-                else:
-                    raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}")
-            except HTTPException:
-                raise
-            except TimeoutError:
-                logger.warning("resources/read retry timed out after reinstall: uri=%s", body.uri)
-                raise HTTPException(
-                    status_code=404, detail=f"Resource not found: {body.uri}"
-                ) from None
-            except Exception as reinstall_err:
-                logger.warning(
-                    "resources/read reinstall failed for '%s': %s", server_name, reinstall_err
-                )
-                raise HTTPException(
-                    status_code=404, detail=f"Resource not found: {body.uri}"
-                ) from reinstall_err
-
-        if result.is_error:
-            error_text = ""
-            for item in result.content:
-                if isinstance(item, dict) and item.get("type") == "text":
-                    error_text = item.get("text", "")
-                    break
-            logger.warning("resources/read proxy error: %s", error_text)
-            raise HTTPException(
-                status_code=404,
-                detail=f"Resource not found: {body.uri}",
+            result = await _retry_resource_after_reinstall(
+                body, server_name, tenant_id, db, mcp_manager, _read_resource
             )
 
-        # Extract HTML content from response
-        html_content = None
-        for item in result.content:
-            if isinstance(item, dict):
-                # Check for resource content with matching URI
-                if item.get("uri") == body.uri:
-                    html_content = item.get("text", "")
-                    break
-                # Fall back to text content
-                if item.get("type") == "text" and not html_content:
-                    html_content = item.get("text", "")
-
-        if not html_content:
-            raise HTTPException(
-                status_code=404,
-                detail=f"No content found for resource: {body.uri}",
-            )
-
+        html_content = _extract_html_from_result(result, body.uri)
         return MCPResourceReadResponse(
             contents=[
                 {

@@ -4,6 +4,8 @@ Endpoints for conversation messages, execution history, and status.
 """
 
 import logging
+from collections import defaultdict
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -28,9 +30,476 @@ from .utils import get_container_with_db
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
+_DISPLAYABLE_EVENTS = {
+    "user_message",
+    "assistant_message",
+    "thought",
+    "act",
+    "observe",
+    "work_plan",
+    "artifact_created",
+    "artifact_ready",
+    "artifact_error",
+    # Task timeline events
+    "task_start",
+    "task_complete",
+    # HITL (Human-in-the-Loop) events
+    "clarification_asked",
+    "clarification_answered",
+    "decision_asked",
+    "decision_answered",
+    "env_var_requested",
+    "env_var_provided",
+    # Agent emits both permission_asked and permission_requested
+    "permission_asked",
+    "permission_requested",
+    # Agent emits both permission_replied and permission_granted
+    "permission_replied",
+    "permission_granted",
+}
+
+_SKIP_EVENT_SENTINEL = object()
+
+
+# ---------------------------------------------------------------------------
+# Helpers for get_conversation_messages
+# ---------------------------------------------------------------------------
+
+
+def _build_tool_exec_map(tool_executions: list) -> dict:
+    """Build a lookup map from tool executions keyed by message_id:tool_name."""
+    tool_exec_map: dict[str, dict] = {}
+    for te in tool_executions:
+        key = f"{te.message_id}:{te.tool_name}"
+        tool_exec_map[key] = {
+            "startTime": te.started_at.timestamp() * 1000 if te.started_at else None,
+            "endTime": te.completed_at.timestamp() * 1000 if te.completed_at else None,
+            "duration": te.duration_ms,
+        }
+    return tool_exec_map
+
+
+def _build_hitl_answered_map(events: list) -> dict:
+    """Build HITL answered map from answered events by request_id."""
+    hitl_answered_map: dict[str, dict] = {}
+    _answer_extractors: dict[str, str] = {
+        "clarification_answered": "answer",
+        "decision_answered": "decision",
+    }
+    for event in events:
+        event_type = event.event_type
+        data = event.event_data or {}
+        request_id = data.get("request_id", "")
+        if not request_id:
+            continue
+        if event_type in _answer_extractors:
+            field = _answer_extractors[event_type]
+            hitl_answered_map[request_id] = {field: data.get(field, "")}
+        elif event_type == "env_var_provided":
+            hitl_answered_map[request_id] = {"values": data.get("values", {})}
+        elif event_type in ("permission_granted", "permission_replied"):
+            hitl_answered_map[request_id] = {"granted": data.get("granted", False)}
+    return hitl_answered_map
+
+
+def _build_hitl_status_map(hitl_requests: list) -> dict:
+    """Build HITL status map from database requests."""
+    hitl_status_map: dict[str, dict] = {}
+    for req in hitl_requests:
+        hitl_status_map[req.id] = {
+            "status": req.status.value if hasattr(req.status, "value") else req.status,
+            "response": req.response,
+            "response_metadata": req.response_metadata or {},
+        }
+    return hitl_status_map
+
+
+def _build_artifact_maps(events: list) -> tuple[dict, dict]:
+    """Build artifact ready/error maps for merging into artifact_created events."""
+    artifact_ready_map: dict[str, dict] = {}
+    artifact_error_map: dict[str, dict] = {}
+    for event in events:
+        event_type = event.event_type
+        data = event.event_data or {}
+        if event_type == "artifact_ready":
+            aid = data.get("artifact_id", "")
+            if aid:
+                artifact_ready_map[aid] = {
+                    "url": data.get("url", ""),
+                    "preview_url": data.get("preview_url", ""),
+                }
+        elif event_type == "artifact_error":
+            aid = data.get("artifact_id", "")
+            if aid:
+                artifact_error_map[aid] = {
+                    "error": data.get("error", "Upload failed"),
+                }
+    return artifact_ready_map, artifact_error_map
+
+
+def _resolve_hitl_answered(
+    request_id: str,
+    field_name: str,
+    hitl_answered_map: dict,
+    hitl_status_map: dict,
+) -> tuple[bool, Any]:
+    """Check if an HITL request has been answered and extract the response value."""
+    if request_id in hitl_answered_map:
+        return True, hitl_answered_map[request_id].get(field_name)
+    if request_id in hitl_status_map:
+        status_info = hitl_status_map[request_id]
+        if status_info["status"] in ("answered", "completed"):
+            value = status_info.get("response") or status_info.get("response_metadata", {}).get(
+                field_name
+            )
+            return True, value
+    return False, None
+
+
+# ---------------------------------------------------------------------------
+# Per-event-type timeline item builders
+# ---------------------------------------------------------------------------
+
+
+def _build_user_message(data: dict, **_kwargs: Any) -> dict:
+    item: dict[str, Any] = {
+        "message_id": data.get("message_id"),
+        "content": data.get("content", ""),
+        "role": "user",
+    }
+    metadata: dict[str, Any] = {}
+    if data.get("file_metadata"):
+        metadata["fileMetadata"] = data["file_metadata"]
+    if data.get("forced_skill_name"):
+        metadata["forcedSkillName"] = data["forced_skill_name"]
+    if metadata:
+        item["metadata"] = metadata
+    return item
+
+
+def _build_assistant_message(data: dict, **_kwargs: Any) -> dict:
+    return {
+        "message_id": data.get("message_id"),
+        "content": data.get("content", ""),
+        "role": "assistant",
+    }
+
+
+def _build_thought(data: dict, **_kwargs: Any) -> dict | object:
+    thought_content = data.get("thought", "")
+    if not thought_content or not thought_content.strip():
+        return _SKIP_EVENT_SENTINEL
+    return {"content": thought_content}
+
+
+def _build_act(data: dict, event: Any, tool_exec_map: dict, **_kwargs: Any) -> dict:
+    item: dict[str, Any] = {
+        "toolName": data.get("tool_name", ""),
+        "toolInput": data.get("tool_input", {}),
+    }
+    key = f"{event.message_id}:{data.get('tool_name', '')}"
+    if key in tool_exec_map:
+        item["execution"] = tool_exec_map[key]
+    return item
+
+
+def _build_observe(data: dict, **_kwargs: Any) -> dict:
+    item: dict[str, Any] = {
+        "toolName": data.get("tool_name", ""),
+        "toolOutput": data.get("observation", ""),
+        "isError": data.get("is_error", False),
+    }
+    raw_ui_meta = data.get("ui_metadata")
+    if raw_ui_meta and isinstance(raw_ui_meta, dict):
+        item["mcpUiMetadata"] = {
+            "resource_uri": raw_ui_meta.get("resource_uri"),
+            "server_name": raw_ui_meta.get("server_name"),
+            "app_id": raw_ui_meta.get("app_id"),
+            "title": raw_ui_meta.get("title"),
+            "project_id": raw_ui_meta.get("project_id"),
+        }
+    return item
+
+
+def _build_work_plan(data: dict, **_kwargs: Any) -> dict:
+    return {"steps": data.get("steps", []), "status": data.get("status", "planning")}
+
+
+def _build_task_start(data: dict, **_kwargs: Any) -> dict:
+    return {
+        "taskId": data.get("task_id", ""),
+        "content": data.get("content", ""),
+        "orderIndex": data.get("order_index", 0),
+        "totalTasks": data.get("total_tasks", 0),
+    }
+
+
+def _build_task_complete(data: dict, **_kwargs: Any) -> dict:
+    return {
+        "taskId": data.get("task_id", ""),
+        "status": data.get("status", "completed"),
+        "orderIndex": data.get("order_index", 0),
+        "totalTasks": data.get("total_tasks", 0),
+    }
+
+
+def _build_artifact_created(
+    data: dict, artifact_ready_map: dict, artifact_error_map: dict, **_kwargs: Any
+) -> dict:
+    artifact_id = data.get("artifact_id", "")
+    item: dict[str, Any] = {
+        "artifactId": artifact_id,
+        "filename": data.get("filename", ""),
+        "mimeType": data.get("mime_type", ""),
+        "category": data.get("category", "other"),
+        "sizeBytes": data.get("size_bytes", 0),
+        "url": data.get("url", ""),
+        "previewUrl": data.get("preview_url", ""),
+        "sourceTool": data.get("source_tool", ""),
+        "metadata": data.get("metadata", {}),
+    }
+    if artifact_id in artifact_ready_map:
+        ready = artifact_ready_map[artifact_id]
+        item["url"] = ready.get("url") or item["url"]
+        item["previewUrl"] = ready.get("preview_url") or item["previewUrl"]
+    if artifact_id in artifact_error_map:
+        item["error"] = artifact_error_map[artifact_id].get("error", "")
+    return item
+
+
+def _build_artifact_skip(**_kwargs: Any) -> object:
+    """Skip artifact_ready/error events - merged into artifact_created above."""
+    return _SKIP_EVENT_SENTINEL
+
+
+def _build_clarification_asked(
+    data: dict, hitl_answered_map: dict, hitl_status_map: dict, **_kwargs: Any
+) -> dict:
+    request_id = data.get("request_id", "")
+    answered, answer = _resolve_hitl_answered(
+        request_id, "answer", hitl_answered_map, hitl_status_map
+    )
+    return {
+        "requestId": request_id,
+        "question": data.get("question", ""),
+        "options": data.get("options", []),
+        "allowCustom": data.get("allow_custom", True),
+        "answered": answered,
+        "answer": answer,
+    }
+
+
+def _build_clarification_answered(data: dict, **_kwargs: Any) -> dict:
+    return {"requestId": data.get("request_id", ""), "answer": data.get("answer", "")}
+
+
+def _build_decision_asked(
+    data: dict, hitl_answered_map: dict, hitl_status_map: dict, **_kwargs: Any
+) -> dict:
+    request_id = data.get("request_id", "")
+    answered, decision = _resolve_hitl_answered(
+        request_id, "decision", hitl_answered_map, hitl_status_map
+    )
+    return {
+        "requestId": request_id,
+        "question": data.get("question", ""),
+        "options": data.get("options", []),
+        "decisionType": data.get("decision_type", "branch"),
+        "allowCustom": data.get("allow_custom", False),
+        "defaultOption": data.get("default_option"),
+        "answered": answered,
+        "decision": decision,
+    }
+
+
+def _build_decision_answered(data: dict, **_kwargs: Any) -> dict:
+    return {"requestId": data.get("request_id", ""), "decision": data.get("decision", "")}
+
+
+def _build_env_var_requested(
+    data: dict, hitl_answered_map: dict, hitl_status_map: dict, **_kwargs: Any
+) -> dict:
+    request_id = data.get("request_id", "")
+    answered = False
+    values: dict = {}
+    if request_id in hitl_answered_map:
+        answered = True
+        values = hitl_answered_map[request_id].get("values", {})
+    elif request_id in hitl_status_map:
+        status_info = hitl_status_map[request_id]
+        if status_info["status"] in ("answered", "completed"):
+            answered = True
+            values = status_info.get("response_metadata", {}).get("values", {})
+    return {
+        "requestId": request_id,
+        "toolName": data.get("tool_name", ""),
+        "fields": data.get("fields", []),
+        "message": data.get("message", ""),
+        "context": data.get("context", {}),
+        "answered": answered,
+        "values": values,
+    }
+
+
+def _build_env_var_provided(data: dict, **_kwargs: Any) -> dict:
+    variable_names = data.get("saved_variables", [])
+    if not variable_names:
+        variable_names = list(data.get("values", {}).keys())
+    return {
+        "requestId": data.get("request_id", ""),
+        "toolName": data.get("tool_name", ""),
+        "variableNames": variable_names,
+    }
+
+
+def _build_permission_asked(
+    data: dict, hitl_answered_map: dict, hitl_status_map: dict, **_kwargs: Any
+) -> dict:
+    request_id = data.get("request_id", "")
+    answered = False
+    granted = None
+    if request_id in hitl_answered_map:
+        answered = True
+        granted = hitl_answered_map[request_id].get("granted")
+    elif request_id in hitl_status_map:
+        status_info = hitl_status_map[request_id]
+        if status_info["status"] in ("answered", "completed"):
+            answered = True
+            granted = status_info.get("response_metadata", {}).get("granted")
+    return {
+        "requestId": request_id,
+        "action": data.get("action", ""),
+        "resource": data.get("resource", ""),
+        "reason": data.get("reason", ""),
+        "toolName": data.get("tool_name", ""),
+        "toolDisplayName": data.get("tool_display_name", ""),
+        "riskLevel": data.get("risk_level", "medium"),
+        "description": data.get("description", ""),
+        "allowRemember": data.get("allow_remember", True),
+        "answered": answered,
+        "granted": granted,
+    }
+
+
+def _build_permission_replied(data: dict, **_kwargs: Any) -> dict:
+    return {"requestId": data.get("request_id", ""), "granted": data.get("granted", False)}
+
+
+# Dispatch dict: event_type -> builder function
+_EVENT_BUILDERS: dict[str, Any] = {
+    "user_message": _build_user_message,
+    "assistant_message": _build_assistant_message,
+    "thought": _build_thought,
+    "act": _build_act,
+    "observe": _build_observe,
+    "work_plan": _build_work_plan,
+    "task_start": _build_task_start,
+    "task_complete": _build_task_complete,
+    "artifact_created": _build_artifact_created,
+    "artifact_ready": _build_artifact_skip,
+    "artifact_error": _build_artifact_skip,
+    "clarification_asked": _build_clarification_asked,
+    "clarification_answered": _build_clarification_answered,
+    "decision_asked": _build_decision_asked,
+    "decision_answered": _build_decision_answered,
+    "env_var_requested": _build_env_var_requested,
+    "env_var_provided": _build_env_var_provided,
+    "permission_requested": _build_permission_asked,
+    "permission_asked": _build_permission_asked,
+    "permission_granted": _build_permission_replied,
+    "permission_replied": _build_permission_replied,
+}
+
+
+def _build_timeline(
+    events: list,
+    tool_exec_map: dict,
+    hitl_answered_map: dict,
+    hitl_status_map: dict,
+    artifact_ready_map: dict,
+    artifact_error_map: dict,
+) -> list[dict]:
+    """Build the timeline list from raw events using the dispatch dict."""
+    timeline: list[dict] = []
+    for event in events:
+        event_type = event.event_type
+        data = event.event_data or {}
+        builder = _EVENT_BUILDERS.get(event_type)
+        if builder is None:
+            continue
+
+        fields = builder(
+            data=data,
+            event=event,
+            tool_exec_map=tool_exec_map,
+            hitl_answered_map=hitl_answered_map,
+            hitl_status_map=hitl_status_map,
+            artifact_ready_map=artifact_ready_map,
+            artifact_error_map=artifact_error_map,
+        )
+        if fields is _SKIP_EVENT_SENTINEL:
+            continue
+
+        item = {
+            "id": f"{event_type}-{event.event_time_us}-{event.event_counter}",
+            "type": event_type,
+            "eventTimeUs": event.event_time_us,
+            "eventCounter": event.event_counter,
+            "timestamp": event.event_time_us // 1000
+            if event.event_time_us
+            else (int(event.created_at.timestamp() * 1000) if event.created_at else None),
+        }
+        item.update(fields)
+        timeline.append(item)
+    return timeline
+
+
+async def _resolve_pagination_cursors(
+    event_repo: Any,
+    conversation_id: str,
+    from_time_us: int | None,
+    from_counter: int | None,
+    before_time_us: int | None,
+    before_counter: int | None,
+) -> tuple[int, int, int | None, int | None]:
+    """Resolve pagination cursor values, defaulting to latest if neither provided."""
+    calc_from_time_us = from_time_us or 0
+    calc_from_counter = from_counter or 0
+    calc_before_time_us = before_time_us
+    calc_before_counter = before_counter
+
+    if calc_from_time_us == 0 and calc_before_time_us is None:
+        last_time_us, _last_counter = await event_repo.get_last_event_time(conversation_id)
+        if last_time_us > 0:
+            calc_before_time_us = last_time_us + 1
+            calc_before_counter = 0
+            calc_from_time_us = 0
+
+    return calc_from_time_us, calc_from_counter, calc_before_time_us, calc_before_counter
+
+
+async def _check_has_more(
+    event_repo: Any,
+    conversation_id: str,
+    first_time_us: int | None,
+    first_counter: int | None,
+) -> bool:
+    """Check whether there are more events before the first timeline event."""
+    if first_time_us is None:
+        return False
+    check_events = await event_repo.get_events(
+        conversation_id=conversation_id,
+        from_time_us=0,
+        limit=1,
+        event_types=_DISPLAYABLE_EVENTS,
+        before_time_us=first_time_us,
+        before_counter=first_counter,
+    )
+    return len(check_events) > 0
+
 
 @router.get("/conversations/{conversation_id}/messages")
-async def get_conversation_messages(  # noqa: PLR0913
+async def get_conversation_messages(
     conversation_id: str,
     project_id: str = Query(..., description="Project ID for authorization"),
     limit: int = Query(50, ge=1, le=500, description="Maximum events to return"),
@@ -73,366 +542,65 @@ async def get_conversation_messages(  # noqa: PLR0913
         event_repo = container.agent_execution_event_repository()
         tool_exec_repo = container.tool_execution_record_repository()
 
-        DISPLAYABLE_EVENTS = {
-            "user_message",
-            "assistant_message",
-            "thought",
-            "act",
-            "observe",
-            "work_plan",
-            "artifact_created",
-            "artifact_ready",
-            "artifact_error",
-            # Task timeline events
-            "task_start",
-            "task_complete",
-            # HITL (Human-in-the-Loop) events
-            "clarification_asked",
-            "clarification_answered",
-            "decision_asked",
-            "decision_answered",
-            "env_var_requested",
-            "env_var_provided",
-            # Agent emits both permission_asked and permission_requested
-            "permission_asked",
-            "permission_requested",
-            # Agent emits both permission_replied and permission_granted
-            "permission_replied",
-            "permission_granted",
-        }
-
-        calc_from_time_us = from_time_us or 0
-        calc_from_counter = from_counter or 0
-        calc_before_time_us = before_time_us
-        calc_before_counter = before_counter
-
-        if calc_from_time_us == 0 and calc_before_time_us is None:
-            last_time_us, last_counter = await event_repo.get_last_event_time(conversation_id)
-            if last_time_us > 0:
-                # Load latest events by backward pagination from end
-                calc_before_time_us = last_time_us + 1
-                calc_before_counter = 0
-                calc_from_time_us = 0
+        cursors = await _resolve_pagination_cursors(
+            event_repo,
+            conversation_id,
+            from_time_us,
+            from_counter,
+            before_time_us,
+            before_counter,
+        )
+        calc_from_time_us, calc_from_counter, calc_before_time_us, calc_before_counter = cursors
 
         events = await event_repo.get_events(
             conversation_id=conversation_id,
             from_time_us=calc_from_time_us,
             from_counter=calc_from_counter,
             limit=limit,
-            event_types=DISPLAYABLE_EVENTS,
+            event_types=_DISPLAYABLE_EVENTS,
             before_time_us=calc_before_time_us,
             before_counter=calc_before_counter,
         )
 
-        tool_executions = await tool_exec_repo.list_by_conversation(conversation_id)
-        tool_exec_map = {}
-        for te in tool_executions:
-            key = f"{te.message_id}:{te.tool_name}"
-            tool_exec_map[key] = {
-                "startTime": te.started_at.timestamp() * 1000 if te.started_at else None,
-                "endTime": te.completed_at.timestamp() * 1000 if te.completed_at else None,
-                "duration": te.duration_ms,
-            }
+        tool_exec_map = _build_tool_exec_map(
+            await tool_exec_repo.list_by_conversation(conversation_id)
+        )
+        hitl_answered_map = _build_hitl_answered_map(events)
 
-        # Build HITL answered map: collect all answered events by request_id
-        # This allows us to determine if a *_asked event has been answered
-        hitl_answered_map: dict = {}  # request_id -> answer data
-        for event in events:
-            event_type = event.event_type
-            data = event.event_data or {}
-            request_id = data.get("request_id", "")
-            if event_type == "clarification_answered" and request_id:
-                hitl_answered_map[request_id] = {"answer": data.get("answer", "")}
-            elif event_type == "decision_answered" and request_id:
-                hitl_answered_map[request_id] = {"decision": data.get("decision", "")}
-            elif event_type == "env_var_provided" and request_id:
-                hitl_answered_map[request_id] = {"values": data.get("values", {})}
-            elif event_type in ("permission_granted", "permission_replied") and request_id:
-                hitl_answered_map[request_id] = {"granted": data.get("granted", False)}
-
-        # Also query HITL requests table for status (handles cases where answered event
-        # might not be in current page, or HITL was answered but agent hasn't resumed)
         hitl_repo = container.hitl_request_repository()
-        hitl_requests = await hitl_repo.get_by_conversation(conversation_id)
-        hitl_status_map: dict = {}  # request_id -> status info
-        for req in hitl_requests:
-            hitl_status_map[req.id] = {
-                "status": req.status.value if hasattr(req.status, "value") else req.status,
-                "response": req.response,
-                "response_metadata": req.response_metadata or {},
-            }
+        hitl_status_map = _build_hitl_status_map(
+            await hitl_repo.get_by_conversation(conversation_id)
+        )
 
-        # Build artifact status map: merge artifact_ready/error into artifact_created
-        artifact_ready_map: dict = {}  # artifact_id -> {url, preview_url, ...}
-        artifact_error_map: dict = {}  # artifact_id -> {error}
-        for event in events:
-            event_type = event.event_type
-            data = event.event_data or {}
-            if event_type == "artifact_ready":
-                aid = data.get("artifact_id", "")
-                if aid:
-                    artifact_ready_map[aid] = {
-                        "url": data.get("url", ""),
-                        "preview_url": data.get("preview_url", ""),
-                    }
-            elif event_type == "artifact_error":
-                aid = data.get("artifact_id", "")
-                if aid:
-                    artifact_error_map[aid] = {
-                        "error": data.get("error", "Upload failed"),
-                    }
+        artifact_ready_map, artifact_error_map = _build_artifact_maps(events)
 
-        timeline = []
-        for event in events:
-            event_type = event.event_type
-            data = event.event_data or {}
-            item = {
-                "id": f"{event_type}-{event.event_time_us}-{event.event_counter}",
-                "type": event_type,
-                "eventTimeUs": event.event_time_us,
-                "eventCounter": event.event_counter,
-                "timestamp": event.event_time_us // 1000
-                if event.event_time_us
-                else (int(event.created_at.timestamp() * 1000) if event.created_at else None),
-            }
+        timeline = _build_timeline(
+            events,
+            tool_exec_map,
+            hitl_answered_map,
+            hitl_status_map,
+            artifact_ready_map,
+            artifact_error_map,
+        )
 
-            if event_type == "user_message":
-                item["message_id"] = data.get("message_id")
-                item["content"] = data.get("content", "")
-                item["role"] = "user"
-                # Include file and skill metadata for UI rendering
-                metadata: dict[str, Any] = {}
-                if data.get("file_metadata"):
-                    metadata["fileMetadata"] = data["file_metadata"]
-                if data.get("forced_skill_name"):
-                    metadata["forcedSkillName"] = data["forced_skill_name"]
-                if metadata:
-                    item["metadata"] = metadata
+        first_time_us_val = timeline[0]["eventTimeUs"] if timeline else None
+        first_counter_val = timeline[0]["eventCounter"] if timeline else None
+        last_time_us_val = timeline[-1]["eventTimeUs"] if timeline else None
+        last_counter_val = timeline[-1]["eventCounter"] if timeline else None
 
-            elif event_type == "assistant_message":
-                item["message_id"] = data.get("message_id")
-                item["content"] = data.get("content", "")
-                item["role"] = "assistant"
-
-            elif event_type == "thought":
-                thought_content = data.get("thought", "")
-                if not thought_content or not thought_content.strip():
-                    continue
-                item["content"] = thought_content
-
-            elif event_type == "act":
-                item["toolName"] = data.get("tool_name", "")
-                item["toolInput"] = data.get("tool_input", {})
-                key = f"{event.message_id}:{data.get('tool_name', '')}"
-                if key in tool_exec_map:
-                    item["execution"] = tool_exec_map[key]
-
-            elif event_type == "observe":
-                item["toolName"] = data.get("tool_name", "")
-                item["toolOutput"] = data.get("observation", "")
-                item["isError"] = data.get("is_error", False)
-                # Include MCP App UI metadata for "Open App" button in timeline
-                raw_ui_meta = data.get("ui_metadata")
-                if raw_ui_meta and isinstance(raw_ui_meta, dict):
-                    item["mcpUiMetadata"] = {
-                        "resource_uri": raw_ui_meta.get("resource_uri"),
-                        "server_name": raw_ui_meta.get("server_name"),
-                        "app_id": raw_ui_meta.get("app_id"),
-                        "title": raw_ui_meta.get("title"),
-                        "project_id": raw_ui_meta.get("project_id"),
-                    }
-
-            elif event_type == "work_plan":
-                item["steps"] = data.get("steps", [])
-                item["status"] = data.get("status", "planning")
-
-            elif event_type == "task_start":
-                item["taskId"] = data.get("task_id", "")
-                item["content"] = data.get("content", "")
-                item["orderIndex"] = data.get("order_index", 0)
-                item["totalTasks"] = data.get("total_tasks", 0)
-
-            elif event_type == "task_complete":
-                item["taskId"] = data.get("task_id", "")
-                item["status"] = data.get("status", "completed")
-                item["orderIndex"] = data.get("order_index", 0)
-                item["totalTasks"] = data.get("total_tasks", 0)
-
-            elif event_type == "artifact_created":
-                artifact_id = data.get("artifact_id", "")
-                item["artifactId"] = artifact_id
-                item["filename"] = data.get("filename", "")
-                item["mimeType"] = data.get("mime_type", "")
-                item["category"] = data.get("category", "other")
-                item["sizeBytes"] = data.get("size_bytes", 0)
-                item["url"] = data.get("url", "")
-                item["previewUrl"] = data.get("preview_url", "")
-                item["sourceTool"] = data.get("source_tool", "")
-                item["metadata"] = data.get("metadata", {})
-                # Merge artifact_ready data if available
-                if artifact_id in artifact_ready_map:
-                    ready = artifact_ready_map[artifact_id]
-                    item["url"] = ready.get("url") or item["url"]
-                    item["previewUrl"] = ready.get("preview_url") or item["previewUrl"]
-                # Merge artifact_error data if available
-                if artifact_id in artifact_error_map:
-                    item["error"] = artifact_error_map[artifact_id].get("error", "")
-
-            # Skip artifact_ready/error - merged into artifact_created above
-            elif event_type in ("artifact_ready", "artifact_error"):
-                continue
-
-            # HITL events - determine answered status from:
-            # 1. Corresponding *_answered event in timeline
-            # 2. HITL request status from database
-            elif event_type == "clarification_asked":
-                request_id = data.get("request_id", "")
-                item["requestId"] = request_id
-                item["question"] = data.get("question", "")
-                item["options"] = data.get("options", [])
-                item["allowCustom"] = data.get("allow_custom", True)
-                # Check if answered
-                answered = False
-                answer = None
-                if request_id in hitl_answered_map:
-                    answered = True
-                    answer = hitl_answered_map[request_id].get("answer")
-                elif request_id in hitl_status_map:
-                    status_info = hitl_status_map[request_id]
-                    if status_info["status"] in ("answered", "completed"):
-                        answered = True
-                        # response holds the raw answer, response_metadata may have structured data
-                        answer = status_info.get("response") or status_info.get(
-                            "response_metadata", {}
-                        ).get("answer")
-                item["answered"] = answered
-                item["answer"] = answer
-
-            elif event_type == "clarification_answered":
-                item["requestId"] = data.get("request_id", "")
-                item["answer"] = data.get("answer", "")
-
-            elif event_type == "decision_asked":
-                request_id = data.get("request_id", "")
-                item["requestId"] = request_id
-                item["question"] = data.get("question", "")
-                item["options"] = data.get("options", [])
-                item["decisionType"] = data.get("decision_type", "branch")
-                item["allowCustom"] = data.get("allow_custom", False)
-                item["defaultOption"] = data.get("default_option")
-                # Check if answered
-                answered = False
-                decision = None
-                if request_id in hitl_answered_map:
-                    answered = True
-                    decision = hitl_answered_map[request_id].get("decision")
-                elif request_id in hitl_status_map:
-                    status_info = hitl_status_map[request_id]
-                    if status_info["status"] in ("answered", "completed"):
-                        answered = True
-                        # response holds the raw decision, response_metadata may have structured data
-                        decision = status_info.get("response") or status_info.get(
-                            "response_metadata", {}
-                        ).get("decision")
-                item["answered"] = answered
-                item["decision"] = decision
-
-            elif event_type == "decision_answered":
-                item["requestId"] = data.get("request_id", "")
-                item["decision"] = data.get("decision", "")
-
-            elif event_type == "env_var_requested":
-                request_id = data.get("request_id", "")
-                item["requestId"] = request_id
-                item["toolName"] = data.get("tool_name", "")
-                item["fields"] = data.get("fields", [])
-                item["message"] = data.get("message", "")
-                item["context"] = data.get("context", {})
-                # Check if answered
-                answered = False
-                values = {}
-                if request_id in hitl_answered_map:
-                    answered = True
-                    values = hitl_answered_map[request_id].get("values", {})
-                elif request_id in hitl_status_map:
-                    status_info = hitl_status_map[request_id]
-                    if status_info["status"] in ("answered", "completed"):
-                        answered = True
-                        values = status_info.get("response_metadata", {}).get("values", {})
-                item["answered"] = answered
-                item["values"] = values
-
-            elif event_type == "env_var_provided":
-                item["requestId"] = data.get("request_id", "")
-                item["toolName"] = data.get("tool_name", "")
-                item["variableNames"] = data.get("saved_variables", [])
-                if not item["variableNames"]:
-                    item["variableNames"] = list(data.get("values", {}).keys())
-
-            elif event_type in ("permission_requested", "permission_asked"):
-                request_id = data.get("request_id", "")
-                item["requestId"] = request_id
-                item["action"] = data.get("action", "")
-                item["resource"] = data.get("resource", "")
-                item["reason"] = data.get("reason", "")
-                # SSE format fields
-                item["toolName"] = data.get("tool_name", "")
-                item["toolDisplayName"] = data.get("tool_display_name", "")
-                item["riskLevel"] = data.get("risk_level", "medium")
-                item["description"] = data.get("description", "")
-                item["allowRemember"] = data.get("allow_remember", True)
-                # Check if answered
-                answered = False
-                granted = None
-                if request_id in hitl_answered_map:
-                    answered = True
-                    granted = hitl_answered_map[request_id].get("granted")
-                elif request_id in hitl_status_map:
-                    status_info = hitl_status_map[request_id]
-                    if status_info["status"] in ("answered", "completed"):
-                        answered = True
-                        # For permission, granted is stored in response_metadata
-                        granted = status_info.get("response_metadata", {}).get("granted")
-                item["answered"] = answered
-                item["granted"] = granted
-
-            elif event_type in ("permission_granted", "permission_replied"):
-                item["requestId"] = data.get("request_id", "")
-                item["granted"] = data.get("granted", False)
-
-            timeline.append(item)
-
-        first_time_us = None
-        first_counter = None
-        last_time_us = None
-        last_counter = None
-        if timeline:
-            first_time_us = timeline[0]["eventTimeUs"]
-            first_counter = timeline[0]["eventCounter"]
-            last_time_us = timeline[-1]["eventTimeUs"]
-            last_counter = timeline[-1]["eventCounter"]
-
-        has_more = False
-        if first_time_us is not None:
-            check_events = await event_repo.get_events(
-                conversation_id=conversation_id,
-                from_time_us=0,
-                limit=1,
-                event_types=DISPLAYABLE_EVENTS,
-                before_time_us=first_time_us,
-                before_counter=first_counter,
-            )
-            has_more = len(check_events) > 0
+        has_more = await _check_has_more(
+            event_repo, conversation_id, first_time_us_val, first_counter_val
+        )
 
         return {
             "conversationId": conversation_id,
             "timeline": timeline,
             "total": len(timeline),
             "has_more": has_more,
-            "first_time_us": first_time_us,
-            "first_counter": first_counter,
-            "last_time_us": last_time_us,
-            "last_counter": last_counter,
+            "first_time_us": first_time_us_val,
+            "first_counter": first_counter_val,
+            "last_time_us": last_time_us_val,
+            "last_counter": last_counter_val,
         }
 
     except HTTPException:
@@ -667,6 +835,62 @@ async def _get_recovery_info(
     return recovery_info
 
 
+# ---------------------------------------------------------------------------
+# Helpers for get_execution_stats
+# ---------------------------------------------------------------------------
+
+
+def _compute_durations(executions: list[dict]) -> list[float]:
+    """Extract durations in ms from executions that have both start and end times."""
+    durations: list[float] = []
+    for e in executions:
+        if e.get("started_at") and e.get("completed_at"):
+            started = datetime.fromisoformat(e["started_at"].replace("Z", "+00:00"))
+            completed = datetime.fromisoformat(e["completed_at"].replace("Z", "+00:00"))
+            durations.append((completed - started).total_seconds() * 1000)
+    return durations
+
+
+def _compute_tool_usage(executions: list[dict]) -> dict[str, int]:
+    """Count tool usage across executions."""
+    tool_usage: dict[str, int] = {}
+    for e in executions:
+        tool_name = e.get("tool_name")
+        if tool_name:
+            tool_usage[tool_name] = tool_usage.get(tool_name, 0) + 1
+    return tool_usage
+
+
+def _compute_status_distribution(executions: list[dict]) -> dict[str, int]:
+    """Count status distribution across executions."""
+    status_distribution: dict[str, int] = {}
+    for e in executions:
+        status = e.get("status", "UNKNOWN")
+        status_distribution[status] = status_distribution.get(status, 0) + 1
+    return status_distribution
+
+
+def _compute_timeline_data(executions: list[dict]) -> list[dict]:
+    """Build timeline data bucketed by hour."""
+    if not executions:
+        return []
+
+    time_buckets: dict[str, dict] = defaultdict(lambda: {"count": 0, "completed": 0, "failed": 0})
+
+    for e in executions:
+        if not e.get("started_at"):
+            continue
+        started = datetime.fromisoformat(e["started_at"].replace("Z", "+00:00"))
+        bucket_key = started.strftime("%Y-%m-%d %H:00")
+        time_buckets[bucket_key]["count"] += 1
+        if e.get("status") == "COMPLETED":
+            time_buckets[bucket_key]["completed"] += 1
+        elif e.get("status") == "FAILED":
+            time_buckets[bucket_key]["failed"] += 1
+
+    return [{"time": k, **v} for k, v in sorted(time_buckets.items())]
+
+
 @router.get("/conversations/{conversation_id}/execution/stats")
 async def get_execution_stats(
     conversation_id: str,
@@ -689,63 +913,16 @@ async def get_execution_stats(
             limit=1000,
         )
 
-        total_executions = len(executions)
-        completed_count = sum(1 for e in executions if e.get("status") == "COMPLETED")
-        failed_count = sum(1 for e in executions if e.get("status") == "FAILED")
-
-        durations = []
-        for e in executions:
-            if e.get("started_at") and e.get("completed_at"):
-                from datetime import datetime
-
-                started = datetime.fromisoformat(e["started_at"].replace("Z", "+00:00"))
-                completed = datetime.fromisoformat(e["completed_at"].replace("Z", "+00:00"))
-                duration_ms = (completed - started).total_seconds() * 1000
-                durations.append(duration_ms)
-
-        average_duration_ms = sum(durations) / len(durations) if durations else 0.0
-
-        tool_usage: dict[str, int] = {}
-        for e in executions:
-            tool_name = e.get("tool_name")
-            if tool_name:
-                tool_usage[tool_name] = tool_usage.get(tool_name, 0) + 1
-
-        status_distribution: dict[str, int] = {}
-        for e in executions:
-            status = e.get("status", "UNKNOWN")
-            status_distribution[status] = status_distribution.get(status, 0) + 1
-
-        timeline_data = []
-        if executions:
-            from collections import defaultdict
-            from datetime import datetime
-
-            time_buckets: dict[str, dict] = defaultdict(
-                lambda: {"count": 0, "completed": 0, "failed": 0}
-            )
-
-            for e in executions:
-                if e.get("started_at"):
-                    started = datetime.fromisoformat(e["started_at"].replace("Z", "+00:00"))
-                    bucket_key = started.strftime("%Y-%m-%d %H:00")
-                    time_buckets[bucket_key]["count"] += 1
-
-                    if e.get("status") == "COMPLETED":
-                        time_buckets[bucket_key]["completed"] += 1
-                    elif e.get("status") == "FAILED":
-                        time_buckets[bucket_key]["failed"] += 1
-
-            timeline_data = [{"time": k, **v} for k, v in sorted(time_buckets.items())]
+        durations = _compute_durations(executions)
 
         return ExecutionStatsResponse(
-            total_executions=total_executions,
-            completed_count=completed_count,
-            failed_count=failed_count,
-            average_duration_ms=average_duration_ms,
-            tool_usage=tool_usage,
-            status_distribution=status_distribution,
-            timeline_data=timeline_data,
+            total_executions=len(executions),
+            completed_count=sum(1 for e in executions if e.get("status") == "COMPLETED"),
+            failed_count=sum(1 for e in executions if e.get("status") == "FAILED"),
+            average_duration_ms=sum(durations) / len(durations) if durations else 0.0,
+            tool_usage=_compute_tool_usage(executions),
+            status_distribution=_compute_status_distribution(executions),
+            timeline_data=_compute_timeline_data(executions),
         )
 
     except ValueError as e:

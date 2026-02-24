@@ -208,7 +208,7 @@ class StructuredLLMLogger:
 
         return request_id
 
-    def log_call_end(  # noqa: PLR0913
+    def log_call_end(
         self,
         request_id: str,
         input_tokens: int = 0,

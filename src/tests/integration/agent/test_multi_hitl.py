@@ -29,6 +29,26 @@ API_KEY = os.environ.get("API_KEY", "")
 TEST_PROJECT_ID = os.environ.get("TEST_PROJECT_ID", "")
 TEST_CONVERSATION_ID = os.environ.get("TEST_CONVERSATION_ID", "")
 
+HITL_EVENT_TYPES = ["clarification_asked", "decision_asked", "env_var_requested"]
+TERMINAL_EVENT_TYPES = [*HITL_EVENT_TYPES, "complete", "error"]
+
+
+def _build_hitl_response_text(hitl_type: str, cycle: int) -> str:
+    """Build a response string based on HITL type and cycle number."""
+    if hitl_type == "decision":
+        return "option_a" if cycle % 2 == 1 else "option_b"
+    if hitl_type == "clarification":
+        return f"clarification_response_{cycle}"
+    return f"env_var_{cycle}"
+
+
+def _find_hitl_event(events: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Find the first HITL event in the event list."""
+    for e in events:
+        if e.get("type") in HITL_EVENT_TYPES:
+            return e
+    return None
+
 
 class MultiHITLTester:
     """Test multiple HITL interactions."""
@@ -72,7 +92,7 @@ class MultiHITLTester:
                     event_type = data.get("type", "unknown")
 
                     # Log important events
-                    if event_type in ["clarification_asked", "decision_asked", "env_var_requested"]:
+                    if event_type in HITL_EVENT_TYPES:
                         self.hitl_count += 1
                         request_id = data.get("data", {}).get("request_id")
                         print(
@@ -118,19 +138,13 @@ class MultiHITLTester:
             self.errors.append(f"Failed to send HITL response: {e}")
             return False
 
-    async def run_multi_hitl_test(self) -> bool:
-        """Run the complete multi-HITL test."""
-        print("\n" + "=" * 70)
-        print("Multiple HITL Interactions Test")
-        print("=" * 70)
-
-        # Step 1: Connect
+    async def _connect_and_subscribe(self) -> bool:
+        """Connect to WebSocket and wait for the connected event."""
         print("\n[Step 1] Connecting to WebSocket...")
         if not await self.connect():
             print(f"   ✗ Failed: {self.errors[-1]}")
             return False
 
-        # Wait for connected event
         msg = await self.ws.recv()
         data = json.loads(msg)
         if data.get("type") != "connected":
@@ -139,10 +153,11 @@ class MultiHITLTester:
 
         self.session_id = data.get("data", {}).get("session_id")
         print(f"   ✓ Connected (session: {self.session_id[:8]}...)")
+        return True
 
-        # Step 2: Send message designed to trigger multiple HITLs
+    async def _send_trigger_message(self) -> None:
+        """Send a message designed to trigger multiple HITLs."""
         print("\n[Step 2] Sending message that may trigger multiple HITLs...")
-        # This message is designed to potentially trigger multiple decisions
         message = (
             "I need to perform a complex multi-step operation. "
             "First, should I use approach A or B? "
@@ -160,7 +175,53 @@ class MultiHITLTester:
             )
         )
 
-        # Step 3: Handle multiple HITL cycles
+    async def _process_cycle_events(self, events: list[dict[str, Any]], cycle: int) -> str:
+        """Process events from a HITL cycle. Returns 'error', 'complete', 'no_hitl', or 'responded'."""
+        event_types = [e.get("type") for e in events]
+
+        if "error" in event_types:
+            error_event = [e for e in events if e.get("type") == "error"][-1]
+            print(f"   ✗ Error during cycle #{cycle}: {error_event.get('data', {})}")
+            return "error"
+
+        if "complete" in event_types:
+            print(f"   ✓ Agent completed after {self.hitl_count} HITL(s)")
+            return "complete"
+
+        hitl_event = _find_hitl_event(events)
+        if not hitl_event:
+            return await self._handle_no_hitl(events, cycle)
+
+        return await self._respond_to_hitl(hitl_event, cycle)
+
+    async def _handle_no_hitl(self, events: list[dict[str, Any]], cycle: int) -> str:
+        """Handle the case where no HITL event was found in the cycle."""
+        print(f"   ⚠ No HITL request in cycle #{cycle}, continuing to listen...")
+        if len(events) < 3:
+            print(f"   ✗ No progress after cycle #{cycle}")
+            return "error"
+        return "no_hitl"
+
+    async def _respond_to_hitl(self, hitl_event: dict[str, Any], cycle: int) -> str:
+        """Extract HITL info and send a response."""
+        hitl_type = hitl_event.get("type").replace("_asked", "").replace("_requested", "")
+        request_id = hitl_event.get("data", {}).get("request_id")
+        question = hitl_event.get("data", {}).get("question", "")
+
+        print(f"   HITL type: {hitl_type}")
+        print(f"   Question: {question[:80]}...")
+
+        response = _build_hitl_response_text(hitl_type, cycle)
+        success = await self.send_hitl_response(hitl_type, request_id, response)
+        if not success:
+            print("   ✗ Failed to send HITL response")
+            return "error"
+
+        await asyncio.sleep(0.5)
+        return "responded"
+
+    async def _run_hitl_cycles(self) -> bool:
+        """Run the HITL cycle loop until completion or max cycles reached."""
         print("\n[Step 3] Handling HITL cycles...")
 
         cycle = 0
@@ -168,72 +229,32 @@ class MultiHITLTester:
             cycle += 1
             print(f"\n   --- HITL Cycle #{cycle} ---")
 
-            # Wait for HITL request or completion
             events = await self.receive_events_until(
-                target_events=[
-                    "clarification_asked",
-                    "decision_asked",
-                    "env_var_requested",
-                    "complete",
-                    "error",
-                ],
+                target_events=TERMINAL_EVENT_TYPES,
                 timeout=60.0,
             )
 
-            # Check what happened
-            event_types = [e.get("type") for e in events]
-
-            if "error" in event_types:
-                error_event = [e for e in events if e.get("type") == "error"][-1]
-                print(f"   ✗ Error during cycle #{cycle}: {error_event.get('data', {})}")
+            result = await self._process_cycle_events(events, cycle)
+            if result == "error":
                 return False
-
-            if "complete" in event_types:
-                print(f"   ✓ Agent completed after {self.hitl_count} HITL(s)")
+            if result == "complete":
                 return True
-
-            # Find HITL request
-            hitl_event = None
-            for e in events:
-                if e.get("type") in ["clarification_asked", "decision_asked", "env_var_requested"]:
-                    hitl_event = e
-                    break
-
-            if not hitl_event:
-                print(f"   ⚠ No HITL request in cycle #{cycle}, continuing to listen...")
-                # Check if we got any meaningful events
-                if len(events) < 3:  # Only ack + message + user_message
-                    print(f"   ✗ No progress after cycle #{cycle}")
-                    return False
-                continue
-
-            # Extract HITL info
-            hitl_type = hitl_event.get("type").replace("_asked", "").replace("_requested", "")
-            request_id = hitl_event.get("data", {}).get("request_id")
-            question = hitl_event.get("data", {}).get("question", "")
-
-            print(f"   HITL type: {hitl_type}")
-            print(f"   Question: {question[:80]}...")
-
-            # Send response based on HITL type
-            if hitl_type == "decision":
-                # Alternate between options to test different paths
-                response = "option_a" if cycle % 2 == 1 else "option_b"
-            elif hitl_type == "clarification":
-                response = f"clarification_response_{cycle}"
-            else:
-                response = f"env_var_{cycle}"
-
-            success = await self.send_hitl_response(hitl_type, request_id, response)
-            if not success:
-                print("   ✗ Failed to send HITL response")
-                return False
-
-            # Wait a moment for the response to be processed
-            await asyncio.sleep(0.5)
+            # "no_hitl" or "responded" -> continue loop
 
         print(f"\n   ⚠ Reached max HITL cycles ({self.max_hitls})")
         return False
+
+    async def run_multi_hitl_test(self) -> bool:
+        """Run the complete multi-HITL test."""
+        print("\n" + "=" * 70)
+        print("Multiple HITL Interactions Test")
+        print("=" * 70)
+
+        if not await self._connect_and_subscribe():
+            return False
+
+        await self._send_trigger_message()
+        return await self._run_hitl_cycles()
 
     async def close(self):
         """Close connection."""

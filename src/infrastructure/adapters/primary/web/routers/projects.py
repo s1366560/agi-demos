@@ -2,7 +2,7 @@
 
 import logging
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
@@ -582,6 +582,68 @@ async def list_project_members(
     return {"members": members, "total": len(members)}
 
 
+async def _query_active_nodes(graphiti_client: Any, project_id: str) -> int:
+    """Query Graphiti for active nodes in the last 7 days."""
+    try:
+        threshold_date = (datetime.now(UTC) - timedelta(days=7)).isoformat()
+        query = """
+            MATCH (n:Node)
+            WHERE n.project_id = $project_id
+            AND n.valid_at >= $threshold
+            RETURN count(n) as active_count
+        """
+        result = await graphiti_client.driver.execute_query(
+            query, project_id=project_id, threshold=threshold_date
+        )
+        if hasattr(result, "records") and result.records:
+            for record in result.records:
+                return record.get("active_count", 0)
+        elif result and len(result) > 0:
+            for record in result:
+                if hasattr(record, "get"):
+                    return record.get("active_count", 0)
+        return 0
+    except Exception as e:
+        logger.error(f"Failed to get active nodes from Graphiti: {e}")
+        return 0
+
+
+def _format_relative_time(created_at: datetime) -> str:
+    """Format a datetime as relative time string."""
+    now = datetime.now(UTC)
+    diff = now - created_at
+    if diff.days > 0:
+        return f"{diff.days}d ago"
+    if diff.seconds >= 3600:
+        return f"{diff.seconds // 3600}h ago"
+    if diff.seconds >= 60:
+        return f"{diff.seconds // 60}m ago"
+    return "Just now"
+
+
+async def _build_recent_activity(db: AsyncSession, project_id: str) -> list[dict[str, Any]]:
+    """Build recent activity list from memories."""
+    recent_memories_result = await db.execute(
+        select(Memory, User)
+        .join(User, Memory.author_id == User.id)
+        .where(Memory.project_id == project_id)
+        .order_by(Memory.created_at.desc())
+        .limit(5)
+    )
+    activities = []
+    for memory, user in recent_memories_result.fetchall():
+        activities.append(
+            {
+                "id": memory.id,
+                "user": user.full_name or user.email,
+                "action": "created a memory",
+                "target": memory.title or "Untitled Memory",
+                "time": _format_relative_time(memory.created_at),
+            }
+        )
+    return activities
+
+
 @router.get("/{project_id}/stats", response_model=ProjectStats)
 async def get_project_stats(
     project_id: str,
@@ -627,42 +689,8 @@ async def get_project_stats(
         member_count = member_count_result.scalar()
 
         # Get active nodes (from Graphiti)
-        # Active nodes are those with last_active timestamp within last 7 days
-        from datetime import datetime, timedelta
-
-        active_nodes = 0
-        try:
-            # Calculate threshold date (7 days ago)
-            threshold_date = (datetime.now(UTC) - timedelta(days=7)).isoformat()
-
-            # Query Graphiti for active nodes in this project
-            query = """
-                MATCH (n:Node)
-                WHERE n.project_id = $project_id
-                AND n.valid_at >= $threshold
-                RETURN count(n) as active_count
-            """
-
-            result = await graphiti_client.driver.execute_query(
-                query, project_id=project_id, threshold=threshold_date
-            )
-
-            # Extract count from result
-            if hasattr(result, "records") and result.records:
-                for record in result.records:
-                    active_nodes = record.get("active_count", 0)
-                    break
-            elif result and len(result) > 0:
-                # Fallback for old driver behavior or different result shape
-                for record in result:
-                    if hasattr(record, "get"):
-                        active_nodes = record.get("active_count", 0)
-                    break
-
-            logger.info(f"Found {active_nodes} active nodes for project {project_id}")
-        except Exception as e:
-            logger.error(f"Failed to get active nodes from Graphiti: {e}")
-            # Keep active_nodes as 0 on error
+        active_nodes = await _query_active_nodes(graphiti_client, project_id)
+        logger.info(f"Found {active_nodes} active nodes for project {project_id}")
 
         # Get tenant limit for storage
         # tenant_result = await db.execute(select(Tenant).where(Tenant.id == project.tenant_id))
@@ -671,38 +699,7 @@ async def get_project_stats(
         # storage_limit = tenant.max_storage if tenant else 1024 * 1024 * 1024  # Default 1GB
 
         # Recent activity (from Memories)
-        recent_memories_result = await db.execute(
-            select(Memory, User)
-            .join(User, Memory.author_id == User.id)
-            .where(Memory.project_id == project_id)
-            .order_by(Memory.created_at.desc())
-            .limit(5)
-        )
-        activities = []
-        for memory, user in recent_memories_result.fetchall():
-            # Calculate relative time string
-            from datetime import datetime
-
-            now = datetime.now(UTC)
-            diff = now - memory.created_at
-            if diff.days > 0:
-                time_str = f"{diff.days}d ago"
-            elif diff.seconds >= 3600:
-                time_str = f"{diff.seconds // 3600}h ago"
-            elif diff.seconds >= 60:
-                time_str = f"{diff.seconds // 60}m ago"
-            else:
-                time_str = "Just now"
-
-            activities.append(
-                {
-                    "id": memory.id,
-                    "user": user.full_name or user.email,
-                    "action": "created a memory",
-                    "target": memory.title or "Untitled Memory",
-                    "time": time_str,
-                }
-            )
+        activities = await _build_recent_activity(db, project_id)
 
         # Get conversation count
         conversation_count_result = await db.execute(

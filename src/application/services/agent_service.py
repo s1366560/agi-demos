@@ -71,7 +71,7 @@ class AgentService(AgentServicePort):
     - Real-time SSE events for step_start, step_end
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         conversation_repository: ConversationRepository,
         execution_repository: AgentExecutionRepository,
@@ -168,6 +168,65 @@ class AgentService(AgentServicePort):
     async def _build_react_agent_async(self, project_id: str, user_id: str, tenant_id: str) -> None:
         # Deprecated: Agent execution moved to Ray Actors
         pass
+
+    # ------------------------------------------------------------------
+    # stream_chat_v2 helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_user_event_data(
+        user_msg_id: str,
+        user_message: str,
+        created_at_iso: str,
+        attachment_ids: list[str] | None,
+        file_metadata: list[dict[str, Any]] | None,
+        forced_skill_name: str | None,
+    ) -> dict[str, Any]:
+        """Build the user event data dict, conditionally adding optional fields."""
+        data: dict[str, Any] = {
+            "id": user_msg_id,
+            "role": "user",
+            "content": user_message,
+            "created_at": created_at_iso,
+        }
+        if attachment_ids:
+            data["attachment_ids"] = attachment_ids
+        if file_metadata:
+            data["file_metadata"] = file_metadata
+        if forced_skill_name:
+            data["forced_skill_name"] = forced_skill_name
+        return data
+
+    async def _load_conversation_context(
+        self,
+        conversation: Conversation,
+        exclude_event_id: str | None,
+    ) -> tuple[list[dict[str, Any]], Any]:
+        """Load conversation context via context_loader or fallback.
+
+        Returns:
+            Tuple of (conversation_context_messages, context_summary_or_None).
+        """
+        if self._context_loader:
+            load_result = await self._context_loader.load_context(
+                conversation_id=conversation.id,
+                exclude_event_id=exclude_event_id,
+            )
+            return load_result.messages, load_result.summary
+
+        # Fallback: direct message loading (no summary caching)
+        message_events = await self._agent_execution_event_repo.get_message_events(
+            conversation_id=conversation.id, limit=50
+        )
+        context = [
+            {
+                "role": event.event_data.get("role", "user"),
+                "content": event.event_data.get("content", ""),
+            }
+            for event in message_events
+            if event.id != exclude_event_id
+        ]
+        return context, None
 
     async def stream_chat_v2(
         self,
@@ -273,20 +332,15 @@ class AgentService(AgentServicePort):
 
             await self._agent_execution_event_repo.save_and_commit(user_msg_event)
 
-            # Yield user message event (using SSE adapter manually here or constructing dict)
-            # Since we are returning a dict yield, we construct it to match the legacy format expected by frontend
-            user_event_data = {
-                "id": user_msg_id,
-                "role": "user",
-                "content": user_message,
-                "created_at": user_msg_event.created_at.isoformat(),
-            }
-            if attachment_ids:
-                user_event_data["attachment_ids"] = attachment_ids
-            if file_metadata:
-                user_event_data["file_metadata"] = file_metadata
-            if forced_skill_name:
-                user_event_data["forced_skill_name"] = forced_skill_name
+            # Yield user message event
+            user_event_data = self._build_user_event_data(
+                user_msg_id=user_msg_id,
+                user_message=user_message,
+                created_at_iso=user_msg_event.created_at.isoformat(),
+                attachment_ids=attachment_ids,
+                file_metadata=file_metadata,
+                forced_skill_name=forced_skill_name,
+            )
 
             yield {
                 "type": "message",
@@ -296,32 +350,12 @@ class AgentService(AgentServicePort):
             }
 
             # Get conversation context with smart summary caching.
-            # The user message was just saved above, so exclude it since
-            # the Activity will add it again via build_context().
-            context_summary = None
-            if self._context_loader:
-                load_result = await self._context_loader.load_context(
-                    conversation_id=conversation.id,
-                    exclude_event_id=user_msg_event.id,
-                )
-                conversation_context = load_result.messages
-                context_summary = load_result.summary
-            else:
-                # Fallback: direct message loading (no summary caching)
-                message_events = await self._agent_execution_event_repo.get_message_events(
-                    conversation_id=conversation.id, limit=50
-                )
-                conversation_context = [
-                    {
-                        "role": event.event_data.get("role", "user"),
-                        "content": event.event_data.get("content", ""),
-                    }
-                    for event in message_events
-                    if event.id != user_msg_event.id
-                ]
+            conversation_context, context_summary = await self._load_conversation_context(
+                conversation=conversation,
+                exclude_event_id=user_msg_event.id,
+            )
 
             # Start Ray Actor
-            # Events will be published to Redis Stream by the Actor runtime
             actor_id = await self._start_chat_actor(
                 conversation=conversation,
                 message_id=user_msg_id,
@@ -429,6 +463,272 @@ class AgentService(AgentServicePort):
 
         return events
 
+    # ------------------------------------------------------------------
+    # connect_chat_stream helpers
+    # ------------------------------------------------------------------
+
+    async def _replay_db_events(
+        self,
+        conversation_id: str,
+        message_id: str | None,
+    ) -> tuple[list[dict[str, Any]], int, int, bool]:
+        """Replay persisted events from the database.
+
+        Returns:
+            Tuple of (events_to_yield, last_event_time_us, last_event_counter, saw_complete).
+        """
+        if message_id:
+            events = await self._agent_execution_event_repo.get_events_by_message(
+                message_id=message_id
+            )
+        else:
+            events = await self._agent_execution_event_repo.list_by_conversation(
+                conversation_id=conversation_id, limit=1000
+            )
+
+        last_event_time_us = 0
+        last_event_counter = 0
+        saw_complete = False
+        yielded: list[dict[str, Any]] = []
+
+        for event in events:
+            yielded.append(
+                {
+                    "type": event.event_type,
+                    "data": event.event_data,
+                    "timestamp": event.created_at.isoformat(),
+                    "event_time_us": event.event_time_us,
+                    "event_counter": event.event_counter,
+                }
+            )
+            if event.event_time_us > last_event_time_us or (
+                event.event_time_us == last_event_time_us
+                and event.event_counter > last_event_counter
+            ):
+                last_event_time_us = event.event_time_us
+                last_event_counter = event.event_counter
+            if event.event_type in ("complete", "error"):
+                saw_complete = True
+
+        logger.info(
+            f"[AgentService] Replayed {len(events)} DB events for conversation {conversation_id}, "
+            f"last_event_time_us={last_event_time_us}"
+        )
+        return yielded, last_event_time_us, last_event_counter, saw_complete
+
+    async def _replay_completed_stream(
+        self,
+        conversation_id: str,
+        message_id: str,
+        last_event_time_us: int,
+    ) -> list[dict[str, Any]]:
+        """Replay stream events for a completed message.
+
+        Returns:
+            List of event dicts to yield.
+        """
+        stream_events = await self._get_stream_events(
+            conversation_id, message_id, last_event_time_us
+        )
+        stream_events.sort(key=lambda e: (e.get("event_time_us", 0), e.get("event_counter", 0)))
+        return [
+            {
+                "type": event.get("type"),
+                "data": event.get("data"),
+                "timestamp": datetime.now(UTC).isoformat(),
+                "event_time_us": event.get("event_time_us", 0),
+                "event_counter": event.get("event_counter", 0),
+            }
+            for event in stream_events
+        ]
+
+    async def _handle_title_generation(
+        self,
+        conversation_id: str,
+        message_id: str | None,
+    ) -> None:
+        """Launch background title generation if applicable."""
+        try:
+            conv = await self._conversation_repo.find_by_id(conversation_id)
+            if not conv or conv.title not in ("New Conversation", "New Chat"):
+                return
+
+            first_user_msg = await self._extract_first_user_message(message_id)
+            if not first_user_msg:
+                return
+
+            _title_task = asyncio.create_task(
+                self._trigger_title_generation(
+                    conversation_id=conversation_id,
+                    project_id=conv.project_id,
+                    user_message=first_user_msg,
+                )
+            )
+            _background_tasks.add(_title_task)
+            _title_task.add_done_callback(_background_tasks.discard)
+        except Exception as title_err:
+            logger.debug(f"Title generation check failed: {title_err}")
+
+    async def _extract_first_user_message(self, message_id: str | None) -> str:
+        """Extract the first user message content from event history."""
+        if not message_id:
+            return ""
+        try:
+            msg_events = await self._agent_execution_event_repo.get_events_by_message(
+                message_id=message_id
+            )
+            for me in msg_events:
+                if me.event_type == "user_message":
+                    return (
+                        me.event_data.get("content", "") if isinstance(me.event_data, dict) else ""
+                    )
+        except Exception:
+            pass
+        return ""
+
+    def _is_event_already_seen(
+        self,
+        evt_time_us: int,
+        evt_counter: int,
+        last_event_time_us: int,
+        last_event_counter: int,
+    ) -> bool:
+        """Check whether an event was already yielded (based on time/counter ordering)."""
+        return evt_time_us < last_event_time_us or (
+            evt_time_us == last_event_time_us and evt_counter <= last_event_counter
+        )
+
+    async def _read_delayed_events(
+        self,
+        stream_key: str,
+        conversation_id: str,
+        message_id: str | None,
+        last_event_time_us: int,
+        last_event_counter: int,
+        max_delay: float = 5.0,
+    ) -> list[dict[str, Any]]:
+        """Read delayed events (e.g. title_generated) after stream completion.
+
+        Returns:
+            List of event dicts to yield.
+        """
+        delayed_start = time_module.time()
+        result: list[dict[str, Any]] = []
+        try:
+            async for delayed_message in self._event_bus.stream_read(
+                stream_key, last_id="0", count=100, block_ms=200
+            ):
+                delayed_event = delayed_message.get("data", {})
+                delayed_type = delayed_event.get("type", "unknown")
+                delayed_time_us = delayed_event.get("event_time_us", 0)
+                delayed_counter = delayed_event.get("event_counter", 0)
+                delayed_data = delayed_event.get("data", {})
+
+                # Skip already seen events
+                if self._is_event_already_seen(
+                    delayed_time_us, delayed_counter, last_event_time_us, last_event_counter
+                ):
+                    continue
+
+                if not self._is_delayed_event_relevant(delayed_data, conversation_id, message_id):
+                    continue
+
+                # Only process specific delayed events (conversation-level events)
+                if delayed_type in ("title_generated",):
+                    logger.info(
+                        f"[AgentService] Yielding delayed event: type={delayed_type}, "
+                        f"conversation_id={delayed_data.get('conversation_id')}"
+                    )
+                    result.append(
+                        {
+                            "type": delayed_type,
+                            "data": delayed_data,
+                            "timestamp": datetime.now(UTC).isoformat(),
+                            "event_time_us": delayed_time_us,
+                            "event_counter": delayed_counter,
+                        }
+                    )
+                    # Update tracking (for subsequent filter passes within this loop)
+                    if delayed_time_us > last_event_time_us or (
+                        delayed_time_us == last_event_time_us
+                        and delayed_counter > last_event_counter
+                    ):
+                        last_event_time_us = delayed_time_us
+                        last_event_counter = delayed_counter
+
+                # Timeout check
+                if time_module.time() - delayed_start > max_delay:
+                    break
+        except Exception as delay_err:
+            logger.warning(f"[AgentService] Error reading delayed events: {delay_err}")
+        return result
+
+    @staticmethod
+    def _is_delayed_event_relevant(
+        delayed_data: dict[str, Any],
+        conversation_id: str,
+        message_id: str | None,
+    ) -> bool:
+        """Check if a delayed event is relevant for the current stream."""
+        event_conversation_id = delayed_data.get("conversation_id")
+        event_message_id = delayed_data.get("message_id")
+
+        # Skip events for different conversations
+        if event_conversation_id and event_conversation_id != conversation_id:
+            return False
+
+        # Skip message events for different messages (only when filtering by message_id)
+        if message_id and event_message_id and event_message_id != message_id:
+            return False
+
+        return True
+
+    def _filter_live_event(
+        self,
+        raw_message: dict[str, Any],
+        *,
+        message_id: str | None,
+        conversation_id: str,
+        live_event_count: int,
+        last_event_time_us: int,
+        last_event_counter: int,
+    ) -> tuple[str, dict[str, Any], int, int] | None:
+        """Parse and filter a single live Redis stream event.
+
+        Returns ``(event_type, event_data, evt_time_us, evt_counter)`` when
+        the event should be yielded, or ``None`` to skip it.
+        """
+        event = raw_message.get("data", {})
+        event_type = event.get("type", "unknown")
+        evt_time_us = event.get("event_time_us", 0)
+        evt_counter = event.get("event_counter", 0)
+        event_data = event.get("data", {})
+
+        if live_event_count <= 10:
+            logger.debug(
+                f"[AgentService] Live stream event #{live_event_count}: "
+                f"type={event_type}, event_time_us={evt_time_us}, "
+                f"message_id={event_data.get('message_id')}"
+            )
+
+        # Filter by message_id (only when message_id is specified)
+        if message_id and event_data.get("message_id") != message_id:
+            return None
+
+        if event_type in ("task_list_updated", "task_updated"):
+            logger.info(
+                f"[AgentService] Task event from Redis: type={event_type}, "
+                f"conversation_id={conversation_id}"
+            )
+
+        # Skip already-seen events (from DB replay)
+        if self._is_event_already_seen(
+            evt_time_us, evt_counter, last_event_time_us, last_event_counter
+        ):
+            return None
+
+        return (event_type, event_data, evt_time_us, evt_counter)
+
     async def connect_chat_stream(
         self,
         conversation_id: str,
@@ -459,73 +759,30 @@ class AgentService(AgentServicePort):
         )
 
         # 1. Replay from DB
-        # Get events for this conversation, optionally filtered by message_id
         try:
-            if message_id:
-                # Filter events for specific message only
-                events = await self._agent_execution_event_repo.get_events_by_message(
-                    message_id=message_id
-                )
-            else:
-                # Get all events for this conversation
-                events = await self._agent_execution_event_repo.list_by_conversation(
-                    conversation_id=conversation_id, limit=1000
-                )
-
+            (
+                db_events,
+                last_event_time_us,
+                last_event_counter,
+                saw_complete,
+            ) = await self._replay_db_events(conversation_id, message_id)
+            for ev in db_events:
+                yield ev
+        except Exception as e:
+            logger.warning(f"[AgentService] Failed to replay events: {e}")
             last_event_time_us = 0
             last_event_counter = 0
             saw_complete = False
-            for event in events:
-                # Reconstruct SSE event format
-                yield {
-                    "type": event.event_type,
-                    "data": event.event_data,
-                    "timestamp": event.created_at.isoformat(),
-                    "event_time_us": event.event_time_us,
-                    "event_counter": event.event_counter,
-                }
-                if event.event_time_us > last_event_time_us or (
-                    event.event_time_us == last_event_time_us
-                    and event.event_counter > last_event_counter
-                ):
-                    last_event_time_us = event.event_time_us
-                    last_event_counter = event.event_counter
-                if event.event_type in ("complete", "error"):
-                    saw_complete = True
-
-            logger.info(
-                f"[AgentService] Replayed {len(events)} DB events for conversation {conversation_id}, "
-                f"last_event_time_us={last_event_time_us}"
-            )
-
-        except Exception as e:
-            logger.warning(f"[AgentService] Failed to replay events: {e}")
 
         # If completion already happened, replay text_delta from Redis Stream once
         if message_id and saw_complete:
-            stream_events = await self._get_stream_events(
+            for ev in await self._replay_completed_stream(
                 conversation_id, message_id, last_event_time_us
-            )
-            stream_only = [e for e in stream_events]
-            stream_only.sort(key=lambda e: (e.get("event_time_us", 0), e.get("event_counter", 0)))
-            for event in stream_only:
-                yield {
-                    "type": event.get("type"),
-                    "data": event.get("data"),
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "event_time_us": event.get("event_time_us", 0),
-                    "event_counter": event.get("event_counter", 0),
-                }
+            ):
+                yield ev
             return
 
         # 4. Stream live events from Redis Stream (reliable real-time)
-        # IMPORTANT: Use last_id="0" to read ALL messages from Redis Stream
-        # This is necessary because events are published to Redis Stream BEFORE
-        # being saved to DB. If we used "$", we might miss events published during DB replay.
-        # We use last_event_time_us/counter filtering to skip duplicates from DB replay.
-        #
-        # When message_id is None: Read ALL new events for the conversation (HITL recovery mode)
-        # When message_id is set: Filter events for that specific message
         stream_key = f"agent:events:{conversation_id}"
         logger.info(
             f"[AgentService] Streaming live from Redis Stream: {stream_key}, "
@@ -534,42 +791,21 @@ class AgentService(AgentServicePort):
         )
         live_event_count = 0
         try:
-            # Use "0" to read all messages (catch any missed during DB replay)
-            # Filter by last_event_time_us/counter to avoid duplicates
             async for message in self._event_bus.stream_read(
                 stream_key, last_id="0", count=1000, block_ms=1000
             ):
-                event = message.get("data", {})
-                event_type = event.get("type", "unknown")
-                evt_time_us = event.get("event_time_us", 0)
-                evt_counter = event.get("event_counter", 0)
-                event_data = event.get("data", {})
-
                 live_event_count += 1
-                if live_event_count <= 10:
-                    logger.debug(
-                        f"[AgentService] Live stream event #{live_event_count}: "
-                        f"type={event_type}, event_time_us={evt_time_us}, "
-                        f"message_id={event_data.get('message_id')}"
-                    )
-
-                # Filter by message_id (only when message_id is specified)
-                # When message_id is None (HITL recovery mode), accept all events
-                if message_id and event_data.get("message_id") != message_id:
+                filtered = self._filter_live_event(
+                    message,
+                    message_id=message_id,
+                    conversation_id=conversation_id,
+                    live_event_count=live_event_count,
+                    last_event_time_us=last_event_time_us,
+                    last_event_counter=last_event_counter,
+                )
+                if filtered is None:
                     continue
-
-                if event_type in ("task_list_updated", "task_updated"):
-                    logger.info(
-                        f"[AgentService] Task event from Redis: type={event_type}, "
-                        f"conversation_id={conversation_id}"
-                    )
-
-                # CRITICAL: Use last_event_time_us/counter (from DB replay) for filtering
-                # This prevents re-yielding events that were already replayed from DB
-                if evt_time_us < last_event_time_us or (
-                    evt_time_us == last_event_time_us and evt_counter <= last_event_counter
-                ):
-                    continue
+                event_type, event_data, evt_time_us, evt_counter = filtered
 
                 yield {
                     "type": event_type,
@@ -585,7 +821,6 @@ class AgentService(AgentServicePort):
                     last_event_counter = evt_counter
 
                 # Stop when completion is seen, but continue briefly for delayed events
-                # (e.g., title_generated which is published after complete)
                 if event_type in ("complete", "error"):
                     logger.info(
                         f"[AgentService] Stream completed from Redis Stream: type={event_type}, "
@@ -594,99 +829,17 @@ class AgentService(AgentServicePort):
 
                     # Launch background title generation (fire-and-forget)
                     if event_type == "complete":
-                        try:
-                            conv = await self._conversation_repo.find_by_id(conversation_id)
-                            if conv and conv.title in ("New Conversation", "New Chat"):
-                                # Extract first user message from the event data
-                                first_user_msg = ""
-                                if message_id:
-                                    try:
-                                        msg_events = await self._agent_execution_event_repo.get_events_by_message(
-                                            message_id=message_id
-                                        )
-                                        for me in msg_events:
-                                            if me.event_type == "user_message":
-                                                first_user_msg = (
-                                                    me.event_data.get("content", "")
-                                                    if isinstance(me.event_data, dict)
-                                                    else ""
-                                                )
-                                                break
-                                    except Exception:
-                                        pass
-                                if first_user_msg:
-                                    _title_task = asyncio.create_task(
-                                        self._trigger_title_generation(
-                                            conversation_id=conversation_id,
-                                            project_id=conv.project_id,
-                                            user_message=first_user_msg,
-                                        )
-                                    )
-                                    _background_tasks.add(_title_task)
-                                    _title_task.add_done_callback(_background_tasks.discard)
-                        except Exception as title_err:
-                            logger.debug(f"Title generation check failed: {title_err}")
+                        await self._handle_title_generation(conversation_id, message_id)
 
-                    # Continue reading for a short time to catch delayed events like title_generated
-                    # and artifact_ready (uploaded in background after agent completes)
-                    delayed_start = time_module.time()
-                    max_delay = 5.0  # Read for up to 5 more seconds
-                    try:
-                        async for delayed_message in self._event_bus.stream_read(
-                            stream_key, last_id="0", count=100, block_ms=200
-                        ):
-                            delayed_event = delayed_message.get("data", {})
-                            delayed_type = delayed_event.get("type", "unknown")
-                            delayed_time_us = delayed_event.get("event_time_us", 0)
-                            delayed_counter = delayed_event.get("event_counter", 0)
-                            delayed_data = delayed_event.get("data", {})
-
-                            # Skip already seen events
-                            if delayed_time_us < last_event_time_us or (
-                                delayed_time_us == last_event_time_us
-                                and delayed_counter <= last_event_counter
-                            ):
-                                continue
-
-                            # For conversation-level events (like title_generated), check conversation_id
-                            # For message-level events, check message_id
-                            event_message_id = delayed_data.get("message_id")
-                            event_conversation_id = delayed_data.get("conversation_id")
-
-                            # Skip events for different conversations
-                            if event_conversation_id and event_conversation_id != conversation_id:
-                                continue
-
-                            # Skip message events for different messages (only when filtering by message_id)
-                            if message_id and event_message_id and event_message_id != message_id:
-                                continue
-
-                            # Only process specific delayed events (conversation-level events)
-                            # These events don't have message_id but are valid for this conversation
-                            if delayed_type in ("title_generated",):
-                                logger.info(
-                                    f"[AgentService] Yielding delayed event: type={delayed_type}, "
-                                    f"conversation_id={event_conversation_id}"
-                                )
-                                yield {
-                                    "type": delayed_type,
-                                    "data": delayed_data,
-                                    "timestamp": datetime.now(UTC).isoformat(),
-                                    "event_time_us": delayed_time_us,
-                                    "event_counter": delayed_counter,
-                                }
-                                if delayed_time_us > last_event_time_us or (
-                                    delayed_time_us == last_event_time_us
-                                    and delayed_counter > last_event_counter
-                                ):
-                                    last_event_time_us = delayed_time_us
-                                    last_event_counter = delayed_counter
-
-                            # Timeout check
-                            if time_module.time() - delayed_start > max_delay:
-                                break
-                    except Exception as delay_err:
-                        logger.warning(f"[AgentService] Error reading delayed events: {delay_err}")
+                    # Continue reading for a short time to catch delayed events
+                    for ev in await self._read_delayed_events(
+                        stream_key=stream_key,
+                        conversation_id=conversation_id,
+                        message_id=message_id,
+                        last_event_time_us=last_event_time_us,
+                        last_event_counter=last_event_counter,
+                    ):
+                        yield ev
 
                     logger.info("[AgentService] Stream ended (after delayed event window)")
                     return
@@ -1006,4 +1159,3 @@ class AgentService(AgentServicePort):
     ) -> None:
         """Trigger workflow pattern learning after successful execution."""
         # Implementation preserved
-        pass

@@ -8,6 +8,7 @@ import asyncio
 import contextlib
 import logging
 import re
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
@@ -239,42 +240,23 @@ async def terminal_websocket(
 ) -> None:
     """
     WebSocket endpoint for terminal interaction.
-
-    Message Protocol (JSON):
     - Client -> Server:
         {"type": "input", "data": "ls -la\\n"}
         {"type": "resize", "cols": 120, "rows": 40}
         {"type": "ping"}
-
-    - Server -> Client:
         {"type": "output", "data": "file1.txt\\nfile2.txt"}
         {"type": "error", "message": "Session closed"}
         {"type": "connected", "session_id": "abc123"}
         {"type": "pong"}
     """
     await websocket.accept()
-
     proxy = get_terminal_proxy()
-    session: TerminalSession | None = None
+    output_task: asyncio.Task | None = None
 
     try:
-        # Create or get session
-        if session_id:
-            session = proxy.get_session(session_id)
-            if not session or session.container_id != sandbox_id:
-                await websocket.send_json({"type": "error", "message": "Session not found"})
-                await websocket.close()
-                return
-        else:
-            # Create new session
-            try:
-                session = await proxy.create_session(container_id=sandbox_id)
-            except ValueError as e:
-                await websocket.send_json({"type": "error", "message": str(e)})
-                await websocket.close()
-                return
-
-        # Send connected message
+        session = await _resolve_terminal_session(proxy, websocket, sandbox_id, session_id)
+        if session is None:
+            return
         await websocket.send_json(
             {
                 "type": "connected",
@@ -284,57 +266,69 @@ async def terminal_websocket(
             }
         )
 
-        # Start output reader task
-        async def read_output() -> None:
-            """Background task to read and forward output."""
-            while session and session.is_active:
-                try:
-                    output = await proxy.read_output(session.session_id)
-                    if output is None:
-                        break
-                    if output:
-                        await websocket.send_json({"type": "output", "data": output})
-                except Exception as e:
-                    logger.error(f"Output reader error: {e}")
-                    break
-                await asyncio.sleep(0.01)  # Small delay to prevent CPU spin
+        output_task = asyncio.create_task(_read_terminal_output(proxy, websocket, session))
 
-        output_task = asyncio.create_task(read_output())
-
-        # Process incoming messages
         try:
             while True:
                 msg = await websocket.receive_json()
-                msg_type = msg.get("type")
-
-                if msg_type == "input":
-                    data = msg.get("data", "")
-                    await proxy.send_input(session.session_id, data)
-
-                elif msg_type == "resize":
-                    cols = msg.get("cols", 80)
-                    rows = msg.get("rows", 24)
-                    await proxy.resize(session.session_id, cols, rows)
-
-                elif msg_type == "ping":
-                    await websocket.send_json({"type": "pong"})
-
+                await _handle_terminal_message(proxy, websocket, session, msg)
         except WebSocketDisconnect:
             logger.info(f"WebSocket disconnected for session {session.session_id}")
-
     except Exception as e:
         logger.error(f"Terminal WebSocket error: {e}")
         with contextlib.suppress(Exception):
             await websocket.send_json({"type": "error", "message": str(e)})
-
     finally:
-        # Cleanup
-        if "output_task" in locals():
+        if output_task is not None:
             output_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await output_task
-
-        # Don't close session on disconnect - allow reconnection
-        # Session will be cleaned up by cleanup task or explicit close
         with contextlib.suppress(Exception):
             await websocket.close()
+
+
+async def _resolve_terminal_session(
+    proxy: Any, websocket: WebSocket, sandbox_id: str, session_id: str | None
+) -> TerminalSession | None:
+    """Resolve or create a terminal session. Returns None if session is invalid."""
+    if session_id:
+        session = proxy.get_session(session_id)
+        if not session or session.container_id != sandbox_id:
+            await websocket.send_json({"type": "error", "message": "Session not found"})
+            await websocket.close()
+            return None
+        return session
+    try:
+        return await proxy.create_session(container_id=sandbox_id)
+    except ValueError as e:
+        await websocket.send_json({"type": "error", "message": str(e)})
+        await websocket.close()
+        return None
+
+
+async def _read_terminal_output(proxy: Any, websocket: WebSocket, session: TerminalSession) -> None:
+    """Background task to read and forward terminal output."""
+    while session and session.is_active:
+        try:
+            output = await proxy.read_output(session.session_id)
+            if output is None:
+                break
+            if output:
+                await websocket.send_json({"type": "output", "data": output})
+        except Exception as e:
+            logger.error(f"Output reader error: {e}")
+            break
+        await asyncio.sleep(0.01)
+
+
+async def _handle_terminal_message(
+    proxy: Any, websocket: WebSocket, session: TerminalSession, msg: dict
+) -> None:
+    """Dispatch a single terminal WebSocket message."""
+    msg_type = msg.get("type")
+    if msg_type == "input":
+        await proxy.send_input(session.session_id, msg.get("data", ""))
+    elif msg_type == "resize":
+        await proxy.resize(session.session_id, msg.get("cols", 80), msg.get("rows", 24))
+    elif msg_type == "ping":
+        await websocket.send_json({"type": "pong"})

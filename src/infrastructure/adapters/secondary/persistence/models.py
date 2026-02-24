@@ -217,7 +217,7 @@ class Project(Base):
     edge_maps: Mapped[list["EdgeTypeMap"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
-    channel_configs: Mapped[list["ChannelConfigModel"]] = relationship(  # noqa: F821
+    channel_configs: Mapped[list["ChannelConfigModel"]] = relationship(
         back_populates="project", cascade="all, delete-orphan"
     )
 

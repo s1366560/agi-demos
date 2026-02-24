@@ -506,64 +506,14 @@ class RequestEnvVarTool(AgentTool):
             )
             project_id = self._project_id if save_to_project else None
 
-            # If we have a session_factory, create a new session for database operations
-            if self._session_factory:
-                from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
-                    SqlToolEnvironmentVariableRepository,
-                )
-
-                async with self._session_factory() as db_session:
-                    repository = SqlToolEnvironmentVariableRepository(db_session)
-                    for var_name, var_value in values.items():
-                        if var_value:
-                            spec = field_specs.get(var_name, {})
-                            # Encrypt the value
-                            encrypted_value = self._encryption_service.encrypt(var_value)
-
-                            # Create domain entity
-                            env_var = ToolEnvironmentVariable(
-                                tenant_id=self._tenant_id,
-                                project_id=project_id,
-                                tool_name=tool_name,
-                                variable_name=var_name,
-                                encrypted_value=encrypted_value,
-                                description=spec.get("description"),
-                                is_required=spec.get("is_required", True),
-                                is_secret=spec.get("is_secret", True),
-                                scope=scope,
-                            )
-
-                            # Upsert to database
-                            await repository.upsert(env_var)
-                            saved_vars.append(var_name)
-
-                            logger.info(f"Saved env var: {tool_name}/{var_name}")
-                    await db_session.commit()
-            elif self._repository:
-                for var_name, var_value in values.items():
-                    if var_value:
-                        spec = field_specs.get(var_name, {})
-                        # Encrypt the value
-                        encrypted_value = self._encryption_service.encrypt(var_value)
-
-                        # Create domain entity
-                        env_var = ToolEnvironmentVariable(
-                            tenant_id=self._tenant_id,
-                            project_id=project_id,
-                            tool_name=tool_name,
-                            variable_name=var_name,
-                            encrypted_value=encrypted_value,
-                            description=spec.get("description"),
-                            is_required=spec.get("is_required", True),
-                            is_secret=spec.get("is_secret", True),
-                            scope=scope,
-                        )
-
-                        # Upsert to database
-                        await self._repository.upsert(env_var)
-                        saved_vars.append(var_name)
-
-                        logger.info(f"Saved env var: {tool_name}/{var_name}")
+            # Save env vars to database
+            saved_vars = await self._save_env_vars(
+                tool_name=tool_name,
+                values=values,
+                field_specs=field_specs,
+                scope=scope,
+                project_id=project_id,
+            )
 
             return json.dumps(
                 {
@@ -590,6 +540,66 @@ class RequestEnvVarTool(AgentTool):
                     "message": str(e),
                 }
             )
+
+    async def _save_env_vars(
+        self,
+        tool_name: str,
+        values: dict[str, str],
+        field_specs: dict[str, dict[str, Any]],
+        scope: EnvVarScope,
+        project_id: str | None,
+    ) -> list[str]:
+        """Encrypt and persist env var values, returning saved variable names."""
+        saved_vars: list[str] = []
+
+        if self._session_factory:
+            from src.infrastructure.adapters.secondary.persistence.sql_tool_environment_variable_repository import (
+                SqlToolEnvironmentVariableRepository,
+            )
+
+            async with self._session_factory() as db_session:
+                repository = SqlToolEnvironmentVariableRepository(db_session)
+                await self._upsert_env_vars(
+                    repository, tool_name, values, field_specs, scope, project_id, saved_vars
+                )
+                await db_session.commit()
+        elif self._repository:
+            await self._upsert_env_vars(
+                self._repository, tool_name, values, field_specs, scope, project_id, saved_vars
+            )
+
+        return saved_vars
+
+    async def _upsert_env_vars(
+        self,
+        repository: Any,
+        tool_name: str,
+        values: dict[str, str],
+        field_specs: dict[str, dict[str, Any]],
+        scope: EnvVarScope,
+        project_id: str | None,
+        saved_vars: list[str],
+    ) -> None:
+        """Encrypt and upsert each env var value to the given repository."""
+        for var_name, var_value in values.items():
+            if not var_value:
+                continue
+            spec = field_specs.get(var_name, {})
+            encrypted_value = self._encryption_service.encrypt(var_value)
+            env_var = ToolEnvironmentVariable(
+                tenant_id=self._tenant_id,
+                project_id=project_id,
+                tool_name=tool_name,
+                variable_name=var_name,
+                encrypted_value=encrypted_value,
+                description=spec.get("description"),
+                is_required=spec.get("is_required", True),
+                is_secret=spec.get("is_secret", True),
+                scope=scope,
+            )
+            await repository.upsert(env_var)
+            saved_vars.append(var_name)
+            logger.info(f"Saved env var: {tool_name}/{var_name}")
 
     def get_output_schema(self) -> dict[str, Any]:
         """Get output schema for tool composition."""

@@ -73,27 +73,32 @@ class MCPToolError:
             result["configured_timeout_s"] = self.configured_timeout_s
         return result
 
+    _SIMPLE_USER_MESSAGES: ClassVar[dict[MCPToolErrorType, str]] = {
+        MCPToolErrorType.CONNECTION_ERROR: "无法连接到 sandbox 容器，请稍后重试",
+        MCPToolErrorType.PARAMETER_ERROR: "参数错误: {message}",
+        MCPToolErrorType.PERMISSION_ERROR: "权限被拒绝: {message}",
+        MCPToolErrorType.SANDBOX_NOT_FOUND: "Sandbox 不存在或已终止",
+        MCPToolErrorType.SANDBOX_TERMINATED: "Sandbox 已终止",
+    }
+
     def get_user_message(self) -> str:
         """Get user-friendly error message."""
-        if self.error_type == MCPToolErrorType.CONNECTION_ERROR:
-            return "无法连接到 sandbox 容器，请稍后重试"
         if self.error_type == MCPToolErrorType.TIMEOUT_ERROR:
-            duration_info = ""
-            if self.execution_duration_ms is not None and self.configured_timeout_s is not None:
-                actual_s = self.execution_duration_ms / 1000
-                duration_info = (
-                    f" (实际执行 {actual_s:.1f}s / 超时限制 {self.configured_timeout_s:.0f}s)"
-                )
-            return f"工具执行超时: {self.tool_name}{duration_info}"
-        if self.error_type == MCPToolErrorType.PARAMETER_ERROR:
-            return f"参数错误: {self.message}"
-        if self.error_type == MCPToolErrorType.PERMISSION_ERROR:
-            return f"权限被拒绝: {self.message}"
-        if self.error_type == MCPToolErrorType.SANDBOX_NOT_FOUND:
-            return "Sandbox 不存在或已终止"
-        if self.error_type == MCPToolErrorType.SANDBOX_TERMINATED:
-            return "Sandbox 已终止"
+            return self._get_timeout_message()
+        template = self._SIMPLE_USER_MESSAGES.get(self.error_type)
+        if template is not None:
+            return template.format(message=self.message)
         return self.message
+
+    def _get_timeout_message(self) -> str:
+        """Build timeout error message with optional duration info."""
+        duration_info = ""
+        if self.execution_duration_ms is not None and self.configured_timeout_s is not None:
+            actual_s = self.execution_duration_ms / 1000
+            duration_info = (
+                f" (实际执行 {actual_s:.1f}s / 超时限制 {self.configured_timeout_s:.0f}s)"
+            )
+        return f"工具执行超时: {self.tool_name}{duration_info}"
 
 
 class MCPToolErrorClassifier:

@@ -385,46 +385,34 @@ class LLMInvoker:
         """
         # Lazy import to avoid circular dependency
         from src.infrastructure.agent.core.llm_stream import StreamEventType
+        if event.type in (
+            StreamEventType.TEXT_START,
+            StreamEventType.TEXT_DELTA,
+            StreamEventType.TEXT_END,
+        ):
+            async for text_event in self._handle_text_event(
+                event, result, current_message
+            ):
+                yield text_event
 
-        if event.type == StreamEventType.TEXT_START:
-            yield AgentTextStartEvent()
-
-        elif event.type == StreamEventType.TEXT_DELTA:
-            delta = event.data.get("delta", "")
-            result.text += delta
-            yield AgentTextDeltaEvent(delta=delta)
-
-        elif event.type == StreamEventType.TEXT_END:
-            full_text = event.data.get("full_text", result.text)
-            current_message.add_text(full_text)
-            yield AgentTextEndEvent(full_text=full_text)
-
-        elif event.type == StreamEventType.REASONING_START:
-            yield AgentThoughtEvent(content="", thought_level="reasoning")
-
-        elif event.type == StreamEventType.REASONING_DELTA:
-            delta = event.data.get("delta", "")
-            result.reasoning += delta
-            yield AgentThoughtDeltaEvent(delta=delta)
-
-        elif event.type == StreamEventType.REASONING_END:
-            full_reasoning = event.data.get("full_text", result.reasoning)
-            current_message.add_reasoning(full_reasoning)
-            yield AgentThoughtEvent(content=full_reasoning, thought_level="reasoning")
-
+        elif event.type in (
+            StreamEventType.REASONING_START,
+            StreamEventType.REASONING_DELTA,
+            StreamEventType.REASONING_END,
+        ):
+            async for reasoning_event in self._handle_reasoning_event(
+                event, result, current_message
+            ):
+                yield reasoning_event
         elif event.type == StreamEventType.TOOL_CALL_START:
             call_id = event.data.get("call_id", "")
             tool_name = event.data.get("name", "")
-
-            # Create tool part (don't emit act event yet - wait for complete args)
             tool_part = current_message.add_tool_call(
                 call_id=call_id,
                 tool=tool_name,
                 input={},
             )
             pending_tool_calls[call_id] = tool_part
-
-        elif event.type == StreamEventType.TOOL_CALL_END:
             async for tool_event in self._handle_tool_call_end(
                 event=event,
                 result=result,
@@ -436,21 +424,55 @@ class LLMInvoker:
                 current_plan_step_holder=current_plan_step_holder,
             ):
                 yield tool_event
-
-        elif event.type == StreamEventType.USAGE:
             async for usage_event in self._handle_usage_event(
                 event=event,
                 result=result,
                 config=config,
             ):
                 yield usage_event
-
-        elif event.type == StreamEventType.FINISH:
             result.finish_reason = event.data.get("reason", "stop")
-
-        elif event.type == StreamEventType.ERROR:
             error_msg = event.data.get("message", "Unknown error")
             raise Exception(error_msg)
+
+    async def _handle_text_event(
+        self,
+        event: Any,
+        result: InvocationResult,
+        current_message: MessageProtocol,
+    ) -> AsyncIterator[AgentDomainEvent]:
+        """Handle TEXT_START, TEXT_DELTA, and TEXT_END stream events."""
+        from src.infrastructure.agent.core.llm_stream import StreamEventType
+
+        if event.type == StreamEventType.TEXT_START:
+            yield AgentTextStartEvent()
+        elif event.type == StreamEventType.TEXT_DELTA:
+            delta = event.data.get("delta", "")
+            result.text += delta
+            yield AgentTextDeltaEvent(delta=delta)
+        elif event.type == StreamEventType.TEXT_END:
+            full_text = event.data.get("full_text", result.text)
+            current_message.add_text(full_text)
+            yield AgentTextEndEvent(full_text=full_text)
+
+    async def _handle_reasoning_event(
+        self,
+        event: Any,
+        result: InvocationResult,
+        current_message: MessageProtocol,
+    ) -> AsyncIterator[AgentDomainEvent]:
+        """Handle REASONING_START, REASONING_DELTA, and REASONING_END stream events."""
+        from src.infrastructure.agent.core.llm_stream import StreamEventType
+
+        if event.type == StreamEventType.REASONING_START:
+            yield AgentThoughtEvent(content="", thought_level="reasoning")
+        elif event.type == StreamEventType.REASONING_DELTA:
+            delta = event.data.get("delta", "")
+            result.reasoning += delta
+            yield AgentThoughtDeltaEvent(delta=delta)
+        elif event.type == StreamEventType.REASONING_END:
+            full_reasoning = event.data.get("full_text", result.reasoning)
+            current_message.add_reasoning(full_reasoning)
+            yield AgentThoughtEvent(content=full_reasoning, thought_level="reasoning")
 
     async def _handle_tool_call_end(
         self,

@@ -7,7 +7,7 @@ based on project-specific entity and edge type definitions stored in the databas
 
 import logging
 from datetime import datetime
-from typing import TypedDict
+from typing import Any, TypedDict
 
 from pydantic import BaseModel, Field, create_model
 from sqlalchemy import select
@@ -87,15 +87,76 @@ DEFAULT_ENTITY_TYPES_CONTEXT: list[EntityTypeContext] = [
 ]
 
 
+_TYPE_MAP: dict[str, type] = {
+    "Integer": int,
+    "Float": float,
+    "Boolean": bool,
+    "DateTime": datetime,
+    "List": list,
+    "Dict": dict,
+}
+
+
+def _resolve_python_type(type_str: str) -> type:
+    """Resolve a schema type string to a Python type."""
+    return _TYPE_MAP.get(type_str, str)
+
+
+def _build_typed_fields(schema: dict) -> dict:
+    """Build pydantic model fields from a schema definition dict."""
+    fields = {}
+    for field_name, field_def in schema.items():
+        desc = ""
+        if isinstance(field_def, dict):
+            type_str = field_def.get("type", "String")
+            desc = field_def.get("description", "")
+        else:
+            type_str = str(field_def)
+        py_type = _resolve_python_type(type_str)
+        fields[field_name] = (py_type | None, Field(None, description=desc))
+    return fields
+
+
+async def _fetch_entity_types(session: Any, project_id: str) -> dict:
+    """Fetch and build entity type models from the database."""
+    entity_types: dict = {}
+    result = await session.execute(select(EntityType).where(EntityType.project_id == project_id))
+    for et in result.scalars().all():
+        fields = _build_typed_fields(et.schema)
+        model = create_model(et.name, **fields, __base__=BaseModel)
+        if et.description:
+            model.__doc__ = et.description
+        entity_types[et.name] = model
+    return entity_types
+
+
+async def _fetch_edge_types(session: Any, project_id: str) -> dict:
+    """Fetch and build edge type models from the database."""
+    edge_types: dict = {}
+    result = await session.execute(select(EdgeType).where(EdgeType.project_id == project_id))
+    for et in result.scalars().all():
+        fields = _build_typed_fields(et.schema)
+        edge_types[et.name] = create_model(et.name, **fields, __base__=BaseModel)
+    return edge_types
+
+
+async def _fetch_edge_maps(session: Any, project_id: str) -> dict:
+    """Fetch edge type maps from the database."""
+    edge_type_map: dict = {}
+    result = await session.execute(select(EdgeTypeMap).where(EdgeTypeMap.project_id == project_id))
+    for em in result.scalars().all():
+        key = (em.source_type, em.target_type)
+        if key not in edge_type_map:
+            edge_type_map[key] = []
+        edge_type_map[key].append(em.edge_type)
+    return edge_type_map
+
+
 async def get_project_schema(project_id: str) -> tuple[dict, dict, dict]:
     """
     Get dynamic schema for a project.
     Returns: (entity_types, edge_types, edge_type_map)
     """
-    entity_types = {}
-    edge_types = {}
-    edge_type_map = {}
-
     # Default types
     default_types = {
         "Entity": "A generic entity. Use this if the entity does not fit into any other specific category.",
@@ -106,85 +167,19 @@ async def get_project_schema(project_id: str) -> tuple[dict, dict, dict]:
         "Event": "A happening, occurrence, or incident, typically at a specific time and place.",
         "Artifact": "An object made by a human being, typically an item of cultural or historical interest.",
     }
+    entity_types = {}
     for name, desc in default_types.items():
         model = create_model(name, __base__=BaseModel)
         model.__doc__ = desc
         entity_types[name] = model
 
     if not project_id:
-        return entity_types, edge_types, edge_type_map
+        return entity_types, {}, {}
 
     async with async_session_factory() as session:
-        # Fetch Entity Types
-        result = await session.execute(
-            select(EntityType).where(EntityType.project_id == project_id)
-        )
-        for et in result.scalars().all():
-            fields = {}
-            for field_name, field_def in et.schema.items():
-                py_type = str
-                desc = ""
-                if isinstance(field_def, dict):
-                    type_str = field_def.get("type", "String")
-                    desc = field_def.get("description", "")
-                else:
-                    type_str = str(field_def)
-
-                if type_str == "Integer":
-                    py_type = int
-                elif type_str == "Float":
-                    py_type = float
-                elif type_str == "Boolean":
-                    py_type = bool
-                elif type_str == "DateTime":
-                    py_type = datetime
-                elif type_str == "List":
-                    py_type = list
-                elif type_str == "Dict":
-                    py_type = dict
-
-                fields[field_name] = (py_type | None, Field(None, description=desc))
-
-            model = create_model(et.name, **fields, __base__=BaseModel)
-            if et.description:
-                model.__doc__ = et.description
-            entity_types[et.name] = model
-
-        # Fetch Edge Types
-        result = await session.execute(select(EdgeType).where(EdgeType.project_id == project_id))
-        for et in result.scalars().all():
-            fields = {}
-            for field_name, field_def in et.schema.items():
-                py_type = str
-                desc = ""
-                if isinstance(field_def, dict):
-                    type_str = field_def.get("type", "String")
-                    desc = field_def.get("description", "")
-                else:
-                    type_str = str(field_def)
-
-                if type_str == "Integer":
-                    py_type = int
-                elif type_str == "Float":
-                    py_type = float
-                elif type_str == "Boolean":
-                    py_type = bool
-                elif type_str == "DateTime":
-                    py_type = datetime
-
-                fields[field_name] = (py_type | None, Field(None, description=desc))
-
-            edge_types[et.name] = create_model(et.name, **fields, __base__=BaseModel)
-
-        # Fetch Edge Maps
-        result = await session.execute(
-            select(EdgeTypeMap).where(EdgeTypeMap.project_id == project_id)
-        )
-        for em in result.scalars().all():
-            key = (em.source_type, em.target_type)
-            if key not in edge_type_map:
-                edge_type_map[key] = []
-            edge_type_map[key].append(em.edge_type)
+        entity_types.update(await _fetch_entity_types(session, project_id))
+        edge_types = await _fetch_edge_types(session, project_id)
+        edge_type_map = await _fetch_edge_maps(session, project_id)
 
     return entity_types, edge_types, edge_type_map
 

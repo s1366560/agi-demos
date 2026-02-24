@@ -52,6 +52,27 @@ class SubTaskExecution:
     error: str | None = None
 
 
+@dataclass
+class _RunTaskContext:
+    """Shared mutable state passed to each parallel task runner."""
+
+    completed_ids: set[str]
+    results: list[SubAgentResult]
+    event_queue: asyncio.Queue[dict[str, Any] | None]
+    semaphore: asyncio.Semaphore
+    abort_signal: asyncio.Event | None
+    conversation_context: list[dict[str, str]]
+    main_token_budget: int
+    project_id: str
+    tenant_id: str
+    tools: list[Any]
+    base_model: str
+    base_api_key: str | None
+    base_url: str | None
+    llm_client: LLMClient | None
+    subtask_timeout: float
+
+
 class ParallelScheduler:
     """Schedules and executes multiple SubAgents concurrently.
 
@@ -75,7 +96,7 @@ class ParallelScheduler:
         """
         self._config = config or ParallelSchedulerConfig()
 
-    async def execute(  # noqa: PLR0913
+    async def execute(
         self,
         subtasks: list[SubTask],
         subagent_map: dict[str, SubAgent],
@@ -114,15 +135,7 @@ class ParallelScheduler:
         if not subtasks:
             return
 
-        # Build execution map
-        executions: dict[str, SubTaskExecution] = {}
-        for st in subtasks:
-            agent = self._resolve_agent(st, subagent_map)
-            if not agent:
-                logger.warning(f"[ParallelScheduler] No agent for task {st.id}, skipping")
-                continue
-            executions[st.id] = SubTaskExecution(subtask=st, subagent=agent)
-
+        executions = self._build_execution_map(subtasks, subagent_map)
         if not executions:
             return
 
@@ -135,115 +148,25 @@ class ParallelScheduler:
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-        # Track completed task IDs for dependency resolution
-        completed_ids: set[str] = set()
-        results: list[SubAgentResult] = []
+        ctx = _RunTaskContext(
+            completed_ids=set(),
+            results=[],
+            event_queue=asyncio.Queue(),
+            semaphore=asyncio.Semaphore(self._config.max_concurrency),
+            abort_signal=abort_signal,
+            conversation_context=conversation_context or [],
+            main_token_budget=main_token_budget,
+            project_id=project_id,
+            tenant_id=tenant_id,
+            tools=tools,
+            base_model=base_model,
+            base_api_key=base_api_key,
+            base_url=base_url,
+            llm_client=llm_client,
+            subtask_timeout=self._config.subtask_timeout,
+        )
 
-        # Event queue for collecting events from parallel tasks
-        event_queue: asyncio.Queue = asyncio.Queue()
-        semaphore = asyncio.Semaphore(self._config.max_concurrency)
-
-        async def run_task(task_id: str, execution: SubTaskExecution) -> None:
-            """Run a single sub-task, waiting for dependencies first."""
-            # Wait for dependencies
-            while not all(dep in completed_ids for dep in execution.subtask.dependencies):
-                if abort_signal and abort_signal.is_set():
-                    return
-                await asyncio.sleep(0.1)
-
-            async with semaphore:
-                execution.started = True
-                await event_queue.put(
-                    {
-                        "type": "subtask_started",
-                        "data": {
-                            "task_id": task_id,
-                            "subagent_name": execution.subagent.display_name,
-                            "description": execution.subtask.description[:200],
-                        },
-                        "timestamp": datetime.now(UTC).isoformat(),
-                    }
-                )
-
-                try:
-                    # Build context for this sub-task
-                    bridge = ContextBridge()
-                    context = bridge.build_subagent_context(
-                        user_message=execution.subtask.description,
-                        subagent_system_prompt=execution.subagent.system_prompt,
-                        conversation_context=conversation_context or [],
-                        main_token_budget=main_token_budget,
-                        project_id=project_id,
-                        tenant_id=tenant_id,
-                    )
-
-                    process = SubAgentProcess(
-                        subagent=execution.subagent,
-                        context=context,
-                        tools=tools,
-                        base_model=base_model,
-                        base_api_key=base_api_key,
-                        base_url=base_url,
-                        llm_client=llm_client,
-                        abort_signal=abort_signal,
-                    )
-                    execution.process = process
-
-                    # Execute and relay events with task_id prefix
-                    async for event in asyncio.wait_for(
-                        self._collect_events(process, task_id),
-                        timeout=self._config.subtask_timeout,
-                    ):
-                        await event_queue.put(event)
-
-                    execution.result = process.result
-                    execution.completed = True
-
-                except TimeoutError:
-                    execution.error = f"Task {task_id} timed out"
-                    logger.warning(f"[ParallelScheduler] {execution.error}")
-                except Exception as e:
-                    execution.error = str(e)
-                    logger.error(f"[ParallelScheduler] Task {task_id} failed: {e}")
-                finally:
-                    completed_ids.add(task_id)
-                    if execution.result:
-                        results.append(execution.result)
-
-                    await event_queue.put(
-                        {
-                            "type": "subtask_completed",
-                            "data": {
-                                "task_id": task_id,
-                                "success": execution.completed and not execution.error,
-                                "error": execution.error,
-                            },
-                            "timestamp": datetime.now(UTC).isoformat(),
-                        }
-                    )
-
-        # Launch all tasks concurrently
-        tasks = []
-        for task_id, execution in executions.items():
-            tasks.append(asyncio.create_task(run_task(task_id, execution)))
-
-        # Also launch a sentinel to detect when all tasks are done
-        all_done = asyncio.Event()
-
-        async def wait_for_all() -> None:
-            await asyncio.gather(*tasks, return_exceptions=True)
-            all_done.set()
-            await event_queue.put(None)  # Sentinel
-
-        _sentinel_task = asyncio.create_task(wait_for_all())
-        _scheduler_bg_tasks.add(_sentinel_task)
-        _sentinel_task.add_done_callback(_scheduler_bg_tasks.discard)
-
-        # Yield events as they arrive
-        while True:
-            event = await event_queue.get()
-            if event is None:
-                break
+        async for event in self._launch_and_drain_events(executions, ctx):
             yield event
 
         # Final summary event
@@ -253,10 +176,149 @@ class ParallelScheduler:
                 "total_tasks": len(executions),
                 "succeeded": sum(1 for e in executions.values() if e.completed and not e.error),
                 "failed": sum(1 for e in executions.values() if e.error),
-                "results": [r.to_event_data() for r in results],
+                "results": [r.to_event_data() for r in ctx.results],
             },
             "timestamp": datetime.now(UTC).isoformat(),
         }
+
+    @staticmethod
+    def _build_execution_map(
+        subtasks: list[SubTask],
+        subagent_map: dict[str, SubAgent],
+    ) -> dict[str, SubTaskExecution]:
+        """Build execution map from subtasks, skipping those without agents."""
+        executions: dict[str, SubTaskExecution] = {}
+        for st in subtasks:
+            agent = ParallelScheduler._resolve_agent(st, subagent_map)
+            if not agent:
+                logger.warning(f"[ParallelScheduler] No agent for task {st.id}, skipping")
+                continue
+            executions[st.id] = SubTaskExecution(subtask=st, subagent=agent)
+        return executions
+
+    async def _launch_and_drain_events(
+        self,
+        executions: dict[str, SubTaskExecution],
+        ctx: _RunTaskContext,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Launch all tasks, drain event queue until all complete."""
+        tasks = [
+            asyncio.create_task(self._run_single_task(task_id, execution, ctx))
+            for task_id, execution in executions.items()
+        ]
+
+        async def wait_for_all() -> None:
+            await asyncio.gather(*tasks, return_exceptions=True)
+            await ctx.event_queue.put(None)  # Sentinel
+
+        sentinel_task = asyncio.create_task(wait_for_all())
+        _scheduler_bg_tasks.add(sentinel_task)
+        sentinel_task.add_done_callback(_scheduler_bg_tasks.discard)
+
+        while True:
+            event = await ctx.event_queue.get()
+            if event is None:
+                break
+            yield event
+
+    async def _run_single_task(
+        self,
+        task_id: str,
+        execution: SubTaskExecution,
+        ctx: _RunTaskContext,
+    ) -> None:
+        """Run a single sub-task, waiting for dependencies first."""
+        await self._wait_for_dependencies(execution, ctx)
+        if ctx.abort_signal and ctx.abort_signal.is_set():
+            return
+
+        async with ctx.semaphore:
+            execution.started = True
+            await ctx.event_queue.put(
+                {
+                    "type": "subtask_started",
+                    "data": {
+                        "task_id": task_id,
+                        "subagent_name": execution.subagent.display_name,
+                        "description": execution.subtask.description[:200],
+                    },
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+            )
+
+            try:
+                await self._execute_subtask_process(task_id, execution, ctx)
+            except TimeoutError:
+                execution.error = f"Task {task_id} timed out"
+                logger.warning(f"[ParallelScheduler] {execution.error}")
+            except Exception as e:
+                execution.error = str(e)
+                logger.error(f"[ParallelScheduler] Task {task_id} failed: {e}")
+            finally:
+                ctx.completed_ids.add(task_id)
+                if execution.result:
+                    ctx.results.append(execution.result)
+
+                await ctx.event_queue.put(
+                    {
+                        "type": "subtask_completed",
+                        "data": {
+                            "task_id": task_id,
+                            "success": execution.completed and not execution.error,
+                            "error": execution.error,
+                        },
+                        "timestamp": datetime.now(UTC).isoformat(),
+                    }
+                )
+
+    @staticmethod
+    async def _wait_for_dependencies(
+        execution: SubTaskExecution,
+        ctx: _RunTaskContext,
+    ) -> None:
+        """Block until all dependency tasks have completed."""
+        while not all(dep in ctx.completed_ids for dep in execution.subtask.dependencies):
+            if ctx.abort_signal and ctx.abort_signal.is_set():
+                return
+            await asyncio.sleep(0.1)
+
+    async def _execute_subtask_process(
+        self,
+        task_id: str,
+        execution: SubTaskExecution,
+        ctx: _RunTaskContext,
+    ) -> None:
+        """Build context, create SubAgentProcess, and relay events."""
+        bridge = ContextBridge()
+        context = bridge.build_subagent_context(
+            user_message=execution.subtask.description,
+            subagent_system_prompt=execution.subagent.system_prompt,
+            conversation_context=ctx.conversation_context,
+            main_token_budget=ctx.main_token_budget,
+            project_id=ctx.project_id,
+            tenant_id=ctx.tenant_id,
+        )
+
+        process = SubAgentProcess(
+            subagent=execution.subagent,
+            context=context,
+            tools=ctx.tools,
+            base_model=ctx.base_model,
+            base_api_key=ctx.base_api_key,
+            base_url=ctx.base_url,
+            llm_client=ctx.llm_client,
+            abort_signal=ctx.abort_signal,
+        )
+        execution.process = process
+
+        async for event in asyncio.wait_for(
+            self._collect_events(process, task_id),
+            timeout=ctx.subtask_timeout,
+        ):
+            await ctx.event_queue.put(event)
+
+        execution.result = process.result
+        execution.completed = True
 
     @staticmethod
     async def _collect_events(

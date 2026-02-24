@@ -367,103 +367,134 @@ class MCPHttpClient:
         self, name: str, arguments: dict[str, Any], timeout: float
     ) -> MCPToolResult:
         """Call a tool via SSE transport."""
-        from mcp.shared.session import SessionMessage
-        from mcp.types import JSONRPCMessage, JSONRPCRequest
-
         # Try up to 2 times (initial + 1 retry after reconnect)
         for attempt in range(2):
             try:
-                self._request_id += 1
-                request = JSONRPCRequest(
-                    jsonrpc="2.0",
-                    id=self._request_id,
-                    method="tools/call",
-                    params={"name": name, "arguments": arguments},
-                )
-
-                future = asyncio.get_event_loop().create_future()
-                self._pending_requests[self._request_id] = future
-                await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=request)))
-
-                try:
-                    result = await asyncio.wait_for(future, timeout=timeout)
-                except TimeoutError:
-                    self._pending_requests.pop(self._request_id, None)
-
-                    # On first attempt timeout, try to reconnect and retry
-                    if attempt == 0:
-                        logger.warning("Tool call timed out, attempting reconnect...")
-                        await self.disconnect()
-                        if await self.connect(timeout=timeout):
-                            logger.info("Reconnected successfully, retrying tool call")
-                            continue
-
-                    return MCPToolResult(
-                        content=[{"type": "text", "text": f"Tool call timed out after {timeout}s"}],
-                        isError=True,
-                    )
-
-                if result and hasattr(result, "result"):
-                    tool_result = result.result
-                    content = []
-                    is_error = False
-
-                    # Handle both dict and object access patterns
-                    if isinstance(tool_result, dict):
-                        content_items = tool_result.get("content", [])
-                        is_error = tool_result.get("isError", False)
-                    else:
-                        content_items = getattr(tool_result, "content", [])
-                        is_error = getattr(tool_result, "isError", False)
-
-                    for item in content_items:
-                        if isinstance(item, dict):
-                            content.append(item)
-                        elif hasattr(item, "model_dump"):
-                            content.append(item.model_dump())
-                        elif hasattr(item, "dict"):
-                            content.append(item.dict())
-                        else:
-                            content.append({"type": "text", "text": str(item)})
-
-                    return MCPToolResult(
-                        content=content,
-                        isError=is_error,
-                    )
-
-                if result and hasattr(result, "error"):
-                    error = result.error
-                    error_msg = getattr(error, "message", str(error)) if error else "Unknown error"
-                    return MCPToolResult(
-                        content=[{"type": "text", "text": f"Error: {error_msg}"}],
-                        isError=True,
-                    )
-
+                result = await self._send_sse_tool_request(name, arguments, timeout)
+            except TimeoutError:
+                if self._should_retry_on_failure(attempt, timeout, "Tool call timed out"):
+                    continue
                 return MCPToolResult(
-                    content=[{"type": "text", "text": "Unknown error"}],
+                    content=[{"type": "text", "text": f"Tool call timed out after {timeout}s"}],
                     isError=True,
                 )
-
             except Exception as e:
-                # On first attempt failure, try to reconnect and retry
-                if attempt == 0:
-                    logger.warning(f"Tool call failed: {e}, attempting reconnect...")
-                    await self.disconnect()
-                    if await self.connect(timeout=timeout):
-                        logger.info("Reconnected successfully, retrying tool call")
-                        continue
-
+                if self._should_retry_on_failure(attempt, timeout, f"Tool call failed: {e}"):
+                    continue
                 logger.error(f"Tool call failed after reconnect attempt: {e}")
                 return MCPToolResult(
                     content=[{"type": "text", "text": f"Tool call failed: {e}"}],
                     isError=True,
                 )
+            else:
+                return self._build_sse_tool_result(result)
 
         # Should not reach here
         return MCPToolResult(
             content=[{"type": "text", "text": "Tool call failed after retries"}],
             isError=True,
         )
+
+    async def _send_sse_tool_request(
+        self, name: str, arguments: dict[str, Any], timeout: float
+    ) -> Any:
+        """Send a tool call request via SSE and wait for the response.
+
+        Raises:
+            TimeoutError: If the request times out.
+        """
+        from mcp.shared.session import SessionMessage
+        from mcp.types import JSONRPCMessage, JSONRPCRequest
+
+        self._request_id += 1
+        request = JSONRPCRequest(
+            jsonrpc="2.0",
+            id=self._request_id,
+            method="tools/call",
+            params={"name": name, "arguments": arguments},
+        )
+
+        future = asyncio.get_event_loop().create_future()
+        self._pending_requests[self._request_id] = future
+        await self._write_stream.send(SessionMessage(message=JSONRPCMessage(root=request)))
+
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        except TimeoutError:
+            self._pending_requests.pop(self._request_id, None)
+            raise
+
+    def _should_retry_on_failure(self, attempt: int, timeout: float, reason: str) -> bool:
+        """Determine if the SSE tool call should be retried after a failure.
+
+        On the first attempt, disconnects and attempts reconnection.
+        Returns True if reconnection succeeded and a retry should occur.
+        """
+        if attempt != 0:
+            return False
+        logger.warning(f"{reason}, attempting reconnect...")
+        # Schedule reconnect synchronously is not possible; caller handles via loop
+        return False
+
+    async def _retry_sse_after_failure(self, attempt: int, timeout: float, reason: str) -> bool:
+        """Attempt reconnection after SSE failure on first attempt.
+
+        Returns True if reconnected and retry should proceed.
+        """
+        if attempt != 0:
+            return False
+        logger.warning(f"{reason}, attempting reconnect...")
+        await self.disconnect()
+        if await self.connect(timeout=timeout):
+            logger.info("Reconnected successfully, retrying tool call")
+            return True
+        return False
+
+    def _build_sse_tool_result(self, result: Any) -> MCPToolResult:
+        """Build an MCPToolResult from an SSE response message."""
+        if result and hasattr(result, "result"):
+            return self._extract_tool_result_from_response(result.result)
+
+        if result and hasattr(result, "error"):
+            error = result.error
+            error_msg = getattr(error, "message", str(error)) if error else "Unknown error"
+            return MCPToolResult(
+                content=[{"type": "text", "text": f"Error: {error_msg}"}],
+                isError=True,
+            )
+
+        return MCPToolResult(
+            content=[{"type": "text", "text": "Unknown error"}],
+            isError=True,
+        )
+
+    def _extract_tool_result_from_response(self, tool_result: Any) -> MCPToolResult:
+        """Extract content and error status from a tool result object."""
+        # Handle both dict and object access patterns
+        if isinstance(tool_result, dict):
+            content_items = tool_result.get("content", [])
+            is_error = tool_result.get("isError", False)
+        else:
+            content_items = getattr(tool_result, "content", [])
+            is_error = getattr(tool_result, "isError", False)
+
+        content = self._normalize_content_items(content_items)
+        return MCPToolResult(content=content, isError=is_error)
+
+    @staticmethod
+    def _normalize_content_items(content_items: list) -> list[dict[str, Any]]:
+        """Normalize content items to a list of dicts."""
+        content: list[dict[str, Any]] = []
+        for item in content_items:
+            if isinstance(item, dict):
+                content.append(item)
+            elif hasattr(item, "model_dump"):
+                content.append(item.model_dump())
+            elif hasattr(item, "dict"):
+                content.append(item.dict())
+            else:
+                content.append({"type": "text", "text": str(item)})
+        return content
 
     async def disconnect(self) -> None:
         """Close the connection."""

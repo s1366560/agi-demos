@@ -39,59 +39,72 @@ def extract_user_query(messages: list[dict[str, Any]]) -> str | None:
     return None
 
 
+# Classification rules: (category, primary_keywords, secondary_keywords_or_None)
+# A tool matches a category if any primary keyword is found AND
+# (secondary_keywords is None OR any secondary keyword is found).
+_TOOL_CATEGORY_RULES: list[tuple[str, list[str], list[str] | None]] = [
+    (
+        "search",
+        ["search", "\u641c\u7d22", "\u67e5\u627e", "find", "query", "\u67e5\u8be2", "bing", "google"],
+        ["web"],
+    ),
+    (
+        "scrape",
+        ["scrape", "\u6293\u53d6", "extract", "\u63d0\u53d6", "fetch", "\u83b7\u53d6", "crawl", "\u722c\u53d6"],
+        ["web", "page", "\u7f51\u9875", "html", "url"],
+    ),
+    (
+        "memory",
+        ["memory", "\u8bb0\u5fc6", "knowledge", "\u77e5\u8bc6", "recall", "\u56de\u5fc6", "episodic"],
+        None,
+    ),
+    (
+        "entity",
+        ["entity", "\u5b9e\u4f53", "lookup", "\u67e5\u627e"],
+        None,
+    ),
+    (
+        "graph",
+        ["graph", "\u56fe\u8c31", "cypher", "relationship", "\u5173\u7cfb", "node", "\u8282\u70b9"],
+        None,
+    ),
+    (
+        "code",
+        ["code", "\u4ee3\u7801", "execute", "\u6267\u884c", "run", "\u8fd0\u884c", "python", "script"],
+        None,
+    ),
+    (
+        "summary",
+        ["summary", "\u603b\u7ed3", "summarize", "\u6982\u62ec", "synthesize", "\u7efc\u5408"],
+        None,
+    ),
+]
+
+
+def _matches_category_rule(
+    desc_lower: str, primary: list[str], secondary: list[str] | None
+) -> bool:
+    """Check if description matches a category rule."""
+    if not any(kw in desc_lower for kw in primary):
+        return False
+    if secondary is None:
+        return True
+    return any(kw in desc_lower for kw in secondary)
+
+
 def classify_tool_by_description(tool_name: str, description: str) -> str:
     """
     Classify tool into a category based on its description.
-
-    Uses semantic keywords in the tool's description to determine its purpose,
     supporting dynamic tool addition via MCP or Skills without hardcoded names.
-
     Args:
         tool_name: Name of the tool
         description: Tool description
-
-    Returns:
         Category string: "search", "scrape", "memory", "entity", "graph", "code", "summary", "other"
     """
     desc_lower = description.lower()
-
-    # Search tools: find information from web, databases, etc.
-    search_keywords = ["search", "搜索", "查找", "find", "query", "查询", "bing", "google"]
-    if any(kw in desc_lower for kw in search_keywords) and "web" in desc_lower:
-        return "search"
-
-    # Scrape tools: extract content from web pages
-    scrape_keywords = ["scrape", "抓取", "extract", "提取", "fetch", "获取", "crawl", "爬取"]
-    if any(kw in desc_lower for kw in scrape_keywords) and any(
-        w in desc_lower for w in ["web", "page", "网页", "html", "url"]
-    ):
-        return "scrape"
-
-    # Memory tools: access knowledge base
-    memory_keywords = ["memory", "记忆", "knowledge", "知识", "recall", "回忆", "episodic"]
-    if any(kw in desc_lower for kw in memory_keywords):
-        return "memory"
-
-    # Entity tools: lookup entities in knowledge graph
-    entity_keywords = ["entity", "实体", "lookup", "查找"]
-    if any(kw in desc_lower for kw in entity_keywords):
-        return "entity"
-
-    # Graph tools: query knowledge graph
-    graph_keywords = ["graph", "图谱", "cypher", "relationship", "关系", "node", "节点"]
-    if any(kw in desc_lower for kw in graph_keywords):
-        return "graph"
-
-    # Code tools: execute code
-    code_keywords = ["code", "代码", "execute", "执行", "run", "运行", "python", "script"]
-    if any(kw in desc_lower for kw in code_keywords):
-        return "code"
-
-    # Summary tools: summarize or synthesize information
-    summary_keywords = ["summary", "总结", "summarize", "概括", "synthesize", "综合"]
-    if any(kw in desc_lower for kw in summary_keywords):
-        return "summary"
-
+    for category, primary, secondary in _TOOL_CATEGORY_RULES:
+        if _matches_category_rule(desc_lower, primary, secondary):
+            return category
     return "other"
 
 

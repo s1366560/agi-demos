@@ -140,48 +140,75 @@ class HybridSearch:
     ) -> HybridSearchResult:
         """
         Perform hybrid search combining vector and keyword search.
-
-        Args:
-            query: Search query string
-            project_id: Optional project ID to filter results
-            limit: Maximum number of results
-            include_episodes: Whether to search episodes
-            include_entities: Whether to search entities
-
-        Returns:
-            HybridSearchResult with combined results
         """
         if not query or not query.strip():
             return HybridSearchResult(items=[], total_results=0)
-
-        # Over-fetch for post-processing (MMR/temporal decay may reorder)
         fetch_limit = limit * 3 if self._search_config.enable_mmr else limit * 2
 
-        # Query expansion: extract keywords for improved FTS matching
-        expanded_query = query
-        if self._search_config.enable_query_expansion:
-            keywords = extract_keywords(query)
-            if keywords:
-                expanded_query = " ".join(keywords)
-                logger.debug(f"Query expanded: '{query}' -> keywords: {keywords}")
+        expanded_query = self._expand_query(query)
 
-        # Run searches in parallel
-        tasks = []
+        results = await self._run_searches(
+            query, expanded_query, project_id, fetch_limit, include_episodes, include_entities
+        )
 
+        vector_entity_results, keyword_entity_results, episode_results = (
+            self._collect_search_results(results, include_entities, include_episodes)
+        )
+        combined_entities = self._rrf_fusion(
+            vector_entity_results,
+            keyword_entity_results,
+            vector_weight=self._vector_weight,
+            keyword_weight=self._keyword_weight,
+        )
+        all_results = combined_entities + episode_results
+        all_results.sort(key=lambda x: x.score, reverse=True)
+        all_results = self._apply_post_processing(all_results)
+        limited_results = all_results[:limit]
+        return HybridSearchResult(
+            items=limited_results,
+            total_results=len(all_results),
+            vector_results_count=len(vector_entity_results),
+            keyword_results_count=len(keyword_entity_results) + len(episode_results),
+        )
+
+    def _expand_query(self, query: str) -> str:
+        """Expand query with keywords if enabled."""
+        if not self._search_config.enable_query_expansion:
+            return query
+        keywords = extract_keywords(query)
+        if keywords:
+            logger.debug(f"Query expanded: '{query}' -> keywords: {keywords}")
+            return " ".join(keywords)
+        return query
+
+    async def _run_searches(
+        self,
+        query: str,
+        expanded_query: str,
+        project_id: str | None,
+        fetch_limit: int,
+        include_episodes: bool,
+        include_entities: bool,
+    ) -> list[Any]:
+        """Run all search tasks in parallel."""
+        tasks: list[Any] = []
         if include_entities:
             tasks.append(self._vector_search_entities(query, project_id, fetch_limit))
             tasks.append(self._keyword_search_entities(expanded_query, project_id, fetch_limit))
-
         if include_episodes:
             tasks.append(self._keyword_search_episodes(expanded_query, project_id, fetch_limit))
+        return await asyncio.gather(*tasks, return_exceptions=True)
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Collect results, handling any errors
+    @staticmethod
+    def _collect_search_results(
+        results: list[Any],
+        include_entities: bool,
+        include_episodes: bool,
+    ) -> tuple[list[SearchResultItem], list[SearchResultItem], list[SearchResultItem]]:
+        """Collect and categorize search results, handling errors."""
         vector_entity_results: list[SearchResultItem] = []
         keyword_entity_results: list[SearchResultItem] = []
         episode_results: list[SearchResultItem] = []
-
         idx = 0
         if include_entities:
             if not isinstance(results[idx], BaseException):
@@ -201,33 +228,7 @@ class HybridSearch:
                 episode_results = results[idx]
             else:
                 logger.warning(f"Episode keyword search failed: {results[idx]}")
-
-        # Combine entity results using RRF
-        combined_entities = self._rrf_fusion(
-            vector_entity_results,
-            keyword_entity_results,
-            vector_weight=self._vector_weight,
-            keyword_weight=self._keyword_weight,
-        )
-
-        # Combine all results
-        all_results = combined_entities + episode_results
-
-        # Sort by score before post-processing
-        all_results.sort(key=lambda x: x.score, reverse=True)
-
-        # Post-processing pipeline: temporal decay -> MMR
-        all_results = self._apply_post_processing(all_results)
-
-        # Final limit
-        limited_results = all_results[:limit]
-
-        return HybridSearchResult(
-            items=limited_results,
-            total_results=len(all_results),
-            vector_results_count=len(vector_entity_results),
-            keyword_results_count=len(keyword_entity_results) + len(episode_results),
-        )
+        return vector_entity_results, keyword_entity_results, episode_results
 
     def _apply_post_processing(self, items: list[SearchResultItem]) -> list[SearchResultItem]:
         """Apply temporal decay and MMR re-ranking to search results.

@@ -59,65 +59,57 @@ class MaxRetriesExceededError(Exception):
             self.__cause__ = last_error
 
 
+def _is_transient_by_message(error: Exception, keywords: list[str]) -> bool:
+    """Check if error message contains transient-related keywords."""
+    error_msg = str(error).lower()
+    return any(keyword in error_msg for keyword in keywords)
+
+
 def is_transient_error(error: Exception) -> bool:
     """
     Determine if an error is transient (should be retried).
-
-    Transient errors include:
     - ConnectionError: Network connection issues
     - TimeoutError: Operation timeouts
     - OSError with EINTR: Interrupted system calls
     - ConnectionResetError / ConnectionRefusedError: Connection issues
     - RuntimeError with connection-related messages
     - TransientError: Custom transient errors
-
     Args:
         error: The exception to check
-
-    Returns:
         True if error is transient, False otherwise
     """
-    # Built-in transient error types
-    if isinstance(error, TransientError):
+    # Direct type-based transient checks (consolidated isinstance)
+    if isinstance(
+        error,
+        (
+            TransientError,
+            ConnectionError,
+            TimeoutError,
+            ConnectionResetError,
+            ConnectionRefusedError,
+        ),
+    ):
         return True
 
-    if isinstance(error, (ConnectionError, TimeoutError)):
+    # OSError with specific errno values
+    if isinstance(error, OSError) and error.errno in {4, 104, 111}:
         return True
 
-    if isinstance(error, (ConnectionResetError, ConnectionRefusedError)):
+    # Message-based checks for RuntimeError and ValueError
+    _transient_keywords = [
+        "connection",
+        "timeout",
+        "pool",
+        "deadlock",
+        "temporary",
+        "unavailable",
+        "overloaded",
+    ]
+    if isinstance(error, RuntimeError) and _is_transient_by_message(error, _transient_keywords):
         return True
 
-    if isinstance(error, OSError):
-        # EINTR (4) - Interrupted system call
-        # ECONNRESET (104) - Connection reset
-        # ECONNREFUSED (111) - Connection refused
-        if error.errno in {4, 104, 111}:
-            return True
-
-    if isinstance(error, RuntimeError):
-        error_msg = str(error).lower()
-        transient_keywords = [
-            "connection",
-            "timeout",
-            "pool",
-            "deadlock",
-            "temporary",
-            "unavailable",
-            "overloaded",
-        ]
-        if any(keyword in error_msg for keyword in transient_keywords):
-            return True
-
-    if isinstance(error, ValueError):
-        # Deadlock-related errors
-        error_msg = str(error).lower()
-        if "deadlock" in error_msg or "lock" in error_msg:
-            return True
-
-    # Non-transient errors
-    if isinstance(error, (NotImplementedError, AttributeError, ImportError)):
-        return False
-
+    if isinstance(error, ValueError) and _is_transient_by_message(error, ["deadlock", "lock"]):
+        return True
     # Default to non-transient for unknown error types
     return False
 

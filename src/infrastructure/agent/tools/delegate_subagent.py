@@ -122,91 +122,98 @@ class DelegateSubAgentTool(AgentTool):
         }
 
     async def execute(self, subagent_name: str = "", task: str = "", **kwargs: Any) -> str:
-        """Execute delegation to a SubAgent.
+        """Execute delegation to a SubAgent."""
+        error = self._validate_inputs(subagent_name, task)
+        if error:
+            return error
 
-        Args:
-            subagent_name: Name of the target SubAgent.
-            task: Task description for the SubAgent.
+        self._pending_events.clear()
+        started_at = time.time()
 
-        Returns:
-            SubAgent execution result as a formatted string.
-        """
+        run_id = self._register_run(subagent_name, task)
+        if isinstance(run_id, str) and run_id.startswith("Error:"):
+            return run_id
+
+        logger.info(f"[DelegateSubAgentTool] Delegating to '{subagent_name}': {task[:100]}...")
+
+        try:
+            result = await self._invoke_callback(subagent_name, task)
+            self._finalize_run_success(run_id, result, started_at)
+            return result
+        except Exception as e:
+            logger.error(f"[DelegateSubAgentTool] Execution failed: {e}")
+            self._finalize_run_failure(run_id, e, started_at)
+            return f"Error: SubAgent '{subagent_name}' execution failed: {e}"
+
+    def _validate_inputs(self, subagent_name: str, task: str) -> str | None:
         if not subagent_name:
             return "Error: subagent_name is required"
-
         if subagent_name not in self._subagent_names:
             return (
                 f"Error: SubAgent '{subagent_name}' not found. "
                 f"Available: {', '.join(self._subagent_names)}"
             )
-
         if not task:
             return "Error: task description is required"
+        return None
 
-        self._pending_events.clear()
-        started_at = time.time()
-
-        run_id: str | None = None
-        if self._run_registry and self._conversation_id:
-            active_runs = self._run_registry.count_active_runs(self._conversation_id)
-            if self._max_active_runs is not None and active_runs >= self._max_active_runs:
-                return (
-                    "Error: active SubAgent run limit reached "
-                    f"({active_runs}/{self._max_active_runs})"
-                )
-            run = self._run_registry.create_run(
-                conversation_id=self._conversation_id,
-                subagent_name=subagent_name,
-                task=task,
-                metadata={"delegation_depth": self._delegation_depth},
+    def _register_run(self, subagent_name: str, task: str) -> str | None:
+        if not (self._run_registry and self._conversation_id):
+            return None
+        active_runs = self._run_registry.count_active_runs(self._conversation_id)
+        if self._max_active_runs is not None and active_runs >= self._max_active_runs:
+            return (
+                f"Error: active SubAgent run limit reached ({active_runs}/{self._max_active_runs})"
             )
-            run_id = run.run_id
-            running = self._run_registry.mark_running(self._conversation_id, run_id)
-            if running:
-                self._pending_events.append(
-                    {"type": "subagent_run_started", "data": running.to_event_data()}
-                )
+        run = self._run_registry.create_run(
+            conversation_id=self._conversation_id,
+            subagent_name=subagent_name,
+            task=task,
+            metadata={"delegation_depth": self._delegation_depth},
+        )
+        running = self._run_registry.mark_running(self._conversation_id, run.run_id)
+        if running:
+            self._pending_events.append(
+                {"type": "subagent_run_started", "data": running.to_event_data()}
+            )
+        return run.run_id
 
-        logger.info(f"[DelegateSubAgentTool] Delegating to '{subagent_name}': {task[:100]}...")
+    async def _invoke_callback(self, subagent_name: str, task: str) -> str:
+        if self._supports_on_event:
+            return await self._execute_fn(subagent_name, task, on_event=self._pending_events.append)
+        return await self._execute_fn(subagent_name, task)
 
-        try:
-            if self._supports_on_event:
-                result = await self._execute_fn(
-                    subagent_name,
-                    task,
-                    on_event=self._pending_events.append,
-                )
-            else:
-                result = await self._execute_fn(subagent_name, task)
+    def _finalize_run_success(self, run_id: str | None, result: str, started_at: float) -> None:
+        if not (self._run_registry and self._conversation_id and run_id):
+            return
+        elapsed_ms = int((time.time() - started_at) * 1000)
+        completed = self._run_registry.mark_completed(
+            conversation_id=self._conversation_id,
+            run_id=run_id,
+            summary=result if isinstance(result, str) else str(result),
+            execution_time_ms=elapsed_ms,
+        )
+        if completed:
+            self._pending_events.append(
+                {"type": "subagent_run_completed", "data": completed.to_event_data()}
+            )
 
-            if self._run_registry and self._conversation_id and run_id:
-                elapsed_ms = int((time.time() - started_at) * 1000)
-                completed = self._run_registry.mark_completed(
-                    conversation_id=self._conversation_id,
-                    run_id=run_id,
-                    summary=result if isinstance(result, str) else str(result),
-                    execution_time_ms=elapsed_ms,
-                )
-                if completed:
-                    self._pending_events.append(
-                        {"type": "subagent_run_completed", "data": completed.to_event_data()}
-                    )
-            return result
-        except Exception as e:
-            logger.error(f"[DelegateSubAgentTool] Execution failed: {e}")
-            if self._run_registry and self._conversation_id and run_id:
-                elapsed_ms = int((time.time() - started_at) * 1000)
-                failed = self._run_registry.mark_failed(
-                    conversation_id=self._conversation_id,
-                    run_id=run_id,
-                    error=str(e),
-                    execution_time_ms=elapsed_ms,
-                )
-                if failed:
-                    self._pending_events.append(
-                        {"type": "subagent_run_failed", "data": failed.to_event_data()}
-                    )
-            return f"Error: SubAgent '{subagent_name}' execution failed: {e}"
+    def _finalize_run_failure(
+        self, run_id: str | None, error: Exception, started_at: float
+    ) -> None:
+        if not (self._run_registry and self._conversation_id and run_id):
+            return
+        elapsed_ms = int((time.time() - started_at) * 1000)
+        failed = self._run_registry.mark_failed(
+            conversation_id=self._conversation_id,
+            run_id=run_id,
+            error=str(error),
+            execution_time_ms=elapsed_ms,
+        )
+        if failed:
+            self._pending_events.append(
+                {"type": "subagent_run_failed", "data": failed.to_event_data()}
+            )
 
 
 class ParallelDelegateSubAgentTool(AgentTool):
@@ -299,144 +306,106 @@ class ParallelDelegateSubAgentTool(AgentTool):
         }
 
     async def execute(self, tasks: Any = None, **kwargs: Any) -> str:
-        """Execute parallel delegation to multiple SubAgents.
-
-        Args:
-            tasks: List of {subagent_name, task} dicts. May be a JSON string
-                   or already-parsed list depending on LLM output parsing.
-
-        Returns:
-            JSON-formatted aggregated results from all SubAgents.
-        """
+        """Execute parallel delegation to multiple SubAgents."""
         self._pending_events.clear()
 
-        # Handle JSON string input (some LLM parsers pass raw strings)
-        if isinstance(tasks, str):
-            try:
-                tasks = json.loads(tasks)
-            except json.JSONDecodeError:
-                return "Error: 'tasks' must be a JSON array of {subagent_name, task} objects"
+        parsed_tasks, error = self._parse_and_validate_tasks(tasks)
+        if error:
+            return error
 
-        if not tasks or not isinstance(tasks, list):
-            return "Error: 'tasks' must be a non-empty array"
-
-        if len(tasks) < 2:
-            return "Error: parallel_delegate_subagents requires at least 2 tasks"
-
-        # Validate all tasks before execution
-        for i, t in enumerate(tasks):
-            if not isinstance(t, dict):
-                return f"Error: task[{i}] must be an object with subagent_name and task"
-            name = t.get("subagent_name", "")
-            if not name or name not in self._subagent_names:
-                return (
-                    f"Error: task[{i}] has invalid subagent_name '{name}'. "
-                    f"Available: {', '.join(self._subagent_names)}"
-                )
-            if not t.get("task"):
-                return f"Error: task[{i}] is missing 'task' description"
-
-        task_count = len(tasks)
-        run_ids_by_index: dict[int, str] = {}
-
-        if self._run_registry and self._conversation_id:
-            active_runs = self._run_registry.count_active_runs(self._conversation_id)
-            if (
-                self._max_active_runs is not None
-                and active_runs + task_count > self._max_active_runs
-            ):
-                return (
-                    "Error: active SubAgent run limit reached "
-                    f"({active_runs + task_count}/{self._max_active_runs})"
-                )
-            for idx, item in enumerate(tasks):
-                run = self._run_registry.create_run(
-                    conversation_id=self._conversation_id,
-                    subagent_name=item["subagent_name"],
-                    task=item["task"],
-                    metadata={
-                        "delegation_depth": self._delegation_depth,
-                        "parallel_index": idx,
-                        "parallel_total": task_count,
-                    },
-                )
-                run_ids_by_index[idx] = run.run_id
-                running = self._run_registry.mark_running(self._conversation_id, run.run_id)
-                if running:
-                    self._pending_events.append(
-                        {"type": "subagent_run_started", "data": running.to_event_data()}
-                    )
+        task_count = len(parsed_tasks)
+        run_ids_by_index = self._register_parallel_runs(parsed_tasks)
+        if isinstance(run_ids_by_index, str):
+            return run_ids_by_index
 
         logger.info(f"[ParallelDelegate] Starting {task_count} parallel SubAgent executions")
         start_time = time.time()
 
-        # Create semaphore for concurrency control
+        results = await self._execute_all(parsed_tasks, run_ids_by_index)
+        elapsed_ms = (time.time() - start_time) * 1000
+
+        return self._format_parallel_results(results, parsed_tasks, task_count, elapsed_ms)
+
+    def _parse_and_validate_tasks(self, tasks: Any) -> tuple[list[dict[str, Any]], str | None]:
+        if isinstance(tasks, str):
+            try:
+                tasks = json.loads(tasks)
+            except json.JSONDecodeError:
+                return [], "Error: 'tasks' must be a JSON array of {subagent_name, task} objects"
+
+        if not tasks or not isinstance(tasks, list):
+            return [], "Error: 'tasks' must be a non-empty array"
+
+        if len(tasks) < 2:
+            return [], "Error: parallel_delegate_subagents requires at least 2 tasks"
+
+        for i, t in enumerate(tasks):
+            error = self._validate_single_task(i, t)
+            if error:
+                return [], error
+
+        return tasks, None
+
+    def _validate_single_task(self, index: int, task: Any) -> str | None:
+        if not isinstance(task, dict):
+            return f"Error: task[{index}] must be an object with subagent_name and task"
+        name = task.get("subagent_name", "")
+        if not name or name not in self._subagent_names:
+            return (
+                f"Error: task[{index}] has invalid subagent_name '{name}'. "
+                f"Available: {', '.join(self._subagent_names)}"
+            )
+        if not task.get("task"):
+            return f"Error: task[{index}] is missing 'task' description"
+        return None
+
+    def _register_parallel_runs(self, tasks: list[dict[str, Any]]) -> dict[int, str] | str:
+        run_ids_by_index: dict[int, str] = {}
+        if not (self._run_registry and self._conversation_id):
+            return run_ids_by_index
+
+        task_count = len(tasks)
+        active_runs = self._run_registry.count_active_runs(self._conversation_id)
+        if self._max_active_runs is not None and active_runs + task_count > self._max_active_runs:
+            return (
+                "Error: active SubAgent run limit reached "
+                f"({active_runs + task_count}/{self._max_active_runs})"
+            )
+        for idx, item in enumerate(tasks):
+            run = self._run_registry.create_run(
+                conversation_id=self._conversation_id,
+                subagent_name=item["subagent_name"],
+                task=item["task"],
+                metadata={
+                    "delegation_depth": self._delegation_depth,
+                    "parallel_index": idx,
+                    "parallel_total": task_count,
+                },
+            )
+            run_ids_by_index[idx] = run.run_id
+            running = self._run_registry.mark_running(self._conversation_id, run.run_id)
+            if running:
+                self._pending_events.append(
+                    {"type": "subagent_run_started", "data": running.to_event_data()}
+                )
+        return run_ids_by_index
+
+    async def _execute_all(
+        self,
+        tasks: list[dict[str, Any]],
+        run_ids_by_index: dict[int, str],
+    ) -> list[dict[str, Any]]:
         semaphore = asyncio.Semaphore(self._max_concurrency)
 
         async def _run_one(index: int, item: dict[str, Any]) -> dict[str, Any]:
-            name = item["subagent_name"]
-            task_desc = item["task"]
-            subtask_start = time.time()
             async with semaphore:
-                try:
-                    if self._supports_on_event:
-                        result = await self._execute_fn(
-                            name,
-                            task_desc,
-                            on_event=self._pending_events.append,
-                        )
-                    else:
-                        result = await self._execute_fn(name, task_desc)
+                return await self._execute_single_task(index, item, run_ids_by_index)
 
-                    run_id = run_ids_by_index.get(index)
-                    if self._run_registry and self._conversation_id and run_id:
-                        completed = self._run_registry.mark_completed(
-                            conversation_id=self._conversation_id,
-                            run_id=run_id,
-                            summary=result if isinstance(result, str) else str(result),
-                            execution_time_ms=int((time.time() - subtask_start) * 1000),
-                        )
-                        if completed:
-                            self._pending_events.append(
-                                {
-                                    "type": "subagent_run_completed",
-                                    "data": completed.to_event_data(),
-                                }
-                            )
-                    return {
-                        "index": index,
-                        "subagent": name,
-                        "success": True,
-                        "result": result,
-                    }
-                except Exception as e:
-                    logger.error(f"[ParallelDelegate] SubAgent '{name}' failed: {e}")
-                    run_id = run_ids_by_index.get(index)
-                    if self._run_registry and self._conversation_id and run_id:
-                        failed = self._run_registry.mark_failed(
-                            conversation_id=self._conversation_id,
-                            run_id=run_id,
-                            error=str(e),
-                            execution_time_ms=int((time.time() - subtask_start) * 1000),
-                        )
-                        if failed:
-                            self._pending_events.append(
-                                {"type": "subagent_run_failed", "data": failed.to_event_data()}
-                            )
-                    return {
-                        "index": index,
-                        "subagent": name,
-                        "success": False,
-                        "error": str(e),
-                    }
-
-        # Execute all tasks concurrently
         coros = [_run_one(i, t) for i, t in enumerate(tasks)]
-        results = await asyncio.gather(*coros, return_exceptions=True)
+        raw_results = await asyncio.gather(*coros, return_exceptions=True)
 
-        # Process results (handle unexpected exceptions from gather)
-        processed = []
-        for i, r in enumerate(results):
+        processed: list[dict[str, Any]] = []
+        for i, r in enumerate(raw_results):
             if isinstance(r, Exception):
                 processed.append(
                     {
@@ -448,23 +417,95 @@ class ParallelDelegateSubAgentTool(AgentTool):
                 )
             else:
                 processed.append(r)
+        return processed
 
-        elapsed_ms = (time.time() - start_time) * 1000
-        succeeded = sum(1 for r in processed if r.get("success"))
-        failed = len(processed) - succeeded
+    async def _execute_single_task(
+        self,
+        index: int,
+        item: dict[str, Any],
+        run_ids_by_index: dict[int, str],
+    ) -> dict[str, Any]:
+        name = item["subagent_name"]
+        task_desc = item["task"]
+        subtask_start = time.time()
+        try:
+            if self._supports_on_event:
+                result = await self._execute_fn(
+                    name, task_desc, on_event=self._pending_events.append
+                )
+            else:
+                result = await self._execute_fn(name, task_desc)
+
+            self._finalize_single_run_success(index, run_ids_by_index, result, subtask_start)
+            return {"index": index, "subagent": name, "success": True, "result": result}
+        except Exception as e:
+            logger.error(f"[ParallelDelegate] SubAgent '{name}' failed: {e}")
+            self._finalize_single_run_failure(index, run_ids_by_index, e, subtask_start)
+            return {"index": index, "subagent": name, "success": False, "error": str(e)}
+
+    def _finalize_single_run_success(
+        self,
+        index: int,
+        run_ids_by_index: dict[int, str],
+        result: str,
+        started_at: float,
+    ) -> None:
+        run_id = run_ids_by_index.get(index)
+        if not (self._run_registry and self._conversation_id and run_id):
+            return
+        completed = self._run_registry.mark_completed(
+            conversation_id=self._conversation_id,
+            run_id=run_id,
+            summary=result if isinstance(result, str) else str(result),
+            execution_time_ms=int((time.time() - started_at) * 1000),
+        )
+        if completed:
+            self._pending_events.append(
+                {"type": "subagent_run_completed", "data": completed.to_event_data()}
+            )
+
+    def _finalize_single_run_failure(
+        self,
+        index: int,
+        run_ids_by_index: dict[int, str],
+        error: Exception,
+        started_at: float,
+    ) -> None:
+        run_id = run_ids_by_index.get(index)
+        if not (self._run_registry and self._conversation_id and run_id):
+            return
+        failed = self._run_registry.mark_failed(
+            conversation_id=self._conversation_id,
+            run_id=run_id,
+            error=str(error),
+            execution_time_ms=int((time.time() - started_at) * 1000),
+        )
+        if failed:
+            self._pending_events.append(
+                {"type": "subagent_run_failed", "data": failed.to_event_data()}
+            )
+
+    @staticmethod
+    def _format_parallel_results(
+        results: list[dict[str, Any]],
+        tasks: list[dict[str, Any]],
+        task_count: int,
+        elapsed_ms: float,
+    ) -> str:
+        succeeded = sum(1 for r in results if r.get("success"))
+        failed = len(results) - succeeded
 
         logger.info(
             f"[ParallelDelegate] Completed {task_count} tasks in {elapsed_ms:.0f}ms "
             f"({succeeded} succeeded, {failed} failed)"
         )
 
-        # Format output for LLM consumption
         output_lines = [
             f"[Parallel execution completed: {succeeded}/{task_count} succeeded, "
             f"{elapsed_ms:.0f}ms total]",
             "",
         ]
-        for r in sorted(processed, key=lambda x: x.get("index", 0)):
+        for r in sorted(results, key=lambda x: x.get("index", 0)):
             name = r.get("subagent", "unknown")
             if r.get("success"):
                 output_lines.append(f"--- {name} (success) ---")

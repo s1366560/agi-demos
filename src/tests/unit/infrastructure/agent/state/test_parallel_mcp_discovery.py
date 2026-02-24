@@ -158,7 +158,7 @@ class TestParallelMCPToolDiscovery:
             "src.infrastructure.agent.state.agent_worker_state._discover_single_server_tools",
             side_effect=mock_discover_single,
         ):
-            results = await _discover_tools_for_servers_parallel(  # noqa: F841
+            results = await _discover_tools_for_servers_parallel(
                 sandbox_adapter=mock_adapter,
                 sandbox_id="test-sandbox",
                 servers=servers,

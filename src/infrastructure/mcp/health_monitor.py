@@ -237,83 +237,117 @@ class MCPServerHealthMonitor:
         Returns:
             True if server was restarted, False otherwise.
         """
-        # Check current health
+        restart_info = await self._should_restart(sandbox_id, server_name, max_restarts)
+        if restart_info is None:
+            return False
+
+        try:
+            return await self._perform_restart(
+                sandbox_id,
+                server_name,
+                restart_info["server_type"],
+                restart_info["transport_config"],
+            )
+        except Exception as e:
+            logger.error(f"Error restarting server '{server_name}': {e}")
+            return False
+
+    async def _should_restart(
+        self,
+        sandbox_id: str,
+        server_name: str,
+        max_restarts: int,
+    ) -> dict[str, Any] | None:
+        """Check whether a server needs and can be restarted.
+
+        Returns:
+            Server config dict with server_type and transport_config if restart
+            should proceed, or None if restart is not needed/allowed.
+        """
         health = await self.health_check(sandbox_id, server_name)
 
         if health.status == "healthy":
             logger.debug(f"Server '{server_name}' is healthy, no restart needed")
-            return False
+            return None
 
-        # Check restart limit
         current_restarts = self._restart_counts.get(server_name, 0)
         if current_restarts >= max_restarts:
             logger.warning(
-                f"Server '{server_name}' exceeded max restarts ({current_restarts}/{max_restarts}), "
-                "not restarting"
+                f"Server '{server_name}' exceeded max restarts "
+                f"({current_restarts}/{max_restarts}), not restarting"
             )
-            return False
+            return None
 
-        # Get server config
         config = self._get_server_config(sandbox_id, server_name)
         if not config:
             logger.warning(f"No config found for server '{server_name}', cannot restart")
+            return None
+
+        return {
+            "server_type": config.get("server_type", "stdio"),
+            "transport_config": config.get("transport_config", {}),
+        }
+
+    async def _perform_restart(
+        self,
+        sandbox_id: str,
+        server_name: str,
+        server_type: str,
+        transport_config: dict[str, Any],
+    ) -> bool:
+        """Execute stop-install-start restart sequence.
+
+        Returns:
+            True if server was restarted successfully, False otherwise.
+        """
+        # Stop server first (in case it's in a bad state)
+        await self._sandbox_adapter.call_tool(
+            sandbox_id=sandbox_id,
+            tool_name="mcp_server_stop",
+            arguments={"name": server_name},
+        )
+
+        # Reinstall
+        install_result = await self._sandbox_adapter.call_tool(
+            sandbox_id=sandbox_id,
+            tool_name="mcp_server_install",
+            arguments={
+                "name": server_name,
+                "server_type": server_type,
+                "transport_config": json.dumps(transport_config),
+            },
+        )
+        install_data = self._parse_tool_result(install_result)
+        if not install_data.get("success", False):
+            error = install_data.get("error", "Install failed")
+            logger.error(f"Failed to reinstall server '{server_name}': {error}")
             return False
 
-        server_type = config.get("server_type", "stdio")
-        transport_config = config.get("transport_config", {})
-
-        try:
-            # Stop server first (in case it's in a bad state)
-            await self._sandbox_adapter.call_tool(
-                sandbox_id=sandbox_id,
-                tool_name="mcp_server_stop",
-                arguments={"name": server_name},
-            )
-
-            # Reinstall
-            install_result = await self._sandbox_adapter.call_tool(
-                sandbox_id=sandbox_id,
-                tool_name="mcp_server_install",
-                arguments={
-                    "name": server_name,
-                    "server_type": server_type,
-                    "transport_config": json.dumps(transport_config),
-                },
-            )
-            install_data = self._parse_tool_result(install_result)
-            if not install_data.get("success", False):
-                error = install_data.get("error", "Install failed")
-                logger.error(f"Failed to reinstall server '{server_name}': {error}")
-                return False
-
-            # Start
-            start_result = await self._sandbox_adapter.call_tool(
-                sandbox_id=sandbox_id,
-                tool_name="mcp_server_start",
-                arguments={
-                    "name": server_name,
-                    "server_type": server_type,
-                    "transport_config": json.dumps(transport_config),
-                },
-            )
-            start_data = self._parse_tool_result(start_result)
-            if not start_data.get("success", False):
-                error = start_data.get("error", "Start failed")
-                logger.error(f"Failed to start server '{server_name}': {error}")
-                return False
-
-            # Increment restart count
-            self._restart_counts[server_name] = current_restarts + 1
-
-            logger.info(
-                f"Successfully restarted server '{server_name}' "
-                f"(restart #{self._restart_counts[server_name]})"
-            )
-            return True
-
-        except Exception as e:
-            logger.error(f"Error restarting server '{server_name}': {e}")
+        # Start
+        start_result = await self._sandbox_adapter.call_tool(
+            sandbox_id=sandbox_id,
+            tool_name="mcp_server_start",
+            arguments={
+                "name": server_name,
+                "server_type": server_type,
+                "transport_config": json.dumps(transport_config),
+            },
+        )
+        start_data = self._parse_tool_result(start_result)
+        if not start_data.get("success", False):
+            error = start_data.get("error", "Start failed")
+            logger.error(f"Failed to start server '{server_name}': {error}")
             return False
+
+        # Increment restart count
+        current_restarts = self._restart_counts.get(server_name, 0)
+        self._restart_counts[server_name] = current_restarts + 1
+
+        logger.info(
+            f"Successfully restarted server '{server_name}' "
+            f"(restart #{self._restart_counts[server_name]})"
+        )
+        return True
 
     async def get_resource_usage(
         self,

@@ -34,9 +34,13 @@ def _first_value(recs: Any, key: str) -> Any:
     if not recs:
         return 0
     r0 = recs[0]
+    return _extract_value(r0, key)
+
+
+def _extract_value(r0: Any, key: str) -> Any:
+    """Extract a value from a record by key."""
     if isinstance(r0, dict):
         return r0.get(key, 0)
-    # Support Mock with __getitem__ returning numeric
     if hasattr(r0, "__getitem__"):
         try:
             return r0[key]
@@ -48,7 +52,6 @@ def _first_value(recs: Any, key: str) -> Any:
         except Exception:
             return 0
     if isinstance(r0, (list, tuple)) and len(r0) > 0:
-        # assume single value tuple/list
         return r0[0]
     return 0
 

@@ -158,6 +158,103 @@ def is_overflow(
     return total >= usable
 
 
+def _collect_prune_candidates(
+    messages: list[Message],
+    result: PruneResult,
+) -> tuple[list[tuple[Message, ToolPart]], int]:
+    """Scan messages backwards and collect tool parts eligible for pruning.
+
+    Returns:
+        Tuple of (candidates list, total prunable tokens).
+    """
+    total_tokens = 0
+    pruned_tokens = 0
+    parts_to_prune: list[tuple[Message, ToolPart]] = []
+    turns = 0
+
+    for msg_index in range(len(messages) - 1, -1, -1):
+        msg = messages[msg_index]
+
+        if msg.info.role == "user":
+            turns += 1
+
+        if turns < 2:
+            continue
+
+        if msg.info.role == "assistant" and msg.info.summary:
+            break
+
+        total_tokens, pruned_tokens = _scan_tool_parts(
+            msg,
+            result,
+            parts_to_prune,
+            total_tokens,
+            pruned_tokens,
+        )
+
+    return parts_to_prune, pruned_tokens
+
+
+def _scan_tool_parts(
+    msg: Message,
+    result: PruneResult,
+    parts_to_prune: list[tuple[Message, ToolPart]],
+    total_tokens: int,
+    pruned_tokens: int,
+) -> tuple[int, int]:
+    """Scan tool parts in a single message and update prune candidates."""
+    tool_parts = msg.get_tool_parts()
+    for part_index in range(len(tool_parts) - 1, -1, -1):
+        tool_part = tool_parts[part_index]
+
+        if tool_part.status != "completed":
+            continue
+
+        if tool_part.tool in PRUNE_PROTECTED_TOOLS:
+            result.protected_count += 1
+            continue
+
+        if tool_part.compacted:
+            break
+
+        if tool_part.tokens is None:
+            tool_part.tokens = estimate_tokens(tool_part.output)
+
+        total_tokens += tool_part.tokens
+
+        if total_tokens > PRUNE_PROTECT_TOKENS:
+            pruned_tokens += tool_part.tokens
+            parts_to_prune.append((msg, tool_part))
+
+    return total_tokens, pruned_tokens
+
+
+def _apply_pruning(
+    parts_to_prune: list[tuple[Message, ToolPart]],
+    pruned_tokens: int,
+    result: PruneResult,
+) -> None:
+    """Apply pruning to collected candidates if token threshold is met."""
+    if pruned_tokens > PRUNE_MINIMUM_TOKENS:
+        for _msg, tool_part in parts_to_prune:
+            tool_part.compacted = True
+            tool_part.compacted_at = datetime.now()
+            tool_part.output = "[Output compacted to save tokens]"
+            result.pruned_count += 1
+
+        result.pruned_tokens = pruned_tokens
+        result.was_pruned = True
+
+        logger.info(
+            f"Pruned {result.pruned_count} tool outputs, recovered ~{result.pruned_tokens} tokens"
+        )
+    else:
+        logger.info(
+            f"Skipping pruning: only {pruned_tokens} tokens available "
+            f"(minimum threshold: {PRUNE_MINIMUM_TOKENS})"
+        )
+
+
 def prune_tool_outputs(
     messages: list[Message],
     enabled: bool = True,
@@ -180,7 +277,6 @@ def prune_tool_outputs(
     """
     result = PruneResult()
 
-    # Pruning can be disabled
     if not enabled:
         logger.debug("Tool output pruning is disabled")
         return result
@@ -190,84 +286,11 @@ def prune_tool_outputs(
 
     logger.info("Starting tool output pruning")
 
-    # Find tool outputs to prune
-    total_tokens = 0
-    pruned_tokens = 0
-    parts_to_prune: list[tuple[Message, ToolPart]] = []
-    turns = 0  # Number of user messages seen (turns)
+    parts_to_prune, pruned_tokens = _collect_prune_candidates(messages, result)
 
-    # Iterate backwards through messages
-    for msg_index in range(len(messages) - 1, -1, -1):
-        msg = messages[msg_index]
+    logger.info(f"Pruning analysis: {len(parts_to_prune)} parts, {pruned_tokens} tokens to prune")
 
-        # Count user turns
-        if msg.info.role == "user":
-            turns += 1
-
-        # Skip the last 2 turns (most recent context)
-        if turns < 2:
-            continue
-
-        # Stop at summary messages (they're already compressed)
-        if msg.info.role == "assistant" and msg.info.summary:
-            break
-
-        # Check tool parts in this message (iterate backwards)
-        tool_parts = msg.get_tool_parts()
-        for part_index in range(len(tool_parts) - 1, -1, -1):
-            tool_part = tool_parts[part_index]
-
-            # Only prune completed tool outputs
-            if tool_part.status != "completed":
-                continue
-
-            # Skip protected tools
-            if tool_part.tool in PRUNE_PROTECTED_TOOLS:
-                result.protected_count += 1
-                continue
-
-            # Skip already compacted parts
-            if tool_part.compacted:
-                break
-
-            # Estimate tokens if not provided
-            if tool_part.tokens is None:
-                tool_part.tokens = estimate_tokens(tool_part.output)
-
-            # Add to total
-            total_tokens += tool_part.tokens
-
-            # If we're past the protection threshold, mark for pruning
-            if total_tokens > PRUNE_PROTECT_TOKENS:
-                pruned_tokens += tool_part.tokens
-                parts_to_prune.append((msg, tool_part))
-
-    logger.info(
-        f"Pruning analysis: {len(parts_to_prune)} parts, "
-        f"{pruned_tokens} tokens to prune, {total_tokens} total"
-    )
-
-    # Only prune if we can recover at least PRUNE_MINIMUM_TOKENS
-    if pruned_tokens > PRUNE_MINIMUM_TOKENS:
-        for _msg, tool_part in parts_to_prune:
-            # Mark as compacted
-            tool_part.compacted = True
-            tool_part.compacted_at = datetime.now()
-            # Clear the output to save tokens
-            tool_part.output = "[Output compacted to save tokens]"
-            result.pruned_count += 1
-
-        result.pruned_tokens = pruned_tokens
-        result.was_pruned = True
-
-        logger.info(
-            f"Pruned {result.pruned_count} tool outputs, recovered ~{result.pruned_tokens} tokens"
-        )
-    else:
-        logger.info(
-            f"Skipping pruning: only {pruned_tokens} tokens available "
-            f"(minimum threshold: {PRUNE_MINIMUM_TOKENS})"
-        )
+    _apply_pruning(parts_to_prune, pruned_tokens, result)
 
     return result
 

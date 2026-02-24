@@ -475,7 +475,7 @@ class TestMCPAppMatchingLogging:
         # Assert: Should return None and log warning about no match
         assert result is None
         # Check for warning log about no match
-        log_messages = [record.message for record in caplog.records]  # noqa: F841
+        log_messages = [record.message for record in caplog.records]
         # The implementation should log a warning when no match is found
         # We'll make this pass by implementing the logging
 

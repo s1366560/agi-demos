@@ -258,36 +258,29 @@ class RelationshipExtractor:
     ) -> list[dict[str, Any]]:
         """
         Parse LLM response to extract relationships.
-
         Args:
             response: LLM response text (should be JSON)
-
-        Returns:
             List of relationship dictionaries
         """
         try:
             data = json.loads(response)
-
-            if isinstance(data, dict):
-                if "relationships" in data:
-                    return data["relationships"]
-                elif "edges" in data:
-                    return data["edges"]
-                elif "facts" in data:
-                    return data["facts"]
-                elif "from_entity" in data:
-                    # Single relationship
-                    return [data]
-                return []
-
-            elif isinstance(data, list):
-                return data
-
-            return []
-
+            return self._extract_relationships_from_parsed(data)
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse relationship response as JSON: {e}")
             return self._extract_json_from_text(response)
+    @staticmethod
+    def _extract_relationships_from_parsed(data: Any) -> list[dict[str, Any]]:
+        """Extract relationship list from parsed JSON data."""
+        if isinstance(data, dict):
+            for key in ("relationships", "edges", "facts"):
+                if key in data:
+                    return data[key]
+            if "from_entity" in data:
+                return [data]
+            return []
+        if isinstance(data, list):
+            return data
+        return []
 
     def _extract_json_from_text(self, text: str) -> list[dict[str, Any]]:
         """

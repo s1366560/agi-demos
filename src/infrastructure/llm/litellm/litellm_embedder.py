@@ -313,47 +313,73 @@ class LiteLLMEmbedder(BaseEmbedder):
                 continue
             request_kwargs[key] = value
 
+    # Provider type -> LiteLLM model prefix mapping for embeddings
+    _EMBEDDER_PROVIDER_PREFIXES: dict[str, str] = {
+        "gemini": "gemini/",
+        "cohere": "cohere/",
+        "bedrock": "bedrock/",
+        "vertex": "vertex_ai/",
+        "mistral": "mistral/",
+        "azure_openai": "azure/",
+        "dashscope": "openai/",
+        "kimi": "openai/",
+        "minimax": "minimax/",
+        "zai": "openai/",
+        "ollama": "ollama/",
+        "lmstudio": "openai/",
+    }
+
     def _get_litellm_model_name(self) -> str:
         """Get model name in LiteLLM format."""
         model = self._embedding_model
         provider_type = self._provider_type.value if self._provider_type else None
 
-        # Add provider prefix if needed
-        if provider_type == "gemini" and not model.startswith("gemini/"):
-            return f"gemini/{model}"
-        elif provider_type == "cohere" and not model.startswith("cohere/"):
-            return f"cohere/{model}"
-        elif provider_type == "bedrock" and not model.startswith("bedrock/"):
-            return f"bedrock/{model}"
-        elif provider_type == "vertex" and not model.startswith("vertex_ai/"):
-            return f"vertex_ai/{model}"
-        elif provider_type == "mistral" and not model.startswith("mistral/"):
-            return f"mistral/{model}"
-        elif provider_type == "azure_openai" and not model.startswith("azure/"):
-            return f"azure/{model}"
-        elif provider_type == "dashscope":
-            # Dashscope uses OpenAI-compatible API
-            if not model.startswith("openai/"):
-                return f"openai/{model}"
-        elif provider_type == "kimi":
-            # Kimi uses OpenAI-compatible API
-            if not model.startswith("openai/"):
-                return f"openai/{model}"
-        elif provider_type == "minimax":
-            if not model.startswith("minimax/"):
-                return f"minimax/{model}"
-        elif provider_type == "zai":
-            # ZhipuAI embedding API is OpenAI-compatible.
-            if not model.startswith("openai/"):
-                return f"openai/{model}"
-        elif provider_type == "ollama":
-            if not model.startswith("ollama/"):
-                return f"ollama/{model}"
-        elif provider_type == "lmstudio":
-            if not model.startswith("openai/"):
-                return f"openai/{model}"
+        prefix = self._EMBEDDER_PROVIDER_PREFIXES.get(provider_type or "")
+        if prefix and not model.startswith(prefix):
+            return f"{prefix}{model}"
 
         return model
+
+    @staticmethod
+    def _extract_embedding_from_item(item: Any) -> list[float]:
+        """Extract embedding vector from a single response item."""
+        if isinstance(item, dict):
+            embedding = item.get("embedding")
+        else:
+            embedding = getattr(item, "embedding", None)
+        if not embedding:
+            raise ValueError("No embedding returned for item")
+        return embedding
+
+    def _build_embedding_kwargs(self, model: str, texts: list[str]) -> dict[str, Any]:
+        """Build kwargs dict for litellm.aembedding call."""
+        embedding_kwargs: dict[str, Any] = {
+            "model": model,
+            "input": texts,
+            "timeout": self._timeout_seconds,
+        }
+        if self._api_key:
+            embedding_kwargs["api_key"] = self._api_key
+        if self._base_url:
+            embedding_kwargs["api_base"] = self._base_url
+        self._apply_embedding_options(embedding_kwargs)
+        return embedding_kwargs
+
+    def _validate_input_texts(
+        self,
+        input_data: str | list[str] | Iterable[int] | Iterable[Iterable[int]],
+    ) -> list[str]:
+        """Normalize and validate input data for embedding."""
+        if isinstance(input_data, str):
+            texts = [input_data]
+        else:
+            texts = list(input_data)
+
+        if not texts:
+            raise ValueError("No texts provided for embedding")
+        if not isinstance(texts[0], str):
+            raise ValueError("Input must be string or list of strings")
+        return texts
 
     async def create(
         self,
@@ -381,53 +407,18 @@ class LiteLLMEmbedder(BaseEmbedder):
 
             litellm.aembedding = _noop_aembedding
 
-        # Normalize input to list of strings
-        if isinstance(input_data, str):
-            texts = [input_data]
-        else:
-            texts = list(input_data)
-
-        # Validate we have texts
-        if not texts:
-            raise ValueError("No texts provided for embedding")
-
-        # Validate first item is a string
-        if not isinstance(texts[0], str):
-            raise ValueError("Input must be string or list of strings")
-
-        # Get model name in LiteLLM format
+        texts = self._validate_input_texts(input_data)
         model = self._get_litellm_model_name()
 
-        # Call LiteLLM embedding
         try:
-            embedding_kwargs: dict[str, Any] = {
-                "model": model,
-                "input": texts,
-                "timeout": self._timeout_seconds,
-            }
-            # Pass api_key directly (no env var pollution)
-            if self._api_key:
-                embedding_kwargs["api_key"] = self._api_key
-            # Add api_base for custom base URL (supports proxy/self-hosted scenarios)
-            if self._base_url:
-                embedding_kwargs["api_base"] = self._base_url
-            self._apply_embedding_options(embedding_kwargs)
-
+            embedding_kwargs = self._build_embedding_kwargs(model, texts)
             response = await litellm.aembedding(**embedding_kwargs)
 
-            # Extract embedding
             if not response.data:
                 raise ValueError("No embedding returned")
 
-            first_item = response.data[0]
-            if isinstance(first_item, dict):
-                embedding = first_item.get("embedding")
-            else:
-                embedding = getattr(first_item, "embedding", None)
-            if not embedding:
-                raise ValueError("No embedding returned")
+            embedding = self._extract_embedding_from_item(response.data[0])
 
-            # Update detected dimension if different
             if len(embedding) != self._embedding_dim:
                 logger.info(
                     f"Embedding dimension mismatch: expected {self._embedding_dim}, "
@@ -445,6 +436,89 @@ class LiteLLMEmbedder(BaseEmbedder):
         except Exception as e:
             logger.error(f"LiteLLM embedding error: {e}")
             raise
+
+    def _extract_batch_embeddings(self, response: Any) -> list[list[float]]:
+        """Extract embedding vectors from a batch response."""
+        return [self._extract_embedding_from_item(item) for item in response.data]
+
+    async def _handle_batch_retry_delay(
+        self,
+        error: Exception,
+        retry_count: int,
+        max_retries: int,
+        current_delay: float,
+        batch_idx: int,
+        total_batches: int,
+    ) -> float:
+        """Handle retry delay logic for batch embedding errors. Returns updated delay."""
+        import asyncio
+
+        error_msg = str(error).lower()
+        is_rate_limit = any(kw in error_msg for kw in ["rate limit", "quota", "429", "throttling"])
+
+        if is_rate_limit:
+            wait_time = current_delay * (2 ** (retry_count - 1))
+            logger.warning(
+                f"Rate limit hit for batch {batch_idx}/{total_batches}, "
+                f"retrying in {wait_time:.1f}s (attempt {retry_count}/{max_retries})"
+            )
+            await asyncio.sleep(wait_time)
+            return current_delay * 2
+
+        logger.warning(
+            f"Batch {batch_idx}/{total_batches} embedding error (attempt "
+            f"{retry_count}/{max_retries}): {error}"
+        )
+        await asyncio.sleep(current_delay)
+        return current_delay
+
+    async def _process_single_batch(
+        self,
+        model: str,
+        batch: list[str],
+        batch_idx: int,
+        total_batches: int,
+        max_retries: int,
+        retry_delay: float,
+    ) -> list[list[float]]:
+        """Process a single batch with retry logic. Returns embeddings."""
+        import litellm
+
+        retry_count = 0
+        current_delay = retry_delay
+
+        while retry_count <= max_retries:
+            try:
+                batch_kwargs = self._build_embedding_kwargs(model, batch)
+                response = await litellm.aembedding(**batch_kwargs)
+                batch_embeddings = self._extract_batch_embeddings(response)
+
+                logger.debug(
+                    f"Batch {batch_idx}/{total_batches} embeddings created: "
+                    f"model={model}, count={len(batch_embeddings)}"
+                )
+                return batch_embeddings
+
+            except Exception as e:
+                retry_count += 1
+                if retry_count > max_retries:
+                    logger.error(
+                        f"Batch {batch_idx}/{total_batches} embedding failed after "
+                        f"{max_retries} retries: {e}"
+                    )
+                    remaining = len(batch)
+                    return [[0.0] * self._embedding_dim] * remaining
+
+                current_delay = await self._handle_batch_retry_delay(
+                    e,
+                    retry_count,
+                    max_retries,
+                    current_delay,
+                    batch_idx,
+                    total_batches,
+                )
+
+        return []  # unreachable but satisfies type checker
 
     async def create_batch(
         self,
@@ -474,8 +548,6 @@ class LiteLLMEmbedder(BaseEmbedder):
         Example:
             embeddings = await embedder.create_batch(texts, batch_size=64)
         """
-        import asyncio
-
         import litellm
 
         if not hasattr(litellm, "aembedding"):
@@ -492,95 +564,23 @@ class LiteLLMEmbedder(BaseEmbedder):
         if not input_data_list:
             return []
 
-        # Get model name in LiteLLM format
         model = self._get_litellm_model_name()
-
-        # Split into batches
         batches = [
             input_data_list[i : i + batch_size] for i in range(0, len(input_data_list), batch_size)
         ]
-
-        all_embeddings: list[list[float]] = []
         total_batches = len(batches)
 
+        all_embeddings: list[list[float]] = []
         for batch_idx, batch in enumerate(batches, 1):
-            retry_count = 0
-            current_delay = retry_delay
-
-            while retry_count <= max_retries:
-                try:
-                    batch_kwargs: dict[str, Any] = {
-                        "model": model,
-                        "input": batch,
-                        "timeout": self._timeout_seconds,
-                    }
-                    if self._api_key:
-                        batch_kwargs["api_key"] = self._api_key
-                    if self._base_url:
-                        batch_kwargs["api_base"] = self._base_url
-                    self._apply_embedding_options(batch_kwargs)
-
-                    response = await litellm.aembedding(**batch_kwargs)
-
-                    # Extract embeddings
-                    batch_embeddings = []
-                    for item in response.data:
-                        if isinstance(item, dict):
-                            embedding = item.get("embedding")
-                        else:
-                            embedding = getattr(item, "embedding", None)
-                        if not embedding:
-                            raise ValueError("No embedding returned for item")
-                        batch_embeddings.append(embedding)
-
-                    all_embeddings.extend(batch_embeddings)
-
-                    logger.debug(
-                        f"Batch {batch_idx}/{total_batches} embeddings created: "
-                        f"model={model}, count={len(batch_embeddings)}"
-                    )
-
-                    break  # Success, exit retry loop
-
-                except Exception as e:
-                    retry_count += 1
-                    error_msg = str(e).lower()
-
-                    # Check if rate limit error
-                    is_rate_limit = any(
-                        kw in error_msg for kw in ["rate limit", "quota", "429", "throttling"]
-                    )
-
-                    if retry_count > max_retries:
-                        logger.error(
-                            f"Batch {batch_idx}/{total_batches} embedding failed after "
-                            f"{max_retries} retries: {e}"
-                        )
-                        # Return partial results instead of failing completely
-                        # Fill remaining slots with zero vectors
-                        remaining = len(batch) - (
-                            len(all_embeddings) % batch_size if all_embeddings else 0
-                        )
-                        zero_embeddings = [[0.0] * self._embedding_dim] * remaining
-                        all_embeddings.extend(zero_embeddings)
-                        break
-
-                    if is_rate_limit:
-                        # Exponential backoff for rate limits
-                        wait_time = current_delay * (2 ** (retry_count - 1))
-                        logger.warning(
-                            f"Rate limit hit for batch {batch_idx}/{total_batches}, "
-                            f"retrying in {wait_time:.1f}s (attempt {retry_count}/{max_retries})"
-                        )
-                        await asyncio.sleep(wait_time)
-                        current_delay *= 2
-                    else:
-                        # For other errors, retry immediately
-                        logger.warning(
-                            f"Batch {batch_idx}/{total_batches} embedding error (attempt "
-                            f"{retry_count}/{max_retries}): {e}"
-                        )
-                        await asyncio.sleep(current_delay)
+            batch_embeddings = await self._process_single_batch(
+                model,
+                batch,
+                batch_idx,
+                total_batches,
+                max_retries,
+                retry_delay,
+            )
+            all_embeddings.extend(batch_embeddings)
 
         logger.info(
             f"Completed batch embeddings: model={model}, "

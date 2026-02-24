@@ -154,7 +154,7 @@ class TestResourceSubscription:
     async def test_subscribe_resource_with_callback(self, mock_client):
         """Test subscription with update callback."""
         # Mock callback for resource updates
-        callback = MagicMock()  # noqa: F841
+        callback = MagicMock()
 
         # Subscribe with callback
         result = await mock_client.subscribe_resource("file:///data.json")

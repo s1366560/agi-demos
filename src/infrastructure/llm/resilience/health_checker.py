@@ -28,6 +28,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
+from typing import NamedTuple
 
 import httpx
 
@@ -81,6 +82,161 @@ class HealthCheckConfig:
 
     # Callback when health status changes
     on_status_change: Callable[[ProviderType, HealthStatus, HealthStatus], None] | None = None
+
+
+class _HealthEndpoint(NamedTuple):
+    """Health check endpoint configuration for a provider."""
+
+    url: str
+    headers: dict[str, str | None] | None
+    acceptable_statuses: frozenset[int]
+
+
+# Standard acceptable status (200 only)
+_OK_ONLY: frozenset[int] = frozenset({200})
+# Some providers return 404 for models endpoint but are still reachable
+_OK_OR_NOT_FOUND: frozenset[int] = frozenset({200, 404})
+
+
+def _bearer_auth(api_key: str | None) -> dict[str, str | None]:
+    """Build standard Bearer authorization header."""
+    return {"Authorization": f"Bearer {api_key}"}
+
+
+def _endpoint_openai(
+    _config: ProviderConfig,
+    api_key: str | None,
+) -> _HealthEndpoint:
+    return _HealthEndpoint(
+        url="https://api.openai.com/v1/models",
+        headers=_bearer_auth(api_key),
+        acceptable_statuses=_OK_ONLY,
+    )
+
+
+def _endpoint_gemini(
+    config: ProviderConfig,
+    api_key: str | None,
+) -> _HealthEndpoint:
+    model = config.llm_model or "gemini-pro"
+    return _HealthEndpoint(
+        url=f"https://generativelanguage.googleapis.com/v1beta/models/{model}",
+        headers={"x-goog-api-key": api_key},
+        acceptable_statuses=_OK_ONLY,
+    )
+
+
+def _endpoint_dashscope(
+    config: ProviderConfig,
+    api_key: str | None,
+) -> _HealthEndpoint:
+    base_url = config.base_url or "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    return _HealthEndpoint(
+        url=f"{base_url}/models",
+        headers=_bearer_auth(api_key),
+        acceptable_statuses=_OK_ONLY,
+    )
+
+
+def _endpoint_anthropic(
+    _config: ProviderConfig,
+    api_key: str | None,
+) -> _HealthEndpoint:
+    return _HealthEndpoint(
+        url="https://api.anthropic.com/v1/models",
+        headers={"x-api-key": api_key, "anthropic-version": "2023-06-01"},
+        acceptable_statuses=_OK_OR_NOT_FOUND,
+    )
+
+
+def _endpoint_deepseek(
+    config: ProviderConfig,
+    api_key: str | None,
+) -> _HealthEndpoint:
+    base_url = config.base_url or "https://api.deepseek.com/v1"
+    return _HealthEndpoint(
+        url=f"{base_url}/models",
+        headers=_bearer_auth(api_key),
+        acceptable_statuses=_OK_ONLY,
+    )
+
+
+def _endpoint_minimax(
+    config: ProviderConfig,
+    api_key: str | None,
+) -> _HealthEndpoint:
+    base_url = config.base_url or "https://api.minimax.chat/v1"
+    return _HealthEndpoint(
+        url=f"{base_url}/models",
+        headers=_bearer_auth(api_key),
+        acceptable_statuses=_OK_ONLY,
+    )
+
+
+def _endpoint_zai(
+    config: ProviderConfig,
+    api_key: str | None,
+) -> _HealthEndpoint:
+    base_url = config.base_url or "https://open.bigmodel.cn/api/paas/v4"
+    return _HealthEndpoint(
+        url=f"{base_url}/models",
+        headers=_bearer_auth(api_key),
+        acceptable_statuses=_OK_OR_NOT_FOUND,
+    )
+
+
+def _endpoint_kimi(
+    config: ProviderConfig,
+    api_key: str | None,
+) -> _HealthEndpoint:
+    base_url = config.base_url or "https://api.moonshot.cn/v1"
+    return _HealthEndpoint(
+        url=f"{base_url}/models",
+        headers=_bearer_auth(api_key),
+        acceptable_statuses=_OK_ONLY,
+    )
+
+
+def _endpoint_ollama(
+    config: ProviderConfig,
+    _api_key: str | None,
+) -> _HealthEndpoint:
+    base_url = config.base_url or "http://localhost:11434"
+    return _HealthEndpoint(
+        url=f"{base_url}/api/tags",
+        headers=None,
+        acceptable_statuses=_OK_ONLY,
+    )
+
+
+def _endpoint_lmstudio(
+    config: ProviderConfig,
+    api_key: str | None,
+) -> _HealthEndpoint:
+    base_url = config.base_url or "http://localhost:1234/v1"
+    headers = _bearer_auth(api_key) if api_key else None
+    return _HealthEndpoint(
+        url=f"{base_url}/models",
+        headers=headers,
+        acceptable_statuses=_OK_ONLY,
+    )
+
+
+_HEALTH_ENDPOINT_REGISTRY: dict[
+    ProviderType,
+    Callable[[ProviderConfig, str | None], _HealthEndpoint],
+] = {
+    ProviderType.OPENAI: _endpoint_openai,
+    ProviderType.GEMINI: _endpoint_gemini,
+    ProviderType.DASHSCOPE: _endpoint_dashscope,
+    ProviderType.ANTHROPIC: _endpoint_anthropic,
+    ProviderType.DEEPSEEK: _endpoint_deepseek,
+    ProviderType.MINIMAX: _endpoint_minimax,
+    ProviderType.ZAI: _endpoint_zai,
+    ProviderType.KIMI: _endpoint_kimi,
+    ProviderType.OLLAMA: _endpoint_ollama,
+    ProviderType.LMSTUDIO: _endpoint_lmstudio,
+}
 
 
 class HealthChecker:
@@ -250,95 +406,19 @@ class HealthChecker:
 
         start = time.time()
 
+        endpoint_factory = _HEALTH_ENDPOINT_REGISTRY.get(provider_type)
+
+        if endpoint_factory is None:
+            # Unknown provider -- just mark as healthy
+            logger.debug(f"No specific health check for {provider_type.value}, marking as healthy")
+            return (time.time() - start) * 1000
+
+        endpoint = endpoint_factory(provider_config, api_key)
+
         async with httpx.AsyncClient(timeout=self.config.timeout) as client:
-            if provider_type == ProviderType.OPENAI:
-                response = await client.get(
-                    "https://api.openai.com/v1/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
+            response = await client.get(endpoint.url, headers=endpoint.headers)
+            if response.status_code not in endpoint.acceptable_statuses:
                 response.raise_for_status()
-
-            elif provider_type == ProviderType.GEMINI:
-                model = provider_config.llm_model or "gemini-pro"
-                response = await client.get(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}",
-                    headers={"x-goog-api-key": api_key},
-                )
-                response.raise_for_status()
-
-            elif provider_type == ProviderType.DASHSCOPE:
-                base_url = (
-                    provider_config.base_url or "https://dashscope.aliyuncs.com/compatible-mode/v1"
-                )
-                response = await client.get(
-                    f"{base_url}/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
-                response.raise_for_status()
-
-            elif provider_type == ProviderType.ANTHROPIC:
-                # Anthropic doesn't have a models endpoint, check with a minimal request
-                response = await client.get(
-                    "https://api.anthropic.com/v1/models",
-                    headers={
-                        "x-api-key": api_key,
-                        "anthropic-version": "2023-06-01",
-                    },
-                )
-                # May return 404 but that's ok - we're just checking connectivity
-                if response.status_code not in (200, 404):
-                    response.raise_for_status()
-
-            elif provider_type == ProviderType.DEEPSEEK:
-                base_url = provider_config.base_url or "https://api.deepseek.com/v1"
-                response = await client.get(
-                    f"{base_url}/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
-                response.raise_for_status()
-
-            elif provider_type == ProviderType.MINIMAX:
-                base_url = provider_config.base_url or "https://api.minimax.chat/v1"
-                response = await client.get(
-                    f"{base_url}/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
-                response.raise_for_status()
-
-            elif provider_type == ProviderType.ZAI:
-                base_url = provider_config.base_url or "https://open.bigmodel.cn/api/paas/v4"
-                response = await client.get(
-                    f"{base_url}/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
-                # ZAI may return different status codes
-                if response.status_code not in (200, 404):
-                    response.raise_for_status()
-
-            elif provider_type == ProviderType.KIMI:
-                base_url = provider_config.base_url or "https://api.moonshot.cn/v1"
-                response = await client.get(
-                    f"{base_url}/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
-                response.raise_for_status()
-
-            elif provider_type == ProviderType.OLLAMA:
-                base_url = provider_config.base_url or "http://localhost:11434"
-                response = await client.get(f"{base_url}/api/tags")
-                response.raise_for_status()
-
-            elif provider_type == ProviderType.LMSTUDIO:
-                base_url = provider_config.base_url or "http://localhost:1234/v1"
-                headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
-                response = await client.get(f"{base_url}/models", headers=headers)
-                response.raise_for_status()
-
-            else:
-                # For unknown providers, just check if we can connect
-                logger.debug(
-                    f"No specific health check for {provider_type.value}, marking as healthy"
-                )
 
         return (time.time() - start) * 1000
 

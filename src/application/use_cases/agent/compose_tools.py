@@ -13,6 +13,7 @@ Key Features:
 
 import asyncio
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from src.domain.model.agent import ToolComposition
@@ -372,8 +373,6 @@ class ComposeToolsUseCase:
     ) -> bool:
         """
         Evaluate whether a tool should execute based on conditions.
-
-        Supported condition types:
         - always: Always execute (default)
         - key_exists: Check if key exists in context or output
         - key_value: Check if key equals specific value
@@ -385,41 +384,65 @@ class ComposeToolsUseCase:
             if cond.get("tool_index") == tool_index:
                 tool_condition = cond
                 break
-
         if not tool_condition:
             return True  # No condition = always execute
+        return self._check_condition_type(
+            condition_type, tool_condition, current_output, execution_context
+        )
 
-        condition_type = tool_condition.get("condition", "always")
+    def _check_condition_type(
+        self,
+        condition_type: str,
+        tool_condition: dict[str, Any],
+        current_output: Any,
+        execution_context: dict[str, Any],
+    ) -> bool:
+        """Dispatch condition evaluation by type."""
+        _EVALUATORS: dict[str, Callable[..., bool]] = {
+            "always": lambda: True,
+            "key_exists": lambda: self._eval_key_exists(
+                tool_condition, current_output, execution_context
+            ),
+            "key_value": lambda: self._eval_key_value(
+                tool_condition, current_output, execution_context
+            ),
+            "output_not_empty": lambda: current_output is not None and current_output != "",
+        }
+        evaluator = _EVALUATORS.get(condition_type)
+        if evaluator:
+            return evaluator()
+        logger.warning(f"Unknown condition type: {condition_type}")
+        return True
 
-        if condition_type == "always":
+    @staticmethod
+    def _eval_key_exists(
+        tool_condition: dict[str, Any],
+        current_output: Any,
+        execution_context: dict[str, Any],
+    ) -> bool:
+        """Evaluate 'key_exists' condition."""
+        key = tool_condition.get("key")
+        if not key:
             return True
+        return key in execution_context or (
+            current_output and isinstance(current_output, dict) and key in current_output
+        )
 
-        elif condition_type == "key_exists":
-            key = tool_condition.get("key")
-            if not key:
-                return True
-            # Check in context first, then output
-            return key in execution_context or (
-                current_output and isinstance(current_output, dict) and key in current_output
-            )
-
-        elif condition_type == "key_value":
-            key = tool_condition.get("key")
-            expected_value = tool_condition.get("value")
-            if not key:
-                return True
-            # Check in context first, then output
-            actual_value = execution_context.get(key) or (
-                current_output.get(key) if isinstance(current_output, dict) else None
-            )
-            return actual_value == expected_value
-
-        elif condition_type == "output_not_empty":
-            return current_output is not None and current_output != ""
-
-        else:
-            logger.warning(f"Unknown condition type: {condition_type}")
+    @staticmethod
+    def _eval_key_value(
+        tool_condition: dict[str, Any],
+        current_output: Any,
+        execution_context: dict[str, Any],
+    ) -> bool:
+        """Evaluate 'key_value' condition."""
+        key = tool_condition.get("key")
+        expected_value = tool_condition.get("value")
+        if not key:
             return True
+        actual_value = execution_context.get(key) or (
+            current_output.get(key) if isinstance(current_output, dict) else None
+        )
+        return actual_value == expected_value
 
     async def _execute_tool_step(
         self,

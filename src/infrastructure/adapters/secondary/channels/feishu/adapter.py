@@ -620,6 +620,91 @@ class FeishuAdapter:
                 mention_open_ids.append(mention_open_id)
         return mention_open_ids
 
+    @staticmethod
+    def _normalize_content_data(content_data: Any) -> dict[str, Any]:
+        """Normalize raw content data into a dict."""
+        if isinstance(content_data, dict):
+            return content_data
+        if isinstance(content_data, str):
+            try:
+                raw_parsed = json.loads(content_data) if content_data else {}
+                return raw_parsed if isinstance(raw_parsed, dict) else {"text": str(raw_parsed)}
+            except json.JSONDecodeError:
+                return {"text": content_data}
+        if content_data is None:
+            return {}
+        return {"text": str(content_data)}
+
+    def _parse_text(self, parsed: dict[str, Any]) -> MessageContent:
+        text_value = parsed.get("text", "")
+        text = (
+            text_value
+            if isinstance(text_value, str)
+            else ("" if text_value is None else str(text_value))
+        )
+        return MessageContent(type=MessageType.TEXT, text=text)
+
+    def _parse_image(self, parsed: dict[str, Any]) -> MessageContent:
+        image_key = parsed.get("image_key")
+        return MessageContent(
+            type=MessageType.IMAGE,
+            image_key=image_key,
+            text=f"[图片消息: key={image_key}]",
+        )
+
+    def _parse_file(self, parsed: dict[str, Any]) -> MessageContent:
+        file_key = parsed.get("file_key")
+        file_name = parsed.get("file_name", "unknown")
+        logger.info(
+            f"[FeishuAdapter] Parsing file message - "
+            f"file_key={file_key}, file_name={file_name}, "
+            f"parsed_content={str(parsed)[:300]}"
+        )
+        return MessageContent(
+            type=MessageType.FILE,
+            file_key=file_key,
+            file_name=file_name,
+            text=f"[文件: {file_name}, key={file_key}]",
+        )
+
+    def _parse_audio(self, parsed: dict[str, Any]) -> MessageContent:
+        file_key = parsed.get("file_key")
+        duration_ms = parsed.get("duration", 0)
+        return MessageContent(
+            type=MessageType.AUDIO,
+            file_key=file_key,
+            duration=duration_ms // 1000,
+            text=f"[语音消息: {duration_ms // 1000}秒]",
+        )
+
+    def _parse_video(self, parsed: dict[str, Any]) -> MessageContent:
+        file_key = parsed.get("file_key")
+        duration_ms = parsed.get("duration", 0)
+        thumbnail_key = parsed.get("thumbnail", {}).get("file_key")
+        return MessageContent(
+            type=MessageType.VIDEO,
+            file_key=file_key,
+            duration=duration_ms // 1000,
+            thumbnail_key=thumbnail_key,
+            text=f"[视频消息: {duration_ms // 1000}秒]",
+        )
+
+    def _parse_sticker(self, parsed: dict[str, Any]) -> MessageContent:
+        file_key = parsed.get("file_key")
+        return MessageContent(
+            type=MessageType.STICKER,
+            file_key=file_key,
+            text="[表情消息]",
+        )
+
+    def _parse_post(self, parsed: dict[str, Any]) -> MessageContent:
+        text, image_key = self._parse_post_content(parsed)
+        return MessageContent(
+            type=MessageType.POST,
+            text=text if text.strip() else None,
+            image_key=image_key,
+        )
+
     def _parse_content(self, content_data: Any, message_type: str) -> MessageContent:
         """Parse message content based on type."""
         logger.info(
@@ -627,91 +712,50 @@ class FeishuAdapter:
             f"content_data={str(content_data)[:200]}"
         )
 
-        parsed: dict[str, Any]
-        if isinstance(content_data, dict):
-            parsed = content_data
-        elif isinstance(content_data, str):
-            try:
-                raw_parsed = json.loads(content_data) if content_data else {}
-                parsed = raw_parsed if isinstance(raw_parsed, dict) else {"text": str(raw_parsed)}
-            except json.JSONDecodeError:
-                parsed = {"text": content_data}
-        elif content_data is None:
-            parsed = {}
-        else:
-            parsed = {"text": str(content_data)}
+        parsed = self._normalize_content_data(content_data)
 
-        if message_type == "text":
-            text_value = parsed.get("text", "")
-            text = (
-                text_value
-                if isinstance(text_value, str)
-                else ("" if text_value is None else str(text_value))
-            )
-            return MessageContent(type=MessageType.TEXT, text=text)
+        parsers: dict[str, Any] = {
+            "text": self._parse_text,
+            "image": self._parse_image,
+            "file": self._parse_file,
+            "audio": self._parse_audio,
+            "video": self._parse_video,
+            "sticker": self._parse_sticker,
+            "post": self._parse_post,
+        }
+        parser = parsers.get(message_type)
+        if parser:
+            return parser(parsed)
+        return None
 
-        elif message_type == "image":
-            image_key = parsed.get("image_key")
-            return MessageContent(
-                type=MessageType.IMAGE,
-                image_key=image_key,
-                text=f"[图片消息: key={image_key}]",
-            )
+    @staticmethod
+    def _render_code_element(element: dict[str, Any]) -> tuple[str, str | None]:
+        """Render code/code_block element."""
+        lang = element.get("language", "")
+        code_text = element.get("text", "")
+        if lang:
+            return f"\n```{lang}\n{code_text}\n```\n", None
+            return f"`{code_text}`", None
 
-        elif message_type == "file":
-            file_key = parsed.get("file_key")
-            file_name = parsed.get("file_name", "unknown")
-            logger.info(
-                f"[FeishuAdapter] Parsing file message - "
-                f"file_key={file_key}, file_name={file_name}, "
-                f"parsed_content={str(parsed)[:300]}"
-            )
-            return MessageContent(
-                type=MessageType.FILE,
-                file_key=file_key,
-                file_name=file_name,
-                text=f"[文件: {file_name}, key={file_key}]",
-            )
-
-        elif message_type == "audio":
-            file_key = parsed.get("file_key")
-            duration_ms = parsed.get("duration", 0)
-            return MessageContent(
-                type=MessageType.AUDIO,
-                file_key=file_key,
-                duration=duration_ms // 1000,  # Convert to seconds
-                text=f"[语音消息: {duration_ms // 1000}秒]",
-            )
-
-        elif message_type == "video":
-            file_key = parsed.get("file_key")
-            duration_ms = parsed.get("duration", 0)
-            thumbnail_key = parsed.get("thumbnail", {}).get("file_key")
-            return MessageContent(
-                type=MessageType.VIDEO,
-                file_key=file_key,
-                duration=duration_ms // 1000,  # Convert to seconds
-                thumbnail_key=thumbnail_key,
-                text=f"[视频消息: {duration_ms // 1000}秒]",
-            )
-
-        elif message_type == "sticker":
-            file_key = parsed.get("file_key")
-            return MessageContent(
-                type=MessageType.STICKER,
-                file_key=file_key,
-                text="[表情消息]",
-            )
-
-        elif message_type == "post":
-            # Rich text post - may contain images and text
-            # Always preserve the text content, and extract image_key if present
-            text, image_key = self._parse_post_content(parsed)
-            return MessageContent(
-                type=MessageType.POST,
-                text=text if text.strip() else None,
-                image_key=image_key,  # Will be used for media import if present
-            )
+    def _render_post_element(element: dict[str, Any]) -> tuple[str, str | None]:
+        """Render a single post element to text. Returns (text, image_key_or_none)."""
+        _simple_renderers: dict[str, Any] = {
+            "text": lambda el: (el.get("text", ""), None),
+            "a": lambda el: (el.get("text", el.get("href", "")), None),
+            "at": lambda el: (f"@{el.get('user_name', '')}", None),
+            "img": lambda el: ("", el.get("image_key")),
+            "media": lambda _el: ("[media]", None),
+            "pre": lambda el: (f"\n```\n{el.get('text', '')}\n```\n", None),
+            "blockquote": lambda el: (f"> {el.get('text', '')}", None),
+            "mention": lambda el: (f"@{el.get('name', el.get('key', ''))}", None),
+        }
+        tag = element.get("tag", "")
+        renderer = _simple_renderers.get(tag)
+        if renderer:
+            return renderer(element)
+        if tag in ("code_block", "code"):
+            return FeishuAdapter._render_code_element(element)
+        return "", None
 
     def _parse_post_content(self, content: dict[str, Any]) -> tuple:
         """Parse rich text post content. Returns (text, image_key)."""
@@ -722,39 +766,15 @@ class FeishuAdapter:
         extracted_image_key = None
 
         for paragraph in content_blocks:
-            if isinstance(paragraph, list):
-                para_text = ""
-                for element in paragraph:
-                    tag = element.get("tag", "")
-                    if tag == "text":
-                        para_text += element.get("text", "")
-                    elif tag == "a":
-                        para_text += element.get("text", element.get("href", ""))
-                    elif tag == "at":
-                        para_text += f"@{element.get('user_name', '')}"
-                    elif tag == "img":
-                        # Extract image_key from img tag - don't add placeholder text
-                        # The image will be imported separately via image_key
-                        img_key = element.get("image_key")
-                        if img_key and not extracted_image_key:
-                            extracted_image_key = img_key
-                        # No text placeholder - image is handled separately
-                    elif tag == "media":
-                        para_text += "[media]"
-                    elif tag in ("code_block", "code"):
-                        lang = element.get("language", "")
-                        code_text = element.get("text", "")
-                        if lang:
-                            para_text += f"\n```{lang}\n{code_text}\n```\n"
-                        else:
-                            para_text += f"`{code_text}`"
-                    elif tag == "pre":
-                        para_text += f"\n```\n{element.get('text', '')}\n```\n"
-                    elif tag == "blockquote":
-                        para_text += f"> {element.get('text', '')}"
-                    elif tag == "mention":
-                        para_text += f"@{element.get('name', element.get('key', ''))}"
-                text_parts.append(para_text)
+            if not isinstance(paragraph, list):
+                continue
+            para_text = ""
+            for element in paragraph:
+                text_fragment, img_key = self._render_post_element(element)
+                para_text += text_fragment
+                if img_key and not extracted_image_key:
+                    extracted_image_key = img_key
+            text_parts.append(para_text)
 
         return ("\n".join(text_parts) or "[rich text message]", extracted_image_key)
 

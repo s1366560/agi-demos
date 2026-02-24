@@ -104,33 +104,7 @@ class MemorySearchTool(AgentTool):
 
         # Also search knowledge graph if available
         if self._graph_service and len(results) < max_results:
-            try:
-                graph_results = await self._graph_service.search(query, project_id=self._project_id)
-                for gr in graph_results[: max_results - len(results)]:
-                    # Graph results may be objects or dicts
-                    if isinstance(gr, dict):
-                        content = gr.get("content", "") or gr.get("fact", "")
-                        score = gr.get("score", 0.5)
-                        uid = gr.get("uuid", "")
-                        created = gr.get("created_at", "")
-                    else:
-                        content = getattr(gr, "fact", "") or getattr(gr, "content", "")
-                        score = getattr(gr, "score", 0.5)
-                        uid = getattr(gr, "uuid", "")
-                        created = getattr(gr, "created_at", "")
-                    if content:
-                        results.append(
-                            {
-                                "content": content,
-                                "score": round(float(score), 3),
-                                "category": "fact",
-                                "source_type": "knowledge_graph",
-                                "source_id": str(uid),
-                                "created_at": str(created) if created else "",
-                            }
-                        )
-            except Exception as e:
-                logger.debug(f"Graph search failed (non-critical): {e}")
+            await self._search_graph(results, query, max_results)
 
         # Format citations
         for _i, r in enumerate(results):
@@ -152,6 +126,43 @@ class MemorySearchTool(AgentTool):
             ensure_ascii=False,
             default=str,
         )
+
+    async def _search_graph(
+        self, results: list[dict[str, Any]], query: str, max_results: int
+    ) -> None:
+        """Search knowledge graph and append results in-place."""
+        try:
+            graph_results = await self._graph_service.search(query, project_id=self._project_id)
+            for gr in graph_results[: max_results - len(results)]:
+                content, score, uid, created = self._extract_graph_fields(gr)
+                if content:
+                    results.append(
+                        {
+                            "content": content,
+                            "score": round(float(score), 3),
+                            "category": "fact",
+                            "source_type": "knowledge_graph",
+                            "source_id": str(uid),
+                            "created_at": str(created) if created else "",
+                        }
+                    )
+        except Exception as e:
+            logger.debug(f"Graph search failed (non-critical): {e}")
+
+    @staticmethod
+    def _extract_graph_fields(gr: Any) -> tuple[str, float, str, str]:
+        """Extract content, score, uuid, created_at from a graph result."""
+        if isinstance(gr, dict):
+            content = gr.get("content", "") or gr.get("fact", "")
+            score = gr.get("score", 0.5)
+            uid = gr.get("uuid", "")
+            created = gr.get("created_at", "")
+        else:
+            content = getattr(gr, "fact", "") or getattr(gr, "content", "")
+            score = getattr(gr, "score", 0.5)
+            uid = getattr(gr, "uuid", "")
+            created = getattr(gr, "created_at", "")
+        return content, score, uid, created
 
 
 class MemoryGetTool(AgentTool):

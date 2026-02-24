@@ -252,6 +252,30 @@ async def handle_decision_tool(
         )
 
 
+def _prepare_fields_for_sse(fields_raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Normalize raw field definitions into SSE-compatible dicts."""
+    fields_for_sse: list[dict[str, Any]] = []
+    for field in fields_raw:
+        var_name = field.get("variable_name", field.get("name", ""))
+        display_name = field.get("display_name", field.get("label", var_name))
+        input_type_str = field.get("input_type", "text")
+        is_required = field.get("is_required", field.get("required", True))
+        is_secret = field.get("is_secret", True)
+
+        field_dict = {
+            "name": var_name,
+            "label": display_name,
+            "description": field.get("description"),
+            "required": is_required,
+            "input_type": input_type_str,
+            "default_value": field.get("default_value"),
+            "placeholder": field.get("placeholder"),
+            "secret": is_secret,
+        }
+        fields_for_sse.append(field_dict)
+    return fields_for_sse
+
+
 async def handle_env_var_tool(
     coordinator: HITLCoordinator,
     call_id: str,
@@ -269,25 +293,7 @@ async def handle_env_var_tool(
         timeout = arguments.get("timeout", 300.0)
         save_to_project = arguments.get("save_to_project", False)
 
-        fields_for_sse: list[dict[str, Any]] = []
-        for field in fields_raw:
-            var_name = field.get("variable_name", field.get("name", ""))
-            display_name = field.get("display_name", field.get("label", var_name))
-            input_type_str = field.get("input_type", "text")
-            is_required = field.get("is_required", field.get("required", True))
-            is_secret = field.get("is_secret", True)
-
-            field_dict = {
-                "name": var_name,
-                "label": display_name,
-                "description": field.get("description"),
-                "required": is_required,
-                "input_type": input_type_str,
-                "default_value": field.get("default_value"),
-                "placeholder": field.get("placeholder"),
-                "secret": is_secret,
-            }
-            fields_for_sse.append(field_dict)
+        fields_for_sse = _prepare_fields_for_sse(fields_raw)
 
         request_data = {
             "tool_name": target_tool_name,

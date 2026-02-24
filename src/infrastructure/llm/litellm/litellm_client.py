@@ -47,6 +47,34 @@ from src.infrastructure.security.encryption_service import get_encryption_servic
 logger = logging.getLogger(__name__)
 
 
+# Default API base URLs for known providers
+_DEFAULT_API_BASES: dict[str, str] = {
+    "zai": "https://open.bigmodel.cn/api/paas/v4",
+    "kimi": "https://api.moonshot.cn/v1",
+    "minimax": "https://api.minimax.chat/v1",
+    "ollama": "http://localhost:11434",
+    "lmstudio": "http://localhost:1234/v1",
+}
+
+# Provider prefixes for LiteLLM model qualification
+_PROVIDER_PREFIXES: dict[str, str] = {
+    "anthropic": "anthropic",
+    "gemini": "gemini",
+    "vertex": "vertex_ai",
+    "bedrock": "bedrock",
+    "mistral": "mistral",
+    "groq": "groq",
+    "deepseek": "deepseek",
+    "zai": "zai",
+    "minimax": "minimax",
+    "kimi": "openai",
+    "ollama": "ollama",
+    "lmstudio": "openai",
+    "dashscope": "dashscope",
+}
+
+
+
 class LiteLLMClient(LLMClient):
     """
     LiteLLM-based implementation of LLMClient.
@@ -99,19 +127,13 @@ class LiteLLMClient(LLMClient):
     def _resolve_api_base(self) -> str | None:
         """Resolve the API base URL for this provider."""
         provider_type = self.provider_config.provider_type.value
-        if provider_type == "zai":
-            return self.provider_config.base_url or "https://open.bigmodel.cn/api/paas/v4"
-        elif provider_type == "kimi":
-            return self.provider_config.base_url or "https://api.moonshot.cn/v1"
-        elif provider_type == "minimax":
-            return self.provider_config.base_url or "https://api.minimax.chat/v1"
-        elif provider_type == "ollama":
-            return self.provider_config.base_url or "http://localhost:11434"
-        elif provider_type == "lmstudio":
-            return self.provider_config.base_url or "http://localhost:1234/v1"
-        elif self.provider_config.base_url:
+        default = _DEFAULT_API_BASES.get(provider_type)
+        if default:
+            return self.provider_config.base_url or default
+        if self.provider_config.base_url:
             return self.provider_config.base_url
         return None
+
 
     def _configure_litellm(self) -> None:
         """Configure LiteLLM environment variables as fallback.
@@ -671,66 +693,15 @@ class LiteLLMClient(LLMClient):
         if model_size == ModelSize.small:
             model = self.provider_config.llm_small_model or self.provider_config.llm_model
 
-        # Add provider prefix if not present
-        provider_type = self.provider_config.provider_type.value
-        # Add explicit provider prefixes where needed
-
-        # Special handling for Qwen/Dashscope
-        # LiteLLM usually expects just the model name if DASHSCOPE_API_KEY is set,
-        # but sometimes might need 'qwen/...' depending on how it's called.
-        # However, the error message "LLM Provider NOT provided" suggests it didn't infer the provider from the model name.
-        # qwen-max is not automatically mapped to a provider in LiteLLM without a prefix unless configured?
-        # Actually, for Qwen, if using standard OpenAI compatible endpoint, it might be different.
-        # But if using Dashscope directly, LiteLLM supports 'qwen/qwen-max' or just 'qwen-max' if it knows it.
-
-        # Let's handle generic prefixing based on provider type if needed.
-        # For 'dashscope', LiteLLM might not auto-detect 'qwen-max' as a specific provider if not in its default list or if strict.
-        # But the error explicitly says: "Pass in the LLM provider you are trying to call. You passed model=qwen-max"
-
         # If the model name already contains the prefix (e.g. "anthropic/claude-3"), don't add it.
         if "/" in model:
             return model
 
-        # Add explicit prefixes for known providers to avoid ambiguity
-        if provider_type == "anthropic":
-            return f"anthropic/{model}"
-        elif provider_type == "gemini":
-            return f"gemini/{model}"
-        elif provider_type == "vertex":
-            return f"vertex_ai/{model}"
-        elif provider_type == "bedrock":
-            return f"bedrock/{model}"
-        elif provider_type == "mistral":
-            return f"mistral/{model}"
-        elif provider_type == "groq":
-            return f"groq/{model}"
-        elif provider_type == "deepseek":
-            return f"deepseek/{model}"
-        elif provider_type == "zai":
-            # ZhipuAI uses 'zai/' prefix in LiteLLM (not 'zhipu/')
-            return f"zai/{model}"
-        elif provider_type == "minimax":
-            return f"minimax/{model}"
-        elif provider_type == "kimi":
-            # Moonshot AI (Kimi) uses OpenAI-compatible API
-            return f"openai/{model}"
-        elif provider_type == "ollama":
-            return f"ollama/{model}"
-        elif provider_type == "lmstudio":
-            # LM Studio exposes OpenAI-compatible API.
-            return f"openai/{model}"
-        # For Dashscope, let's try explicitly adding the provider if it's missing?
-        # LiteLLM docs say for some providers you need provider/model.
-        # But for Qwen/Dashscope, it often works with just model if DASHSCOPE_API_KEY is set.
-        # The error suggests LiteLLM doesn't recognize 'qwen-max' as belonging to a provider it has credentials for,
-        # OR it needs the provider prefix.
-
-        # If using Dashscope (Qwen) via standard litellm logic,
-        # sometimes "qwen/" prefix helps disambiguate if it's not default.
-        if provider_type == "dashscope":
-            # Check if it looks like a model name without prefix
-            return f"dashscope/{model}"
-
+        # Look up provider prefix and apply it if found
+        provider_type = self.provider_config.provider_type.value
+        prefix = _PROVIDER_PREFIXES.get(provider_type)
+        if prefix:
+            return f"{prefix}/{model}"
         return model
 
     def _get_provider_type(self) -> str:

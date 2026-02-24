@@ -113,6 +113,186 @@ class SandboxMCPToolWrapper(AgentTool):
         required = input_schema.get("required", [])
         return all(arg in kwargs for arg in required)
 
+    def _extract_error_message(self, result: dict[str, Any]) -> str:
+        """Extract error message from an MCP error result.
+
+        Args:
+            result: The MCP result dict with is_error/isError flag set.
+
+        Returns:
+            The extracted error message string.
+        """
+        content_list = result.get("content", [])
+
+        if content_list and len(content_list) > 0:
+            first_content = content_list[0]
+            if isinstance(first_content, dict):
+                error_msg = first_content.get("text", "")
+            else:
+                error_msg = str(first_content)
+        else:
+            error_msg = ""
+
+        if not error_msg:
+            logger.warning(
+                f"SandboxMCPToolWrapper: Tool returned is_error=True but no error "
+                f"message. Full result: {result}"
+            )
+            error_msg = f"Tool execution failed (no details provided). Raw result: {result}"
+
+        return error_msg
+
+    def _classify_error(
+        self,
+        error: Exception,
+        kwargs: dict[str, Any],
+        attempt: int,
+        elapsed_ms: int,
+        configured_timeout_s: float | None,
+    ) -> MCPToolError:
+        """Classify an error using MCPToolErrorClassifier.
+
+        Args:
+            error: The exception to classify.
+            kwargs: Original tool arguments.
+            attempt: Current retry attempt number.
+            elapsed_ms: Execution duration in milliseconds.
+            configured_timeout_s: Configured timeout in seconds, if any.
+
+        Returns:
+            Classified MCPToolError with retry_count set.
+        """
+        mcp_error = MCPToolErrorClassifier.classify(
+            error=error,
+            tool_name=self.tool_name,
+            sandbox_id=self.sandbox_id,
+            context={
+                "kwargs": kwargs,
+                "attempt": attempt,
+                "execution_duration_ms": elapsed_ms,
+                "configured_timeout_s": configured_timeout_s,
+            },
+        )
+        mcp_error.retry_count = attempt
+        return mcp_error
+
+    def _extract_success_output(self, result: dict[str, Any]) -> Any:
+        """Extract output from a successful MCP result.
+
+        Args:
+            result: The MCP result dict (no error flag set).
+
+        Returns:
+            Dict with artifact data, text string, or "Success" fallback.
+        """
+        artifact = result.get("artifact")
+        content_list = result.get("content", [])
+
+        if artifact:
+            filename = artifact.get("filename", "unknown")
+            mime_type = artifact.get("mime_type", "unknown")
+            size = artifact.get("size", 0)
+            category = artifact.get("category", "file")
+            output_summary = (
+                f"Exported artifact: {filename} ({mime_type}, {size} bytes, category: {category})"
+            )
+            return {
+                "output": output_summary,
+                "content": content_list,
+                "artifact": artifact,
+            }
+
+        if content_list and len(content_list) > 0:
+            return content_list[0].get("text", "")
+
+        return "Success"
+
+    async def _handle_error_result(
+        self,
+        result: dict[str, Any],
+        kwargs: dict[str, Any],
+        attempt: int,
+        elapsed_ms: int,
+        configured_timeout_s: float | None,
+    ) -> tuple[MCPToolError, bool]:
+        """Handle an error result from MCP tool execution.
+
+        Args:
+            result: The MCP error result.
+            kwargs: Original tool arguments.
+            attempt: Current retry attempt number.
+            elapsed_ms: Execution duration in milliseconds.
+            configured_timeout_s: Configured timeout in seconds, if any.
+
+        Returns:
+            Tuple of (classified error, should_retry).
+        """
+        error_msg = self._extract_error_message(result)
+        error = Exception(error_msg)
+        mcp_error = self._classify_error(error, kwargs, attempt, elapsed_ms, configured_timeout_s)
+
+        logger.debug(
+            f"SandboxMCPToolWrapper: Error classified as {mcp_error.error_type.value} "
+            f"(duration={elapsed_ms}ms, timeout={configured_timeout_s}s)"
+        )
+
+        if mcp_error.is_retryable and attempt < self._retry_config.max_retries:
+            logger.warning(
+                f"SandboxMCPToolWrapper: Retryable error (attempt {attempt + 1}): "
+                f"{mcp_error.error_type.value} - {mcp_error.message}"
+            )
+            delay = self._retry_config.get_delay(attempt)
+            await asyncio.sleep(delay)
+            return mcp_error, True
+
+        return mcp_error, False
+
+    async def _handle_exception(
+        self,
+        error: Exception,
+        kwargs: dict[str, Any],
+        attempt: int,
+        elapsed_ms: int,
+        configured_timeout_s: float | None,
+    ) -> MCPToolError:
+        """Handle an exception during MCP tool execution.
+
+        Classifies the error. If retryable, sleeps and returns the error
+        for the caller to continue the retry loop. If not retryable,
+        raises RuntimeError.
+
+        Args:
+            error: The caught exception.
+            kwargs: Original tool arguments.
+            attempt: Current retry attempt number.
+            elapsed_ms: Execution duration in milliseconds.
+            configured_timeout_s: Configured timeout in seconds, if any.
+
+        Returns:
+            Classified MCPToolError (only if retryable).
+
+        Raises:
+            RuntimeError: If the error is not retryable or max retries reached.
+        """
+        mcp_error = self._classify_error(error, kwargs, attempt, elapsed_ms, configured_timeout_s)
+
+        logger.error(
+            f"SandboxMCPToolWrapper: Exception during execution: "
+            f"{mcp_error.error_type.value} - {mcp_error.message} "
+            f"(duration={elapsed_ms}ms, timeout={configured_timeout_s}s)"
+        )
+
+        if mcp_error.is_retryable and attempt < self._retry_config.max_retries:
+            delay = self._retry_config.get_delay(attempt)
+            logger.info(
+                f"SandboxMCPToolWrapper: Retrying after {delay:.2f}s "
+                f"(attempt {attempt + 2}/{self._retry_config.max_retries + 1})"
+            )
+            await asyncio.sleep(delay)
+            return mcp_error
+
+        raise RuntimeError(f"Tool execution failed: {mcp_error.get_user_message()}") from error
+
     async def execute(self, **kwargs: Any) -> Any:
         """
         Execute the tool with automatic error handling and retry.
@@ -126,163 +306,40 @@ class SandboxMCPToolWrapper(AgentTool):
         import time
 
         last_error: MCPToolError | None = None
-        configured_timeout_s: float | None = None
-
-        # Extract configured timeout from tool arguments for duration-aware classification
-        tool_timeout = kwargs.get("timeout")
-        if tool_timeout and isinstance(tool_timeout, (int, float)):
-            configured_timeout_s = float(tool_timeout)
+        configured_timeout_s = self._extract_configured_timeout(kwargs)
 
         for attempt in range(self._retry_config.max_retries + 1):
             start_time = time.time()
             try:
-                logger.debug(
-                    f"SandboxMCPToolWrapper: Executing {self.name} "
-                    f"(sandbox={self.sandbox_id}, tool={self.tool_name}, "
-                    f"attempt={attempt + 1}/{self._retry_config.max_retries + 1})"
-                )
-
-                # Route to sandbox adapter's call_tool method
-                # Extract timeout from tool arguments (e.g., bash tool's timeout param)
-                # and use it as MCP request timeout with padding for overhead
-                call_kwargs: dict[str, Any] = {}
-                if configured_timeout_s is not None:
-                    call_kwargs["timeout"] = configured_timeout_s + 30.0
-
-                start_time = time.time()
-                result = await self._adapter.call_tool(
-                    self.sandbox_id,
-                    self.tool_name,
-                    kwargs,
-                    **call_kwargs,
-                )
+                result = await self._call_tool(kwargs, attempt, configured_timeout_s)
                 elapsed_ms = int((time.time() - start_time) * 1000)
 
-                # Parse result - check both is_error (client normalized) and isError (MCP standard)
                 if result.get("is_error") or result.get("isError"):
-                    content_list = result.get("content", [])
-
-                    # Extract error message with better fallback
-                    if content_list and len(content_list) > 0:
-                        first_content = content_list[0]
-                        if isinstance(first_content, dict):
-                            error_msg = first_content.get("text", "")
-                        else:
-                            error_msg = str(first_content)
-                    else:
-                        error_msg = ""
-
-                    # If still no error message, provide debugging info
-                    if not error_msg:
-                        logger.warning(
-                            f"SandboxMCPToolWrapper: Tool returned is_error=True but no error "
-                            f"message. Full result: {result}"
-                        )
-                        error_msg = (
-                            f"Tool execution failed (no details provided). Raw result: {result}"
-                        )
-
-                    # Create error from tool result with duration context
-                    error = Exception(error_msg)
-                    mcp_error = MCPToolErrorClassifier.classify(
-                        error=error,
-                        tool_name=self.tool_name,
-                        sandbox_id=self.sandbox_id,
-                        context={
-                            "kwargs": kwargs,
-                            "attempt": attempt,
-                            "execution_duration_ms": elapsed_ms,
-                            "configured_timeout_s": configured_timeout_s,
-                        },
+                    mcp_error, should_retry = await self._handle_error_result(
+                        result,
+                        kwargs,
+                        attempt,
+                        elapsed_ms,
+                        configured_timeout_s,
                     )
-                    mcp_error.retry_count = attempt
-
-                    logger.debug(
-                        f"SandboxMCPToolWrapper: Error classified as {mcp_error.error_type.value} "
-                        f"(duration={elapsed_ms}ms, timeout={configured_timeout_s}s)"
-                    )
-
-                    # Check if retryable
-                    if mcp_error.is_retryable and attempt < self._retry_config.max_retries:
-                        logger.warning(
-                            f"SandboxMCPToolWrapper: Retryable error (attempt {attempt + 1}): "
-                            f"{mcp_error.error_type.value} - {mcp_error.message}"
-                        )
-                        last_error = mcp_error
-                        delay = self._retry_config.get_delay(attempt)
-                        await asyncio.sleep(delay)
-                        continue
-
-                    # Not retryable or max retries reached - store error and break
                     last_error = mcp_error
+                    if should_retry:
+                        continue
                     break
 
-                # Success - check if this is an artifact result (for export_artifact tool)
-                artifact = result.get("artifact")
-                content_list = result.get("content", [])
-
-                if artifact:
-                    # Build a text summary for LLM context (avoid base64 in context)
-                    filename = artifact.get("filename", "unknown")
-                    mime_type = artifact.get("mime_type", "unknown")
-                    size = artifact.get("size", 0)
-                    category = artifact.get("category", "file")
-                    output_summary = (
-                        f"Exported artifact: {filename} "
-                        f"({mime_type}, {size} bytes, category: {category})"
-                    )
-                    # Return full result dict for artifact processing in processor
-                    # "output" key ensures processor uses the summary, not json.dumps()
-                    return {
-                        "output": output_summary,
-                        "content": content_list,
-                        "artifact": artifact,
-                    }
-
-                # Regular tool - extract text output
-                if content_list and len(content_list) > 0:
-                    return content_list[0].get("text", "")
-
-                return "Success"
+                return self._extract_success_output(result)
 
             except Exception as e:
                 elapsed_ms = int((time.time() - start_time) * 1000)
-                # Classify the exception with duration context
-                mcp_error = MCPToolErrorClassifier.classify(
-                    error=e,
-                    tool_name=self.tool_name,
-                    sandbox_id=self.sandbox_id,
-                    context={
-                        "kwargs": kwargs,
-                        "attempt": attempt,
-                        "execution_duration_ms": elapsed_ms,
-                        "configured_timeout_s": configured_timeout_s,
-                    },
-                )
-                mcp_error.retry_count = attempt
-                last_error = mcp_error
-
-                # Log the error
-                logger.error(
-                    f"SandboxMCPToolWrapper: Exception during execution: "
-                    f"{mcp_error.error_type.value} - {mcp_error.message} "
-                    f"(duration={elapsed_ms}ms, timeout={configured_timeout_s}s)"
+                last_error = await self._handle_exception(
+                    e,
+                    kwargs,
+                    attempt,
+                    elapsed_ms,
+                    configured_timeout_s,
                 )
 
-                # Check if retryable
-                if mcp_error.is_retryable and attempt < self._retry_config.max_retries:
-                    delay = self._retry_config.get_delay(attempt)
-                    logger.info(
-                        f"SandboxMCPToolWrapper: Retrying after {delay:.2f}s "
-                        f"(attempt {attempt + 2}/{self._retry_config.max_retries + 1})"
-                    )
-                    await asyncio.sleep(delay)
-                    continue
-
-                # Not retryable or max retries reached - raise exception for processor to catch
-                raise RuntimeError(f"Tool execution failed: {mcp_error.get_user_message()}") from e
-
-        # All retries exhausted - raise exception for processor to catch
+        # All retries exhausted
         if last_error:
             raise RuntimeError(
                 f"Tool execution failed after {last_error.retry_count + 1} attempts: "
@@ -290,3 +347,51 @@ class SandboxMCPToolWrapper(AgentTool):
             )
 
         raise RuntimeError("Tool execution failed: Unknown error")
+
+    def _extract_configured_timeout(self, kwargs: dict[str, Any]) -> float | None:
+        """Extract configured timeout from tool arguments.
+
+        Args:
+            kwargs: Tool arguments.
+
+        Returns:
+            Timeout in seconds as float, or None if not configured.
+        """
+        tool_timeout = kwargs.get("timeout")
+        if tool_timeout and isinstance(tool_timeout, (int, float)):
+            return float(tool_timeout)
+        return None
+
+    async def _call_tool(
+        self,
+        kwargs: dict[str, Any],
+        attempt: int,
+        configured_timeout_s: float | None,
+    ) -> dict[str, Any]:
+        """Call the sandbox adapter's call_tool method.
+
+        Args:
+            kwargs: Tool arguments.
+            attempt: Current retry attempt number.
+            configured_timeout_s: Configured timeout in seconds, if any.
+
+        Returns:
+            The MCP result dict.
+        """
+        logger.debug(
+            f"SandboxMCPToolWrapper: Executing {self.name} "
+            f"(sandbox={self.sandbox_id}, tool={self.tool_name}, "
+            f"attempt={attempt + 1}/{self._retry_config.max_retries + 1})"
+        )
+
+        call_kwargs: dict[str, Any] = {}
+        if configured_timeout_s is not None:
+            call_kwargs["timeout"] = configured_timeout_s + 30.0
+
+        result = await self._adapter.call_tool(
+            self.sandbox_id,
+            self.tool_name,
+            kwargs,
+            **call_kwargs,
+        )
+        return result

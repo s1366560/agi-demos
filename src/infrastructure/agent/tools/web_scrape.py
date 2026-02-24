@@ -154,6 +154,131 @@ class WebScrapeTool(AgentTool):
             return "https://" + url
         return url
 
+    async def _extract_meta_description(self, page: Any) -> str:
+        """Extract meta description from the page.
+
+        Args:
+            page: Playwright page object.
+
+        Returns:
+            Meta description string, or empty string if not found.
+        """
+        try:
+            desc_elem = await page.query_selector('meta[name="description"]')
+            if desc_elem:
+                return await desc_elem.get_attribute("content") or ""
+        except Exception:
+            pass
+        return ""
+
+    async def _remove_unwanted_elements(self, page: Any) -> None:
+        """Remove unwanted elements (nav, header, footer, etc.) from the page.
+
+        Args:
+            page: Playwright page object.
+        """
+        for unwanted in self.UNWANTED_SELECTORS:
+            with contextlib.suppress(Exception):
+                await page.evaluate(
+                    f"document.querySelectorAll('{unwanted}').forEach(el => el.remove())"
+                )
+
+    async def _extract_with_selector(self, page: Any, selector: str) -> str:
+        """Extract content using a custom CSS selector.
+
+        Args:
+            page: Playwright page object.
+            selector: CSS selector string.
+
+        Returns:
+            Extracted text content.
+
+        Raises:
+            ValueError: If selector found no elements or extraction failed.
+        """
+        try:
+            element = await page.query_selector(selector)
+            if element:
+                return await element.inner_text()
+            raise ValueError(f"Selector '{selector}' found no elements on page")
+        except ValueError:
+            raise
+        except Exception as e:
+            raise ValueError(f"Error extracting content with selector: {e!s}") from e
+
+    async def _extract_auto_content(self, page: Any) -> str:
+        """Auto-detect and extract main content from the page.
+
+        Tries a list of common content selectors, falling back to body text.
+
+        Args:
+            page: Playwright page object.
+
+        Returns:
+            Extracted text content.
+        """
+        for content_selector in self.CONTENT_SELECTORS:
+            try:
+                element = await page.query_selector(content_selector)
+                if element:
+                    content = await element.inner_text()
+                    logger.debug(f"Found content using selector: {content_selector}")
+                    return content
+            except Exception:
+                continue
+
+        # Fallback to body content
+        return await page.inner_text("body")
+
+    async def _scrape_page(self, url: str, selector: str | None) -> str:
+        """Launch browser, navigate to URL, and extract content.
+
+        Args:
+            url: The URL to scrape.
+            selector: Optional CSS selector for specific content area.
+
+        Returns:
+            Formatted result string with title, URL, description, and content.
+        """
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=self._settings.playwright_headless,
+                args=["--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage"],
+            )
+
+            try:
+                context = await browser.new_context(
+                    user_agent=self.USER_AGENT,
+                    viewport={"width": 1280, "height": 720},
+                    ignore_https_errors=True,
+                )
+                page = await context.new_page()
+
+                await page.goto(
+                    url,
+                    wait_until="domcontentloaded",
+                    timeout=self._settings.playwright_timeout,
+                )
+
+                title = await page.title()
+                description = await self._extract_meta_description(page)
+
+                if selector:
+                    content = await self._extract_with_selector(page, selector)
+                else:
+                    await self._remove_unwanted_elements(page)
+                    content = await self._extract_auto_content(page)
+
+                content = self._clean_content(content)
+                content = self._truncate_content(content)
+
+                result = self._format_result(title, url, description, content)
+                await context.close()
+                return result
+
+            finally:
+                await browser.close()
+
     async def execute(self, **kwargs: Any) -> str:
         """
         Execute web scrape.
@@ -175,99 +300,12 @@ class WebScrapeTool(AgentTool):
 
         try:
             logger.info(f"Scraping URL: {url[:100]}...")
-
-            async with async_playwright() as p:
-                # Launch browser
-                browser = await p.chromium.launch(
-                    headless=self._settings.playwright_headless,
-                    args=["--disable-gpu", "--no-sandbox", "--disable-dev-shm-usage"],
-                )
-
-                try:
-                    # Create context with custom user agent
-                    context = await browser.new_context(
-                        user_agent=self.USER_AGENT,
-                        viewport={"width": 1280, "height": 720},
-                        ignore_https_errors=True,
-                    )
-
-                    # Create page
-                    page = await context.new_page()
-
-                    # Navigate to URL with timeout
-                    await page.goto(
-                        url,
-                        wait_until="domcontentloaded",
-                        timeout=self._settings.playwright_timeout,
-                    )
-
-                    # Extract title first
-                    title = await page.title()
-
-                    # Try to get meta description
-                    description = ""
-                    try:
-                        desc_elem = await page.query_selector('meta[name="description"]')
-                        if desc_elem:
-                            description = await desc_elem.get_attribute("content") or ""
-                    except Exception:
-                        pass
-
-                    # Remove unwanted elements if using body content
-                    if not selector:
-                        for unwanted in self.UNWANTED_SELECTORS:
-                            with contextlib.suppress(Exception):
-                                # Use JavaScript to remove elements
-                                await page.evaluate(
-                                    f"document.querySelectorAll('{unwanted}').forEach(el => el.remove())"
-                                )
-
-                    # Extract content
-                    if selector:
-                        # Use custom selector
-                        try:
-                            element = await page.query_selector(selector)
-                            if element:
-                                content = await element.inner_text()
-                            else:
-                                return f"Error: Selector '{selector}' found no elements on page"
-                        except Exception as e:
-                            return f"Error extracting content with selector: {e!s}"
-                    else:
-                        # Try to find main content
-                        content = None
-
-                        for content_selector in self.CONTENT_SELECTORS:
-                            try:
-                                element = await page.query_selector(content_selector)
-                                if element:
-                                    content = await element.inner_text()
-                                    logger.debug(
-                                        f"Found content using selector: {content_selector}"
-                                    )
-                                    break
-                            except Exception:
-                                continue
-
-                        # Fallback to body content
-                        if not content:
-                            content = await page.inner_text("body")
-
-                    # Clean and truncate content
-                    content = self._clean_content(content)
-                    content = self._truncate_content(content)
-
-                    # Format result
-                    result = self._format_result(title, url, description, content)
-
-                    await context.close()
-                    return result
-
-                finally:
-                    await browser.close()
+            return await self._scrape_page(url, selector)
 
         except PlaywrightTimeoutError:
             return f"Error: Timeout after {self._settings.playwright_timeout}ms loading page"
+        except ValueError as e:
+            return f"Error: {e!s}"
         except Exception as e:
             error_msg = f"Error scraping page: {e!s}"
             logger.error(error_msg)

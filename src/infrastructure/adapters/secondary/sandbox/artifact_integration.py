@@ -7,7 +7,7 @@ automatically detecting new files produced by tool executions and uploading them
 import asyncio
 import logging
 from collections.abc import Callable
-from typing import Any
+from typing import Any, ClassVar
 
 from src.application.services.artifact_service import ArtifactService
 from src.domain.model.artifact.artifact import get_category_from_mime
@@ -186,6 +186,108 @@ class SandboxArtifactIntegration:
 
         return artifact_ids
 
+    # Tools that commonly produce output files
+    _OUTPUT_PRODUCING_TOOLS: ClassVar[set[str]] = {
+        "bash",
+        "python",
+        "execute",
+        "run",
+        "screenshot",
+        "render",
+        "export",
+        "save",
+        "write",
+        "generate",
+    }
+
+    @staticmethod
+    async def _read_text_fallback(
+        call_tool_fn: Callable,
+        sandbox_id: str,
+        path: str,
+    ) -> bytes | None:
+        """Fallback: read file as text when export_artifact fails."""
+        result = await call_tool_fn(sandbox_id, "read", {"file_path": path})
+        if result.get("is_error") or result.get("isError"):
+            return None
+        content = result.get("content", [])
+        if not content:
+            return None
+        text = content[0].get("text", "")
+        return text.encode("utf-8")
+
+    @staticmethod
+    def _extract_base64_content(result: dict[str, Any]) -> bytes | None:
+        """Extract base64-encoded content from export_artifact result."""
+        import base64
+
+        artifact_info = result.get("artifact", {})
+        data = artifact_info.get("data")
+        if data:
+            return base64.b64decode(data)
+        # Also check for image content
+        for item in result.get("content", []):
+            if item.get("type") == "image":
+                return base64.b64decode(item.get("data", ""))
+        return None
+
+    @staticmethod
+    def _extract_text_content(result: dict[str, Any]) -> bytes | None:
+        """Extract text content from tool result."""
+        content = result.get("content", [])
+        if content:
+            text = content[0].get("text", "")
+            return text.encode("utf-8")
+        return None
+
+    async def _read_sandbox_file(
+        self,
+        call_tool_fn: Callable,
+        sandbox_id: str,
+        path: str,
+    ) -> bytes | None:
+        """Read file from sandbox using export_artifact with text fallback."""
+        try:
+            result = await call_tool_fn(
+                sandbox_id,
+                "export_artifact",
+                {"file_path": path, "encoding": "auto"},
+            )
+            if result.get("is_error") or result.get("isError"):
+                return await self._read_text_fallback(call_tool_fn, sandbox_id, path)
+                # Check for base64 encoded data
+            encoding = result.get("artifact", {}).get("encoding", "utf-8")
+            if encoding == "base64":
+                return self._extract_base64_content(result)
+
+            return self._extract_text_content(result)
+        except Exception as e:
+            logger.debug(f"Failed to read file {path}: {e}")
+            return None
+
+    async def _list_sandbox_files(
+        self,
+        call_tool_fn: Callable,
+        sandbox_id: str,
+        directory: str,
+    ) -> list[str]:
+        """List files in a sandbox directory via MCP glob tool."""
+        try:
+            result = await call_tool_fn(
+                sandbox_id,
+                "glob",
+                {"pattern": "**/*", "path": directory},
+            )
+            if result.get("is_error"):
+                return []
+            content = result.get("content", [])
+            if not content:
+                return []
+            files_text = content[0].get("text", "")
+            return [f.strip() for f in files_text.split("\n") if f.strip()]
+        except Exception:
+            return []
+
     async def process_tool_result(
         self,
         sandbox_id: str,
@@ -199,12 +301,9 @@ class SandboxArtifactIntegration:
     ) -> list[str]:
         """
         Process a tool result and extract any artifacts.
-
-        This method:
         1. Checks if the tool might have produced output files
         2. Scans output directories for new files
         3. Uploads new files as artifacts
-
         Args:
             sandbox_id: Sandbox ID
             tool_name: Name of the tool that was called
@@ -214,100 +313,19 @@ class SandboxArtifactIntegration:
             tenant_id: Tenant ID
             tool_execution_id: Tool execution ID
             conversation_id: Conversation ID
-
-        Returns:
             List of artifact IDs created
         """
-        # Tools that commonly produce output files
-        output_producing_tools = {
-            "bash",
-            "python",
-            "execute",
-            "run",
-            "screenshot",
-            "render",
-            "export",
-            "save",
-            "write",
-            "generate",
-        }
-
         # Check if this tool might produce outputs
         tool_base = tool_name.split("_")[-1] if "_" in tool_name else tool_name
-        if tool_base.lower() not in output_producing_tools:
+        if tool_base.lower() not in self._OUTPUT_PRODUCING_TOOLS:
             return []
 
-        # Define functions to interact with sandbox
+        # Build closures bound to this call
         async def list_files(directory: str) -> list[str]:
-            try:
-                result = await call_tool_fn(
-                    sandbox_id,
-                    "glob",
-                    {"pattern": "**/*", "path": directory},
-                )
-                if result.get("is_error"):
-                    return []
-
-                content = result.get("content", [])
-                if not content:
-                    return []
-
-                files_text = content[0].get("text", "")
-                return [f.strip() for f in files_text.split("\n") if f.strip()]
-            except Exception:
-                return []
+            return await self._list_sandbox_files(call_tool_fn, sandbox_id, directory)
 
         async def read_file(path: str) -> bytes | None:
-            """Read file using export_artifact tool for proper binary support."""
-            try:
-                # Use export_artifact tool which supports binary files
-                result = await call_tool_fn(
-                    sandbox_id,
-                    "export_artifact",
-                    {"file_path": path, "encoding": "auto"},
-                )
-                if result.get("is_error") or result.get("isError"):
-                    # Fallback to text read for non-binary files
-                    result = await call_tool_fn(
-                        sandbox_id,
-                        "read",
-                        {"file_path": path},
-                    )
-                    if result.get("is_error") or result.get("isError"):
-                        return None
-                    content = result.get("content", [])
-                    if not content:
-                        return None
-                    text = content[0].get("text", "")
-                    return text.encode("utf-8")
-
-                # Extract content from export_artifact result
-                artifact_info = result.get("artifact", {})
-                encoding = artifact_info.get("encoding", "utf-8")
-
-                # Check for base64 encoded data
-                if encoding == "base64":
-                    import base64
-
-                    data = artifact_info.get("data")
-                    if data:
-                        return base64.b64decode(data)
-                    # Also check for image content
-                    for item in result.get("content", []):
-                        if item.get("type") == "image":
-                            return base64.b64decode(item.get("data", ""))
-                    return None
-
-                # Text content
-                content = result.get("content", [])
-                if content:
-                    text = content[0].get("text", "")
-                    return text.encode("utf-8")
-                return None
-
-            except Exception as e:
-                logger.debug(f"Failed to read file {path}: {e}")
-                return None
+            return await self._read_sandbox_file(call_tool_fn, sandbox_id, path)
 
         # Scan for new artifacts
         return await self.scan_for_new_artifacts(
@@ -495,7 +513,5 @@ def extract_artifacts_from_mcp_result(
 
                 except Exception as e:
                     logger.warning(f"Failed to decode MCP resource blob: {e}")
-
-    return artifacts
 
     return artifacts

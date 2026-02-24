@@ -121,6 +121,40 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
             logger.error(f"[AgentEventBus] Failed to publish to {stream_key}: {e}")
             raise
 
+    _TERMINAL_EVENTS = frozenset(
+        {
+            AgentEventType.COMPLETE,
+            AgentEventType.ERROR,
+            AgentEventType.CANCELLED,
+        }
+    )
+
+    def _filter_stream_messages(
+        self,
+        streams: list,
+        from_time_us: int,
+        from_counter: int,
+    ) -> tuple[list[AgentEvent], str | None, bool]:
+        """Filter and parse stream messages.
+
+        Returns (events, last_id, is_terminal).
+        """
+        events: list[AgentEvent] = []
+        last_id: str | None = None
+        for _stream_name, messages in streams:
+            for msg_id, fields in messages:
+                last_id = self._decode_bytes(msg_id)
+                event = self._parse_stream_message(msg_id, fields)
+                if not event:
+                    continue
+                if event.event_time_us > from_time_us or (
+                    event.event_time_us == from_time_us and event.event_counter >= from_counter
+                ):
+                    events.append(event)
+                    if event.event_type in self._TERMINAL_EVENTS:
+                        return events, last_id, True
+        return events, last_id, False
+
     async def subscribe_events(
         self,
         conversation_id: str,
@@ -155,35 +189,19 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
                 )
 
                 if not streams:
-                    # Timeout with no new events - check if complete
                     if await self._is_stream_complete(conversation_id, message_id):
                         return
                     continue
 
-                for _stream_name, messages in streams:
-                    for msg_id, fields in messages:
-                        event = self._parse_stream_message(msg_id, fields)
-                        if event and (
-                            event.event_time_us > from_time_us
-                            or (
-                                event.event_time_us == from_time_us
-                                and event.event_counter >= from_counter
-                            )
-                        ):
-                            yield event
-                            # Check if this is a terminal event
-                            if event.event_type in (
-                                AgentEventType.COMPLETE,
-                                AgentEventType.ERROR,
-                                AgentEventType.CANCELLED,
-                            ):
-                                return
-
-                        # Update last_id for next iteration
-                        if isinstance(msg_id, bytes):
-                            last_id = msg_id.decode("utf-8")
-                        else:
-                            last_id = msg_id
+                events, new_last_id, is_terminal = self._filter_stream_messages(
+                    streams, from_time_us, from_counter
+                )
+                if new_last_id is not None:
+                    last_id = new_last_id
+                for event in events:
+                    yield event
+                if is_terminal:
+                    return
 
             except redis.ConnectionError as e:
                 logger.error(f"[AgentEventBus] Connection error on {stream_key}: {e}")
@@ -328,59 +346,46 @@ class RedisAgentEventBusAdapter(AgentEventBusPort):
     # Private helper methods
     # =========================================================================
 
+    @staticmethod
+    def _decode_bytes(value: Any) -> Any:
+        """Decode a value from bytes if needed."""
+        return value.decode("utf-8") if isinstance(value, bytes) else value
+
+    @staticmethod
+    def _decode_int_field(value: Any, default: int = 0) -> int:
+        """Decode a bytes/str value to int with a default."""
+        if isinstance(value, bytes):
+            return int(value.decode())
+        return int(value) if value else default
+
+    @staticmethod
+    def _parse_data_field(data: Any) -> dict:
+        """Parse the data field from raw string/bytes to dict."""
+        if isinstance(data, bytes):
+            data = data.decode("utf-8")
+        if data:
+            try:
+                return json.loads(data)
+            except json.JSONDecodeError:
+                return {"raw": data}
+        return {}
+
     def _parse_stream_message(self, msg_id: Any, fields: dict[Any, Any]) -> AgentEvent | None:
         """Parse a raw Redis stream message into AgentEvent."""
         try:
-            # Decode message ID
-            if isinstance(msg_id, bytes):
-                msg_id = msg_id.decode("utf-8")
+            msg_id = self._decode_bytes(msg_id)
 
             # Helper to get field value
             def get_field(key: str) -> Any:
                 return fields.get(key.encode()) if key.encode() in fields else fields.get(key)
 
-            sequence = get_field("event_time_us")
-            counter = get_field("event_counter")
-            event_type = get_field("event_type")
-            data = get_field("data")
-            timestamp = get_field("timestamp")
-            conversation_id = get_field("conversation_id")
-            message_id = get_field("message_id")
-
-            # Decode bytes
-            if isinstance(sequence, bytes):
-                sequence = int(sequence.decode())
-            else:
-                sequence = int(sequence) if sequence else 0
-
-            if isinstance(counter, bytes):
-                counter = int(counter.decode())
-            else:
-                counter = int(counter) if counter else 0
-
-            if isinstance(event_type, bytes):
-                event_type = event_type.decode()
-
-            if isinstance(data, bytes):
-                data = data.decode()
-
-            if isinstance(timestamp, bytes):
-                timestamp = timestamp.decode()
-
-            if isinstance(conversation_id, bytes):
-                conversation_id = conversation_id.decode()
-
-            if isinstance(message_id, bytes):
-                message_id = message_id.decode()
-
-            # Parse JSON data
-            if data:
-                try:
-                    data = json.loads(data)
-                except json.JSONDecodeError:
-                    data = {"raw": data}
-            else:
-                data = {}
+            sequence = self._decode_int_field(get_field("event_time_us"))
+            counter = self._decode_int_field(get_field("event_counter"))
+            event_type = self._decode_bytes(get_field("event_type"))
+            data = self._parse_data_field(get_field("data"))
+            timestamp = self._decode_bytes(get_field("timestamp"))
+            conversation_id = self._decode_bytes(get_field("conversation_id"))
+            message_id = self._decode_bytes(get_field("message_id"))
 
             return AgentEvent(
                 event_id=msg_id,

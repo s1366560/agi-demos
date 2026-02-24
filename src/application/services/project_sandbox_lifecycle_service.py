@@ -262,116 +262,20 @@ class ProjectSandboxLifecycleService:
             use_redis_lock = self._distributed_lock is not None
 
             try:
-                if use_redis_lock:
-                    # Use Redis distributed lock (preferred)
-                    lock_handle = await self._distributed_lock.acquire(
-                        key=lock_key,
-                        ttl=120,  # 2 minutes for container creation
-                        blocking=True,
-                        timeout=30.0,
-                    )
-                    db_lock_acquired = lock_handle is not None
-                    if db_lock_acquired:
-                        logger.debug(f"Redis lock acquired for project {project_id}: {lock_handle}")
-                else:
-                    # Fallback to PostgreSQL advisory lock
-                    db_lock_acquired = await self._repository.acquire_project_lock(
-                        project_id, blocking=True, timeout_seconds=30
-                    )
+                lock_handle, db_lock_acquired = await self._acquire_distributed_lock(
+                    lock_key, project_id, use_redis_lock
+                )
 
                 if not db_lock_acquired:
-                    # Another process is creating, wait and check
-                    logger.info(
-                        f"Project {project_id} sandbox creation locked by another worker, waiting..."
-                    )
-                    await asyncio.sleep(1.0)
-                    existing = await self._repository.find_by_project(project_id)
-                    if existing:
-                        if existing.is_usable():
-                            existing.mark_accessed()
-                            await self._repository.save(existing)
-                            return await self._get_sandbox_info(existing)
-                        # Created but not usable, fall through to handle
-                    # Lock not acquired and no existing sandbox, retry
-                    raise SandboxLockTimeoutError(
-                        message=f"Could not acquire lock for project {project_id}",
-                        project_id=project_id,
-                        timeout_seconds=30.0,
-                    )
+                    return await self._handle_lock_not_acquired(project_id)
 
                 # Lock acquired, proceed with double-check
                 existing = await self._repository.find_by_project(project_id)
 
                 if existing:
-                    logger.debug(
-                        f"Found existing sandbox for project {project_id}: "
-                        f"status={existing.status}, status_value={existing.status.value}"
-                    )
-                    # CRITICAL: Verify container actually exists before returning
-                    # This handles cases where container was externally killed/deleted
-                    if existing.is_usable():
-                        container_exists = await self._adapter.container_exists(existing.sandbox_id)
-                        if container_exists:
-                            existing.mark_accessed()
-                            await self._repository.save(existing)
-                            return await self._get_sandbox_info(existing)
-                        else:
-                            # Container was killed/deleted externally, need to rebuild
-                            logger.warning(
-                                f"Project {project_id} sandbox {existing.sandbox_id} "
-                                f"marked as {existing.status.value} but container doesn't exist. "
-                                f"Triggering rebuild..."
-                            )
-                            # Clean up any orphan containers and rebuild
-                            await self._cleanup_failed_sandbox(existing)
-                            # Fall through to create new
-
-                    # Sandbox exists but not running - try to recover or recreate
-                    elif existing.status == ProjectSandboxStatus.STOPPED:
-                        logger.info(f"Project {project_id} sandbox stopped, restarting...")
-                        return await self._restart_sandbox(existing)
-
-                    elif existing.status == ProjectSandboxStatus.ERROR:
-                        logger.warning(
-                            f"Project {project_id} sandbox in error state, recreating..."
-                        )
-                        await self._cleanup_failed_sandbox(existing)
-                        # Fall through to create new
-
-                    elif existing.status == ProjectSandboxStatus.UNHEALTHY and self._auto_recover:
-                        logger.info(
-                            f"Project {project_id} sandbox unhealthy, attempting recovery..."
-                        )
-                        recovered = await self._recover_sandbox(existing)
-                        if recovered:
-                            return await self._get_sandbox_info(existing)
-                        # Recovery failed, recreate
-                        await self._cleanup_failed_sandbox(existing)
-
-                    elif existing.status == ProjectSandboxStatus.CREATING:
-                        # Check if container actually exists for CREATING state
-                        # It might be stuck in CREATING if previous creation failed
-                        container_exists = await self._adapter.container_exists(existing.sandbox_id)
-                        if container_exists:
-                            # Container exists, wait for it
-                            logger.info(
-                                f"Project {project_id} sandbox is being created, waiting..."
-                            )
-                            return await self._get_sandbox_info(existing)
-                        else:
-                            # CREATING but no container - previous creation failed
-                            logger.warning(
-                                f"Project {project_id} sandbox stuck in CREATING state "
-                                f"but container doesn't exist. Rebuilding..."
-                            )
-                            await self._cleanup_failed_sandbox(existing)
-                            # Fall through to create new
-
-                    elif existing.status == ProjectSandboxStatus.TERMINATED:
-                        # Sandbox was explicitly terminated, clean up and create new
-                        logger.info(f"Project {project_id} sandbox terminated, creating new...")
-                        await self._cleanup_failed_sandbox(existing)
-                        # Fall through to create new
+                    result = await self._handle_existing_sandbox(existing, project_id)
+                    if result is not None:
+                        return result
 
                 # Create new sandbox (under both locks)
                 # The distributed lock is held until this method returns
@@ -382,16 +286,189 @@ class ProjectSandboxLifecycleService:
                     config_override=config_override,
                 )
             finally:
-                # CRITICAL: Release the distributed lock after container creation completes
-                if use_redis_lock and lock_handle:
-                    released = await self._distributed_lock.release(lock_handle)
-                    if released:
-                        logger.debug(f"Redis lock released for project {project_id}")
-                    else:
-                        logger.warning(f"Failed to release Redis lock for project {project_id}")
-                elif not use_redis_lock:
-                    # Fallback: release PostgreSQL advisory lock
-                    await self._repository.release_project_lock(project_id)
+                await self._release_distributed_lock(lock_handle, project_id, use_redis_lock)
+
+    async def _acquire_distributed_lock(
+        self,
+        lock_key: str,
+        project_id: str,
+        use_redis_lock: bool,
+    ) -> tuple[Any, bool]:
+        """Acquire distributed lock via Redis or PostgreSQL fallback.
+
+        Returns:
+            Tuple of (lock_handle, lock_acquired).
+        """
+        lock_handle = None
+        if use_redis_lock:
+            # Use Redis distributed lock (preferred)
+            lock_handle = await self._distributed_lock.acquire(
+                key=lock_key,
+                ttl=120,  # 2 minutes for container creation
+                blocking=True,
+                timeout=30.0,
+            )
+            db_lock_acquired = lock_handle is not None
+            if db_lock_acquired:
+                logger.debug(f"Redis lock acquired for project {project_id}: {lock_handle}")
+        else:
+            # Fallback to PostgreSQL advisory lock
+            db_lock_acquired = await self._repository.acquire_project_lock(
+                project_id, blocking=True, timeout_seconds=30
+            )
+        return lock_handle, db_lock_acquired
+
+    async def _release_distributed_lock(
+        self,
+        lock_handle: Any,
+        project_id: str,
+        use_redis_lock: bool,
+    ) -> None:
+        """Release distributed lock after container creation completes."""
+        if use_redis_lock and lock_handle:
+            released = await self._distributed_lock.release(lock_handle)
+            if released:
+                logger.debug(f"Redis lock released for project {project_id}")
+            else:
+                logger.warning(f"Failed to release Redis lock for project {project_id}")
+        elif not use_redis_lock:
+            # Fallback: release PostgreSQL advisory lock
+            await self._repository.release_project_lock(project_id)
+
+    async def _handle_lock_not_acquired(self, project_id: str) -> SandboxInfo:
+        """Handle case when distributed lock could not be acquired.
+
+        Waits briefly and checks for an existing usable sandbox.
+
+        Raises:
+            SandboxLockTimeoutError: If no usable sandbox is found.
+        """
+        logger.info(f"Project {project_id} sandbox creation locked by another worker, waiting...")
+        await asyncio.sleep(1.0)
+        existing = await self._repository.find_by_project(project_id)
+        if existing and existing.is_usable():
+            existing.mark_accessed()
+            await self._repository.save(existing)
+            return await self._get_sandbox_info(existing)
+        raise SandboxLockTimeoutError(
+            message=f"Could not acquire lock for project {project_id}",
+            project_id=project_id,
+            timeout_seconds=30.0,
+        )
+
+    async def _handle_existing_sandbox(
+        self,
+        existing: ProjectSandbox,
+        project_id: str,
+    ) -> SandboxInfo | None:
+        """Handle an existing sandbox association based on its status.
+
+        Returns:
+            SandboxInfo if the sandbox is usable/recovered, None if a new sandbox
+            should be created (after cleanup).
+        """
+        logger.debug(
+            f"Found existing sandbox for project {project_id}: "
+            f"status={existing.status}, status_value={existing.status.value}"
+        )
+
+        # Dispatch to status-specific handlers
+        _status_handlers: dict[ProjectSandboxStatus, Any] = {
+            ProjectSandboxStatus.RUNNING: self._handle_status_running,
+            ProjectSandboxStatus.STOPPED: self._handle_status_stopped,
+            ProjectSandboxStatus.ERROR: self._handle_status_error,
+            ProjectSandboxStatus.UNHEALTHY: self._handle_status_unhealthy,
+            ProjectSandboxStatus.CREATING: self._handle_status_creating,
+            ProjectSandboxStatus.TERMINATED: self._handle_status_terminated,
+        }
+
+        # RUNNING status is also triggered for any other "usable" state
+        if existing.is_usable():
+            return await self._handle_status_running(existing, project_id)
+
+        handler = _status_handlers.get(existing.status)
+        if handler is not None:
+            return await handler(existing, project_id)
+
+        # Unknown status, fall through to create new
+        return None
+
+    async def _handle_status_running(
+        self, existing: ProjectSandbox, project_id: str
+    ) -> SandboxInfo | None:
+        """Handle sandbox in RUNNING/usable state.
+
+        Verifies the container actually exists before returning.
+        """
+        container_exists = await self._adapter.container_exists(existing.sandbox_id)
+        if container_exists:
+            existing.mark_accessed()
+            await self._repository.save(existing)
+            return await self._get_sandbox_info(existing)
+
+        # Container was killed/deleted externally, need to rebuild
+        logger.warning(
+            f"Project {project_id} sandbox {existing.sandbox_id} "
+            f"marked as {existing.status.value} but container doesn't exist. "
+            f"Triggering rebuild..."
+        )
+        await self._cleanup_failed_sandbox(existing)
+        return None
+
+    async def _handle_status_stopped(
+        self, existing: ProjectSandbox, project_id: str
+    ) -> SandboxInfo | None:
+        """Handle sandbox in STOPPED state by restarting."""
+        logger.info(f"Project {project_id} sandbox stopped, restarting...")
+        return await self._restart_sandbox(existing)
+
+    async def _handle_status_error(
+        self, existing: ProjectSandbox, project_id: str
+    ) -> SandboxInfo | None:
+        """Handle sandbox in ERROR state by cleaning up for recreation."""
+        logger.warning(f"Project {project_id} sandbox in error state, recreating...")
+        await self._cleanup_failed_sandbox(existing)
+        return None
+
+    async def _handle_status_unhealthy(
+        self, existing: ProjectSandbox, project_id: str
+    ) -> SandboxInfo | None:
+        """Handle sandbox in UNHEALTHY state with recovery attempt."""
+        if not self._auto_recover:
+            return None
+        logger.info(f"Project {project_id} sandbox unhealthy, attempting recovery...")
+        recovered = await self._recover_sandbox(existing)
+        if recovered:
+            return await self._get_sandbox_info(existing)
+        # Recovery failed, recreate
+        await self._cleanup_failed_sandbox(existing)
+        return None
+
+    async def _handle_status_creating(
+        self, existing: ProjectSandbox, project_id: str
+    ) -> SandboxInfo | None:
+        """Handle sandbox stuck in CREATING state."""
+        container_exists = await self._adapter.container_exists(existing.sandbox_id)
+        if container_exists:
+            # Container exists, wait for it
+            logger.info(f"Project {project_id} sandbox is being created, waiting...")
+            return await self._get_sandbox_info(existing)
+
+        # CREATING but no container - previous creation failed
+        logger.warning(
+            f"Project {project_id} sandbox stuck in CREATING state "
+            f"but container doesn't exist. Rebuilding..."
+        )
+        await self._cleanup_failed_sandbox(existing)
+        return None
+
+    async def _handle_status_terminated(
+        self, existing: ProjectSandbox, project_id: str
+    ) -> SandboxInfo | None:
+        """Handle sandbox in TERMINATED state by cleaning up for recreation."""
+        logger.info(f"Project {project_id} sandbox terminated, creating new...")
+        await self._cleanup_failed_sandbox(existing)
+        return None
 
     async def get_project_sandbox(self, project_id: str) -> SandboxInfo | None:
         """Get sandbox info for a project if it exists.

@@ -224,13 +224,87 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         """List all active providers."""
         return await self.list_all(include_inactive=False)
 
+    def _apply_simple_field_updates(
+        self, orm: LLMProviderORM, config: ProviderConfigUpdate
+    ) -> None:
+        """Apply simple scalar field updates from config to ORM."""
+        simple_fields: list[tuple[str, str | None]] = [
+            ("name", None),
+            ("base_url", None),
+            ("llm_model", None),
+            ("llm_small_model", None),
+            ("reranker_model", None),
+        ]
+        for field_name, orm_attr in simple_fields:
+            value = getattr(config, field_name, None)
+            if value is not None:
+                setattr(orm, orm_attr or field_name, value)
+
+        if config.provider_type is not None:
+            orm.provider_type = config.provider_type.value
+        if config.is_active is not None:
+            orm.is_active = config.is_active
+        if config.is_default is not None:
+            orm.is_default = config.is_default
+
+    def _apply_api_key_update(
+        self, orm: LLMProviderORM, config: ProviderConfigUpdate
+    ) -> None:
+        """Encrypt and apply API key update if provided."""
+        if config.api_key is None:
+            return
+        provider_type = config.provider_type or ProviderType(orm.provider_type)
+        storable_api_key = to_storable_api_key(provider_type, config.api_key)
+        orm.api_key_encrypted = self.encryption_service.encrypt(storable_api_key)
+
+    def _apply_embedding_config_update(
+        self,
+        orm: LLMProviderORM,
+        config: ProviderConfigUpdate,
+        updated_config: dict,
+    ) -> bool:
+        """Apply embedding_config update. Returns True if config dict was modified."""
+        embedding_payload = self._build_embedding_payload(
+            config.embedding_model,
+            config.embedding_config,
+        )
+        if embedding_payload:
+            updated_config["embedding"] = embedding_payload
+            orm.embedding_model = embedding_payload.get("model")
+        else:
+            updated_config.pop("embedding", None)
+            orm.embedding_model = None
+        return True
+
+    def _apply_embedding_model_update(
+        self,
+        orm: LLMProviderORM,
+        config: ProviderConfigUpdate,
+        updated_config: dict,
+    ) -> bool:
+        """Apply embedding_model-only update. Returns True if config dict was modified."""
+        existing_embedding = (
+            dict(updated_config.get("embedding", {}))
+            if isinstance(updated_config.get("embedding"), dict)
+            else {}
+        )
+        if config.embedding_model:
+            existing_embedding["model"] = config.embedding_model
+        else:
+            existing_embedding.pop("model", None)
+        if existing_embedding:
+            updated_config["embedding"] = existing_embedding
+        else:
+            updated_config.pop("embedding", None)
+        orm.embedding_model = config.embedding_model
+        return True
+
     async def update(
         self, provider_id: UUID, config: ProviderConfigUpdate
     ) -> ProviderConfig | None:
         """Update provider configuration."""
         session = await self._get_session()
 
-        # Get existing provider
         from uuid import UUID as _UUID
 
         pid = _UUID(str(provider_id))
@@ -240,64 +314,25 @@ class SQLAlchemyProviderRepository(ProviderRepository):
         if not orm:
             return None
 
-        # Update fields
-        if config.name is not None:
-            orm.name = config.name
-        if config.provider_type is not None:
-            orm.provider_type = config.provider_type.value
-        if config.api_key is not None:
-            provider_type = config.provider_type or ProviderType(orm.provider_type)
-            storable_api_key = to_storable_api_key(provider_type, config.api_key)
-            orm.api_key_encrypted = self.encryption_service.encrypt(storable_api_key)
-        if config.base_url is not None:
-            orm.base_url = config.base_url
-        if config.llm_model is not None:
-            orm.llm_model = config.llm_model
-        if config.llm_small_model is not None:
-            orm.llm_small_model = config.llm_small_model
+        self._apply_simple_field_updates(orm, config)
+        self._apply_api_key_update(orm, config)
+
         should_update_config = config.config is not None
         updated_config = (
             dict(config.config) if config.config is not None else dict(orm.config or {})
         )
+
         if config.embedding_config is not None:
-            embedding_payload = self._build_embedding_payload(
-                config.embedding_model,
-                config.embedding_config,
+            should_update_config = self._apply_embedding_config_update(
+                orm, config, updated_config
             )
-
-            if embedding_payload:
-                updated_config["embedding"] = embedding_payload
-                orm.embedding_model = embedding_payload.get("model")
-            else:
-                updated_config.pop("embedding", None)
-                orm.embedding_model = None
-
         elif config.embedding_model is not None:
-            existing_embedding = (
-                dict(updated_config.get("embedding", {}))
-                if isinstance(updated_config.get("embedding"), dict)
-                else {}
+            should_update_config = self._apply_embedding_model_update(
+                orm, config, updated_config
             )
-            if config.embedding_model:
-                existing_embedding["model"] = config.embedding_model
-            else:
-                existing_embedding.pop("model", None)
-            if existing_embedding:
-                updated_config["embedding"] = existing_embedding
-            else:
-                updated_config.pop("embedding", None)
-            orm.embedding_model = config.embedding_model
-            should_update_config = True
-        if config.reranker_model is not None:
-            orm.reranker_model = config.reranker_model
-        if config.embedding_config is not None:
-            should_update_config = True
+
         if should_update_config:
             orm.config = updated_config
-        if config.is_active is not None:
-            orm.is_active = config.is_active
-        if config.is_default is not None:
-            orm.is_default = config.is_default
 
         await session.flush()
         await session.commit()

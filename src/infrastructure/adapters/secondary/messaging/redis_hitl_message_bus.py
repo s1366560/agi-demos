@@ -161,7 +161,24 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
             start_from_latest=False,  # Read all messages, including pending
         )
 
-        # First, check for pending messages (messages already delivered but not acked)
+        # First, check for pending messages
+        async for msg in self._read_pending_messages(stream_key, consumer_group, consumer_name):
+            yield msg
+
+        # Now wait for new messages
+        async for msg in self._poll_new_messages(
+            stream_key, consumer_group, consumer_name, block_ms
+        ):
+            yield msg
+            return  # Single response expected, exit after receiving
+
+    async def _read_pending_messages(
+        self,
+        stream_key: str,
+        consumer_group: str,
+        consumer_name: str,
+    ) -> AsyncIterator[HITLMessage]:
+        """Read pending messages that were delivered but not acknowledged."""
         try:
             pending = await self._redis.xreadgroup(
                 groupname=consumer_group,
@@ -181,7 +198,14 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
         except Exception as e:
             logger.warning(f"[HITLMessageBus] Error reading pending from {stream_key}: {e}")
 
-        # Now wait for new messages
+    async def _poll_new_messages(
+        self,
+        stream_key: str,
+        consumer_group: str,
+        consumer_name: str,
+        block_ms: int,
+    ) -> AsyncIterator[HITLMessage]:
+        """Poll for new messages using consumer group."""
         while True:
             try:
                 streams = await self._redis.xreadgroup(
@@ -193,7 +217,6 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                 )
 
                 if not streams:
-                    # Timeout with no new messages
                     continue
 
                 for _stream_name, messages in streams:
@@ -201,7 +224,7 @@ class RedisHITLMessageBusAdapter(HITLMessageBusPort):
                         message = self._parse_stream_message(msg_id, fields)
                         if message:
                             yield message
-                            return  # Single response expected, exit after receiving
+                            return
 
             except redis.ConnectionError as e:
                 logger.error(f"[HITLMessageBus] Connection error on {stream_key}: {e}")

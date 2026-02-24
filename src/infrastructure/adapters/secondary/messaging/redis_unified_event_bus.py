@@ -227,6 +227,20 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
         finally:
             self._active_subscriptions.pop(subscription_id, None)
 
+    def _iter_decoded_messages(
+        self, streams: list, stream_name_key: str | None = None
+    ) -> list[tuple[str, str, dict]]:
+        """Decode stream messages, returning (stream_name, msg_id, fields) tuples."""
+        results: list[tuple[str, str, dict]] = []
+        for stream_name, messages in streams:
+            if isinstance(stream_name, bytes):
+                stream_name = stream_name.decode("utf-8")
+            for msg_id, fields in messages:
+                if isinstance(msg_id, bytes):
+                    msg_id = msg_id.decode("utf-8")
+                results.append((stream_name, msg_id, fields))
+        return results
+
     async def _subscribe_direct(
         self,
         pattern: str,
@@ -234,18 +248,15 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
         subscription_id: str,
     ) -> AsyncIterator[EventWithMetadata]:
         """Direct subscription without consumer group."""
-        # Get matching stream keys
         stream_keys = await self._get_matching_streams(pattern)
         if not stream_keys:
             logger.debug(f"[UnifiedEventBus] No streams match pattern: {pattern}")
             return
 
-        # Build stream dict with last_id tracking
         last_ids: dict[str, str] = dict.fromkeys(stream_keys, "$")
 
         while self._active_subscriptions.get(subscription_id, False):
             try:
-                # Read from all matching streams
                 streams = await self._redis.xread(
                     last_ids,
                     count=opts.batch_size,
@@ -253,30 +264,21 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                 )
 
                 if not streams:
-                    # Check for new matching streams periodically
                     new_streams = await self._get_matching_streams(pattern)
                     for key in new_streams:
                         if key not in last_ids:
                             last_ids[key] = "0"
                     continue
 
-                for stream_name, messages in streams:
-                    if isinstance(stream_name, bytes):
-                        stream_name = stream_name.decode("utf-8")
-
-                    for msg_id, fields in messages:
-                        if isinstance(msg_id, bytes):
-                            msg_id = msg_id.decode("utf-8")
-
-                        event = self._parse_message(msg_id, fields, stream_name)
-                        if event:
-                            yield event
-
-                        last_ids[stream_name] = msg_id
+                for stream_name, msg_id, fields in self._iter_decoded_messages(streams):
+                    event = self._parse_message(msg_id, fields, stream_name)
+                    if event:
+                        yield event
+                    last_ids[stream_name] = msg_id
 
             except redis.ConnectionError as e:
                 logger.error(f"[UnifiedEventBus] Connection error: {e}")
-                await asyncio.sleep(1)  # Brief pause before retry
+                await asyncio.sleep(1)
             except Exception as e:
                 logger.error(f"[UnifiedEventBus] Subscribe error: {e}")
                 raise EventSubscribeError(str(e), pattern=pattern) from e
@@ -291,7 +293,6 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
         consumer_group = opts.consumer_group
         consumer_name = opts.consumer_name or f"consumer-{id(self)}"
 
-        # Get matching streams and ensure consumer groups exist
         stream_keys = await self._get_matching_streams(pattern)
         for key in stream_keys:
             await self._ensure_consumer_group(key, consumer_group)
@@ -300,7 +301,6 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
 
         while self._active_subscriptions.get(subscription_id, False):
             try:
-                # Read using consumer group
                 streams = await self._redis.xreadgroup(
                     groupname=consumer_group,
                     consumername=consumer_name,
@@ -312,25 +312,15 @@ class RedisUnifiedEventBusAdapter(UnifiedEventBusPort):
                 if not streams:
                     continue
 
-                for stream_name, messages in streams:
-                    if isinstance(stream_name, bytes):
-                        stream_name = stream_name.decode("utf-8")
-
-                    for msg_id, fields in messages:
-                        if isinstance(msg_id, bytes):
-                            msg_id = msg_id.decode("utf-8")
-
-                        event = self._parse_message(msg_id, fields, stream_name)
-                        if event:
-                            yield event
-
-                            # Auto-ack if configured
-                            if opts.ack_immediately:
-                                await self._redis.xack(stream_name, consumer_group, msg_id)
+                for stream_name, msg_id, fields in self._iter_decoded_messages(streams):
+                    event = self._parse_message(msg_id, fields, stream_name)
+                    if event:
+                        yield event
+                        if opts.ack_immediately:
+                            await self._redis.xack(stream_name, consumer_group, msg_id)
 
             except redis.ResponseError as e:
                 if "NOGROUP" in str(e):
-                    # Group was deleted, recreate
                     for key in stream_keys:
                         await self._ensure_consumer_group(key, consumer_group)
                 else:

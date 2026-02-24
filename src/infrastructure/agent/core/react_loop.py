@@ -243,6 +243,7 @@ class ReActLoop:
         self._current_plan_step: int = 0
         self._task_statuses: dict[str, str] = {}
         self._no_progress_steps: int = 0
+        self._last_evaluated_result: LoopResult = LoopResult.CONTINUE
 
     @property
     def state(self) -> LoopState:
@@ -257,6 +258,71 @@ class ReActLoop:
     def set_abort_event(self, event: asyncio.Event) -> None:
         """Set abort event for cancellation."""
         self._abort_event = event
+
+    def _reset_loop_state(self) -> None:
+        """Reset all loop state for a new run."""
+        self._step_count = 0
+        self._state = LoopState.IDLE
+        self._task_statuses = {}
+        self._no_progress_steps = 0
+        if self._doom_loop_detector:
+            self._doom_loop_detector.reset()
+
+    def _try_generate_work_plan(
+        self, messages: list[dict[str, Any]], tools: dict[str, Any]
+    ) -> None:
+        """Generate work plan if enabled and applicable."""
+        if not (self._config.enable_work_plan and self._work_plan_generator):
+            return
+        user_query = self._extract_user_query(messages)
+        if user_query:
+            work_plan = self._work_plan_generator.generate(user_query, tools)
+            if work_plan:
+                self._work_plan = work_plan
+
+    async def _run_iteration(
+        self,
+        messages: list[dict[str, Any]],
+        tools: dict[str, Any],
+        context: LoopContext,
+    ) -> AsyncIterator[AgentDomainEvent]:
+        """Run a single iteration of the loop. Sets self._last_evaluated_result."""
+        # Check abort and step limit
+        abort_event = self._check_abort_and_step_limit()
+        if abort_event is not None:
+            yield abort_event
+            self._state = LoopState.ERROR
+            self._last_evaluated_result = LoopResult.STOP
+            return
+
+        # Process one step
+        had_tool_calls = False
+        last_thought = ""
+        step_loop_result = LoopResult.CONTINUE
+
+        async for event in self._process_step(messages, tools, context):
+            yield event
+            classification = self._classify_step_event(event)
+            if classification == "error":
+                step_loop_result = LoopResult.STOP
+                break
+            elif classification == "tool_call":
+                had_tool_calls = True
+            elif classification == "compact":
+                step_loop_result = LoopResult.COMPACT
+                break
+            elif classification == "thought":
+                last_thought = event.content
+
+        # Determine final step result
+        if step_loop_result == LoopResult.CONTINUE and had_tool_calls:
+            self._no_progress_steps = 0
+        elif step_loop_result == LoopResult.CONTINUE:
+            async for ev in self._evaluate_no_tool_result(last_thought):
+                yield ev
+            step_loop_result = self._last_evaluated_result
+
+        self._last_evaluated_result = step_loop_result
 
     async def run(
         self,
@@ -275,119 +341,22 @@ class ReActLoop:
         Yields:
             AgentDomainEvent objects for real-time streaming
         """
-        self._step_count = 0
-        self._state = LoopState.IDLE
-        self._task_statuses = {}
-        self._no_progress_steps = 0
-
-        if self._doom_loop_detector:
-            self._doom_loop_detector.reset()
+        self._reset_loop_state()
 
         # Emit start event
         yield AgentStartEvent()
         self._state = LoopState.THINKING
 
         # Generate work plan if enabled
-        if self._config.enable_work_plan and self._work_plan_generator:
-            user_query = self._extract_user_query(messages)
-            if user_query:
-                work_plan = self._work_plan_generator.generate(user_query, tools)
-                if work_plan:
-                    self._work_plan = work_plan
+        self._try_generate_work_plan(messages, tools)
 
         try:
             result = LoopResult.CONTINUE
 
             while result == LoopResult.CONTINUE:
-                # Check abort
-                if self._abort_event and self._abort_event.is_set():
-                    yield AgentErrorEvent(message="Processing aborted", code="ABORTED")
-                    self._state = LoopState.ERROR
-                    return
-
-                # Check step limit
-                self._step_count += 1
-                if self._step_count > self._config.max_steps:
-                    yield AgentErrorEvent(
-                        message=f"Maximum steps ({self._config.max_steps}) exceeded",
-                        code="MAX_STEPS_EXCEEDED",
-                    )
-                    self._state = LoopState.ERROR
-                    return
-
-                # Process one step
-                step_result = StepResult(result=LoopResult.CONTINUE)
-                had_tool_calls = False
-                last_thought = ""
-
-                async for event in self._process_step(messages, tools, context):
+                async for event in self._run_iteration(messages, tools, context):
                     yield event
-
-                    # Check for stop conditions
-                    if event.event_type == AgentEventType.ERROR:
-                        step_result.result = LoopResult.STOP
-                        break
-                    elif event.event_type == AgentEventType.ACT:
-                        had_tool_calls = True
-                    elif event.event_type == AgentEventType.COMPACT_NEEDED:
-                        step_result.result = LoopResult.COMPACT
-                        break
-                    elif (
-                        event.event_type == AgentEventType.THOUGHT
-                        and isinstance(event, AgentThoughtEvent)
-                        and event.content
-                    ):
-                        last_thought = event.content
-                    elif event.event_type == AgentEventType.TASK_LIST_UPDATED:
-                        self._ingest_task_list_event(event)
-                    elif event.event_type == AgentEventType.TASK_UPDATED:
-                        self._ingest_task_update_event(event)
-
-                # If no stop/compact, determine result from tool calls
-                if step_result.result == LoopResult.CONTINUE:
-                    if had_tool_calls:
-                        self._no_progress_steps = 0
-                        step_result.result = LoopResult.CONTINUE
-                    else:
-                        goal_check = self._evaluate_goal_state(last_thought)
-                        if goal_check.achieved:
-                            self._no_progress_steps = 0
-                            yield AgentStatusEvent(status=f"goal_achieved:{goal_check.source}")
-                            step_result.result = LoopResult.COMPLETE
-                        elif self._is_conversational_text(last_thought):
-                            # Text-only response without tool calls and without an
-                            # explicit goal_achieved=false signal — treat as a
-                            # deliberate conversational reply.
-                            self._no_progress_steps = 0
-                            yield AgentStatusEvent(status="goal_achieved:conversational_response")
-                            step_result.result = LoopResult.COMPLETE
-                        elif goal_check.should_stop:
-                            yield AgentErrorEvent(
-                                message=goal_check.reason or "Goal cannot be completed",
-                                code="GOAL_NOT_ACHIEVED",
-                            )
-                            self._state = LoopState.ERROR
-                            step_result.result = LoopResult.STOP
-                        else:
-                            self._no_progress_steps += 1
-                            yield AgentStatusEvent(status=f"goal_pending:{goal_check.source}")
-                            if self._no_progress_steps > 1:
-                                yield AgentStatusEvent(status="planning_recheck")
-                            if self._no_progress_steps >= self._config.max_no_progress_steps:
-                                yield AgentErrorEvent(
-                                    message=(
-                                        "Goal not achieved after "
-                                        f"{self._no_progress_steps} no-progress turns. "
-                                        f"{goal_check.reason or 'Replan required.'}"
-                                    ),
-                                    code="GOAL_NOT_ACHIEVED",
-                                )
-                                self._state = LoopState.ERROR
-                                step_result.result = LoopResult.STOP
-                            else:
-                                step_result.result = LoopResult.CONTINUE
-
-                result = step_result.result
+                result = self._last_evaluated_result
 
             # Emit completion
             if result == LoopResult.COMPLETE:
@@ -403,6 +372,82 @@ class ReActLoop:
             logger.error(f"ReAct loop error: {e}", exc_info=True)
             yield AgentErrorEvent(message=str(e), code=type(e).__name__)
             self._state = LoopState.ERROR
+
+    def _check_abort_and_step_limit(self) -> AgentDomainEvent | None:
+        """Check for abort signal or step limit. Returns error event or None."""
+        if self._abort_event and self._abort_event.is_set():
+            return AgentErrorEvent(message="Processing aborted", code="ABORTED")
+
+        self._step_count += 1
+        if self._step_count > self._config.max_steps:
+            return AgentErrorEvent(
+                message=f"Maximum steps ({self._config.max_steps}) exceeded",
+                code="MAX_STEPS_EXCEEDED",
+            )
+        return None
+
+    def _classify_step_event(self, event: AgentDomainEvent) -> str | None:
+        """Classify a step event and update internal state. Returns classification string."""
+        if event.event_type == AgentEventType.ERROR:
+            return "error"
+        if event.event_type == AgentEventType.ACT:
+            return "tool_call"
+        if event.event_type == AgentEventType.COMPACT_NEEDED:
+            return "compact"
+        if (
+            event.event_type == AgentEventType.THOUGHT
+            and isinstance(event, AgentThoughtEvent)
+            and event.content
+        ):
+            return "thought"
+        if event.event_type == AgentEventType.TASK_LIST_UPDATED:
+            self._ingest_task_list_event(event)
+        elif event.event_type == AgentEventType.TASK_UPDATED:
+            self._ingest_task_update_event(event)
+        return None
+
+    async def _evaluate_no_tool_result(self, last_thought: str) -> AsyncIterator[AgentDomainEvent]:
+        """Evaluate goal state when no tool calls were made. Sets self._last_evaluated_result."""
+        goal_check = self._evaluate_goal_state(last_thought)
+
+        if goal_check.achieved:
+            self._no_progress_steps = 0
+            yield AgentStatusEvent(status=f"goal_achieved:{goal_check.source}")
+            self._last_evaluated_result = LoopResult.COMPLETE
+            return
+
+        if self._is_conversational_text(last_thought):
+            self._no_progress_steps = 0
+            yield AgentStatusEvent(status="goal_achieved:conversational_response")
+            self._last_evaluated_result = LoopResult.COMPLETE
+            return
+
+        if goal_check.should_stop:
+            yield AgentErrorEvent(
+                message=goal_check.reason or "Goal cannot be completed",
+                code="GOAL_NOT_ACHIEVED",
+            )
+            self._state = LoopState.ERROR
+            self._last_evaluated_result = LoopResult.STOP
+            return
+
+        self._no_progress_steps += 1
+        yield AgentStatusEvent(status=f"goal_pending:{goal_check.source}")
+        if self._no_progress_steps > 1:
+            yield AgentStatusEvent(status="planning_recheck")
+        if self._no_progress_steps >= self._config.max_no_progress_steps:
+            yield AgentErrorEvent(
+                message=(
+                    "Goal not achieved after "
+                    f"{self._no_progress_steps} no-progress turns. "
+                    f"{goal_check.reason or 'Replan required.'}"
+                ),
+                code="GOAL_NOT_ACHIEVED",
+            )
+            self._state = LoopState.ERROR
+            self._last_evaluated_result = LoopResult.STOP
+        else:
+            self._last_evaluated_result = LoopResult.CONTINUE
 
     def _ingest_task_list_event(self, event: AgentDomainEvent) -> None:
         """Update task status cache from a task list event."""
@@ -496,6 +541,7 @@ class ReActLoop:
         if not stripped:
             return None
 
+        # Try direct parse first
         try:
             parsed = json.loads(stripped)
             if isinstance(parsed, dict):
@@ -503,39 +549,56 @@ class ReActLoop:
         except json.JSONDecodeError:
             pass
 
-        start_idx = stripped.find("{")
+        # Try to find a JSON object embedded in the text
+        return self._find_json_object_in_text(stripped)
+
+    @staticmethod
+    def _match_brace_end(text: str, start_idx: int) -> int:
+        """Find the end index of a brace-balanced JSON object.
+
+        Returns the index of the closing brace, or -1 if no match.
+        """
+        depth = 0
+        in_string = False
+        escape_next = False
+        for index in range(start_idx, len(text)):
+            char = text[index]
+
+            if in_string:
+                if escape_next:
+                    escape_next = False
+                elif char == "\\":
+                    escape_next = True
+                elif char == '"':
+                    in_string = False
+                continue
+
+            if char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return index
+        return -1
+
+    @staticmethod
+    def _find_json_object_in_text(text: str) -> dict[str, Any] | None:
+        """Find and parse a JSON object within text using brace matching."""
+        start_idx = text.find("{")
         while start_idx >= 0:
-            depth = 0
-            in_string = False
-            escape_next = False
-            for index in range(start_idx, len(stripped)):
-                char = stripped[index]
-
-                if in_string:
-                    if escape_next:
-                        escape_next = False
-                    elif char == "\\":
-                        escape_next = True
-                    elif char == '"':
-                        in_string = False
-                    continue
-
-                if char == '"':
-                    in_string = True
-                elif char == "{":
-                    depth += 1
-                elif char == "}":
-                    depth -= 1
-                    if depth == 0:
-                        candidate = stripped[start_idx : index + 1]
-                        try:
-                            parsed = json.loads(candidate)
-                        except json.JSONDecodeError:
-                            break
-                        if isinstance(parsed, dict):
-                            return parsed
-                        break
-            start_idx = stripped.find("{", start_idx + 1)
+            end_idx = ReActLoop._match_brace_end(text, start_idx)
+            if end_idx >= 0:
+                candidate = text[start_idx : end_idx + 1]
+                try:
+                    parsed = json.loads(candidate)
+                except json.JSONDecodeError:
+                    pass
+                else:
+                    if isinstance(parsed, dict):
+                        return parsed
+            start_idx = text.find("{", start_idx + 1)
 
         return None
 

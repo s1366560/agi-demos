@@ -143,16 +143,13 @@ class BaseTransport(ABC):
 class MCPTransportError(Exception):
     """Base exception for transport errors."""
 
-    pass
 
 
 class MCPTransportClosedError(MCPTransportError):
     """Exception raised when transport is closed."""
 
-    pass
 
 
 class MCPTransportTimeoutError(MCPTransportError):
     """Exception raised on transport timeout."""
 
-    pass

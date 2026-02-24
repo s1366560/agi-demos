@@ -57,249 +57,341 @@ def discover_plugins(
     seen_names: set[str] = set()
 
     if include_builtins:
-        for plugin in _builtin_plugins():
-            plugin_name = getattr(plugin, "name", plugin.__class__.__name__)
-            if not _is_enabled(
-                plugin_name, state_store=state_store, include_disabled=include_disabled
-            ):
-                diagnostics.append(
-                    PluginDiagnostic(
-                        plugin_name=plugin_name,
-                        code="plugin_disabled",
-                        message=f"Skipped disabled plugin: {plugin_name}",
-                        level="info",
-                    )
-                )
-                continue
-            discovered.append(
-                DiscoveredPlugin(
-                    name=plugin_name,
-                    plugin=plugin,
-                    source="builtin",
-                )
-            )
-            seen_names.add(plugin_name)
+        _discover_builtin_plugins(
+            state_store=state_store,
+            include_disabled=include_disabled,
+            discovered=discovered,
+            diagnostics=diagnostics,
+            seen_names=seen_names,
+        )
 
     if include_local_paths:
-        for plugin_dir in _iter_local_plugin_dirs(state_store=state_store):
-            plugin_name = plugin_dir.name
-            try:
-                manifest_metadata, manifest_diagnostics = load_local_plugin_manifest(
-                    plugin_dir,
-                    plugin_name=plugin_name,
-                )
-                diagnostics.extend(manifest_diagnostics)
-                if strict_local_manifest and _has_manifest_errors(manifest_diagnostics):
-                    diagnostics.append(
-                        PluginDiagnostic(
-                            plugin_name=plugin_name,
-                            code="plugin_manifest_strict_skip",
-                            message="Skipped plugin due to invalid manifest in strict mode",
-                            level="warning",
-                        )
-                    )
-                    continue
-                plugin = _load_local_plugin(plugin_dir)
-                plugin_name = str(getattr(plugin, "name", plugin_dir.name))
-                if manifest_metadata is not None and manifest_metadata.id != plugin_name:
-                    diagnostics.append(
-                        PluginDiagnostic(
-                            plugin_name=plugin_name,
-                            code="plugin_manifest_id_mismatch",
-                            message=(
-                                "Manifest id does not match plugin runtime name "
-                                f"('{manifest_metadata.id}' != '{plugin_name}')"
-                            ),
-                            level="warning",
-                        )
-                    )
-                    if strict_local_manifest:
-                        diagnostics.append(
-                            PluginDiagnostic(
-                                plugin_name=plugin_name,
-                                code="plugin_manifest_strict_skip",
-                                message="Skipped plugin due to manifest id mismatch in strict mode",
-                                level="warning",
-                            )
-                        )
-                        continue
-                if plugin_name in seen_names:
-                    diagnostics.append(
-                        PluginDiagnostic(
-                            plugin_name=plugin_name,
-                            code="plugin_name_conflict",
-                            message=f"Skipped duplicate plugin name: {plugin_name}",
-                        )
-                    )
-                    continue
-                if not _is_enabled(
-                    plugin_name, state_store=state_store, include_disabled=include_disabled
-                ):
-                    diagnostics.append(
-                        PluginDiagnostic(
-                            plugin_name=plugin_name,
-                            code="plugin_disabled",
-                            message=f"Skipped disabled plugin: {plugin_name}",
-                            level="info",
-                        )
-                    )
-                    continue
-
-                discovered.append(
-                    DiscoveredPlugin(
-                        name=plugin_name,
-                        plugin=plugin,
-                        source="local",
-                        version=manifest_metadata.version if manifest_metadata else None,
-                        kind=manifest_metadata.kind if manifest_metadata else None,
-                        manifest_id=manifest_metadata.id if manifest_metadata else None,
-                        manifest_path=manifest_metadata.manifest_path
-                        if manifest_metadata
-                        else None,
-                        channels=manifest_metadata.channels if manifest_metadata else (),
-                        providers=manifest_metadata.providers if manifest_metadata else (),
-                        skills=manifest_metadata.skills if manifest_metadata else (),
-                    )
-                )
-                seen_names.add(plugin_name)
-            except ImportError as exc:
-                diagnostics.append(
-                    PluginDiagnostic(
-                        plugin_name=plugin_name,
-                        code="plugin_import_failed",
-                        message=str(exc),
-                        level="warning",
-                    )
-                )
-            except (AttributeError, TypeError) as exc:
-                diagnostics.append(
-                    PluginDiagnostic(
-                        plugin_name=plugin_name,
-                        code="plugin_invalid_structure",
-                        message=str(exc),
-                        level="error",
-                    )
-                )
-            except Exception as exc:
-                logger.error(
-                    "Unexpected local plugin discovery failure for %s",
-                    plugin_name,
-                    exc_info=True,
-                )
-                diagnostics.append(
-                    PluginDiagnostic(
-                        plugin_name=plugin_name,
-                        code="plugin_discovery_failed",
-                        message=f"Unexpected error: {exc}",
-                        level="error",
-                    )
-                )
+        _discover_local_plugins(
+            state_store=state_store,
+            include_disabled=include_disabled,
+            strict_local_manifest=strict_local_manifest,
+            discovered=discovered,
+            diagnostics=diagnostics,
+            seen_names=seen_names,
+        )
 
     if include_entrypoints:
-        for entry_point in _iter_entry_points(PLUGIN_ENTRYPOINT_GROUP):
-            plugin_name = entry_point.name
-            try:
-                loaded = entry_point.load()
-                plugin = _coerce_plugin_instance(loaded)
-                plugin_name = str(getattr(plugin, "name", entry_point.name))
-                manifest_metadata, manifest_diagnostics = _load_entrypoint_manifest_metadata(
-                    plugin=plugin,
-                    plugin_name=plugin_name,
-                )
-                diagnostics.extend(manifest_diagnostics)
-                if manifest_metadata is not None and manifest_metadata.id != plugin_name:
-                    diagnostics.append(
-                        PluginDiagnostic(
-                            plugin_name=plugin_name,
-                            code="plugin_manifest_id_mismatch",
-                            message=(
-                                "Manifest id does not match plugin runtime name "
-                                f"('{manifest_metadata.id}' != '{plugin_name}')"
-                            ),
-                            level="warning",
-                        )
-                    )
-                if plugin_name in seen_names:
-                    diagnostics.append(
-                        PluginDiagnostic(
-                            plugin_name=plugin_name,
-                            code="plugin_name_conflict",
-                            message=f"Skipped duplicate plugin name: {plugin_name}",
-                        )
-                    )
-                    continue
-                if not _is_enabled(
-                    plugin_name, state_store=state_store, include_disabled=include_disabled
-                ):
-                    diagnostics.append(
-                        PluginDiagnostic(
-                            plugin_name=plugin_name,
-                            code="plugin_disabled",
-                            message=f"Skipped disabled plugin: {plugin_name}",
-                            level="info",
-                        )
-                    )
-                    continue
-
-                dist = getattr(entry_point, "dist", None)
-                package_name = getattr(dist, "name", None)
-                version = (
-                    manifest_metadata.version
-                    if manifest_metadata and manifest_metadata.version
-                    else getattr(dist, "version", None)
-                )
-                discovered.append(
-                    DiscoveredPlugin(
-                        name=plugin_name,
-                        plugin=plugin,
-                        source="entrypoint",
-                        package=package_name,
-                        version=version,
-                        kind=manifest_metadata.kind if manifest_metadata else None,
-                        manifest_id=manifest_metadata.id if manifest_metadata else None,
-                        manifest_path=manifest_metadata.manifest_path
-                        if manifest_metadata
-                        else None,
-                        channels=manifest_metadata.channels if manifest_metadata else (),
-                        providers=manifest_metadata.providers if manifest_metadata else (),
-                        skills=manifest_metadata.skills if manifest_metadata else (),
-                    )
-                )
-                seen_names.add(plugin_name)
-            except ImportError as exc:
-                diagnostics.append(
-                    PluginDiagnostic(
-                        plugin_name=plugin_name,
-                        code="plugin_import_failed",
-                        message=str(exc),
-                        level="warning",
-                    )
-                )
-            except (AttributeError, TypeError) as exc:
-                diagnostics.append(
-                    PluginDiagnostic(
-                        plugin_name=plugin_name,
-                        code="plugin_invalid_structure",
-                        message=str(exc),
-                        level="error",
-                    )
-                )
-            except Exception as exc:
-                logger.error(
-                    "Unexpected plugin discovery failure for %s",
-                    plugin_name,
-                    exc_info=True,
-                )
-                diagnostics.append(
-                    PluginDiagnostic(
-                        plugin_name=plugin_name,
-                        code="plugin_discovery_failed",
-                        message=f"Unexpected error: {exc}",
-                        level="error",
-                    )
-                )
+        _discover_entrypoint_plugins(
+            state_store=state_store,
+            include_disabled=include_disabled,
+            discovered=discovered,
+            diagnostics=diagnostics,
+            seen_names=seen_names,
+        )
 
     return discovered, diagnostics
+
+
+def _discover_builtin_plugins(
+    *,
+    state_store: PluginStateStore | None,
+    include_disabled: bool,
+    discovered: list[DiscoveredPlugin],
+    diagnostics: list[PluginDiagnostic],
+    seen_names: set[str],
+) -> None:
+    """Discover built-in plugins shipped inside the core runtime."""
+    for plugin in _builtin_plugins():
+        plugin_name = getattr(plugin, "name", plugin.__class__.__name__)
+        if not _is_enabled(plugin_name, state_store=state_store, include_disabled=include_disabled):
+            diagnostics.append(
+                PluginDiagnostic(
+                    plugin_name=plugin_name,
+                    code="plugin_disabled",
+                    message=f"Skipped disabled plugin: {plugin_name}",
+                    level="info",
+                )
+            )
+            continue
+        discovered.append(
+            DiscoveredPlugin(
+                name=plugin_name,
+                plugin=plugin,
+                source="builtin",
+            )
+        )
+        seen_names.add(plugin_name)
+
+
+def _discover_local_plugins(
+    *,
+    state_store: PluginStateStore | None,
+    include_disabled: bool,
+    strict_local_manifest: bool,
+    discovered: list[DiscoveredPlugin],
+    diagnostics: list[PluginDiagnostic],
+    seen_names: set[str],
+) -> None:
+    """Discover plugins from local .memstack/plugins/ directories."""
+    for plugin_dir in _iter_local_plugin_dirs(state_store=state_store):
+        plugin_name = plugin_dir.name
+        try:
+            _discover_single_local_plugin(
+                plugin_dir=plugin_dir,
+                plugin_name=plugin_name,
+                state_store=state_store,
+                include_disabled=include_disabled,
+                strict_local_manifest=strict_local_manifest,
+                discovered=discovered,
+                diagnostics=diagnostics,
+                seen_names=seen_names,
+            )
+        except ImportError as exc:
+            diagnostics.append(
+                PluginDiagnostic(
+                    plugin_name=plugin_name,
+                    code="plugin_import_failed",
+                    message=str(exc),
+                    level="warning",
+                )
+            )
+        except (AttributeError, TypeError) as exc:
+            diagnostics.append(
+                PluginDiagnostic(
+                    plugin_name=plugin_name,
+                    code="plugin_invalid_structure",
+                    message=str(exc),
+                    level="error",
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Unexpected local plugin discovery failure for %s",
+                plugin_name,
+                exc_info=True,
+            )
+            diagnostics.append(
+                PluginDiagnostic(
+                    plugin_name=plugin_name,
+                    code="plugin_discovery_failed",
+                    message=f"Unexpected error: {exc}",
+                    level="error",
+                )
+            )
+
+
+def _discover_single_local_plugin(
+    *,
+    plugin_dir: Path,
+    plugin_name: str,
+    state_store: PluginStateStore | None,
+    include_disabled: bool,
+    strict_local_manifest: bool,
+    discovered: list[DiscoveredPlugin],
+    diagnostics: list[PluginDiagnostic],
+    seen_names: set[str],
+) -> None:
+    """Discover and validate a single local plugin directory."""
+    manifest_metadata, manifest_diagnostics = load_local_plugin_manifest(
+        plugin_dir,
+        plugin_name=plugin_name,
+    )
+    diagnostics.extend(manifest_diagnostics)
+    if strict_local_manifest and _has_manifest_errors(manifest_diagnostics):
+        diagnostics.append(
+            PluginDiagnostic(
+                plugin_name=plugin_name,
+                code="plugin_manifest_strict_skip",
+                message="Skipped plugin due to invalid manifest in strict mode",
+                level="warning",
+            )
+        )
+        return
+    plugin = _load_local_plugin(plugin_dir)
+    plugin_name = str(getattr(plugin, "name", plugin_dir.name))
+    if manifest_metadata is not None and manifest_metadata.id != plugin_name:
+        diagnostics.append(
+            PluginDiagnostic(
+                plugin_name=plugin_name,
+                code="plugin_manifest_id_mismatch",
+                message=(
+                    "Manifest id does not match plugin runtime name "
+                    f"('{manifest_metadata.id}' != '{plugin_name}')"
+                ),
+                level="warning",
+            )
+        )
+        if strict_local_manifest:
+            diagnostics.append(
+                PluginDiagnostic(
+                    plugin_name=plugin_name,
+                    code="plugin_manifest_strict_skip",
+                    message="Skipped plugin due to manifest id mismatch in strict mode",
+                    level="warning",
+                )
+            )
+            return
+    if plugin_name in seen_names:
+        diagnostics.append(
+            PluginDiagnostic(
+                plugin_name=plugin_name,
+                code="plugin_name_conflict",
+                message=f"Skipped duplicate plugin name: {plugin_name}",
+            )
+        )
+        return
+    if not _is_enabled(plugin_name, state_store=state_store, include_disabled=include_disabled):
+        diagnostics.append(
+            PluginDiagnostic(
+                plugin_name=plugin_name,
+                code="plugin_disabled",
+                message=f"Skipped disabled plugin: {plugin_name}",
+                level="info",
+            )
+        )
+        return
+
+    discovered.append(
+        DiscoveredPlugin(
+            name=plugin_name,
+            plugin=plugin,
+            source="local",
+            version=manifest_metadata.version if manifest_metadata else None,
+            kind=manifest_metadata.kind if manifest_metadata else None,
+            manifest_id=manifest_metadata.id if manifest_metadata else None,
+            manifest_path=manifest_metadata.manifest_path if manifest_metadata else None,
+            channels=manifest_metadata.channels if manifest_metadata else (),
+            providers=manifest_metadata.providers if manifest_metadata else (),
+            skills=manifest_metadata.skills if manifest_metadata else (),
+        )
+    )
+    seen_names.add(plugin_name)
+
+
+def _discover_entrypoint_plugins(
+    *,
+    state_store: PluginStateStore | None,
+    include_disabled: bool,
+    discovered: list[DiscoveredPlugin],
+    diagnostics: list[PluginDiagnostic],
+    seen_names: set[str],
+) -> None:
+    """Discover plugins registered via Python entry points."""
+    for entry_point in _iter_entry_points(PLUGIN_ENTRYPOINT_GROUP):
+        plugin_name = entry_point.name
+        try:
+            _discover_single_entrypoint_plugin(
+                entry_point=entry_point,
+                plugin_name=plugin_name,
+                state_store=state_store,
+                include_disabled=include_disabled,
+                discovered=discovered,
+                diagnostics=diagnostics,
+                seen_names=seen_names,
+            )
+        except ImportError as exc:
+            diagnostics.append(
+                PluginDiagnostic(
+                    plugin_name=plugin_name,
+                    code="plugin_import_failed",
+                    message=str(exc),
+                    level="warning",
+                )
+            )
+        except (AttributeError, TypeError) as exc:
+            diagnostics.append(
+                PluginDiagnostic(
+                    plugin_name=plugin_name,
+                    code="plugin_invalid_structure",
+                    message=str(exc),
+                    level="error",
+                )
+            )
+        except Exception as exc:
+            logger.error(
+                "Unexpected plugin discovery failure for %s",
+                plugin_name,
+                exc_info=True,
+            )
+            diagnostics.append(
+                PluginDiagnostic(
+                    plugin_name=plugin_name,
+                    code="plugin_discovery_failed",
+                    message=f"Unexpected error: {exc}",
+                    level="error",
+                )
+            )
+
+
+def _discover_single_entrypoint_plugin(
+    *,
+    entry_point: Any,
+    plugin_name: str,
+    state_store: PluginStateStore | None,
+    include_disabled: bool,
+    discovered: list[DiscoveredPlugin],
+    diagnostics: list[PluginDiagnostic],
+    seen_names: set[str],
+) -> None:
+    """Discover and validate a single entry-point plugin."""
+    loaded = entry_point.load()
+    plugin = _coerce_plugin_instance(loaded)
+    plugin_name = str(getattr(plugin, "name", entry_point.name))
+    manifest_metadata, manifest_diagnostics = _load_entrypoint_manifest_metadata(
+        plugin=plugin,
+        plugin_name=plugin_name,
+    )
+    diagnostics.extend(manifest_diagnostics)
+    if manifest_metadata is not None and manifest_metadata.id != plugin_name:
+        diagnostics.append(
+            PluginDiagnostic(
+                plugin_name=plugin_name,
+                code="plugin_manifest_id_mismatch",
+                message=(
+                    "Manifest id does not match plugin runtime name "
+                    f"('{manifest_metadata.id}' != '{plugin_name}')"
+                ),
+                level="warning",
+            )
+        )
+    if plugin_name in seen_names:
+        diagnostics.append(
+            PluginDiagnostic(
+                plugin_name=plugin_name,
+                code="plugin_name_conflict",
+                message=f"Skipped duplicate plugin name: {plugin_name}",
+            )
+        )
+        return
+    if not _is_enabled(plugin_name, state_store=state_store, include_disabled=include_disabled):
+        diagnostics.append(
+            PluginDiagnostic(
+                plugin_name=plugin_name,
+                code="plugin_disabled",
+                message=f"Skipped disabled plugin: {plugin_name}",
+                level="info",
+            )
+        )
+        return
+
+    dist = getattr(entry_point, "dist", None)
+    package_name = getattr(dist, "name", None)
+    version = (
+        manifest_metadata.version
+        if manifest_metadata and manifest_metadata.version
+        else getattr(dist, "version", None)
+    )
+    discovered.append(
+        DiscoveredPlugin(
+            name=plugin_name,
+            plugin=plugin,
+            source="entrypoint",
+            package=package_name,
+            version=version,
+            kind=manifest_metadata.kind if manifest_metadata else None,
+            manifest_id=manifest_metadata.id if manifest_metadata else None,
+            manifest_path=manifest_metadata.manifest_path if manifest_metadata else None,
+            channels=manifest_metadata.channels if manifest_metadata else (),
+            providers=manifest_metadata.providers if manifest_metadata else (),
+            skills=manifest_metadata.skills if manifest_metadata else (),
+        )
+    )
+    seen_names.add(plugin_name)
 
 
 def _iter_entry_points(group: str) -> Sequence[Any]:

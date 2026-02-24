@@ -26,7 +26,7 @@ from typing import Any, TypeVar
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload  # noqa: F401 - used in docstring examples
+from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 
 from src.domain.exceptions import (

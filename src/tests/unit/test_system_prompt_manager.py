@@ -10,7 +10,7 @@ Tests the system prompt management functionality including:
 - Full prompt assembly
 """
 
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -239,6 +239,72 @@ class TestSystemPromptManager:
         assert "QuickSearch" in prompt
         assert "Fast memory search" in prompt
 
+    async def test_none_matched_skill_does_not_crash(self, manager, context):
+        """Prompt building should tolerate missing matched skill."""
+        context.matched_skill = None
+
+        prompt = await manager.build_system_prompt(context)
+
+        assert len(prompt) > 0
+        assert "RECOMMENDED SKILL" not in prompt
+
+    async def test_forced_skill_suppresses_available_skills(self, manager, context):
+        """Forced skill mode should disable normal skill-list rendering."""
+        context.skills = [
+            {
+                "name": "NormalSkill",
+                "description": "Regular skill",
+                "tools": ["MemorySearch"],
+                "status": "active",
+            }
+        ]
+        context.matched_skill = {
+            "name": "ForcedSkill",
+            "description": "Forced workflow",
+            "tools": ["GraphQuery"],
+            "force_execution": True,
+        }
+
+        prompt = await manager.build_system_prompt(context)
+
+        assert "IMPORTANT: The user has explicitly activated the skill \"/ForcedSkill\"" in prompt
+        assert "## Available Skills (Pre-defined Tool Compositions)" not in prompt
+        assert "NormalSkill" not in prompt
+
+    async def test_skills_and_subagents_render_without_tools(self, manager, context):
+        """Skills/subagents should still render when no tools are available."""
+        context.tool_definitions = []
+        context.skills = [
+            {
+                "name": "SkillWithoutTools",
+                "description": "Still should render",
+                "tools": [],
+                "status": "active",
+            }
+        ]
+        context.subagents = [
+            {
+                "name": "planner-subagent",
+                "display_name": "Planner",
+                "description": "Planning specialist",
+            }
+        ]
+
+        prompt = await manager.build_system_prompt(context)
+
+        assert "SkillWithoutTools" in prompt
+        assert "## Available SubAgents (Specialized Autonomous Agents)" in prompt
+        assert "planner-subagent" in prompt
+
+    async def test_memory_context_not_gated_by_base_prompt(self, manager, context):
+        """Memory context should be included even if base prompt is unavailable."""
+        manager._load_base_prompt = AsyncMock(return_value="")
+        context.memory_context = "<memory-context>important memory</memory-context>"
+
+        prompt = await manager.build_system_prompt(context)
+
+        assert "<memory-context>important memory</memory-context>" in prompt
+
     async def test_environment_context(self, manager, context):
         """Test environment context is included."""
         context.project_id = "my-project-123"
@@ -331,6 +397,11 @@ class TestSystemPromptManager:
         assert "Test description" in recommendation
         assert "Tool1, Tool2" in recommendation
         assert "Use this guidance" in recommendation
+
+    def test_build_skill_recommendation_none(self, manager):
+        """No recommendation block should be built for None skill."""
+        recommendation = manager._build_skill_recommendation(None)
+        assert recommendation == ""
 
     def test_build_environment_context(self, manager, context):
         """Test environment context building."""

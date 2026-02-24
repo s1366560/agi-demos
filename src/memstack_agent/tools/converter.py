@@ -30,6 +30,49 @@ _TYPE_MAPPING: dict[type, dict[str, Any]] = {
 }
 
 
+def _infer_union_schema(type_hint: Any) -> dict[str, Any]:
+    """Infer JSON Schema for Union types including Optional[T]."""
+    args = get_args(type_hint)
+    non_none_args = [a for a in args if a is not type(None)]
+    if len(non_none_args) == 1:
+        schema = infer_type_schema(non_none_args[0])
+        schema["nullable"] = True
+        return schema
+    return {"anyOf": [infer_type_schema(a) for a in args]}
+
+
+def _infer_list_schema(type_hint: Any) -> dict[str, Any]:
+    """Infer JSON Schema for list types."""
+    if hasattr(type_hint, "__args__"):
+        args = get_args(type_hint)
+        return {
+            "type": "array",
+            "items": infer_type_schema(args[0]) if args else str,
+        }
+    return {"type": "array"}
+
+
+def _infer_dict_schema(type_hint: Any) -> dict[str, Any]:
+    """Infer JSON Schema for dict types."""
+    if hasattr(type_hint, "__args__"):
+        args = get_args(type_hint)
+        if args and len(args) >= 2:
+            _key_type, value_type = args
+            return {
+                "type": "object",
+                "additionalProperties": infer_type_schema(value_type),
+            }
+    return {"type": "object"}
+
+
+# Dispatch table mapping type origins to handler functions
+_ORIGIN_HANDLERS: dict[type, Callable] = {
+    Union: _infer_union_schema,
+    list: _infer_list_schema,
+    dict: _infer_dict_schema,
+}
+
+
 def infer_type_schema(type_hint: Any) -> dict[str, Any]:
     """Infer JSON Schema from a Python type hint.
 
@@ -47,58 +90,18 @@ def infer_type_schema(type_hint: Any) -> dict[str, Any]:
     Returns:
         JSON Schema dictionary for type
     """
-    # Handle dataclass types
     if is_dataclass(type_hint):
         return _infer_dataclass_schema(type_hint)
 
     origin = get_origin(type_hint)
+    handler = _ORIGIN_HANDLERS.get(origin)
+    if handler is not None:
+        return handler(type_hint)
 
-    # Handle Optional[T] (Union[T, None])
-    if origin is Union:
-        args = get_args(type_hint)
-
-        non_none_args = [a for a in args if a is not type(None)]
-        if len(non_none_args) == 1:
-            # Optional[T] -> Union[T, None]
-            schema = infer_type_schema(non_none_args[0])
-            schema["nullable"] = True
-            return schema
-        # Multi-type Union -> anyOf
-        return {"anyOf": [infer_type_schema(a) for a in args]}
-
-    # Handle List[T]
-    if origin is list or origin is list:
-        if hasattr(type_hint, "__args__"):
-            # Get generic type from List[T]
-            args = get_args(type_hint)
-            return {
-                "type": "array",
-                "items": infer_type_schema(args[0]) if args else str,
-            }
-        # Fallback for list-like types
-        return {"type": "array"}
-
-    # Handle Dict[str, T]
-    if origin is dict or origin is dict:
-        if hasattr(type_hint, "__args__"):
-            # Get generic type from Dict[str, T]
-            args = get_args(type_hint)
-            if args and len(args) >= 2:
-                _key_type, value_type = args
-                return {
-                    "type": "object",
-                    "additionalProperties": infer_type_schema(value_type),
-                }
-        # Fallback
-        return {"type": "object"}
-
-    # Check for direct type mapping
     if type_hint in _TYPE_MAPPING:
         return _TYPE_MAPPING[type_hint].copy()
 
-    # Fallback: treat as string
     return {"type": "string"}
-
 
 def _parse_param_docstring(docstring: str) -> dict[str, str]:
     """Parse parameter descriptions from docstring.

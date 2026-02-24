@@ -283,52 +283,44 @@ class WebSearchTool(AgentTool):
             return "Error: query parameter is required for web_search"
 
         try:
-            # Check cache first
-            cache_key = self._generate_cache_key(query, max_results)
-            cached_response = await self._get_cached_results(cache_key)
-            if cached_response:
-                return self._format_results(cached_response)
-
-            # Call Tavily API
-            logger.info(f"Searching Tavily for: {query[:100]}...")
-            tavily_response = await self._call_tavily_api(query, max_results, search_depth)
-
-            # Parse results
-            search_results = self._parse_tavily_response(tavily_response)
-
-            # Build response
-            response = WebSearchResponse(
-                query=query,
-                results=search_results,
-                total_results=len(search_results),
-                cached=False,
-                timestamp=datetime.now(UTC).isoformat(),
-            )
-
-            # Cache the results
-            await self._cache_results(cache_key, response)
-
-            return self._format_results(response)
-
+            return await self._search_and_cache(query, max_results, search_depth)
         except ValueError as e:
-            # Configuration error
             error_msg = f"Configuration error: {e!s}"
-            logger.error(error_msg)
-            return f"Error: {error_msg}"
         except httpx.HTTPStatusError as e:
-            # API error with status code
             error_msg = f"Tavily API error ({e.response.status_code}): {e.response.text[:200]}"
-            logger.error(error_msg)
-            return f"Error: {error_msg}"
         except httpx.HTTPError as e:
-            # Network or HTTP error
             error_msg = f"Network error during search: {e!s}"
-            logger.error(error_msg)
-            return f"Error: {error_msg}"
         except Exception as e:
-            # Unexpected error
             logger.exception(f"Unexpected error in web_search: {e}")
             return "Error: An unexpected error occurred during web search"
+        logger.error(error_msg)
+        return f"Error: {error_msg}"
+
+    async def _search_and_cache(self, query: str, max_results: int, search_depth: str) -> str:
+        """Search via Tavily API with Redis caching.
+
+        Returns:
+            Formatted search results string.
+        """
+        cache_key = self._generate_cache_key(query, max_results)
+        cached_response = await self._get_cached_results(cache_key)
+        if cached_response:
+            return self._format_results(cached_response)
+
+        logger.info(f"Searching Tavily for: {query[:100]}...")
+        tavily_response = await self._call_tavily_api(query, max_results, search_depth)
+        search_results = self._parse_tavily_response(tavily_response)
+
+        response = WebSearchResponse(
+            query=query,
+            results=search_results,
+            total_results=len(search_results),
+            cached=False,
+            timestamp=datetime.now(UTC).isoformat(),
+        )
+
+        await self._cache_results(cache_key, response)
+        return self._format_results(response)
 
     def _format_results(self, response: WebSearchResponse) -> str:
         """

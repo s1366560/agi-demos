@@ -12,7 +12,7 @@ async def v2_db_session(db_session: AsyncSession) -> AsyncSession:
     return db_session
 
 
-def make_agent_execution(  # noqa: PLR0913
+def make_agent_execution(
     execution_id: str = "exec-1",
     conversation_id: str = "conv-1",
     message_id: str = "msg-1",

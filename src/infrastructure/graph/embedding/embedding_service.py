@@ -156,31 +156,10 @@ class EmbeddingService:
 
         # Check if embedder supports batch
         if hasattr(self._embedder, "create_batch"):
-            # Use batch API
-            try:
-                batch_results = await self._embedder.create_batch(non_empty_texts)
-                for idx, embedding in zip(non_empty_indices, batch_results, strict=False):
-                    if self._validate_dimensions and len(embedding) != self.embedding_dim:
-                        embedding = self._fix_dimension(embedding)
-                    embeddings[idx] = embedding
-            except Exception as e:
-                logger.warning(f"Batch embedding failed, falling back to individual: {e}")
-                # Fall back to individual embedding
-                for idx, text in zip(non_empty_indices, non_empty_texts, strict=False):
-                    embeddings[idx] = await self.embed_text(text)
+            await self._embed_batch_api(non_empty_indices, non_empty_texts, embeddings)
         else:
-            # Use individual calls with concurrency control
-            semaphore = asyncio.Semaphore(max_concurrency)
-
-            async def embed_with_semaphore(idx: int, text: str) -> None:
-                async with semaphore:
-                    embeddings[idx] = await self.embed_text(text)
-
-            await asyncio.gather(
-                *[
-                    embed_with_semaphore(idx, text)
-                    for idx, text in zip(non_empty_indices, non_empty_texts, strict=False)
-                ]
+            await self._embed_batch_individual(
+                non_empty_indices, non_empty_texts, embeddings, max_concurrency
             )
 
         # Fill empty texts with zero vectors
@@ -189,6 +168,59 @@ class EmbeddingService:
                 embeddings[i] = [0.0] * self.embedding_dim
 
         return embeddings
+
+    async def _embed_batch_api(
+        self,
+        indices: list[int],
+        texts: list[str],
+        embeddings: list[list[float] | None],
+    ) -> None:
+        """
+        Generate embeddings using the batch API.
+
+        Falls back to individual embedding on failure.
+
+        Args:
+            indices: Original indices for each text
+            texts: Non-empty texts to embed
+            embeddings: Mutable list to populate with results
+        """
+        try:
+            batch_results = await self._embedder.create_batch(texts)
+            for idx, embedding in zip(indices, batch_results, strict=False):
+                if self._validate_dimensions and len(embedding) != self.embedding_dim:
+                    embedding = self._fix_dimension(embedding)
+                embeddings[idx] = embedding
+        except Exception as e:
+            logger.warning(f"Batch embedding failed, falling back to individual: {e}")
+            for idx, text in zip(indices, texts, strict=False):
+                embeddings[idx] = await self.embed_text(text)
+
+    async def _embed_batch_individual(
+        self,
+        indices: list[int],
+        texts: list[str],
+        embeddings: list[list[float] | None],
+        max_concurrency: int,
+    ) -> None:
+        """
+        Generate embeddings individually with concurrency control.
+
+        Args:
+            indices: Original indices for each text
+            texts: Non-empty texts to embed
+            embeddings: Mutable list to populate with results
+            max_concurrency: Maximum concurrent requests
+        """
+        semaphore = asyncio.Semaphore(max_concurrency)
+
+        async def embed_with_semaphore(idx: int, text: str) -> None:
+            async with semaphore:
+                embeddings[idx] = await self.embed_text(text)
+
+        await asyncio.gather(
+            *[embed_with_semaphore(idx, text) for idx, text in zip(indices, texts, strict=False)]
+        )
 
     def _fix_dimension(self, embedding: list[float]) -> list[float]:
         """

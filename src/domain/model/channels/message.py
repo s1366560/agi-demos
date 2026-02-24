@@ -72,24 +72,28 @@ class MessageContent(ValueObject):
         """Generate contextual display text for the message."""
         if self.text:
             return self.text
+        return self._display_text_for_type()
 
-        if self.type == MessageType.IMAGE:
-            size_info = f" ({self.size} bytes)" if self.size else ""
-            return f"[图片消息{size_info}]"
-        elif self.type == MessageType.FILE:
-            name = self.file_name or "unknown"
-            size_info = f" ({self.size} bytes)" if self.size else ""
-            return f"[文件: {name}{size_info}]"
-        elif self.type == MessageType.AUDIO:
-            duration_info = f"{self.duration}秒" if self.duration else "未知时长"
-            return f"[语音消息: {duration_info}]"
-        elif self.type == MessageType.VIDEO:
-            duration_info = f"{self.duration}秒" if self.duration else "未知时长"
-            return f"[视频消息: {duration_info}]"
-        elif self.type == MessageType.STICKER:
-            return "[表情消息]"
-        else:
-            return ""
+    def _display_text_for_type(self) -> str:
+        """Return display text based on message type."""
+        _DISPLAY_MAP: dict[MessageType, Callable[[], str]] = {
+            MessageType.IMAGE: lambda: (
+                f"[图片消息 ({self.size} bytes)]" if self.size else "[图片消息]"
+            ),
+            MessageType.FILE: lambda: (
+                f"[文件: {self.file_name or 'unknown'}"
+                f"{f' ({self.size} bytes)' if self.size else ''}]"
+            ),
+            MessageType.AUDIO: lambda: (
+                f"[语音消息: {f'{self.duration}秒' if self.duration else '未知时长'}]"
+            ),
+            MessageType.VIDEO: lambda: (
+                f"[视频消息: {f'{self.duration}秒' if self.duration else '未知时长'}]"
+            ),
+            MessageType.STICKER: lambda: "[表情消息]",
+        }
+        formatter = _DISPLAY_MAP.get(self.type)
+        return formatter() if formatter else ""
 
 
 @dataclass(frozen=True)

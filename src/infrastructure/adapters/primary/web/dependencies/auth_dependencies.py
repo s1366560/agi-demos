@@ -459,327 +459,252 @@ async def create_user(db: AsyncSession, email: str, name: str, password: str) ->
 # ============================================================================
 
 
+async def _init_permissions(db: AsyncSession) -> dict[str, Permission]:
+    """Create permissions if they don't exist. Return code->Permission map."""
+    permissions_data = [
+        {"code": "tenant:create", "name": "Create Tenant", "description": "Create new tenants"},
+        {"code": "tenant:read", "name": "Read Tenant", "description": "View tenant details"},
+        {"code": "tenant:update", "name": "Update Tenant", "description": "Update tenant details"},
+        {"code": "tenant:delete", "name": "Delete Tenant", "description": "Delete tenants"},
+        {"code": "project:create", "name": "Create Project", "description": "Create new projects"},
+        {"code": "project:read", "name": "Read Project", "description": "View project details"},
+        {
+            "code": "project:update",
+            "name": "Update Project",
+            "description": "Update project details",
+        },
+        {"code": "project:delete", "name": "Delete Project", "description": "Delete projects"},
+        {"code": "memory:create", "name": "Create Memory", "description": "Create new memories"},
+        {"code": "memory:read", "name": "Read Memory", "description": "View memories"},
+        {"code": "user:read", "name": "Read User", "description": "View user details"},
+        {"code": "user:update", "name": "Update User", "description": "Update user details"},
+    ]
+    created_permissions: dict[str, Permission] = {}
+    for perm_data in permissions_data:
+        result = await db.execute(select(Permission).where(Permission.code == perm_data["code"]))
+        perm = result.scalar_one_or_none()
+        if not perm:
+            perm = Permission(id=str(uuid4()), **perm_data)
+            db.add(perm)
+            await db.commit()
+            await db.refresh(perm)
+        created_permissions[perm_data["code"]] = perm
+    return created_permissions
+
+
+async def _init_roles(db: AsyncSession) -> dict[str, Role]:
+    """Create roles if they don't exist. Return name->Role map."""
+    roles_data = [
+        {"name": "admin", "description": "System Administrator"},
+        {"name": "user", "description": "Regular User"},
+    ]
+    created_roles: dict[str, Role] = {}
+    for role_data in roles_data:
+        result = await db.execute(select(Role).where(Role.name == role_data["name"]))
+        role = result.scalar_one_or_none()
+        if not role:
+            role = Role(id=str(uuid4()), **role_data)
+            db.add(role)
+            await db.commit()
+            await db.refresh(role)
+        created_roles[role_data["name"]] = role
+    return created_roles
+
+
+async def _assign_role_permissions(
+    db: AsyncSession,
+    created_roles: dict[str, Role],
+    created_permissions: dict[str, Permission],
+) -> None:
+    """Assign permissions to roles (admin=all, user=read+create)."""
+    admin_role = created_roles["admin"]
+    for perm in created_permissions.values():
+        result = await db.execute(
+            select(RolePermission).where(
+                RolePermission.role_id == admin_role.id,
+                RolePermission.permission_id == perm.id,
+            )
+        )
+        if not result.scalar_one_or_none():
+            db.add(RolePermission(id=str(uuid4()), role_id=admin_role.id, permission_id=perm.id))
+
+    user_role = created_roles["user"]
+    for code, perm in created_permissions.items():
+        if "read" in code or "create" in code:
+            result = await db.execute(
+                select(RolePermission).where(
+                    RolePermission.role_id == user_role.id,
+                    RolePermission.permission_id == perm.id,
+                )
+            )
+            if not result.scalar_one_or_none():
+                db.add(RolePermission(id=str(uuid4()), role_id=user_role.id, permission_id=perm.id))
+    await db.commit()
+
+
+async def _ensure_tenant_membership(
+    db: AsyncSession,
+    user_id: str,
+    tenant_id: str,
+    role: str = "member",
+    permissions: dict | None = None,
+) -> None:
+    """Ensure a user has membership in a tenant."""
+    result = await db.execute(
+        select(UserTenant).where(
+            UserTenant.user_id == user_id,
+            UserTenant.tenant_id == tenant_id,
+        )
+    )
+    if not result.scalar_one_or_none():
+        membership = UserTenant(
+            id=str(uuid4()),
+            user_id=user_id,
+            tenant_id=tenant_id,
+            role=role,
+            permissions=permissions or {"read": True, "write": True},
+        )
+        db.add(membership)
+
+
+async def _ensure_tenant_exists(
+    db: AsyncSession,
+    name: str,
+    slug: str,
+    description: str,
+    owner_id: str,
+) -> Tenant:
+    """Create a tenant if it doesn't exist. Return the tenant."""
+    result = await db.execute(select(Tenant).where(Tenant.name == name))
+    tenant = result.scalar_one_or_none()
+    if not tenant:
+        tenant = Tenant(
+            id=str(uuid4()),
+            name=name,
+            slug=slug,
+            description=description,
+            owner_id=owner_id,
+        )
+        db.add(tenant)
+        await db.flush()
+        logger.info(f"Tenant created: {name} ({tenant.id})")
+    return tenant
+
+
+async def _init_admin_user(
+    db: AsyncSession,
+    admin_role: Role,
+    default_tenant: Tenant | None,
+) -> tuple[DBUser | None, Tenant | None]:
+    """Create admin user with API key and tenant if needed."""
+    result = await db.execute(select(DBUser).where(DBUser.email == "admin@memstack.ai"))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        user = await create_user(
+            db, email="admin@memstack.ai", name="Default Admin", password="adminpassword"
+        )
+        db.add(UserRole(id=str(uuid4()), user_id=user.id, role_id=admin_role.id))
+        plain_key, _ = await create_api_key(
+            db, user_id=user.id, name="Default API Key", permissions=["read", "write", "admin"]
+        )
+        logger.info(f"Default Admin API Key created: {plain_key}")
+        logger.info(f"Default Admin ID: {user.id}")
+        logger.info(f"Default Admin Email: {user.email}")
+        logger.info("Default Admin Password: adminpassword")
+
+        if not default_tenant:
+            default_tenant = await _ensure_tenant_exists(
+                db,
+                "Default Tenant",
+                "default-tenant",
+                "Default tenant for demonstration",
+                user.id,
+            )
+            await _ensure_tenant_membership(
+                db, user.id, default_tenant.id, "owner", {"admin": True}
+            )
+    elif default_tenant:
+        await _ensure_tenant_membership(db, user.id, default_tenant.id, "owner", {"admin": True})
+
+    return user, default_tenant
+
+
+async def _init_normal_user(
+    db: AsyncSession,
+    user_role: Role,
+    default_tenant: Tenant | None,
+) -> None:
+    """Create normal user with API key and tenant if needed."""
+    result = await db.execute(select(DBUser).where(DBUser.email == "user@memstack.ai"))
+    normal_user = result.scalar_one_or_none()
+
+    if not normal_user:
+        normal_user = await create_user(
+            db, email="user@memstack.ai", name="Default User", password="userpassword"
+        )
+        db.add(UserRole(id=str(uuid4()), user_id=normal_user.id, role_id=user_role.id))
+        plain_user_key, _ = await create_api_key(
+            db,
+            user_id=normal_user.id,
+            name="Default User Key",
+            permissions=["read", "write"],
+        )
+        logger.info(f"Default User API Key created: {plain_user_key}")
+        logger.info(f"Default User ID: {normal_user.id}")
+        logger.info(f"Default User Email: {normal_user.email}")
+        logger.info("Default User Password: userpassword")
+
+        user_tenant = await _ensure_tenant_exists(
+            db, "User Tenant", "user-tenant", "Default tenant for user", normal_user.id
+        )
+        await _ensure_tenant_membership(
+            db, normal_user.id, user_tenant.id, "owner", {"admin": True}
+        )
+        if default_tenant:
+            await _ensure_tenant_membership(
+                db,
+                normal_user.id,
+                default_tenant.id,
+                "member",
+                {"read": True, "write": True},
+            )
+    else:
+        user_tenant = await _ensure_tenant_exists(
+            db, "User Tenant", "user-tenant", "Default tenant for user", normal_user.id
+        )
+        await _ensure_tenant_membership(
+            db, normal_user.id, user_tenant.id, "owner", {"admin": True}
+        )
+        if default_tenant:
+            await _ensure_tenant_membership(
+                db,
+                normal_user.id,
+                default_tenant.id,
+                "member",
+                {"read": True, "write": True},
+            )
+
+
 async def initialize_default_credentials() -> None:
     """Initialize default user and API key for development."""
     async with async_session_factory() as db:
         try:
             # 1. Initialize Permissions
-            permissions_data = [
-                {
-                    "code": "tenant:create",
-                    "name": "Create Tenant",
-                    "description": "Create new tenants",
-                },
-                {
-                    "code": "tenant:read",
-                    "name": "Read Tenant",
-                    "description": "View tenant details",
-                },
-                {
-                    "code": "tenant:update",
-                    "name": "Update Tenant",
-                    "description": "Update tenant details",
-                },
-                {"code": "tenant:delete", "name": "Delete Tenant", "description": "Delete tenants"},
-                {
-                    "code": "project:create",
-                    "name": "Create Project",
-                    "description": "Create new projects",
-                },
-                {
-                    "code": "project:read",
-                    "name": "Read Project",
-                    "description": "View project details",
-                },
-                {
-                    "code": "project:update",
-                    "name": "Update Project",
-                    "description": "Update project details",
-                },
-                {
-                    "code": "project:delete",
-                    "name": "Delete Project",
-                    "description": "Delete projects",
-                },
-                {
-                    "code": "memory:create",
-                    "name": "Create Memory",
-                    "description": "Create new memories",
-                },
-                {"code": "memory:read", "name": "Read Memory", "description": "View memories"},
-                {"code": "user:read", "name": "Read User", "description": "View user details"},
-                {
-                    "code": "user:update",
-                    "name": "Update User",
-                    "description": "Update user details",
-                },
-            ]
-
-            created_permissions = {}
-            for perm_data in permissions_data:
-                result = await db.execute(
-                    select(Permission).where(Permission.code == perm_data["code"])
-                )
-                perm = result.scalar_one_or_none()
-                if not perm:
-                    perm = Permission(id=str(uuid4()), **perm_data)
-                    db.add(perm)
-                    await db.commit()
-                    await db.refresh(perm)
-                created_permissions[perm_data["code"]] = perm
-
+            created_permissions = await _init_permissions(db)
             # 2. Initialize Roles
-            roles_data = [
-                {"name": "admin", "description": "System Administrator"},
-                {"name": "user", "description": "Regular User"},
-            ]
-
-            created_roles = {}
-            for role_data in roles_data:
-                result = await db.execute(select(Role).where(Role.name == role_data["name"]))
-                role = result.scalar_one_or_none()
-                if not role:
-                    role = Role(id=str(uuid4()), **role_data)
-                    db.add(role)
-                    await db.commit()
-                    await db.refresh(role)
-                created_roles[role_data["name"]] = role
-
+            created_roles = await _init_roles(db)
             # 3. Assign Permissions to Roles
-            # Admin gets all permissions
-            admin_role = created_roles["admin"]
-            for perm in created_permissions.values():
-                result = await db.execute(
-                    select(RolePermission).where(
-                        RolePermission.role_id == admin_role.id,
-                        RolePermission.permission_id == perm.id,
-                    )
-                )
-                if not result.scalar_one_or_none():
-                    db.add(
-                        RolePermission(
-                            id=str(uuid4()), role_id=admin_role.id, permission_id=perm.id
-                        )
-                    )
+            await _assign_role_permissions(db, created_roles, created_permissions)
 
-            # User gets read permissions
-            user_role = created_roles["user"]
-            for code, perm in created_permissions.items():
-                if "read" in code or "create" in code:
-                    result = await db.execute(
-                        select(RolePermission).where(
-                            RolePermission.role_id == user_role.id,
-                            RolePermission.permission_id == perm.id,
-                        )
-                    )
-                    if not result.scalar_one_or_none():
-                        db.add(
-                            RolePermission(
-                                id=str(uuid4()), role_id=user_role.id, permission_id=perm.id
-                            )
-                        )
-
-            await db.commit()
-
-            # 4. Create Users using AuthService
-            # Check if default user exists
-            result = await db.execute(select(DBUser).where(DBUser.email == "admin@memstack.ai"))
-            user = result.scalar_one_or_none()
-
-            # Check if default tenant exists
+            # 4. Check if default tenant exists
             result = await db.execute(select(Tenant).where(Tenant.name == "Default Tenant"))
             default_tenant = result.scalar_one_or_none()
+            # 5. Create Admin User
+            _, default_tenant = await _init_admin_user(db, created_roles["admin"], default_tenant)
 
-            if not user:
-                user = await create_user(
-                    db, email="admin@memstack.ai", name="Default Admin", password="adminpassword"
-                )
-
-                # Assign Admin Role
-                db.add(UserRole(id=str(uuid4()), user_id=user.id, role_id=admin_role.id))
-
-                plain_key, _ = await create_api_key(
-                    db,
-                    user_id=user.id,
-                    name="Default API Key",
-                    permissions=["read", "write", "admin"],
-                )
-
-                logger.info(f"🔑 Default Admin API Key created: {plain_key}")
-                logger.info(f"👤 Default Admin ID: {user.id}")
-                logger.info(f"📧 Default Admin Email: {user.email}")
-                logger.info("🔑 Default Admin Password: adminpassword")
-
-                # Create Default Tenant if not exists and assign admin as owner
-                if not default_tenant:
-                    default_tenant = Tenant(
-                        id=str(uuid4()),
-                        name="Default Tenant",
-                        slug="default-tenant",  # Required unique field
-                        description="Default tenant for demonstration",
-                        owner_id=user.id,
-                    )
-                    db.add(default_tenant)
-                    await db.flush()  # flush to get ID
-                    logger.info(f"🏢 Default Tenant created: {default_tenant.id}")
-
-                    # Add admin as owner of the tenant
-                    admin_tenant_membership = UserTenant(
-                        id=str(uuid4()),
-                        user_id=user.id,
-                        tenant_id=default_tenant.id,
-                        role="owner",
-                        permissions={"admin": True},
-                    )
-                    db.add(admin_tenant_membership)
-
-            # If user exists but tenant was just created (edge case or partial init), ensure membership
-            elif default_tenant:
-                # Check if admin is member
-                result = await db.execute(
-                    select(UserTenant).where(
-                        UserTenant.user_id == user.id, UserTenant.tenant_id == default_tenant.id
-                    )
-                )
-                if not result.scalar_one_or_none():
-                    admin_tenant_membership = UserTenant(
-                        id=str(uuid4()),
-                        user_id=user.id,
-                        tenant_id=default_tenant.id,
-                        role="owner",
-                        permissions={"admin": True},
-                    )
-                    db.add(admin_tenant_membership)
-
-            # Check if default regular user exists
-            result = await db.execute(select(DBUser).where(DBUser.email == "user@memstack.ai"))
-            normal_user = result.scalar_one_or_none()
-
-            if not normal_user:
-                normal_user = await create_user(
-                    db, email="user@memstack.ai", name="Default User", password="userpassword"
-                )
-
-                # Assign User Role
-                db.add(UserRole(id=str(uuid4()), user_id=normal_user.id, role_id=user_role.id))
-
-                plain_user_key, _ = await create_api_key(
-                    db,
-                    user_id=normal_user.id,
-                    name="Default User Key",
-                    permissions=["read", "write"],
-                )
-
-                logger.info(f"🔑 Default User API Key created: {plain_user_key}")
-                logger.info(f"👤 Default User ID: {normal_user.id}")
-                logger.info(f"📧 Default User Email: {normal_user.email}")
-                logger.info("🔑 Default User Password: userpassword")
-
-                # Create Tenant for User if not exists
-                result = await db.execute(select(Tenant).where(Tenant.name == "User Tenant"))
-                user_tenant = result.scalar_one_or_none()
-                if not user_tenant:
-                    user_tenant = Tenant(
-                        id=str(uuid4()),
-                        name="User Tenant",
-                        slug="user-tenant",  # Required unique field
-                        description="Default tenant for user",
-                        owner_id=normal_user.id,
-                    )
-                    db.add(user_tenant)
-                    await db.flush()  # flush to get ID
-                    logger.info(f"🏢 User Tenant created: {user_tenant.id}")
-
-                    # Add normal user as owner of their tenant
-                    user_tenant_membership = UserTenant(
-                        id=str(uuid4()),
-                        user_id=normal_user.id,
-                        tenant_id=user_tenant.id,
-                        role="owner",
-                        permissions={"admin": True},
-                    )
-                    db.add(user_tenant_membership)
-
-                # Add normal user to default tenant as member (optional, but good for demo)
-                if default_tenant:
-                    # Check if already member
-                    result = await db.execute(
-                        select(UserTenant).where(
-                            UserTenant.user_id == normal_user.id,
-                            UserTenant.tenant_id == default_tenant.id,
-                        )
-                    )
-                    if not result.scalar_one_or_none():
-                        user_tenant_membership = UserTenant(
-                            id=str(uuid4()),
-                            user_id=normal_user.id,
-                            tenant_id=default_tenant.id,
-                            role="member",
-                            permissions={"read": True, "write": True},
-                        )
-                        db.add(user_tenant_membership)
-
-            elif normal_user:
-                # Ensure user has their own tenant
-                result = await db.execute(select(Tenant).where(Tenant.name == "User Tenant"))
-                user_tenant = result.scalar_one_or_none()
-                if not user_tenant:
-                    user_tenant = Tenant(
-                        id=str(uuid4()),
-                        name="User Tenant",
-                        slug="user-tenant",
-                        description="Default tenant for user",
-                        owner_id=normal_user.id,
-                    )
-                    db.add(user_tenant)
-                    await db.flush()
-                    logger.info(f"🏢 User Tenant created: {user_tenant.id}")
-
-                    # Add normal user as owner
-                    user_tenant_membership = UserTenant(
-                        id=str(uuid4()),
-                        user_id=normal_user.id,
-                        tenant_id=user_tenant.id,
-                        role="owner",
-                        permissions={"admin": True},
-                    )
-                    db.add(user_tenant_membership)
-
-                else:
-                    # Check membership in own tenant
-                    result = await db.execute(
-                        select(UserTenant).where(
-                            UserTenant.user_id == normal_user.id,
-                            UserTenant.tenant_id == user_tenant.id,
-                        )
-                    )
-                    if not result.scalar_one_or_none():
-                        user_tenant_membership = UserTenant(
-                            id=str(uuid4()),
-                            user_id=normal_user.id,
-                            tenant_id=user_tenant.id,
-                            role="owner",
-                            permissions={"admin": True},
-                        )
-                        db.add(user_tenant_membership)
-
-                # Check if normal user is member of default tenant
-                if default_tenant:
-                    result = await db.execute(
-                        select(UserTenant).where(
-                            UserTenant.user_id == normal_user.id,
-                            UserTenant.tenant_id == default_tenant.id,
-                        )
-                    )
-                    if not result.scalar_one_or_none():
-                        user_tenant_membership = UserTenant(
-                            id=str(uuid4()),
-                            user_id=normal_user.id,
-                            tenant_id=default_tenant.id,
-                            role="member",
-                            permissions={"read": True, "write": True},
-                        )
-                        db.add(user_tenant_membership)
+            # 6. Create Normal User
+            await _init_normal_user(db, created_roles["user"], default_tenant)
 
             await db.commit()
 

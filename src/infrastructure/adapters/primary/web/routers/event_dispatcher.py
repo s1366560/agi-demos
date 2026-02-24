@@ -167,8 +167,14 @@ class EventDispatcher:
                 await self.websocket.send_json(event.data)
             self.stats["sent"] += 1
             return True
-
-        except RuntimeError as e:
+        except TimeoutError:
+            # Delta events are ephemeral - drop on timeout instead of retrying
+            event_type = event.data.get("type", "")
+            if "delta" in event_type:
+                self.stats["failed"] += 1
+                return False
+            return await self._retry_or_fail(event, f"Send timeout for {self.session_id[:8]}...")
+        except Exception as e:
             # WebSocket already closed - no point retrying
             if "websocket.close" in str(e) or "already completed" in str(e):
                 logger.debug(
@@ -177,43 +183,24 @@ class EventDispatcher:
                 )
                 self.stats["failed"] += 1
                 return False
-            raise
-
-        except TimeoutError:
-            # Delta events are ephemeral — drop on timeout instead of retrying
-            event_type = event.data.get("type", "")
-            if "delta" in event_type:
-                self.stats["failed"] += 1
-                return False
-
-            # Non-delta events: retry
-            if event.retry_count < self.config.max_retries:
-                event.retry_count += 1
-                self.stats["retried"] += 1
-                await asyncio.sleep(self.config.retry_delay * event.retry_count)
-                return await self._send_event(event)
-
-            logger.warning(
-                f"[Dispatcher] Send timeout for {self.session_id[:8]}...: type={event_type}"
-            )
-            self.stats["failed"] += 1
-            return False
-
-        except Exception as e:
             logger.warning(
                 f"[Dispatcher] Send failed for {self.session_id[:8]}...: "
                 f"type={event.data.get('type')}, error={type(e).__name__}: {e}"
             )
+            return await self._retry_or_fail(event)
 
-            # Retry on failure
-            if event.retry_count < self.config.max_retries:
-                event.retry_count += 1
-                self.stats["retried"] += 1
-                await asyncio.sleep(self.config.retry_delay * event.retry_count)
-                return await self._send_event(event)
-
-            self.stats["failed"] += 1
-            return False
+    async def _retry_or_fail(self, event: QueuedEvent, warn_msg: str = "") -> bool:
+        """Retry sending an event or record failure."""
+        if event.retry_count < self.config.max_retries:
+            event.retry_count += 1
+            self.stats["retried"] += 1
+            await asyncio.sleep(self.config.retry_delay * event.retry_count)
+            return await self._send_event(event)
+        if warn_msg:
+            event_type = event.data.get("type", "")
+            logger.warning(f"[Dispatcher] {warn_msg}: type={event_type}")
+        self.stats["failed"] += 1
+        return False
 
     async def _flush_remaining(self) -> None:
         """Flush remaining events before shutdown."""

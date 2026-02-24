@@ -104,6 +104,20 @@ class SkillSyncTool(AgentTool):
             "required": ["skill_name"],
         }
 
+    def _validate_prerequisites(self) -> str | None:
+        """Validate that required dependencies are available.
+
+        Returns:
+            Error message string if validation fails, None if all prerequisites met.
+        """
+        if not self._sandbox_adapter:
+            return "No sandbox adapter available. Sandbox may not be initialized."
+        if not self._sandbox_id:
+            return "No sandbox ID available. Sandbox may not be attached."
+        if not self._session_factory:
+            return "Database session factory not available."
+        return None
+
     async def execute(self, **kwargs: Any) -> str | dict[str, Any]:
         """Execute the skill sync operation."""
         skill_name = kwargs.get("skill_name", "").strip()
@@ -113,15 +127,9 @@ class SkillSyncTool(AgentTool):
         skill_path = kwargs.get("skill_path")
         change_summary = kwargs.get("change_summary")
 
-        # Validate prerequisites
-        if not self._sandbox_adapter:
-            return {"error": "No sandbox adapter available. Sandbox may not be initialized."}
-
-        if not self._sandbox_id:
-            return {"error": "No sandbox ID available. Sandbox may not be attached."}
-
-        if not self._session_factory:
-            return {"error": "Database session factory not available."}
+        prereq_error = self._validate_prerequisites()
+        if prereq_error:
+            return {"error": prereq_error}
 
         try:
             from pathlib import Path

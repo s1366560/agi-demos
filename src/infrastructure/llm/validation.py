@@ -66,6 +66,96 @@ class ValidationResult:
     attempts: int = 0
 
 
+def _strip_code_blocks(content: str) -> str:
+    """Strip markdown code block markers from content."""
+    content = content.strip()
+
+    if content.startswith("```json"):
+        content = content[7:]
+    elif content.startswith("```"):
+        content = content[3:]
+
+    if content.endswith("```"):
+        content = content[:-3]
+
+    return content.strip()
+
+
+def _find_json_boundaries(content: str) -> str:
+    """Find and extract JSON object or array from content with surrounding text."""
+    # Skip to first JSON start character if needed
+    if not (content.startswith("{") or content.startswith("[")):
+        json_start = -1
+        for i, char in enumerate(content):
+            if char in "{[":
+                json_start = i
+                break
+
+        if json_start >= 0:
+            content = content[json_start:]
+
+    # Find matching end bracket
+    open_char, close_char = _get_bracket_pair(content)
+    if open_char is not None:
+        content = _find_matching_bracket(content, open_char, close_char)
+
+    return content
+
+
+def _get_bracket_pair(content: str) -> tuple[str | None, str | None]:
+    """Return the bracket pair for the content's opening character."""
+    if content.startswith("{"):
+        return "{", "}"
+    if content.startswith("["):
+        return "[", "]"
+    return None, None
+
+
+def _find_matching_bracket(content: str, open_char: str, close_char: str) -> str:
+    """Find the matching closing bracket and return the substring."""
+    depth = 0
+    for i, char in enumerate(content):
+        if char == open_char:
+            depth += 1
+        elif char == close_char:
+            depth -= 1
+            if depth == 0:
+                return content[: i + 1]
+    return content
+
+
+def _inject_schema_into_messages(
+    working_messages: list[Message | dict[str, Any]],
+    schema_prompt: str,
+) -> list[Message | dict[str, Any]]:
+    """Inject schema prompt into the system message of the message list.
+
+    If a system message exists, appends the schema prompt to it.
+    Otherwise, inserts a new system message at the beginning.
+
+    Returns:
+        A new message list with the schema injected.
+    """
+    result = list(working_messages)
+
+    for i, msg in enumerate(result):
+        role = msg.get("role") if isinstance(msg, dict) else msg.role
+        if role == "system":
+            content = msg.get("content") if isinstance(msg, dict) else msg.content
+            if isinstance(msg, dict):
+                result[i] = {"role": "system", "content": content + schema_prompt}
+            else:
+                result[i] = Message(role="system", content=content + schema_prompt)
+            return result
+
+    # No system message found -- insert one
+    result.insert(
+        0,
+        {"role": "system", "content": f"You are a helpful assistant.{schema_prompt}"},
+    )
+    return result
+
+
 class StructuredOutputValidator:
     """
     Validator for structured LLM outputs with automatic retry.
@@ -98,54 +188,8 @@ class StructuredOutputValidator:
         Returns:
             Extracted JSON string
         """
-        content = content.strip()
-
-        # Remove markdown code blocks
-        if content.startswith("```json"):
-            content = content[7:]
-        elif content.startswith("```"):
-            content = content[3:]
-
-        if content.endswith("```"):
-            content = content[:-3]
-
-        content = content.strip()
-
-        # Try to find JSON object/array boundaries
-        if not (content.startswith("{") or content.startswith("[")):
-            # Look for JSON start
-            json_start = -1
-            for i, char in enumerate(content):
-                if char in "{[":
-                    json_start = i
-                    break
-
-            if json_start >= 0:
-                content = content[json_start:]
-
-        # Find matching end bracket
-        if content.startswith("{"):
-            depth = 0
-            for i, char in enumerate(content):
-                if char == "{":
-                    depth += 1
-                elif char == "}":
-                    depth -= 1
-                    if depth == 0:
-                        content = content[: i + 1]
-                        break
-        elif content.startswith("["):
-            depth = 0
-            for i, char in enumerate(content):
-                if char == "[":
-                    depth += 1
-                elif char == "]":
-                    depth -= 1
-                    if depth == 0:
-                        content = content[: i + 1]
-                        break
-
-        return content
+        content = _strip_code_blocks(content)
+        return _find_json_boundaries(content)
 
     def _build_schema_prompt(self, response_model: type[BaseModel]) -> str:
         """
@@ -282,62 +326,33 @@ class StructuredOutputValidator:
         # Add schema to system prompt if configured
         if self.config.include_schema_in_prompt:
             schema_prompt = self._build_schema_prompt(response_model)
+            working_messages = _inject_schema_into_messages(working_messages, schema_prompt)
 
-            # Find and modify system message, or add one
-            system_found = False
-            for i, msg in enumerate(working_messages):
-                role = msg.get("role") if isinstance(msg, dict) else msg.role
-                if role == "system":
-                    content = msg.get("content") if isinstance(msg, dict) else msg.content
-                    if isinstance(msg, dict):
-                        working_messages[i] = {
-                            "role": "system",
-                            "content": content + schema_prompt,
-                        }
-                    else:
-                        working_messages[i] = Message(
-                            role="system",
-                            content=content + schema_prompt,
-                        )
-                    system_found = True
-                    break
+        return await self._retry_loop(llm_client, working_messages, response_model, **kwargs)
 
-            if not system_found:
-                working_messages.insert(
-                    0,
-                    {"role": "system", "content": f"You are a helpful assistant.{schema_prompt}"},
-                )
+    async def _retry_loop(
+        self,
+        llm_client: LLMClient,
+        working_messages: list[Message | dict[str, Any]],
+        response_model: type[T],
+        **kwargs: Any,
+    ) -> ValidationResult:
+        """Execute the generate-validate-retry loop.
 
+        Returns:
+            ValidationResult after retries are exhausted or success.
+        """
         last_result: ValidationResult | None = None
 
         for attempt in range(self.config.max_retries + 1):
             try:
-                # Generate response
-                temperature = (
-                    self.config.retry_temperature if attempt > 0 else kwargs.get("temperature", 0.0)
+                result = await self._attempt_generation(
+                    llm_client,
+                    working_messages,
+                    response_model,
+                    attempt,
+                    **kwargs,
                 )
-
-                response = await llm_client.generate_response(
-                    messages=working_messages,
-                    max_tokens=self.config.max_tokens,
-                    temperature=temperature,
-                    **{k: v for k, v in kwargs.items() if k not in ("temperature", "max_tokens")},
-                )
-
-                # Extract content
-                content = response.get("content", "")
-                if not content:
-                    last_result = ValidationResult(
-                        success=False,
-                        raw_response=str(response),
-                        error="Empty response from LLM",
-                        attempts=attempt + 1,
-                    )
-                    continue
-
-                # Validate
-                result = self.validate(content, response_model)
-                result.attempts = attempt + 1
 
                 if result.success:
                     if attempt > 0:
@@ -351,9 +366,11 @@ class StructuredOutputValidator:
                 # Prepare retry if we have more attempts
                 if attempt < self.config.max_retries and self.config.include_error_feedback:
                     retry_prompt = self._build_retry_prompt(
-                        content, result.error or "Unknown error", response_model
+                        result.raw_response or "", result.error or "Unknown error", response_model
                     )
-                    working_messages.append({"role": "assistant", "content": content})
+                    working_messages.append(
+                        {"role": "assistant", "content": result.raw_response or ""}
+                    )
                     working_messages.append({"role": "user", "content": retry_prompt})
 
                     logger.debug(
@@ -381,6 +398,39 @@ class StructuredOutputValidator:
             error="No response generated",
             attempts=self.config.max_retries + 1,
         )
+
+    async def _attempt_generation(
+        self,
+        llm_client: LLMClient,
+        working_messages: list[Message | dict[str, Any]],
+        response_model: type[T],
+        attempt: int,
+        **kwargs: Any,
+    ) -> ValidationResult:
+        """Execute a single generation + validation attempt."""
+        temperature = (
+            self.config.retry_temperature if attempt > 0 else kwargs.get("temperature", 0.0)
+        )
+
+        response = await llm_client.generate_response(
+            messages=working_messages,
+            max_tokens=self.config.max_tokens,
+            temperature=temperature,
+            **{k: v for k, v in kwargs.items() if k not in ("temperature", "max_tokens")},
+        )
+
+        content = response.get("content", "")
+        if not content:
+            return ValidationResult(
+                success=False,
+                raw_response=str(response),
+                error="Empty response from LLM",
+                attempts=attempt + 1,
+            )
+
+        result = self.validate(content, response_model)
+        result.attempts = attempt + 1
+        return result
 
 
 # Global validator instance

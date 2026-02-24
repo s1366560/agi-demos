@@ -87,13 +87,8 @@ class HITLReactLoopTester:
 
         return events
 
-    async def run_test(self) -> bool:
-        """Run the complete HITL -> ReAct test."""
-        print("\n" + "=" * 70)
-        print("HITL -> ReAct Event Loop Test")
-        print("=" * 70)
-
-        # Step 1: Connect
+    async def _connect_and_subscribe(self) -> bool:
+        """Connect to WebSocket and subscribe to conversation."""
         print("\n[Step 1] Connecting to WebSocket...")
         if not await self.connect():
             print(f"   ✗ Failed: {self.errors[-1]}")
@@ -109,7 +104,7 @@ class HITLReactLoopTester:
         self.session_id = data.get("data", {}).get("session_id")
         print(f"   ✓ Connected (session: {self.session_id[:8]}...)")
 
-        # Step 2: Subscribe to conversation
+        # Subscribe to conversation
         print("\n[Step 2] Subscribing to conversation...")
         await self.ws.send(
             json.dumps(
@@ -119,10 +114,11 @@ class HITLReactLoopTester:
                 }
             )
         )
+        return True
 
-        # Step 3: Send message that triggers HITL
+    async def _send_trigger_message(self):
+        """Send a message designed to trigger HITL."""
         print("\n[Step 3] Sending message that triggers HITL...")
-        # This message is designed to trigger a decision HITL
         message = (
             "I need to delete all user data from the database. "
             "This is a destructive operation. What should I do?"
@@ -138,7 +134,8 @@ class HITLReactLoopTester:
             )
         )
 
-        # Step 4: Wait for HITL request
+    async def _wait_for_hitl_request(self) -> bool | None:
+        """Wait for HITL request. Returns True if completed, False if error, None if HITL found."""
         print("\n[Step 4] Waiting for HITL request...")
         print("   Receiving events:")
         self.events_before_hitl = await self.receive_until_event(
@@ -160,40 +157,43 @@ class HITLReactLoopTester:
             if "complete" in event_types:
                 print("   ✓ Agent completed without HITL")
                 return True
-            elif "error" in event_types:
+            if "error" in event_types:
                 print("   ✗ Agent error")
                 return False
-            else:
-                print("   ⚠ No completion or HITL - may need different test message")
-                return True  # Not a failure, just need different test
+            print("   ⚠ No completion or HITL - may need different test message")
+            return True  # Not a failure, just need different test
 
         print(f"\n   ✓ Received HITL request: {self.hitl_type} / {self.hitl_request_id}")
+        return None  # HITL found, continue
 
-        # Step 5: Send HITL response
-        print("\n[Step 5] Sending HITL response...")
+    def _build_hitl_response(self) -> dict[str, Any]:
+        """Build the appropriate HITL response message."""
         if self.hitl_type == "decision":
-            response_msg = {
+            return {
                 "type": "decision_respond",
                 "request_id": self.hitl_request_id,
                 "decision": "cancel",  # Safe choice for test
             }
-        elif self.hitl_type == "clarification":
-            response_msg = {
+        if self.hitl_type == "clarification":
+            return {
                 "type": "clarification_respond",
                 "request_id": self.hitl_request_id,
                 "answer": "Please use the safest approach",
             }
-        else:
-            response_msg = {
-                "type": "env_var_respond",
-                "request_id": self.hitl_request_id,
-                "values": {"test_var": "test_value"},
-            }
+        return {
+            "type": "env_var_respond",
+            "request_id": self.hitl_request_id,
+            "values": {"test_var": "test_value"},
+        }
 
+    async def _send_hitl_and_verify(self) -> bool:
+        """Send HITL response and verify agent continues."""
+        print("\n[Step 5] Sending HITL response...")
+        response_msg = self._build_hitl_response()
         await self.ws.send(json.dumps(response_msg))
         print(f"   ✓ Sent {response_msg['type']}")
 
-        # Step 6: CRITICAL - Wait for events AFTER HITL response
+        # CRITICAL - Wait for events AFTER HITL response
         print("\n[Step 6] CRITICAL: Waiting for events AFTER HITL response...")
         print("   This tests if ReAct Agent event loop continues correctly.")
         print("   Receiving events:")
@@ -202,7 +202,10 @@ class HITLReactLoopTester:
             target_events=["complete", "error"], timeout=45.0
         )
 
-        # Step 7: Analyze results
+        return self._analyze_post_hitl_results()
+
+    def _analyze_post_hitl_results(self) -> bool:
+        """Analyze results after HITL response."""
         print("\n[Step 7] Analyzing results...")
 
         event_types_after = [e.get("type") for e in self.events_after_hitl]
@@ -217,14 +220,30 @@ class HITLReactLoopTester:
         if "complete" in event_types_after:
             print("   ✓ SUCCESS: ReAct Agent continued and completed after HITL!")
             return True
-        elif "error" in event_types_after:
+        if "error" in event_types_after:
             error_event = next(e for e in self.events_after_hitl if e.get("type") == "error")
             print(f"   ✗ ERROR after HITL: {error_event.get('data', {})}")
             return False
-        else:
-            print("   ⚠ Events received but no completion (timeout)")
-            print("   This may indicate the agent is still processing.")
-            return True  # Partial success
+        print("   ⚠ Events received but no completion (timeout)")
+        print("   This may indicate the agent is still processing.")
+        return True  # Partial success
+
+    async def run_test(self) -> bool:
+        """Run the complete HITL -> ReAct test."""
+        print("\n" + "=" * 70)
+        print("HITL -> ReAct Event Loop Test")
+        print("=" * 70)
+
+        if not await self._connect_and_subscribe():
+            return False
+
+        await self._send_trigger_message()
+
+        hitl_result = await self._wait_for_hitl_request()
+        if hitl_result is not None:
+            return hitl_result
+
+        return await self._send_hitl_and_verify()
 
     async def close(self):
         """Close connection."""

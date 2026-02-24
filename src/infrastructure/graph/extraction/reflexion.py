@@ -301,33 +301,30 @@ class ReflexionChecker:
     ) -> list[dict[str, Any]]:
         """
         Parse LLM response for missed entities.
-
         Args:
             response: LLM response text
-
-        Returns:
             List of missed entity dictionaries
         """
         try:
             data = json.loads(response)
-
-            if isinstance(data, dict):
-                if "missed_entities" in data:
-                    return data["missed_entities"]
-                elif "entities" in data:
-                    return data["entities"]
-                elif "name" in data:
-                    return [data]
-                return []
-
-            elif isinstance(data, list):
-                return data
-
-            return []
-
+            return self._extract_missed_entities(data)
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse reflexion response as JSON: {e}")
             return self._extract_json_from_text(response)
+    @staticmethod
+    def _extract_missed_entities(data: Any) -> list[dict[str, Any]]:
+        """Extract missed entities from parsed JSON data."""
+        if isinstance(data, dict):
+            if "missed_entities" in data:
+                return data["missed_entities"]
+            if "entities" in data:
+                return data["entities"]
+            if "name" in data:
+                return [data]
+            return []
+        if isinstance(data, list):
+            return data
+        return []
 
     def _extract_json_from_text(self, text: str) -> list[dict[str, Any]]:
         """

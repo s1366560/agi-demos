@@ -360,6 +360,42 @@ class EnhancedHealthMonitor:
             except Exception as e:
                 logger.error(f"Error checking sandbox {sandbox_id}: {e}")
 
+    async def _check_container_running(self, sandbox_id: str) -> bool:
+        """Check if sandbox container is running."""
+        if not hasattr(self._adapter, "get_sandbox"):
+            return False
+        instance = await self._adapter.get_sandbox(sandbox_id)
+        if not instance:
+            return False
+        from src.domain.ports.services.sandbox_port import SandboxStatus
+
+        return instance.status == SandboxStatus.RUNNING
+
+    async def _check_mcp_connection(self, sandbox_id: str) -> bool:
+        """Check MCP WebSocket connection, attempting reconnect if needed."""
+        mcp_connected = False
+        if hasattr(self._adapter, "_active_sandboxes"):
+            async with self._adapter._lock:
+                instance = self._adapter._active_sandboxes.get(sandbox_id)
+                if instance and instance.mcp_client:
+                    mcp_connected = instance.mcp_client.is_connected
+        if not mcp_connected:
+            mcp_connected = await self._adapter.connect_mcp(sandbox_id, timeout=10)
+        return mcp_connected
+
+    async def _check_full_services(self, sandbox_id: str) -> bool:
+        """Run a full service check by executing a simple command."""
+        try:
+            await self._adapter.call_tool(
+                sandbox_id,
+                "bash",
+                {"command": "echo health_check"},
+                timeout=5,
+            )
+            return True
+        except Exception:
+            return False
+
     async def check_sandbox_health(
         self,
         sandbox_id: str,
@@ -367,85 +403,46 @@ class EnhancedHealthMonitor:
     ) -> HealthCheckResult:
         """
         Perform a health check on a specific sandbox.
-
         Args:
             sandbox_id: The sandbox to check
             level: Level of health check to perform
-
-        Returns:
             HealthCheckResult with check details
         """
         start_time = time.time()
-        result = HealthCheckResult(
-            sandbox_id=sandbox_id,
-            healthy=False,
-            level=level,
-        )
+        result = HealthCheckResult(sandbox_id=sandbox_id, healthy=False, level=level)
 
         try:
-            # Basic check - container running
-            if hasattr(self._adapter, "get_sandbox"):
-                instance = await self._adapter.get_sandbox(sandbox_id)
-                if instance:
-                    from src.domain.ports.services.sandbox_port import SandboxStatus
-
-                    result.container_running = instance.status == SandboxStatus.RUNNING
-
+            result.container_running = await self._check_container_running(sandbox_id)
             if not result.container_running:
                 result.error_message = "Container not running"
                 return result
-
             if level == HealthCheckLevel.BASIC:
                 result.healthy = True
                 return result
 
-            # MCP check - WebSocket connection
-            if hasattr(self._adapter, "_active_sandboxes"):
-                async with self._adapter._lock:
-                    instance = self._adapter._active_sandboxes.get(sandbox_id)
-                    if instance and instance.mcp_client:
-                        result.mcp_connected = instance.mcp_client.is_connected
-
-            if not result.mcp_connected:
-                # Try to reconnect
-                try:
-                    connected = await self._adapter.connect_mcp(sandbox_id, timeout=10)
-                    result.mcp_connected = connected
-                except Exception as e:
-                    result.error_message = f"MCP connection failed: {e}"
-                    return result
-
+            # MCP check
+            try:
+                result.mcp_connected = await self._check_mcp_connection(sandbox_id)
+            except Exception as e:
+                result.error_message = f"MCP connection failed: {e}"
+                return result
             if level == HealthCheckLevel.MCP:
                 result.healthy = result.mcp_connected
                 result.latency_ms = (time.time() - start_time) * 1000
                 return result
 
-            # Services check - desktop and terminal
-            if level in (HealthCheckLevel.SERVICES, HealthCheckLevel.FULL):
-                # For now, assume services are healthy if MCP is connected
-                result.services_healthy = result.mcp_connected
-
-            # Full check - execute a simple command
+            # Services/Full check
+            result.services_healthy = result.mcp_connected
             if level == HealthCheckLevel.FULL and result.mcp_connected:
-                try:
-                    await self._adapter.call_tool(
-                        sandbox_id,
-                        "bash",
-                        {"command": "echo health_check"},
-                        timeout=5,
-                    )
-                    result.services_healthy = True
-                except Exception as e:
-                    result.error_message = f"Tool execution failed: {e}"
-                    result.services_healthy = False
-
+                result.services_healthy = await self._check_full_services(sandbox_id)
+                if not result.services_healthy:
+                    result.error_message = "Tool execution failed"
             result.healthy = result.container_running and result.mcp_connected
             result.latency_ms = (time.time() - start_time) * 1000
 
         except Exception as e:
             result.error_message = str(e)
             logger.error(f"Health check error for {sandbox_id}: {e}")
-
         return result
 
     async def _handle_unhealthy(self, sandbox_id: str, result: HealthCheckResult) -> None:

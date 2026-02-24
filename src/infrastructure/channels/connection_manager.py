@@ -272,49 +272,16 @@ class ChannelConnectionManager:
             ChannelAdapterBuildContext,
             get_plugin_registry,
         )
-        from src.infrastructure.security.encryption_service import get_encryption_service
 
         plugin_registry = get_plugin_registry()
         metadata = plugin_registry.list_channel_type_metadata().get(
             (config.channel_type or "").lower()
         )
-        secret_paths_raw = getattr(metadata, "secret_paths", None)
-        secret_paths = (
-            [path for path in secret_paths_raw if isinstance(path, str)]
-            if isinstance(secret_paths_raw, list)
-            else []
+        secret_paths = self._resolve_secret_paths(metadata)
+
+        app_secret, encrypt_key, verification_token, extra_settings = self._decrypt_config_secrets(
+            config, secret_paths
         )
-        encryption_service = get_encryption_service()
-
-        def _decrypt_if_needed(value: str | None) -> str | None:
-            if not value:
-                return value
-            try:
-                return encryption_service.decrypt(value)
-            except Exception:
-                return value
-
-        app_secret = config.app_secret or ""
-        if app_secret and (not secret_paths or "app_secret" in secret_paths):
-            app_secret = _decrypt_if_needed(app_secret) or ""
-
-        encrypt_key = config.encrypt_key
-        if encrypt_key and "encrypt_key" in secret_paths:
-            encrypt_key = _decrypt_if_needed(encrypt_key)
-
-        verification_token = config.verification_token
-        if verification_token and "verification_token" in secret_paths:
-            verification_token = _decrypt_if_needed(verification_token)
-
-        extra_settings = dict(config.extra_settings or {})
-        for secret_path in secret_paths:
-            if secret_path in {"app_secret", "encrypt_key", "verification_token"}:
-                continue
-            if "." in secret_path:
-                continue
-            secret_value = extra_settings.get(secret_path)
-            if isinstance(secret_value, str) and secret_value:
-                extra_settings[secret_path] = _decrypt_if_needed(secret_value)
 
         channel_config = ChannelConfig(
             enabled=config.enabled,
@@ -343,6 +310,60 @@ class ChannelConnectionManager:
         raise ValueError(f"Unsupported channel type: {config.channel_type}")
 
     @staticmethod
+    def _resolve_secret_paths(metadata: Any) -> list[str]:
+        """Extract secret_paths list from channel type metadata."""
+        secret_paths_raw = getattr(metadata, "secret_paths", None)
+        if isinstance(secret_paths_raw, list):
+            return [path for path in secret_paths_raw if isinstance(path, str)]
+        return []
+
+    @staticmethod
+    def _decrypt_config_secrets(
+        config: ChannelConfigModel,
+        secret_paths: list[str],
+    ) -> tuple[str, str | None, str | None, dict[str, Any]]:
+        """Decrypt secret fields in the channel configuration.
+
+        Returns:
+            Tuple of (app_secret, encrypt_key, verification_token, extra_settings).
+        """
+        from src.infrastructure.security.encryption_service import get_encryption_service
+
+        encryption_service = get_encryption_service()
+
+        def _decrypt_if_needed(value: str | None) -> str | None:
+            if not value:
+                return value
+            try:
+                return encryption_service.decrypt(value)
+            except Exception:
+                return value
+
+        app_secret = config.app_secret or ""
+        if app_secret and (not secret_paths or "app_secret" in secret_paths):
+            app_secret = _decrypt_if_needed(app_secret) or ""
+
+        encrypt_key = config.encrypt_key
+        if encrypt_key and "encrypt_key" in secret_paths:
+            encrypt_key = _decrypt_if_needed(encrypt_key)
+
+        verification_token = config.verification_token
+        if verification_token and "verification_token" in secret_paths:
+            verification_token = _decrypt_if_needed(verification_token)
+
+        extra_settings = dict(config.extra_settings or {})
+        for sp in secret_paths:
+            if sp in {"app_secret", "encrypt_key", "verification_token"}:
+                continue
+            if "." in sp:
+                continue
+            secret_value = extra_settings.get(sp)
+            if isinstance(secret_value, str) and secret_value:
+                extra_settings[sp] = _decrypt_if_needed(secret_value)
+
+        return app_secret, encrypt_key, verification_token, extra_settings
+
+    @staticmethod
     def _log_plugin_diagnostic(diagnostic: PluginDiagnostic) -> None:
         """Log plugin diagnostic records emitted during adapter creation."""
         message = (
@@ -362,71 +383,14 @@ class ChannelConnectionManager:
         connection: ManagedConnection,
         config: ChannelConfigModel,
     ) -> None:
-        """Run the connection loop with automatic reconnection.
-
-        Args:
-            connection: The managed connection.
-            config: The channel configuration.
-        """
+        """Run the connection loop with automatic reconnection."""
         while not connection._stop_event.is_set():
             try:
-                # Attempt to connect
-                connection.status = ConnectionStatus.CONNECTING
-                await self._update_db_status(config.id, "connecting")
-
-                # Set up message handler
-                def message_handler(message: Message) -> None:
-                    message.project_id = config.project_id
-
-                    raw_data = message.raw_data if isinstance(message.raw_data, dict) else {}
-                    routing_meta = raw_data.get("_routing")
-                    if not isinstance(routing_meta, dict):
-                        routing_meta = {}
-
-                    event = raw_data.get("event")
-                    event_message = event.get("message") if isinstance(event, dict) else None
-                    if isinstance(event_message, dict):
-                        source_message_id = event_message.get("message_id")
-                        if isinstance(source_message_id, str) and source_message_id:
-                            routing_meta["channel_message_id"] = source_message_id
-
-                    routing_meta["channel_config_id"] = config.id
-                    routing_meta["project_id"] = config.project_id
-                    routing_meta["channel_type"] = config.channel_type
-                    routing_meta["rate_limit_per_minute"] = getattr(
-                        config, "rate_limit_per_minute", 60
-                    )
-                    raw_data["_routing"] = routing_meta
-                    message.raw_data = raw_data
-
-                    if self._message_router:
-                        try:
-                            self._schedule_route_message(message)
-                        except Exception as e:
-                            logger.error(f"[ChannelManager] Error routing message: {e}")
-
-                connection.adapter.on_message(message_handler)
-
-                # Connect
-                await connection.adapter.connect()
-
-                connection.status = ConnectionStatus.CONNECTED
-                connection.last_heartbeat = datetime.now(UTC)
-                connection.reconnect_attempts = 0
-                connection.last_error = None
-
-                await self._update_db_status(config.id, "connected")
-
-                logger.info(f"[ChannelManager] Connected: {config.id} ({config.channel_type})")
-
-                # Wait for disconnect or stop signal
-                while connection.adapter.connected and not connection._stop_event.is_set():
-                    await asyncio.sleep(1)
+                await self._attempt_connect(connection, config)
 
                 if connection._stop_event.is_set():
                     break
 
-                # Disconnected unexpectedly
                 logger.warning(f"[ChannelManager] Connection lost: {config.id}")
                 connection.status = ConnectionStatus.DISCONNECTED
 
@@ -434,37 +398,114 @@ class ChannelConnectionManager:
                 logger.error(f"[ChannelManager] Connection error for {config.id}: {e}")
                 connection.status = ConnectionStatus.ERROR
                 connection.last_error = str(e)
-
                 await self._update_db_status(config.id, "error", str(e))
 
-            # Reconnect with exponential backoff (circuit breaker)
-            if not connection._stop_event.is_set():
-                connection.reconnect_attempts += 1
-                if connection.reconnect_attempts >= MAX_RECONNECT_ATTEMPTS:
-                    connection.status = ConnectionStatus.CIRCUIT_OPEN
-                    await self._update_db_status(
-                        config.id,
-                        "error",
-                        f"Circuit breaker open after {MAX_RECONNECT_ATTEMPTS} "
-                        f"failed attempts. Manual restart required.",
-                    )
-                    logger.error(
-                        f"[ChannelManager] Circuit breaker open for {config.id} "
-                        f"after {connection.reconnect_attempts} attempts"
-                    )
-                    break
+            should_stop = await self._handle_reconnect_backoff(connection, config)
+            if should_stop:
+                break
 
-                delay = min(
-                    INITIAL_RECONNECT_DELAY**connection.reconnect_attempts,
-                    MAX_RECONNECT_DELAY,
-                )
-                logger.info(
-                    f"[ChannelManager] Reconnecting {config.id} in {delay}s "
-                    f"(attempt {connection.reconnect_attempts})"
-                )
-                await asyncio.sleep(delay)
+        await self._cleanup_connection(connection, config)
 
-        # Clean up
+    async def _attempt_connect(
+        self,
+        connection: ManagedConnection,
+        config: ChannelConfigModel,
+    ) -> None:
+        """Attempt to connect and wait until disconnect or stop."""
+        connection.status = ConnectionStatus.CONNECTING
+        await self._update_db_status(config.id, "connecting")
+
+        handler = self._build_message_handler(config)
+        connection.adapter.on_message(handler)
+
+        await connection.adapter.connect()
+
+        connection.status = ConnectionStatus.CONNECTED
+        connection.last_heartbeat = datetime.now(UTC)
+        connection.reconnect_attempts = 0
+        connection.last_error = None
+        await self._update_db_status(config.id, "connected")
+        logger.info(f"[ChannelManager] Connected: {config.id} ({config.channel_type})")
+
+        while connection.adapter.connected and not connection._stop_event.is_set():
+            await asyncio.sleep(1)
+
+    def _build_message_handler(self, config: ChannelConfigModel) -> Callable[[Message], None]:
+        """Create a message handler closure for the given config."""
+
+        def message_handler(message: Message) -> None:
+            message.project_id = config.project_id
+
+            raw_data = message.raw_data if isinstance(message.raw_data, dict) else {}
+            routing_meta = raw_data.get("_routing")
+            if not isinstance(routing_meta, dict):
+                routing_meta = {}
+
+            event = raw_data.get("event")
+            event_message = event.get("message") if isinstance(event, dict) else None
+            if isinstance(event_message, dict):
+                source_message_id = event_message.get("message_id")
+                if isinstance(source_message_id, str) and source_message_id:
+                    routing_meta["channel_message_id"] = source_message_id
+
+            routing_meta["channel_config_id"] = config.id
+            routing_meta["project_id"] = config.project_id
+            routing_meta["channel_type"] = config.channel_type
+            routing_meta["rate_limit_per_minute"] = getattr(config, "rate_limit_per_minute", 60)
+            raw_data["_routing"] = routing_meta
+            message.raw_data = raw_data
+
+            if self._message_router:
+                try:
+                    self._schedule_route_message(message)
+                except Exception as e:
+                    logger.error(f"[ChannelManager] Error routing message: {e}")
+
+        return message_handler
+
+    async def _handle_reconnect_backoff(
+        self,
+        connection: ManagedConnection,
+        config: ChannelConfigModel,
+    ) -> bool:
+        """Handle reconnect backoff with circuit breaker.
+
+        Returns:
+            True if the loop should stop, False to continue reconnecting.
+        """
+        if connection._stop_event.is_set():
+            return True
+
+        connection.reconnect_attempts += 1
+        if connection.reconnect_attempts >= MAX_RECONNECT_ATTEMPTS:
+            connection.status = ConnectionStatus.CIRCUIT_OPEN
+            await self._update_db_status(
+                config.id,
+                "error",
+                f"Circuit breaker open after {MAX_RECONNECT_ATTEMPTS} "
+                f"failed attempts. Manual restart required.",
+            )
+            logger.error(
+                f"[ChannelManager] Circuit breaker open for {config.id} "
+                f"after {connection.reconnect_attempts} attempts"
+            )
+            return True
+
+        delay = min(
+            INITIAL_RECONNECT_DELAY**connection.reconnect_attempts,
+            MAX_RECONNECT_DELAY,
+        )
+        logger.info(
+            f"[ChannelManager] Reconnecting {config.id} in {delay}s "
+            f"(attempt {connection.reconnect_attempts})"
+        )
+        await asyncio.sleep(delay)
+        return False
+
+    async def _cleanup_connection(
+        self, connection: ManagedConnection, config: ChannelConfigModel
+    ) -> None:
+        """Clean up after connection loop ends."""
         try:
             await connection.adapter.disconnect()
         except Exception as e:

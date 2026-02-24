@@ -386,69 +386,47 @@ class AutoScalingService:
             cooldown_end = last_up + timedelta(seconds=policy.scale_up_cooldown_seconds)
             if now < cooldown_end:
                 return None
-
         current = self._current_counts.get(instance_key, 1)
         if current >= policy.max_instances:
             return None
-
         recent = history[-policy.evaluation_periods :]
         metrics = recent[-1]
+        # Check metrics against thresholds
+        metric_checks = [
+            (
+                sum(m.cpu_utilization for m in recent) / len(recent),
+                policy.cpu_scale_up_threshold,
+                ScalingReason.HIGH_CPU,
+            ),
+            (
+                sum(m.memory_utilization for m in recent) / len(recent),
+                policy.memory_scale_up_threshold,
+                ScalingReason.HIGH_MEMORY,
+            ),
+            (
+                sum(m.queue_depth for m in recent) / len(recent),
+                policy.queue_depth_scale_up_threshold,
+                ScalingReason.HIGH_QUEUE_DEPTH,
+            ),
+            (
+                sum(m.average_latency_ms for m in recent) / len(recent),
+                policy.latency_scale_up_threshold_ms,
+                ScalingReason.HIGH_LATENCY,
+            ),
+        ]
 
-        # Check CPU
-        avg_cpu = sum(m.cpu_utilization for m in recent) / len(recent)
-        if avg_cpu >= policy.cpu_scale_up_threshold:
-            return ScalingDecision(
-                direction=ScalingDirection.UP,
-                reason=ScalingReason.HIGH_CPU,
-                target_count=min(
-                    current + policy.scale_up_increment,
-                    policy.max_instances,
-                ),
-                metrics=metrics,
-                confidence=min(avg_cpu / policy.cpu_scale_up_threshold, 1.0),
-            )
-
-        # Check memory
-        avg_memory = sum(m.memory_utilization for m in recent) / len(recent)
-        if avg_memory >= policy.memory_scale_up_threshold:
-            return ScalingDecision(
-                direction=ScalingDirection.UP,
-                reason=ScalingReason.HIGH_MEMORY,
-                target_count=min(
-                    current + policy.scale_up_increment,
-                    policy.max_instances,
-                ),
-                metrics=metrics,
-                confidence=min(avg_memory / policy.memory_scale_up_threshold, 1.0),
-            )
-
-        # Check queue depth
-        avg_queue = sum(m.queue_depth for m in recent) / len(recent)
-        if avg_queue >= policy.queue_depth_scale_up_threshold:
-            return ScalingDecision(
-                direction=ScalingDirection.UP,
-                reason=ScalingReason.HIGH_QUEUE_DEPTH,
-                target_count=min(
-                    current + policy.scale_up_increment,
-                    policy.max_instances,
-                ),
-                metrics=metrics,
-                confidence=min(avg_queue / policy.queue_depth_scale_up_threshold, 1.0),
-            )
-
-        # Check latency
-        avg_latency = sum(m.average_latency_ms for m in recent) / len(recent)
-        if avg_latency >= policy.latency_scale_up_threshold_ms:
-            return ScalingDecision(
-                direction=ScalingDirection.UP,
-                reason=ScalingReason.HIGH_LATENCY,
-                target_count=min(
-                    current + policy.scale_up_increment,
-                    policy.max_instances,
-                ),
-                metrics=metrics,
-                confidence=min(avg_latency / policy.latency_scale_up_threshold_ms, 1.0),
-            )
+        for avg_value, threshold, reason in metric_checks:
+            if avg_value >= threshold:
+                return ScalingDecision(
+                    direction=ScalingDirection.UP,
+                    reason=reason,
+                    target_count=min(
+                        current + policy.scale_up_increment,
+                        policy.max_instances,
+                    ),
+                    metrics=metrics,
+                    confidence=min(avg_value / threshold, 1.0),
+                )
 
         return None
 

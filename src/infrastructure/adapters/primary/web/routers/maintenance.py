@@ -374,6 +374,214 @@ async def get_maintenance_status(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+async def _run_incremental_refresh(
+    group_id: str,
+    tenant_id: str | None,
+    project_id: str | None,
+    user_id: str,
+    workflow_engine: WorkflowEnginePort,
+) -> dict[str, Any]:
+    """Handle incremental_refresh operation for optimize_graph."""
+    from uuid import uuid4
+
+    from src.infrastructure.adapters.secondary.persistence.database import (
+        async_session_factory,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import TaskLog
+
+    task_payload = {
+        "group_id": group_id,
+        "episode_uuids": None,
+        "rebuild_communities": False,
+        "tenant_id": tenant_id,
+        "project_id": project_id,
+        "user_id": user_id,
+    }
+    task_id = str(uuid4())
+    async with async_session_factory() as session, session.begin():
+        task_log = TaskLog(
+            id=task_id,
+            group_id=group_id,
+            task_type="incremental_refresh",
+            status="PENDING",
+            payload=task_payload,
+            entity_type="episode",
+            created_at=datetime.now(UTC),
+        )
+        session.add(task_log)
+    task_payload["task_id"] = task_id
+    workflow_id = f"incremental-refresh-{group_id}-{task_id[:8]}"
+    await workflow_engine.start_workflow(
+        workflow_name="incremental_refresh",
+        workflow_id=workflow_id,
+        input_data=task_payload,
+        task_queue="default",
+    )
+    return {
+        "operation": "incremental_refresh",
+        "result": {"status": "success", "task_id": task_id, "workflow_id": workflow_id},
+    }
+
+
+async def _run_deduplicate(
+    dry_run: bool,
+    group_id: str,
+    project_id: str | None,
+    neo4j_client: Neo4jClient,
+    workflow_engine: WorkflowEnginePort,
+) -> dict[str, Any]:
+    """Handle deduplicate operation for optimize_graph."""
+    if dry_run:
+        query = """
+        MATCH (e:Entity)
+        WITH e.name as name, collect(e) as entities
+        WHERE size(entities) > 1
+        RETURN name, entities
+        LIMIT 100
+        """
+        result = await neo4j_client.execute_query(query)
+        duplicates = [{"name": r["name"], "count": len(r["entities"])} for r in result.records]
+        return {
+            "operation": "deduplicate",
+            "result": {
+                "dry_run": True,
+                "duplicates_found": len(duplicates),
+                "message": f"Found {len(duplicates)} potential duplicate groups",
+            },
+        }
+
+    from uuid import uuid4
+
+    from src.infrastructure.adapters.secondary.persistence.database import (
+        async_session_factory,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import TaskLog
+
+    task_payload = {
+        "group_id": group_id,
+        "similarity_threshold": 0.9,
+        "dry_run": dry_run,
+        "project_id": project_id,
+    }
+    task_id = str(uuid4())
+    async with async_session_factory() as session, session.begin():
+        task_log = TaskLog(
+            id=task_id,
+            group_id=group_id,
+            task_type="deduplicate_entities",
+            status="PENDING",
+            payload=task_payload,
+            entity_type="entity",
+            created_at=datetime.now(UTC),
+        )
+        session.add(task_log)
+    task_payload["task_id"] = task_id
+    workflow_id = f"deduplicate-entities-{group_id}-{task_id[:8]}"
+    await workflow_engine.start_workflow(
+        workflow_name="deduplicate_entities",
+        workflow_id=workflow_id,
+        input_data=task_payload,
+        task_queue="default",
+    )
+    return {
+        "operation": "deduplicate",
+        "result": {"status": "success", "task_id": task_id, "workflow_id": workflow_id},
+    }
+
+
+async def _run_invalidate_edges(
+    dry_run: bool,
+    neo4j_client: Neo4jClient,
+) -> dict[str, Any]:
+    """Handle invalidate_edges operation for optimize_graph."""
+    cutoff_date = datetime.now(UTC) - timedelta(days=30)
+    if dry_run:
+        query = """
+        MATCH (a)-[r]->(b)
+        WHERE r.created_at < datetime($cutoff_date)
+        RETURN count(r) as count
+        """
+        result = await neo4j_client.execute_query(query, cutoff_date=cutoff_date.isoformat())
+        count = result.records[0]["count"] if result.records else 0
+        return {
+            "operation": "invalidate_edges",
+            "result": {
+                "dry_run": True,
+                "stale_edges_found": count,
+                "message": f"Found {count} stale edges",
+            },
+        }
+
+    delete_query = """
+    MATCH (a)-[r]->(b)
+    WHERE r.created_at < datetime($cutoff_date)
+    DELETE r
+    RETURN count(r) as deleted
+    """
+    result = await neo4j_client.execute_query(delete_query, cutoff_date=cutoff_date.isoformat())
+    deleted = result.records[0]["deleted"] if result.records else 0
+    return {
+        "operation": "invalidate_edges",
+        "result": {
+            "dry_run": False,
+            "deleted": deleted,
+            "message": f"Deleted {deleted} stale edges",
+        },
+    }
+
+
+async def _run_rebuild_communities(
+    dry_run: bool,
+    group_id: str,
+    project_id: str | None,
+    workflow_engine: WorkflowEnginePort,
+) -> dict[str, Any]:
+    """Handle rebuild_communities operation for optimize_graph."""
+    if dry_run:
+        return {
+            "operation": "rebuild_communities",
+            "result": {"status": "skipped", "message": "Skipped in dry_run mode"},
+        }
+
+    from uuid import uuid4
+
+    from src.infrastructure.adapters.secondary.persistence.database import (
+        async_session_factory,
+    )
+    from src.infrastructure.adapters.secondary.persistence.models import TaskLog
+
+    task_payload = {"task_group_id": group_id, "project_id": project_id}
+    task_id = str(uuid4())
+    async with async_session_factory() as session, session.begin():
+        task_log = TaskLog(
+            id=task_id,
+            group_id=group_id,
+            task_type="rebuild_communities",
+            status="PENDING",
+            payload=task_payload,
+            entity_type="community",
+            created_at=datetime.now(UTC),
+        )
+        session.add(task_log)
+    task_payload["task_id"] = task_id
+    workflow_id = f"rebuild-communities-{group_id}-{task_id[:8]}"
+    await workflow_engine.start_workflow(
+        workflow_name="rebuild_communities",
+        workflow_id=workflow_id,
+        input_data=task_payload,
+        task_queue="default",
+    )
+    return {
+        "operation": "rebuild_communities",
+        "result": {
+            "status": "success",
+            "message": "Community rebuild task submitted to Temporal",
+            "task_id": task_id,
+            "workflow_id": workflow_id,
+        },
+    }
+
+
 @router.post("/optimize")
 async def optimize_graph(
     operations: list[str] = Body(
@@ -394,230 +602,38 @@ async def optimize_graph(
     - invalidate_edges: Remove stale edges
     - rebuild_communities: Rebuild community structure
     """
-    from uuid import uuid4
-
-    from src.infrastructure.adapters.secondary.persistence.database import (
-        async_session_factory,
-    )
-    from src.infrastructure.adapters.secondary.persistence.models import TaskLog
-
     try:
         results = {
             "operations_run": [],
             "dry_run": dry_run,
             "timestamp": datetime.now(UTC).isoformat(),
         }
-
         group_id = getattr(current_user, "project_id", None) or "neo4j"
         project_id = getattr(current_user, "project_id", None)
         tenant_id = getattr(current_user, "tenant_id", None)
         user_id = str(current_user.id)
-
         for operation in operations:
             if operation == "incremental_refresh":
-                # Create task payload
-                task_payload = {
-                    "group_id": group_id,
-                    "episode_uuids": None,
-                    "rebuild_communities": False,
-                    "tenant_id": tenant_id,
-                    "project_id": project_id,
-                    "user_id": user_id,
-                }
-                task_id = str(uuid4())
-                async with async_session_factory() as session, session.begin():
-                    task_log = TaskLog(
-                        id=task_id,
-                        group_id=group_id,
-                        task_type="incremental_refresh",
-                        status="PENDING",
-                        payload=task_payload,
-                        entity_type="episode",
-                        created_at=datetime.now(UTC),
-                    )
-                    session.add(task_log)
-                task_payload["task_id"] = task_id
-                workflow_id = f"incremental-refresh-{group_id}-{task_id[:8]}"
-                await workflow_engine.start_workflow(
-                    workflow_name="incremental_refresh",
-                    workflow_id=workflow_id,
-                    input_data=task_payload,
-                    task_queue="default",
+                op_result = await _run_incremental_refresh(
+                    group_id, tenant_id, project_id, user_id, workflow_engine
                 )
-                results["operations_run"].append(
-                    {
-                        "operation": "incremental_refresh",
-                        "result": {
-                            "status": "success",
-                            "task_id": task_id,
-                            "workflow_id": workflow_id,
-                        },
-                    }
-                )
-
+                results["operations_run"].append(op_result)
             elif operation == "deduplicate":
-                if dry_run:
-                    # Dry run logic (Cypher)
-                    query = """
-                    MATCH (e:Entity)
-                    WITH e.name as name, collect(e) as entities
-                    WHERE size(entities) > 1
-                    RETURN name, entities
-                    LIMIT 100
-                    """
-                    result = await neo4j_client.execute_query(query)
-                    duplicates = []
-                    for r in result.records:
-                        name = r["name"]
-                        entities = r["entities"]
-                        duplicates.append({"name": name, "count": len(entities)})
-
-                    results["operations_run"].append(
-                        {
-                            "operation": "deduplicate",
-                            "result": {
-                                "dry_run": True,
-                                "duplicates_found": len(duplicates),
-                                "message": f"Found {len(duplicates)} potential duplicate groups",
-                            },
-                        }
-                    )
-                else:
-                    task_payload = {
-                        "group_id": group_id,
-                        "similarity_threshold": 0.9,
-                        "dry_run": dry_run,
-                        "project_id": project_id,
-                    }
-                    task_id = str(uuid4())
-                    async with async_session_factory() as session, session.begin():
-                        task_log = TaskLog(
-                            id=task_id,
-                            group_id=group_id,
-                            task_type="deduplicate_entities",
-                            status="PENDING",
-                            payload=task_payload,
-                            entity_type="entity",
-                            created_at=datetime.now(UTC),
-                        )
-                        session.add(task_log)
-                    task_payload["task_id"] = task_id
-                    workflow_id = f"deduplicate-entities-{group_id}-{task_id[:8]}"
-                    await workflow_engine.start_workflow(
-                        workflow_name="deduplicate_entities",
-                        workflow_id=workflow_id,
-                        input_data=task_payload,
-                        task_queue="default",
-                    )
-                    results["operations_run"].append(
-                        {
-                            "operation": "deduplicate",
-                            "result": {
-                                "status": "success",
-                                "task_id": task_id,
-                                "workflow_id": workflow_id,
-                            },
-                        }
-                    )
-
+                op_result = await _run_deduplicate(
+                    dry_run, group_id, project_id, neo4j_client, workflow_engine
+                )
+                results["operations_run"].append(op_result)
             elif operation == "invalidate_edges":
-                days_since_update = 30
-                cutoff_date = datetime.now(UTC) - timedelta(days=days_since_update)
-
-                if dry_run:
-                    query = """
-                    MATCH (a)-[r]->(b)
-                    WHERE r.created_at < datetime($cutoff_date)
-                    RETURN count(r) as count
-                    """
-                    result = await neo4j_client.execute_query(
-                        query, cutoff_date=cutoff_date.isoformat()
-                    )
-                    count = result.records[0]["count"] if result.records else 0
-
-                    results["operations_run"].append(
-                        {
-                            "operation": "invalidate_edges",
-                            "result": {
-                                "dry_run": True,
-                                "stale_edges_found": count,
-                                "message": f"Found {count} stale edges",
-                            },
-                        }
-                    )
-                else:
-                    delete_query = """
-                    MATCH (a)-[r]->(b)
-                    WHERE r.created_at < datetime($cutoff_date)
-                    DELETE r
-                    RETURN count(r) as deleted
-                    """
-                    result = await neo4j_client.execute_query(
-                        delete_query, cutoff_date=cutoff_date.isoformat()
-                    )
-                    deleted = result.records[0]["deleted"] if result.records else 0
-
-                    results["operations_run"].append(
-                        {
-                            "operation": "invalidate_edges",
-                            "result": {
-                                "dry_run": False,
-                                "deleted": deleted,
-                                "message": f"Deleted {deleted} stale edges",
-                            },
-                        }
-                    )
-
+                op_result = await _run_invalidate_edges(dry_run, neo4j_client)
+                results["operations_run"].append(op_result)
             elif operation == "rebuild_communities":
-                if not dry_run:
-                    task_payload = {
-                        "task_group_id": group_id,
-                        "project_id": project_id,
-                    }
-                    task_id = str(uuid4())
-                    async with async_session_factory() as session, session.begin():
-                        task_log = TaskLog(
-                            id=task_id,
-                            group_id=group_id,
-                            task_type="rebuild_communities",
-                            status="PENDING",
-                            payload=task_payload,
-                            entity_type="community",
-                            created_at=datetime.now(UTC),
-                        )
-                        session.add(task_log)
-                    task_payload["task_id"] = task_id
-                    workflow_id = f"rebuild-communities-{group_id}-{task_id[:8]}"
-                    await workflow_engine.start_workflow(
-                        workflow_name="rebuild_communities",
-                        workflow_id=workflow_id,
-                        input_data=task_payload,
-                        task_queue="default",
-                    )
-                    results["operations_run"].append(
-                        {
-                            "operation": "rebuild_communities",
-                            "result": {
-                                "status": "success",
-                                "message": "Community rebuild task submitted to Temporal",
-                                "task_id": task_id,
-                                "workflow_id": workflow_id,
-                            },
-                        }
-                    )
-                else:
-                    results["operations_run"].append(
-                        {
-                            "operation": "rebuild_communities",
-                            "result": {"status": "skipped", "message": "Skipped in dry_run mode"},
-                        }
-                    )
-
+                op_result = await _run_rebuild_communities(
+                    dry_run, group_id, project_id, workflow_engine
+                )
+                results["operations_run"].append(op_result)
             else:
                 logger.warning(f"Unknown operation: {operation}")
-
         return results
-
     except Exception as e:
         logger.error(f"Graph optimization failed: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -949,6 +965,74 @@ def _get_embedding_recommendations(
     return recommendations
 
 
+def _resolve_target_dimension(target_model: str) -> int:
+    """Resolve embedding dimension from model name."""
+    from src.configuration.factories import EMBEDDING_DIMS
+
+    model_lower = target_model.lower()
+    for provider, dim in EMBEDDING_DIMS.items():
+        if provider in model_lower:
+            return dim
+
+    fallback_dims = {"3072": 3072, "1536": 1536, "ada": 1536, "1024": 1024, "768": 768}
+    for key, dim in fallback_dims.items():
+        if key in model_lower:
+            return dim
+
+    raise HTTPException(
+        status_code=400,
+        detail=f"Unknown model dimension for: {target_model}",
+    )
+
+
+async def _query_entity_embeddings(
+    neo4j_client: Neo4jClient,
+    project_id: str | None,
+) -> Any:
+    """Query entity embeddings, optionally scoped to a project."""
+    if project_id:
+        query = """
+            MATCH (n:Entity {project_id: $project_id})
+            WHERE n.name_embedding IS NOT NULL
+            RETURN count(n) AS count,
+                   n.embedding_dim AS dim,
+                   size(n.name_embedding) AS actual_dim
+        """
+        return await neo4j_client.execute_query(query, project_id=project_id)
+    query = """
+        MATCH (n:Entity)
+        WHERE n.name_embedding IS NOT NULL
+        RETURN count(n) AS count,
+               n.embedding_dim AS dim,
+               size(n.name_embedding) AS actual_dim
+    """
+    return await neo4j_client.execute_query(query)
+
+
+async def _clear_entity_embeddings(
+    neo4j_client: Neo4jClient,
+    project_id: str | None,
+) -> int:
+    """Clear entity embeddings, optionally scoped to a project."""
+    if project_id:
+        query = """
+            MATCH (n:Entity {project_id: $project_id})
+            WHERE n.name_embedding IS NOT NULL
+            REMOVE n.name_embedding, n.embedding_dim
+            RETURN count(n) AS cleared
+        """
+        result = await neo4j_client.execute_query(query, project_id=project_id)
+    else:
+        query = """
+            MATCH (n:Entity)
+            WHERE n.name_embedding IS NOT NULL
+            REMOVE n.name_embedding, n.embedding_dim
+            RETURN count(n) AS cleared
+        """
+        result = await neo4j_client.execute_query(query)
+    return result.records[0]["cleared"] if result.records else 0
+
+
 @router.post("/embeddings/native/migrate")
 async def migrate_embeddings(
     target_model: str = Query(
@@ -972,52 +1056,9 @@ async def migrate_embeddings(
         dry_run: If True, only report without executing
     """
     try:
-        from src.configuration.factories import EMBEDDING_DIMS
-
-        # Determine target dimension from model name
-        target_dim = None
-        model_lower = target_model.lower()
-        for provider, dim in EMBEDDING_DIMS.items():
-            if provider in model_lower:
-                target_dim = dim
-                break
-
-        if target_dim is None:
-            # Try to parse from model name
-            if "3072" in model_lower:
-                target_dim = 3072
-            elif "1536" in model_lower or "ada" in model_lower:
-                target_dim = 1536
-            elif "1024" in model_lower:
-                target_dim = 1024
-            elif "768" in model_lower:
-                target_dim = 768
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Unknown model dimension for: {target_model}",
-                )
-
+        target_dim = _resolve_target_dimension(target_model)
         # Get existing embeddings info
-        if project_id:
-            count_query = """
-                MATCH (n:Entity {project_id: $project_id})
-                WHERE n.name_embedding IS NOT NULL
-                RETURN count(n) AS count,
-                       n.embedding_dim AS dim,
-                       size(n.name_embedding) AS actual_dim
-            """
-            result = await neo4j_client.execute_query(count_query, project_id=project_id)
-        else:
-            count_query = """
-                MATCH (n:Entity)
-                WHERE n.name_embedding IS NOT NULL
-                RETURN count(n) AS count,
-                       n.embedding_dim AS dim,
-                       size(n.name_embedding) AS actual_dim
-            """
-            result = await neo4j_client.execute_query(count_query)
-
+        result = await _query_entity_embeddings(neo4j_client, project_id)
         total_count = 0
         dimension_groups = {}
         for record in result.records:
@@ -1026,8 +1067,6 @@ async def migrate_embeddings(
             total_count += count
             if dim:
                 dimension_groups[str(dim)] = dimension_groups.get(str(dim), 0) + count
-
-        if dry_run:
             return {
                 "dry_run": True,
                 "target_model": target_model,
@@ -1040,27 +1079,8 @@ async def migrate_embeddings(
                     f"{list(dimension_groups.keys())} to {target_dim}D"
                 ),
             }
-
         # Execute migration: clear old embeddings
-        if project_id:
-            clear_query = """
-                MATCH (n:Entity {project_id: $project_id})
-                WHERE n.name_embedding IS NOT NULL
-                REMOVE n.name_embedding, n.embedding_dim
-                RETURN count(n) AS cleared
-            """
-            result = await neo4j_client.execute_query(clear_query, project_id=project_id)
-        else:
-            clear_query = """
-                MATCH (n:Entity)
-                WHERE n.name_embedding IS NOT NULL
-                REMOVE n.name_embedding, n.embedding_dim
-                RETURN count(n) AS cleared
-            """
-            result = await neo4j_client.execute_query(clear_query)
-
-        cleared = result.records[0]["cleared"] if result.records else 0
-
+        cleared = await _clear_entity_embeddings(neo4j_client, project_id)
         # Create new vector index with target dimension
         new_index_name = f"entity_name_vector_{target_dim}D"
         await neo4j_client.create_vector_index(
@@ -1070,7 +1090,6 @@ async def migrate_embeddings(
             dimensions=target_dim,
             similarity_function="cosine",
         )
-
         logger.info(
             f"Embedding migration completed: cleared {cleared} embeddings, "
             f"created index {new_index_name}"

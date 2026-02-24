@@ -405,6 +405,142 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
             "files_installed": ["SKILL.md"],
         }
 
+    async def _resolve_skill_name(
+        self,
+        owner: str,
+        repo: str,
+        skill_name: str | None,
+        branch: str,
+    ) -> str | dict[str, Any]:
+        """Resolve the skill name when not explicitly provided.
+
+        If skill_name is already set, returns it directly.
+        Otherwise, discovers skills in the repo and returns a resolved name
+        or a response dict if discovery yields zero or multiple skills.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            skill_name: Explicit skill name, or None.
+            branch: Git branch.
+
+        Returns:
+            Resolved skill name string, or a response dict for the caller to return.
+        """
+        if skill_name:
+            return skill_name
+
+        logger.info(f"No skill name specified, discovering skills in {owner}/{repo}")
+        available_skills = await self._discover_skills_in_repo(owner, repo, branch)
+
+        if not available_skills:
+            return self._error_response(
+                f"No skills found in {owner}/{repo}. Please specify a skill_name parameter.",
+                hint="Check the repository structure or specify a skill_name",
+            )
+
+        if len(available_skills) == 1:
+            return available_skills[0]
+
+        return {
+            "title": f"Multiple skills available in {owner}/{repo}",
+            "output": (
+                f"Found {len(available_skills)} skills in the repository.\n"
+                f"Please specify which skill to install using the skill_name parameter.\n\n"
+                f"Available skills:\n" + "\n".join(f"  - {s}" for s in available_skills)
+            ),
+            "metadata": {
+                "action": "list",
+                "source": f"{owner}/{repo}",
+                "available_skills": available_skills,
+            },
+        }
+
+    async def _do_install(
+        self,
+        owner: str,
+        repo: str,
+        skill_name: str,
+        install_location: str,
+        branch: str,
+    ) -> dict[str, Any]:
+        """Check existence, install skill, and run lifecycle hooks.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            skill_name: Resolved skill name.
+            install_location: 'project' or 'global'.
+            branch: Git branch.
+
+        Returns:
+            Response dict (success, skip, or error).
+        """
+        install_path = self._get_install_path(install_location, skill_name)
+
+        # Check if skill already exists
+        if install_path.exists() and (install_path / "SKILL.md").exists():
+            return {
+                "title": f"Skill '{skill_name}' already installed",
+                "output": (
+                    f"The skill '{skill_name}' is already installed at:\n"
+                    f"  {install_path}\n\n"
+                    "To reinstall, delete the existing skill directory first."
+                ),
+                "metadata": {
+                    "action": "skip",
+                    "skill_name": skill_name,
+                    "install_path": str(install_path),
+                    "reason": "already_exists",
+                },
+            }
+
+        # Install the skill
+        logger.info(f"Installing skill '{skill_name}' from {owner}/{repo} to {install_path}")
+        result = await self._install_skill(owner, repo, skill_name, install_path, branch)
+
+        if not result.get("success"):
+            return self._error_response(
+                result.get("error", "Unknown error during installation"),
+                **{k: v for k, v in result.items() if k not in ("success", "error")},
+            )
+
+        # Invalidate skill loader cache so new skill is discovered
+        lifecycle_result = self._invalidate_skill_cache(skill_name=skill_name)
+        self._pending_events.append(
+            {
+                "type": "toolset_changed",
+                "data": {
+                    "source": "skill_installer",
+                    "tenant_id": self._tenant_id,
+                    "project_id": self._project_id,
+                    "skill_name": skill_name,
+                    "lifecycle": lifecycle_result,
+                },
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
+
+        return {
+            "title": f"Successfully installed skill: {skill_name}",
+            "output": (
+                f"✅ Skill '{skill_name}' has been installed successfully!\n\n"
+                f"Source: {owner}/{repo}\n"
+                f"Location: {result['install_path']}\n"
+                f"Files: {', '.join(result['files_installed'])}\n\n"
+                "The skill is now available through the skill_loader tool.\n"
+                f"Use: skill_loader(skill_name='{skill_name}')"
+            ),
+            "metadata": {
+                "action": "install",
+                "skill_name": skill_name,
+                "source": f"{owner}/{repo}",
+                "install_path": result["install_path"],
+                "files_installed": result["files_installed"],
+                "lifecycle": lifecycle_result,
+            },
+        }
+
     async def execute(self, **kwargs: Any) -> str | dict[str, Any]:
         """
         Execute skill installation.
@@ -428,114 +564,25 @@ The skill will be installed to .memstack/skills/ (project) or ~/.memstack/skills
         if not skill_source:
             return self._error_response("skill_source parameter is required")
 
-        # Validate install_location
         if install_location not in ("project", "global"):
             return self._error_response(
                 f"Invalid install_location: {install_location}. Must be 'project' or 'global'"
             )
 
         try:
-            # Parse the skill source
             owner, repo, url_skill_name = self._parse_skill_source(skill_source)
 
             # Use skill name from URL if not explicitly provided
             if not skill_name and url_skill_name:
                 skill_name = url_skill_name
 
-            # If no skill name specified, try to discover skills in the repo
-            if not skill_name:
-                logger.info(f"No skill name specified, discovering skills in {owner}/{repo}")
-                available_skills = await self._discover_skills_in_repo(owner, repo, branch)
+            # Resolve skill name (discover if needed)
+            resolved = await self._resolve_skill_name(owner, repo, skill_name, branch)
+            if isinstance(resolved, dict):
+                return resolved
+            skill_name = resolved
 
-                if not available_skills:
-                    return self._error_response(
-                        f"No skills found in {owner}/{repo}. Please specify a skill_name parameter.",
-                        hint="Check the repository structure or specify a skill_name",
-                    )
-
-                if len(available_skills) == 1:
-                    skill_name = available_skills[0]
-                else:
-                    return {
-                        "title": f"Multiple skills available in {owner}/{repo}",
-                        "output": (
-                            f"Found {len(available_skills)} skills in the repository.\n"
-                            f"Please specify which skill to install using the skill_name parameter.\n\n"
-                            f"Available skills:\n" + "\n".join(f"  - {s}" for s in available_skills)
-                        ),
-                        "metadata": {
-                            "action": "list",
-                            "source": f"{owner}/{repo}",
-                            "available_skills": available_skills,
-                        },
-                    }
-
-            # Get the installation path
-            install_path = self._get_install_path(install_location, skill_name)
-
-            # Check if skill already exists
-            if install_path.exists() and (install_path / "SKILL.md").exists():
-                return {
-                    "title": f"Skill '{skill_name}' already installed",
-                    "output": (
-                        f"The skill '{skill_name}' is already installed at:\n"
-                        f"  {install_path}\n\n"
-                        "To reinstall, delete the existing skill directory first."
-                    ),
-                    "metadata": {
-                        "action": "skip",
-                        "skill_name": skill_name,
-                        "install_path": str(install_path),
-                        "reason": "already_exists",
-                    },
-                }
-
-            # Install the skill
-            logger.info(f"Installing skill '{skill_name}' from {owner}/{repo} to {install_path}")
-            result = await self._install_skill(owner, repo, skill_name, install_path, branch)
-
-            if not result.get("success"):
-                return self._error_response(
-                    result.get("error", "Unknown error during installation"),
-                    **{k: v for k, v in result.items() if k not in ("success", "error")},
-                )
-
-            # Invalidate skill loader cache so new skill is discovered
-            # This enables the skill to be immediately available without restart
-            lifecycle_result = self._invalidate_skill_cache(skill_name=skill_name)
-            self._pending_events.append(
-                {
-                    "type": "toolset_changed",
-                    "data": {
-                        "source": "skill_installer",
-                        "tenant_id": self._tenant_id,
-                        "project_id": self._project_id,
-                        "skill_name": skill_name,
-                        "lifecycle": lifecycle_result,
-                    },
-                    "timestamp": datetime.now(UTC).isoformat(),
-                }
-            )
-
-            return {
-                "title": f"Successfully installed skill: {skill_name}",
-                "output": (
-                    f"✅ Skill '{skill_name}' has been installed successfully!\n\n"
-                    f"Source: {owner}/{repo}\n"
-                    f"Location: {result['install_path']}\n"
-                    f"Files: {', '.join(result['files_installed'])}\n\n"
-                    "The skill is now available through the skill_loader tool.\n"
-                    f"Use: skill_loader(skill_name='{skill_name}')"
-                ),
-                "metadata": {
-                    "action": "install",
-                    "skill_name": skill_name,
-                    "source": f"{owner}/{repo}",
-                    "install_path": result["install_path"],
-                    "files_installed": result["files_installed"],
-                    "lifecycle": lifecycle_result,
-                },
-            }
+            return await self._do_install(owner, repo, skill_name, install_location, branch)
 
         except ValueError as e:
             return self._error_response(str(e))

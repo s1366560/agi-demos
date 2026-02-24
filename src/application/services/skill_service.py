@@ -243,63 +243,88 @@ class SkillService:
         skip_database: bool,
     ) -> None:
         """Load tenant-level skills, including overrides for system skills."""
-        # Load from file system (tenant scope)
-        if self._fs_loader:
-            fs_skills = [
-                s
-                for s in self._fs_loader.get_cached_skills(include_system=False)
-                if s.scope == SkillScope.TENANT
-            ]
+        self._load_tenant_fs_skills(skills_by_name, status, agent_mode, tier)
+        if not skip_database:
+            await self._load_tenant_db_skills(
+                tenant_id, skills_by_name, status, agent_mode, tier
+            )
+        await self._apply_system_overrides(
+            tenant_configs, skills_by_name, agent_mode, tier
+        )
 
-            for skill in fs_skills:
-                if status and skill.status != status:
-                    continue
+    def _load_tenant_fs_skills(
+        self,
+        skills_by_name: dict[str, Skill],
+        status: SkillStatus | None,
+        agent_mode: str,
+        tier: int,
+    ) -> None:
+        """Load tenant-scope skills from the file system."""
+        if not self._fs_loader:
+            return
+        fs_skills = [
+            s
+            for s in self._fs_loader.get_cached_skills(include_system=False)
+            if s.scope == SkillScope.TENANT
+        ]
+        for skill in fs_skills:
+            if status and skill.status != status:
+                continue
+            if not skill.is_accessible_by_agent(agent_mode):
+                continue
+            skill_for_tier = self._apply_tier(skill, tier)
+            skills_by_name[skill.name] = skill_for_tier
+
+    async def _load_tenant_db_skills(
+        self,
+        tenant_id: str,
+        skills_by_name: dict[str, Skill],
+        status: SkillStatus | None,
+        agent_mode: str,
+        tier: int,
+    ) -> None:
+        """Load tenant-scope skills from the database."""
+        try:
+            db_skills = await self._skill_repo.list_by_tenant(
+                tenant_id=tenant_id,
+                status=status,
+                scope=SkillScope.TENANT,
+                limit=1000,
+            )
+            for skill in db_skills:
+                # Skip if already have this skill from filesystem (filesystem takes priority)
+                if skill.name in skills_by_name:
+                    existing = skills_by_name[skill.name]
+                    if existing.source == SkillSource.FILESYSTEM:
+                        continue
                 if not skill.is_accessible_by_agent(agent_mode):
                     continue
-
                 skill_for_tier = self._apply_tier(skill, tier)
                 skills_by_name[skill.name] = skill_for_tier
-
-        # Load from database (tenant scope)
-        if not skip_database:
-            try:
-                db_skills = await self._skill_repo.list_by_tenant(
-                    tenant_id=tenant_id,
-                    status=status,
-                    scope=SkillScope.TENANT,
-                    limit=1000,
-                )
-
-                for skill in db_skills:
-                    # Skip if already have this skill from filesystem (filesystem takes priority)
-                    if skill.name in skills_by_name:
-                        existing = skills_by_name[skill.name]
-                        if existing.source == SkillSource.FILESYSTEM:
-                            continue
-
-                    if not skill.is_accessible_by_agent(agent_mode):
-                        continue
-
-                    skill_for_tier = self._apply_tier(skill, tier)
-                    skills_by_name[skill.name] = skill_for_tier
-            except Exception as e:
+        except Exception as e:
                 logger.warning(f"Failed to load tenant skills from database: {e}")
-
-        # Handle system skill overrides
+    async def _apply_system_overrides(
+        self,
+        tenant_configs: dict[str, TenantSkillConfig],
+        skills_by_name: dict[str, Skill],
+        agent_mode: str,
+        tier: int,
+    ) -> None:
+        """Apply system skill overrides from tenant configurations."""
         for config in tenant_configs.values():
-            if config.is_override() and config.override_skill_id:
-                try:
-                    override_skill = await self._skill_repo.get_by_id(config.override_skill_id)
-                    if override_skill and override_skill.is_accessible_by_agent(agent_mode):
-                        # Replace system skill with override
-                        skill_for_tier = self._apply_tier(override_skill, tier)
-                        skills_by_name[config.system_skill_name] = skill_for_tier
-                        logger.debug(
-                            f"System skill '{config.system_skill_name}' overridden "
-                            f"with '{override_skill.name}' for tenant {config.tenant_id}"
-                        )
-                except Exception as e:
-                    logger.warning(f"Failed to load override skill {config.override_skill_id}: {e}")
+            if not (config.is_override() and config.override_skill_id):
+                continue
+            try:
+                override_skill = await self._skill_repo.get_by_id(config.override_skill_id)
+                if override_skill and override_skill.is_accessible_by_agent(agent_mode):
+                    skill_for_tier = self._apply_tier(override_skill, tier)
+                    skills_by_name[config.system_skill_name] = skill_for_tier
+                    logger.debug(
+                        f"System skill '{config.system_skill_name}' overridden "
+                        f"with '{override_skill.name}' for tenant {config.tenant_id}"
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to load override skill {config.override_skill_id}: {e}")
 
     async def _load_project_skills(
         self,

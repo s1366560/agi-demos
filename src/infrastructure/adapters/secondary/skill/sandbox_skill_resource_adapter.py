@@ -257,49 +257,7 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
             self._injection_cache[cache_key] = {}
 
         for resource in resources:
-            if resource.is_binary:
-                logger.debug(f"Skipping binary resource: {resource.virtual_path}")
-                continue
-
-            try:
-                # Load content if not already loaded
-                if resource.content is None and resource.local_path:
-                    resource.content = resource.local_path.read_text(encoding="utf-8")
-
-                if resource.content is None:
-                    failed.append(resource.virtual_path)
-                    errors.append(f"No content for {resource.virtual_path}")
-                    continue
-
-                # Container path (relative for MCP write tool)
-                container_path = resource.container_path
-                if container_path and container_path.startswith("/workspace/"):
-                    relative_path = container_path[11:]  # Remove "/workspace/"
-                else:
-                    relative_path = f".memstack/skills/{context.skill_name}/{resource.name}"
-
-                # Write to container via MCP
-                result = await self._sandbox_adapter.call_tool(
-                    sandbox_id=context.sandbox_id,
-                    tool_name="write",
-                    arguments={
-                        "file_path": relative_path,
-                        "content": resource.content,
-                    },
-                )
-
-                if not result.get("isError"):
-                    synced.append(resource)
-                    self._injection_cache[cache_key][resource.virtual_path] = container_path or ""
-                    logger.debug(f"Injected: {resource.virtual_path} -> {relative_path}")
-                else:
-                    failed.append(resource.virtual_path)
-                    errors.append(f"MCP write failed for {resource.virtual_path}: {result}")
-
-            except Exception as e:
-                failed.append(resource.virtual_path)
-                errors.append(f"Failed to inject {resource.virtual_path}: {e}")
-                logger.error(f"Resource injection error: {e}")
+            await self._sync_single_resource(resource, context, cache_key, synced, failed, errors)
 
         # Update version cache on success
         if not failed:
@@ -311,6 +269,66 @@ class SandboxSkillResourceAdapter(SkillResourcePort):
             failed_resources=failed,
             errors=errors,
         )
+
+    async def _sync_single_resource(
+        self,
+        resource: SkillResource,
+        context: SkillResourceContext,
+        cache_key: tuple[str, str],
+        synced: list[SkillResource],
+        failed: list[str],
+        errors: list[str],
+    ) -> None:
+        """Sync a single resource to the sandbox container."""
+        if resource.is_binary:
+            logger.debug(f"Skipping binary resource: {resource.virtual_path}")
+            return
+
+        try:
+            # Load content if not already loaded
+            if resource.content is None and resource.local_path:
+                resource.content = resource.local_path.read_text(encoding="utf-8")
+
+            if resource.content is None:
+                failed.append(resource.virtual_path)
+                errors.append(f"No content for {resource.virtual_path}")
+                return
+
+            # Container path (relative for MCP write tool)
+            relative_path = self._resolve_relative_path(resource, context)
+
+            # Write to container via MCP
+            result = await self._sandbox_adapter.call_tool(
+                sandbox_id=context.sandbox_id,
+                tool_name="write",
+                arguments={
+                    "file_path": relative_path,
+                    "content": resource.content,
+                },
+            )
+
+            if not result.get("isError"):
+                synced.append(resource)
+                self._injection_cache[cache_key][resource.virtual_path] = (
+                    resource.container_path or ""
+                )
+                logger.debug(f"Injected: {resource.virtual_path} -> {relative_path}")
+            else:
+                failed.append(resource.virtual_path)
+                errors.append(f"MCP write failed for {resource.virtual_path}: {result}")
+
+        except Exception as e:
+            failed.append(resource.virtual_path)
+            errors.append(f"Failed to inject {resource.virtual_path}: {e}")
+            logger.error(f"Resource injection error: {e}")
+
+    @staticmethod
+    def _resolve_relative_path(resource: SkillResource, context: SkillResourceContext) -> str:
+        """Resolve the relative path for writing a resource to the container."""
+        container_path = resource.container_path
+        if container_path and container_path.startswith("/workspace/"):
+            return container_path[11:]  # Remove "/workspace/"
+        return f".memstack/skills/{context.skill_name}/{resource.name}"
 
     async def setup_environment(
         self,

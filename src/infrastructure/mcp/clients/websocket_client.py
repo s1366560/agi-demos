@@ -257,53 +257,54 @@ class MCPWebSocketClient:
                 logger.debug("Disconnect already in progress, skipping")
                 return
             self._is_cleaning_up = True
-
         try:
             logger.info("Disconnecting MCP WebSocket client")
             self._connected = False
-
-            # Cancel receive task
-            if self._receive_task and not self._receive_task.done():
-                self._receive_task.cancel()
-                try:
-                    await asyncio.wait_for(self._receive_task, timeout=5.0)
-                except (TimeoutError, asyncio.CancelledError):
-                    pass
-                except Exception as e:
-                    logger.warning(f"Error waiting for receive task: {e}")
-                self._receive_task = None
-
-            # Close WebSocket with timeout
-            if self._ws and not self._ws.closed:
-                try:
-                    await asyncio.wait_for(self._ws.close(), timeout=5.0)
-                except TimeoutError:
-                    logger.warning("WebSocket close timed out")
-                except Exception as e:
-                    logger.warning(f"Error closing WebSocket: {e}")
-            self._ws = None
-
-            # Close session with timeout
-            if self._session and not self._session.closed:
-                try:
-                    await asyncio.wait_for(self._session.close(), timeout=5.0)
-                except TimeoutError:
-                    logger.warning("Session close timed out")
-                except Exception as e:
-                    logger.warning(f"Error closing session: {e}")
-            self._session = None
-
-            # Fail pending requests
-            for _request_id, future in list(self._pending_requests.items()):
-                if not future.done():
-                    future.set_exception(RuntimeError("WebSocket connection closed"))
-            self._pending_requests.clear()
-
+            await self._cleanup_receive_task()
+            await self._cleanup_websocket()
+            await self._cleanup_session()
+            self._fail_pending_requests()
             self._tools = []
             self.server_info = None
         finally:
             async with self._cleanup_lock:
                 self._is_cleaning_up = False
+        """Cancel and await the background receive task."""
+        if not self._receive_task or self._receive_task.done():
+            self._receive_task = None
+            return
+        self._receive_task.cancel()
+        try:
+            await asyncio.wait_for(self._receive_task, timeout=5.0)
+        except (TimeoutError, asyncio.CancelledError):
+            pass
+        except Exception as e:
+            logger.warning(f"Error waiting for receive task: {e}")
+        self._receive_task = None
+    async def _cleanup_websocket(self) -> None:
+        """Close the WebSocket connection with timeout."""
+        if self._ws and not self._ws.closed:
+            try:
+                await asyncio.wait_for(self._ws.close(), timeout=5.0)
+            except TimeoutError:
+                logger.warning("WebSocket close timed out")
+            except Exception as e:
+                logger.warning(f"Error closing WebSocket: {e}")
+            self._ws = None
+        """Close the aiohttp session with timeout."""
+        if self._session and not self._session.closed:
+            try:
+                await asyncio.wait_for(self._session.close(), timeout=5.0)
+            except TimeoutError:
+                logger.warning("Session close timed out")
+            except Exception as e:
+                logger.warning(f"Error closing session: {e}")
+            self._session = None
+        """Fail all pending requests with a connection closed error."""
+        for _request_id, future in list(self._pending_requests.items()):
+            if not future.done():
+                future.set_exception(RuntimeError("WebSocket connection closed"))
+        self._pending_requests.clear()
 
     async def _receive_loop(self) -> None:
         """Background task to receive and dispatch WebSocket messages."""

@@ -93,13 +93,13 @@ class AttachmentModel(Base):
     )
 
     # Relationships
-    conversation: Mapped["Conversation"] = relationship(  # noqa: F821
+    conversation: Mapped["Conversation"] = relationship(
         foreign_keys=[conversation_id],
     )
-    project: Mapped["Project"] = relationship(  # noqa: F821
+    project: Mapped["Project"] = relationship(
         foreign_keys=[project_id],
     )
-    tenant: Mapped["Tenant"] = relationship(  # noqa: F821
+    tenant: Mapped["Tenant"] = relationship(
         foreign_keys=[tenant_id],
     )
 

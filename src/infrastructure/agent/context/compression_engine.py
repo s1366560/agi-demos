@@ -384,7 +384,6 @@ class ContextCompressionEngine:
         messages: list[dict[str, Any]],
     ) -> tuple[list[dict[str, Any]], int]:
         """L1: Prune old tool outputs and long assistant messages.
-
         Replaces tool result content with placeholder for old tool calls,
         and truncates verbose assistant responses outside the protection window.
         Protects recent turns and critical tool types.
@@ -394,7 +393,6 @@ class ContextCompressionEngine:
             PRUNE_PROTECT_TOKENS,
             PRUNE_PROTECTED_TOOLS,
         )
-
         # Use instance config, falling back to compaction module defaults
         min_tokens = (
             self._prune_min_tokens if self._prune_min_tokens is not None else PRUNE_MINIMUM_TOKENS
@@ -409,33 +407,40 @@ class ContextCompressionEngine:
             if self._prune_protected_tools is not None
             else PRUNE_PROTECTED_TOOLS
         )
-        assistant_truncate = self._assistant_truncate_chars
-
-        pruned_count = 0
+        prune_candidates, prunable_tokens = self._scan_prune_candidates(
+            messages, protect_tokens, protected_tools
+        )
+        # Only prune if worthwhile
+        if prunable_tokens < min_tokens:
+            return messages, 0
+        return self._apply_pruning(messages, prune_candidates, prunable_tokens)
+    def _scan_prune_candidates(
+        self,
+        messages: list[dict[str, Any]],
+        protect_tokens: int,
+        protected_tools: frozenset[str],
+    ) -> tuple[list[tuple[int, dict[str, Any], str]], int]:
+        """Scan messages backwards for pruning candidates."""
         total_tool_tokens = 0
         prunable_tokens = 0
         prune_candidates: list[tuple[int, dict[str, Any], str]] = []
+        assistant_truncate = self._assistant_truncate_chars
 
-        # Scan backwards for tool result messages and long assistant messages
         turns = 0
         for i in range(len(messages) - 1, -1, -1):
             msg = messages[i]
-
             if msg.get("role") == "user":
                 turns += 1
-
             # Protect last 2 user turns
             if turns < 2:
                 continue
 
             role = msg.get("role", "")
-
             if role == "tool":
                 content = msg.get("content", "")
                 tool_name = msg.get("name", "")
                 tokens = self._estimate_tokens(content)
                 total_tool_tokens += tokens
-
                 # Skip protected tools
                 if tool_name in protected_tools:
                     continue
@@ -444,7 +449,6 @@ class ContextCompressionEngine:
                 if total_tool_tokens > protect_tokens:
                     prunable_tokens += tokens
                     prune_candidates.append((i, msg, "tool"))
-
             elif role == "assistant":
                 content = msg.get("content", "")
                 if isinstance(content, str) and len(content) > assistant_truncate:
@@ -453,12 +457,16 @@ class ContextCompressionEngine:
                     if saved > 0:
                         prunable_tokens += saved
                         prune_candidates.append((i, msg, "assistant"))
-
-        # Only prune if worthwhile
-        if prunable_tokens < min_tokens:
-            return messages, 0
-
-        # Apply pruning
+        return prune_candidates, prunable_tokens
+    def _apply_pruning(
+        self,
+        messages: list[dict[str, Any]],
+        prune_candidates: list[tuple[int, dict[str, Any], str]],
+        prunable_tokens: int,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Apply pruning to candidate messages."""
+        assistant_truncate = self._assistant_truncate_chars
+        pruned_count = 0
         result = list(messages)
         for idx, msg, msg_type in prune_candidates:
             if msg_type == "tool":
@@ -474,7 +482,6 @@ class ContextCompressionEngine:
                     + "\n[... response truncated to save tokens]",
                 }
             pruned_count += 1
-
         logger.info(
             f"L1 Prune: pruned {pruned_count} messages "
             f"(tool + assistant), ~{prunable_tokens} tokens"

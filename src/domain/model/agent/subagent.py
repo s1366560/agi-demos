@@ -354,7 +354,7 @@ class SubAgent:
         )
 
     @classmethod
-    def create(  # noqa: PLR0913
+    def create(
         cls,
         tenant_id: str,
         name: str,

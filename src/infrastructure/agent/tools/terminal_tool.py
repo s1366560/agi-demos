@@ -282,68 +282,74 @@ class TerminalTool(AgentTool):
     def _format_legacy_result(self, result: dict[str, Any], success_message: str) -> str:
         """
         Format the result from legacy MCP tool call.
-
         Args:
             result: Raw result from sandbox adapter
             success_message: Default message on success
-
-        Returns:
             Formatted status message
         """
-        import json
-
         if result.get("is_error"):
-            content_list = result.get("content", [])
-            if content_list and len(content_list) > 0:
-                return f"Error: {content_list[0].get('text', 'Unknown error')}"
-            return "Error: Terminal operation failed"
+            return self._extract_error_content(result, "Terminal operation failed")
 
-        # Parse JSON response
         content_list = result.get("content", [])
         if not content_list:
             return success_message
+        return self._parse_legacy_text(text_content, success_message)
 
-        text_content = content_list[0].get("text", "")
+    @staticmethod
+    def _extract_error_content(result: dict[str, Any], fallback: str) -> str:
+        """Extract error message from MCP result content list."""
+        content_list = result.get("content", [])
+        if content_list and len(content_list) > 0:
+            return f"Error: {content_list[0].get('text', 'Unknown error')}"
+        return f"Error: {fallback}"
+
+    def _parse_legacy_text(self, text_content: str, success_message: str) -> str:
+        """Parse JSON text content from legacy MCP result."""
+        import json
+
         try:
             data = json.loads(text_content)
-
-            # Handle status response (has 'running' field)
             if "running" in data:
-                parts = []
-                if data.get("running"):
-                    parts.append("Terminal is running")
-                else:
-                    parts.append("Terminal is not running")
-
-                if data.get("url"):
-                    parts.append(f"URL: {data['url']}")
-                if "port" in data:
-                    parts.append(f"Port: {data['port']}")
-                if data.get("pid"):
-                    parts.append(f"PID: {data['pid']}")
-
-                return " | ".join(parts) if parts else "Terminal status retrieved"
-
-            # Handle success/error response
+                return self._format_status_data(data)
             if data.get("success"):
-                parts = [success_message]
-                if data.get("url"):
-                    parts.append(f"URL: {data['url']}")
-                if "port" in data:
-                    parts.append(f"Port: {data['port']}")
-                if data.get("pid"):
-                    parts.append(f"PID: {data['pid']}")
-
-                return " | ".join(parts)
-            else:
-                error = data.get("error", "Unknown error")
-                return f"Error: {error}"
-
+                return self._format_success_data(data, success_message)
+            return f"Error: {data.get('error', 'Unknown error')}"
         except (json.JSONDecodeError, ValueError):
-            # Return raw text if JSON parsing fails - treat as potential error
-            if text_content and text_content not in ("success", "ok"):
-                # Try to detect if it's an error by content
-                text_lower = text_content.lower()
-                if any(word in text_lower for word in ("error", "failed", "invalid", "cannot")):
-                    return f"Error: {text_content}"
-            return text_content if text_content else success_message
+            return self._handle_json_parse_fallback(text_content, success_message)
+
+    @staticmethod
+    def _format_status_data(data: dict[str, Any]) -> str:
+        """Format status response data with 'running' field."""
+        parts = []
+        if data.get("running"):
+            parts.append("Terminal is running")
+        else:
+            parts.append("Terminal is not running")
+        if data.get("url"):
+            parts.append(f"URL: {data['url']}")
+        if "port" in data:
+            parts.append(f"Port: {data['port']}")
+        if data.get("pid"):
+            parts.append(f"PID: {data['pid']}")
+        return " | ".join(parts) if parts else "Terminal status retrieved"
+
+    @staticmethod
+    def _format_success_data(data: dict[str, Any], success_message: str) -> str:
+        """Format success response data."""
+        parts = [success_message]
+        if data.get("url"):
+            parts.append(f"URL: {data['url']}")
+        if "port" in data:
+            parts.append(f"Port: {data['port']}")
+        if data.get("pid"):
+            parts.append(f"PID: {data['pid']}")
+        return " | ".join(parts)
+
+    @staticmethod
+    def _handle_json_parse_fallback(text_content: str, success_message: str) -> str:
+        """Handle non-JSON text content from legacy MCP result."""
+        if text_content and text_content not in ("success", "ok"):
+            text_lower = text_content.lower()
+            if any(word in text_lower for word in ("error", "failed", "invalid", "cannot")):
+                return f"Error: {text_content}"
+        return text_content if text_content else success_message

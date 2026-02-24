@@ -494,117 +494,6 @@ class SessionProcessor:
 
         return ui_metadata
 
-    @staticmethod
-    def _classify_step_event(event: ProcessorEvent) -> str | None:
-        """Extract the event type string from a step event."""
-        event_type_raw = (
-            event.get("type")
-            if isinstance(event, dict)
-            else getattr(event, "event_type", None)
-        )
-        if isinstance(event_type_raw, AgentEventType):
-            return event_type_raw.value
-        return event_type_raw
-
-    async def _evaluate_no_tool_result(
-        self,
-        session_id: str,
-        messages: list[dict[str, Any]],
-    ) -> AsyncIterator[tuple[ProcessorResult, ProcessorEvent | None]]:
-        """Evaluate goal when no tool calls were made, yielding (result, event) pairs."""
-        goal_check = await self._evaluate_goal_completion(session_id, messages)
-        if goal_check.achieved:
-            self._no_progress_steps = 0
-            yield (
-                ProcessorResult.COMPLETE,
-                AgentStatusEvent(status=f"goal_achieved:{goal_check.source}"),
-            )
-            return
-
-        if self._is_conversational_response():
-            self._no_progress_steps = 0
-            yield (
-                ProcessorResult.COMPLETE,
-                AgentStatusEvent(status="goal_achieved:conversational_response"),
-            )
-            return
-
-        if goal_check.should_stop:
-            self._state = ProcessorState.ERROR
-            yield (
-                ProcessorResult.STOP,
-                AgentErrorEvent(
-                    message=goal_check.reason or "Goal cannot be completed",
-                    code="GOAL_NOT_ACHIEVED",
-                ),
-            )
-            return
-
-        # No progress -- increment counter and check limit
-        self._no_progress_steps += 1
-        yield (
-            ProcessorResult.CONTINUE,
-            AgentStatusEvent(status=f"goal_pending:{goal_check.source}"),
-        )
-        if self._no_progress_steps > 1:
-            yield (ProcessorResult.CONTINUE, AgentStatusEvent(status="planning_recheck"))
-        if self._no_progress_steps >= self.config.max_no_progress_steps:
-            self._state = ProcessorState.ERROR
-            yield (
-                ProcessorResult.STOP,
-                AgentErrorEvent(
-                    message=(
-                        "Goal not achieved after "
-                        f"{self._no_progress_steps} no-progress turns. "
-                        f"{goal_check.reason or 'Replan required.'}"
-                    ),
-                    code="GOAL_NOT_ACHIEVED",
-                ),
-            )
-
-    def _append_tool_results_to_messages(self, messages: list[dict[str, Any]]) -> None:
-        """Append current assistant message and tool results to message list."""
-        if not self._current_message:
-            return
-        messages.append(self._current_message.to_llm_format())
-        for part in self._current_message.get_tool_parts():
-            if part.status == ToolState.COMPLETED:
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": part.call_id,
-                        "content": part.output or "",
-                    }
-                )
-            elif part.status == ToolState.ERROR:
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": part.call_id,
-                        "content": f"Error: {part.error}",
-                    }
-                )
-
-    async def _build_completion_events(
-        self, result: ProcessorResult, session_id: str, messages: list[dict[str, Any]]
-    ) -> AsyncIterator[ProcessorEvent]:
-        """Yield final events when processing loop completes."""
-        if result == ProcessorResult.COMPLETE:
-            suggestions_event = await self._generate_suggestions(messages)
-            if suggestions_event:
-                yield suggestions_event
-            trace_url = None
-            if self._langfuse_context:
-                from src.configuration.config import get_settings
-
-                settings = get_settings()
-                if settings.langfuse_enabled and settings.langfuse_host:
-                    trace_id = self._langfuse_context.get("conversation_id", session_id)
-                    trace_url = f"{settings.langfuse_host}/trace/{trace_id}"
-            yield AgentCompleteEvent(trace_url=trace_url)
-            self._state = ProcessorState.COMPLETED
-        elif result == ProcessorResult.COMPACT:
-            yield AgentStatusEvent(status="compact_needed")
     async def process(
         self,
         session_id: str,
@@ -638,59 +527,199 @@ class SessionProcessor:
         self._abort_event = abort_signal or asyncio.Event()
         self._step_count = 0
         self._no_progress_steps = 0
-        self._langfuse_context = langfuse_context
+        self._langfuse_context = langfuse_context  # Store for use in _process_step
+
+        # Emit start event
         yield AgentStartEvent()
         self._state = ProcessorState.THINKING
+
         try:
             result = ProcessorResult.CONTINUE
+
             while result == ProcessorResult.CONTINUE:
-                if self._abort_event.is_set():
-                    yield AgentErrorEvent(message="Processing aborted", code="ABORTED")
+                abort_event = self._check_abort_and_limits()
+                if abort_event is not None:
+                    yield abort_event
                     self._state = ProcessorState.ERROR
                     return
-                self._step_count += 1
-                if self._step_count > self.config.max_steps:
-                    yield AgentErrorEvent(
-                        message=f"Maximum steps ({self.config.max_steps}) exceeded",
-                        code="MAX_STEPS_EXCEEDED",
-                    )
-                    self._state = ProcessorState.ERROR
-                    return
+
+                # Process one step and classify events
                 had_tool_calls = False
                 async for event in self._process_step(session_id, messages):
                     yield event
-                    event_type = self._classify_step_event(event)
-                    if event_type == AgentEventType.ERROR.value:
-                        result = ProcessorResult.STOP
-                        break
-                    elif event_type == AgentEventType.ACT.value:
-                        had_tool_calls = True
-                    elif event_type == AgentEventType.COMPACT_NEEDED.value:
-                        result = ProcessorResult.COMPACT
+                    result, had_tool_calls = self._classify_step_event(
+                        event, result, had_tool_calls
+                    )
+                    if result in (ProcessorResult.STOP, ProcessorResult.COMPACT):
                         break
 
+                # Evaluate goal if no tool calls and still continuing
                 if result == ProcessorResult.CONTINUE:
                     if had_tool_calls:
                         self._no_progress_steps = 0
                     else:
-                        async for pair in self._evaluate_no_tool_result(
+                        async for evt in self._evaluate_no_tool_result(
                             session_id, messages
                         ):
-                            result_val, evt = pair
-                            if evt is not None:
-                                yield evt
-                            if result_val != ProcessorResult.CONTINUE:
-                                result = result_val
+                            yield evt
+                        result = self._last_process_result
 
+                # Append tool results to messages for next iteration
                 if result == ProcessorResult.CONTINUE:
                     self._append_tool_results_to_messages(messages)
 
-            async for event in self._build_completion_events(result, session_id, messages):
+            # Emit completion events
+            async for event in self._emit_completion_events(
+                result, session_id, messages
+            ):
                 yield event
+
         except Exception as e:
             logger.error(f"Processor error: {e}", exc_info=True)
             yield AgentErrorEvent(message=str(e), code=type(e).__name__)
             self._state = ProcessorState.ERROR
+
+    def _check_abort_and_limits(self) -> AgentErrorEvent | None:
+        """Check abort signal and step limits. Returns error event or None."""
+        if self._abort_event.is_set():
+            return AgentErrorEvent(message="Processing aborted", code="ABORTED")
+        self._step_count += 1
+        if self._step_count > self.config.max_steps:
+            return AgentErrorEvent(
+                message=f"Maximum steps ({self.config.max_steps}) exceeded",
+                code="MAX_STEPS_EXCEEDED",
+            )
+        return None
+
+    def _classify_step_event(
+        self,
+        event: ProcessorEvent,
+        current_result: ProcessorResult,
+        had_tool_calls: bool,
+    ) -> tuple[ProcessorResult, bool]:
+        """Classify a step event and update loop control state."""
+        event_type_raw = (
+            event.get("type")
+            if isinstance(event, dict)
+            else getattr(event, "event_type", None)
+        )
+        event_type = (
+            event_type_raw.value
+            if isinstance(event_type_raw, AgentEventType)
+            else event_type_raw
+        )
+        if event_type == AgentEventType.ERROR.value:
+            return ProcessorResult.STOP, had_tool_calls
+        if event_type == AgentEventType.ACT.value:
+            return current_result, True
+        if event_type == AgentEventType.COMPACT_NEEDED.value:
+            return ProcessorResult.COMPACT, had_tool_calls
+        return current_result, had_tool_calls
+
+    async def _evaluate_no_tool_result(
+        self, session_id: str, messages: list[dict[str, Any]]
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Evaluate goal completion when no tools were called.
+
+        Sets self._last_process_result for the caller to read.
+        """
+        goal_check = await self._evaluate_goal_completion(session_id, messages)
+        if goal_check.achieved:
+            self._no_progress_steps = 0
+            yield AgentStatusEvent(status=f"goal_achieved:{goal_check.source}")
+            self._last_process_result = ProcessorResult.COMPLETE
+            return
+
+        if self._is_conversational_response():
+            # Text-only response without tool calls and without an
+            # explicit goal_achieved=false signal -- treat as a
+            # deliberate conversational reply.
+            self._no_progress_steps = 0
+            yield AgentStatusEvent(status="goal_achieved:conversational_response")
+            self._last_process_result = ProcessorResult.COMPLETE
+            return
+
+        if goal_check.should_stop:
+            yield AgentErrorEvent(
+                message=goal_check.reason or "Goal cannot be completed",
+                code="GOAL_NOT_ACHIEVED",
+            )
+            self._state = ProcessorState.ERROR
+            self._last_process_result = ProcessorResult.STOP
+            return
+
+        # No progress -- check if we should give up
+        self._no_progress_steps += 1
+        yield AgentStatusEvent(status=f"goal_pending:{goal_check.source}")
+        if self._no_progress_steps > 1:
+            yield AgentStatusEvent(status="planning_recheck")
+        if self._no_progress_steps >= self.config.max_no_progress_steps:
+            yield AgentErrorEvent(
+                message=(
+                    "Goal not achieved after "
+                    f"{self._no_progress_steps} no-progress turns. "
+                    f"{goal_check.reason or 'Replan required.'}"
+                ),
+                code="GOAL_NOT_ACHIEVED",
+            )
+            self._state = ProcessorState.ERROR
+            self._last_process_result = ProcessorResult.STOP
+            return
+        self._last_process_result = ProcessorResult.CONTINUE
+
+    def _append_tool_results_to_messages(
+        self, messages: list[dict[str, Any]]
+    ) -> None:
+        """Append current message and tool results to the message list."""
+        if not self._current_message:
+            return
+        messages.append(self._current_message.to_llm_format())
+        for part in self._current_message.get_tool_parts():
+            if part.status == ToolState.COMPLETED:
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": part.call_id,
+                        "content": part.output or "",
+                    }
+                )
+            elif part.status == ToolState.ERROR:
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": part.call_id,
+                        "content": f"Error: {part.error}",
+                    }
+                )
+
+    async def _emit_completion_events(
+        self,
+        result: ProcessorResult,
+        session_id: str,
+        messages: list[dict[str, Any]],
+    ) -> AsyncIterator[ProcessorEvent]:
+        """Emit final completion or compact events."""
+        if result == ProcessorResult.COMPLETE:
+            suggestions_event = await self._generate_suggestions(messages)
+            if suggestions_event:
+                yield suggestions_event
+            trace_url = self._build_trace_url(session_id)
+            yield AgentCompleteEvent(trace_url=trace_url)
+            self._state = ProcessorState.COMPLETED
+        elif result == ProcessorResult.COMPACT:
+            yield AgentStatusEvent(status="compact_needed")
+
+    def _build_trace_url(self, session_id: str) -> str | None:
+        """Build Langfuse trace URL if context is available."""
+        if not self._langfuse_context:
+            return None
+        from src.configuration.config import get_settings
+
+        settings = get_settings()
+        if not (settings.langfuse_enabled and settings.langfuse_host):
+            return None
+        trace_id = self._langfuse_context.get("conversation_id", session_id)
+        return f"{settings.langfuse_host}/trace/{trace_id}"
 
     def _extract_user_query(self, messages: list[dict[str, Any]]) -> str | None:
         """Extract the latest user query from messages."""
@@ -803,6 +832,34 @@ class SessionProcessor:
         if not context_summary:
             return fallback
 
+        content = await self._call_goal_check_llm(context_summary)
+        if content is None:
+            return fallback
+
+        parsed = self._extract_goal_json(content)
+        if parsed is None:
+            parsed = self._extract_goal_from_plain_text(content)
+        if parsed is None:
+            logger.debug(
+                "[Processor] Goal self-check payload not parseable, using fallback: %s",
+                content[:200],
+            )
+            return fallback
+
+        achieved = self._coerce_goal_achieved_bool(parsed.get("goal_achieved"))
+        if achieved is None:
+            logger.debug("[Processor] Goal self-check missing boolean goal_achieved")
+            return fallback
+
+        reason = str(parsed.get("reason", "")).strip()
+        return GoalCheckResult(
+            achieved=achieved,
+            reason=reason or ("Goal achieved" if achieved else "Goal not achieved"),
+            source="llm_self_check",
+        )
+
+    async def _call_goal_check_llm(self, context_summary: str) -> str | None:
+        """Call LLM for goal check and return content string, or None on failure."""
         try:
             response = await self._llm_client.generate(
                 messages=[
@@ -822,44 +879,26 @@ class SessionProcessor:
             )
         except Exception as exc:
             logger.warning(f"[Processor] LLM goal self-check failed: {exc}")
-            return fallback
+            return None
 
-        content = ""
         if isinstance(response, dict):
-            content = str(response.get("content", "") or "")
-        elif isinstance(response, str):
-            content = response
-        else:
-            content = str(response)
+            return str(response.get("content", "") or "")
+        if isinstance(response, str):
+            return response
+        return str(response)
 
-        parsed = self._extract_goal_json(content)
-        if parsed is None:
-            parsed = self._extract_goal_from_plain_text(content)
-        if parsed is None:
-            logger.debug(
-                "[Processor] Goal self-check payload not parseable, using fallback: %s",
-                content[:200],
-            )
-            return fallback
-
-        achieved = parsed.get("goal_achieved")
-        if not isinstance(achieved, bool):
-            if isinstance(achieved, str):
-                lowered = achieved.strip().lower()
-                if lowered in {"true", "yes", "1"}:
-                    achieved = True
-                elif lowered in {"false", "no", "0"}:
-                    achieved = False
-            if not isinstance(achieved, bool):
-                logger.debug("[Processor] Goal self-check missing boolean goal_achieved")
-                return fallback
-
-        reason = str(parsed.get("reason", "")).strip()
-        return GoalCheckResult(
-            achieved=achieved,
-            reason=reason or ("Goal achieved" if achieved else "Goal not achieved"),
-            source="llm_self_check",
-        )
+    @staticmethod
+    def _coerce_goal_achieved_bool(value: Any) -> bool | None:
+        """Coerce a goal_achieved value to bool, or return None if not possible."""
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"true", "yes", "1"}:
+                return True
+            if lowered in {"false", "no", "0"}:
+                return False
+        return None
 
     def _extract_goal_from_plain_text(self, text: str) -> dict[str, Any] | None:
         """Parse non-JSON goal-check payloads from plain text."""
@@ -964,51 +1003,67 @@ class SessionProcessor:
 
         return "\n".join(summary_lines)
 
+    @staticmethod
+    def _find_json_object_end(text: str, start_idx: int) -> int | None:
+        """Find the end index (inclusive) of a balanced JSON object.
+
+        Scans from start_idx (which must be a '{') tracking brace depth
+        and string escaping. Returns the index of the closing '}' or None.
+        """
+        depth = 0
+        in_string = False
+        escape_next = False
+        for index in range(start_idx, len(text)):
+            char = text[index]
+
+            if in_string:
+                if escape_next:
+                    escape_next = False
+                elif char == "\\":
+                    escape_next = True
+                elif char == '"':
+                    in_string = False
+                continue
+
+            if char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return index
+        return None
+
+    @staticmethod
+    def _try_parse_json_dict(text: str) -> dict | None:
+        """Try to parse text as a JSON dict. Returns dict or None."""
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(parsed, dict):
+            return parsed
+        return None
+
     def _extract_goal_json(self, text: str) -> dict[str, Any] | None:
         """Extract goal-check JSON object from model text."""
         stripped = text.strip()
         if not stripped:
             return None
 
-        try:
-            parsed = json.loads(stripped)
-            if isinstance(parsed, dict):
-                return parsed
-        except json.JSONDecodeError:
-            pass
+        result = self._try_parse_json_dict(stripped)
+        if result is not None:
+            return result
 
         start_idx = stripped.find("{")
         while start_idx >= 0:
-            depth = 0
-            in_string = False
-            escape_next = False
-            for index in range(start_idx, len(stripped)):
-                char = stripped[index]
-
-                if in_string:
-                    if escape_next:
-                        escape_next = False
-                    elif char == "\\":
-                        escape_next = True
-                    elif char == '"':
-                        in_string = False
-                    continue
-
-                if char == '"':
-                    in_string = True
-                elif char == "{":
-                    depth += 1
-                elif char == "}":
-                    depth -= 1
-                    if depth == 0:
-                        candidate = stripped[start_idx : index + 1]
-                        try:
-                            parsed = json.loads(candidate)
-                        except json.JSONDecodeError:
-                            break
-                        if isinstance(parsed, dict):
-                            return parsed
-                        break
+            end_idx = self._find_json_object_end(stripped, start_idx)
+            if end_idx is not None:
+                candidate = stripped[start_idx : end_idx + 1]
+                result = self._try_parse_json_dict(candidate)
+                if result is not None:
+                    return result
             start_idx = stripped.find("{", start_idx + 1)
 
         return None
@@ -2246,7 +2301,7 @@ class SessionProcessor:
                     f"size={len(file_content)}, project_id={project_id}"
                 )
 
-                def _sync_upload(  # noqa: PLR0913
+                def _sync_upload(
                     content: bytes,
                     fname: str,
                     pid: str,
@@ -2322,7 +2377,7 @@ class SessionProcessor:
                         "size_bytes": len(content),
                     }
 
-                async def _threaded_upload(  # noqa: PLR0913
+                async def _threaded_upload(
                     content: bytes,
                     fname: str,
                     pid: str,

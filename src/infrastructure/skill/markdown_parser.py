@@ -123,6 +123,47 @@ class MarkdownParser:
         if not content or not content.strip():
             raise MarkdownParseError("Empty content", file_path)
 
+        frontmatter, markdown_content = self._extract_frontmatter(content, file_path)
+
+        name = frontmatter.get("name")
+        if not name:
+            raise MarkdownParseError(
+                "Missing required field 'name' in frontmatter",
+                file_path,
+            )
+
+        description = self._extract_description(frontmatter)
+        trigger_patterns = self._extract_trigger_patterns(frontmatter)
+        tools, allowed_tools_list, allowed_tools_raw = self._extract_tools(frontmatter)
+        user_invocable = self._extract_user_invocable(frontmatter)
+        context = frontmatter.get("context", "shared")
+        agent = self._extract_agent_modes(frontmatter)
+        license_field, compatibility, metadata, version_str = self._extract_agentskills_fields(
+            frontmatter
+        )
+
+        return SkillMarkdown(
+            frontmatter=frontmatter,
+            content=markdown_content,
+            name=str(name),
+            description=str(description),
+            trigger_patterns=trigger_patterns,
+            tools=tools,
+            allowed_tools=allowed_tools_list,
+            user_invocable=user_invocable,
+            context=str(context),
+            agent=agent,
+            license=str(license_field) if license_field else None,
+            compatibility=str(compatibility) if compatibility else None,
+            metadata=metadata,
+            allowed_tools_raw=allowed_tools_raw if isinstance(allowed_tools_raw, str) else None,
+            version=version_str,
+        )
+
+    def _extract_frontmatter(
+        self, content: str, file_path: str | None
+    ) -> tuple[dict[str, Any], str]:
+        """Parse and validate YAML frontmatter, returning (frontmatter_dict, markdown_content)."""
         match = self.FRONTMATTER_PATTERN.match(content)
         if not match:
             raise MarkdownParseError(
@@ -145,88 +186,75 @@ class MarkdownParser:
                 file_path,
             )
 
-        # Validate required fields
-        name = frontmatter.get("name")
-        if not name:
-            raise MarkdownParseError(
-                "Missing required field 'name' in frontmatter",
-                file_path,
-            )
+        return frontmatter, markdown_content
 
+    def _extract_description(self, frontmatter: dict[str, Any]) -> str:
+        """Extract description from frontmatter, trying alternative field names."""
         description = frontmatter.get("description", "")
         if not description:
-            # Try alternative field names
             description = frontmatter.get("desc", "") or frontmatter.get("summary", "")
+        return description
 
-        # Extract optional fields
+    def _extract_trigger_patterns(self, frontmatter: dict[str, Any]) -> list[str]:
+        """Extract trigger patterns from frontmatter."""
         trigger_patterns = self._extract_list(frontmatter, "trigger_patterns")
         if not trigger_patterns:
             trigger_patterns = self._extract_list(frontmatter, "triggers")
+        return trigger_patterns
 
-        # Parse allowed-tools (AgentSkills.io spec format: space-separated string)
-        # Priority: allowed-tools > tools
+    def _extract_tools(self, frontmatter: dict[str, Any]) -> tuple[list[str], list[str], Any]:
+        """Extract tools and allowed-tools, returning (tools, allowed_tools_list, raw_value)."""
         allowed_tools_raw = frontmatter.get("allowed-tools")
         tools: list[str] = []
         allowed_tools_list: list[str] = []
 
         if allowed_tools_raw is not None:
             if isinstance(allowed_tools_raw, str):
-                # AgentSkills.io format: space-separated string like "Bash(git:*) Read Write"
-                # Extract tool names (without arguments)
-                for part in allowed_tools_raw.split():
-                    part = part.strip()
-                    if part:
-                        # Extract tool name before any parentheses
-                        tool_name = re.split(r"[(\[]", part)[0]
-                        if tool_name:
-                            tools.append(tool_name)
-                            allowed_tools_list.append(part)
+                tools, allowed_tools_list = self._parse_allowed_tools_string(allowed_tools_raw)
             else:
-                # Invalid format - will be caught by validator
                 allowed_tools_raw = str(allowed_tools_raw)
         else:
-            # Fallback to tools array format (deprecated but supported)
             tools = self._extract_list(frontmatter, "tools")
             allowed_tools_list = self._extract_list(frontmatter, "allowed-tools")
             if not allowed_tools_list:
                 allowed_tools_list = self._extract_list(frontmatter, "allowed_tools")
 
+        return tools, allowed_tools_list, allowed_tools_raw
+
+    def _parse_allowed_tools_string(self, raw: str) -> tuple[list[str], list[str]]:
+        """Parse AgentSkills.io format space-separated allowed-tools string."""
+        tools: list[str] = []
+        allowed_tools_list: list[str] = []
+        for part in raw.split():
+            part = part.strip()
+            if part:
+                tool_name = re.split(r"[(\[]", part)[0]
+                if tool_name:
+                    tools.append(tool_name)
+                    allowed_tools_list.append(part)
+        return tools, allowed_tools_list
+
+    def _extract_user_invocable(self, frontmatter: dict[str, Any]) -> bool:
+        """Extract user-invocable flag from frontmatter."""
         user_invocable = frontmatter.get("user-invocable", True)
         if not isinstance(user_invocable, bool):
             user_invocable = str(user_invocable).lower() in ("true", "yes", "1")
+        return user_invocable
 
-        context = frontmatter.get("context", "shared")
-        agent = self._extract_agent_modes(frontmatter)
-
-        # Extract AgentSkills.io spec fields
+    def _extract_agentskills_fields(
+        self, frontmatter: dict[str, Any]
+    ) -> tuple[Any, Any, dict[str, Any], str | None]:
+        """Extract AgentSkills.io spec fields (license, compatibility, metadata, version)."""
         license_field = frontmatter.get("license")
         compatibility = frontmatter.get("compatibility")
         metadata = frontmatter.get("metadata", {})
         if not isinstance(metadata, dict):
             metadata = {}
 
-        # Extract version field
         version_field = frontmatter.get("version")
         version_str = str(version_field).strip() if version_field is not None else None
 
-        return SkillMarkdown(
-            frontmatter=frontmatter,
-            content=markdown_content,
-            name=str(name),
-            description=str(description),
-            trigger_patterns=trigger_patterns,
-            tools=tools,
-            allowed_tools=allowed_tools_list,
-            user_invocable=user_invocable,
-            context=str(context),
-            agent=agent,
-            # AgentSkills.io spec fields
-            license=str(license_field) if license_field else None,
-            compatibility=str(compatibility) if compatibility else None,
-            metadata=metadata,
-            allowed_tools_raw=allowed_tools_raw if isinstance(allowed_tools_raw, str) else None,
-            version=version_str,
-        )
+        return license_field, compatibility, metadata, version_str
 
     def parse_file(self, file_path: str) -> SkillMarkdown:
         """
@@ -266,7 +294,6 @@ class MarkdownParser:
             return [str(item) for item in value if item]
 
         if isinstance(value, str):
-            # Handle comma-separated string
             return [item.strip() for item in value.split(",") if item.strip()]
 
         return []

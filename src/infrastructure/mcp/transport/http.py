@@ -86,7 +86,6 @@ class HTTPTransport(BaseTransport):
         For standalone send, this is a no-op. Use send_request instead.
         """
         # HTTP transport doesn't have separate send; it's request/response
-        pass
 
     async def receive(
         self,

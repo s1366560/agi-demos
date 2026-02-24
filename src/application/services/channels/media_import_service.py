@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 class MediaImportError(Exception):
     """Exception raised when media import fails."""
 
-    pass
 
 
 class MediaImportService:

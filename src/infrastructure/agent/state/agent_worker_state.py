@@ -373,6 +373,7 @@ def get_cached_llm_clients() -> dict[str, Any]:
 # ============================================================================
 
 
+
 async def get_or_create_tools(
     project_id: str,
     tenant_id: str,
@@ -400,18 +401,53 @@ async def get_or_create_tools(
     Returns:
         Dictionary of tool name -> tool instance (built-in + sandbox + skill_loader)
     """
+    # 1. Get or create cached built-in tools
+    tools = await _get_or_create_builtin_tools(project_id, redis_client)
+
+    # 2. Load Project Sandbox MCP tools (if sandbox exists for project)
+    await _add_sandbox_tools(tools, project_id, tenant_id, redis_client)
+
+    # 3. Add SkillLoaderTool
+    await _add_skill_loader_tool(tools, tenant_id, project_id, agent_mode)
+
+    # 4. Add SkillInstallerTool and PluginManagerTool
+    _add_skill_installer_tools(tools, tenant_id, project_id)
+
+    # 5. Add SkillSyncTool
+    _add_skill_sync_tool(tools, tenant_id, project_id)
+
+    # 6. Add Environment Variable Tools
+    _add_env_var_tools(tools, tenant_id, project_id)
+
+    # 7. Add Human-in-the-Loop Tools
+    _add_hitl_tools(tools, project_id)
+
+    # 8. Add Todo Tools
+    _add_todo_tools(tools, project_id)
+
+    # 9. Add RegisterMCPServerTool
+    _add_register_mcp_server_tool(tools, tenant_id, project_id)
+
+    # 10. Add Memory Tools
+    _add_memory_tools(tools, project_id, graph_service, redis_client)
+
+    # 11. Add plugin tools
+    await _add_plugin_tools(tools, tenant_id, project_id)
+
+    return tools
+
+
+async def _get_or_create_builtin_tools(
+    project_id: str,
+    redis_client: Any,
+) -> dict[str, Any]:
+    """Get or create cached built-in tools, returning a copy."""
     from src.infrastructure.agent.tools import WebScrapeTool, WebSearchTool
     from src.infrastructure.agent.tools.clarification import ClarificationTool
     from src.infrastructure.agent.tools.decision import DecisionTool
 
-    # 1. Get or create cached built-in tools
     async with _tools_cache_lock:
         if project_id not in _tools_cache:
-            # Get neo4j_client from graph_service
-            neo4j_client = getattr(graph_service, "neo4j_client", None)
-            if neo4j_client is None:
-                neo4j_client = getattr(graph_service, "_neo4j_client", None)
-
             _tools_cache[project_id] = {
                 "web_search": WebSearchTool(redis_client),
                 "web_scrape": WebScrapeTool(),
@@ -420,30 +456,43 @@ async def get_or_create_tools(
             }
             logger.info(f"Agent Worker: Tool set cached for project {project_id}")
 
-    # 2. Copy built-in tools (avoid mutating cache)
-    tools = dict(_tools_cache[project_id])
+    return dict(_tools_cache[project_id])
 
-    # 3. Load Project Sandbox MCP tools (if sandbox exists for project)
-    if _mcp_sandbox_adapter is not None:
-        try:
-            sandbox_tools = await _load_project_sandbox_tools(
-                project_id=project_id,
-                tenant_id=tenant_id,
-                redis_client=redis_client,
-            )
-            if sandbox_tools:
-                tools.update(sandbox_tools)
-                logger.info(
-                    f"Agent Worker: Loaded {len(sandbox_tools)} Project Sandbox tools "
-                    f"for project {project_id}"
-                )
-        except Exception as e:
-            logger.warning(
-                f"Agent Worker: Failed to load Project Sandbox tools for project {project_id}: {e}"
-            )
 
-    # 4. Add SkillLoaderTool (initialized with skill list in description)
-    # This enables LLM to see available skills and make autonomous decisions
+async def _add_sandbox_tools(
+    tools: dict[str, Any],
+    project_id: str,
+    tenant_id: str,
+    redis_client: Any,
+) -> None:
+    """Load and add Project Sandbox MCP tools."""
+    if _mcp_sandbox_adapter is None:
+        return
+    try:
+        sandbox_tools = await _load_project_sandbox_tools(
+            project_id=project_id,
+            tenant_id=tenant_id,
+            redis_client=redis_client,
+        )
+        if sandbox_tools:
+            tools.update(sandbox_tools)
+            logger.info(
+                f"Agent Worker: Loaded {len(sandbox_tools)} Project Sandbox tools "
+                f"for project {project_id}"
+            )
+    except Exception as e:
+        logger.warning(
+            f"Agent Worker: Failed to load Project Sandbox tools for project {project_id}: {e}"
+        )
+
+
+async def _add_skill_loader_tool(
+    tools: dict[str, Any],
+    tenant_id: str,
+    project_id: str,
+    agent_mode: str,
+) -> None:
+    """Add SkillLoaderTool initialized with skill list in description."""
     try:
         skill_loader = await get_or_create_skill_loader_tool(
             tenant_id=tenant_id,
@@ -451,10 +500,9 @@ async def get_or_create_tools(
             agent_mode=agent_mode,
         )
         # Set sandbox_id from loaded sandbox tools for resource sync
-        for tool in tools.values():
-            if hasattr(tool, "sandbox_id") and tool.sandbox_id:
-                skill_loader.set_sandbox_id(tool.sandbox_id)
-                break
+        sandbox_id = _find_sandbox_id(tools)
+        if sandbox_id:
+            skill_loader.set_sandbox_id(sandbox_id)
         tools["skill_loader"] = skill_loader
         logger.info(
             f"Agent Worker: SkillLoaderTool added for tenant {tenant_id}, agent_mode={agent_mode}"
@@ -462,14 +510,19 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillLoaderTool: {e}")
 
-    # 5. Add SkillInstallerTool for installing skills from skills.sh
+
+def _add_skill_installer_tools(
+    tools: dict[str, Any],
+    tenant_id: str,
+    project_id: str,
+) -> None:
+    """Add SkillInstallerTool and PluginManagerTool."""
     try:
         from pathlib import Path
 
         from src.infrastructure.agent.tools.plugin_manager import PluginManagerTool
         from src.infrastructure.agent.tools.skill_installer import SkillInstallerTool
 
-        # Use the project path from config or fallback to current working directory
         project_path = Path.cwd()
         skill_installer = SkillInstallerTool(
             project_path=project_path,
@@ -488,7 +541,13 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillInstallerTool/PluginManagerTool: {e}")
 
-    # 5b. Add SkillSyncTool for syncing skills from sandbox back to the system
+
+def _add_skill_sync_tool(
+    tools: dict[str, Any],
+    tenant_id: str,
+    project_id: str,
+) -> None:
+    """Add SkillSyncTool for syncing skills from sandbox back to the system."""
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as sync_session_factory,
@@ -502,10 +561,9 @@ async def get_or_create_tools(
             session_factory=sync_session_factory,
         )
         # Set sandbox_id from loaded sandbox tools
-        for tool in tools.values():
-            if hasattr(tool, "sandbox_id") and tool.sandbox_id:
-                skill_sync_tool.set_sandbox_id(tool.sandbox_id)
-                break
+        sandbox_id = _find_sandbox_id(tools)
+        if sandbox_id:
+            skill_sync_tool.set_sandbox_id(sandbox_id)
         # Set reference to skill_loader for cache invalidation
         if "skill_loader" in tools:
             skill_sync_tool.set_skill_loader_tool(tools["skill_loader"])
@@ -514,7 +572,13 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create SkillSyncTool: {e}")
 
-    # 7. Add Environment Variable Tools (GetEnvVarTool, RequestEnvVarTool, CheckEnvVarsTool)
+
+def _add_env_var_tools(
+    tools: dict[str, Any],
+    tenant_id: str,
+    project_id: str,
+) -> None:
+    """Add Environment Variable Tools (GetEnvVarTool, RequestEnvVarTool, CheckEnvVarsTool)."""
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory,
@@ -562,7 +626,9 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create environment variable tools: {e}")
 
-    # 8. Add Human-in-the-Loop Tools (ClarificationTool, DecisionTool)
+
+def _add_hitl_tools(tools: dict[str, Any], project_id: str) -> None:
+    """Add Human-in-the-Loop Tools (ClarificationTool, DecisionTool)."""
     try:
         from src.infrastructure.agent.tools.clarification import ClarificationTool
         from src.infrastructure.agent.tools.decision import DecisionTool
@@ -579,7 +645,9 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create HITL tools: {e}")
 
-    # 9. Add Todo Tools (DB-persistent task tracking)
+
+def _add_todo_tools(tools: dict[str, Any], project_id: str) -> None:
+    """Add Todo Tools (DB-persistent task tracking)."""
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as todo_session_factory,
@@ -592,19 +660,20 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create todo tools: {e}")
 
-    # 10. Add RegisterMCPServerTool (register full MCP servers built in sandbox)
+
+def _add_register_mcp_server_tool(
+    tools: dict[str, Any],
+    tenant_id: str,
+    project_id: str,
+) -> None:
+    """Add RegisterMCPServerTool for registering full MCP servers built in sandbox."""
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as app_session_factory,
         )
         from src.infrastructure.agent.tools.register_mcp_server import RegisterMCPServerTool
 
-        # Resolve sandbox_id from loaded sandbox tools
-        sandbox_id_for_tools = None
-        for tool in tools.values():
-            if hasattr(tool, "sandbox_id") and tool.sandbox_id:
-                sandbox_id_for_tools = tool.sandbox_id
-                break
+        sandbox_id_for_tools = _find_sandbox_id(tools)
 
         register_server_tool = RegisterMCPServerTool(
             tenant_id=tenant_id,
@@ -618,7 +687,14 @@ async def get_or_create_tools(
     except Exception as e:
         logger.warning(f"Agent Worker: Failed to create RegisterMCPServerTool: {e}")
 
-    # 11. Add Memory Tools (memory_search + memory_get)
+
+def _add_memory_tools(
+    tools: dict[str, Any],
+    project_id: str,
+    graph_service: Any,
+    redis_client: Any,
+) -> None:
+    """Add Memory Tools (memory_search + memory_get)."""
     try:
         from src.infrastructure.adapters.secondary.persistence.database import (
             async_session_factory as mem_session_factory,
@@ -644,13 +720,20 @@ async def get_or_create_tools(
     except Exception as e:
         logger.debug(f"Agent Worker: Memory tools not available: {e}")
 
-    # 12. Ensure plugin runtime is loaded before building plugin-provided tools.
+
+async def _add_plugin_tools(
+    tools: dict[str, Any],
+    tenant_id: str,
+    project_id: str,
+) -> None:
+    """Load plugin runtime and add plugin-provided tools."""
+    # Ensure plugin runtime is loaded before building plugin-provided tools.
     runtime_manager = get_plugin_runtime_manager()
     runtime_diagnostics = await runtime_manager.ensure_loaded()
     for diagnostic in runtime_diagnostics:
         _log_plugin_diagnostic(diagnostic, context="runtime_load")
 
-    # 13. Add plugin tools registered via plugin runtime (phase-1 foundation).
+    # Add plugin tools registered via plugin runtime (phase-1 foundation).
     # Default behavior stays unchanged when no plugins are registered.
     plugin_registry = get_plugin_registry()
     plugin_tools, diagnostics = await plugin_registry.build_tools(
@@ -670,7 +753,14 @@ async def get_or_create_tools(
             project_id,
         )
 
-    return tools
+
+def _find_sandbox_id(tools: dict[str, Any]) -> str | None:
+    """Find sandbox_id from loaded sandbox tools."""
+    for tool in tools.values():
+        if hasattr(tool, "sandbox_id") and tool.sandbox_id:
+            return tool.sandbox_id
+    return None
+
 
 
 def _log_plugin_diagnostic(diagnostic: PluginDiagnostic, *, context: str) -> None:
@@ -686,6 +776,7 @@ def _log_plugin_diagnostic(diagnostic: PluginDiagnostic, *, context: str) -> Non
         logger.info(message)
         return
     logger.warning(message)
+
 
 
 async def _load_project_sandbox_tools(
@@ -714,107 +805,17 @@ async def _load_project_sandbox_tools(
     Returns:
         Dictionary of tool name -> SandboxMCPToolWrapper instances
     """
-    import asyncio
-
-    from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
 
     tools: dict[str, Any] = {}
 
     if _mcp_sandbox_adapter is None:
         return tools
 
-    project_sandbox_id = None
-
     try:
-        # STEP 1: Query DATABASE first (single source of truth)
-        # This ensures we use the same sandbox that API Server created
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
-            SqlProjectSandboxRepository,
-        )
-
-        async with async_session_factory() as db:
-            sandbox_repo = SqlProjectSandboxRepository(db)
-            assoc = await sandbox_repo.find_by_project(project_id)
-            if assoc and assoc.sandbox_id:
-                project_sandbox_id = assoc.sandbox_id
-                logger.info(
-                    f"[AgentWorker] Found sandbox_id from DB for project {project_id}: "
-                    f"{project_sandbox_id}"
-                )
-
-        # STEP 2: If found in DB, verify container exists and sync to adapter
-        if project_sandbox_id:
-            # Sync from Docker to ensure adapter has the container in its cache
-            if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
-                logger.info(
-                    f"[AgentWorker] Syncing sandbox {project_sandbox_id} from Docker "
-                    f"to adapter's internal state"
-                )
-                await _mcp_sandbox_adapter.sync_from_docker()
-
-            # Verify container actually exists after sync
-            if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
-                # Container might have been deleted - check if it's running in Docker
-                container_exists = await _mcp_sandbox_adapter.container_exists(project_sandbox_id)
-                if not container_exists:
-                    logger.warning(
-                        f"[AgentWorker] Sandbox {project_sandbox_id} in DB but container "
-                        f"doesn't exist. Sandbox will be recreated by API on next access."
-                    )
-                    return tools
-
-        # STEP 3: If not in DB, fall back to Docker discovery (for backwards compat)
-        if not project_sandbox_id:
-            logger.info(
-                f"[AgentWorker] No sandbox association in DB for project {project_id}, "
-                f"checking Docker directly..."
-            )
-            loop = asyncio.get_event_loop()
-
-            # List all containers with memstack.sandbox label
-            containers = await loop.run_in_executor(
-                None,
-                lambda: _mcp_sandbox_adapter._docker.containers.list(
-                    all=True,
-                    filters={"label": "memstack.sandbox=true"},
-                ),
-            )
-
-            for container in containers:
-                # Check if this container belongs to the project
-                labels = container.labels or {}
-                if labels.get("memstack.project_id") == project_id:
-                    project_sandbox_id = container.name
-                    # If container exists but is not running, try to start it
-                    if container.status != "running":
-                        logger.info(
-                            f"[AgentWorker] Starting existing sandbox {project_sandbox_id} "
-                            f"for project {project_id}"
-                        )
-                        await loop.run_in_executor(None, lambda c=container: c.start())
-                        await asyncio.sleep(2)
-                    break
-
-                # Also check by project path
-                mounts = container.attrs.get("Mounts", [])
-                for mount in mounts:
-                    source = mount.get("Source", "")
-                    if source and f"memstack_{project_id}" in source:
-                        project_sandbox_id = container.name
-                        break
-                if project_sandbox_id:
-                    break
-
-            # Sync to adapter if found in Docker
-            if project_sandbox_id:
-                if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
-                    await _mcp_sandbox_adapter.sync_from_docker()
+        # STEP 1-3: Resolve the sandbox ID (DB lookup, verification, Docker fallback)
+        project_sandbox_id = await _resolve_project_sandbox_id(project_id)
 
         # STEP 4: If still no sandbox found, DON'T CREATE ONE
-        # Let the API Server handle sandbox creation via ProjectSandboxLifecycleService
         if not project_sandbox_id:
             logger.info(
                 f"[AgentWorker] No sandbox found for project {project_id}. "
@@ -824,106 +825,17 @@ async def _load_project_sandbox_tools(
 
         # STEP 5: Connect to MCP and load tools
         await _mcp_sandbox_adapter.connect_mcp(project_sandbox_id)
-
-        # List tools from the sandbox
-        tool_list = await _mcp_sandbox_adapter.list_tools(project_sandbox_id)
-
-        # MCP management tools are internal, not exposed to agents
-        _MCP_MANAGEMENT_TOOLS = {
-            "mcp_server_install",
-            "mcp_server_start",
-            "mcp_server_stop",
-            "mcp_server_list",
-            "mcp_server_discover_tools",
-            "mcp_server_call_tool",
-        }
-
-        # Wrap each tool with SandboxMCPToolWrapper
-        for tool_info in tool_list:
-            tool_name = tool_info.get("name", "")
-            if not tool_name:
-                continue
-
-            # Skip internal MCP management tools
-            if tool_name in _MCP_MANAGEMENT_TOOLS:
-                continue
-
-            wrapper = SandboxMCPToolWrapper(
-                sandbox_id=project_sandbox_id,
-                tool_name=tool_name,
-                tool_schema=tool_info,
-                sandbox_adapter=_mcp_sandbox_adapter,
-            )
-
-            # Use namespaced name as the key
-            tools[wrapper.name] = wrapper
+        tools = _wrap_sandbox_tools(project_sandbox_id, await _mcp_sandbox_adapter.list_tools(project_sandbox_id))
 
         logger.info(
             f"[AgentWorker] Loaded {len(tools)} tools from sandbox {project_sandbox_id} "
             f"for project {project_id}"
         )
 
-        # STEP 6: Load user MCP server tools running inside the sandbox
-        user_mcp_tools = await _load_user_mcp_server_tools(
-            sandbox_adapter=_mcp_sandbox_adapter,
-            sandbox_id=project_sandbox_id,
-            project_id=project_id,
-            redis_client=redis_client,
+        # STEP 6: Load user MCP server tools and resolve app IDs
+        await _load_and_merge_user_mcp_tools(
+            tools, project_sandbox_id, project_id, redis_client
         )
-        if user_mcp_tools:
-            tools.update(user_mcp_tools)
-            logger.info(
-                f"[AgentWorker] Loaded {len(user_mcp_tools)} user MCP server tools "
-                f"from sandbox {project_sandbox_id} for project {project_id}"
-            )
-
-            # Resolve MCPApp IDs for sandbox MCP tools so processor can emit app events.
-            # This handles tools that declare _meta.ui. We fetch ALL project apps
-            # from DB and fuzzy-match against all adapters.
-            from src.infrastructure.mcp.sandbox_tool_adapter import SandboxMCPServerToolAdapter
-
-            all_adapters = [
-                t for t in user_mcp_tools.values() if isinstance(t, SandboxMCPServerToolAdapter)
-            ]
-            if all_adapters:
-                try:
-                    from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
-                        SqlMCPAppRepository,
-                    )
-
-                    async with async_session_factory() as db:
-                        app_repo = SqlMCPAppRepository(db)
-                        project_apps = await app_repo.find_by_project(project_id)
-
-                    logger.info(
-                        "[AgentWorker] Found %d project apps, matching against %d adapters",
-                        len(project_apps) if project_apps else 0,
-                        len(all_adapters),
-                    )
-                    if project_apps:
-                        for adapter in all_adapters:
-                            matched_app = _match_adapter_to_app(adapter, project_apps)
-                            if matched_app:
-                                adapter._app_id = matched_app.id
-                                if not adapter._ui_metadata and matched_app.ui_metadata:
-                                    adapter._ui_metadata = matched_app.ui_metadata.to_dict()
-                                logger.info(
-                                    "[AgentWorker] Resolved MCPApp %s for tool %s (ui_metadata=%s)",
-                                    matched_app.id,
-                                    adapter.name,
-                                    adapter._ui_metadata,
-                                )
-                            else:
-                                logger.warning(
-                                    "[AgentWorker] No MCPApp match for tool %s "
-                                    "(server=%s, original=%s, has _ui_metadata=%s)",
-                                    adapter.name,
-                                    adapter._server_name,
-                                    adapter._original_tool_name,
-                                    adapter._ui_metadata is not None,
-                                )
-                except Exception as e:
-                    logger.warning(f"[AgentWorker] Failed to resolve MCPApp IDs: {e}")
 
     except Exception as e:
         logger.warning(f"[AgentWorker] Failed to load project sandbox tools: {e}")
@@ -932,6 +844,264 @@ async def _load_project_sandbox_tools(
         logger.debug(f"[AgentWorker] Traceback: {traceback.format_exc()}")
 
     return tools
+
+
+async def _resolve_project_sandbox_id(project_id: str) -> str | None:
+    """Resolve sandbox ID for a project from DB or Docker discovery.
+
+    Steps:
+    1. Query database for existing sandbox association
+    2. If found, verify container exists and sync to adapter
+    3. If not found in DB, fall back to Docker discovery
+    """
+    # STEP 1: Query DATABASE first (single source of truth)
+    project_sandbox_id = await _lookup_sandbox_from_db(project_id)
+
+    # STEP 2: If found in DB, verify container exists
+    if project_sandbox_id:
+        container_ok = await _verify_sandbox_container(project_sandbox_id)
+        if not container_ok:
+            return None
+        return project_sandbox_id
+
+    # STEP 3: If not in DB, fall back to Docker discovery
+    return await _discover_sandbox_from_docker(project_id)
+
+
+async def _lookup_sandbox_from_db(project_id: str) -> str | None:
+    """Query database for existing sandbox association."""
+    from src.infrastructure.adapters.secondary.persistence.database import (
+        async_session_factory,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
+        SqlProjectSandboxRepository,
+    )
+
+    async with async_session_factory() as db:
+        sandbox_repo = SqlProjectSandboxRepository(db)
+        assoc = await sandbox_repo.find_by_project(project_id)
+        if assoc and assoc.sandbox_id:
+            logger.info(
+                f"[AgentWorker] Found sandbox_id from DB for project {project_id}: "
+                f"{assoc.sandbox_id}"
+            )
+            return assoc.sandbox_id
+    return None
+
+
+async def _verify_sandbox_container(project_sandbox_id: str) -> bool:
+    """Verify sandbox container exists and sync to adapter if needed.
+
+    Returns True if container is available, False otherwise.
+    """
+    # Sync from Docker to ensure adapter has the container in its cache
+    if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
+        logger.info(
+            f"[AgentWorker] Syncing sandbox {project_sandbox_id} from Docker "
+            f"to adapter's internal state"
+        )
+        await _mcp_sandbox_adapter.sync_from_docker()
+
+    # Verify container actually exists after sync
+    if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
+        # Container might have been deleted - check if it's running in Docker
+        container_exists = await _mcp_sandbox_adapter.container_exists(project_sandbox_id)
+        if not container_exists:
+            logger.warning(
+                f"[AgentWorker] Sandbox {project_sandbox_id} in DB but container "
+                f"doesn't exist. Sandbox will be recreated by API on next access."
+            )
+            return False
+
+    return True
+
+
+async def _discover_sandbox_from_docker(project_id: str) -> str | None:
+    """Fall back to Docker discovery for backwards compatibility."""
+    import asyncio
+
+    logger.info(
+        f"[AgentWorker] No sandbox association in DB for project {project_id}, "
+        f"checking Docker directly..."
+    )
+    loop = asyncio.get_event_loop()
+
+    # List all containers with memstack.sandbox label
+    containers = await loop.run_in_executor(
+        None,
+        lambda: _mcp_sandbox_adapter._docker.containers.list(
+            all=True,
+            filters={"label": "memstack.sandbox=true"},
+        ),
+    )
+
+    project_sandbox_id = await _match_container_to_project(containers, project_id, loop)
+
+    if project_sandbox_id:
+        # Sync to adapter if found in Docker
+        if project_sandbox_id not in _mcp_sandbox_adapter._active_sandboxes:
+            await _mcp_sandbox_adapter.sync_from_docker()
+
+    return project_sandbox_id
+
+
+async def _match_container_to_project(
+    containers: list, project_id: str, loop: Any
+) -> str | None:
+    """Match a Docker container to the given project ID."""
+    import asyncio
+
+    for container in containers:
+        # Check if this container belongs to the project
+        labels = container.labels or {}
+        if labels.get("memstack.project_id") == project_id:
+            project_sandbox_id = container.name
+            # If container exists but is not running, try to start it
+            if container.status != "running":
+                logger.info(
+                    f"[AgentWorker] Starting existing sandbox {project_sandbox_id} "
+                    f"for project {project_id}"
+                )
+                await loop.run_in_executor(None, lambda c=container: c.start())
+                await asyncio.sleep(2)
+            return project_sandbox_id
+
+        # Also check by project path
+        mounts = container.attrs.get("Mounts", [])
+        for mount in mounts:
+            source = mount.get("Source", "")
+            if source and f"memstack_{project_id}" in source:
+                return container.name
+
+    return None
+
+
+def _wrap_sandbox_tools(
+    project_sandbox_id: str,
+    tool_list: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Wrap sandbox MCP tools with SandboxMCPToolWrapper, filtering internal tools."""
+    from src.infrastructure.agent.tools.sandbox_tool_wrapper import SandboxMCPToolWrapper
+
+    # MCP management tools are internal, not exposed to agents
+    _MCP_MANAGEMENT_TOOLS = {
+        "mcp_server_install",
+        "mcp_server_start",
+        "mcp_server_stop",
+        "mcp_server_list",
+        "mcp_server_discover_tools",
+        "mcp_server_call_tool",
+    }
+
+    tools: dict[str, Any] = {}
+    for tool_info in tool_list:
+        tool_name = tool_info.get("name", "")
+        if not tool_name:
+            continue
+
+        # Skip internal MCP management tools
+        if tool_name in _MCP_MANAGEMENT_TOOLS:
+            continue
+
+        wrapper = SandboxMCPToolWrapper(
+            sandbox_id=project_sandbox_id,
+            tool_name=tool_name,
+            tool_schema=tool_info,
+            sandbox_adapter=_mcp_sandbox_adapter,
+        )
+
+        # Use namespaced name as the key
+        tools[wrapper.name] = wrapper
+
+    return tools
+
+
+async def _load_and_merge_user_mcp_tools(
+    tools: dict[str, Any],
+    project_sandbox_id: str,
+    project_id: str,
+    redis_client: redis.Redis | None,
+) -> None:
+    """Load user MCP server tools and resolve MCPApp IDs."""
+    user_mcp_tools = await _load_user_mcp_server_tools(
+        sandbox_adapter=_mcp_sandbox_adapter,
+        sandbox_id=project_sandbox_id,
+        project_id=project_id,
+        redis_client=redis_client,
+    )
+    if not user_mcp_tools:
+        return
+
+    tools.update(user_mcp_tools)
+    logger.info(
+        f"[AgentWorker] Loaded {len(user_mcp_tools)} user MCP server tools "
+        f"from sandbox {project_sandbox_id} for project {project_id}"
+    )
+
+    # Resolve MCPApp IDs for sandbox MCP tools so processor can emit app events.
+    await _resolve_mcp_app_ids(user_mcp_tools, project_id)
+
+
+async def _resolve_mcp_app_ids(
+    user_mcp_tools: dict[str, Any],
+    project_id: str,
+) -> None:
+    """Resolve MCPApp IDs for sandbox MCP tools so processor can emit app events."""
+    from src.infrastructure.mcp.sandbox_tool_adapter import SandboxMCPServerToolAdapter
+
+    all_adapters = [
+        t for t in user_mcp_tools.values() if isinstance(t, SandboxMCPServerToolAdapter)
+    ]
+    if not all_adapters:
+        return
+
+    try:
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (
+            SqlMCPAppRepository,
+        )
+
+        async with async_session_factory() as db:
+            app_repo = SqlMCPAppRepository(db)
+            project_apps = await app_repo.find_by_project(project_id)
+
+        logger.info(
+            "[AgentWorker] Found %d project apps, matching against %d adapters",
+            len(project_apps) if project_apps else 0,
+            len(all_adapters),
+        )
+        if project_apps:
+            _apply_app_matches(all_adapters, project_apps)
+    except Exception as e:
+        logger.warning(f"[AgentWorker] Failed to resolve MCPApp IDs: {e}")
+
+
+def _apply_app_matches(adapters: list, project_apps: list) -> None:
+    """Apply MCPApp matches to adapters."""
+    for adapter in adapters:
+        matched_app = _match_adapter_to_app(adapter, project_apps)
+        if matched_app:
+            adapter._app_id = matched_app.id
+            if not adapter._ui_metadata and matched_app.ui_metadata:
+                adapter._ui_metadata = matched_app.ui_metadata.to_dict()
+            logger.info(
+                "[AgentWorker] Resolved MCPApp %s for tool %s (ui_metadata=%s)",
+                matched_app.id,
+                adapter.name,
+                adapter._ui_metadata,
+            )
+        else:
+            logger.warning(
+                "[AgentWorker] No MCPApp match for tool %s "
+                "(server=%s, original=%s, has _ui_metadata=%s)",
+                adapter.name,
+                adapter._server_name,
+                adapter._original_tool_name,
+                adapter._ui_metadata is not None,
+            )
+
 
 
 async def _discover_single_server_tools(
@@ -1141,6 +1311,7 @@ async def _load_user_mcp_server_tools(
     return tools
 
 
+
 async def _auto_restore_mcp_servers(
     sandbox_adapter: SandboxPort,
     sandbox_id: str,
@@ -1171,23 +1342,8 @@ async def _auto_restore_mcp_servers(
         - Non-blocking: If lock cannot be acquired, skip that server
         - Double-check: Server is re-checked inside lock before restore
     """
-    import uuid
-
     try:
-        from src.infrastructure.adapters.secondary.persistence.database import (
-            async_session_factory,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
-            SqlMCPServerRepository,
-        )
-
-        async with async_session_factory() as session:
-            repo = SqlMCPServerRepository(session)
-            db_servers = await repo.list_by_project(project_id, enabled_only=True)
-
-        # Find servers that need restoring
-        servers_to_restore = [s for s in db_servers if s.name and s.name not in running_names]
-
+        servers_to_restore = await _find_servers_to_restore(project_id, running_names)
         if not servers_to_restore:
             return
 
@@ -1198,102 +1354,191 @@ async def _auto_restore_mcp_servers(
         )
 
         for server in servers_to_restore:
-            server_name = server.name
-            server_type = server.server_type or "stdio"
-            transport_config = server.transport_config or {}
-
-            # Use distributed lock if redis_client is available
-            if redis_client is not None:
-                lock_key = f"memstack:lock:mcp_restore:{project_id}:{server_name}"
-                lock_owner = str(uuid.uuid4())
-                lock_ttl = 60
-
-                # Try to acquire lock (non-blocking)
-                acquired = await redis_client.set(lock_key, lock_owner, nx=True, ex=lock_ttl)
-
-                if not acquired:
-                    logger.debug(
-                        f"[AgentWorker] Skip restore '{server_name}': lock held by another worker"
-                    )
-                    continue
-
-                try:
-                    # Double-check: Re-verify server is still not running inside lock
-                    # (another worker may have just restored it)
-                    try:
-                        list_result = await sandbox_adapter.call_tool(
-                            sandbox_id=sandbox_id,
-                            tool_name="mcp_server_list",
-                            arguments={},
-                            timeout=10.0,
-                        )
-                        current_servers = _parse_mcp_server_list(list_result.get("content", []))
-                        current_running = {
-                            s.get("name") for s in current_servers if s.get("status") == "running"
-                        }
-                        if server_name in current_running:
-                            logger.debug(
-                                f"[AgentWorker] Skip restore '{server_name}': "
-                                f"already running (double-check)"
-                            )
-                            continue
-                    except Exception as e:
-                        logger.warning(
-                            f"[AgentWorker] Double-check failed for '{server_name}': {e}"
-                        )
-                        # Continue with restore if double-check fails
-
-                    # Perform restore inside lock
-                    restored, restore_error = await _restore_single_server(
-                        sandbox_adapter=sandbox_adapter,
-                        sandbox_id=sandbox_id,
-                        server_name=server_name,
-                        server_type=server_type,
-                        transport_config=transport_config,
-                    )
-                    server_id = getattr(server, "id", None)
-                    server_tenant_id = getattr(server, "tenant_id", None)
-                    if server_id and server_tenant_id:
-                        await _persist_restore_lifecycle_result(
-                            tenant_id=server_tenant_id,
-                            project_id=project_id,
-                            server_id=server_id,
-                            restored=restored,
-                            error_message=restore_error,
-                        )
-
-                finally:
-                    # Release lock (only if we own it)
-                    try:
-                        current_owner = await redis_client.get(lock_key)
-                        if current_owner == lock_owner:
-                            await redis_client.delete(lock_key)
-                    except Exception as e:
-                        logger.warning(
-                            f"[AgentWorker] Failed to release lock for '{server_name}': {e}"
-                        )
-            else:
-                # Fallback: No lock (backward compatible)
-                restored, restore_error = await _restore_single_server(
-                    sandbox_adapter=sandbox_adapter,
-                    sandbox_id=sandbox_id,
-                    server_name=server_name,
-                    server_type=server_type,
-                    transport_config=transport_config,
-                )
-                server_id = getattr(server, "id", None)
-                server_tenant_id = getattr(server, "tenant_id", None)
-                if server_id and server_tenant_id:
-                    await _persist_restore_lifecycle_result(
-                        tenant_id=server_tenant_id,
-                        project_id=project_id,
-                        server_id=server_id,
-                        restored=restored,
-                        error_message=restore_error,
-                    )
+            await _restore_server_with_optional_lock(
+                sandbox_adapter=sandbox_adapter,
+                sandbox_id=sandbox_id,
+                project_id=project_id,
+                server=server,
+                redis_client=redis_client,
+            )
 
     except Exception as e:
         logger.warning(f"[AgentWorker] Error in auto-restore MCP servers: {e}")
+
+
+async def _find_servers_to_restore(
+    project_id: str,
+    running_names: set,
+) -> list:
+    """Find enabled MCP servers from DB that aren't currently running."""
+    from src.infrastructure.adapters.secondary.persistence.database import (
+        async_session_factory,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
+        SqlMCPServerRepository,
+    )
+
+    async with async_session_factory() as session:
+        repo = SqlMCPServerRepository(session)
+        db_servers = await repo.list_by_project(project_id, enabled_only=True)
+
+    return [s for s in db_servers if s.name and s.name not in running_names]
+
+
+async def _restore_server_with_optional_lock(
+    sandbox_adapter: SandboxPort,
+    sandbox_id: str,
+    project_id: str,
+    server: Any,
+    redis_client: redis.Redis | None,
+) -> None:
+    """Restore a single server, using distributed lock if redis_client is available."""
+    server_name = server.name
+    server_type = server.server_type or "stdio"
+    transport_config = server.transport_config or {}
+
+    if redis_client is not None:
+        await _restore_with_lock(
+            sandbox_adapter, sandbox_id, project_id,
+            server, server_name, server_type, transport_config, redis_client,
+        )
+    else:
+        await _restore_without_lock(
+            sandbox_adapter, sandbox_id, project_id,
+            server, server_name, server_type, transport_config,
+        )
+
+
+async def _restore_with_lock(
+    sandbox_adapter: SandboxPort,
+    sandbox_id: str,
+    project_id: str,
+    server: Any,
+    server_name: str,
+    server_type: str,
+    transport_config: dict,
+    redis_client: redis.Redis,
+) -> None:
+    """Restore a server using distributed lock to prevent race conditions."""
+    import uuid
+
+    lock_key = f"memstack:lock:mcp_restore:{project_id}:{server_name}"
+    lock_owner = str(uuid.uuid4())
+    lock_ttl = 60
+
+    # Try to acquire lock (non-blocking)
+    acquired = await redis_client.set(lock_key, lock_owner, nx=True, ex=lock_ttl)
+
+    if not acquired:
+        logger.debug(
+            f"[AgentWorker] Skip restore '{server_name}': lock held by another worker"
+        )
+        return
+
+    try:
+        # Double-check: Re-verify server is still not running inside lock
+        if await _is_server_already_running(sandbox_adapter, sandbox_id, server_name):
+            return
+
+        # Perform restore inside lock
+        restored, restore_error = await _restore_single_server(
+            sandbox_adapter=sandbox_adapter,
+            sandbox_id=sandbox_id,
+            server_name=server_name,
+            server_type=server_type,
+            transport_config=transport_config,
+        )
+        await _maybe_persist_restore_result(server, project_id, restored, restore_error)
+
+    finally:
+        await _release_lock_if_owned(redis_client, lock_key, lock_owner, server_name)
+
+
+async def _restore_without_lock(
+    sandbox_adapter: SandboxPort,
+    sandbox_id: str,
+    project_id: str,
+    server: Any,
+    server_name: str,
+    server_type: str,
+    transport_config: dict,
+) -> None:
+    """Restore a server without distributed locking (backward compatible fallback)."""
+    restored, restore_error = await _restore_single_server(
+        sandbox_adapter=sandbox_adapter,
+        sandbox_id=sandbox_id,
+        server_name=server_name,
+        server_type=server_type,
+        transport_config=transport_config,
+    )
+    await _maybe_persist_restore_result(server, project_id, restored, restore_error)
+
+
+async def _is_server_already_running(
+    sandbox_adapter: SandboxPort,
+    sandbox_id: str,
+    server_name: str,
+) -> bool:
+    """Check if a server is already running (double-check inside lock)."""
+    try:
+        list_result = await sandbox_adapter.call_tool(
+            sandbox_id=sandbox_id,
+            tool_name="mcp_server_list",
+            arguments={},
+            timeout=10.0,
+        )
+        current_servers = _parse_mcp_server_list(list_result.get("content", []))
+        current_running = {
+            s.get("name") for s in current_servers if s.get("status") == "running"
+        }
+        if server_name in current_running:
+            logger.debug(
+                f"[AgentWorker] Skip restore '{server_name}': "
+                f"already running (double-check)"
+            )
+            return True
+    except Exception as e:
+        logger.warning(
+            f"[AgentWorker] Double-check failed for '{server_name}': {e}"
+        )
+        # Continue with restore if double-check fails
+    return False
+
+
+async def _release_lock_if_owned(
+    redis_client: redis.Redis,
+    lock_key: str,
+    lock_owner: str,
+    server_name: str,
+) -> None:
+    """Release a distributed lock only if we still own it."""
+    try:
+        current_owner = await redis_client.get(lock_key)
+        if current_owner == lock_owner:
+            await redis_client.delete(lock_key)
+    except Exception as e:
+        logger.warning(
+            f"[AgentWorker] Failed to release lock for '{server_name}': {e}"
+        )
+
+
+async def _maybe_persist_restore_result(
+    server: Any,
+    project_id: str,
+    restored: bool,
+    restore_error: str | None,
+) -> None:
+    """Persist restore lifecycle result if server has required attributes."""
+    server_id = getattr(server, "id", None)
+    server_tenant_id = getattr(server, "tenant_id", None)
+    if server_id and server_tenant_id:
+        await _persist_restore_lifecycle_result(
+            tenant_id=server_tenant_id,
+            project_id=project_id,
+            server_id=server_id,
+            restored=restored,
+            error_message=restore_error,
+        )
 
 
 async def _restore_single_server(

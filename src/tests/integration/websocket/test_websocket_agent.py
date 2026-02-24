@@ -32,6 +32,57 @@ TEST_USER_ID = os.environ.get("TEST_USER_ID", "")
 TEST_TENANT_ID = os.environ.get("TEST_TENANT_ID", "")
 
 
+class SetupError(Exception):
+    """Raised when a test setup step fails."""
+
+
+def _require_env_vars() -> None:
+    """Validate required environment variables. Raises SetupError if missing."""
+    if not API_KEY:
+        raise SetupError("API_KEY not set, skipping test")
+    if not TEST_PROJECT_ID:
+        raise SetupError("TEST_PROJECT_ID not set, skipping test")
+    if not TEST_CONVERSATION_ID:
+        raise SetupError("TEST_CONVERSATION_ID not set, skipping test")
+
+
+async def _setup_tester_connection(tester: "AgentWebSocketTester") -> None:
+    """Connect tester and receive connected event. Raises SetupError on failure."""
+    if not await tester.connect():
+        raise SetupError(f"Connection failed: {tester.errors[-1]}")
+
+    if not await tester.receive_connected_event():
+        raise SetupError(f"Connected event failed: {tester.errors[-1]}")
+
+
+async def _send_or_fail(tester: "AgentWebSocketTester", message: str) -> None:
+    """Send a message or raise SetupError."""
+    if not await tester.send_message(message):
+        raise SetupError(f"Send failed: {tester.errors[-1]}")
+
+
+def _analyze_post_hitl_events(events_after_hitl: list[dict[str, Any]], hitl_label: str) -> bool:
+    """Analyze events after HITL response. Returns True if test should pass."""
+    event_types_after = [e.get("type") for e in events_after_hitl]
+    print(f"\n   Events after {hitl_label}: {event_types_after}")
+
+    if "complete" in event_types_after:
+        print(f"   ✓ ReAct Agent continued and completed after {hitl_label}!")
+        return True
+
+    if "error" in event_types_after:
+        error_event = next(e for e in events_after_hitl if e.get("type") == "error")
+        print(f"   ✗ Error after {hitl_label}: {error_event.get('data', {})}")
+        return False
+
+    if not events_after_hitl:
+        print(f"   ✗ NO EVENTS after {hitl_label} response - ReAct event loop may be stuck!")
+        return False
+
+    print("   ⚠ Events received but no completion yet")
+    return True
+
+
 class AgentWebSocketTester:
     """Test agent WebSocket functionality."""
 
@@ -158,6 +209,18 @@ class AgentWebSocketTester:
             self.errors.append(f"Error subscribing: {e}")
             return False
 
+    def _process_hitl_event(self, event_type: str, data: dict[str, Any]) -> None:
+        """Record HITL event data on the tester."""
+        hitl_map = {
+            "clarification_asked": "clarification",
+            "decision_asked": "decision",
+            "env_var_requested": "env_var",
+        }
+        if event_type in hitl_map:
+            self.hitl_request_id = data.get("data", {}).get("request_id")
+            self.hitl_type = hitl_map[event_type]
+            print(f"   ✓ HITL {self.hitl_type} request: {self.hitl_request_id}")
+
     async def receive_events(
         self, timeout: float = 30.0, expected_event_types: list[str] | None = None
     ) -> list[dict[str, Any]]:
@@ -179,27 +242,11 @@ class AgentWebSocketTester:
                 event_type = data.get("type", "unknown")
                 print(f"   [Event] {event_type}")
 
-                # Check for HITL request
-                if event_type == "clarification_asked":
-                    self.hitl_request_id = data.get("data", {}).get("request_id")
-                    self.hitl_type = "clarification"
-                    print(f"   ✓ HITL clarification request: {self.hitl_request_id}")
+                self._process_hitl_event(event_type, data)
 
-                elif event_type == "decision_asked":
-                    self.hitl_request_id = data.get("data", {}).get("request_id")
-                    self.hitl_type = "decision"
-                    print(f"   ✓ HITL decision request: {self.hitl_request_id}")
-
-                elif event_type == "env_var_requested":
-                    self.hitl_request_id = data.get("data", {}).get("request_id")
-                    self.hitl_type = "env_var"
-                    print(f"   ✓ HITL env_var request: {self.hitl_request_id}")
-
-                # Check for completion or error
                 if event_type in ("complete", "error"):
                     break
 
-                # Check if we received expected event types
                 if expected_event_types and event_type in expected_event_types:
                     break
 
@@ -223,31 +270,18 @@ async def test_basic_websocket_connection():
     print("Test 1: Basic WebSocket Connection")
     print("=" * 60)
 
-    if not API_KEY:
-        print("   ✗ API_KEY not set, skipping test")
-        return False
-
-    if not TEST_PROJECT_ID:
-        print("   ✗ TEST_PROJECT_ID not set, skipping test")
-        return False
-
-    if not TEST_CONVERSATION_ID:
-        print("   ✗ TEST_CONVERSATION_ID not set, skipping test")
+    try:
+        _require_env_vars()
+    except SetupError as e:
+        print(f"   ✗ {e}")
         return False
 
     tester = AgentWebSocketTester(API_KEY, TEST_PROJECT_ID, TEST_CONVERSATION_ID)
 
     try:
         print("\n1.1 Connecting to WebSocket...")
-        if not await tester.connect():
-            print(f"   ✗ Connection failed: {tester.errors[-1]}")
-            return False
+        await _setup_tester_connection(tester)
         print("   ✓ WebSocket connected")
-
-        print("\n1.2 Receiving connected event...")
-        if not await tester.receive_connected_event():
-            print(f"   ✗ Failed: {tester.errors[-1]}")
-            return False
 
         print("\n1.3 Subscribing to conversation...")
         if not await tester.send_subscribe():
@@ -258,6 +292,9 @@ async def test_basic_websocket_connection():
         print("\n   ✓ Test 1 PASSED")
         return True
 
+    except SetupError as e:
+        print(f"   ✗ {e}")
+        return False
     except Exception as e:
         print(f"   ✗ Test 1 FAILED: {e}")
         return False
@@ -271,47 +308,42 @@ async def test_agent_chat_flow():
     print("Test 2: Agent Chat Flow")
     print("=" * 60)
 
-    if not API_KEY:
-        print("   ✗ API_KEY not set, skipping test")
+    try:
+        _require_env_vars()
+    except SetupError as e:
+        print(f"   ✗ {e}")
         return False
 
     tester = AgentWebSocketTester(API_KEY, TEST_PROJECT_ID, TEST_CONVERSATION_ID)
 
     try:
         print("\n2.1 Connecting...")
-        if not await tester.connect():
-            print(f"   ✗ Connection failed: {tester.errors[-1]}")
-            return False
-
-        if not await tester.receive_connected_event():
-            print(f"   ✗ Failed: {tester.errors[-1]}")
-            return False
+        await _setup_tester_connection(tester)
 
         print("\n2.2 Sending simple message...")
-        message = "Hello, can you tell me what you can do?"
-        if not await tester.send_message(message):
-            print(f"   ✗ Failed: {tester.errors[-1]}")
-            return False
+        await _send_or_fail(tester, "Hello, can you tell me what you can do?")
 
         print("\n2.3 Receiving events...")
         events = await tester.receive_events(timeout=30.0)
-
         event_types = [e.get("type") for e in events]
         print(f"\n   Received events: {event_types}")
 
-        if "complete" in event_types:
-            print("   ✓ Agent completed successfully")
-        elif "error" in event_types:
+        if "error" in event_types:
             error_event = next(e for e in events if e.get("type") == "error")
             print(f"   ✗ Agent error: {error_event.get('data', {})}")
             return False
+
+        if "complete" in event_types:
+            print("   ✓ Agent completed successfully")
         else:
             print("   ⚠ No completion event received (timeout)")
-            # Don't fail on timeout, might be normal for long operations
 
         print("\n   ✓ Test 2 PASSED")
         return True
 
+    except SetupError as e:
+        print(f"   ✗ {e}")
+        return False
     except Exception as e:
         print(f"   ✗ Test 2 FAILED: {e}")
         import traceback
@@ -322,76 +354,79 @@ async def test_agent_chat_flow():
         await tester.close()
 
 
+async def _run_hitl_flow(
+    tester: AgentWebSocketTester,
+    message: str,
+    expected_hitl_type: str,
+    hitl_label: str,
+    send_response_fn,
+    response_value: str,
+) -> bool:
+    """Run a HITL flow: send message, wait for HITL, respond, check continuation."""
+    await _send_or_fail(tester, message)
+
+    print(f"\n   Waiting for HITL {hitl_label} request...")
+    _events = await tester.receive_events(timeout=30.0)
+
+    if tester.hitl_type != expected_hitl_type:
+        print(f"   ⚠ No {hitl_label} request received (HITL type: {tester.hitl_type})")
+        print(f"   This may be normal if the agent doesn't need {hitl_label}")
+        return True
+
+    print(f"   ✓ Received {hitl_label} request: {tester.hitl_request_id}")
+
+    print(f"\n   Sending {hitl_label} response...")
+    if not await send_response_fn(tester.hitl_request_id, response_value):
+        print(f"   ✗ Failed: {tester.errors[-1]}")
+        return False
+
+    print(f"\n   Waiting for agent to continue after {hitl_label} response...")
+    events_after_hitl = await tester.receive_events(timeout=30.0)
+
+    return _analyze_post_hitl_events(events_after_hitl, hitl_label)
+
+
 async def test_hitl_clarification_flow():
     """Test 3: HITL clarification flow - CRITICAL for ReAct event loop."""
     print("\n" + "=" * 60)
     print("Test 3: HITL Clarification Flow (ReAct Event Loop)")
     print("=" * 60)
 
-    if not API_KEY:
-        print("   ✗ API_KEY not set, skipping test")
+    try:
+        _require_env_vars()
+    except SetupError as e:
+        print(f"   ✗ {e}")
         return False
 
     tester = AgentWebSocketTester(API_KEY, TEST_PROJECT_ID, TEST_CONVERSATION_ID)
 
     try:
         print("\n3.1 Connecting...")
-        if not await tester.connect():
-            print(f"   ✗ Connection failed: {tester.errors[-1]}")
-            return False
-
-        if not await tester.receive_connected_event():
-            print(f"   ✗ Failed: {tester.errors[-1]}")
-            return False
+        await _setup_tester_connection(tester)
 
         print("\n3.2 Sending message that should trigger clarification...")
-        # This message is designed to trigger a clarification request
         message = (
             "I need to implement a feature but I'm not sure about the approach. "
             "Can you help me decide between using a REST API or GraphQL?"
         )
-        if not await tester.send_message(message):
-            print(f"   ✗ Failed: {tester.errors[-1]}")
+
+        result = await _run_hitl_flow(
+            tester,
+            message,
+            "clarification",
+            "clarification",
+            tester.send_clarification_response,
+            "rest_api",
+        )
+        if not result:
             return False
-
-        print("\n3.3 Waiting for HITL clarification request...")
-        _events = await tester.receive_events(timeout=30.0)
-
-        # Check if we got clarification_asked
-        if tester.hitl_type != "clarification":
-            print(f"   ⚠ No clarification request received (HITL type: {tester.hitl_type})")
-            print("   This may be normal if the agent doesn't need clarification")
-            # Continue with test - not all queries trigger HITL
-        else:
-            print(f"   ✓ Received clarification request: {tester.hitl_request_id}")
-
-            print("\n3.4 Sending clarification response...")
-            if not await tester.send_clarification_response(tester.hitl_request_id, "rest_api"):
-                print(f"   ✗ Failed: {tester.errors[-1]}")
-                return False
-
-            print("\n3.5 Waiting for agent to continue after HITL response...")
-            # THIS IS THE CRITICAL TEST: Does the ReAct event loop continue?
-            events_after_hitl = await tester.receive_events(timeout=30.0)
-
-            event_types_after = [e.get("type") for e in events_after_hitl]
-            print(f"\n   Events after HITL: {event_types_after}")
-
-            if "complete" in event_types_after:
-                print("   ✓ ReAct Agent continued and completed after HITL!")
-            elif "error" in event_types_after:
-                error_event = next(e for e in events_after_hitl if e.get("type") == "error")
-                print(f"   ✗ Error after HITL: {error_event.get('data', {})}")
-                return False
-            elif not events_after_hitl:
-                print("   ✗ NO EVENTS after HITL response - ReAct event loop may be stuck!")
-                return False
-            else:
-                print("   ⚠ Events received but no completion yet")
 
         print("\n   ✓ Test 3 PASSED")
         return True
 
+    except SetupError as e:
+        print(f"   ✗ {e}")
+        return False
     except Exception as e:
         print(f"   ✗ Test 3 FAILED: {e}")
         import traceback
@@ -408,69 +443,41 @@ async def test_hitl_decision_flow():
     print("Test 4: HITL Decision Flow (ReAct Event Loop)")
     print("=" * 60)
 
-    if not API_KEY:
-        print("   ✗ API_KEY not set, skipping test")
+    try:
+        _require_env_vars()
+    except SetupError as e:
+        print(f"   ✗ {e}")
         return False
 
     tester = AgentWebSocketTester(API_KEY, TEST_PROJECT_ID, TEST_CONVERSATION_ID)
 
     try:
         print("\n4.1 Connecting...")
-        if not await tester.connect():
-            print(f"   ✗ Connection failed: {tester.errors[-1]}")
-            return False
-
-        if not await tester.receive_connected_event():
-            print(f"   ✗ Failed: {tester.errors[-1]}")
-            return False
+        await _setup_tester_connection(tester)
 
         print("\n4.2 Sending message that should trigger decision request...")
-        # This message is designed to trigger a decision request
         message = (
             "I need to delete a large amount of user data. "
             "This is a risky operation. What should I do?"
         )
-        if not await tester.send_message(message):
-            print(f"   ✗ Failed: {tester.errors[-1]}")
+
+        result = await _run_hitl_flow(
+            tester,
+            message,
+            "decision",
+            "decision",
+            tester.send_decision_response,
+            "cancel",
+        )
+        if not result:
             return False
-
-        print("\n4.3 Waiting for HITL decision request...")
-        _ = await tester.receive_events(timeout=30.0)
-
-        # Check if we got decision_asked
-        if tester.hitl_type != "decision":
-            print(f"   ⚠ No decision request received (HITL type: {tester.hitl_type})")
-            print("   This may be normal if the agent doesn't need a decision")
-        else:
-            print(f"   ✓ Received decision request: {tester.hitl_request_id}")
-
-            print("\n4.4 Sending decision response...")
-            if not await tester.send_decision_response(tester.hitl_request_id, "cancel"):
-                print(f"   ✗ Failed: {tester.errors[-1]}")
-                return False
-
-            print("\n4.5 Waiting for agent to continue after decision response...")
-            # CRITICAL TEST: Does the ReAct event loop continue?
-            events_after_hitl = await tester.receive_events(timeout=30.0)
-
-            event_types_after = [e.get("type") for e in events_after_hitl]
-            print(f"\n   Events after decision: {event_types_after}")
-
-            if "complete" in event_types_after:
-                print("   ✓ ReAct Agent continued and completed after decision!")
-            elif "error" in event_types_after:
-                error_event = next(e for e in events_after_hitl if e.get("type") == "error")
-                print(f"   ✗ Error after decision: {error_event.get('data', {})}")
-                return False
-            elif not events_after_hitl:
-                print("   ✗ NO EVENTS after decision response - ReAct event loop may be stuck!")
-                return False
-            else:
-                print("   ⚠ Events received but no completion yet")
 
         print("\n   ✓ Test 4 PASSED")
         return True
 
+    except SetupError as e:
+        print(f"   ✗ {e}")
+        return False
     except Exception as e:
         print(f"   ✗ Test 4 FAILED: {e}")
         import traceback
@@ -520,16 +527,9 @@ async def main():
     # Run tests
     results = []
 
-    # Test 1: Basic connection
     results.append(("Basic WebSocket Connection", await test_basic_websocket_connection()))
-
-    # Test 2: Agent chat flow
     results.append(("Agent Chat Flow", await test_agent_chat_flow()))
-
-    # Test 3: HITL clarification flow
     results.append(("HITL Clarification Flow", await test_hitl_clarification_flow()))
-
-    # Test 4: HITL decision flow
     results.append(("HITL Decision Flow", await test_hitl_decision_flow()))
 
     # Summary

@@ -118,7 +118,7 @@ def _build_lifecycle_metadata(
 class SessionsSpawnTool(AgentTool):
     """Spawn a SubAgent run as a non-blocking session."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         subagent_names: list[str],
         subagent_descriptions: dict[str, str],
@@ -213,20 +213,45 @@ class SessionsSpawnTool(AgentTool):
             "required": ["subagent_name", "task"],
         }
 
-    async def execute(
+    def _validate_spawn_params(
         self,
-        subagent_name: str = "",
-        task: str = "",
-        run_timeout_seconds: int = 0,
-        mode: str = "run",
-        thread: bool = False,
-        cleanup: str = "keep",
-        agent_id: str = "",
-        model: str = "",
-        thinking: str = "",
-        **kwargs: Any,
-    ) -> str:
-        self._pending_events.clear()
+        subagent_name: str,
+        task: str,
+        mode: str,
+        thread: bool,
+        cleanup: str,
+        agent_id: str,
+    ) -> tuple[str | None, dict[str, Any]]:
+        """Validate spawn parameters, returning (error, validated_params)."""
+        error = self._validate_basic_spawn_params(subagent_name, task)
+        if error:
+            return error, {}
+        spawn_mode = (mode or "run").strip().lower()
+        error = self._validate_mode_cleanup(spawn_mode, bool(thread), cleanup)
+        if error:
+            return error, {}
+        cleanup_policy = (cleanup or "keep").strip().lower()
+        if spawn_mode == "session":
+            cleanup_policy = "keep"
+        requested_agent_id = (agent_id or "").strip()
+        target_subagent_name = subagent_name
+        if requested_agent_id:
+            if requested_agent_id not in self._subagent_names:
+                return (
+                    f"Error: invalid agent_id. Available: {', '.join(self._subagent_names)}",
+                    {},
+                )
+            target_subagent_name = requested_agent_id
+        return None, {
+            "spawn_mode": spawn_mode,
+            "thread_requested": bool(thread),
+            "cleanup_policy": cleanup_policy,
+            "target_subagent_name": target_subagent_name,
+            "requested_agent_id": requested_agent_id,
+        }
+
+    def _validate_basic_spawn_params(self, subagent_name: str, task: str) -> str | None:
+        """Validate subagent_name, task, and delegation depth."""
         if not subagent_name or subagent_name not in self._subagent_names:
             return f"Error: invalid subagent_name. Available: {', '.join(self._subagent_names)}"
         if not task or not task.strip():
@@ -236,46 +261,24 @@ class SessionsSpawnTool(AgentTool):
                 "Error: sessions_spawn is disabled at current delegation depth "
                 f"({self._delegation_depth}/{self._max_delegation_depth})"
             )
-        try:
-            timeout_seconds = max(0, int(run_timeout_seconds or 0))
-        except (TypeError, ValueError):
-            timeout_seconds = 0
-        spawn_mode = (mode or "run").strip().lower()
+        return None
+
+    @staticmethod
+    def _validate_mode_cleanup(spawn_mode: str, thread_requested: bool, cleanup: str) -> str | None:
+        """Validate mode, thread, and cleanup constraints."""
         if spawn_mode not in {"run", "session"}:
             return "Error: mode must be one of run|session"
-
-        thread_requested = bool(thread)
         if spawn_mode == "session" and not thread_requested:
             return "Error: mode='session' requires thread=true"
-
         cleanup_policy = (cleanup or "keep").strip().lower()
         if cleanup_policy not in {"keep", "delete"}:
             return "Error: cleanup must be one of keep|delete"
         if spawn_mode == "session" and cleanup_policy == "delete":
             return "Error: mode='session' requires cleanup='keep'"
-        if spawn_mode == "session":
-            cleanup_policy = "keep"
+        return None
 
-        requested_agent_id = (agent_id or "").strip()
-        target_subagent_name = subagent_name
-        if requested_agent_id:
-            if requested_agent_id not in self._subagent_names:
-                return f"Error: invalid agent_id. Available: {', '.join(self._subagent_names)}"
-            target_subagent_name = requested_agent_id
-
-        model_override = (model or "").strip() or None
-        thinking_override = (thinking or "").strip() or None
-        spawn_options: dict[str, Any] = {
-            "spawn_mode": spawn_mode,
-            "thread_requested": thread_requested,
-            "cleanup": cleanup_policy,
-            "agent_id": requested_agent_id or target_subagent_name,
-            "model": model_override,
-            "thinking": thinking_override,
-            "requester_session_key": self._requester_session_key,
-            "run_timeout_seconds": timeout_seconds,
-        }
-
+    def _check_capacity_limits(self) -> str | None:
+        """Check active run capacity limits, returning error if exceeded."""
         active_runs = self._run_registry.count_active_runs(self._conversation_id)
         if active_runs >= self._max_active_runs:
             return (
@@ -290,7 +293,62 @@ class SessionsSpawnTool(AgentTool):
                 "Error: requester SubAgent sessions limit reached "
                 f"({requester_runs}/{self._max_children_per_requester})"
             )
+        return None
 
+    async def execute(
+        self,
+        subagent_name: str = "",
+        task: str = "",
+        run_timeout_seconds: int = 0,
+        mode: str = "run",
+        thread: bool = False,
+        cleanup: str = "keep",
+        agent_id: str = "",
+        model: str = "",
+        thinking: str = "",
+        **kwargs: Any,
+    ) -> str:
+        self._pending_events.clear()
+        error, params = self._validate_spawn_params(
+            subagent_name, task, mode, thread, cleanup, agent_id
+        )
+        if error:
+            return error
+        try:
+            timeout_seconds = max(0, int(run_timeout_seconds or 0))
+        except (TypeError, ValueError):
+            timeout_seconds = 0
+        target_subagent_name = params["target_subagent_name"]
+        spawn_options: dict[str, Any] = {
+            "spawn_mode": params["spawn_mode"],
+            "thread_requested": params["thread_requested"],
+            "cleanup": params["cleanup_policy"],
+            "agent_id": params["requested_agent_id"] or target_subagent_name,
+            "model": (model or "").strip() or None,
+            "thinking": (thinking or "").strip() or None,
+            "requester_session_key": self._requester_session_key,
+            "run_timeout_seconds": timeout_seconds,
+        }
+
+        capacity_error = self._check_capacity_limits()
+        if capacity_error:
+            return capacity_error
+
+        return await self._create_and_spawn(
+            subagent_name=subagent_name,
+            target_subagent_name=target_subagent_name,
+            task=task,
+            spawn_options=spawn_options,
+        )
+
+    async def _create_and_spawn(
+        self,
+        subagent_name: str,
+        target_subagent_name: str,
+        task: str,
+        spawn_options: dict[str, Any],
+    ) -> str:
+        """Create run record and invoke spawn callback."""
         run = self._run_registry.create_run(
             conversation_id=self._conversation_id,
             subagent_name=target_subagent_name,
@@ -334,13 +392,13 @@ class SessionsSpawnTool(AgentTool):
                         "conversation_id": self._conversation_id,
                         "run_id": run.run_id,
                         "subagent_name": target_subagent_name,
-                        "spawn_mode": spawn_mode,
-                        "thread_requested": thread_requested,
-                        "cleanup": cleanup_policy,
+                        "spawn_mode": spawn_options["spawn_mode"],
+                        "thread_requested": spawn_options["thread_requested"],
+                        "cleanup": spawn_options["cleanup"],
                     },
                 }
             )
-            if spawn_mode == "session":
+            if spawn_options["spawn_mode"] == "session":
                 return (
                     f"Spawned persistent SubAgent session {run.run_id} for "
                     f"'{target_subagent_name}'. Use sessions_send to continue the lineage."
@@ -821,12 +879,16 @@ class SessionsOverviewTool(AgentTool):
         effective_visibility = (visibility or self._visibility_default).strip().lower()
         if effective_visibility not in {"self", "tree", "all"}:
             return f"Error: invalid visibility '{effective_visibility}'"
-
         runs = self._run_registry.list_runs_for_requester(
             self._conversation_id,
             self._requester_session_key,
             visibility=effective_visibility,
         )
+        stats = self._collect_run_stats(runs)
+        return self._build_overview_response(effective_visibility, runs, stats)
+
+    def _collect_run_stats(self, runs: list[SubAgentRun]) -> dict[str, Any]:
+        """Collect aggregate statistics from runs."""
         status_counts: dict[str, int] = {status.value: 0 for status in SubAgentRunStatus}
         subagent_counts: dict[str, int] = {}
         error_counts: dict[str, int] = {}
@@ -845,52 +907,97 @@ class SessionsOverviewTool(AgentTool):
             SubAgentRunStatus.CANCELLED,
             SubAgentRunStatus.TIMED_OUT,
         }
-
         for run in runs:
             status_counts[run.status.value] = status_counts.get(run.status.value, 0) + 1
             subagent_counts[run.subagent_name] = subagent_counts.get(run.subagent_name, 0) + 1
-
-            if (
-                run.status
-                in {
-                    SubAgentRunStatus.FAILED,
-                    SubAgentRunStatus.TIMED_OUT,
-                    SubAgentRunStatus.CANCELLED,
-                }
-                and run.error
-            ):
-                error_counts[run.error] = error_counts.get(run.error, 0) + 1
-
-            announce_dropped_count += int(run.metadata.get("announce_events_dropped") or 0)
-            announce_events = run.metadata.get("announce_events")
-            if isinstance(announce_events, list):
-                for event in announce_events:
-                    if not isinstance(event, dict):
-                        continue
-                    event_type = str(event.get("type") or "").strip().lower()
-                    if event_type in {"retry", "completion_retry"}:
-                        announce_retry_count += 1
-                    elif event_type in {"giveup", "completion_giveup"}:
-                        announce_giveup_count += 1
-                    elif event_type == "completion_delivered":
-                        announce_delivered_count += 1
-
+            self._collect_error_stats(run, error_counts)
+            announce_stats = self._collect_announce_stats(run)
+            announce_retry_count += announce_stats["retry"]
+            announce_giveup_count += announce_stats["giveup"]
+            announce_delivered_count += announce_stats["delivered"]
+            announce_dropped_count += announce_stats["dropped"]
             if run.status in terminal_statuses:
                 announce_status = str(run.metadata.get("announce_status") or "").strip().lower()
                 if announce_status not in {"delivered", "giveup"}:
                     announce_backlog_count += 1
-                if retention_seconds > 0:
-                    terminal_at = run.ended_at or run.created_at
-                    lag_ms = int((now - terminal_at).total_seconds() * 1000) - (
-                        retention_seconds * 1000
-                    )
-                    if lag_ms > 0:
-                        archive_lag_values.append(lag_ms)
-
+                self._collect_archive_lag(run, retention_seconds, now, archive_lag_values)
             lane_wait_ms = run.metadata.get("lane_wait_ms")
             if isinstance(lane_wait_ms, (int, float)):
                 lane_wait_values.append(int(lane_wait_ms))
+        return {
+            "status_counts": status_counts,
+            "subagent_counts": subagent_counts,
+            "error_counts": error_counts,
+            "announce_retry_count": announce_retry_count,
+            "announce_giveup_count": announce_giveup_count,
+            "announce_delivered_count": announce_delivered_count,
+            "announce_dropped_count": announce_dropped_count,
+            "announce_backlog_count": announce_backlog_count,
+            "lane_wait_values": lane_wait_values,
+            "archive_lag_values": archive_lag_values,
+        }
 
+    @staticmethod
+    def _collect_error_stats(run: SubAgentRun, error_counts: dict[str, int]) -> None:
+        """Collect error counts from a run."""
+        if (
+            run.status
+            in {
+                SubAgentRunStatus.FAILED,
+                SubAgentRunStatus.TIMED_OUT,
+                SubAgentRunStatus.CANCELLED,
+            }
+            and run.error
+        ):
+            error_counts[run.error] = error_counts.get(run.error, 0) + 1
+
+    def _collect_announce_stats(run: SubAgentRun) -> dict[str, int]:
+        """Collect announce event counts from a run."""
+        retry = 0
+        giveup = 0
+        delivered = 0
+        dropped = int(run.metadata.get("announce_events_dropped") or 0)
+        announce_events = run.metadata.get("announce_events")
+        if isinstance(announce_events, list):
+            for event in announce_events:
+                if not isinstance(event, dict):
+                    continue
+                event_type = str(event.get("type") or "").strip().lower()
+                if event_type in {"retry", "completion_retry"}:
+                    retry += 1
+                elif event_type in {"giveup", "completion_giveup"}:
+                    giveup += 1
+                elif event_type == "completion_delivered":
+                    delivered += 1
+        return {
+            "retry": retry,
+            "giveup": giveup,
+            "delivered": delivered,
+            "dropped": dropped,
+        }
+
+    @staticmethod
+    def _collect_archive_lag(
+        run: SubAgentRun,
+        retention_seconds: int,
+        now: datetime,
+        archive_lag_values: list[int],
+    ) -> None:
+        """Collect archive lag value for a terminal run."""
+        if retention_seconds > 0:
+            terminal_at = run.ended_at or run.created_at
+            lag_ms = int((now - terminal_at).total_seconds() * 1000) - (retention_seconds * 1000)
+            if lag_ms > 0:
+                archive_lag_values.append(lag_ms)
+
+    def _build_overview_response(
+        self,
+        effective_visibility: str,
+        runs: list[SubAgentRun],
+        stats: dict[str, Any],
+    ) -> str:
+        """Build the JSON overview response."""
+        status_counts = stats["status_counts"]
         active_runs = (
             status_counts[SubAgentRunStatus.PENDING.value]
             + status_counts[SubAgentRunStatus.RUNNING.value]
@@ -898,22 +1005,25 @@ class SessionsOverviewTool(AgentTool):
         by_subagent = [
             {"subagent_name": name, "count": count}
             for name, count in sorted(
-                subagent_counts.items(),
+                stats["subagent_counts"].items(),
                 key=lambda item: (-item[1], item[0]),
             )
         ]
         error_hotspots = [
             {"error": error, "count": count}
             for error, count in sorted(
-                error_counts.items(),
+                stats["error_counts"].items(),
                 key=lambda item: (-item[1], item[0]),
             )[:5]
         ]
+        lane_wait_values = stats["lane_wait_values"]
         lane_wait_summary = {
             "sample_count": len(lane_wait_values),
             "avg": int(sum(lane_wait_values) / len(lane_wait_values)) if lane_wait_values else 0,
             "max": max(lane_wait_values) if lane_wait_values else 0,
         }
+        archive_lag_values = stats["archive_lag_values"]
+        retention_seconds = max(int(self._run_registry.terminal_retention_seconds), 0)
         archive_lag_summary = {
             "retention_seconds": retention_seconds,
             "stale_count": len(archive_lag_values),
@@ -922,15 +1032,7 @@ class SessionsOverviewTool(AgentTool):
             else 0,
             "max": max(archive_lag_values) if archive_lag_values else 0,
         }
-        hook_failures = 0
-        if self._observability_stats_provider:
-            try:
-                stats = self._observability_stats_provider()
-                if isinstance(stats, dict):
-                    hook_failures = int(stats.get("hook_failures") or 0)
-            except Exception:
-                hook_failures = 0
-
+        hook_failures = self._get_hook_failures()
         return json.dumps(
             {
                 "conversation_id": self._conversation_id,
@@ -940,11 +1042,11 @@ class SessionsOverviewTool(AgentTool):
                 "status_counts": status_counts,
                 "by_subagent": by_subagent,
                 "announce_summary": {
-                    "retry_count": announce_retry_count,
-                    "giveup_count": announce_giveup_count,
-                    "delivered_count": announce_delivered_count,
-                    "dropped_count": announce_dropped_count,
-                    "backlog_count": announce_backlog_count,
+                    "retry_count": stats["announce_retry_count"],
+                    "giveup_count": stats["announce_giveup_count"],
+                    "delivered_count": stats["announce_delivered_count"],
+                    "dropped_count": stats["announce_dropped_count"],
+                    "backlog_count": stats["announce_backlog_count"],
                 },
                 "archive_lag_ms": archive_lag_summary,
                 "hook_failures": hook_failures,
@@ -954,6 +1056,18 @@ class SessionsOverviewTool(AgentTool):
             ensure_ascii=False,
             indent=2,
         )
+
+    def _get_hook_failures(self) -> int:
+        """Get hook failure count from observability provider."""
+        if not self._observability_stats_provider:
+            return 0
+        try:
+            stats = self._observability_stats_provider()
+            if isinstance(stats, dict):
+                return int(stats.get("hook_failures") or 0)
+        except Exception:
+            pass
+        return 0
 
 
 class SessionsWaitTool(AgentTool):
@@ -1139,7 +1253,7 @@ class SessionsAckTool(AgentTool):
 class SessionsSendTool(AgentTool):
     """Send follow-up work to the same SubAgent lineage as an existing run."""
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         run_registry: SubAgentRunRegistry,
         conversation_id: str,
@@ -1205,49 +1319,15 @@ class SessionsSendTool(AgentTool):
         **kwargs: Any,
     ) -> str:
         self._pending_events.clear()
-        if not run_id:
-            return "Error: run_id is required"
-        if not task or not task.strip():
-            return "Error: task is required"
-        if self._delegation_depth >= self._max_delegation_depth:
-            return (
-                "Error: sessions_send is disabled at current delegation depth "
-                f"({self._delegation_depth}/{self._max_delegation_depth})"
-            )
-        try:
-            timeout_seconds = max(0, int(run_timeout_seconds or 0))
-        except (TypeError, ValueError):
-            timeout_seconds = 0
-
+        error, timeout_seconds = self._validate_send_params(run_id, task, run_timeout_seconds)
+        if error:
+            return error
         parent_run = self._run_registry.get_run(self._conversation_id, run_id)
         if not parent_run:
             return f"Error: run_id '{run_id}' not found"
-
-        active_runs = self._run_registry.count_active_runs(self._conversation_id)
-        if active_runs >= self._max_active_runs:
-            return (
-                f"Error: active SubAgent sessions limit reached "
-                f"({active_runs}/{self._max_active_runs})"
-            )
-        requester_runs = self._run_registry.count_active_runs_for_requester(
-            self._conversation_id, self._requester_session_key
-        )
-        if requester_runs >= self._max_children_per_requester:
-            return (
-                "Error: requester SubAgent sessions limit reached "
-                f"({requester_runs}/{self._max_children_per_requester})"
-            )
-
-        lineage_root_run_id = str(parent_run.metadata.get("lineage_root_run_id") or run_id).strip()
-        lineage_active_runs = self._run_registry.count_active_runs_for_lineage(
-            self._conversation_id,
-            lineage_root_run_id,
-        )
-        if lineage_active_runs >= self._max_active_runs_per_lineage:
-            return (
-                "Error: lineage SubAgent sessions limit reached "
-                f"({lineage_active_runs}/{self._max_active_runs_per_lineage})"
-            )
+        capacity_error = self._check_send_capacity(lineage_root_run_id)
+        if capacity_error:
+            return capacity_error
         try:
             parent_timeout = int(parent_run.metadata.get("run_timeout_seconds") or 0)
         except (TypeError, ValueError):
@@ -1335,6 +1415,52 @@ class SessionsSendTool(AgentTool):
                     {"type": "subagent_run_failed", "data": failed.to_event_data()}
                 )
             return f"Error: failed to send follow-up: {exc}"
+
+    def _validate_send_params(
+        self, run_id: str, task: str, run_timeout_seconds: int
+    ) -> tuple[str | None, int]:
+        """Validate send parameters. Returns (error_message, timeout_seconds)."""
+        if not run_id:
+            return "Error: run_id is required", 0
+        if not task or not task.strip():
+            return "Error: task is required", 0
+        if self._delegation_depth >= self._max_delegation_depth:
+            return (
+                "Error: sessions_send is disabled at current delegation depth "
+                f"({self._delegation_depth}/{self._max_delegation_depth})"
+            ), 0
+        try:
+            timeout_seconds = max(0, int(run_timeout_seconds or 0))
+        except (TypeError, ValueError):
+            timeout_seconds = 0
+        return None, timeout_seconds
+
+    def _check_send_capacity(self, lineage_root_run_id: str) -> str | None:
+        """Check capacity limits for send. Returns error or None."""
+        active_runs = self._run_registry.count_active_runs(self._conversation_id)
+        if active_runs >= self._max_active_runs:
+            return (
+                f"Error: active SubAgent sessions limit reached "
+                f"({active_runs}/{self._max_active_runs})"
+            )
+        requester_runs = self._run_registry.count_active_runs_for_requester(
+            self._conversation_id, self._requester_session_key
+        )
+        if requester_runs >= self._max_children_per_requester:
+            return (
+                "Error: requester SubAgent sessions limit reached "
+                f"({requester_runs}/{self._max_children_per_requester})"
+            )
+        lineage_active_runs = self._run_registry.count_active_runs_for_lineage(
+            self._conversation_id,
+            lineage_root_run_id,
+        )
+        if lineage_active_runs >= self._max_active_runs_per_lineage:
+            return (
+                "Error: lineage SubAgent sessions limit reached "
+                f"({lineage_active_runs}/{self._max_active_runs_per_lineage})"
+            )
+        return None
 
     async def _invoke_spawn_callback(
         self,
@@ -1429,7 +1555,7 @@ class SubAgentsControlTool(AgentTool):
 
     _ACTIVE_STATUSES: ClassVar[set] = {SubAgentRunStatus.PENDING, SubAgentRunStatus.RUNNING}
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         run_registry: SubAgentRunRegistry,
         conversation_id: str,
@@ -1537,38 +1663,76 @@ class SubAgentsControlTool(AgentTool):
     ) -> str:
         self._pending_events.clear()
         normalized_action = (action or "list").strip().lower()
-        if normalized_action == "list":
+        return await self._dispatch_action(
+            normalized_action,
+            run_id=run_id,
+            target=target,
+            instruction=instruction,
+            task=task,
+            run_timeout_seconds=run_timeout_seconds,
+            include_descendants=include_descendants,
+            include_announce=include_announce,
+        )
+
+    async def _dispatch_action(
+        self,
+        action: str,
+        *,
+        run_id: str,
+        target: str,
+        instruction: str,
+        task: str,
+        run_timeout_seconds: int,
+        include_descendants: bool,
+        include_announce: bool,
+    ) -> str:
+        """Dispatch action to the appropriate handler."""
+        if action == "list":
             return self._list_subagents()
-        if normalized_action == "info":
+        if action == "info":
             return self._info_runs(
                 run_id=run_id, target=target, include_descendants=include_descendants
             )
-        if normalized_action == "log":
+        if action == "log":
             return await self._log_runs(
                 run_id=run_id,
                 target=target,
                 include_descendants=include_descendants,
                 include_announce=include_announce,
             )
-        if normalized_action == "send":
-            blocked_error = self._ensure_mutation_allowed(action_name="send")
-            if blocked_error:
-                return blocked_error
+        return await self._dispatch_mutation(
+            action,
+            run_id=run_id,
+            target=target,
+            instruction=instruction,
+            task=task,
+            run_timeout_seconds=run_timeout_seconds,
+        )
+
+    async def _dispatch_mutation(
+        self,
+        action: str,
+        *,
+        run_id: str,
+        target: str,
+        instruction: str,
+        task: str,
+        run_timeout_seconds: int,
+    ) -> str:
+        """Dispatch mutation actions with permission check."""
+        blocked_error = self._ensure_mutation_allowed(action_name=action)
+        if blocked_error:
+            return blocked_error
+        if action == "send":
             return await self._send_follow_up(
                 run_id=run_id,
                 target=target,
                 task=task,
                 run_timeout_seconds=run_timeout_seconds,
             )
-        if normalized_action == "kill":
-            blocked_error = self._ensure_mutation_allowed(action_name="kill")
-            if blocked_error:
-                return blocked_error
+        if action == "kill":
             return await self._kill_run(run_id=run_id, target=target)
-        if normalized_action == "steer":
-            blocked_error = self._ensure_mutation_allowed(action_name="steer")
-            if blocked_error:
-                return blocked_error
+        if action == "steer":
             return await self._steer_run(run_id=run_id, target=target, instruction=instruction)
         return "Error: action must be one of list|info|log|send|kill|steer"
 
@@ -1638,43 +1802,48 @@ class SubAgentsControlTool(AgentTool):
         token = target_token.strip()
         if not token:
             return [], "Error: target (or run_id) is required"
-
         if token.lower() == "all":
             statuses = None if include_terminal else list(self._ACTIVE_STATUSES)
             runs = self._run_registry.list_runs(self._conversation_id, statuses=statuses)
             return runs, None
-
         if token.startswith("#") or token.lower().startswith("index:"):
             raw_index = token[1:] if token.startswith("#") else token.split(":", 1)[1]
-            try:
-                resolved_index = int(raw_index)
-            except (TypeError, ValueError):
-                return [], f"Error: invalid target index '{raw_index}'"
-            if resolved_index <= 0:
-                return [], "Error: target index must be >= 1"
-            active_runs = self._run_registry.list_runs(
-                self._conversation_id,
-                statuses=list(self._ACTIVE_STATUSES),
-            )
-            if resolved_index > len(active_runs):
-                return [], f"Error: target index #{resolved_index} out of range"
-            return [active_runs[resolved_index - 1]], None
-
+            return self._resolve_by_index(raw_index)
         if token.lower().startswith("label:"):
-            label = token.split(":", 1)[1].strip()
-            if not label:
-                return [], "Error: label selector requires a non-empty value"
-            statuses = None if include_terminal else list(self._ACTIVE_STATUSES)
-            runs = self._run_registry.list_runs(self._conversation_id, statuses=statuses)
-            matched = [run for run in runs if (self._run_label(run) or "") == label]
-            if not matched:
-                return [], f"Error: no runs found for label '{label}'"
-            return matched, None
-
+            return self._resolve_by_label(token.split(":", 1)[1].strip(), include_terminal)
         run = self._run_registry.get_run(self._conversation_id, token)
         if not run:
             return [], f"Error: run_id '{token}' not found"
         return [run], None
+
+    def _resolve_by_index(self, raw_index_str: str) -> tuple[list[SubAgentRun], str | None]:
+        """Resolve target by index (#N or index:N)."""
+        try:
+            resolved_index = int(raw_index_str)
+        except (TypeError, ValueError):
+            return [], f"Error: invalid target index '{raw_index_str}'"
+        if resolved_index <= 0:
+            return [], "Error: target index must be >= 1"
+        active_runs = self._run_registry.list_runs(
+            self._conversation_id,
+            statuses=list(self._ACTIVE_STATUSES),
+        )
+        if resolved_index > len(active_runs):
+            return [], f"Error: target index #{resolved_index} out of range"
+            return [active_runs[resolved_index - 1]], None
+
+    def _resolve_by_label(
+        self, label: str, include_terminal: bool
+    ) -> tuple[list[SubAgentRun], str | None]:
+        """Resolve target by label."""
+        if not label:
+            return [], "Error: label selector requires a non-empty value"
+        statuses = None if include_terminal else list(self._ACTIVE_STATUSES)
+        runs = self._run_registry.list_runs(self._conversation_id, statuses=statuses)
+        matched = [run for run in runs if (self._run_label(run) or "") == label]
+        if not matched:
+            return [], f"Error: no runs found for label '{label}'"
+        return matched, None
 
     @staticmethod
     def _serialize_run_snapshot(run: SubAgentRun) -> dict[str, Any]:
@@ -1787,14 +1956,25 @@ class SubAgentsControlTool(AgentTool):
         matched_roots, error = self._resolve_target_runs(target_token, include_terminal=True)
         if error:
             return error
-
         if (
             len(matched_roots) == 1
             and matched_roots[0].run_id == target_token
             and matched_roots[0].status not in self._ACTIVE_STATUSES
         ):
             return f"Run {target_token} is already terminal ({matched_roots[0].status.value})"
+        candidate_roots = self._collect_kill_candidates(matched_roots)
+        is_direct = target_token == run_id and run_id and not target
+        if not candidate_roots:
+            if is_direct:
+                return (
+                    f"Marked run lineage {run_id} as cancelled (tasks already finished or detached)"
+                )
+            return f"No active runs matched target '{target_token}'"
+        cancelled_count = await self._execute_cancellations(candidate_roots, target_token)
+        return self._kill_result_message(cancelled_count, target_token, run_id, is_direct)
 
+    def _collect_kill_candidates(self, matched_roots: list[SubAgentRun]) -> dict[str, str]:
+        """Collect candidate run_ids mapping to root_run_id."""
         candidate_roots: dict[str, str] = {}
         for root in matched_roots:
             if root.status in self._ACTIVE_STATUSES:
@@ -1807,14 +1987,12 @@ class SubAgentsControlTool(AgentTool):
             for descendant in descendants:
                 if descendant.status in self._ACTIVE_STATUSES:
                     candidate_roots.setdefault(descendant.run_id, root.run_id)
+        return candidate_roots
 
-        if not candidate_roots:
-            if target_token == run_id and run_id and not target:
-                return (
-                    f"Marked run lineage {run_id} as cancelled (tasks already finished or detached)"
-                )
-            return f"No active runs matched target '{target_token}'"
-
+    async def _execute_cancellations(
+        self, candidate_roots: dict[str, str], target_token: str
+    ) -> int:
+        """Execute cancellations for candidate runs. Returns cancelled count."""
         cancelled_count = 0
         for candidate_run_id, root_run_id in candidate_roots.items():
             candidate = self._run_registry.get_run(self._conversation_id, candidate_run_id)
@@ -1838,12 +2016,18 @@ class SubAgentsControlTool(AgentTool):
                 )
             if cancelled or updated:
                 cancelled_count += 1
+        return cancelled_count
 
+    @staticmethod
+    def _kill_result_message(
+        cancelled_count: int, target_token: str, run_id: str, is_direct: bool
+    ) -> str:
+        """Build result message for kill operation."""
         if cancelled_count > 0:
-            if target_token == run_id and run_id and not target:
+            if is_direct:
                 return f"Cancelled {cancelled_count} run(s) in lineage rooted at {run_id}"
             return f"Cancelled {cancelled_count} run(s) for target {target_token}"
-        if target_token == run_id and run_id and not target:
+        if is_direct:
             return f"Marked run lineage {run_id} as cancelled (tasks already finished or detached)"
         return f"No active runs matched target '{target_token}'"
 
@@ -1853,24 +2037,38 @@ class SubAgentsControlTool(AgentTool):
             return "Error: target (or run_id) is required for steer"
         if not instruction or not instruction.strip():
             return "Error: instruction is required for steer"
-
-        matched_runs, error = self._resolve_target_runs(target_token, include_terminal=True)
+        run, error = self._steer_resolve_active_run(target_token)
         if error:
             return error
-        active_runs = [
-            candidate for candidate in matched_runs if candidate.status in self._ACTIVE_STATUSES
-        ]
+        assert run is not None
+        rate_error = self._steer_check_rate_limit(run.run_id)
+        if rate_error:
+            return rate_error
+        if not self._restart_callback:
+            return self._steer_metadata_only(run.run_id, instruction)
+        return await self._steer_with_restart(run, instruction)
+
+    def _steer_resolve_active_run(self, target_token: str) -> tuple[SubAgentRun | None, str | None]:
+        """Resolve target to exactly one active run for steering."""
+        matched_runs, error = self._resolve_target_runs(target_token, include_terminal=True)
+        if error:
+            return None, error
+        active_runs = [c for c in matched_runs if c.status in self._ACTIVE_STATUSES]
         if len(active_runs) != 1:
             if (
                 len(matched_runs) == 1
                 and matched_runs[0].run_id == target_token
                 and matched_runs[0].status not in self._ACTIVE_STATUSES
             ):
-                return f"Run {target_token} is already terminal ({matched_runs[0].status.value})"
-            return f"Error: steer target '{target_token}' requires exactly one active run"
-        run = active_runs[0]
-        resolved_run_id = run.run_id
+                return (
+                    None,
+                    f"Run {target_token} is already terminal ({matched_runs[0].status.value})",
+                )
+            return None, f"Error: steer target '{target_token}' requires exactly one active run"
+        return active_runs[0], None
 
+    def _steer_check_rate_limit(self, resolved_run_id: str) -> str | None:
+        """Check steer rate limit, returning error if exceeded."""
         now = datetime.now(UTC)
         last_steer = self._last_steer_at.get(resolved_run_id)
         if last_steer:
@@ -1881,29 +2079,36 @@ class SubAgentsControlTool(AgentTool):
                     f"Wait at least {self._steer_rate_limit_ms - elapsed_ms}ms."
                 )
         self._last_steer_at[resolved_run_id] = now
+        return None
 
-        if not self._restart_callback:
-            updated = self._run_registry.attach_metadata(
-                conversation_id=self._conversation_id,
-                run_id=resolved_run_id,
-                metadata={
-                    "steer_instruction": instruction,
-                    "steered_at": now.isoformat(),
+    def _steer_metadata_only(self, resolved_run_id: str, instruction: str) -> str:
+        """Attach steer instruction as metadata without restart."""
+        now = datetime.now(UTC)
+        updated = self._run_registry.attach_metadata(
+            conversation_id=self._conversation_id,
+            run_id=resolved_run_id,
+            metadata={
+                "steer_instruction": instruction,
+                "steered_at": now.isoformat(),
+            },
+        )
+        if not updated:
+            return f"Error: run_id '{resolved_run_id}' not found"
+        self._pending_events.append(
+            {
+                "type": "subagent_steered",
+                "data": {
+                    **updated.to_event_data(),
+                    "instruction": instruction,
                 },
-            )
-            if not updated:
-                return f"Error: run_id '{resolved_run_id}' not found"
-            self._pending_events.append(
-                {
-                    "type": "subagent_steered",
-                    "data": {
-                        **updated.to_event_data(),
-                        "instruction": instruction,
-                    },
-                }
-            )
-            return f"Steering instruction attached to run {resolved_run_id}"
+            }
+        )
+        return f"Steering instruction attached to run {resolved_run_id}"
 
+    async def _steer_with_restart(self, run: SubAgentRun, instruction: str) -> str:
+        """Cancel run and restart with steering instruction."""
+        assert self._restart_callback is not None
+        resolved_run_id = run.run_id
         cancelled = await self._cancel_callback(resolved_run_id)
         updated_old = self._run_registry.mark_cancelled(
             conversation_id=self._conversation_id,
@@ -1916,8 +2121,8 @@ class SubAgentsControlTool(AgentTool):
             self._pending_events.append(
                 {"type": "subagent_killed", "data": updated_old.to_event_data()}
             )
-
         restart_task = f"{run.task}\n\n[Steering Instruction]\n{instruction.strip()}"
+        now = datetime.now(UTC)
         lineage_root = str(run.metadata.get("lineage_root_run_id") or resolved_run_id).strip()
         replacement = self._run_registry.create_run(
             conversation_id=self._conversation_id,
@@ -1940,7 +2145,6 @@ class SubAgentsControlTool(AgentTool):
             self._pending_events.append(
                 {"type": "subagent_run_started", "data": running.to_event_data()}
             )
-
         try:
             await self._restart_callback(run.subagent_name, restart_task, replacement.run_id)
         except Exception as exc:
@@ -1955,7 +2159,6 @@ class SubAgentsControlTool(AgentTool):
                     {"type": "subagent_run_failed", "data": failed.to_event_data()}
                 )
             return f"Error: failed to steer run {resolved_run_id}: {exc}"
-
         if updated_old:
             self._run_registry.attach_metadata(
                 conversation_id=self._conversation_id,

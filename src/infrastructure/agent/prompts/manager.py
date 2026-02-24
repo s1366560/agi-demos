@@ -129,8 +129,6 @@ class SystemPromptManager:
     ) -> str:
         """
         Build the complete system prompt for the agent.
-
-        Assembly order:
         1. SubAgent override (if provided)
         2. Base system prompt (model-specific)
         3. Forced skill injection (if user specified /skill-name, placed here
@@ -142,92 +140,94 @@ class SystemPromptManager:
         8. Mode reminder (Plan/Build)
         9. Max steps warning (if applicable)
         10. Custom rules (.memstack/AGENTS.md)
-
         Args:
             context: The prompt context containing all dynamic information.
             subagent: Optional SubAgent instance. If provided with a
                      system_prompt, it overrides all other prompts.
-
-        Returns:
             Complete system prompt string.
         """
         # 1. SubAgent override takes priority
         if subagent and hasattr(subagent, "system_prompt") and subagent.system_prompt:
             logger.debug(f"Using SubAgent system prompt: {subagent.name}")
             return subagent.system_prompt
-
         sections: list[str] = []
-
         # Check if we have a forced skill (highest priority injection)
-        is_forced_skill = context.matched_skill and context.matched_skill.get(
-            "force_execution", False
+        is_forced_skill = bool(
+            context.matched_skill and context.matched_skill.get("force_execution", False)
         )
 
-        # 2. Base system prompt (model-specific)
+        # 2-3. Base prompt, memory context, forced skill
+        await self._build_base_sections(sections, context, is_forced_skill)
+
+        # 4-6.5. Tools, skills, subagents sections
+        self._build_capability_sections(sections, context, is_forced_skill)
+        # 7. Environment context
+        env_context = self._build_environment_context(context)
+        sections.append(env_context)
+        # 7.5-10. Workspace, mode, max steps, custom rules
+        await self._build_trailing_sections(sections, context)
+
+        return "\n\n".join(filter(None, sections))
+
+    async def _build_base_sections(
+        self,
+        sections: list[str],
+        context: PromptContext,
+        is_forced_skill: bool,
+    ) -> None:
+        """Build base prompt, memory context, and forced skill sections."""
         base_prompt = await self._load_base_prompt(context.model_provider)
         if base_prompt:
             sections.append(base_prompt)
-
-        # 2.5. Recalled memory context (auto-recall from memory index)
         if context.memory_context:
             sections.append(context.memory_context)
-
-        # 3. Forced skill injection (immediately after base prompt for maximum attention)
         if is_forced_skill:
             skill_injection = self._build_skill_recommendation(context.matched_skill)
-            sections.append(skill_injection)
+            if skill_injection:
+                sections.append(skill_injection)
 
-        # 4. Section modules (safety, memory guidance) - embedded in base prompt
-        # Note: These are included in the base prompt files for better organization
-
-        # 5. Tools section
+    def _build_capability_sections(
+        self,
+        sections: list[str],
+        context: PromptContext,
+        is_forced_skill: bool,
+    ) -> None:
+        """Build tools, skills, and subagent sections."""
         tools_section = self._build_tools_section(context)
         if tools_section:
             sections.append(tools_section)
-
-        # 6. Skills section (skip when forced skill is active to reduce noise)
         if context.skills and not is_forced_skill:
             skill_section = self._build_skill_section(context)
             if skill_section:
                 sections.append(skill_section)
-
-        # 6.5. SubAgents section (available specialized agents for delegation)
         if context.subagents:
             subagent_section = self._build_subagent_section(context)
             if subagent_section:
                 sections.append(subagent_section)
-
-        # 7. Non-forced skill recommendation (confidence-based match)
         if context.matched_skill and not is_forced_skill:
             skill_recommendation = self._build_skill_recommendation(context.matched_skill)
-            sections.append(skill_recommendation)
+            if skill_recommendation:
+                sections.append(skill_recommendation)
 
-        # 7. Environment context
-        env_context = self._build_environment_context(context)
-        sections.append(env_context)
-
-        # 7.5. Workspace filesystem guidelines
+    async def _build_trailing_sections(
+        self,
+        sections: list[str],
+        context: PromptContext,
+    ) -> None:
+        """Build workspace guidelines, mode reminder, max steps warning, and custom rules."""
         workspace_guidelines = await self._load_file("sections/workspace.txt")
         if workspace_guidelines:
             sections.append(workspace_guidelines)
-
-        # 8. Mode reminder
         mode_reminder = await self._load_mode_reminder(context.mode)
+        custom_rules = await self._load_custom_rules()
         if mode_reminder:
             sections.append(mode_reminder)
-
-        # 9. Max steps warning
         if context.is_last_step:
             max_steps_warning = await self._load_file("reminders/max_steps.txt")
             if max_steps_warning:
                 sections.append(max_steps_warning)
-
-        # 10. Custom rules (.memstack/AGENTS.md, CLAUDE.md)
-        custom_rules = await self._load_custom_rules()
         if custom_rules:
             sections.append(custom_rules)
-
-        return "\n\n".join(filter(None, sections))
 
     async def _load_base_prompt(self, provider: ModelProvider) -> str:
         """
@@ -405,7 +405,7 @@ Each SubAgent runs independently with its own context and tools.
 **When to delegate**: The task clearly matches a SubAgent's specialty and can be described as a self-contained unit.
 **When NOT to delegate**: Simple questions, tasks requiring your current context, or tasks where you need intermediate results.{parallel_guidance}"""
 
-    def _build_skill_recommendation(self, skill: dict[str, Any]) -> str:
+    def _build_skill_recommendation(self, skill: dict[str, Any] | None) -> str:
         """
         Build the skill injection section.
 
@@ -418,6 +418,9 @@ Each SubAgent runs independently with its own context and tools.
         Returns:
             Skill injection XML block.
         """
+        if not skill:
+            return ""
+
         is_forced = skill.get("force_execution", False)
         name = skill.get("name", "unknown")
         description = skill.get("description", "")
@@ -544,30 +547,24 @@ Use these tools in order: {tools}"""
         """Clear the prompt file cache."""
         self._cache.clear()
 
+    _MODEL_PROVIDER_RULES: tuple[tuple[tuple[str, ...], ModelProvider], ...] = (
+        (("claude", "anthropic"), ModelProvider.ANTHROPIC),
+        (("gemini",), ModelProvider.GEMINI),
+        (("qwen",), ModelProvider.DASHSCOPE),
+        (("deepseek",), ModelProvider.DEEPSEEK),
+        (("glm", "zhipu"), ModelProvider.ZHIPU),
+        (("gpt", "openai"), ModelProvider.OPENAI),
+    )
     @staticmethod
     def detect_model_provider(model_name: str) -> ModelProvider:
         """
         Detect the model provider from a model name.
-
         Args:
             model_name: The model name string (e.g., "claude-3-opus", "gemini-pro").
-
-        Returns:
             The detected ModelProvider enum value.
         """
         model_lower = model_name.lower()
-
-        if "claude" in model_lower or "anthropic" in model_lower:
-            return ModelProvider.ANTHROPIC
-        elif "gemini" in model_lower:
-            return ModelProvider.GEMINI
-        elif "qwen" in model_lower:
-            return ModelProvider.DASHSCOPE
-        elif "deepseek" in model_lower:
-            return ModelProvider.DEEPSEEK
-        elif "glm" in model_lower or "zhipu" in model_lower:
-            return ModelProvider.ZHIPU
-        elif "gpt" in model_lower or "openai" in model_lower:
-            return ModelProvider.OPENAI
-        else:
-            return ModelProvider.DEFAULT
+        for keywords, provider in SystemPromptManager._MODEL_PROVIDER_RULES:
+            if any(kw in model_lower for kw in keywords):
+                return provider
+        return ModelProvider.DEFAULT

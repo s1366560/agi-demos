@@ -124,70 +124,81 @@ class ResourcePool[T]:
                     resource_type="pool",
                 )
 
-            # If specific resource requested, try to find it
             if resource_id:
-                if resource_id in self._available:
-                    self._available.remove(resource_id)
-                    self._in_use.add(resource_id)
-                    self._last_used[resource_id] = asyncio.get_event_loop().time()
-                    return resource_id
-                if resource_id in self._in_use:
-                    raise SandboxResourceError(
-                        f"Resource '{resource_id}' is already in use",
-                        resource_type="resource",
-                    )
-                # Resource doesn't exist, create it
-                if len(self._resources) >= self._config.max_size:
-                    raise SandboxResourceError(
-                        f"Pool '{self._pool_name}' is at max capacity",
-                        resource_type="pool",
-                    )
-                return await self._create_resource(resource_id)
+                return await self._acquire_specific(resource_id)
 
-            # Wait for available resource or create new one
-            deadline = asyncio.get_event_loop().time() + timeout
-            while True:
-                # Try to get an available resource
-                if self._available:
-                    rid = next(iter(self._available))
-                    resource = self._resources.get(rid)
-                    self._available.remove(rid)
-                    # Validate resource
-                    if resource and self._validate(resource):
-                        self._in_use.add(rid)
-                        self._last_used[rid] = asyncio.get_event_loop().time()
-                        return rid
-                    # Resource failed validation, cleanup and remove
-                    self._remove_resource_metadata(rid)
-                    if resource and self._cleanup:
-                        try:
-                            self._cleanup(resource)
-                        except Exception as e:
-                            logger.warning(f"Cleanup failed for {rid}: {e}")
-                    # Also remove from resources dict
-                    self._resources.pop(rid, None)
+            return await self._acquire_any(timeout)
 
-                # Check if we can create a new resource
-                if len(self._resources) < self._config.max_size:
-                    return await self._create_resource()
+    async def _acquire_specific(self, resource_id: str) -> str:
+        """Acquire a specific resource by ID. Must be called under self._cond."""
+        if resource_id in self._available:
+            self._available.remove(resource_id)
+            self._in_use.add(resource_id)
+            self._last_used[resource_id] = asyncio.get_event_loop().time()
+            return resource_id
+        if resource_id in self._in_use:
+            raise SandboxResourceError(
+                f"Resource '{resource_id}' is already in use",
+                resource_type="resource",
+            )
+        # Resource doesn't exist, create it
+        if len(self._resources) >= self._config.max_size:
+            raise SandboxResourceError(
+                f"Pool '{self._pool_name}' is at max capacity",
+                resource_type="pool",
+            )
+        return await self._create_resource(resource_id)
 
-                # Wait for a resource to become available
-                remaining = deadline - asyncio.get_event_loop().time()
-                if remaining <= 0:
-                    raise SandboxTimeoutError(
-                        f"Acquire timeout for pool '{self._pool_name}'",
-                        timeout_seconds=timeout,
-                    )
-                try:
-                    await asyncio.wait_for(
-                        self._cond.wait(),
-                        timeout=remaining,
-                    )
-                except TimeoutError:
-                    raise SandboxTimeoutError(
-                        f"Acquire timeout for pool '{self._pool_name}'",
-                        timeout_seconds=timeout,
-                    ) from None
+    async def _acquire_any(self, timeout: float) -> str:
+        """Acquire any available resource or create a new one. Must be called under self._cond."""
+        deadline = asyncio.get_event_loop().time() + timeout
+        while True:
+            rid = self._try_take_validated_resource()
+            if rid is not None:
+                return rid
+
+            # Check if we can create a new resource
+            if len(self._resources) < self._config.max_size:
+                return await self._create_resource()
+
+            # Wait for a resource to become available
+            remaining = deadline - asyncio.get_event_loop().time()
+            if remaining <= 0:
+                raise SandboxTimeoutError(
+                    f"Acquire timeout for pool '{self._pool_name}'",
+                    timeout_seconds=timeout,
+                )
+            try:
+                await asyncio.wait_for(
+                    self._cond.wait(),
+                    timeout=remaining,
+                )
+            except TimeoutError:
+                raise SandboxTimeoutError(
+                    f"Acquire timeout for pool '{self._pool_name}'",
+                    timeout_seconds=timeout,
+                ) from None
+
+    def _try_take_validated_resource(self) -> str | None:
+        """Try to take a validated resource from the available set. Returns rid or None."""
+        if not self._available:
+            return None
+        rid = next(iter(self._available))
+        resource = self._resources.get(rid)
+        self._available.remove(rid)
+        if resource and self._validate(resource):
+            self._in_use.add(rid)
+            self._last_used[rid] = asyncio.get_event_loop().time()
+            return rid
+        # Resource failed validation, cleanup and remove
+        self._remove_resource_metadata(rid)
+        if resource and self._cleanup:
+            try:
+                self._cleanup(resource)
+            except Exception as e:
+                logger.warning(f"Cleanup failed for {rid}: {e}")
+        self._resources.pop(rid, None)
+        return None
 
     async def release(self, resource_id: str) -> None:
         """

@@ -286,277 +286,39 @@ class ProjectReActAgent:
         try:
             logger.info(f"ProjectReActAgent[{self.project_key}]: Initializing...")
 
-            # Import dependencies here to avoid circular imports
-            from src.configuration.di_container import DIContainer as Container
-            from src.infrastructure.agent.core.processor import ProcessorConfig
-            from src.infrastructure.agent.core.react_agent import ReActAgent
-            from src.infrastructure.agent.state.agent_worker_state import (
-                get_or_create_agent_graph_service,
-                get_or_create_agent_session,
-                get_or_create_llm_client,
-                get_or_create_provider_config,
-                get_or_create_skills,
-                get_or_create_tools,
-                get_redis_client,
+            # Phase 1: Core services
+            (
+                graph_service,
+                redis_client,
+                artifact_service,
+                provider_config,
+                llm_client,
+            ) = await self._init_core_services(force_refresh)
+
+            # Phase 2: Tools, skills, subagents
+            await self._init_tools_and_skills(
+                graph_service, redis_client, llm_client, force_refresh
             )
 
-            # Graph service must be resolved by tenant so embedding/rerank mappings are honored.
-            graph_service = await get_or_create_agent_graph_service(tenant_id=self.config.tenant_id)
-            if not graph_service:
-                raise RuntimeError("Graph service not available")
-
-            redis_client = await get_redis_client()
-
-            # Get artifact service for rich output handling
-            try:
-                container = Container()
-                artifact_service = container.artifact_service()
-            except Exception as e:
-                logger.warning(f"Could not initialize artifact service: {e}")
-                artifact_service = None
-
-            # Get LLM provider configuration
-            # Use tenant-specific provider resolution via AIServiceFactory
-            provider_config = await get_or_create_provider_config(
-                tenant_id=self.config.tenant_id, force_refresh=force_refresh
+            # Phase 3: Memory services
+            memory_recall, memory_capture, memory_flush = self._init_memory_services(
+                graph_service, redis_client, llm_client
             )
-            llm_client = await get_or_create_llm_client(tenant_id=self.config.tenant_id)
 
-            # Load tools
-            self._tools = await get_or_create_tools(
-                project_id=self.config.project_id,
-                tenant_id=self.config.tenant_id,
+            # Phase 4: ReActAgent construction
+            await self._init_react_agent(
                 graph_service=graph_service,
                 redis_client=redis_client,
-                llm=llm_client,
-                agent_mode=self.config.agent_mode,
-                mcp_tools_ttl_seconds=0 if force_refresh else self.config.mcp_tools_ttl_seconds,
-                force_mcp_refresh=force_refresh,
-            )
-
-            # Load skills
-            if self.config.enable_skills:
-                self._skills = await get_or_create_skills(
-                    tenant_id=self.config.tenant_id,
-                    project_id=self.config.project_id,
-                )
-            else:
-                self._skills = []
-
-            # Load subagents (if enabled)
-            if self.config.enable_subagents:
-                self._subagents = await self._load_subagents()
-            else:
-                self._subagents = []
-
-            # Create processor config with llm_client for unified resilience
-            processor_config = ProcessorConfig(
-                model=provider_config.llm_model,
-                api_key="",  # Will be set from provider_config
-                base_url=provider_config.base_url,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                max_steps=self.config.max_steps,
-                llm_client=llm_client,  # Pass cached LiteLLMClient for circuit breaker + rate limiter
-            )
-
-            # Store artifact_service for use in ReActAgent
-            self._artifact_service = artifact_service
-
-            # Memory services: recall preprocessor + capture postprocessor + flush
-            memory_recall = None
-            memory_capture = None
-            memory_flush = None
-            try:
-                from src.infrastructure.agent.memory.capture import MemoryCapturePostprocessor
-                from src.infrastructure.agent.memory.recall import MemoryRecallPreprocessor
-                from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
-                from src.infrastructure.memory.chunk_search import ChunkHybridSearch
-
-                # Session factory for on-demand DB access (shared by all memory services)
-                session_factory = None
-                try:
-                    from src.infrastructure.adapters.secondary.persistence.database import (
-                        async_session_factory,
-                    )
-
-                    session_factory = async_session_factory
-                except Exception:
-                    pass
-
-                embedding_service = getattr(graph_service, "embedder", None)
-                if embedding_service and redis_client:
-                    cached_embedding = CachedEmbeddingService(embedding_service, redis_client)
-                    chunk_search = ChunkHybridSearch(cached_embedding, session_factory)
-                    memory_recall = MemoryRecallPreprocessor(
-                        chunk_search=chunk_search,
-                        graph_search=graph_service,
-                    )
-                    logger.info(f"ProjectReActAgent[{self.project_key}]: Memory recall enabled")
-
-                # LLM-driven capture (requires llm_client, works without chunk_repo/embedding)
-                if llm_client:
-                    cached_emb = (
-                        CachedEmbeddingService(embedding_service, redis_client)
-                        if embedding_service and redis_client
-                        else None
-                    )
-                    memory_capture = MemoryCapturePostprocessor(
-                        llm_client=llm_client,
-                        session_factory=session_factory,
-                        embedding_service=cached_emb,
-                    )
-                    logger.info(f"ProjectReActAgent[{self.project_key}]: Memory capture enabled")
-
-                    # Pre-compaction flush shares LLM + session_factory
-                    from src.infrastructure.agent.memory.flush import MemoryFlushService
-
-                    memory_flush = MemoryFlushService(
-                        llm_client=llm_client,
-                        embedding_service=cached_emb,
-                        session_factory=session_factory,
-                    )
-            except Exception as e:
-                logger.debug(f"Memory services not available: {e}")
-
-            # Get or create agent session (caches tool definitions, router, etc.)
-            self._session_context = await get_or_create_agent_session(
-                tenant_id=self.config.tenant_id,
-                project_id=self.config.project_id,
-                agent_mode=self.config.agent_mode,
-                tools=self._tools,
-                skills=self._skills,
-                subagents=self._subagents,
-                processor_config=processor_config,
-            )
-
-            # Create ReActAgent instance with cached components
-            # Build context window config from application settings
-            from src.configuration.config import get_settings
-            from src.infrastructure.agent.context.window_manager import ContextWindowConfig
-            from src.infrastructure.llm.model_registry import (
-                clamp_max_tokens as _clamp_max_tokens,
-                get_model_context_window,
-            )
-
-            app_settings = get_settings()
-            model_context_window = get_model_context_window(provider_config.llm_model)
-            clamped_max_tokens = _clamp_max_tokens(
-                provider_config.llm_model, self.config.max_tokens
-            )
-            context_window_config = ContextWindowConfig(
-                max_context_tokens=model_context_window,
-                max_output_tokens=clamped_max_tokens,
-                l1_trigger_pct=app_settings.compression_l1_trigger_pct,
-                l2_trigger_pct=app_settings.compression_l2_trigger_pct,
-                l3_trigger_pct=app_settings.compression_l3_trigger_pct,
-                chunk_size=app_settings.compression_chunk_size,
-                summary_max_tokens=app_settings.compression_summary_max_tokens,
-                prune_min_tokens=app_settings.compression_prune_min_tokens,
-                prune_protect_tokens=app_settings.compression_prune_protect_tokens,
-                prune_protected_tools=app_settings.compression_prune_protected_tools,
-                assistant_truncate_chars=app_settings.compression_assistant_truncate_chars,
-                truncate_user=app_settings.compression_truncate_user,
-                truncate_assistant=app_settings.compression_truncate_assistant,
-                truncate_tool=app_settings.compression_truncate_tool,
-                truncate_system=app_settings.compression_truncate_system,
-            )
-
-            async def _subagent_lifecycle_hook(event: dict[str, Any]) -> None:
-                if not notifier:
-                    return
-                await notifier.notify_subagent_lifecycle_event(
-                    tenant_id=self.config.tenant_id,
-                    project_id=self.config.project_id,
-                    event=event,
-                )
-
-            self._react_agent = ReActAgent(
-                model=provider_config.llm_model,
-                tools=self._tools,
-                api_key=None,  # Set from provider_config during execution
-                base_url=provider_config.base_url,
-                temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens,
-                max_steps=self.config.max_steps,
-                agent_mode=self.config.agent_mode,
-                context_window_config=context_window_config,
-                skills=self._skills,
-                subagents=self._subagents,
-                artifact_service=self._artifact_service,  # Pass artifact service
-                llm_client=llm_client,  # Pass cached LiteLLMClient
-                resource_sync_service=self._session_context.resource_sync_service,
-                graph_service=graph_service,  # Pass graph service for SubAgent memory sharing
-                # Memory auto-recall / auto-capture / pre-compaction flush
+                artifact_service=artifact_service,
+                provider_config=provider_config,
+                llm_client=llm_client,
                 memory_recall=memory_recall,
                 memory_capture=memory_capture,
                 memory_flush=memory_flush,
-                max_subagent_delegation_depth=app_settings.agent_subagent_max_delegation_depth,
-                max_subagent_active_runs=app_settings.agent_subagent_max_active_runs,
-                max_subagent_children_per_requester=(
-                    app_settings.agent_subagent_max_children_per_requester
-                ),
-                max_subagent_lane_concurrency=app_settings.agent_subagent_lane_concurrency,
-                subagent_terminal_retention_seconds=(
-                    app_settings.agent_subagent_terminal_retention_seconds
-                ),
-                subagent_announce_max_events=app_settings.agent_subagent_announce_max_events,
-                subagent_announce_max_retries=app_settings.agent_subagent_announce_max_retries,
-                subagent_announce_retry_delay_ms=(
-                    app_settings.agent_subagent_announce_retry_delay_ms
-                ),
-                subagent_lifecycle_hook=_subagent_lifecycle_hook,
-                # Use cached components from session pool
-                _cached_tool_definitions=self._session_context.tool_definitions,
-                _cached_system_prompt_manager=self._session_context.system_prompt_manager,
-                _cached_subagent_router=self._session_context.subagent_router,
             )
 
-            # Calculate detailed tool statistics
-            builtin_tool_count = 0
-            mcp_tool_count = 0
-            for tool_name in self._tools.keys():
-                # MCP tools have prefixes like "mcp_", "sandbox_", or server-specific prefixes
-                if tool_name.startswith(("mcp_", "sandbox_")) or "_mcp_" in tool_name:
-                    mcp_tool_count += 1
-                else:
-                    builtin_tool_count += 1
-
-            # Calculate skill statistics
-            loaded_skill_count = len(self._skills) if self._skills else 0
-            # TODO: Get total_skill_count from skill registry if available
-            total_skill_count = loaded_skill_count  # For now, same as loaded
-
-            # Update status
-            self._initialized = True
-            self._status.is_initialized = True
-            self._status.is_active = True
-            self._status.tool_count = len(self._tools)
-            self._status.skill_count = loaded_skill_count
-            self._status.subagent_count = len(self._subagents) if self._subagents else 0
-
-            init_time_ms = (time.time() - start_time) * 1000
-            logger.info(
-                f"ProjectReActAgent[{self.project_key}]: Initialized in {init_time_ms:.1f}ms, "
-                f"tools={self._status.tool_count} (builtin={builtin_tool_count}, mcp={mcp_tool_count}), "
-                f"skills={loaded_skill_count}"
-            )
-
-            # Notify ready state with detailed stats
-            if notifier:
-                await notifier.notify_ready(
-                    tenant_id=self.config.tenant_id,
-                    project_id=self.config.project_id,
-                    tool_count=self._status.tool_count,
-                    builtin_tool_count=builtin_tool_count,
-                    mcp_tool_count=mcp_tool_count,
-                    skill_count=loaded_skill_count,
-                    total_skill_count=total_skill_count,
-                    loaded_skill_count=loaded_skill_count,
-                    subagent_count=self._status.subagent_count,
-                )
-
-            return True
+            # Phase 5: Finalize
+            return await self._finalize_initialization(start_time)
 
         except Exception as e:
             self._status.last_error = str(e)
@@ -575,6 +337,317 @@ class ProjectReActAgent:
                 )
 
             return False
+
+    async def _init_core_services(self, force_refresh: bool) -> tuple[Any, Any, Any, Any, Any]:
+        """Initialize core services: graph, redis, artifact, provider config, LLM client.
+
+        Returns:
+            Tuple of (graph_service, redis_client, artifact_service, provider_config, llm_client)
+        """
+        from src.configuration.di_container import DIContainer as Container
+        from src.infrastructure.agent.state.agent_worker_state import (
+            get_or_create_agent_graph_service,
+            get_or_create_llm_client,
+            get_or_create_provider_config,
+            get_redis_client,
+        )
+
+        graph_service = await get_or_create_agent_graph_service(tenant_id=self.config.tenant_id)
+        if not graph_service:
+            raise RuntimeError("Graph service not available")
+
+        redis_client = await get_redis_client()
+
+        try:
+            container = Container()
+            artifact_service = container.artifact_service()
+        except Exception as e:
+            logger.warning(f"Could not initialize artifact service: {e}")
+            artifact_service = None
+
+        provider_config = await get_or_create_provider_config(
+            tenant_id=self.config.tenant_id, force_refresh=force_refresh
+        )
+        llm_client = await get_or_create_llm_client(tenant_id=self.config.tenant_id)
+
+        return graph_service, redis_client, artifact_service, provider_config, llm_client
+
+    async def _init_tools_and_skills(
+        self,
+        graph_service: Any,
+        redis_client: Any,
+        llm_client: Any,
+        force_refresh: bool,
+    ) -> None:
+        """Load tools, skills, and subagents into self."""
+        from src.infrastructure.agent.state.agent_worker_state import (
+            get_or_create_skills,
+            get_or_create_tools,
+        )
+
+        self._tools = await get_or_create_tools(
+            project_id=self.config.project_id,
+            tenant_id=self.config.tenant_id,
+            graph_service=graph_service,
+            redis_client=redis_client,
+            llm=llm_client,
+            agent_mode=self.config.agent_mode,
+            mcp_tools_ttl_seconds=0 if force_refresh else self.config.mcp_tools_ttl_seconds,
+            force_mcp_refresh=force_refresh,
+        )
+
+        if self.config.enable_skills:
+            self._skills = await get_or_create_skills(
+                tenant_id=self.config.tenant_id,
+                project_id=self.config.project_id,
+            )
+        else:
+            self._skills = []
+
+        if self.config.enable_subagents:
+            self._subagents = await self._load_subagents()
+        else:
+            self._subagents = []
+
+    def _init_memory_services(
+        self,
+        graph_service: Any,
+        redis_client: Any,
+        llm_client: Any,
+    ) -> tuple[Any, Any, Any]:
+        """Initialize memory recall, capture, and flush services.
+
+        Returns:
+            Tuple of (memory_recall, memory_capture, memory_flush)
+        """
+        memory_recall = None
+        memory_capture = None
+        memory_flush = None
+        try:
+            from src.infrastructure.agent.memory.capture import MemoryCapturePostprocessor
+            from src.infrastructure.agent.memory.recall import MemoryRecallPreprocessor
+            from src.infrastructure.memory.cached_embedding import CachedEmbeddingService
+            from src.infrastructure.memory.chunk_search import ChunkHybridSearch
+
+            session_factory = self._get_session_factory()
+            embedding_service = getattr(graph_service, "embedder", None)
+
+            if embedding_service and redis_client:
+                cached_embedding = CachedEmbeddingService(embedding_service, redis_client)
+                chunk_search = ChunkHybridSearch(cached_embedding, session_factory)
+                memory_recall = MemoryRecallPreprocessor(
+                    chunk_search=chunk_search,
+                    graph_search=graph_service,
+                )
+                logger.info(f"ProjectReActAgent[{self.project_key}]: Memory recall enabled")
+
+            if llm_client:
+                cached_emb = (
+                    CachedEmbeddingService(embedding_service, redis_client)
+                    if embedding_service and redis_client
+                    else None
+                )
+                memory_capture = MemoryCapturePostprocessor(
+                    llm_client=llm_client,
+                    session_factory=session_factory,
+                    embedding_service=cached_emb,
+                )
+                logger.info(f"ProjectReActAgent[{self.project_key}]: Memory capture enabled")
+
+                from src.infrastructure.agent.memory.flush import MemoryFlushService
+
+                memory_flush = MemoryFlushService(
+                    llm_client=llm_client,
+                    embedding_service=cached_emb,
+                    session_factory=session_factory,
+                )
+        except Exception as e:
+            logger.debug(f"Memory services not available: {e}")
+
+        return memory_recall, memory_capture, memory_flush
+
+    @staticmethod
+    def _get_session_factory() -> Any:
+        """Get async session factory, returning None on import error."""
+        try:
+            from src.infrastructure.adapters.secondary.persistence.database import (
+                async_session_factory,
+            )
+
+            return async_session_factory
+        except Exception:
+            return None
+
+    async def _init_react_agent(
+        self,
+        graph_service: Any,
+        redis_client: Any,
+        artifact_service: Any,
+        provider_config: Any,
+        llm_client: Any,
+        memory_recall: Any,
+        memory_capture: Any,
+        memory_flush: Any,
+    ) -> None:
+        """Create session context, build context window config, and instantiate ReActAgent."""
+        from src.configuration.config import get_settings
+        from src.infrastructure.agent.core.processor import ProcessorConfig
+        from src.infrastructure.agent.core.react_agent import ReActAgent
+        from src.infrastructure.agent.state.agent_worker_state import (
+            get_or_create_agent_session,
+        )
+        from src.infrastructure.llm.model_registry import (
+            clamp_max_tokens as _clamp_max_tokens,
+            get_model_context_window,
+        )
+
+        processor_config = ProcessorConfig(
+            model=provider_config.llm_model,
+            api_key="",
+            base_url=provider_config.base_url,
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens,
+            max_steps=self.config.max_steps,
+            llm_client=llm_client,
+        )
+
+        self._artifact_service = artifact_service
+
+        self._session_context = await get_or_create_agent_session(
+            tenant_id=self.config.tenant_id,
+            project_id=self.config.project_id,
+            agent_mode=self.config.agent_mode,
+            tools=self._tools,
+            skills=self._skills,
+            subagents=self._subagents,
+            processor_config=processor_config,
+        )
+
+        app_settings = get_settings()
+        context_window_config = self._build_context_window_config(
+            provider_config, app_settings, _clamp_max_tokens, get_model_context_window
+        )
+
+        notifier = get_websocket_notifier()
+
+        async def _subagent_lifecycle_hook(event: dict[str, Any]) -> None:
+            if not notifier:
+                return
+            await notifier.notify_subagent_lifecycle_event(
+                tenant_id=self.config.tenant_id,
+                project_id=self.config.project_id,
+                event=event,
+            )
+
+        self._react_agent = ReActAgent(
+            model=provider_config.llm_model,
+            tools=self._tools,
+            api_key=None,
+            base_url=provider_config.base_url,
+            temperature=self.config.temperature,
+            max_tokens=self.config.max_tokens,
+            max_steps=self.config.max_steps,
+            agent_mode=self.config.agent_mode,
+            context_window_config=context_window_config,
+            skills=self._skills,
+            subagents=self._subagents,
+            artifact_service=self._artifact_service,
+            llm_client=llm_client,
+            resource_sync_service=self._session_context.resource_sync_service,
+            graph_service=graph_service,
+            memory_recall=memory_recall,
+            memory_capture=memory_capture,
+            memory_flush=memory_flush,
+            max_subagent_delegation_depth=app_settings.agent_subagent_max_delegation_depth,
+            max_subagent_active_runs=app_settings.agent_subagent_max_active_runs,
+            max_subagent_children_per_requester=(
+                app_settings.agent_subagent_max_children_per_requester
+            ),
+            max_subagent_lane_concurrency=app_settings.agent_subagent_lane_concurrency,
+            subagent_terminal_retention_seconds=(
+                app_settings.agent_subagent_terminal_retention_seconds
+            ),
+            subagent_announce_max_events=app_settings.agent_subagent_announce_max_events,
+            subagent_announce_max_retries=app_settings.agent_subagent_announce_max_retries,
+            subagent_announce_retry_delay_ms=(app_settings.agent_subagent_announce_retry_delay_ms),
+            subagent_lifecycle_hook=_subagent_lifecycle_hook,
+            _cached_tool_definitions=self._session_context.tool_definitions,
+            _cached_system_prompt_manager=self._session_context.system_prompt_manager,
+            _cached_subagent_router=self._session_context.subagent_router,
+        )
+
+    def _build_context_window_config(
+        self,
+        provider_config: Any,
+        app_settings: Any,
+        clamp_max_tokens_fn: Any,
+        get_model_context_window_fn: Any,
+    ) -> Any:
+        """Build ContextWindowConfig from provider config and app settings."""
+        from src.infrastructure.agent.context.window_manager import ContextWindowConfig
+
+        model_context_window = get_model_context_window_fn(provider_config.llm_model)
+        clamped_max_tokens = clamp_max_tokens_fn(provider_config.llm_model, self.config.max_tokens)
+        return ContextWindowConfig(
+            max_context_tokens=model_context_window,
+            max_output_tokens=clamped_max_tokens,
+            l1_trigger_pct=app_settings.compression_l1_trigger_pct,
+            l2_trigger_pct=app_settings.compression_l2_trigger_pct,
+            l3_trigger_pct=app_settings.compression_l3_trigger_pct,
+            chunk_size=app_settings.compression_chunk_size,
+            summary_max_tokens=app_settings.compression_summary_max_tokens,
+            prune_min_tokens=app_settings.compression_prune_min_tokens,
+            prune_protect_tokens=app_settings.compression_prune_protect_tokens,
+            prune_protected_tools=app_settings.compression_prune_protected_tools,
+            assistant_truncate_chars=app_settings.compression_assistant_truncate_chars,
+            truncate_user=app_settings.compression_truncate_user,
+            truncate_assistant=app_settings.compression_truncate_assistant,
+            truncate_tool=app_settings.compression_truncate_tool,
+            truncate_system=app_settings.compression_truncate_system,
+        )
+
+    async def _finalize_initialization(self, start_time: float) -> bool:
+        """Finalize initialization: compute stats, update status, notify."""
+        builtin_tool_count = 0
+        mcp_tool_count = 0
+        for tool_name in self._tools.keys():
+            if tool_name.startswith(("mcp_", "sandbox_")) or "_mcp_" in tool_name:
+                mcp_tool_count += 1
+            else:
+                builtin_tool_count += 1
+
+        loaded_skill_count = len(self._skills) if self._skills else 0
+        total_skill_count = loaded_skill_count
+
+        self._initialized = True
+        self._status.is_initialized = True
+        self._status.is_active = True
+        self._status.tool_count = len(self._tools)
+        self._status.skill_count = loaded_skill_count
+        self._status.subagent_count = len(self._subagents) if self._subagents else 0
+
+        init_time_ms = (time.time() - start_time) * 1000
+        logger.info(
+            f"ProjectReActAgent[{self.project_key}]: Initialized in {init_time_ms:.1f}ms, "
+            f"tools={self._status.tool_count} (builtin={builtin_tool_count}, mcp={mcp_tool_count}), "
+            f"skills={loaded_skill_count}"
+        )
+
+        notifier = get_websocket_notifier()
+        if notifier:
+            await notifier.notify_ready(
+                tenant_id=self.config.tenant_id,
+                project_id=self.config.project_id,
+                tool_count=self._status.tool_count,
+                builtin_tool_count=builtin_tool_count,
+                mcp_tool_count=mcp_tool_count,
+                skill_count=loaded_skill_count,
+                total_skill_count=total_skill_count,
+                loaded_skill_count=loaded_skill_count,
+                subagent_count=self._status.subagent_count,
+            )
+
+        return True
 
     async def _check_and_refresh_mcp_tools(self) -> bool:
         """Check if MCP tools need to be refreshed and refresh if needed.
@@ -693,7 +766,66 @@ class ProjectReActAgent:
             )
             return False
 
-    async def execute_chat(  # noqa: PLR0913
+    @staticmethod
+    def _make_error_event(message: str, code: str) -> dict[str, Any]:
+        """Create a standard error event dict."""
+        return {
+            "type": "error",
+            "data": {"message": message, "code": code},
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+
+    async def _ensure_ready_for_chat(self) -> dict[str, Any] | None:
+        """Check preconditions for chat execution.
+
+        Returns an error event dict if not ready, or None if ready.
+        """
+        if not self._initialized:
+            success = await self.initialize()
+            if not success:
+                return self._make_error_event(
+                    "Agent initialization failed", "AGENT_NOT_INITIALIZED"
+                )
+
+        await self._check_and_refresh_sandbox_tools()
+        await self._check_and_refresh_mcp_tools()
+
+        if self._is_shutting_down:
+            return self._make_error_event("Agent is shutting down", "AGENT_SHUTTING_DOWN")
+
+        if self._status.active_chats >= self.config.max_concurrent_chats:
+            return self._make_error_event(
+                f"Max concurrent chats ({self.config.max_concurrent_chats}) reached",
+                "MAX_CONCURRENT_CHATS",
+            )
+
+        return None
+
+    async def _finalize_chat_execution(
+        self,
+        start_time: float,
+        is_error: bool,
+        error_message: str | None,
+        event_count: int,
+    ) -> None:
+        """Update metrics and send notifications after chat execution."""
+        execution_time_ms = (time.time() - start_time) * 1000
+        self._latencies.append(execution_time_ms)
+        self._trim_latencies()
+        self._update_metrics(execution_time_ms, is_error)
+
+        if is_error:
+            self._status.failed_chats += 1
+            self._status.last_error = error_message
+            logger.warning(f"ProjectReActAgent[{self.project_key}]: Chat failed: {error_message}")
+        else:
+            self._status.total_chats += 1
+            logger.info(
+                f"ProjectReActAgent[{self.project_key}]: Chat completed in "
+                f"{execution_time_ms:.1f}ms, events={event_count}"
+            )
+
+    async def execute_chat(
         self,
         conversation_id: str,
         user_message: str,
@@ -732,47 +864,10 @@ class ProjectReActAgent:
         Yields:
             Event dictionaries for streaming
         """
-        if not self._initialized:
-            # Auto-initialize on first use
-            success = await self.initialize()
-            if not success:
-                yield {
-                    "type": "error",
-                    "data": {
-                        "message": "Agent initialization failed",
-                        "code": "AGENT_NOT_INITIALIZED",
-                    },
-                    "timestamp": datetime.now(UTC).isoformat(),
-                }
-                return
-
-        # Check if sandbox tools need to be refreshed (for sandboxes created after initialization)
-        await self._check_and_refresh_sandbox_tools()
-
-        # Check if MCP tools need to be refreshed (for MCP servers added after initialization)
-        await self._check_and_refresh_mcp_tools()
-
-        if self._is_shutting_down:
-            yield {
-                "type": "error",
-                "data": {
-                    "message": "Agent is shutting down",
-                    "code": "AGENT_SHUTTING_DOWN",
-                },
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
-            return
-
-        # Check concurrent limit
-        if self._status.active_chats >= self.config.max_concurrent_chats:
-            yield {
-                "type": "error",
-                "data": {
-                    "message": f"Max concurrent chats ({self.config.max_concurrent_chats}) reached",
-                    "code": "MAX_CONCURRENT_CHATS",
-                },
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
+        # Pre-flight checks
+        guard_error = await self._ensure_ready_for_chat()
+        if guard_error is not None:
+            yield guard_error
             return
 
         start_time = time.time()
@@ -802,10 +897,6 @@ class ProjectReActAgent:
                 f"conversation={conversation_id}, user={user_id}"
             )
 
-            # Plan Mode check: use parameter from caller (set from conversation.current_mode)
-            is_plan_mode = plan_mode
-
-            # Execute ReActAgent stream
             async for event in self._react_agent.stream(
                 conversation_id=conversation_id,
                 user_message=user_message,
@@ -818,39 +909,16 @@ class ProjectReActAgent:
                 attachment_metadata=file_metadata,
                 forced_skill_name=forced_skill_name,
                 context_summary_data=context_summary_data,
-                plan_mode=is_plan_mode,
+                plan_mode=plan_mode,
             ):
                 event_count += 1
-
-                # Track content from complete events
                 event_type = event.get("type")
-                if event_type == "complete":
-                    pass  # Content is in the event itself
-                elif event_type == "error":
+                if event_type == "error":
                     is_error = True
                     error_message = event.get("data", {}).get("message", "Unknown error")
-
                 yield event
 
-            # Update metrics
-            execution_time_ms = (time.time() - start_time) * 1000
-            self._latencies.append(execution_time_ms)
-            self._trim_latencies()
-
-            self._update_metrics(execution_time_ms, is_error)
-
-            if is_error:
-                self._status.failed_chats += 1
-                self._status.last_error = error_message
-                logger.warning(
-                    f"ProjectReActAgent[{self.project_key}]: Chat failed: {error_message}"
-                )
-            else:
-                self._status.total_chats += 1
-                logger.info(
-                    f"ProjectReActAgent[{self.project_key}]: Chat completed in {execution_time_ms:.1f}ms, "
-                    f"events={event_count}"
-                )
+            await self._finalize_chat_execution(start_time, is_error, error_message, event_count)
 
         except Exception as e:
             is_error = True
@@ -862,14 +930,7 @@ class ProjectReActAgent:
                 f"ProjectReActAgent[{self.project_key}]: Chat execution error: {e}", exc_info=True
             )
 
-            yield {
-                "type": "error",
-                "data": {
-                    "message": error_message,
-                    "code": "CHAT_EXECUTION_ERROR",
-                },
-                "timestamp": datetime.now(UTC).isoformat(),
-            }
+            yield self._make_error_event(error_message, "CHAT_EXECUTION_ERROR")
 
         finally:
             self._status.active_chats -= 1

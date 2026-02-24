@@ -689,6 +689,106 @@ async def reprocess_memory(
         ) from e
 
 
+async def _check_memory_edit_permission(memory: Any, current_user: User, db: AsyncSession) -> None:
+    """Check if user has edit permission for the memory."""
+    if memory.author_id == current_user.id:
+        return
+    # Check if user has edit permission through share
+    share_result = await db.execute(
+        select(MemoryShare).where(
+            MemoryShare.memory_id == memory.id,
+            MemoryShare.shared_with_user_id == current_user.id,
+            MemoryShare.permission_level == "edit",
+        )
+    )
+    has_edit_share = share_result.scalar_one_or_none()
+    if has_edit_share:
+        return
+    # Check if user is project owner/admin
+    user_project_result = await db.execute(
+        select(UserProject).where(
+            UserProject.user_id == current_user.id,
+            UserProject.project_id == memory.project_id,
+            UserProject.role.in_(["owner", "admin"]),
+        )
+    )
+    if not user_project_result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+
+async def _submit_reprocessing_workflow(
+    memory: Any,
+    current_user: User,
+    db: AsyncSession,
+    workflow_engine: WorkflowEnginePort,
+) -> None:
+    """Submit memory for reprocessing via Temporal workflow."""
+    try:
+        # Get project for tenant_id
+        project_result = await db.execute(select(Project).where(Project.id == memory.project_id))
+        project = project_result.scalar_one_or_none()
+        if not project:
+            logger.error(f"Project {memory.project_id} not found for memory {memory.id}")
+            memory.processing_status = "FAILED"
+            return
+
+        # Submit to Temporal workflow for processing
+        from src.infrastructure.adapters.secondary.persistence.database import (
+            async_session_factory,
+        )
+        from src.infrastructure.adapters.secondary.persistence.models import TaskLog
+
+        task_id = str(uuid4())
+        task_payload = {
+            "group_id": memory.project_id,
+            "name": memory.title or str(memory.id),
+            "content": memory.content,
+            "source_description": "User input (update)",
+            "episode_type": memory.content_type,
+            "entity_types": None,
+            "uuid": memory.id,
+            "tenant_id": project.tenant_id,
+            "project_id": memory.project_id,
+            "user_id": str(current_user.id),
+            "memory_id": memory.id,
+        }
+
+        # Create TaskLog record
+        async with async_session_factory() as task_session, task_session.begin():
+            task_log = TaskLog(
+                id=task_id,
+                group_id=memory.project_id,
+                task_type="add_episode",
+                status="PENDING",
+                payload=task_payload,
+                entity_type="episode",
+                created_at=datetime.now(UTC),
+            )
+            task_session.add(task_log)
+
+        task_payload["task_id"] = task_id
+
+        # Start Temporal workflow
+        workflow_id = f"episode-update-{memory.id}-{task_id[:8]}"
+        await workflow_engine.start_workflow(
+            workflow_name="episode_processing",
+            workflow_id=workflow_id,
+            input_data=task_payload,
+            task_queue="default",
+        )
+        memory.processing_status = "PENDING"
+        memory.task_id = task_id
+        logger.info(f"Memory {memory.id} content updated, triggered reprocessing task {task_id}")
+    except Exception as e:
+        memory.processing_status = "FAILED"
+        memory.processing_error = f"Reprocessing failed: {e!s}"
+        logger.error(
+            f"Failed to trigger reprocessing for memory {memory.id}: {e}. "
+            "Content was updated but knowledge graph won't reflect changes.",
+            exc_info=True,
+        )
+
+
 @router.patch("/memories/{memory_id}", response_model=MemoryResponse)
 async def update_memory(
     memory_id: str,
@@ -706,28 +806,7 @@ async def update_memory(
         raise HTTPException(status_code=404, detail="Memory not found")
 
     # 2. Check permissions (owner or shared with edit permission)
-    if memory.author_id != current_user.id:
-        # Check if user has edit permission through share
-        share_result = await db.execute(
-            select(MemoryShare).where(
-                MemoryShare.memory_id == memory_id,
-                MemoryShare.shared_with_user_id == current_user.id,
-                MemoryShare.permission_level == "edit",
-            )
-        )
-        has_edit_share = share_result.scalar_one_or_none()
-
-        if not has_edit_share:
-            # Check if user is project owner/admin
-            user_project_result = await db.execute(
-                select(UserProject).where(
-                    UserProject.user_id == current_user.id,
-                    UserProject.project_id == memory.project_id,
-                    UserProject.role.in_(["owner", "admin"]),
-                )
-            )
-            if not user_project_result.scalar_one_or_none():
-                raise HTTPException(status_code=403, detail="Permission denied")
+    await _check_memory_edit_permission(memory, current_user, db)
 
     # 3. Optimistic locking: check version
     if memory.version != memory_data.version:
@@ -760,78 +839,7 @@ async def update_memory(
 
     # 6. Reprocess if needed
     if should_reprocess:
-        try:
-            # Get project for tenant_id
-            project_result = await db.execute(
-                select(Project).where(Project.id == memory.project_id)
-            )
-            project = project_result.scalar_one_or_none()
-            if not project:
-                logger.error(f"Project {memory.project_id} not found for memory {memory.id}")
-                memory.processing_status = "FAILED"
-            else:
-                # Submit to Temporal workflow for processing
-                from src.infrastructure.adapters.secondary.persistence.database import (
-                    async_session_factory,
-                )
-                from src.infrastructure.adapters.secondary.persistence.models import TaskLog
-
-                task_id = str(uuid4())
-                task_payload = {
-                    "group_id": memory.project_id,
-                    "name": memory.title or str(memory.id),
-                    "content": memory.content,
-                    "source_description": "User input (update)",
-                    "episode_type": memory.content_type,
-                    "entity_types": None,
-                    "uuid": memory.id,
-                    "tenant_id": project.tenant_id,
-                    "project_id": memory.project_id,
-                    "user_id": str(current_user.id),
-                    "memory_id": memory.id,
-                }
-
-                # Create TaskLog record
-                async with async_session_factory() as task_session, task_session.begin():
-                    task_log = TaskLog(
-                        id=task_id,
-                        group_id=memory.project_id,
-                        task_type="add_episode",
-                        status="PENDING",
-                        payload=task_payload,
-                        entity_type="episode",
-                        created_at=datetime.now(UTC),
-                    )
-                    task_session.add(task_log)
-
-                task_payload["task_id"] = task_id
-
-                # Start Temporal workflow
-                workflow_id = f"episode-update-{memory.id}-{task_id[:8]}"
-                await workflow_engine.start_workflow(
-                    workflow_name="episode_processing",
-                    workflow_id=workflow_id,
-                    input_data=task_payload,
-                    task_queue="default",
-                )
-                memory.processing_status = "PENDING"
-                memory.task_id = task_id
-                logger.info(
-                    f"Memory {memory.id} content updated, triggered reprocessing task {task_id}"
-                )
-        except Exception as e:
-            # Content update will succeed, but graph reprocessing failed.
-            # Set status to FAILED to indicate the knowledge graph is out of sync.
-            # Note: We intentionally catch all exceptions here because we want the
-            # content update to succeed even if reprocessing fails. This is better
-            # than rolling back the content changes.
-            memory.processing_status = "FAILED"
-            memory.processing_error = f"Reprocessing failed: {e!s}"
-            logger.error(
-                f"Failed to trigger reprocessing for memory {memory.id}: {e}. "
-                "Content was updated but knowledge graph won't reflect changes.",
-                exc_info=True,
-            )
+        await _submit_reprocessing_workflow(memory, current_user, db, workflow_engine)
 
     # 7. Save to database
     await db.commit()

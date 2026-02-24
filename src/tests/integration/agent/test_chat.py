@@ -25,13 +25,8 @@ from src.configuration.config import get_settings
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
 
 
-async def test_chat():
-    """Test the chat functionality."""
-    print("=" * 60)
-    print("Testing Agent Chat Flow")
-    print("=" * 60)
-
-    # Test Ray connection
+async def _test_ray_connection():
+    """Test Ray connection and return success status."""
     print("\n1. Testing Ray connection...")
     try:
         import ray
@@ -42,9 +37,12 @@ async def test_chat():
         ray.shutdown()
     except Exception as e:
         print(f"   ✗ Ray connection failed: {e}")
-        return
+        return False
+    return True
 
-    # Test database connection
+
+async def _test_database_connection():
+    """Test database connection and return success status."""
     print("\n2. Testing database connection...")
     try:
         from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
@@ -60,87 +58,113 @@ async def test_chat():
                 print(f"   ✓ User ID: {conversation.user_id}")
             else:
                 print("   ✗ Conversation not found")
-                return
+                return False
     except Exception as e:
         print(f"   ✗ Database error: {e}")
         import traceback
 
         traceback.print_exc()
-        return
+        return False
+    return True
 
-    # Test Agent Service
+
+async def _create_agent_service(db):
+    """Create and return an AgentService instance with all dependencies."""
+    import redis.asyncio as aioredis
+
+    from src.application.services.agent_service import AgentService
+    from src.configuration.factories import create_llm_client, create_native_graph_adapter
+    from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
+        SqlAgentExecutionEventRepository,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_repository import (
+        SqlAgentExecutionRepository,
+    )
+    from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
+        SqlConversationRepository,
+    )
+
+    graph_service = await create_native_graph_adapter()
+    conversation_repo = SqlConversationRepository(db)
+    execution_repo = SqlAgentExecutionRepository(db)
+
+    _settings = get_settings()
+    llm = await create_llm_client("d06da862-1bb1-44fe-93a0-153f58578e07")  # tenant_id
+
+    event_repo = SqlAgentExecutionEventRepository(db)
+
+    redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
+    redis_client = aioredis.from_url(redis_url)
+
+    return AgentService(
+        conversation_repository=conversation_repo,
+        execution_repository=execution_repo,
+        graph_service=graph_service,
+        llm=llm,
+        neo4j_client=graph_service.client,
+        agent_execution_event_repository=event_repo,
+        redis_client=redis_client,
+    )
+
+
+async def _test_stream_chat(agent_service):
+    """Test stream_chat_v2 and return success status."""
+    print("\n4. Testing stream_chat_v2...")
+    print("   Sending test message...")
+
+    events = []
+    async for event in agent_service.stream_chat_v2(
+        conversation_id="822fed4e-b7f9-447d-9bbf-b1600d685e49",
+        user_message="Hello, what can you do?",
+        project_id="a0b13a4d-a0dd-418d-81dd-af48c722773e",
+        user_id="b3e0d371-c11c-4a37-9c12-cf351675a630",
+        tenant_id="d06da862-1bb1-44fe-93a0-153f58578e07",
+    ):
+        events.append(event)
+        event_type = event.get("type", "unknown")
+        print(f"   Event: {event_type}")
+        if event_type == "error":
+            print(f"   Error data: {event.get('data', {})}")
+        if len(events) > 20:
+            print("   (More events...)")
+            break
+
+    print(f"\n   ✓ Received {len(events)} events")
+
+
+async def _test_agent_service():
+    """Test Agent Service creation and streaming."""
     print("\n3. Testing Agent Service...")
     try:
-        from src.application.services.agent_service import AgentService
-        from src.configuration.factories import create_llm_client, create_native_graph_adapter
-        from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_repository import (
-            SqlAgentExecutionRepository,
-        )
-        from src.infrastructure.adapters.secondary.persistence.sql_conversation_repository import (
-            SqlConversationRepository,
-        )
-
         async with async_session_factory() as db:
-            # Create minimal container dependencies
-            graph_service = await create_native_graph_adapter()
-            conversation_repo = SqlConversationRepository(db)
-            execution_repo = SqlAgentExecutionRepository(db)
-
-            _settings = get_settings()
-            llm = await create_llm_client("d06da862-1bb1-44fe-93a0-153f58578e07")  # tenant_id
-
-            import redis.asyncio as aioredis
-
-            from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
-                SqlAgentExecutionEventRepository,
-            )
-
-            event_repo = SqlAgentExecutionEventRepository(db)
-
-            # Create Redis client for event bus
-            redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379")
-            redis_client = aioredis.from_url(redis_url)
-
-            agent_service = AgentService(
-                conversation_repository=conversation_repo,
-                execution_repository=execution_repo,
-                graph_service=graph_service,
-                llm=llm,
-                neo4j_client=graph_service.client,
-                agent_execution_event_repository=event_repo,
-                redis_client=redis_client,
-            )
-
+            agent_service = await _create_agent_service(db)
             print("   ✓ AgentService created")
-
-            # Test stream_chat_v2
-            print("\n4. Testing stream_chat_v2...")
-            print("   Sending test message...")
-
-            events = []
-            async for event in agent_service.stream_chat_v2(
-                conversation_id="822fed4e-b7f9-447d-9bbf-b1600d685e49",
-                user_message="Hello, what can you do?",
-                project_id="a0b13a4d-a0dd-418d-81dd-af48c722773e",
-                user_id="b3e0d371-c11c-4a37-9c12-cf351675a630",
-                tenant_id="d06da862-1bb1-44fe-93a0-153f58578e07",
-            ):
-                events.append(event)
-                event_type = event.get("type", "unknown")
-                print(f"   Event: {event_type}")
-                if event_type == "error":
-                    print(f"   Error data: {event.get('data', {})}")
-                if len(events) > 20:
-                    print("   (More events...)")
-                    break
-
-            print(f"\n   ✓ Received {len(events)} events")
-
+            await _test_stream_chat(agent_service)
     except Exception as e:
         print(f"   ✗ Agent Service error: {e}")
         import traceback
 
         traceback.print_exc()
+        return False
+    return True
+
+
+async def test_chat():
+    """Test the chat functionality."""
+    print("=" * 60)
+    print("Testing Agent Chat Flow")
+    print("=" * 60)
+
+    # Test Ray connection
+    if not await _test_ray_connection():
+        return
+
+    # Test database connection
+    if not await _test_database_connection():
+        return
+
+    # Test Agent Service
+    if not await _test_agent_service():
         return
 
     print("\n" + "=" * 60)

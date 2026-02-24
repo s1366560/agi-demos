@@ -13,7 +13,7 @@ from fastapi import Request
 from src.application.services.sandbox_event_service import SandboxEventPublisher
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
 from src.application.services.sandbox_token_service import SandboxTokenService
-from src.infrastructure.adapters.primary.web.dependencies import (  # noqa: F401
+from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_current_user_tenant,
 )

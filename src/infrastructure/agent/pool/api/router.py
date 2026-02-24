@@ -110,6 +110,336 @@ class OperationResponse(BaseModel):
 
 
 # ============================================================================
+# Dependency helpers (shared across endpoint handlers)
+# ============================================================================
+
+# Module-level reference set by create_pool_router
+_pool_manager_ref: AgentPoolManager | None = None
+
+
+async def _get_pool_manager_optional() -> AgentPoolManager | None:
+    """获取池管理器 (可选，不抛出异常)."""
+    if _pool_manager_ref:
+        return _pool_manager_ref
+
+    try:
+        adapter = await get_global_adapter()
+        if adapter and adapter._pool_manager:
+            return adapter._pool_manager
+    except Exception:
+        pass
+
+    return None
+
+
+async def _get_pool_manager() -> AgentPoolManager:
+    """获取池管理器 (必需，抛出异常)."""
+    manager = await _get_pool_manager_optional()
+    if manager:
+        return manager
+
+    raise HTTPException(
+        status_code=503,
+        detail="Agent pool manager not available. Enable pool with AGENT_POOL_ENABLED=true",
+    )
+
+
+# ============================================================================
+# Helper: build InstanceInfo from an instance
+# ============================================================================
+
+
+def _build_instance_info(instance_key: str, instance: Any) -> InstanceInfo:
+    """Build an InstanceInfo from a pool instance object."""
+    return InstanceInfo(
+        instance_key=instance_key,
+        tenant_id=instance.config.tenant_id,
+        project_id=instance.config.project_id,
+        agent_mode=instance.config.agent_mode,
+        tier=instance.config.tier.value,
+        status=instance.status.value,
+        created_at=instance.created_at.isoformat() if instance.created_at else None,
+        last_request_at=(
+            instance.last_request_at.isoformat() if instance.last_request_at else None
+        ),
+        active_requests=instance._metrics.active_requests if instance._metrics else 0,
+        total_requests=instance._metrics.total_requests if instance._metrics else 0,
+        memory_used_mb=instance._metrics.memory_used_mb if instance._metrics else 0.0,
+        health_status=instance._last_health_status.value
+        if instance._last_health_status
+        else "unknown",
+    )
+
+
+# ============================================================================
+# Helper: build a "disabled" or "initializing" PoolStatusResponse
+# ============================================================================
+
+_EMPTY_PREWARM: dict[str, int] = {"l1": 0, "l2": 0, "l3": 0}
+_EMPTY_RESOURCE: dict[str, Any] = {
+    "total_memory_mb": 0,
+    "used_memory_mb": 0,
+    "total_cpu_cores": 0,
+    "used_cpu_cores": 0,
+}
+
+
+def _empty_pool_status(enabled: bool, status: str) -> PoolStatusResponse:
+    """Return a PoolStatusResponse with zero counts."""
+    return PoolStatusResponse(
+        enabled=enabled,
+        status=status,
+        total_instances=0,
+        hot_instances=0,
+        warm_instances=0,
+        cold_instances=0,
+        ready_instances=0,
+        executing_instances=0,
+        unhealthy_instances=0,
+        prewarm_pool=dict(_EMPTY_PREWARM),
+        resource_usage=dict(_EMPTY_RESOURCE),
+    )
+
+
+# ============================================================================
+# Endpoint handlers (module-level async functions)
+# ============================================================================
+
+
+async def _get_pool_status() -> PoolStatusResponse:
+    """获取池状态概览.
+
+    此端点始终返回200，即使池未启用也会返回disabled状态。
+    """
+    from src.configuration.config import get_settings
+
+    settings = get_settings()
+
+    # 如果池未启用，返回disabled状态
+    if not settings.agent_pool_enabled:
+        return _empty_pool_status(enabled=False, status="disabled")
+
+    # 尝试获取池管理器
+    manager = await _get_pool_manager_optional()
+    if not manager:
+        return _empty_pool_status(enabled=True, status="initializing")
+
+    stats = manager.get_stats()
+
+    return PoolStatusResponse(
+        enabled=True,
+        status="running",
+        total_instances=stats.total_instances,
+        hot_instances=stats.hot_instances,
+        warm_instances=stats.warm_instances,
+        cold_instances=stats.cold_instances,
+        ready_instances=stats.ready_instances,
+        executing_instances=stats.executing_instances,
+        unhealthy_instances=stats.unhealthy_instances,
+        prewarm_pool={
+            "l1": stats.prewarm_l1_count,
+            "l2": stats.prewarm_l2_count,
+            "l3": stats.prewarm_l3_count,
+        },
+        resource_usage={
+            "total_memory_mb": stats.total_memory_mb,
+            "used_memory_mb": stats.used_memory_mb,
+            "total_cpu_cores": stats.total_cpu_cores,
+            "used_cpu_cores": stats.used_cpu_cores,
+        },
+    )
+
+
+async def _list_instances(
+    manager: AgentPoolManager = Depends(_get_pool_manager),
+    tier: str | None = Query(None, description="按分级筛选"),
+    status: str | None = Query(None, description="按状态筛选"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=100, description="每页大小"),
+) -> InstanceListResponse:
+    """列出所有实例."""
+    all_instances = []
+
+    # 从池管理器获取实例
+    for instance_key, instance in manager._instances.items():
+        if tier and instance.config.tier.value != tier:
+            continue
+        if status and instance.status.value != status:
+            continue
+
+        all_instances.append(_build_instance_info(instance_key, instance))
+
+    # 分页
+    total = len(all_instances)
+    start = (page - 1) * page_size
+    end = start + page_size
+    paginated = all_instances[start:end]
+
+    return InstanceListResponse(
+        instances=paginated,
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+async def _get_instance(
+    instance_key: str,
+    manager: AgentPoolManager = Depends(_get_pool_manager),
+) -> InstanceInfo:
+    """获取实例详情."""
+    instance = manager._instances.get(instance_key)
+    if not instance:
+        raise HTTPException(status_code=404, detail=f"Instance not found: {instance_key}")
+
+    return _build_instance_info(instance_key, instance)
+
+
+async def _pause_instance(
+    instance_key: str,
+    manager: AgentPoolManager = Depends(_get_pool_manager),
+) -> OperationResponse:
+    """暂停实例."""
+    instance = manager._instances.get(instance_key)
+    if not instance:
+        raise HTTPException(status_code=404, detail=f"Instance not found: {instance_key}")
+
+    try:
+        await instance.pause()
+        return OperationResponse(
+            success=True,
+            message=f"Instance {instance_key} paused",
+        )
+    except Exception as e:
+        logger.error(f"Failed to pause instance {instance_key}: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+async def _resume_instance(
+    instance_key: str,
+    manager: AgentPoolManager = Depends(_get_pool_manager),
+) -> OperationResponse:
+    """恢复实例."""
+    instance = manager._instances.get(instance_key)
+    if not instance:
+        raise HTTPException(status_code=404, detail=f"Instance not found: {instance_key}")
+
+    try:
+        await instance.resume()
+        return OperationResponse(
+            success=True,
+            message=f"Instance {instance_key} resumed",
+        )
+    except Exception as e:
+        logger.error(f"Failed to resume instance {instance_key}: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+async def _terminate_instance(
+    instance_key: str,
+    graceful: bool = Query(True, description="是否优雅终止"),
+    manager: AgentPoolManager = Depends(_get_pool_manager),
+) -> OperationResponse:
+    """终止实例."""
+    instance = manager._instances.get(instance_key)
+    if not instance:
+        raise HTTPException(status_code=404, detail=f"Instance not found: {instance_key}")
+
+    try:
+        # 解析 instance_key
+        parts = instance_key.split(":")
+        if len(parts) >= 3:
+            tenant_id, project_id, agent_mode = parts[0], parts[1], parts[2]
+            await manager.terminate_instance(tenant_id, project_id, agent_mode)
+        else:
+            await instance.stop(graceful=graceful)
+
+        return OperationResponse(
+            success=True,
+            message=f"Instance {instance_key} terminated",
+        )
+    except Exception as e:
+        logger.error(f"Failed to terminate instance {instance_key}: {e}")
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+async def _set_project_tier(
+    project_id: str,
+    request: SetTierRequest,
+    tenant_id: str = Query(..., description="租户ID"),
+    manager: AgentPoolManager = Depends(_get_pool_manager),
+) -> SetTierResponse:
+    """设置项目分级."""
+    # 验证 tier
+    try:
+        new_tier = ProjectTier(request.tier)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid tier: {request.tier}. Must be one of: hot, warm, cold",
+        ) from None
+
+    # 获取当前分级
+    current_tier = await manager.classify_project(tenant_id, project_id)
+
+    # 设置新分级
+    await manager.set_project_tier(tenant_id, project_id, new_tier)
+
+    return SetTierResponse(
+        project_id=project_id,
+        previous_tier=current_tier.value if current_tier else None,
+        current_tier=new_tier.value,
+        message=f"Project tier updated from {current_tier.value if current_tier else 'auto'} to {new_tier.value}",
+    )
+
+
+async def _get_project_tier(
+    project_id: str,
+    tenant_id: str = Query(..., description="租户ID"),
+    manager: AgentPoolManager = Depends(_get_pool_manager),
+) -> dict[str, Any]:
+    """获取项目分级."""
+    tier = await manager.classify_project(tenant_id, project_id)
+    return {
+        "project_id": project_id,
+        "tenant_id": tenant_id,
+        "tier": tier.value,
+    }
+
+
+async def _get_metrics_json(
+    manager: AgentPoolManager = Depends(_get_pool_manager),
+) -> MetricsResponse:
+    """获取指标 (JSON 格式)."""
+    metrics = get_metrics_collector()
+    stats = manager.get_stats()
+    metrics.update_from_pool_stats(stats)
+
+    data = metrics.to_dict()
+    return MetricsResponse(
+        instances=data.get("instances", {}),
+        health=data.get("health", {}),
+        prewarm=data.get("prewarm", {}),
+    )
+
+
+async def _get_metrics_prometheus(
+    manager: AgentPoolManager = Depends(_get_pool_manager),
+) -> PlainTextResponse:
+    """获取指标 (Prometheus 格式)."""
+    from fastapi.responses import PlainTextResponse
+
+    metrics = get_metrics_collector()
+    stats = manager.get_stats()
+    metrics.update_from_pool_stats(stats)
+
+    return PlainTextResponse(
+        content=metrics.to_prometheus_format(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
+
+
+# ============================================================================
 # Router Factory
 # ============================================================================
 
@@ -129,352 +459,36 @@ def create_pool_router(
     Returns:
         FastAPI 路由器
     """
+    global _pool_manager_ref
+    _pool_manager_ref = pool_manager
+
     router = APIRouter(
         prefix=prefix,
         tags=tags or ["Agent Pool Admin"],
     )
 
-    async def get_pool_manager_optional() -> AgentPoolManager | None:
-        """获取池管理器 (可选，不抛出异常)."""
-        if pool_manager:
-            return pool_manager
+    # Status
+    router.get("/status", response_model=PoolStatusResponse)(_get_pool_status)
 
-        try:
-            adapter = await get_global_adapter()
-            if adapter and adapter._pool_manager:
-                return adapter._pool_manager
-        except Exception:
-            pass
+    # Instances
+    router.get("/instances", response_model=InstanceListResponse)(_list_instances)
+    router.get("/instances/{instance_key}", response_model=InstanceInfo)(_get_instance)
+    router.post("/instances/{instance_key}/pause", response_model=OperationResponse)(
+        _pause_instance
+    )
+    router.post("/instances/{instance_key}/resume", response_model=OperationResponse)(
+        _resume_instance
+    )
+    router.delete("/instances/{instance_key}", response_model=OperationResponse)(
+        _terminate_instance
+    )
 
-        return None
+    # Tier
+    router.post("/projects/{project_id}/tier", response_model=SetTierResponse)(_set_project_tier)
+    router.get("/projects/{project_id}/tier")(_get_project_tier)
 
-    async def get_pool_manager() -> AgentPoolManager:
-        """获取池管理器 (必需，抛出异常)."""
-        manager = await get_pool_manager_optional()
-        if manager:
-            return manager
-
-        raise HTTPException(
-            status_code=503,
-            detail="Agent pool manager not available. Enable pool with AGENT_POOL_ENABLED=true",
-        )
-
-    # ========================================================================
-    # Status Endpoints
-    # ========================================================================
-
-    @router.get("/status", response_model=PoolStatusResponse)
-    async def get_pool_status() -> PoolStatusResponse:
-        """获取池状态概览.
-
-        此端点始终返回200，即使池未启用也会返回disabled状态。
-        """
-        from src.configuration.config import get_settings
-
-        settings = get_settings()
-
-        # 如果池未启用，返回disabled状态
-        if not settings.agent_pool_enabled:
-            return PoolStatusResponse(
-                enabled=False,
-                status="disabled",
-                total_instances=0,
-                hot_instances=0,
-                warm_instances=0,
-                cold_instances=0,
-                ready_instances=0,
-                executing_instances=0,
-                unhealthy_instances=0,
-                prewarm_pool={"l1": 0, "l2": 0, "l3": 0},
-                resource_usage={
-                    "total_memory_mb": 0,
-                    "used_memory_mb": 0,
-                    "total_cpu_cores": 0,
-                    "used_cpu_cores": 0,
-                },
-            )
-
-        # 尝试获取池管理器
-        manager = await get_pool_manager_optional()
-        if not manager:
-            return PoolStatusResponse(
-                enabled=True,
-                status="initializing",
-                total_instances=0,
-                hot_instances=0,
-                warm_instances=0,
-                cold_instances=0,
-                ready_instances=0,
-                executing_instances=0,
-                unhealthy_instances=0,
-                prewarm_pool={"l1": 0, "l2": 0, "l3": 0},
-                resource_usage={
-                    "total_memory_mb": 0,
-                    "used_memory_mb": 0,
-                    "total_cpu_cores": 0,
-                    "used_cpu_cores": 0,
-                },
-            )
-
-        stats = manager.get_stats()
-
-        return PoolStatusResponse(
-            enabled=True,
-            status="running",
-            total_instances=stats.total_instances,
-            hot_instances=stats.hot_instances,
-            warm_instances=stats.warm_instances,
-            cold_instances=stats.cold_instances,
-            ready_instances=stats.ready_instances,
-            executing_instances=stats.executing_instances,
-            unhealthy_instances=stats.unhealthy_instances,
-            prewarm_pool={
-                "l1": stats.prewarm_l1_count,
-                "l2": stats.prewarm_l2_count,
-                "l3": stats.prewarm_l3_count,
-            },
-            resource_usage={
-                "total_memory_mb": stats.total_memory_mb,
-                "used_memory_mb": stats.used_memory_mb,
-                "total_cpu_cores": stats.total_cpu_cores,
-                "used_cpu_cores": stats.used_cpu_cores,
-            },
-        )
-
-    # ========================================================================
-    # Instance Endpoints
-    # ========================================================================
-
-    @router.get("/instances", response_model=InstanceListResponse)
-    async def list_instances(
-        manager: AgentPoolManager = Depends(get_pool_manager),
-        tier: str | None = Query(None, description="按分级筛选"),
-        status: str | None = Query(None, description="按状态筛选"),
-        page: int = Query(1, ge=1, description="页码"),
-        page_size: int = Query(20, ge=1, le=100, description="每页大小"),
-    ) -> InstanceListResponse:
-        """列出所有实例."""
-        all_instances = []
-
-        # 从池管理器获取实例
-        for instance_key, instance in manager._instances.items():
-            if tier and instance.config.tier.value != tier:
-                continue
-            if status and instance.status.value != status:
-                continue
-
-            info = InstanceInfo(
-                instance_key=instance_key,
-                tenant_id=instance.config.tenant_id,
-                project_id=instance.config.project_id,
-                agent_mode=instance.config.agent_mode,
-                tier=instance.config.tier.value,
-                status=instance.status.value,
-                created_at=instance.created_at.isoformat() if instance.created_at else None,
-                last_request_at=(
-                    instance.last_request_at.isoformat() if instance.last_request_at else None
-                ),
-                active_requests=instance._metrics.active_requests if instance._metrics else 0,
-                total_requests=instance._metrics.total_requests if instance._metrics else 0,
-                memory_used_mb=instance._metrics.memory_used_mb if instance._metrics else 0.0,
-                health_status=instance._last_health_status.value
-                if instance._last_health_status
-                else "unknown",
-            )
-            all_instances.append(info)
-
-        # 分页
-        total = len(all_instances)
-        start = (page - 1) * page_size
-        end = start + page_size
-        paginated = all_instances[start:end]
-
-        return InstanceListResponse(
-            instances=paginated,
-            total=total,
-            page=page,
-            page_size=page_size,
-        )
-
-    @router.get("/instances/{instance_key}", response_model=InstanceInfo)
-    async def get_instance(
-        instance_key: str,
-        manager: AgentPoolManager = Depends(get_pool_manager),
-    ) -> InstanceInfo:
-        """获取实例详情."""
-        instance = manager._instances.get(instance_key)
-        if not instance:
-            raise HTTPException(status_code=404, detail=f"Instance not found: {instance_key}")
-
-        return InstanceInfo(
-            instance_key=instance_key,
-            tenant_id=instance.config.tenant_id,
-            project_id=instance.config.project_id,
-            agent_mode=instance.config.agent_mode,
-            tier=instance.config.tier.value,
-            status=instance.status.value,
-            created_at=instance.created_at.isoformat() if instance.created_at else None,
-            last_request_at=(
-                instance.last_request_at.isoformat() if instance.last_request_at else None
-            ),
-            active_requests=instance._metrics.active_requests if instance._metrics else 0,
-            total_requests=instance._metrics.total_requests if instance._metrics else 0,
-            memory_used_mb=instance._metrics.memory_used_mb if instance._metrics else 0.0,
-            health_status=instance._last_health_status.value
-            if instance._last_health_status
-            else "unknown",
-        )
-
-    @router.post("/instances/{instance_key}/pause", response_model=OperationResponse)
-    async def pause_instance(
-        instance_key: str,
-        manager: AgentPoolManager = Depends(get_pool_manager),
-    ) -> OperationResponse:
-        """暂停实例."""
-        instance = manager._instances.get(instance_key)
-        if not instance:
-            raise HTTPException(status_code=404, detail=f"Instance not found: {instance_key}")
-
-        try:
-            await instance.pause()
-            return OperationResponse(
-                success=True,
-                message=f"Instance {instance_key} paused",
-            )
-        except Exception as e:
-            logger.error(f"Failed to pause instance {instance_key}: {e}")
-            raise HTTPException(status_code=500, detail=str(e)) from e
-
-    @router.post("/instances/{instance_key}/resume", response_model=OperationResponse)
-    async def resume_instance(
-        instance_key: str,
-        manager: AgentPoolManager = Depends(get_pool_manager),
-    ) -> OperationResponse:
-        """恢复实例."""
-        instance = manager._instances.get(instance_key)
-        if not instance:
-            raise HTTPException(status_code=404, detail=f"Instance not found: {instance_key}")
-
-        try:
-            await instance.resume()
-            return OperationResponse(
-                success=True,
-                message=f"Instance {instance_key} resumed",
-            )
-        except Exception as e:
-            logger.error(f"Failed to resume instance {instance_key}: {e}")
-            raise HTTPException(status_code=500, detail=str(e)) from e
-
-    @router.delete("/instances/{instance_key}", response_model=OperationResponse)
-    async def terminate_instance(
-        instance_key: str,
-        graceful: bool = Query(True, description="是否优雅终止"),
-        manager: AgentPoolManager = Depends(get_pool_manager),
-    ) -> OperationResponse:
-        """终止实例."""
-        instance = manager._instances.get(instance_key)
-        if not instance:
-            raise HTTPException(status_code=404, detail=f"Instance not found: {instance_key}")
-
-        try:
-            # 解析 instance_key
-            parts = instance_key.split(":")
-            if len(parts) >= 3:
-                tenant_id, project_id, agent_mode = parts[0], parts[1], parts[2]
-                await manager.terminate_instance(tenant_id, project_id, agent_mode)
-            else:
-                await instance.stop(graceful=graceful)
-
-            return OperationResponse(
-                success=True,
-                message=f"Instance {instance_key} terminated",
-            )
-        except Exception as e:
-            logger.error(f"Failed to terminate instance {instance_key}: {e}")
-            raise HTTPException(status_code=500, detail=str(e)) from e
-
-    # ========================================================================
-    # Tier Endpoints
-    # ========================================================================
-
-    @router.post("/projects/{project_id}/tier", response_model=SetTierResponse)
-    async def set_project_tier(
-        project_id: str,
-        request: SetTierRequest,
-        tenant_id: str = Query(..., description="租户ID"),
-        manager: AgentPoolManager = Depends(get_pool_manager),
-    ) -> SetTierResponse:
-        """设置项目分级."""
-        # 验证 tier
-        try:
-            new_tier = ProjectTier(request.tier)
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid tier: {request.tier}. Must be one of: hot, warm, cold",
-            ) from None
-
-        # 获取当前分级
-        current_tier = await manager.classify_project(tenant_id, project_id)
-
-        # 设置新分级
-        await manager.set_project_tier(tenant_id, project_id, new_tier)
-
-        return SetTierResponse(
-            project_id=project_id,
-            previous_tier=current_tier.value if current_tier else None,
-            current_tier=new_tier.value,
-            message=f"Project tier updated from {current_tier.value if current_tier else 'auto'} to {new_tier.value}",
-        )
-
-    @router.get("/projects/{project_id}/tier")
-    async def get_project_tier(
-        project_id: str,
-        tenant_id: str = Query(..., description="租户ID"),
-        manager: AgentPoolManager = Depends(get_pool_manager),
-    ) -> dict[str, Any]:
-        """获取项目分级."""
-        tier = await manager.classify_project(tenant_id, project_id)
-        return {
-            "project_id": project_id,
-            "tenant_id": tenant_id,
-            "tier": tier.value,
-        }
-
-    # ========================================================================
-    # Metrics Endpoints
-    # ========================================================================
-
-    @router.get("/metrics", response_model=MetricsResponse)
-    async def get_metrics_json(
-        manager: AgentPoolManager = Depends(get_pool_manager),
-    ) -> MetricsResponse:
-        """获取指标 (JSON 格式)."""
-        metrics = get_metrics_collector()
-        stats = manager.get_stats()
-        metrics.update_from_pool_stats(stats)
-
-        data = metrics.to_dict()
-        return MetricsResponse(
-            instances=data.get("instances", {}),
-            health=data.get("health", {}),
-            prewarm=data.get("prewarm", {}),
-        )
-
-    @router.get("/metrics/prometheus", response_class=None)
-    async def get_metrics_prometheus(
-        manager: AgentPoolManager = Depends(get_pool_manager),
-    ) -> PlainTextResponse:
-        """获取指标 (Prometheus 格式)."""
-        from fastapi.responses import PlainTextResponse
-
-        metrics = get_metrics_collector()
-        stats = manager.get_stats()
-        metrics.update_from_pool_stats(stats)
-
-        return PlainTextResponse(
-            content=metrics.to_prometheus_format(),
-            media_type="text/plain; version=0.0.4; charset=utf-8",
-        )
+    # Metrics
+    router.get("/metrics", response_model=MetricsResponse)(_get_metrics_json)
+    router.get("/metrics/prometheus", response_class=None)(_get_metrics_prometheus)
 
     return router

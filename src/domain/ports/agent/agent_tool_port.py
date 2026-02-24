@@ -101,44 +101,64 @@ class AgentToolBase(ABC):
             parsed = {"raw_output": output}
 
         if transformation:
-            if "extract_path" in transformation:
-                path = transformation["extract_path"]
-                extracted = self.extract_output_field(output, path)
-                parsed = extracted if extracted is not None else parsed
-
-            if "field_mapping" in transformation and isinstance(parsed, dict):
-                mapping = transformation["field_mapping"]
-                mapped = {}
-                for source_key, target_key in mapping.items():
-                    if source_key in parsed:
-                        mapped[target_key] = parsed[source_key]
-                parsed = mapped if mapped else parsed
-
-            if "filter" in transformation and isinstance(parsed, list):
-                filter_rules = transformation["filter"]
-                filtered = []
-                for item in parsed:
-                    if isinstance(item, dict):
-                        matches = all(item.get(k) == v for k, v in filter_rules.items())
-                        if matches:
-                            filtered.append(item)
-                parsed = filtered
-
-            if "aggregate" in transformation and isinstance(parsed, list):
-                agg_type = transformation["aggregate"]
-                if agg_type == "count":
-                    parsed = {"count": len(parsed)}
-                elif agg_type == "first" and parsed:
-                    parsed = parsed[0]
-                elif agg_type == "last" and parsed:
-                    parsed = parsed[-1]
-                elif agg_type == "sum":
-                    with contextlib.suppress(TypeError, ValueError):
-                        parsed = {"sum": sum(parsed)}
+            parsed = self._apply_transformations(parsed, output, transformation)
 
         if not isinstance(parsed, dict):
             return {"data": parsed}
+        return parsed
 
+    def _apply_transformations(
+        self,
+        parsed: Any,
+        raw_output: str,
+        transformation: dict[str, Any],
+    ) -> Any:
+        """Apply transformation rules to parsed output."""
+        if "extract_path" in transformation:
+            extracted = self.extract_output_field(raw_output, transformation["extract_path"])
+            parsed = extracted if extracted is not None else parsed
+
+        if "field_mapping" in transformation and isinstance(parsed, dict):
+            parsed = self._apply_field_mapping(parsed, transformation["field_mapping"])
+
+        if "filter" in transformation and isinstance(parsed, list):
+            parsed = self._apply_filter(parsed, transformation["filter"])
+
+        if "aggregate" in transformation and isinstance(parsed, list):
+            parsed = self._apply_aggregate(parsed, transformation["aggregate"])
+
+        return parsed
+
+    @staticmethod
+    def _apply_field_mapping(parsed: dict[str, Any], mapping: dict[str, str]) -> dict[str, Any]:
+        """Apply field mapping transformation."""
+        mapped = {}
+        for source_key, target_key in mapping.items():
+            if source_key in parsed:
+                mapped[target_key] = parsed[source_key]
+        return mapped if mapped else parsed
+
+    @staticmethod
+    def _apply_filter(parsed: list[Any], filter_rules: dict[str, Any]) -> list[Any]:
+        """Apply filter transformation to a list."""
+        return [
+            item
+            for item in parsed
+            if isinstance(item, dict) and all(item.get(k) == v for k, v in filter_rules.items())
+        ]
+
+    @staticmethod
+    def _apply_aggregate(parsed: list[Any], agg_type: str) -> Any:
+        """Apply aggregate transformation to a list."""
+        if agg_type == "count":
+            return {"count": len(parsed)}
+        if agg_type == "first" and parsed:
+            return parsed[0]
+        if agg_type == "last" and parsed:
+            return parsed[-1]
+        if agg_type == "sum":
+            with contextlib.suppress(TypeError, ValueError):
+                return {"sum": sum(parsed)}
         return parsed
 
     def get_input_schema(self) -> dict[str, Any]:

@@ -21,7 +21,7 @@ import logging
 import os
 import time
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
@@ -613,6 +613,23 @@ class LLMStream:
         # Flush any pending logs
         self._log_buffer.flush()
 
+    def _handle_content_delta(self, content: str) -> Iterator[StreamEvent]:
+        """Handle a text content delta from the LLM stream."""
+        logger.info(f"[LLMStream] TEXT_DELTA: {content[:50]}...")
+        if not self._in_text:
+            self._in_text = True
+            yield StreamEvent.text_start()
+        self._text_buffer += content
+        yield StreamEvent.text_delta(content)
+
+    def _handle_reasoning_delta(self, reasoning: str) -> Iterator[StreamEvent]:
+        """Handle a reasoning content delta (o1, Claude extended thinking)."""
+        if not self._in_reasoning:
+            self._in_reasoning = True
+            yield StreamEvent.reasoning_start()
+        self._reasoning_buffer += reasoning
+        yield StreamEvent.reasoning_delta(reasoning)
+
     async def _process_chunk(
         self,
         chunk: Any,
@@ -632,7 +649,6 @@ class LLMStream:
         Yields:
             StreamEvent objects
         """
-        # Extract choices
         choices = getattr(chunk, "choices", [])
         if not choices:
             logger.debug("[LLMStream] chunk has no choices")
@@ -640,7 +656,6 @@ class LLMStream:
 
         choice = choices[0]
         delta = getattr(choice, "delta", None)
-
         if delta is None:
             logger.debug("[LLMStream] choice has no delta")
             return
@@ -662,29 +677,18 @@ class LLMStream:
         # Check for content (text)
         content = getattr(delta, "content", None)
         if content:
-            logger.info(f"[LLMStream] TEXT_DELTA: {content[:50]}...")
-            # Start text stream if not started
-            if not self._in_text:
-                self._in_text = True
-                yield StreamEvent.text_start()
-
-            self._text_buffer += content
-            yield StreamEvent.text_delta(content)
+            for event in self._handle_content_delta(content):
+                yield event
 
         # Check for reasoning content (o1, Claude extended thinking)
-        # Different providers may use different field names
         reasoning = (
             getattr(delta, "reasoning_content", None)
             or getattr(delta, "thinking", None)
             or getattr(delta, "reasoning", None)
         )
         if reasoning:
-            if not self._in_reasoning:
-                self._in_reasoning = True
-                yield StreamEvent.reasoning_start()
-
-            self._reasoning_buffer += reasoning
-            yield StreamEvent.reasoning_delta(reasoning)
+            for event in self._handle_reasoning_delta(reasoning):
+                yield event
 
         # Check for tool calls
         tool_calls = getattr(delta, "tool_calls", None)
@@ -692,12 +696,10 @@ class LLMStream:
             async for event in self._process_tool_calls(tool_calls):
                 yield event
 
-        # Check for finish reason
         finish_reason = getattr(choice, "finish_reason", None)
         if finish_reason:
             self._finish_reason = finish_reason
 
-        # Check for usage (usually in final chunk)
         usage = getattr(chunk, "usage", None)
         if usage:
             self._usage = self._extract_usage(usage)
@@ -759,6 +761,119 @@ class LLMStream:
                         arguments_delta=args_delta,
                     )
 
+    @staticmethod
+    def _escape_control_chars(s: str) -> str:
+        """Escape control characters in a JSON string."""
+        s = s.replace("\n", "\\n")
+        s = s.replace("\r", "\\r")
+        s = s.replace("\t", "\\t")
+        return s
+
+    def _try_fix_control_chars(self, raw_args: str, tool_name: str) -> dict[str, Any] | None:
+        """Attempt to parse JSON after escaping unescaped control characters."""
+        try:
+            fixed_args = self._escape_control_chars(raw_args)
+            result = json.loads(fixed_args)
+            logger.info(
+                f"[LLMStream] Successfully parsed JSON after escaping control chars for {tool_name}"
+            )
+            return result
+        except json.JSONDecodeError:
+            return None
+
+    @staticmethod
+    def _try_fix_double_encoded(raw_args: str, tool_name: str) -> dict[str, Any] | None:
+        """Attempt to parse double-encoded JSON."""
+        try:
+            if raw_args.startswith('"') and raw_args.endswith('"'):
+                inner = raw_args[1:-1]
+                inner = inner.replace('\\"', '"').replace("\\\\", "\\")
+                result = json.loads(inner)
+                logger.info(f"[LLMStream] Successfully parsed double-encoded JSON for {tool_name}")
+                return result
+        except json.JSONDecodeError:
+            pass
+        return None
+
+    def _build_truncation_fallback(
+        self, raw_args: str, error_str: str, tool_name: str
+    ) -> dict[str, Any]:
+        """Build fallback arguments dict for unparseable tool arguments."""
+        is_truncated = self._finish_reason == "length" or (
+            ("Unterminated string" in error_str or "Expecting" in error_str)
+            and not raw_args.rstrip().endswith("}")
+        )
+        if is_truncated:
+            logger.error(
+                f"[LLMStream] Tool arguments truncated for {tool_name}. "
+                f"finish_reason={self._finish_reason}. "
+                f"Consider increasing max_tokens or reducing content size."
+            )
+            return {
+                "_error": "truncated",
+                "_message": (
+                    "Tool arguments were truncated (incomplete JSON). "
+                    "The content may be too large. Try with smaller content or increase max_tokens."
+                ),
+                "_raw": raw_args,
+            }
+        logger.warning(
+            f"[LLMStream] Could not parse tool arguments for {tool_name}, "
+            f"passing _raw for processor to handle"
+        )
+        return {"_raw": raw_args}
+
+    def _parse_tool_arguments(self, tracker: ToolCallChunk) -> dict[str, Any]:
+        """Parse tool call arguments with error recovery."""
+        if not tracker.arguments:
+            return {}
+
+        raw_args = tracker.arguments
+        try:
+            return json.loads(raw_args)
+        except json.JSONDecodeError as e:
+            error_str = str(e)
+            logger.warning(
+                f"Failed to parse tool arguments for {tracker.name}: {e}. "
+                f"Arguments preview: {raw_args[:200]}..."
+            )
+
+        # Try common fixes in order
+        fixed = self._try_fix_control_chars(raw_args, tracker.name)
+        if fixed is not None:
+            return fixed
+
+        fixed = self._try_fix_double_encoded(raw_args, tracker.name)
+        if fixed is not None:
+            return fixed
+
+        return self._build_truncation_fallback(raw_args, error_str, tracker.name)
+
+    def _finalize_streams(self) -> Iterator[StreamEvent]:
+        """Close any open text/reasoning streams in correct order."""
+        # IMPORTANT: End reasoning stream BEFORE text stream
+        # Reasoning (thought) should logically complete before the final response (text)
+        # This ensures correct timeline ordering in the frontend:
+        # thought -> response (not response -> thought)
+        if self._in_reasoning:
+            yield StreamEvent.reasoning_end(self._reasoning_buffer)
+            self._in_reasoning = False
+        if self._in_text:
+            yield StreamEvent.text_end(self._text_buffer)
+            self._in_text = False
+
+    def _complete_pending_tool_calls(self) -> Iterator[StreamEvent]:
+        """Complete any pending tool calls and parse their arguments."""
+        for _index, tracker in self._tool_calls.items():
+            if not tracker.complete:
+                tracker.complete = True
+                arguments = self._parse_tool_arguments(tracker)
+                yield StreamEvent.tool_call_end(
+                    call_id=tracker.id,
+                    name=tracker.name,
+                    arguments=arguments,
+                )
+
     async def _finalize(self) -> AsyncIterator[StreamEvent]:
         """
         Finalize streaming and emit completion events.
@@ -772,117 +887,15 @@ class LLMStream:
         Yields:
             Final StreamEvent objects
         """
-        # IMPORTANT: End reasoning stream BEFORE text stream
-        # Reasoning (thought) should logically complete before the final response (text)
-        # This ensures correct timeline ordering in the frontend:
-        # thought -> response (not response -> thought)
-        if self._in_reasoning:
-            yield StreamEvent.reasoning_end(self._reasoning_buffer)
-            self._in_reasoning = False
-
-        # End text stream after reasoning is complete
-        if self._in_text:
-            yield StreamEvent.text_end(self._text_buffer)
-            self._in_text = False
-
-        # Complete any pending tool calls
-        for _index, tracker in self._tool_calls.items():
-            if not tracker.complete:
-                tracker.complete = True
-
-                # Parse arguments - handle various edge cases
-                arguments = {}
-                if tracker.arguments:
-                    raw_args = tracker.arguments
-                    try:
-                        arguments = json.loads(raw_args)
-                    except json.JSONDecodeError as e:
-                        error_str = str(e)
-                        logger.warning(
-                            f"Failed to parse tool arguments for {tracker.name}: {e}. "
-                            f"Arguments preview: {raw_args[:200]}..."
-                        )
-
-                        # Try to fix common issues FIRST before declaring truncation
-                        parse_success = False
-
-                        # Fix 1: Handle unescaped control characters
-                        # This is the most common issue - LLM returns literal \n instead of \\n
-                        try:
-
-                            def escape_control_chars(s: str) -> None:
-                                """Escape control characters in a JSON string."""
-                                s = s.replace("\n", "\\n")
-                                s = s.replace("\r", "\\r")
-                                s = s.replace("\t", "\\t")
-                                return s
-
-                            fixed_args = escape_control_chars(raw_args)
-                            arguments = json.loads(fixed_args)
-                            logger.info(
-                                f"[LLMStream] Successfully parsed JSON after escaping control chars for {tracker.name}"
-                            )
-                            parse_success = True
-                        except json.JSONDecodeError:
-                            pass
-
-                        # Fix 2: Handle double-encoded JSON
-                        if not parse_success:
-                            try:
-                                if raw_args.startswith('"') and raw_args.endswith('"'):
-                                    inner = raw_args[1:-1]
-                                    inner = inner.replace('\\"', '"').replace("\\\\", "\\")
-                                    arguments = json.loads(inner)
-                                    logger.info(
-                                        f"[LLMStream] Successfully parsed double-encoded JSON for {tracker.name}"
-                                    )
-                                    parse_success = True
-                            except json.JSONDecodeError:
-                                pass
-
-                        # If all fixes failed, check if it's truly a truncation
-                        if not parse_success:
-                            # Truncation is indicated by:
-                            # 1. finish_reason == "length" (token limit reached)
-                            # 2. JSON structure is incomplete (missing closing brackets)
-                            is_truncated = self._finish_reason == "length" or (
-                                ("Unterminated string" in error_str or "Expecting" in error_str)
-                                and not raw_args.rstrip().endswith("}")
-                            )
-
-                            if is_truncated:
-                                logger.error(
-                                    f"[LLMStream] Tool arguments truncated for {tracker.name}. "
-                                    f"finish_reason={self._finish_reason}. "
-                                    f"Consider increasing max_tokens or reducing content size."
-                                )
-                                arguments = {
-                                    "_error": "truncated",
-                                    "_message": (
-                                        "Tool arguments were truncated (incomplete JSON). "
-                                        "The content may be too large. Try with smaller content or increase max_tokens."
-                                    ),
-                                    "_raw": raw_args,
-                                }
-                            else:
-                                # Not truncated, just malformed - pass raw for processor to handle
-                                logger.warning(
-                                    f"[LLMStream] Could not parse tool arguments for {tracker.name}, "
-                                    f"passing _raw for processor to handle"
-                                )
-                                arguments = {"_raw": raw_args}
-
-                yield StreamEvent.tool_call_end(
-                    call_id=tracker.id,
-                    name=tracker.name,
-                    arguments=arguments,
-                )
+        for event in self._finalize_streams():
+            yield event
+        for event in self._complete_pending_tool_calls():
+            yield event
 
         # Emit usage if available
         if self._usage:
             yield StreamEvent.usage(**self._usage)
 
-        # Emit finish event
         yield StreamEvent.finish(self._finish_reason or "stop")
 
     def _extract_usage(self, usage: Any) -> dict[str, int]:
