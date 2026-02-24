@@ -233,7 +233,7 @@ class MCPSandboxAdapter(SandboxPort):
             raise SandboxConnectionError(
                 message=f"Failed to connect to Docker: {e}",
                 operation="init",
-            )
+            ) from e
 
     def _is_port_available(self, port: int) -> bool:
         """Check if a port is available on the host.
@@ -485,7 +485,7 @@ class MCPSandboxAdapter(SandboxPort):
                 f"Build with: cd sandbox-mcp-server && docker build -t {self._mcp_image} .",
                 sandbox_id=sandbox_id,
                 operation="create",
-            )
+            ) from None
         except Exception as e:
             # Release allocated ports on failure
             async with self._port_allocation_lock:
@@ -495,7 +495,7 @@ class MCPSandboxAdapter(SandboxPort):
                 message=f"Failed to create sandbox: {e}",
                 sandbox_id=sandbox_id,
                 operation="create",
-            )
+            ) from e
 
     async def connect_mcp(
         self,
@@ -1565,7 +1565,9 @@ class MCPSandboxAdapter(SandboxPort):
 
         return count
 
-    async def get_sandbox_stats(self, sandbox_id: str, project_id: str | None = None) -> dict[str, Any]:
+    async def get_sandbox_stats(
+        self, sandbox_id: str, project_id: str | None = None
+    ) -> dict[str, Any]:
         """
         Get container resource usage statistics.
 

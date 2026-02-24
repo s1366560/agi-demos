@@ -106,7 +106,7 @@ async def create_template(
     try:
         repo = SqlPromptTemplateRepository(db)
         # Only admins can create system templates
-        is_system = data.is_system and getattr(current_user, 'role', '') == 'admin'
+        is_system = data.is_system and getattr(current_user, "role", "") == "admin"
         template = PromptTemplate(
             tenant_id=tenant_id,
             project_id=data.project_id,
@@ -131,7 +131,7 @@ async def create_template(
     except Exception:
         await db.rollback()
         logger.exception("Error creating template")
-        raise HTTPException(status_code=500, detail="Failed to create template")
+        raise HTTPException(status_code=500, detail="Failed to create template") from None
 
 
 @router.get("/templates", response_model=list[TemplateResponse])
@@ -159,7 +159,7 @@ async def list_templates(
         return [_to_response(t) for t in templates]
     except Exception:
         logger.exception("Error listing templates")
-        raise HTTPException(status_code=500, detail="Failed to list templates")
+        raise HTTPException(status_code=500, detail="Failed to list templates") from None
 
 
 @router.get("/templates/{template_id}", response_model=TemplateResponse)
@@ -216,7 +216,7 @@ async def update_template(
     except Exception:
         await db.rollback()
         logger.exception("Error updating template")
-        raise HTTPException(status_code=500, detail="Failed to update template")
+        raise HTTPException(status_code=500, detail="Failed to update template") from None
 
 
 @router.delete(
@@ -245,4 +245,4 @@ async def delete_template(
     except Exception:
         await db.rollback()
         logger.exception("Error deleting template")
-        raise HTTPException(status_code=500, detail="Failed to delete template")
+        raise HTTPException(status_code=500, detail="Failed to delete template") from None

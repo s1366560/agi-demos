@@ -126,7 +126,7 @@ async def list_artifacts(
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid category: {category}. Valid categories: {[c.value for c in ArtifactCategory]}",
-            )
+            ) from None
 
     # Get artifacts
     if tool_execution_id:

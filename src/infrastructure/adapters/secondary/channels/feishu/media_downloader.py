@@ -120,9 +120,9 @@ class FeishuMediaDownloader:
                     return self._tenant_access_token
 
             except TimeoutError:
-                raise FeishuMediaDownloadError("Timeout getting tenant access token")
+                raise FeishuMediaDownloadError("Timeout getting tenant access token") from None
             except Exception as e:
-                raise FeishuMediaDownloadError(f"Error getting tenant access token: {e}")
+                raise FeishuMediaDownloadError(f"Error getting tenant access token: {e}") from e
 
     def _get_api_base_url(self) -> str:
         """Get API base URL based on domain configuration."""
@@ -331,10 +331,12 @@ class FeishuMediaDownloader:
                 return content, metadata
 
         except TimeoutError:
-            raise FeishuMediaDownloadError(f"Download timeout after {self._TIMEOUT_SECONDS}s")
+            raise FeishuMediaDownloadError(
+                f"Download timeout after {self._TIMEOUT_SECONDS}s"
+            ) from None
         except aiohttp.ClientError as e:
-            raise FeishuMediaDownloadError(f"HTTP client error: {e}")
+            raise FeishuMediaDownloadError(f"HTTP client error: {e}") from e
         except Exception as e:
             if isinstance(e, FeishuMediaDownloadError):
                 raise
-            raise FeishuMediaDownloadError(f"Unexpected error: {e}")
+            raise FeishuMediaDownloadError(f"Unexpected error: {e}") from e

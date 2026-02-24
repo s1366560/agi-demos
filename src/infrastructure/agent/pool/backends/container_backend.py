@@ -119,7 +119,7 @@ class ContainerBackend(Backend):
             logger.info(f"Docker client connected: {self._config.docker_host}")
         except ImportError:
             logger.error("Docker SDK not installed. Install with: pip install docker")
-            raise RuntimeError("Docker SDK not available")
+            raise RuntimeError("Docker SDK not available") from None
         except Exception as e:
             logger.error(f"Failed to connect to Docker: {e}")
             raise
@@ -173,9 +173,7 @@ class ContainerBackend(Backend):
 
             # Check container limit
             if len(self._containers) >= self._config.max_containers:
-                raise RuntimeError(
-                    f"Container limit reached: {self._config.max_containers}"
-                )
+                raise RuntimeError(f"Container limit reached: {self._config.max_containers}")
 
             # Allocate ports
             grpc_port = self._next_grpc_port
@@ -383,9 +381,7 @@ class ContainerBackend(Backend):
 
     def get_stats(self) -> dict[str, Any]:
         """Get backend statistics."""
-        running = sum(
-            1 for c in self._containers.values() if c.status == "running"
-        )
+        running = sum(1 for c in self._containers.values() if c.status == "running")
         return {
             "backend_type": self.backend_type.value,
             "total_containers": len(self._containers),
@@ -520,18 +516,14 @@ class ContainerBackend(Backend):
                         if response.status == 200:
                             data = await response.json()
                             if data.get("lifecycle_state") == "ready":
-                                logger.info(
-                                    f"Container ready: {container_info.container_id[:12]}"
-                                )
+                                logger.info(f"Container ready: {container_info.container_id[:12]}")
                                 return
             except Exception:
                 pass
 
             await asyncio.sleep(1)
 
-        raise TimeoutError(
-            f"Container not ready after {timeout}s: {container_info.container_id}"
-        )
+        raise TimeoutError(f"Container not ready after {timeout}s: {container_info.container_id}")
 
     async def _get_grpc_client(self, instance_id: str):
         """Get or create gRPC client for instance."""
@@ -556,9 +548,7 @@ class ContainerBackend(Backend):
                 for instance_id in list(self._containers.keys()):
                     result = await self.health_check(instance_id)
                     if result.status == HealthStatus.UNHEALTHY:
-                        logger.warning(
-                            f"Container unhealthy: {instance_id}, {result.message}"
-                        )
+                        logger.warning(f"Container unhealthy: {instance_id}, {result.message}")
                         # Update container status
                         if instance_id in self._containers:
                             self._containers[instance_id].status = "error"

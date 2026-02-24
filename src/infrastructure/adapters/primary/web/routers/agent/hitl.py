@@ -105,7 +105,9 @@ async def get_pending_hitl_requests(
         raise
     except Exception as e:
         logger.error(f"Error getting pending HITL requests: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get pending HITL requests: {e!s}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get pending HITL requests: {e!s}"
+        ) from e
 
 
 @router.get("/projects/{project_id}/pending", response_model=PendingHITLResponse)
@@ -153,7 +155,9 @@ async def get_project_pending_hitl_requests(
 
     except Exception as e:
         logger.error(f"Error getting project pending HITL requests: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get pending HITL requests: {e!s}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get pending HITL requests: {e!s}"
+        ) from e
 
 
 # =============================================================================
@@ -282,7 +286,7 @@ async def respond_to_hitl(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to respond to HITL request: {e!s}",
-        )
+        ) from e
 
 
 @router.post("/cancel", response_model=HumanInteractionResponse)
@@ -337,7 +341,7 @@ async def cancel_hitl_request(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to cancel HITL request: {e!s}",
-        )
+        ) from e
 
 
 async def _publish_hitl_response_to_redis(

@@ -102,9 +102,12 @@ class TestErrorAndConfigIntegration:
     def test_config_manager_with_error_context(self) -> None:
         """Should use error context in config operations."""
         manager = ConfigManager()
-        manager.set_tenant_config("tenant_1", AgentConfig(
-            execution=ExecutionConfig(max_steps=5),
-        ))
+        manager.set_tenant_config(
+            "tenant_1",
+            AgentConfig(
+                execution=ExecutionConfig(max_steps=5),
+            ),
+        )
 
         # Get config should work
         config = manager.get_config("tenant_1")
@@ -132,15 +135,20 @@ class TestEventAndConfigIntegration:
 
         # Register config change callback
         def on_change(tenant_id: str, config: AgentConfig) -> None:
-            bus.publish(AgentDomainEvent(
-                event_type=AgentEventType.STATUS,
-                data={"tenant": tenant_id, "config_changed": True},
-            ))
+            bus.publish(
+                AgentDomainEvent(
+                    event_type=AgentEventType.STATUS,
+                    data={"tenant": tenant_id, "config_changed": True},
+                )
+            )
 
         manager.register_change_callback(on_change)
-        manager.set_tenant_config("tenant_1", AgentConfig(
-            execution=ExecutionConfig(max_steps=15),
-        ))
+        manager.set_tenant_config(
+            "tenant_1",
+            AgentConfig(
+                execution=ExecutionConfig(max_steps=15),
+            ),
+        )
 
         assert len(events) == 1
         assert events[0].event_type == AgentEventType.STATUS
@@ -167,17 +175,21 @@ class TestToolAndEventIntegration:
         bus.subscribe(callback=capture_events)
 
         # Emit events manually (in real implementation, executor would do this)
-        bus.publish(AgentDomainEvent(
-            event_type=AgentEventType.ACT,
-            data={"tool": "test_tool", "phase": "start"},
-        ))
+        bus.publish(
+            AgentDomainEvent(
+                event_type=AgentEventType.ACT,
+                data={"tool": "test_tool", "phase": "start"},
+            )
+        )
 
         result = await executor.execute("test_tool", {})
 
-        bus.publish(AgentDomainEvent(
-            event_type=AgentEventType.OBSERVE,
-            data={"tool": "test_tool", "result": result.result},
-        ))
+        bus.publish(
+            AgentDomainEvent(
+                event_type=AgentEventType.OBSERVE,
+                data={"tool": "test_tool", "result": result.result},
+            )
+        )
 
         assert len(events) == 2
         assert events[0].event_type == AgentEventType.ACT
@@ -283,19 +295,23 @@ class TestFullIntegration:
         )
 
         # 2. Emit start event
-        event_bus.publish(AgentDomainEvent(
-            event_type=AgentEventType.START,
-            data={"message": "Say hello"},
-        ))
+        event_bus.publish(
+            AgentDomainEvent(
+                event_type=AgentEventType.START,
+                data={"message": "Say hello"},
+            )
+        )
 
         # 3. Execute tool
         result = await executor.execute("hello", {})
 
         # 4. Emit end event
-        event_bus.publish(AgentDomainEvent(
-            event_type=AgentEventType.COMPLETE,
-            data={"success": result.success},
-        ))
+        event_bus.publish(
+            AgentDomainEvent(
+                event_type=AgentEventType.COMPLETE,
+                data={"success": result.success},
+            )
+        )
 
         # Verify
         assert result.success is True
@@ -381,13 +397,19 @@ class TestConfigScenarios:
         """Should isolate configs between tenants."""
         manager = ConfigManager()
 
-        manager.set_tenant_config("tenant_a", AgentConfig(
-            execution=ExecutionConfig(max_steps=5),
-        ))
+        manager.set_tenant_config(
+            "tenant_a",
+            AgentConfig(
+                execution=ExecutionConfig(max_steps=5),
+            ),
+        )
 
-        manager.set_tenant_config("tenant_b", AgentConfig(
-            execution=ExecutionConfig(max_steps=20),
-        ))
+        manager.set_tenant_config(
+            "tenant_b",
+            AgentConfig(
+                execution=ExecutionConfig(max_steps=20),
+            ),
+        )
 
         config_a = manager.get_config("tenant_a")
         config_b = manager.get_config("tenant_b")
@@ -400,9 +422,12 @@ class TestConfigScenarios:
         manager = ConfigManager()
 
         # Set tenant config with only one field changed
-        manager.set_tenant_config("tenant_1", AgentConfig(
-            execution=ExecutionConfig(max_steps=15),
-        ))
+        manager.set_tenant_config(
+            "tenant_1",
+            AgentConfig(
+                execution=ExecutionConfig(max_steps=15),
+            ),
+        )
 
         config = manager.get_config("tenant_1")
 
@@ -422,16 +447,20 @@ class TestEventScenarios:
 
         # Publish different types of events
         for i in range(5):
-            bus.publish(AgentDomainEvent(
-                event_type=AgentEventType.ACT,
-                data={"index": i},
-            ))
+            bus.publish(
+                AgentDomainEvent(
+                    event_type=AgentEventType.ACT,
+                    data={"index": i},
+                )
+            )
 
         for i in range(3):
-            bus.publish(AgentDomainEvent(
-                event_type=AgentEventType.STATUS,
-                data={"index": i},
-            ))
+            bus.publish(
+                AgentDomainEvent(
+                    event_type=AgentEventType.STATUS,
+                    data={"index": i},
+                )
+            )
 
         # Get all
         all_history = bus.get_history()
@@ -540,7 +569,7 @@ class TestErrorWrapping:
             try:
                 raise ValueError("Generic error")
             except Exception as e:
-                raise wrap_error(e, category=ErrorCategory.INTERNAL)
+                raise wrap_error(e, category=ErrorCategory.INTERNAL) from e
         except AgentError as agent_error:
             assert isinstance(agent_error, AgentError)
             assert "Generic error" in str(agent_error)
@@ -557,7 +586,7 @@ class TestErrorWrapping:
             try:
                 raise RuntimeError("Failed")
             except Exception as e:
-                raise wrap_error(e, context=context)
+                raise wrap_error(e, context=context) from e
         except AgentError as agent_error:
             assert agent_error.context.operation == "test_tool"
             assert agent_error.context.conversation_id == "conv-123"
@@ -580,9 +609,12 @@ class TestGlobalSingletons:
 
         # Create new manager and verify isolation
         new_manager = ConfigManager()
-        new_manager.set_tenant_config("test", AgentConfig(
-            execution=ExecutionConfig(max_steps=99),
-        ))
+        new_manager.set_tenant_config(
+            "test",
+            AgentConfig(
+                execution=ExecutionConfig(max_steps=99),
+            ),
+        )
         set_config(new_manager)
 
         config3 = get_config("test")

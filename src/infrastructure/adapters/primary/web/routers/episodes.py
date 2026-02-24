@@ -198,7 +198,7 @@ async def create_episode(
 
     except Exception as e:
         logger.error(f"Failed to create episode: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create episode: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to create episode: {e!s}") from e
 
 
 @router.get("/by-name/{episode_name}", response_model=EpisodeDetail)
@@ -240,7 +240,7 @@ async def get_episode(
         raise
     except Exception as e:
         logger.error(f"Failed to get episode: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/")
@@ -324,7 +324,7 @@ async def list_episodes(
 
     except Exception as e:
         logger.error(f"Failed to list episodes: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.delete("/by-name/{episode_name}")
@@ -358,7 +358,7 @@ async def delete_episode(
         raise
     except Exception as e:
         logger.error(f"Failed to delete episode: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/health", response_model=dict)
@@ -373,4 +373,4 @@ async def health_check(
         await graphiti_client.driver.execute_query("RETURN 1 as test")
         return {"status": "healthy", "timestamp": datetime.now(UTC).isoformat()}
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Service unhealthy: {e!s}")
+        raise HTTPException(status_code=503, detail=f"Service unhealthy: {e!s}") from e

@@ -209,7 +209,7 @@ class UnifiedSandboxService(SandboxResourcePort):
                 raise RuntimeError(
                     f"Failed to create sandbox for project {project_id} "
                     f"after {max_retries} attempts"
-                )
+                ) from None
 
         raise RuntimeError(f"Unexpected state in get_or_create for {project_id}")
 
@@ -372,16 +372,12 @@ class UnifiedSandboxService(SandboxResourcePort):
             await self._repository.save(association)
 
             if self._auto_recover:
-                logger.info(
-                    f"Auto-recovering unhealthy sandbox for project {project_id}"
-                )
+                logger.info(f"Auto-recovering unhealthy sandbox for project {project_id}")
                 try:
                     await self._recreate_sandbox(association)
                     return True
                 except Exception as recover_err:
-                    logger.error(
-                        f"Auto-recovery failed for project {project_id}: {recover_err}"
-                    )
+                    logger.error(f"Auto-recovery failed for project {project_id}: {recover_err}")
 
             return False
 
@@ -504,14 +500,12 @@ class UnifiedSandboxService(SandboxResourcePort):
             # Check if write succeeded
             if result.get("error"):
                 logger.error(
-                    f"Failed to sync file {filename} to sandbox {sandbox_id}: "
-                    f"{result.get('error')}"
+                    f"Failed to sync file {filename} to sandbox {sandbox_id}: {result.get('error')}"
                 )
                 return False
 
             logger.debug(
-                f"Synced file {filename} to sandbox {sandbox_id} "
-                f"({len(content_bytes)} bytes)"
+                f"Synced file {filename} to sandbox {sandbox_id} ({len(content_bytes)} bytes)"
             )
             return True
 
@@ -590,9 +584,7 @@ class UnifiedSandboxService(SandboxResourcePort):
 
                 if existing:
                     if existing.is_usable():
-                        container_exists = await self._adapter.container_exists(
-                            existing.sandbox_id
-                        )
+                        container_exists = await self._adapter.container_exists(existing.sandbox_id)
                         if container_exists:
                             existing.mark_accessed()
                             await self._repository.save(existing)
@@ -659,15 +651,14 @@ class UnifiedSandboxService(SandboxResourcePort):
                 await self._adapter.connect_mcp(instance.id)
             except Exception as e:
                 logger.error(
-                    f"MCP connection failed for {instance.id}, "
-                    f"marking sandbox as ERROR: {e}"
+                    f"MCP connection failed for {instance.id}, marking sandbox as ERROR: {e}"
                 )
                 association.mark_error(f"MCP connection failed: {e}")
                 await self._repository.save(association)
                 # Attempt to clean up the container
                 with contextlib.suppress(Exception):
                     await self._adapter.terminate_sandbox(instance.id)
-                raise RuntimeError(f"MCP connection failed for sandbox {instance.id}: {e}")
+                raise RuntimeError(f"MCP connection failed for sandbox {instance.id}: {e}") from e
 
             logger.info(f"Created sandbox {instance.id} for project {project_id}")
             return await self._build_sandbox_info(association)
@@ -727,8 +718,7 @@ class UnifiedSandboxService(SandboxResourcePort):
                 logger.warning(f"Failed to connect MCP for {instance.id}: {e}")
 
             logger.info(
-                f"Recreated sandbox for project {association.project_id}: "
-                f"sandbox_id={instance.id}"
+                f"Recreated sandbox for project {association.project_id}: sandbox_id={instance.id}"
             )
             return await self._build_sandbox_info(association)
 
@@ -753,8 +743,7 @@ class UnifiedSandboxService(SandboxResourcePort):
         try:
             await self._repository.delete(association.id)
             logger.info(
-                f"Deleted sandbox association {association.id} "
-                f"for project {association.project_id}"
+                f"Deleted sandbox association {association.id} for project {association.project_id}"
             )
         except Exception as e:
             logger.error(f"Failed to delete sandbox association {association.id}: {e}")
@@ -783,9 +772,7 @@ class UnifiedSandboxService(SandboxResourcePort):
                     # Fallback: tool_list might be list of strings
                     available_tools = [str(t) for t in tool_list]
             except Exception as e:
-                logger.debug(
-                    f"Failed to fetch tools for {association.sandbox_id}: {e}"
-                )
+                logger.debug(f"Failed to fetch tools for {association.sandbox_id}: {e}")
 
         return SandboxInfo(
             sandbox_id=association.sandbox_id,

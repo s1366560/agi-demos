@@ -78,7 +78,7 @@ class TopicManager:
         try:
             topic_type = TopicType(parts[0])
         except ValueError:
-            raise ValueError(f"Unknown topic type: {parts[0]}")
+            raise ValueError(f"Unknown topic type: {parts[0]}") from None
 
         if topic_type == TopicType.LIFECYCLE:
             if len(parts) != 3:
@@ -187,7 +187,9 @@ class TopicManager:
                     if not self._topic_sessions[topic]:
                         del self._topic_sessions[topic]
 
-            logger.debug(f"[TopicManager] Session {session_id[:8]}... unsubscribed from {len(topics)} topics")
+            logger.debug(
+                f"[TopicManager] Session {session_id[:8]}... unsubscribed from {len(topics)} topics"
+            )
             return topics
 
     def get_subscribers(self, topic: str) -> set[str]:

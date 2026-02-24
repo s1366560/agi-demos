@@ -156,7 +156,9 @@ class OnDemandBackend(Backend):
                     timeout=self.config.creation_timeout_seconds,
                 )
             except TimeoutError:
-                raise RuntimeError(f"Instance creation timeout: project={config.project_id}")
+                raise RuntimeError(
+                    f"Instance creation timeout: project={config.project_id}"
+                ) from None
 
             if not success:
                 raise RuntimeError(f"Failed to initialize instance: project={config.project_id}")

@@ -106,16 +106,14 @@ async def search_advanced(
         raise
     except Exception as e:
         logger.error(f"Advanced search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/graph-traversal")
 async def search_by_graph_traversal(
     start_entity_uuid: str = Body(..., description="Starting entity UUID"),
     max_depth: int = Body(2, ge=1, le=5, description="Maximum traversal depth"),
-    relationship_types: list[str] | None = Body(
-        None, description="Relationship types to follow"
-    ),
+    relationship_types: list[str] | None = Body(None, description="Relationship types to follow"),
     limit: int = Body(50, ge=1, le=200, description="Maximum results"),
     tenant_id: str | None = Body(None, description="Tenant filter"),
     current_user: User = Depends(get_current_user),
@@ -189,7 +187,7 @@ async def search_by_graph_traversal(
 
     except Exception as e:
         logger.error(f"Graph traversal search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/community")
@@ -265,7 +263,7 @@ async def search_by_community(
 
     except Exception as e:
         logger.error(f"Community search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/temporal")
@@ -292,13 +290,17 @@ async def search_temporal(
             try:
                 parsed_since = datetime.fromisoformat(since)
             except ValueError:
-                raise HTTPException(status_code=400, detail="Invalid 'since' datetime format")
+                raise HTTPException(
+                    status_code=400, detail="Invalid 'since' datetime format"
+                ) from None
 
         if until:
             try:
                 parsed_until = datetime.fromisoformat(until)
             except ValueError:
-                raise HTTPException(status_code=400, detail="Invalid 'until' datetime format")
+                raise HTTPException(
+                    status_code=400, detail="Invalid 'until' datetime format"
+                ) from None
 
         # Build temporal filter
         conditions = []
@@ -355,7 +357,7 @@ async def search_temporal(
         raise
     except Exception as e:
         logger.error(f"Temporal search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/faceted")
@@ -382,7 +384,9 @@ async def search_with_facets(
             try:
                 parsed_since = datetime.fromisoformat(since)
             except ValueError:
-                raise HTTPException(status_code=400, detail="Invalid 'since' datetime format")
+                raise HTTPException(
+                    status_code=400, detail="Invalid 'since' datetime format"
+                ) from None
 
         # Build filters
         conditions = []
@@ -463,7 +467,7 @@ async def search_with_facets(
         raise
     except Exception as e:
         logger.error(f"Faceted search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/capabilities")
@@ -630,4 +634,4 @@ async def memory_search(
         raise
     except Exception as e:
         logger.error(f"Search failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

@@ -234,9 +234,7 @@ def get_sandbox_adapter() -> MCPSandboxAdapter:
     return container.sandbox_adapter()
 
 
-def get_lifecycle_service(
-    request: Request, db=Depends(get_db)
-) -> ProjectSandboxLifecycleService:
+def get_lifecycle_service(request: Request, db=Depends(get_db)) -> ProjectSandboxLifecycleService:
     """Get the project sandbox lifecycle service.
 
     Uses the properly initialized container from app.state which has
@@ -293,7 +291,7 @@ def get_event_publisher(request: Request) -> SandboxEventPublisher | None:
 
 def get_orchestrator() -> SandboxOrchestrator:
     """Get the sandbox orchestrator singleton.
-    
+
     Uses the shared singleton from sandbox/utils.py to ensure
     the orchestrator uses the same sandbox adapter instance that
     has been synced with existing Docker containers.
@@ -361,7 +359,7 @@ async def ensure_project_sandbox(
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid profile: {request.profile}. Use: lite, standard, full",
-            )
+            ) from None
 
     try:
         info = await service.get_or_create_sandbox(
@@ -412,7 +410,7 @@ async def ensure_project_sandbox(
 
     except Exception as e:
         logger.error(f"Failed to ensure sandbox for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to create sandbox: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to create sandbox: {e!s}") from e
 
 
 @router.get("/{project_id}/sandbox/health", response_model=HealthCheckResponse)
@@ -447,7 +445,7 @@ async def check_project_sandbox_health(
         raise
     except Exception as e:
         logger.error(f"Health check failed for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Health check failed: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Health check failed: {e!s}") from e
 
 
 @router.get("/{project_id}/sandbox/stats", response_model=SandboxStatsResponse)
@@ -507,7 +505,7 @@ async def get_project_sandbox_stats(
         raise
     except Exception as e:
         logger.error(f"Failed to get sandbox stats for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Stats query failed: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Stats query failed: {e!s}") from e
 
 
 @router.post("/{project_id}/sandbox/execute", response_model=ExecuteToolResponse)
@@ -540,7 +538,7 @@ async def execute_tool_in_project_sandbox(
 
     except Exception as e:
         logger.error(f"Tool execution failed for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Execution failed: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Execution failed: {e!s}") from e
 
 
 @router.post("/{project_id}/sandbox/restart", response_model=SandboxActionResponse)
@@ -601,7 +599,7 @@ async def restart_project_sandbox(
 
     except Exception as e:
         logger.error(f"Failed to restart sandbox for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Restart failed: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Restart failed: {e!s}") from e
 
 
 @router.delete("/{project_id}/sandbox", response_model=SandboxActionResponse)
@@ -663,7 +661,7 @@ async def terminate_project_sandbox(
         raise
     except Exception as e:
         logger.error(f"Failed to terminate sandbox for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Termination failed: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Termination failed: {e!s}") from e
 
 
 @router.get("/{project_id}/sandbox/sync", response_model=ProjectSandboxResponse)
@@ -685,7 +683,7 @@ async def sync_project_sandbox_status(
 
     except Exception as e:
         logger.error(f"Failed to sync sandbox status for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Sync failed: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Sync failed: {e!s}") from e
 
 
 # ============================================================================
@@ -712,7 +710,7 @@ async def list_project_sandboxes(
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid status: {status}",
-            )
+            ) from None
 
     sandboxes = await service.list_project_sandboxes(
         tenant_id=tenant_id,
@@ -795,7 +793,7 @@ async def start_project_desktop(
 
     except Exception as e:
         logger.error(f"Failed to start desktop for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start desktop: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to start desktop: {e!s}") from e
 
 
 @router.delete("/{project_id}/sandbox/desktop")
@@ -820,7 +818,7 @@ async def stop_project_desktop(
 
     except Exception as e:
         logger.error(f"Failed to stop desktop for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to stop desktop: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to stop desktop: {e!s}") from e
 
 
 @router.post("/{project_id}/sandbox/terminal")
@@ -852,7 +850,7 @@ async def start_project_terminal(
 
     except Exception as e:
         logger.error(f"Failed to start terminal for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start terminal: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to start terminal: {e!s}") from e
 
 
 @router.delete("/{project_id}/sandbox/terminal")
@@ -877,7 +875,7 @@ async def stop_project_terminal(
 
     except Exception as e:
         logger.error(f"Failed to stop terminal for project {project_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to stop terminal: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to stop terminal: {e!s}") from e
 
 
 # ============================================================================
@@ -894,42 +892,42 @@ async def proxy_project_desktop(
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
 ):
     """Proxy requests to the project's sandbox desktop (KasmVNC) web client.
-    
+
     This allows browser access to the desktop without exposing container ports directly.
     Uses httpx to proxy all content (HTML, JS, CSS, WebSocket) through the API server.
     Supports token via query parameter for iframe access.
     """
     info = await service.get_project_sandbox(project_id)
-    
+
     if not info:
         raise HTTPException(
             status_code=404,
             detail=f"No sandbox found for project {project_id}",
         )
-    
+
     if not info.desktop_url:
         raise HTTPException(
             status_code=503,
             detail=f"Desktop service is not running for project {project_id}",
         )
-    
+
     # Build target URL from the desktop service URL
     import re
 
     import httpx
-    
+
     target_base = info.desktop_url.rstrip("/")
     target_path = path if path else ""
     target_url = f"{target_base}/{target_path}"
-    
+
     # Extract token from query params to include in rewritten URLs
     token_param = request.query_params.get("token", "")
-    
+
     # Copy query parameters (excluding token for proxied requests to container)
     other_params = {k: v for k, v in request.query_params.items() if k != "token"}
     if other_params:
         target_url += f"?{'&'.join(f'{k}={v}' for k, v in other_params.items())}"
-    
+
     try:
         # verify=False: KasmVNC uses self-signed TLS on localhost container ports
         async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
@@ -937,63 +935,59 @@ async def proxy_project_desktop(
             for header in ["accept", "accept-encoding", "accept-language", "cache-control"]:
                 if header in request.headers:
                     headers[header] = request.headers[header]
-            
+
             response = await client.get(target_url, headers=headers)
-            
+
             content_type = response.headers.get("content-type", "application/octet-stream")
-            
+
             # For HTML/JS/CSS, rewrite URLs to use proxy path with token
             content = response.content
-            if content_type.startswith("text/html") or content_type.startswith("application/javascript"):
+            if content_type.startswith("text/html") or content_type.startswith(
+                "application/javascript"
+            ):
                 content_str = content.decode("utf-8", errors="replace")
-                
+
                 proxy_prefix = f"/api/v1/projects/{project_id}/sandbox/desktop/proxy/"
-                
+
                 def rewrite_url(match: re.Match) -> str:
                     """Rewrite URL with proxy prefix and token."""
                     attr = match.group(1)  # href or src
                     quote = match.group(2)  # " or '
                     path_part = match.group(3)  # the path after /
-                    
+
                     new_url = f"{proxy_prefix}{path_part}"
-                    
+
                     if token_param and "?" not in path_part:
                         new_url = f"{new_url}?token={token_param}"
                     elif token_param and "?" in path_part:
                         new_url = f"{new_url}&token={token_param}"
-                    
-                    return f'{attr}={quote}{new_url}'
-                
+
+                    return f"{attr}={quote}{new_url}"
+
                 # Rewrite href="/" and src="/" patterns
-                content_str = re.sub(
-                    r'(href|src)=(["\'])/([^"\']*)',
-                    rewrite_url,
-                    content_str
-                )
-                
+                content_str = re.sub(r'(href|src)=(["\'])/([^"\']*)', rewrite_url, content_str)
+
                 # Rewrite WebSocket URLs for KasmVNC
                 ws_proxy_url = f"/api/v1/projects/{project_id}/sandbox/desktop/proxy/websockify"
                 if token_param:
                     ws_proxy_url += f"?token={token_param}"
                 content_str = content_str.replace(
-                    'ws://" + location.host + "/',
-                    f'ws://" + location.host + "{ws_proxy_url}'
+                    'ws://" + location.host + "/', f'ws://" + location.host + "{ws_proxy_url}'
                 )
                 content_str = content_str.replace(
-                    'wss://" + location.host + "/',
-                    f'wss://" + location.host + "{ws_proxy_url}'
+                    'wss://" + location.host + "/', f'wss://" + location.host + "{ws_proxy_url}'
                 )
-                
+
                 content = content_str.encode("utf-8")
-            
+
             resp_headers = {"content-type": content_type}
-            
+
             response_obj = Response(
                 content=content,
                 status_code=response.status_code,
                 headers=resp_headers,
             )
-            
+
             # Set auth cookie on initial request (when token in query param)
             # so subsequent asset requests (CSS/JS/SVG) are authenticated
             if token_param:
@@ -1005,7 +999,7 @@ async def proxy_project_desktop(
                     max_age=86400,
                     path=f"/api/v1/projects/{project_id}/sandbox/desktop/proxy",
                 )
-            
+
             return response_obj
     except httpx.RequestError as e:
         error_detail = str(e) or type(e).__name__
@@ -1013,7 +1007,7 @@ async def proxy_project_desktop(
         raise HTTPException(
             status_code=502,
             detail=f"Failed to connect to desktop service at {target_url}: {error_detail}",
-        )
+        ) from e
 
 
 @router.websocket("/{project_id}/sandbox/desktop/proxy/websockify")
@@ -1034,9 +1028,7 @@ async def proxy_project_desktop_websocket(
     info = await service.get_project_sandbox(project_id)
 
     if not info:
-        await websocket.close(
-            code=1008, reason=f"No sandbox found for project {project_id}"
-        )
+        await websocket.close(code=1008, reason=f"No sandbox found for project {project_id}")
         return
 
     if not info.desktop_url:
@@ -1060,6 +1052,7 @@ async def proxy_project_desktop_websocket(
     upstream_ws = None
     try:
         import ssl as ssl_module
+
         ssl_context = ssl_module.SSLContext(ssl_module.PROTOCOL_TLS_CLIENT)
         ssl_context.check_hostname = False
         ssl_context.verify_mode = ssl_module.CERT_NONE
@@ -1152,7 +1145,7 @@ async def proxy_project_terminal_websocket(
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service_for_websocket),
 ) -> None:
     """WebSocket proxy for the project's sandbox terminal service.
-    
+
     This allows browser WebSocket connections to the terminal without exposing container ports.
     Uses the terminal proxy to create/manage sessions with Docker containers.
     """
@@ -1160,23 +1153,25 @@ async def proxy_project_terminal_websocket(
         TerminalSession,
         get_terminal_proxy,
     )
-    
+
     info = await service.get_project_sandbox(project_id)
-    
+
     if not info:
         await websocket.close(code=1008, reason=f"No sandbox found for project {project_id}")
         return
-    
+
     if not info.terminal_url:
-        await websocket.close(code=1008, reason=f"Terminal service is not running for project {project_id}")
+        await websocket.close(
+            code=1008, reason=f"Terminal service is not running for project {project_id}"
+        )
         return
-    
+
     # Accept the WebSocket connection
     await websocket.accept()
-    
+
     proxy = get_terminal_proxy()
     session: TerminalSession | None = None
-    
+
     try:
         # Create or get session using terminal proxy (docker exec)
         if session_id:
@@ -1193,7 +1188,7 @@ async def proxy_project_terminal_websocket(
                 await websocket.send_json({"type": "error", "message": str(e)})
                 await websocket.close()
                 return
-        
+
         # Send connected message
         await websocket.send_json(
             {
@@ -1203,7 +1198,7 @@ async def proxy_project_terminal_websocket(
                 "rows": session.rows,
             }
         )
-        
+
         # Start output reader task
         async def read_output() -> None:
             """Background task to read and forward output."""
@@ -1218,42 +1213,42 @@ async def proxy_project_terminal_websocket(
                     logger.error(f"Output reader error: {e}")
                     break
                 await asyncio.sleep(0.01)  # Small delay to prevent CPU spin
-        
+
         output_task = asyncio.create_task(read_output())
-        
+
         # Process incoming messages
         try:
             while True:
                 msg = await websocket.receive_json()
                 msg_type = msg.get("type")
-                
+
                 if msg_type == "input":
                     data = msg.get("data", "")
                     await proxy.send_input(session.session_id, data)
-                
+
                 elif msg_type == "resize":
                     cols = msg.get("cols", 80)
                     rows = msg.get("rows", 24)
                     await proxy.resize(session.session_id, cols, rows)
-                
+
                 elif msg_type == "ping":
                     await websocket.send_json({"type": "pong"})
-        
+
         except WebSocketDisconnect:
             logger.info(f"WebSocket disconnected for session {session.session_id}")
-    
+
     except Exception as e:
         logger.error(f"Terminal WebSocket proxy error: {e}")
         with contextlib.suppress(Exception):
             await websocket.send_json({"type": "error", "message": str(e)})
-    
+
     finally:
         # Cleanup
         if "output_task" in locals():
             output_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await output_task
-        
+
         # Don't close session on disconnect - allow reconnection
         with contextlib.suppress(Exception):
             await websocket.close()
@@ -1277,9 +1272,7 @@ async def proxy_project_mcp_websocket(
     info = await service.get_project_sandbox(project_id)
 
     if not info:
-        await websocket.close(
-            code=1008, reason=f"No sandbox found for project {project_id}"
-        )
+        await websocket.close(code=1008, reason=f"No sandbox found for project {project_id}")
         return
 
     if not info.websocket_url:
@@ -1291,9 +1284,7 @@ async def proxy_project_mcp_websocket(
 
     ws_target = info.websocket_url
 
-    logger.info(
-        f"MCP WS proxy: project={project_id} -> ws_target={ws_target}"
-    )
+    logger.info(f"MCP WS proxy: project={project_id} -> ws_target={ws_target}")
 
     await websocket.accept()
 

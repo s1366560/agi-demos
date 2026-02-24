@@ -137,7 +137,7 @@ class MarkdownParser:
         try:
             frontmatter = yaml.safe_load(frontmatter_yaml)
         except yaml.YAMLError as e:
-            raise MarkdownParseError(f"Invalid YAML frontmatter: {e}", file_path)
+            raise MarkdownParseError(f"Invalid YAML frontmatter: {e}", file_path) from e
 
         if not isinstance(frontmatter, dict):
             raise MarkdownParseError(
@@ -246,9 +246,9 @@ class MarkdownParser:
             with open(file_path, encoding="utf-8") as f:
                 content = f.read()
         except FileNotFoundError:
-            raise MarkdownParseError(f"File not found: {file_path}", file_path)
+            raise MarkdownParseError(f"File not found: {file_path}", file_path) from None
         except OSError as e:
-            raise MarkdownParseError(f"Error reading file: {e}", file_path)
+            raise MarkdownParseError(f"Error reading file: {e}", file_path) from e
 
         return self.parse(content, file_path)
 

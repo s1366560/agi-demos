@@ -92,8 +92,8 @@ class ResourcePool[T]:
         self._pool_name = pool_name
 
         self._resources: dict[str, T] = {}  # All resources by ID
-        self._available: set[str] = set()   # IDs of available resources
-        self._in_use: set[str] = set()      # IDs of in-use resources
+        self._available: set[str] = set()  # IDs of available resources
+        self._in_use: set[str] = set()  # IDs of in-use resources
         self._created_at: dict[str, float] = {}
         self._last_used: dict[str, float] = {}
         self._lock = asyncio.Lock()
@@ -187,7 +187,7 @@ class ResourcePool[T]:
                     raise SandboxTimeoutError(
                         f"Acquire timeout for pool '{self._pool_name}'",
                         timeout_seconds=timeout,
-                    )
+                    ) from None
 
     async def release(self, resource_id: str) -> None:
         """
@@ -288,6 +288,7 @@ class ResourcePool[T]:
         """Create a new resource and add to pool."""
         if resource_id is None:
             import uuid
+
             resource_id = str(uuid.uuid4())[:8]
 
         resource = self._factory()

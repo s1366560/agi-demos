@@ -381,7 +381,7 @@ class LiteLLMClient(LLMClient):
                 kw in error_message
                 for kw in ["rate limit", "quota", "throttling", "request denied", "429"]
             ):
-                raise RateLimitError(f"Rate limit error: {e}")
+                raise RateLimitError(f"Rate limit error: {e}") from e
             raise
 
     @staticmethod
@@ -562,7 +562,7 @@ class LiteLLMClient(LLMClient):
                 kw in error_message
                 for kw in ["rate limit", "quota", "throttling", "request denied", "429"]
             ):
-                raise RateLimitError(f"Rate limit error: {e}")
+                raise RateLimitError(f"Rate limit error: {e}") from e
             logger.error(f"LiteLLM streaming error: {e}")
             raise
 

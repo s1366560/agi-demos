@@ -42,6 +42,7 @@ async def _get_resume_service(db: AsyncSession):
     checkpoint_repo = SqlExecutionCheckpointRepository(db)
     return ExecutionResumeService(checkpoint_repo=checkpoint_repo)
 
+
 router = APIRouter()
 
 
@@ -87,7 +88,7 @@ async def get_conversation_events(
 
     except Exception as e:
         logger.error(f"Error getting conversation events: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get events: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to get events: {e!s}") from e
 
 
 @router.get(
@@ -196,9 +197,8 @@ async def get_execution_status(
                             last_entry = await redis_client.xrevrange(stream_key, count=1)
                             if last_entry:
                                 _, fields = last_entry[0]
-                                time_us_raw = (
-                                    fields.get(b"event_time_us")
-                                    or fields.get("event_time_us")
+                                time_us_raw = fields.get(b"event_time_us") or fields.get(
+                                    "event_time_us"
                                 )
                                 if time_us_raw:
                                     stream_time_us = int(time_us_raw)
@@ -214,7 +214,7 @@ async def get_execution_status(
 
     except Exception as e:
         logger.error(f"Error getting execution status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get execution status: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to get execution status: {e!s}") from e
 
 
 @router.post("/conversations/{conversation_id}/resume", status_code=202)
@@ -278,7 +278,7 @@ async def resume_execution(
         raise
     except Exception as e:
         logger.error(f"Error resuming execution: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to resume execution: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to resume execution: {e!s}") from e
 
 
 @router.get(
@@ -321,7 +321,13 @@ async def get_workflow_status(
             )
 
         status = await await_ray(actor.status.remote())
-        status_text = "RUNNING" if status.is_executing else "IDLE" if status.is_initialized else "UNINITIALIZED"
+        status_text = (
+            "RUNNING"
+            if status.is_executing
+            else "IDLE"
+            if status.is_initialized
+            else "UNINITIALIZED"
+        )
 
         started_at = None
         if status.created_at:
@@ -345,4 +351,4 @@ async def get_workflow_status(
         raise
     except Exception as e:
         logger.error(f"Error getting workflow status: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get workflow status: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to get workflow status: {e!s}") from e

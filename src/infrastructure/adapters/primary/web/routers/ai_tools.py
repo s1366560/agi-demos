@@ -84,7 +84,7 @@ async def optimize_content(
         raise
     except Exception as e:
         logger.error(f"Failed to optimize content: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/generate-title", response_model=TitleResponse)
@@ -134,4 +134,4 @@ async def generate_title(
         raise
     except Exception as e:
         logger.error(f"Failed to generate title: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

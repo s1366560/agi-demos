@@ -155,7 +155,7 @@ class WebSocketTransport(BaseTransport):
 
         except TimeoutError:
             self._pending_requests.pop(request_id, None)
-            raise MCPTransportError(f"Timeout waiting for response to {method}")
+            raise MCPTransportError(f"Timeout waiting for response to {method}") from None
 
         except Exception:
             self._pending_requests.pop(request_id, None)

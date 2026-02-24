@@ -148,7 +148,7 @@ async def list_communities(
         return {"communities": communities, "total": total, "limit": limit, "offset": offset}
     except Exception as e:
         logger.error(f"Failed to list communities: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/entities/")
@@ -223,7 +223,7 @@ async def list_entities(
         return {"entities": entities, "total": total, "limit": limit, "offset": offset}
     except Exception as e:
         logger.error(f"Failed to list entities: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/entities/types")
@@ -268,7 +268,7 @@ async def get_entity_types(
         return {"entity_types": entity_types, "total": len(entity_types)}
     except Exception as e:
         logger.error(f"Failed to get entity types: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/entities/{entity_id}")
@@ -332,7 +332,7 @@ async def get_entity(
         raise
     except Exception as e:
         logger.error(f"Failed to get entity {entity_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/entities/{entity_id}/relationships")
@@ -422,7 +422,7 @@ async def get_entity_relationships(
         return {"relationships": relationships, "total": len(relationships)}
     except Exception as e:
         logger.error(f"Failed to get relationships for entity {entity_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/memory/graph")
@@ -506,7 +506,7 @@ async def get_graph(
         return {"elements": {"nodes": list(nodes_map.values()), "edges": edges_list}}
     except Exception as e:
         logger.error(f"Failed to get graph: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/memory/graph/subgraph")
@@ -608,7 +608,7 @@ async def get_subgraph(
         return {"elements": {"nodes": list(nodes_map.values()), "edges": edges_list}}
     except Exception as e:
         logger.error(f"Failed to get subgraph: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # --- Community Detail Endpoints ---
@@ -657,7 +657,7 @@ async def get_community(
         raise
     except Exception as e:
         logger.error(f"Failed to get community {community_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/communities/{community_id}/members")
@@ -706,7 +706,7 @@ async def get_community_members(
         return {"members": members, "total": len(members)}
     except Exception as e:
         logger.error(f"Failed to get members for community {community_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/communities/rebuild")
@@ -850,4 +850,6 @@ async def rebuild_communities(
             }
         except Exception as e:
             logger.error(f"Failed to rebuild communities: {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to rebuild communities: {e!s}")
+            raise HTTPException(
+                status_code=500, detail=f"Failed to rebuild communities: {e!s}"
+            ) from e

@@ -1,4 +1,5 @@
 """Media import service for downloading and importing channel media to workspace."""
+
 from __future__ import annotations
 
 import base64
@@ -370,7 +371,7 @@ class MediaImportService:
         except Exception as e:
             if isinstance(e, MediaImportError):
                 raise
-            raise MediaImportError(f"Failed to import to sandbox: {e}")
+            raise MediaImportError(f"Failed to import to sandbox: {e}") from e
 
     async def _create_artifact(
         self,

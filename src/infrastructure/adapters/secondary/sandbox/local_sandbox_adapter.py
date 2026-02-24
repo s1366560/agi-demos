@@ -242,13 +242,13 @@ class LocalSandboxAdapter(SandboxPort):
         except TimeoutError:
             connection.status = SandboxStatus.ERROR
             connection.error_message = "Connection timeout"
-            raise ConnectionError(f"Timeout connecting to local sandbox: {ws_url}")
+            raise ConnectionError(f"Timeout connecting to local sandbox: {ws_url}") from None
 
         except Exception as e:
             connection.status = SandboxStatus.ERROR
             connection.error_message = str(e)
             logger.error(f"Failed to connect to local sandbox: {e}")
-            raise ConnectionError(f"Failed to connect to local sandbox: {e}")
+            raise ConnectionError(f"Failed to connect to local sandbox: {e}") from e
 
     async def _disconnect(self, connection: LocalSandboxConnection) -> None:
         """Disconnect from a local sandbox."""

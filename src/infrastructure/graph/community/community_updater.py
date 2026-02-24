@@ -376,7 +376,7 @@ class CommunityUpdater:
             logger.warning(f"Failed to parse JSON from LLM response: {e}")
             logger.debug(f"Raw response: {content[:500]}")
             # Return empty result if parsing fails
-            raise ValueError(f"Failed to parse community summary JSON: {e}")
+            raise ValueError(f"Failed to parse community summary JSON: {e}") from e
 
     async def _get_existing_communities(
         self,

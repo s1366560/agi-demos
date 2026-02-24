@@ -91,7 +91,7 @@ async def check_sandbox_health(
         raise HTTPException(
             status_code=400,
             detail=f"Invalid health check level: {level}. Valid values: basic, mcp, services, full",
-        )
+        ) from None
 
     # Create health service
     health_service = SandboxHealthService(sandbox_adapter=adapter)
@@ -201,7 +201,7 @@ async def create_sandbox(
 
     except Exception as e:
         logger.error(f"Failed to create sandbox: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/{sandbox_id}", response_model=SandboxResponse)
@@ -275,7 +275,7 @@ async def list_sandboxes(
         try:
             status_filter = SandboxStatus(status)
         except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from None
 
     instances = await adapter.list_sandboxes(status=status_filter)
 

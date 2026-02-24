@@ -212,7 +212,7 @@ class LiteLLMReranker(BaseReranker):
         except Exception as e:
             error_msg = str(e).lower()
             if any(kw in error_msg for kw in ["rate limit", "quota", "429"]):
-                raise RateLimitError(f"Cohere rerank rate limit: {e}")
+                raise RateLimitError(f"Cohere rerank rate limit: {e}") from e
             raise
 
     async def _llm_rerank(
@@ -297,7 +297,7 @@ class LiteLLMReranker(BaseReranker):
                     f"retrying with compact prompt for model={model}"
                 )
                 retry_prompt = (
-                    "Return ONLY JSON object with key \"scores\" and "
+                    'Return ONLY JSON object with key "scores" and '
                     f"{len(passages)} floats in [0,1].\n"
                     f"query={query}\n"
                     f"passages={json.dumps(passages, ensure_ascii=False)}"
@@ -338,7 +338,7 @@ class LiteLLMReranker(BaseReranker):
         except Exception as e:
             error_msg = str(e).lower()
             if any(kw in error_msg for kw in ["rate limit", "quota", "429"]):
-                raise RateLimitError(f"LLM rerank rate limit: {e}")
+                raise RateLimitError(f"LLM rerank rate limit: {e}") from e
             raise
 
     def _get_litellm_model_name(self) -> str:

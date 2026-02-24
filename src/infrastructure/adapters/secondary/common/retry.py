@@ -28,7 +28,9 @@ class TransientError(Exception):
     if retried after a delay.
     """
 
-    def __init__(self, message: str, code: int | None = None, retry_after: int | None = None) -> None:
+    def __init__(
+        self, message: str, code: int | None = None, retry_after: int | None = None
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.retry_after = retry_after
@@ -208,7 +210,7 @@ async def retry_with_backoff[T](
                     message=f"Max retries ({max_retries}) exceeded",
                     last_error=e,
                     attempts=attempt + 1,
-                )
+                ) from e
 
             # Calculate delay for next retry
             delay = _calculate_delay(attempt, base_delay, max_delay, jitter)

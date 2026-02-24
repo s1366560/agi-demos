@@ -233,7 +233,7 @@ class StdioTransport(MCPTransport):
                 logger.error(
                     f"MCP process exited with code {self.process.returncode}, stderr: {stderr.decode()[:500]}"
                 )
-            raise RuntimeError(f"Timeout waiting for response to {method}")
+            raise RuntimeError(f"Timeout waiting for response to {method}") from None
 
         if not response_line:
             stderr = await self.process.stderr.read()
@@ -476,7 +476,7 @@ class SSETransport(MCPTransport):
             logger.info(f"MCP server initialized: {result}")
         except TimeoutError:
             self._pending_requests.pop(request_id, None)
-            raise RuntimeError("Timeout waiting for initialize response")
+            raise RuntimeError("Timeout waiting for initialize response") from None
 
         # Send initialized notification - wrap in JSONRPCMessage
         notification = JSONRPCNotification(
@@ -572,7 +572,7 @@ class SSETransport(MCPTransport):
                 return {"result": result}
         except TimeoutError:
             self._pending_requests.pop(request_id, None)
-            raise RuntimeError(f"Timeout waiting for response to {method}")
+            raise RuntimeError(f"Timeout waiting for response to {method}") from None
 
     async def list_tools(self) -> list[dict]:
         """List all available tools."""
@@ -866,7 +866,7 @@ class WebSocketTransport(MCPTransport):
 
         except TimeoutError:
             self._pending_requests.pop(request_id, None)
-            raise RuntimeError(f"Timeout waiting for response to {method}")
+            raise RuntimeError(f"Timeout waiting for response to {method}") from None
 
         except Exception:
             self._pending_requests.pop(request_id, None)

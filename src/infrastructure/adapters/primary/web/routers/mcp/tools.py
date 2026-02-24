@@ -147,4 +147,4 @@ async def call_mcp_tool(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to call MCP tool: {e!s}",
-        )
+        ) from e

@@ -238,9 +238,8 @@ class MCPConnector:
 
         except TimeoutError:
             raise RuntimeError(
-                f"Tool call '{tool_name}' timed out after {timeout}s "
-                f"(sandbox={instance.id})"
-            )
+                f"Tool call '{tool_name}' timed out after {timeout}s (sandbox={instance.id})"
+            ) from None
         except Exception as e:
             raise RuntimeError(f"Tool call '{tool_name}' failed: {e}") from e
 

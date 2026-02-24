@@ -107,7 +107,7 @@ async def list_patterns(
         raise
     except Exception as e:
         logger.error(f"Error listing patterns: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list patterns: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to list patterns: {e!s}") from e
 
 
 @router.get("/workflows/patterns/{pattern_id}", response_model=WorkflowPatternResponse)
@@ -166,7 +166,7 @@ async def get_pattern(
         raise
     except Exception as e:
         logger.error(f"Error getting pattern: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get pattern: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to get pattern: {e!s}") from e
 
 
 @router.delete("/workflows/patterns/{pattern_id}", status_code=200)
@@ -201,7 +201,7 @@ async def delete_pattern(
         raise
     except Exception as e:
         logger.error(f"Error deleting pattern: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete pattern: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete pattern: {e!s}") from e
 
 
 @router.post("/workflows/patterns/reset", response_model=ResetPatternsResponse)
@@ -240,4 +240,4 @@ async def reset_patterns(
         raise
     except Exception as e:
         logger.error(f"Error resetting patterns: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to reset patterns: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to reset patterns: {e!s}") from e

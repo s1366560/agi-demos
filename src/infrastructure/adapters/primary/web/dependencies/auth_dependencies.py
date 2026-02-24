@@ -203,7 +203,7 @@ async def verify_api_key_from_header_or_query(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
-        )
+        ) from e
 
 
 async def verify_api_key_from_header_query_or_cookie(
@@ -223,7 +223,7 @@ async def verify_api_key_from_header_query_or_cookie(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
-        )
+        ) from e
 
 
 async def get_current_user_from_desktop_proxy(
@@ -245,7 +245,7 @@ async def get_current_user_from_desktop_proxy(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         return db_user
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e)) from e
 
 
 async def get_current_user_from_header_or_query(
@@ -288,7 +288,7 @@ async def get_current_user_from_header_or_query(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
-        )
+        ) from e
 
 
 async def verify_api_key_dependency(
@@ -321,7 +321,7 @@ async def verify_api_key_dependency(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
-        )
+        ) from e
 
 
 async def get_current_user(
@@ -366,7 +366,7 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(e),
-        )
+        ) from e
 
 
 async def get_current_user_tenant(

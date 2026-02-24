@@ -340,7 +340,7 @@ def create_pool_router(
             )
         except Exception as e:
             logger.error(f"Failed to pause instance {instance_key}: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     @router.post("/instances/{instance_key}/resume", response_model=OperationResponse)
     async def resume_instance(
@@ -360,7 +360,7 @@ def create_pool_router(
             )
         except Exception as e:
             logger.error(f"Failed to resume instance {instance_key}: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     @router.delete("/instances/{instance_key}", response_model=OperationResponse)
     async def terminate_instance(
@@ -388,7 +388,7 @@ def create_pool_router(
             )
         except Exception as e:
             logger.error(f"Failed to terminate instance {instance_key}: {e}")
-            raise HTTPException(status_code=500, detail=str(e))
+            raise HTTPException(status_code=500, detail=str(e)) from e
 
     # ========================================================================
     # Tier Endpoints
@@ -409,7 +409,7 @@ def create_pool_router(
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid tier: {request.tier}. Must be one of: hot, warm, cold",
-            )
+            ) from None
 
         # 获取当前分级
         current_tier = await manager.classify_project(tenant_id, project_id)

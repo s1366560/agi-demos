@@ -107,7 +107,9 @@ async def get_tenant_agent_config(
         raise
     except Exception as e:
         logger.error(f"Error getting tenant agent config: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get tenant agent config: {e!s}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get tenant agent config: {e!s}"
+        ) from e
 
 
 @router.put("/config", response_model=TenantAgentConfigResponse)
@@ -228,9 +230,9 @@ async def update_tenant_agent_config(
         raise
     except ValueError as e:
         # Validation error from entity
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error updating tenant agent config: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to update tenant agent config: {e!s}"
-        )
+        ) from e

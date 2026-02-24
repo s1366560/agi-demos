@@ -134,7 +134,7 @@ class Neo4jClient:
             logger.info("Neo4j connection established successfully")
         except TimeoutError:
             logger.error(f"Neo4j connection timeout after {self.connection_timeout}s")
-            raise ConnectionError(f"Neo4j connection timeout to {self.uri}")
+            raise ConnectionError(f"Neo4j connection timeout to {self.uri}") from None
         except Exception as e:
             logger.error(f"Failed to connect to Neo4j: {e}")
             raise
@@ -195,7 +195,7 @@ class Neo4jClient:
             return result
         except TimeoutError:
             logger.error(f"Query timeout after {timeout}s: {query[:100]}...")
-            raise TimeoutError(f"Neo4j query timeout after {timeout}s")
+            raise TimeoutError(f"Neo4j query timeout after {timeout}s") from None
 
     @asynccontextmanager
     async def session(self):

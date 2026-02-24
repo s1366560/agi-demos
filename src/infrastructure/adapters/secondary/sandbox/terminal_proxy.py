@@ -89,7 +89,7 @@ class TerminalProxy:
         try:
             container = self._docker.containers.get(container_id)
         except NotFound:
-            raise ValueError(f"Container not found: {container_id}")
+            raise ValueError(f"Container not found: {container_id}") from None
 
         # Build environment
         exec_env = {

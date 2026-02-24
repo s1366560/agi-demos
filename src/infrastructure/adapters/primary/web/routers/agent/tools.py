@@ -123,14 +123,14 @@ async def get_tool_capabilities(
         )
     except Exception as e:
         logger.error(f"Error getting tool capabilities: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get tool capabilities: {e!s}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get tool capabilities: {e!s}"
+        ) from e
 
 
 @router.get("/tools/compositions", response_model=ToolCompositionsListResponse)
 async def list_tool_compositions(
-    tools: str | None = Query(
-        None, description="Comma-separated list of tool names to filter by"
-    ),
+    tools: str | None = Query(None, description="Comma-separated list of tool names to filter by"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of compositions"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -172,7 +172,9 @@ async def list_tool_compositions(
 
     except Exception as e:
         logger.error(f"Error listing tool compositions: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list tool compositions: {e!s}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to list tool compositions: {e!s}"
+        ) from e
 
 
 @router.get("/tools/compositions/{composition_id}", response_model=ToolCompositionResponse)
@@ -212,4 +214,4 @@ async def get_tool_composition(
         raise
     except Exception as e:
         logger.error(f"Error getting tool composition: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get tool composition: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to get tool composition: {e!s}") from e

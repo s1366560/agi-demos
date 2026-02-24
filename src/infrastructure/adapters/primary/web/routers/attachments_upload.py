@@ -159,7 +159,7 @@ def _parse_purpose(purpose: str) -> AttachmentPurpose:
         raise HTTPException(
             status_code=400,
             detail=f"Invalid purpose: {purpose}. Must be one of: llm_context, sandbox_input, both",
-        )
+        ) from None
 
 
 # === API Endpoints ===
@@ -199,10 +199,10 @@ async def initiate_multipart_upload(
         )
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to initiate multipart upload: {e}")
-        raise HTTPException(status_code=500, detail="Failed to initiate upload")
+        raise HTTPException(status_code=500, detail="Failed to initiate upload") from e
 
 
 @router.post("/upload/part", response_model=UploadPartResponse)
@@ -234,10 +234,10 @@ async def upload_part(
         )
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to upload part: {e}")
-        raise HTTPException(status_code=500, detail="Failed to upload part")
+        raise HTTPException(status_code=500, detail="Failed to upload part") from e
 
 
 @router.post("/upload/complete", response_model=AttachmentResponse)
@@ -270,10 +270,10 @@ async def complete_multipart_upload(
         return _attachment_to_response(attachment)
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Failed to complete multipart upload: {e}")
-        raise HTTPException(status_code=500, detail="Failed to complete upload")
+        raise HTTPException(status_code=500, detail="Failed to complete upload") from e
 
 
 @router.post("/upload/abort")
@@ -299,7 +299,7 @@ async def abort_multipart_upload(
         raise
     except Exception as e:
         logger.error(f"Failed to abort multipart upload: {e}")
-        raise HTTPException(status_code=500, detail="Failed to abort upload")
+        raise HTTPException(status_code=500, detail="Failed to abort upload") from e
 
 
 @router.post("/upload/simple", response_model=AttachmentResponse)
@@ -334,12 +334,12 @@ async def upload_simple(
         return _attachment_to_response(attachment)
 
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         import traceback
 
         logger.error(f"Failed to upload file: {e}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail="Failed to upload file")
+        raise HTTPException(status_code=500, detail="Failed to upload file") from e
 
 
 @router.get("", response_model=AttachmentListResponse)
@@ -355,7 +355,7 @@ async def list_attachments(
     try:
         status_enum = AttachmentStatus(status) if status else None
     except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+        raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from None
 
     attachments = await attachment_service.get_by_conversation(
         conversation_id=conversation_id,

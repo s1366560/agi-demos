@@ -147,7 +147,7 @@ class MCPAppResourceResolver:
                 f"Resource resolution timed out after {RESOLVE_TIMEOUT_SECONDS}s "
                 f"for {resource_uri}",
                 kind=ResourceErrorKind.TIMEOUT,
-            )
+            ) from None
         except (OSError, ConnectionError) as e:
             logger.error("Network error resolving resource %s: %s", resource_uri, e)
             raise ResourceResolutionError(

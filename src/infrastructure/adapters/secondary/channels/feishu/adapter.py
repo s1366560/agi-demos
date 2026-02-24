@@ -187,7 +187,7 @@ class FeishuAdapter:
             raise ImportError(
                 f"Feishu SDK not installed or import error: {e}. "
                 "Install with: pip install lark_oapi"
-            )
+            ) from e
 
     async def _wait_for_websocket_ready(self) -> None:
         """Wait until websocket is connected or startup fails."""
@@ -868,7 +868,9 @@ class FeishuAdapter:
             return response.data.message_id
 
         except ImportError:
-            raise ImportError("Feishu SDK not installed. Install with: pip install lark_oapi")
+            raise ImportError(
+                "Feishu SDK not installed. Install with: pip install lark_oapi"
+            ) from None
 
     async def send_text(self, to: str, text: str, reply_to: str | None = None) -> str:
         """Send a text message."""

@@ -56,6 +56,7 @@ async def _background_index_memory(
     except Exception as e:
         logger.warning(f"Background memory indexing failed for {memory_id}: {e}")
 
+
 router = APIRouter(prefix="/api/v1", tags=["memories"])
 
 # --- Schemas ---
@@ -398,7 +399,7 @@ async def create_memory(
         import traceback
 
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/memories/", response_model=MemoryListResponse)
@@ -681,7 +682,7 @@ async def reprocess_memory(
         logger.error(f"Failed to reprocess memory {memory_id}: {e}", exc_info=True)
         raise HTTPException(
             status_code=500, detail="Failed to queue memory for reprocessing. Please try again."
-        )
+        ) from e
 
 
 @router.patch("/memories/{memory_id}", response_model=MemoryResponse)
@@ -887,7 +888,7 @@ async def create_memory_share(
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid expires_at format: {share_data['expires_at']}. Use ISO 8601 format (e.g., 2024-12-31T23:59:59).",
-            )
+            ) from None
     elif "expires_in_days" in share_data:
         days = share_data["expires_in_days"]
         if isinstance(days, int) and days > 0:

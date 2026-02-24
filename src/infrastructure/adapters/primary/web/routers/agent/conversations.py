@@ -69,7 +69,7 @@ async def create_conversation(
             exc_info=True,
             extra={"error_id": AGENT_CONVERSATION_CREATE_FAILED},
         )
-        raise HTTPException(status_code=400, detail=f"Invalid request: {e!s}")
+        raise HTTPException(status_code=400, detail=f"Invalid request: {e!s}") from e
     except SQLAlchemyError as e:
         await db.rollback()
         logger.error(
@@ -80,7 +80,7 @@ async def create_conversation(
         raise HTTPException(
             status_code=500,
             detail="A database error occurred while creating the conversation",
-        )
+        ) from e
     except Exception as e:
         await db.rollback()
         logger.error(
@@ -91,7 +91,7 @@ async def create_conversation(
         raise HTTPException(
             status_code=500,
             detail="An error occurred while creating the conversation",
-        )
+        ) from e
 
 
 @router.get("/conversations", response_model=PaginatedConversationsResponse)
@@ -146,7 +146,7 @@ async def list_conversations(
 
     except Exception as e:
         logger.error(f"Error listing conversations: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to list conversations: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to list conversations: {e!s}") from e
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationResponse)
@@ -179,7 +179,7 @@ async def get_conversation(
         raise
     except Exception as e:
         logger.error(f"Error getting conversation: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get conversation: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to get conversation: {e!s}") from e
 
 
 @router.get("/conversations/{conversation_id}/context-status")
@@ -245,7 +245,7 @@ async def get_context_status(
         raise
     except Exception as e:
         logger.error(f"Error getting context status: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get context status: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to get context status: {e!s}") from e
 
 
 @router.delete("/conversations/{conversation_id}", status_code=204)
@@ -282,7 +282,7 @@ async def delete_conversation(
         raise
     except Exception as e:
         logger.error(f"Error deleting conversation: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to delete conversation: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete conversation: {e!s}") from e
 
 
 @router.patch("/conversations/{conversation_id}/title", response_model=ConversationResponse)
@@ -336,7 +336,9 @@ async def update_conversation_title(
         raise
     except Exception as e:
         logger.error(f"Error updating conversation title: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update conversation title: {e!s}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to update conversation title: {e!s}"
+        ) from e
 
 
 @router.post(
@@ -426,7 +428,9 @@ async def generate_conversation_title(
         raise
     except Exception as e:
         logger.error(f"Error generating conversation title: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to generate conversation title: {e!s}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to generate conversation title: {e!s}"
+        ) from e
 
 
 @router.post(
@@ -486,8 +490,7 @@ async def generate_summary(
         response = await title_llm.ainvoke(
             [
                 LLMMessage.system(
-                    "You are a helpful assistant that generates "
-                    "concise conversation summaries."
+                    "You are a helpful assistant that generates concise conversation summaries."
                 ),
                 LLMMessage.user(prompt),
             ]
@@ -511,27 +514,21 @@ async def generate_summary(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate conversation summary: {e!s}",
-        )
+        ) from e
 
 
 @router.post("/conversations/{conversation_id}/fork")
 async def fork_conversation(
     conversation_id: str,
-    message_id: str = Query(
-        ..., description="Message ID to fork from"
-    ),
+    message_id: str = Query(..., description="Message ID to fork from"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Fork a conversation from a specific message point."""
     try:
-        original = await db.get(
-            ConversationModel, conversation_id
-        )
+        original = await db.get(ConversationModel, conversation_id)
         if not original:
-            raise HTTPException(
-                status_code=404, detail="Conversation not found"
-            )
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
         new_id = str(uuid.uuid4())
         new_conv = ConversationModel(
@@ -548,9 +545,7 @@ async def fork_conversation(
 
         query = (
             select(MessageModel)
-            .where(
-                MessageModel.conversation_id == conversation_id
-            )
+            .where(MessageModel.conversation_id == conversation_id)
             .order_by(MessageModel.created_at)
         )
         result = await db.execute(query)
@@ -588,12 +583,10 @@ async def fork_conversation(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to fork conversation: {e!s}",
-        )
+        ) from e
 
 
-@router.put(
-    "/conversations/{conversation_id}/messages/{message_id}"
-)
+@router.put("/conversations/{conversation_id}/messages/{message_id}")
 async def edit_message(
     conversation_id: str,
     message_id: str,
@@ -605,9 +598,7 @@ async def edit_message(
     try:
         msg = await db.get(MessageModel, message_id)
         if not msg or msg.conversation_id != conversation_id:
-            raise HTTPException(
-                status_code=404, detail="Message not found"
-            )
+            raise HTTPException(status_code=404, detail="Message not found")
 
         if msg.original_content is None:
             msg.original_content = msg.content
@@ -631,7 +622,7 @@ async def edit_message(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to edit message: {e!s}",
-        )
+        ) from e
 
 
 @router.post("/conversations/{conversation_id}/tools/{execution_id}/undo")
@@ -681,4 +672,4 @@ async def request_tool_undo(
         raise HTTPException(
             status_code=500,
             detail=f"Failed to request tool undo: {e!s}",
-        )
+        ) from e

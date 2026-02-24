@@ -280,7 +280,7 @@ class SandboxMCPToolWrapper(AgentTool):
                     continue
 
                 # Not retryable or max retries reached - raise exception for processor to catch
-                raise RuntimeError(f"Tool execution failed: {mcp_error.get_user_message()}")
+                raise RuntimeError(f"Tool execution failed: {mcp_error.get_user_message()}") from e
 
         # All retries exhausted - raise exception for processor to catch
         if last_error:

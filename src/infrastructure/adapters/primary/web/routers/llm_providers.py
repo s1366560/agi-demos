@@ -96,7 +96,7 @@ async def create_provider(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.get("/", response_model=list[ProviderConfigResponse])
@@ -147,78 +147,96 @@ async def list_models_for_provider_type(
         "openai": {
             "chat": ["gpt-4o", "gpt-4o-mini", "gpt-3.5-turbo"],
             "embedding": ["text-embedding-3-small", "text-embedding-3-large"],
-            "rerank": []
+            "rerank": [],
         },
         "dashscope": {
             "chat": ["qwen-max", "qwen-plus", "qwen-turbo", "qwen-long"],
             "embedding": ["text-embedding-v3", "text-embedding-v2"],
-            "rerank": ["qwen3-rerank", "qwen-turbo"]
+            "rerank": ["qwen3-rerank", "qwen-turbo"],
         },
         "zai": {
             "chat": ["glm-4-plus", "glm-4-flash", "glm-4-air"],
             "embedding": ["embedding-3", "embedding-2"],
-            "rerank": ["glm-4-flash"]
+            "rerank": ["glm-4-flash"],
         },
         "kimi": {
             "chat": ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"],
             "embedding": ["kimi-embedding-1"],
-            "rerank": ["kimi-rerank-1"]
+            "rerank": ["kimi-rerank-1"],
         },
         "ollama": {
             "chat": ["llama3.1:8b", "qwen2.5:7b", "mistral-nemo"],
             "embedding": ["nomic-embed-text"],
-            "rerank": ["llama3.1:8b"]
+            "rerank": ["llama3.1:8b"],
         },
         "lmstudio": {
             "chat": ["local-model"],
             "embedding": ["text-embedding-nomic-embed-text-v1.5"],
-            "rerank": ["local-model"]
+            "rerank": ["local-model"],
         },
         "gemini": {
-            "chat": ["gemini-1.5-pro", "gemini-1.5-flash", "gemini-1.5-pro-002", "gemini-1.5-flash-002"],
+            "chat": [
+                "gemini-1.5-pro",
+                "gemini-1.5-flash",
+                "gemini-1.5-pro-002",
+                "gemini-1.5-flash-002",
+            ],
             "embedding": ["text-embedding-004"],
-            "rerank": ["gemini-1.5-flash"]
+            "rerank": ["gemini-1.5-flash"],
         },
         "anthropic": {
-            "chat": ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229"],
+            "chat": [
+                "claude-3-5-sonnet-20241022",
+                "claude-3-5-haiku-20241022",
+                "claude-3-opus-20240229",
+            ],
             "embedding": [],
-            "rerank": ["claude-3-5-haiku-20241022"]
+            "rerank": ["claude-3-5-haiku-20241022"],
         },
         "groq": {
-            "chat": ["llama-3.3-70b-versatile", "llama-3.1-70b-versatile", "mixtral-8x7b-32768", "llama-3.1-8b-instant"],
+            "chat": [
+                "llama-3.3-70b-versatile",
+                "llama-3.1-70b-versatile",
+                "mixtral-8x7b-32768",
+                "llama-3.1-8b-instant",
+            ],
             "embedding": [],
-            "rerank": []
+            "rerank": [],
         },
         "deepseek": {
             "chat": ["deepseek-chat", "deepseek-coder"],
             "embedding": [],
-            "rerank": ["deepseek-chat"]
+            "rerank": ["deepseek-chat"],
         },
         "cohere": {
             "chat": ["command-r-plus", "command-r"],
             "embedding": ["embed-english-v3.0", "embed-multilingual-v3.0"],
-            "rerank": ["rerank-english-v3.0", "rerank-multilingual-v3.0"]
+            "rerank": ["rerank-english-v3.0", "rerank-multilingual-v3.0"],
         },
         "mistral": {
             "chat": ["mistral-large-latest", "mistral-medium-latest", "mistral-small-latest"],
             "embedding": ["mistral-embed"],
-            "rerank": ["mistral-small-latest"]
+            "rerank": ["mistral-small-latest"],
         },
         "azure_openai": {
             "chat": ["gpt-4o", "gpt-4", "gpt-4o-mini", "gpt-35-turbo"],
             "embedding": ["text-embedding-3-small", "text-embedding-ada-002"],
-            "rerank": []
+            "rerank": [],
         },
         "bedrock": {
-            "chat": ["anthropic.claude-3-sonnet-20240229-v1:0", "anthropic.claude-3-haiku-20240307-v1:0", "meta.llama3-70b-instruct-v1:0"],
+            "chat": [
+                "anthropic.claude-3-sonnet-20240229-v1:0",
+                "anthropic.claude-3-haiku-20240307-v1:0",
+                "meta.llama3-70b-instruct-v1:0",
+            ],
             "embedding": ["amazon.titan-embed-text-v1", "amazon.titan-embed-text-v2:0"],
-            "rerank": []
+            "rerank": [],
         },
         "vertex": {
             "chat": ["gemini-1.5-pro", "gemini-1.5-flash"],
             "embedding": ["textembedding-gecko"],
-            "rerank": []
-        }
+            "rerank": [],
+        },
     }
 
     if provider_type not in models_data:
@@ -226,11 +244,7 @@ async def list_models_for_provider_type(
         # This allows frontend to fallback to defaults or show empty dropdowns
         return {
             "provider_type": provider_type,
-            "models": {
-                "chat": [],
-                "embedding": [],
-                "rerank": []
-            }
+            "models": {"chat": [], "embedding": [], "rerank": []},
         }
 
     return {
@@ -335,7 +349,7 @@ async def check_provider_health(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.get("/{provider_id}/health", response_model=ProviderHealth)
@@ -420,7 +434,7 @@ async def assign_provider_to_tenant(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.get("/tenants/{tenant_id}/provider", response_model=ProviderConfigResponse)
@@ -445,7 +459,7 @@ async def get_tenant_provider(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.delete("/tenants/{tenant_id}/providers/{provider_id}")
@@ -552,9 +566,9 @@ async def get_system_resilience_status(
             },
             "rate_limiter": rate_stats.get("stats", {}),
             "health": {
-                "status": health_checker._current_status.get(
-                    provider_type, "unknown"
-                ).value if hasattr(health_checker._current_status.get(provider_type, "unknown"), "value") else "unknown",
+                "status": health_checker._current_status.get(provider_type, "unknown").value
+                if hasattr(health_checker._current_status.get(provider_type, "unknown"), "value")
+                else "unknown",
             },
         }
 
@@ -562,10 +576,7 @@ async def get_system_resilience_status(
         "providers": status,
         "summary": {
             "total_providers": len(ProviderType),
-            "healthy_count": sum(
-                1 for p in status.values()
-                if p["circuit_breaker"]["can_execute"]
-            ),
+            "healthy_count": sum(1 for p in status.values() if p["circuit_breaker"]["can_execute"]),
         },
     }
 
@@ -598,4 +609,4 @@ async def reset_circuit_breaker(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to reset circuit breaker: {e}",
-        )
+        ) from e

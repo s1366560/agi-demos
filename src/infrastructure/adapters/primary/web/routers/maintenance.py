@@ -105,7 +105,7 @@ async def incremental_refresh(
 
     except Exception as e:
         logger.error(f"Failed to submit incremental refresh: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/deduplicate")
@@ -215,7 +215,7 @@ async def deduplicate_entities(
 
     except Exception as e:
         logger.error(f"Entity deduplication failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/invalidate-edges")
@@ -285,7 +285,7 @@ async def invalidate_stale_edges(
 
     except Exception as e:
         logger.error(f"Edge invalidation failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/status")
@@ -367,7 +367,7 @@ async def get_maintenance_status(
 
     except Exception as e:
         logger.error(f"Failed to get maintenance status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/optimize")
@@ -618,7 +618,7 @@ async def optimize_graph(
 
     except Exception as e:
         logger.error(f"Graph optimization failed: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # --- Embedding Management Endpoints ---
@@ -684,7 +684,7 @@ async def get_embedding_status(
 
     except Exception as e:
         logger.error(f"Failed to get embedding status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/embeddings/rebuild")
@@ -716,7 +716,7 @@ async def rebuild_embeddings(
 
     except Exception as e:
         logger.error(f"Failed to rebuild embeddings: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/embeddings/dimensions/check")
@@ -765,7 +765,7 @@ async def check_embedding_dimensions(
 
     except Exception as e:
         logger.error(f"Failed to check embedding dimensions: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/embeddings/validate")
@@ -801,7 +801,7 @@ async def validate_embeddings(
 
     except Exception as e:
         logger.error(f"Failed to validate embeddings: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 # --- Native Graph Adapter Embedding Management ---
@@ -872,11 +872,7 @@ async def get_native_embedding_status(
             # Will be auto-detected from embedder
             target_dim = None
 
-        is_compatible = (
-            existing_dim is None
-            or target_dim is None
-            or existing_dim == target_dim
-        )
+        is_compatible = existing_dim is None or target_dim is None or existing_dim == target_dim
 
         return {
             "configured_dimension": config_dim,
@@ -893,7 +889,7 @@ async def get_native_embedding_status(
 
     except Exception as e:
         logger.error(f"Failed to get native embedding status: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 def _get_embedding_recommendations(
@@ -906,39 +902,47 @@ def _get_embedding_recommendations(
     recommendations = []
 
     if not is_compatible:
-        recommendations.append({
-            "type": "dimension_mismatch",
-            "priority": "critical",
-            "message": (
-                f"Dimension mismatch detected: configured={config_dim}, "
-                f"existing={existing_dim}. Vector search will fail."
-            ),
-            "action": "migrate_embeddings",
-        })
+        recommendations.append(
+            {
+                "type": "dimension_mismatch",
+                "priority": "critical",
+                "message": (
+                    f"Dimension mismatch detected: configured={config_dim}, "
+                    f"existing={existing_dim}. Vector search will fail."
+                ),
+                "action": "migrate_embeddings",
+            }
+        )
 
     if total_embeddings > 0 and existing_dim is None:
-        recommendations.append({
-            "type": "index_missing",
-            "priority": "high",
-            "message": "Embeddings exist but no vector index found.",
-            "action": "create_index",
-        })
+        recommendations.append(
+            {
+                "type": "index_missing",
+                "priority": "high",
+                "message": "Embeddings exist but no vector index found.",
+                "action": "create_index",
+            }
+        )
 
     if total_embeddings == 0:
-        recommendations.append({
-            "type": "no_embeddings",
-            "priority": "low",
-            "message": "No embeddings in database. They will be created on demand.",
-            "action": "none",
-        })
+        recommendations.append(
+            {
+                "type": "no_embeddings",
+                "priority": "low",
+                "message": "No embeddings in database. They will be created on demand.",
+                "action": "none",
+            }
+        )
 
     if is_compatible and total_embeddings > 0:
-        recommendations.append({
-            "type": "healthy",
-            "priority": "info",
-            "message": f"Embedding system healthy. {total_embeddings} embeddings at {existing_dim}D.",
-            "action": "none",
-        })
+        recommendations.append(
+            {
+                "type": "healthy",
+                "priority": "info",
+                "message": f"Embedding system healthy. {total_embeddings} embeddings at {existing_dim}D.",
+                "action": "none",
+            }
+        )
 
     return recommendations
 
@@ -1086,4 +1090,4 @@ async def migrate_embeddings(
         raise
     except Exception as e:
         logger.error(f"Failed to migrate embeddings: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

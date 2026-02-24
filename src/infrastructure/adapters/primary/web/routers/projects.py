@@ -110,7 +110,7 @@ async def create_project(
         raise
     except Exception as e:
         logger.exception("Error creating project")
-        raise HTTPException(status_code=500, detail=f"Internal Error: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Internal Error: {e!s}") from e
 
 
 @router.get("/", response_model=ProjectListResponse)
@@ -734,7 +734,7 @@ async def get_project_stats(
         logger.exception(f"Error getting project stats for {project_id}")
         raise HTTPException(
             status_code=500, detail="An error occurred while retrieving project statistics"
-        )
+        ) from None
 
 
 class TrendingEntity(BaseModel):
@@ -809,7 +809,7 @@ async def get_trending_entities(
         raise
     except Exception:
         logger.exception(f"Error getting trending entities for {project_id}")
-        raise HTTPException(status_code=500, detail="Failed to get trending entities")
+        raise HTTPException(status_code=500, detail="Failed to get trending entities") from None
 
 
 class RecentSkillItem(BaseModel):
@@ -880,4 +880,4 @@ async def get_recent_skills(
         raise
     except Exception:
         logger.exception(f"Error getting recent skills for {project_id}")
-        raise HTTPException(status_code=500, detail="Failed to get recent skills")
+        raise HTTPException(status_code=500, detail="Failed to get recent skills") from None

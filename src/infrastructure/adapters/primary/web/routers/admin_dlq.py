@@ -39,7 +39,7 @@ router = APIRouter(
 
 class DLQMessageResponse(BaseModel):
     """Response model for a DLQ message."""
-    
+
     id: str
     event_id: str
     event_type: str
@@ -83,7 +83,7 @@ class DLQMessageResponse(BaseModel):
 
 class DLQListResponse(BaseModel):
     """Response model for listing DLQ messages."""
-    
+
     messages: list[DLQMessageResponse]
     total: int
     limit: int
@@ -92,7 +92,7 @@ class DLQListResponse(BaseModel):
 
 class DLQStatsResponse(BaseModel):
     """Response model for DLQ statistics."""
-    
+
     total_messages: int
     pending_count: int
     retrying_count: int
@@ -106,13 +106,13 @@ class DLQStatsResponse(BaseModel):
 
 class RetryRequest(BaseModel):
     """Request model for retrying messages."""
-    
+
     message_ids: list[str] = Field(min_length=1, max_length=100)
 
 
 class RetryResponse(BaseModel):
     """Response model for retry operation."""
-    
+
     results: dict  # message_id -> success (bool)
     success_count: int
     failure_count: int
@@ -120,14 +120,14 @@ class RetryResponse(BaseModel):
 
 class DiscardRequest(BaseModel):
     """Request model for discarding messages."""
-    
+
     message_ids: list[str] = Field(min_length=1, max_length=100)
     reason: str = Field(min_length=1, max_length=500)
 
 
 class DiscardResponse(BaseModel):
     """Response model for discard operation."""
-    
+
     results: dict  # message_id -> success (bool)
     success_count: int
     failure_count: int
@@ -135,7 +135,7 @@ class DiscardResponse(BaseModel):
 
 class CleanupResponse(BaseModel):
     """Response model for cleanup operation."""
-    
+
     cleaned_count: int
 
 
@@ -159,7 +159,7 @@ async def get_dlq(request: Request) -> DeadLetterQueuePort:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Application container not initialized",
-        )
+        ) from None
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
@@ -179,7 +179,11 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 @router.get("/messages", response_model=DLQListResponse)
 async def list_messages(
-    filter_status: str | None = Query(None, alias="status", description="Filter by status (pending, retrying, discarded, expired, resolved)"),
+    filter_status: str | None = Query(
+        None,
+        alias="status",
+        description="Filter by status (pending, retrying, discarded, expired, resolved)",
+    ),
     event_type: str | None = Query(None, description="Filter by event type"),
     error_type: str | None = Query(None, description="Filter by error type"),
     routing_key: str | None = Query(None, description="Filter by routing key pattern"),
@@ -189,7 +193,7 @@ async def list_messages(
     _user: User = Depends(require_admin),
 ) -> DLQListResponse:
     """List DLQ messages with optional filtering.
-    
+
     Admin only endpoint for viewing failed events in the dead letter queue.
     """
     # Parse status filter
@@ -201,8 +205,8 @@ async def list_messages(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid status: {filter_status}. Valid values: {[s.value for s in DLQMessageStatus]}",
-            )
-    
+            ) from None
+
     messages = await dlq.get_messages(
         status=status_filter,
         event_type=event_type,
@@ -211,7 +215,7 @@ async def list_messages(
         limit=limit,
         offset=offset,
     )
-    
+
     return DLQListResponse(
         messages=[DLQMessageResponse.from_domain(m) for m in messages],
         total=len(messages),  # TODO: Add total count to port
@@ -227,7 +231,7 @@ async def get_message(
     _user: User = Depends(require_admin),
 ) -> DLQMessageResponse:
     """Get a specific DLQ message by ID.
-    
+
     Admin only endpoint for viewing detailed information about a failed event.
     """
     message = await dlq.get_message(message_id)
@@ -236,7 +240,7 @@ async def get_message(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"DLQ message not found: {message_id}",
         )
-    
+
     return DLQMessageResponse.from_domain(message)
 
 
@@ -247,7 +251,7 @@ async def retry_message(
     _user: User = Depends(require_admin),
 ) -> dict:
     """Retry a single DLQ message.
-    
+
     Admin only endpoint for retrying a failed event.
     """
     try:
@@ -261,7 +265,7 @@ async def retry_message(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"DLQ message not found: {message_id}",
-        )
+        ) from None
 
 
 @router.post("/messages/retry", response_model=RetryResponse)
@@ -271,15 +275,15 @@ async def retry_messages(
     _user: User = Depends(require_admin),
 ) -> RetryResponse:
     """Retry multiple DLQ messages in batch.
-    
+
     Admin only endpoint for batch retrying failed events.
     Maximum 100 messages per request.
     """
     results = await dlq.retry_batch(request.message_ids)
-    
+
     success_count = sum(1 for v in results.values() if v)
     failure_count = len(results) - success_count
-    
+
     return RetryResponse(
         results=results,
         success_count=success_count,
@@ -295,7 +299,7 @@ async def discard_message(
     _user: User = Depends(require_admin),
 ) -> dict:
     """Discard a single DLQ message.
-    
+
     Admin only endpoint for permanently discarding a failed event.
     """
     try:
@@ -309,7 +313,7 @@ async def discard_message(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"DLQ message not found: {message_id}",
-        )
+        ) from None
 
 
 @router.post("/messages/discard", response_model=DiscardResponse)
@@ -319,15 +323,15 @@ async def discard_messages(
     _user: User = Depends(require_admin),
 ) -> DiscardResponse:
     """Discard multiple DLQ messages in batch.
-    
+
     Admin only endpoint for batch discarding failed events.
     Maximum 100 messages per request.
     """
     results = await dlq.discard_batch(request.message_ids, request.reason)
-    
+
     success_count = sum(1 for v in results.values() if v)
     failure_count = len(results) - success_count
-    
+
     return DiscardResponse(
         results=results,
         success_count=success_count,
@@ -341,11 +345,11 @@ async def get_stats(
     _user: User = Depends(require_admin),
 ) -> DLQStatsResponse:
     """Get DLQ statistics.
-    
+
     Admin only endpoint for viewing queue health metrics.
     """
     stats = await dlq.get_stats()
-    
+
     return DLQStatsResponse(
         total_messages=stats.total_messages,
         pending_count=stats.pending_count,
@@ -361,35 +365,39 @@ async def get_stats(
 
 @router.post("/cleanup/expired", response_model=CleanupResponse)
 async def cleanup_expired(
-    older_than_hours: int = Query(168, ge=1, le=720, description="Clean messages older than this (hours)"),
+    older_than_hours: int = Query(
+        168, ge=1, le=720, description="Clean messages older than this (hours)"
+    ),
     dlq: DeadLetterQueuePort = Depends(get_dlq),
     _user: User = Depends(require_admin),
 ) -> CleanupResponse:
     """Clean up expired DLQ messages.
-    
+
     Admin only endpoint for removing old expired messages.
     Default: messages older than 168 hours (1 week).
     """
     cleaned = await dlq.cleanup_expired(older_than_hours)
-    
+
     logger.info(f"Cleaned up {cleaned} expired DLQ messages older than {older_than_hours} hours")
-    
+
     return CleanupResponse(cleaned_count=cleaned)
 
 
 @router.post("/cleanup/resolved", response_model=CleanupResponse)
 async def cleanup_resolved(
-    older_than_hours: int = Query(24, ge=1, le=168, description="Clean resolved messages older than this (hours)"),
+    older_than_hours: int = Query(
+        24, ge=1, le=168, description="Clean resolved messages older than this (hours)"
+    ),
     dlq: DeadLetterQueuePort = Depends(get_dlq),
     _user: User = Depends(require_admin),
 ) -> CleanupResponse:
     """Clean up resolved DLQ messages.
-    
+
     Admin only endpoint for removing old successfully retried messages.
     Default: messages older than 24 hours.
     """
     cleaned = await dlq.cleanup_resolved(older_than_hours)
-    
+
     logger.info(f"Cleaned up {cleaned} resolved DLQ messages older than {older_than_hours} hours")
-    
+
     return CleanupResponse(cleaned_count=cleaned)

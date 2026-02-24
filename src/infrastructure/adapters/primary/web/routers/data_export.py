@@ -232,7 +232,7 @@ async def get_graph_stats(
 
     except Exception as e:
         logger.error(f"Failed to get graph stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/cleanup")
@@ -317,4 +317,4 @@ async def cleanup_data(
 
     except Exception as e:
         logger.error(f"Failed to cleanup data: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

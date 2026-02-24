@@ -275,7 +275,7 @@ class PermissionManager:
                         del self.pending[request_id]
                         raise PermissionRejectedError(
                             permission, patterns, "Failed to request permission"
-                        )
+                        ) from e
 
                 # Wait for user response
                 try:

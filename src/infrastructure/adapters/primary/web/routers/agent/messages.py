@@ -190,9 +190,9 @@ async def get_conversation_messages(
                 "type": event_type,
                 "eventTimeUs": event.event_time_us,
                 "eventCounter": event.event_counter,
-                "timestamp": event.event_time_us // 1000 if event.event_time_us else (
-                    int(event.created_at.timestamp() * 1000) if event.created_at else None
-                ),
+                "timestamp": event.event_time_us // 1000
+                if event.event_time_us
+                else (int(event.created_at.timestamp() * 1000) if event.created_at else None),
             }
 
             if event_type == "user_message":
@@ -301,7 +301,9 @@ async def get_conversation_messages(
                     if status_info["status"] in ("answered", "completed"):
                         answered = True
                         # response holds the raw answer, response_metadata may have structured data
-                        answer = status_info.get("response") or status_info.get("response_metadata", {}).get("answer")
+                        answer = status_info.get("response") or status_info.get(
+                            "response_metadata", {}
+                        ).get("answer")
                 item["answered"] = answered
                 item["answer"] = answer
 
@@ -328,7 +330,9 @@ async def get_conversation_messages(
                     if status_info["status"] in ("answered", "completed"):
                         answered = True
                         # response holds the raw decision, response_metadata may have structured data
-                        decision = status_info.get("response") or status_info.get("response_metadata", {}).get("decision")
+                        decision = status_info.get("response") or status_info.get(
+                            "response_metadata", {}
+                        ).get("decision")
                 item["answered"] = answered
                 item["decision"] = decision
 
@@ -436,7 +440,7 @@ async def get_conversation_messages(
         import traceback
 
         logger.error(f"Error getting conversation messages: {e}\n{traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"Failed to get messages: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to get messages: {e!s}") from e
 
 
 @router.get("/conversations/{conversation_id}/execution")
@@ -476,10 +480,12 @@ async def get_conversation_execution(
         }
 
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error getting conversation execution history: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get execution history: {e!s}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get execution history: {e!s}"
+        ) from e
 
 
 @router.get("/conversations/{conversation_id}/tool-executions")
@@ -525,7 +531,7 @@ async def get_conversation_tool_executions(
         logger.error(f"Error getting tool execution history: {e}")
         raise HTTPException(
             status_code=500, detail=f"Failed to get tool execution history: {e!s}"
-        )
+        ) from e
 
 
 @router.get("/conversations/{conversation_id}/status")
@@ -598,7 +604,7 @@ async def get_conversation_execution_status(
         raise
     except Exception as e:
         logger.error(f"Error getting conversation execution status: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get execution status: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to get execution status: {e!s}") from e
 
 
 async def _get_recovery_info(
@@ -742,10 +748,12 @@ async def get_execution_stats(
         )
 
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
     except Exception as e:
         logger.error(f"Error getting execution statistics: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to get execution statistics: {e!s}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get execution statistics: {e!s}"
+        ) from e
 
 
 @router.get("/conversations/{conversation_id}/messages/{message_id}/replies")
@@ -779,6 +787,4 @@ async def get_message_replies(
         ]
     except Exception as e:
         logger.error(f"Error getting message replies: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get message replies: {e!s}"
-        )
+        raise HTTPException(status_code=500, detail=f"Failed to get message replies: {e!s}") from e

@@ -87,7 +87,7 @@ async def switch_mode(
         raise
     except Exception as e:
         logger.error(f"Error switching mode: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to switch mode: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to switch mode: {e!s}") from e
 
 
 @router.get("/mode/{conversation_id}")
@@ -118,7 +118,7 @@ async def get_mode(
         raise
     except Exception as e:
         logger.error(f"Error getting mode: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get mode: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to get mode: {e!s}") from e
 
 
 # === Task List Schemas ===
@@ -183,4 +183,4 @@ async def get_tasks(
 
     except Exception as e:
         logger.error(f"Error getting tasks: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to get tasks: {e!s}")
+        raise HTTPException(status_code=500, detail=f"Failed to get tasks: {e!s}") from e

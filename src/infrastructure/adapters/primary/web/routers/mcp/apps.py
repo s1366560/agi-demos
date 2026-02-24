@@ -4,7 +4,6 @@ CRUD operations and resource serving for MCP Apps -
 interactive HTML interfaces declared by MCP tools.
 """
 
-
 from __future__ import annotations
 
 import asyncio
@@ -556,12 +555,16 @@ async def proxy_resource_read(
                 raise
             except TimeoutError:
                 logger.warning("resources/read retry timed out after reinstall: uri=%s", body.uri)
-                raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}")
+                raise HTTPException(
+                    status_code=404, detail=f"Resource not found: {body.uri}"
+                ) from None
             except Exception as reinstall_err:
                 logger.warning(
                     "resources/read reinstall failed for '%s': %s", server_name, reinstall_err
                 )
-                raise HTTPException(status_code=404, detail=f"Resource not found: {body.uri}")
+                raise HTTPException(
+                    status_code=404, detail=f"Resource not found: {body.uri}"
+                ) from reinstall_err
 
         if result.is_error:
             error_text = ""
@@ -608,7 +611,7 @@ async def proxy_resource_read(
         logger.error("resources/read proxy failed: uri=%s, err=%s", body.uri, e)
         raise HTTPException(
             status_code=502, detail=f"Failed to read resource from MCP server: {e!s}"
-        )
+        ) from e
 
 
 class MCPResourceListRequest(BaseModel):
@@ -649,4 +652,4 @@ async def proxy_resource_list(
         logger.error("resources/list proxy failed: err=%s", e)
         raise HTTPException(
             status_code=502, detail=f"Failed to list resources from MCP server: {e!s}"
-        )
+        ) from e

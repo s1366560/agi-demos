@@ -57,14 +57,13 @@ class TransactionStats:
     reconciled_count: int = 0
 
 
-
-
 class CompensatingTransactionStatus(str, Enum):
     """Status of a compensating transaction."""
 
     PENDING = "pending"
     RECONCILED = "reconciled"
     FAILED = "failed"
+
 
 @dataclass
 class CompensatingTransaction:
@@ -266,9 +265,7 @@ class DistributedTransactionCoordinator:
         )
         self._pending_compensating[tx_id] = compensating
         self._stats.inconsistency_count += 1
-        logger.warning(
-            f"Logged compensating transaction {tx_id} for {operation} on {entity_id}"
-        )
+        logger.warning(f"Logged compensating transaction {tx_id} for {operation} on {entity_id}")
         return tx_id
 
     async def reconcile(self, transaction_id: str) -> bool:
@@ -309,9 +306,7 @@ class DistributedTransactionCoordinator:
                             f"{compensating.neo4j_query[:100]}..."
                         )
                     except Exception as neo4j_error:
-                        logger.error(
-                            f"Failed to replay Neo4j for {transaction_id}: {neo4j_error}"
-                        )
+                        logger.error(f"Failed to replay Neo4j for {transaction_id}: {neo4j_error}")
                         compensating.status = CompensatingTransactionStatus.FAILED
                         return False
 
@@ -319,8 +314,7 @@ class DistributedTransactionCoordinator:
             # The cache will be rebuilt on next read
             if compensating.postgres_committed and not compensating.redis_committed:
                 logger.info(
-                    f"Redis cache inconsistency for {transaction_id} - "
-                    "will be rebuilt on next read"
+                    f"Redis cache inconsistency for {transaction_id} - will be rebuilt on next read"
                 )
 
             compensating.status = CompensatingTransactionStatus.RECONCILED
@@ -391,7 +385,7 @@ class DistributedTransactionCoordinator:
             await tx._rollback_all()
             self._stats.failed_transactions += 1
             self._stats.rollback_count += 1
-            raise TimeoutError(f"Transaction {transaction_id} timed out after {timeout}s")
+            raise TimeoutError(f"Transaction {transaction_id} timed out after {timeout}s") from None
 
         except Exception:
             await tx._rollback_all()
@@ -577,7 +571,7 @@ class DistributedTransaction:
         except Exception as e:
             postgres_error = e
             logger.error(f"PostgreSQL commit failed: {e}")
-            raise postgres_error
+            raise postgres_error from e
 
         # Phase 2: Commit Neo4j
         try:

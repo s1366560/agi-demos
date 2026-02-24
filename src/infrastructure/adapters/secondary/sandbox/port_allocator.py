@@ -224,7 +224,7 @@ class PortAllocator:
             raise
         except Exception as e:
             logger.error(f"Port allocation error for sandbox {sandbox_id}: {e}")
-            raise RuntimeError(f"Port allocation failed: {e}")
+            raise RuntimeError(f"Port allocation failed: {e}") from e
 
     async def confirm_reservation(self, reservation_id: str) -> None:
         """

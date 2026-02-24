@@ -184,7 +184,7 @@ async def create_skill(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid scope: {data.scope}. Must be 'tenant' or 'project'",
-            )
+            ) from None
 
         if scope == SkillScope.SYSTEM:
             raise HTTPException(
@@ -239,7 +239,7 @@ async def create_skill(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.get("/", response_model=SkillListResponse)
@@ -480,7 +480,7 @@ async def update_skill_status(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid status: {status_value}. Must be one of: active, disabled, deprecated",
-        )
+        ) from None
 
     from datetime import datetime
 

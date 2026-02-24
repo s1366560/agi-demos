@@ -194,7 +194,7 @@ async def disable_system_skill(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.post(
@@ -262,7 +262,7 @@ async def override_system_skill(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
 
 
 @router.post("/enable", status_code=status.HTTP_204_NO_CONTENT)

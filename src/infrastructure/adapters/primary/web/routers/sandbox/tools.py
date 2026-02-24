@@ -48,7 +48,7 @@ async def connect_mcp(
 
     except Exception as e:
         logger.error(f"MCP connection error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/{sandbox_id}/tools", response_model=ListToolsResponse)
@@ -74,7 +74,7 @@ async def list_tools(
 
     except Exception as e:
         logger.error(f"Failed to list tools: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.get("/{sandbox_id}/tools/agent")
@@ -123,7 +123,7 @@ async def list_agent_tools(
 
     except Exception as e:
         logger.error(f"Failed to list agent tools: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/{sandbox_id}/call", response_model=ToolCallResponse)
@@ -159,7 +159,7 @@ async def call_tool(
 
     except Exception as e:
         logger.error(f"Tool call error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.post("/{sandbox_id}/read")
