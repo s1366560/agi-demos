@@ -16,6 +16,11 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
+from docker import DockerClient
+from docker.models.containers import Container
+
+from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+
 logger = logging.getLogger(__name__)
 
 
@@ -86,8 +91,8 @@ class SandboxReconciler:
 
     def __init__(
         self,
-        docker_client: Any,
-        sandbox_adapter: Any,
+        docker_client: DockerClient,
+        sandbox_adapter: MCPSandboxAdapter | None,
         repository: Any=None,
         default_action: OrphanAction = OrphanAction.ADOPT,
         max_orphan_age_hours: int = 24,  # Terminate orphans older than this
@@ -244,7 +249,7 @@ class SandboxReconciler:
                 return set(self._adapter._active_sandboxes.keys())
         return set()
 
-    def _container_to_orphan(self, container: Any) -> OrphanContainer:
+    def _container_to_orphan(self, container: Container) -> OrphanContainer:
         """Convert a Docker container to an OrphanContainer object."""
         labels = container.labels or {}
 

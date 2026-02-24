@@ -8,6 +8,8 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
+from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
+
 # Use Cases & DI Container
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
@@ -70,7 +72,7 @@ async def create_episode(
     ),
     current_user: User = Depends(get_current_user),
     graphiti_client: Any=Depends(get_graphiti_client),
-    workflow_engine: Any=Depends(get_workflow_engine),
+    workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
 ):
     """
     Create a new episode and ingest it into the knowledge graph.

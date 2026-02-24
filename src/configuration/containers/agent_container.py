@@ -20,6 +20,8 @@ from src.application.use_cases.agent import (
     ListConversationsUseCase,
     SynthesizeResultsUseCase,
 )
+from src.configuration.config import Settings
+from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.ports.services.graph_service_port import GraphServicePort
 from src.infrastructure.adapters.secondary.persistence.sql_agent_execution_event_repository import (
     SqlAgentExecutionEventRepository,
@@ -69,6 +71,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record
 from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repository import (
     SqlWorkflowPatternRepository,
 )
+from src.infrastructure.agent.context.window_manager import ContextWindowManager
 
 
 class AgentContainer:
@@ -84,7 +87,7 @@ class AgentContainer:
         db: AsyncSession | None = None,
         graph_service: GraphServicePort | None = None,
         redis_client: redis.Redis | None = None,
-        settings: Any=None,
+        settings: Settings | None=None,
         neo4j_client_factory: Callable | None = None,
         storage_service_factory: Callable | None = None,
         sandbox_orchestrator_factory: Callable | None = None,
@@ -258,7 +261,7 @@ class AgentContainer:
 
     # === Agent Service ===
 
-    def agent_service(self, llm: Any) -> AgentService:
+    def agent_service(self, llm: LLMClient) -> AgentService:
         """Get AgentService with dependencies injected."""
         if not self._graph_service:
             raise ValueError("graph_service is required for AgentService")
@@ -319,7 +322,7 @@ class AgentContainer:
 
         return get_attachment_processor()
 
-    def llm_invoker(self, llm: Any):
+    def llm_invoker(self, llm: LLMClient):
         """Get LLMInvoker for LLM invocation with streaming."""
         from src.infrastructure.agent.llm.invoker import LLMInvoker
 
@@ -337,7 +340,7 @@ class AgentContainer:
 
         return get_artifact_extractor()
 
-    def react_loop(self, llm: Any, tools: dict):
+    def react_loop(self, llm: LLMClient, tools: dict):
         """Get ReActLoop for core reasoning loop."""
         from src.infrastructure.agent.core.react_loop import ReActLoop
 
@@ -360,7 +363,7 @@ class AgentContainer:
 
         return AttachmentInjector()
 
-    def context_facade(self, window_manager: Any=None):
+    def context_facade(self, window_manager: ContextWindowManager | None=None):
         """Get ContextFacade for unified context management."""
         from src.infrastructure.agent.context import ContextFacade
 
@@ -372,25 +375,25 @@ class AgentContainer:
 
     # === Agent Use Cases ===
 
-    def create_conversation_use_case(self, llm: Any) -> CreateConversationUseCase:
+    def create_conversation_use_case(self, llm: LLMClient) -> CreateConversationUseCase:
         """Get CreateConversationUseCase with dependencies injected."""
         return CreateConversationUseCase(self.agent_service(llm))
 
-    def list_conversations_use_case(self, llm: Any) -> ListConversationsUseCase:
+    def list_conversations_use_case(self, llm: LLMClient) -> ListConversationsUseCase:
         """Get ListConversationsUseCase with dependencies injected."""
         return ListConversationsUseCase(self.agent_service(llm))
 
-    def get_conversation_use_case(self, llm: Any) -> GetConversationUseCase:
+    def get_conversation_use_case(self, llm: LLMClient) -> GetConversationUseCase:
         """Get GetConversationUseCase with dependencies injected."""
         return GetConversationUseCase(self.agent_service(llm))
 
-    def chat_use_case(self, llm: Any) -> ChatUseCase:
+    def chat_use_case(self, llm: LLMClient) -> ChatUseCase:
         """Get ChatUseCase with dependencies injected."""
         return ChatUseCase(self.agent_service(llm))
 
     # === Multi-Level Thinking Use Cases ===
 
-    def execute_step_use_case(self, llm: Any) -> ExecuteStepUseCase:
+    def execute_step_use_case(self, llm: LLMClient) -> ExecuteStepUseCase:
         """Get ExecuteStepUseCase with dependencies injected."""
         from src.infrastructure.agent.tools import (
             DesktopTool,
@@ -415,7 +418,7 @@ class AgentContainer:
             tools=tools,
         )
 
-    def synthesize_results_use_case(self, llm: Any) -> SynthesizeResultsUseCase:
+    def synthesize_results_use_case(self, llm: LLMClient) -> SynthesizeResultsUseCase:
         """Get SynthesizeResultsUseCase with dependencies injected."""
         return SynthesizeResultsUseCase(llm=llm)
 
@@ -435,7 +438,7 @@ class AgentContainer:
             repository=self.workflow_pattern_repository(),
         )
 
-    def compose_tools_use_case(self, llm: Any) -> ComposeToolsUseCase:
+    def compose_tools_use_case(self, llm: LLMClient) -> ComposeToolsUseCase:
         """Get ComposeToolsUseCase for tool composition."""
         return ComposeToolsUseCase(
             tool_composition_repository=self.tool_composition_repository(),

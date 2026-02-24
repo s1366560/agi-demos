@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -18,7 +19,7 @@ class ContextGuard(Protocol):
         self,
         messages: list[dict[str, Any]],
         *,
-        estimate_message_tokens: Any,
+        estimate_message_tokens: Callable[[dict[str, Any]], int],
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Apply guard transformation."""
         ...
@@ -46,7 +47,7 @@ class ContextGuardChain:
         self,
         messages: list[dict[str, Any]],
         *,
-        estimate_message_tokens: Any,
+        estimate_message_tokens: Callable[[dict[str, Any]], int],
     ) -> GuardChainResult:
         current = list(messages)
         metadata: dict[str, Any] = {

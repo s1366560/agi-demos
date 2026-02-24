@@ -6,6 +6,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from src.configuration.config import Settings
 from src.domain.model.agent import Conversation
 
 if TYPE_CHECKING:
@@ -394,14 +395,14 @@ class AgentRuntimeBootstrapper:
 
             AgentRuntimeBootstrapper._local_bootstrapped = True
 
-    def _get_api_key(self, settings: Any) -> None:
+    def _get_api_key(self, settings: Settings) -> None:
         # Deprecated: Using ProviderResolutionService now
         return None
 
-    def _get_base_url(self, settings: Any) -> None:
+    def _get_base_url(self, settings: Settings) -> None:
         # Deprecated: Using ProviderResolutionService now
         return None
 
-    def _get_model(self, settings: Any) -> str:
+    def _get_model(self, settings: Settings) -> str:
         # Deprecated: Using ProviderResolutionService now
         return "qwen-plus"

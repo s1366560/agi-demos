@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -77,7 +78,7 @@ def build_channel_reload_plan(
 
 async def collect_channel_reload_plan(
     manager: ChannelConnectionManager,
-    session_factory: Any,
+    session_factory: Callable[..., Any],
 ) -> tuple[ChannelReloadPlan, dict[str, ChannelConfigModel]]:
     """Collect current reload plan and enabled config snapshot from DB."""
     async with session_factory() as session:
@@ -91,7 +92,7 @@ async def collect_channel_reload_plan(
 
 async def reconcile_channel_connections(
     manager: ChannelConnectionManager,
-    session_factory: Any,
+    session_factory: Callable[..., Any],
     *,
     apply_changes: bool = False,
 ) -> ChannelReloadPlan:

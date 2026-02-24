@@ -11,6 +11,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.ports.services.graph_service_port import GraphServicePort
+from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
+
 # Use Cases & DI Container
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
@@ -217,7 +220,7 @@ async def create_memory(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     graphiti_client: Any=Depends(get_graphiti_client),
-    workflow_engine: Any=Depends(get_workflow_engine),
+    workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
 ):
     """Create a new memory.
 
@@ -500,7 +503,7 @@ async def delete_memory(
     memory_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    graph_service: Any=Depends(get_graph_service),
+    graph_service: GraphServicePort | None=Depends(get_graph_service),
 ):
     """Delete a memory from all storage systems (DB, Graphiti)."""
     # 1. Get memory to check permissions and project_id
@@ -561,8 +564,8 @@ async def reprocess_memory(
     memory_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    workflow_engine: Any=Depends(get_workflow_engine),
-    graph_service: Any=Depends(get_graph_service),
+    workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
+    graph_service: GraphServicePort | None=Depends(get_graph_service),
 ):
     """Manually trigger re-processing of a memory."""
     # 1. Get memory
@@ -692,7 +695,7 @@ async def update_memory(
     memory_data: MemoryUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    workflow_engine: Any=Depends(get_workflow_engine),
+    workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
 ):
     """Update an existing memory with optimistic locking."""
     # 1. Get memory

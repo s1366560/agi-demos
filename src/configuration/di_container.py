@@ -5,7 +5,6 @@ the exact same public interface for all callers.
 """
 
 
-from typing import Any
 
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -55,6 +54,7 @@ from src.configuration.containers import (
     SandboxContainer,
     TaskContainer,
 )
+from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.ports.repositories.api_key_repository import APIKeyRepository
 from src.domain.ports.repositories.memory_repository import MemoryRepository
 from src.domain.ports.repositories.project_repository import ProjectRepository
@@ -110,6 +110,7 @@ from src.infrastructure.adapters.secondary.persistence.sql_tool_execution_record
 from src.infrastructure.adapters.secondary.persistence.sql_workflow_pattern_repository import (
     SqlWorkflowPatternRepository,
 )
+from src.infrastructure.agent.context.window_manager import ContextWindowManager
 
 
 class DIContainer:
@@ -376,7 +377,7 @@ class DIContainer:
     def skill_service(self) -> SkillService:
         return self._agent.skill_service()
 
-    def agent_service(self, llm: Any) -> AgentService:
+    def agent_service(self, llm: LLMClient) -> AgentService:
         return self._agent.agent_service(llm)
 
     def event_converter(self):
@@ -391,7 +392,7 @@ class DIContainer:
     def attachment_processor(self):
         return self._agent.attachment_processor()
 
-    def llm_invoker(self, llm: Any):
+    def llm_invoker(self, llm: LLMClient):
         return self._agent.llm_invoker(llm)
 
     def tool_executor(self, tools: dict):
@@ -400,7 +401,7 @@ class DIContainer:
     def artifact_extractor(self):
         return self._agent.artifact_extractor()
 
-    def react_loop(self, llm: Any, tools: dict):
+    def react_loop(self, llm: LLMClient, tools: dict):
         return self._agent.react_loop(llm, tools)
 
     def message_builder(self):
@@ -409,25 +410,25 @@ class DIContainer:
     def attachment_injector(self):
         return self._agent.attachment_injector()
 
-    def context_facade(self, window_manager: Any=None):
+    def context_facade(self, window_manager: ContextWindowManager | None=None):
         return self._agent.context_facade(window_manager)
 
-    def create_conversation_use_case(self, llm: Any) -> CreateConversationUseCase:
+    def create_conversation_use_case(self, llm: LLMClient) -> CreateConversationUseCase:
         return self._agent.create_conversation_use_case(llm)
 
-    def list_conversations_use_case(self, llm: Any) -> ListConversationsUseCase:
+    def list_conversations_use_case(self, llm: LLMClient) -> ListConversationsUseCase:
         return self._agent.list_conversations_use_case(llm)
 
-    def get_conversation_use_case(self, llm: Any) -> GetConversationUseCase:
+    def get_conversation_use_case(self, llm: LLMClient) -> GetConversationUseCase:
         return self._agent.get_conversation_use_case(llm)
 
-    def chat_use_case(self, llm: Any) -> ChatUseCase:
+    def chat_use_case(self, llm: LLMClient) -> ChatUseCase:
         return self._agent.chat_use_case(llm)
 
-    def execute_step_use_case(self, llm: Any) -> ExecuteStepUseCase:
+    def execute_step_use_case(self, llm: LLMClient) -> ExecuteStepUseCase:
         return self._agent.execute_step_use_case(llm)
 
-    def synthesize_results_use_case(self, llm: Any) -> SynthesizeResultsUseCase:
+    def synthesize_results_use_case(self, llm: LLMClient) -> SynthesizeResultsUseCase:
         return self._agent.synthesize_results_use_case(llm)
 
     def find_similar_pattern_use_case(self) -> FindSimilarPattern:
@@ -439,5 +440,5 @@ class DIContainer:
     def workflow_learner(self) -> WorkflowLearner:
         return self._agent.workflow_learner()
 
-    def compose_tools_use_case(self, llm: Any) -> ComposeToolsUseCase:
+    def compose_tools_use_case(self, llm: LLMClient) -> ComposeToolsUseCase:
         return self._agent.compose_tools_use_case(llm)

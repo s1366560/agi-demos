@@ -30,7 +30,7 @@ def _records(result: Any):
         return []
 
 
-def _first_value(recs: Any, key: Any):
+def _first_value(recs: Any, key: str):
     if not recs:
         return 0
     r0 = recs[0]

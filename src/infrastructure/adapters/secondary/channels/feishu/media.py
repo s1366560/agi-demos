@@ -2,9 +2,11 @@
 
 import logging
 from pathlib import Path
-from typing import Any, BinaryIO
+from typing import BinaryIO
 
 import httpx
+
+from src.infrastructure.adapters.secondary.channels.feishu.client import FeishuClient
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +14,7 @@ logger = logging.getLogger(__name__)
 class FeishuMediaManager:
     """Manager for Feishu media operations (upload/download)."""
     
-    def __init__(self, client: Any) -> None:
+    def __init__(self, client: FeishuClient) -> None:
         self._client = client
     
     async def upload_image(

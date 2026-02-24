@@ -15,6 +15,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
+from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+
 logger = logging.getLogger(__name__)
 
 
@@ -77,7 +79,7 @@ class SandboxHealthService:
     执行不同级别的健康检查并返回结果。
     """
 
-    def __init__(self, sandbox_adapter: Any=None, default_timeout: float = 5.0) -> None:
+    def __init__(self, sandbox_adapter: MCPSandboxAdapter | None=None, default_timeout: float = 5.0) -> None:
         """初始化健康检查服务.
 
         Args:

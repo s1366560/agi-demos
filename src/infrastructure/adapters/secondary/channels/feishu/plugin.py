@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
-
+from src.infrastructure.agent.plugins.registry import ChannelAdapterBuildContext
 from src.infrastructure.agent.plugins.runtime_api import PluginRuntimeApi
 
 from .adapter import FeishuAdapter
@@ -17,7 +16,7 @@ class FeishuChannelPlugin:
     def setup(self, api: PluginRuntimeApi) -> None:
         """Register Feishu adapter factory under channel_type=feishu."""
 
-        def _factory(context: Any):
+        def _factory(context: ChannelAdapterBuildContext):
             return FeishuAdapter(context.channel_config)
 
         api.register_channel_type(

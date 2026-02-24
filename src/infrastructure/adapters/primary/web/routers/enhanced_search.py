@@ -2,9 +2,10 @@
 
 import logging
 from datetime import datetime
-from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException
+
+from src.domain.ports.services.graph_service_port import GraphServicePort
 
 # Use Cases & DI Container
 from src.infrastructure.adapters.primary.web.dependencies import (
@@ -13,6 +14,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_neo4j_client,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.graph.neo4j_client import Neo4jClient
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +44,7 @@ async def search_advanced(
     project_id: str | None = Body(None, description="Project filter"),
     since: str | None = Body(None, description="Filter by creation date (ISO format)"),
     current_user: User = Depends(get_current_user),
-    graph_service: Any=Depends(get_graph_service),
+    graph_service: GraphServicePort | None=Depends(get_graph_service),
 ):
     """
     Perform advanced search with configurable strategy and reranking.
@@ -118,7 +120,7 @@ async def search_by_graph_traversal(
     limit: int = Body(50, ge=1, le=200, description="Maximum results"),
     tenant_id: str | None = Body(None, description="Tenant filter"),
     current_user: User = Depends(get_current_user),
-    neo4j_client: Any=Depends(get_neo4j_client),
+    neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
 ):
     """
     Search by traversing the knowledge graph from a starting entity.
@@ -197,7 +199,7 @@ async def search_by_community(
     limit: int = Body(50, ge=1, le=200, description="Maximum results"),
     include_episodes: bool = Body(True, description="Include episodes in results"),
     current_user: User = Depends(get_current_user),
-    neo4j_client: Any=Depends(get_neo4j_client),
+    neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
 ):
     """
     Search within a community for related content.
@@ -275,7 +277,7 @@ async def search_temporal(
     limit: int = Body(50, ge=1, le=200, description="Maximum results"),
     tenant_id: str | None = Body(None, description="Tenant filter"),
     current_user: User = Depends(get_current_user),
-    neo4j_client: Any=Depends(get_neo4j_client),
+    neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
 ):
     """
     Search within a temporal window.
@@ -371,7 +373,7 @@ async def search_with_facets(
     offset: int = Body(0, ge=0, description="Pagination offset"),
     tenant_id: str | None = Body(None, description="Tenant filter"),
     current_user: User = Depends(get_current_user),
-    neo4j_client: Any=Depends(get_neo4j_client),
+    neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
 ):
     """
     Search with faceted filtering.
@@ -562,7 +564,7 @@ async def get_search_capabilities(current_user: User = Depends(get_current_user)
 async def memory_search(
     params: dict,
     current_user: User = Depends(get_current_user),
-    graph_service: Any=Depends(get_graph_service),
+    graph_service: GraphServicePort | None=Depends(get_graph_service),
 ):
     """
     Search memories using hybrid search.

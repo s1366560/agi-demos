@@ -27,6 +27,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from aiohttp import web
+
 # gRPC imports will be generated from proto
 # For now, we'll use a simple HTTP/JSON-based approach as fallback
 
@@ -237,7 +239,7 @@ class AgentContainerServer:
             await self._health_server.cleanup()
             logger.info("Health server stopped")
 
-    async def _handle_health(self, request: Any) -> Any:
+    async def _handle_health(self, request: web.Request) -> Any:
         """Handle health check request."""
         from aiohttp import web
 
@@ -251,13 +253,13 @@ class AgentContainerServer:
             }
         )
 
-    async def _handle_status(self, request: Any) -> Any:
+    async def _handle_status(self, request: web.Request) -> Any:
         """Handle status request."""
         from aiohttp import web
 
         return web.json_response(self._get_status_dict())
 
-    async def _handle_metrics(self, request: Any) -> Any:
+    async def _handle_metrics(self, request: web.Request) -> Any:
         """Handle metrics request."""
         from aiohttp import web
 
@@ -497,7 +499,7 @@ async def main() -> None:
     # Handle shutdown signals
     loop = asyncio.get_event_loop()
 
-    def handle_signal(sig: Any) -> None:
+    def handle_signal(sig: int) -> None:
         logger.info(f"Received signal {sig}, shutting down...")
         asyncio.create_task(server.stop(graceful=True))
 

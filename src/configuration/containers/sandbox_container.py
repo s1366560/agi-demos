@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.services.sandbox_orchestrator import SandboxOrchestrator
+from src.configuration.config import Settings
 from src.domain.ports.services.sandbox_resource_port import SandboxResourcePort
 from src.infrastructure.adapters.secondary.persistence.sql_project_sandbox_repository import (
     SqlProjectSandboxRepository,
@@ -24,7 +25,7 @@ class SandboxContainer:
         self,
         db: AsyncSession | None = None,
         redis_client: Any=None,
-        settings: Any=None,
+        settings: Settings | None=None,
         sandbox_adapter_factory: Callable | None = None,
         sandbox_event_publisher_factory: Callable | None = None,
         distributed_lock_factory: Callable | None = None,

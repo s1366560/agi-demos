@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 
@@ -17,7 +18,7 @@ class HistoryTurnGuard:
         self,
         messages: list[dict[str, Any]],
         *,
-        estimate_message_tokens: Any,
+        estimate_message_tokens: Callable[[dict[str, Any]], int],
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         if len(messages) <= self._max_messages:
             return messages, {

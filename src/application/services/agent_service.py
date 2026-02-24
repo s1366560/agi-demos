@@ -22,6 +22,8 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.domain.events.agent_events import AgentMessageEvent
 from src.domain.llm_providers.llm_types import LLMClient
 from src.domain.model.agent import (
@@ -37,8 +39,11 @@ from src.domain.ports.repositories.agent_repository import (
     ExecutionCheckpointRepository,
     ToolExecutionRecordRepository,
 )
+from src.domain.ports.repositories.skill_repository import SkillRepositoryPort
+from src.domain.ports.repositories.subagent_repository import SubAgentRepositoryPort
 from src.domain.ports.services.agent_service_port import AgentServicePort
 from src.domain.ports.services.graph_service_port import GraphServicePort
+from src.infrastructure.graph.neo4j_client import Neo4jClient
 
 if TYPE_CHECKING:
     from src.application.services.skill_service import SkillService
@@ -70,19 +75,19 @@ class AgentService(AgentServicePort):
         execution_repository: AgentExecutionRepository,
         graph_service: GraphServicePort,
         llm: LLMClient,
-        neo4j_client: Any,
+        neo4j_client: Neo4jClient | None,
         execute_step_use_case: "ExecuteStepUseCase | None" = None,
         synthesize_results_use_case: "SynthesizeResultsUseCase | None" = None,
         workflow_learner: "WorkflowLearner | None" = None,
-        skill_repository: Any=None,
+        skill_repository: SkillRepositoryPort | None=None,
         skill_service: "SkillService | None" = None,
-        subagent_repository: Any=None,
+        subagent_repository: SubAgentRepositoryPort | None=None,
         redis_client: Any=None,
         tool_execution_record_repository: "ToolExecutionRecordRepository | None" = None,
         agent_execution_event_repository: "AgentExecutionEventRepository | None" = None,
         execution_checkpoint_repository: "ExecutionCheckpointRepository | None" = None,
         storage_service: Any=None,
-        db_session: Any=None,
+        db_session: AsyncSession | None=None,
         sequence_service: Any=None,
         context_loader: Any=None,
     ) -> None:

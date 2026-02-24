@@ -19,6 +19,9 @@ from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
+from src.infrastructure.adapters.secondary.sandbox.local_sandbox_adapter import LocalSandboxAdapter
+from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import MCPSandboxAdapter
+
 logger = logging.getLogger(__name__)
 
 
@@ -178,8 +181,8 @@ class EnhancedHealthMonitor:
 
     def __init__(
         self,
-        sandbox_adapter: Any,
-        local_sandbox_adapter: Any=None,
+        sandbox_adapter: MCPSandboxAdapter | None,
+        local_sandbox_adapter: LocalSandboxAdapter | None=None,
         check_interval_seconds: float = 60.0,
         heartbeat_interval_seconds: float = 30.0,
         auto_recover: bool = True,

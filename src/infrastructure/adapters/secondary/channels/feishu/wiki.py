@@ -3,13 +3,15 @@
 import logging
 from typing import Any
 
+from src.infrastructure.adapters.secondary.channels.feishu.client import FeishuClient
+
 logger = logging.getLogger(__name__)
 
 
 class FeishuWikiClient:
     """Client for Feishu Wiki/Knowledge Base operations."""
     
-    def __init__(self, client: Any) -> None:
+    def __init__(self, client: FeishuClient) -> None:
         self._client = client
     
     async def list_spaces(

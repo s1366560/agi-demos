@@ -810,7 +810,7 @@ class LLMStream:
                         # This is the most common issue - LLM returns literal \n instead of \\n
                         try:
 
-                            def escape_control_chars(s: Any):
+                            def escape_control_chars(s: str):
                                 """Escape control characters in a JSON string."""
                                 s = s.replace("\n", "\\n")
                                 s = s.replace("\r", "\\r")

@@ -6,13 +6,14 @@ Task list endpoint for agent-managed task checklists per conversation.
 
 import logging
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.domain.model.auth.user import User
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
     get_db,
@@ -51,7 +52,7 @@ class ConversationModeResponse(BaseModel):
 @router.post("/mode")
 async def switch_mode(
     request_body: SwitchModeRequest,
-    current_user: Any=Depends(get_current_user),
+    current_user: User=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ModeResponse:
     """Switch conversation between Plan Mode (read-only) and Build Mode (full)."""
@@ -93,7 +94,7 @@ async def switch_mode(
 @router.get("/mode/{conversation_id}")
 async def get_mode(
     conversation_id: str,
-    current_user: Any=Depends(get_current_user),
+    current_user: User=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ConversationModeResponse:
     """Get the current mode for a conversation."""
@@ -148,7 +149,7 @@ class TaskListResponse(BaseModel):
 async def get_tasks(
     conversation_id: str,
     status: str | None = Query(None, description="Filter by status"),
-    current_user: Any=Depends(get_current_user),
+    current_user: User=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TaskListResponse:
     """Get the task list for a conversation."""

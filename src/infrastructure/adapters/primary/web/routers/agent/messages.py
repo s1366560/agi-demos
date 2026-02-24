@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.configuration.di_container import DIContainer
 from src.configuration.factories import create_llm_client
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
@@ -608,7 +609,7 @@ async def get_conversation_execution_status(
 
 
 async def _get_recovery_info(
-    container: Any,
+    container: DIContainer,
     redis_client: Any,
     conversation_id: str,
     message_id: str | None,

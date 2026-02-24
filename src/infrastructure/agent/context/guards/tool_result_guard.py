@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 
@@ -23,7 +24,7 @@ class ToolResultGuard:
         self,
         messages: list[dict[str, Any]],
         *,
-        estimate_message_tokens: Any,
+        estimate_message_tokens: Callable[[dict[str, Any]], int],
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         if not messages:
             return messages, {

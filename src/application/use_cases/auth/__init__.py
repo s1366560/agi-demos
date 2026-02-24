@@ -2,8 +2,8 @@
 Use case for creating API keys.
 """
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from pydantic import BaseModel, field_validator
 
@@ -42,8 +42,8 @@ class CreateAPIKeyUseCase:
     def __init__(
         self,
         api_key_repository: APIKeyRepository,
-        generate_key_func: Any,
-        hash_key_func: Any,
+        generate_key_func: Callable[[], str],
+        hash_key_func: Callable[[str], str],
     ) -> None:
         self._api_key_repo = api_key_repository
         self._generate_key = generate_key_func

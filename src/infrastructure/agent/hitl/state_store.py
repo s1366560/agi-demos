@@ -24,6 +24,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from redis.asyncio import Redis
+
 logger = logging.getLogger(__name__)
 
 
@@ -129,7 +131,7 @@ class HITLStateStore:
     # Default TTL buffer (added to HITL timeout)
     TTL_BUFFER_SECONDS = 60
 
-    def __init__(self, redis_client: Any) -> None:
+    def __init__(self, redis_client: Redis) -> None:
         """
         Initialize state store.
 

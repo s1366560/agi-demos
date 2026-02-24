@@ -1665,7 +1665,7 @@ class SessionProcessor:
                 )
 
                 # Define helper to escape control characters
-                def escape_control_chars(s: Any):
+                def escape_control_chars(s: str):
                     """Escape control characters in a JSON string."""
                     s = s.replace("\n", "\\n")
                     s = s.replace("\r", "\\r")

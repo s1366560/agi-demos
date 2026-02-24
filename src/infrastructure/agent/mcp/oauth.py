@@ -22,6 +22,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.infrastructure.security.encryption_service import EncryptionService
+
 logger = logging.getLogger(__name__)
 
 # Constants
@@ -83,7 +85,7 @@ class MCPAuthStorage:
     _SENSITIVE_TOKEN_FIELDS = ("accessToken", "refreshToken")
     _SENSITIVE_CLIENT_FIELDS = ("clientSecret",)
 
-    def __init__(self, data_dir: Path | None = None, encryption_service: Any=None) -> None:
+    def __init__(self, data_dir: Path | None = None, encryption_service: EncryptionService | None=None) -> None:
         """Initialize auth storage.
 
         Args:

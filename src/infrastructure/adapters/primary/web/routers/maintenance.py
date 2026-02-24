@@ -6,6 +6,8 @@ from typing import Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
+from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
+
 # Use Cases & DI Container
 from src.infrastructure.adapters.primary.web.dependencies import (
     get_current_user,
@@ -14,6 +16,7 @@ from src.infrastructure.adapters.primary.web.dependencies import (
     get_workflow_engine,
 )
 from src.infrastructure.adapters.secondary.persistence.models import User
+from src.infrastructure.graph.neo4j_client import Neo4jClient
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +31,8 @@ async def incremental_refresh(
     episode_uuids: list[str] | None = Body(None, description="Episode UUIDs to reprocess"),
     rebuild_communities: bool = Body(False, description="Whether to rebuild communities"),
     current_user: User = Depends(get_current_user),
-    neo4j_client: Any=Depends(get_neo4j_client),
-    workflow_engine: Any=Depends(get_workflow_engine),
+    neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
+    workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
 ):
     """
     Perform incremental refresh of the knowledge graph.
@@ -114,8 +117,8 @@ async def deduplicate_entities(
     similarity_threshold: float = Body(0.9, ge=0.0, le=1.0, description="Similarity threshold"),
     dry_run: bool = Body(True, description="If true, only report duplicates without merging"),
     current_user: User = Depends(get_current_user),
-    neo4j_client: Any=Depends(get_neo4j_client),
-    workflow_engine: Any=Depends(get_workflow_engine),
+    neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
+    workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
 ):
     """
     Find and optionally merge duplicate entities.
@@ -226,7 +229,7 @@ async def invalidate_stale_edges(
     ),
     dry_run: bool = Body(True, description="If true, only report without deleting"),
     current_user: User = Depends(get_current_user),
-    neo4j_client: Any=Depends(get_neo4j_client),
+    neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
 ):
     """
     Invalidate or remove stale edges that haven't been updated.
@@ -292,7 +295,7 @@ async def invalidate_stale_edges(
 @router.get("/status")
 async def get_maintenance_status(
     current_user: User = Depends(get_current_user),
-    neo4j_client: Any=Depends(get_neo4j_client),
+    neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
 ):
     """
     Get maintenance status and recommendations.
@@ -379,8 +382,8 @@ async def optimize_graph(
     ),
     dry_run: bool = Body(True, description="If true, report actions without executing"),
     current_user: User = Depends(get_current_user),
-    neo4j_client: Any=Depends(get_neo4j_client),
-    workflow_engine: Any=Depends(get_workflow_engine),
+    neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
+    workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
 ):
     """
     Run multiple optimization operations.
@@ -812,7 +815,7 @@ async def validate_embeddings(
 async def get_native_embedding_status(
     project_id: str | None = Query(None, description="Project ID to check"),
     current_user: User = Depends(get_current_user),
-    neo4j_client: Any=Depends(get_neo4j_client),
+    neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
 ):
     """
     Get embedding dimension status using native graph adapter.
@@ -956,7 +959,7 @@ async def migrate_embeddings(
     project_id: str | None = Query(None, description="Project ID to migrate"),
     dry_run: bool = Query(True, description="If true, only report without migrating"),
     current_user: User = Depends(get_current_user),
-    neo4j_client: Any=Depends(get_neo4j_client),
+    neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
 ):
     """
     Migrate embeddings to a new model dimension.
