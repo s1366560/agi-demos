@@ -314,7 +314,7 @@ async def get_project_sandbox(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
-):
+) -> Any:
     """Get the sandbox for a project.
 
     Returns the current sandbox information if it exists.
@@ -342,7 +342,7 @@ async def ensure_project_sandbox(
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
-):
+) -> Any:
     """Ensure a project's sandbox exists and is running.
 
     Creates a new sandbox if one doesn't exist, or returns the existing one.
@@ -419,7 +419,7 @@ async def check_project_sandbox_health(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
-):
+) -> HealthCheckResponse:
     """Check the health of a project's sandbox."""
     await verify_project_access(project_id, current_user, db)
 
@@ -455,7 +455,7 @@ async def get_project_sandbox_stats(
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-):
+) -> SandboxStatsResponse:
     """Get resource usage statistics for a project's sandbox.
 
     Returns CPU, memory, disk, network, and process metrics.
@@ -515,7 +515,7 @@ async def execute_tool_in_project_sandbox(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
-):
+) -> ExecuteToolResponse:
     """Execute a tool in the project's sandbox.
 
     Automatically ensures the sandbox is running before execution.
@@ -548,7 +548,7 @@ async def restart_project_sandbox(
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
-):
+) -> SandboxActionResponse:
     """Restart the sandbox for a project."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
 
@@ -609,7 +609,7 @@ async def terminate_project_sandbox(
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
-):
+) -> SandboxActionResponse:
     """Terminate the sandbox for a project."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
 
@@ -670,7 +670,7 @@ async def sync_project_sandbox_status(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
-):
+) -> Any:
     """Synchronize database status with actual container status.
 
     Useful for recovering from inconsistent states.
@@ -699,7 +699,7 @@ async def list_project_sandboxes(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
-):
+) -> ListProjectSandboxesResponse:
     """List all project sandboxes for the current tenant."""
     # Parse status filter
     status_filter = None
@@ -730,7 +730,7 @@ async def cleanup_stale_sandboxes(
     request: CleanupStaleRequest,
     current_user: User = Depends(get_current_user),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
-):
+) -> CleanupStaleResponse:
     """Clean up sandboxes that haven't been accessed recently.
 
     Requires admin privileges.
@@ -766,7 +766,7 @@ async def start_project_desktop(
     tenant_id: str = Depends(get_current_user_tenant),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     orchestrator: SandboxOrchestrator = Depends(get_orchestrator),
-):
+) -> dict[str, Any]:
     """Start desktop service (KasmVNC) for the project's sandbox."""
     # Ensure sandbox exists and is running
     info = await service.ensure_sandbox_running(
@@ -802,7 +802,7 @@ async def stop_project_desktop(
     current_user: User = Depends(get_current_user),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     orchestrator: SandboxOrchestrator = Depends(get_orchestrator),
-):
+) -> dict[str, Any]:
     """Stop desktop service for the project's sandbox."""
     info = await service.get_project_sandbox(project_id)
 
@@ -828,7 +828,7 @@ async def start_project_terminal(
     tenant_id: str = Depends(get_current_user_tenant),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     orchestrator: SandboxOrchestrator = Depends(get_orchestrator),
-):
+) -> dict[str, Any]:
     """Start terminal service for the project's sandbox."""
     info = await service.ensure_sandbox_running(
         project_id=project_id,
@@ -859,7 +859,7 @@ async def stop_project_terminal(
     current_user: User = Depends(get_current_user),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
     orchestrator: SandboxOrchestrator = Depends(get_orchestrator),
-):
+) -> dict[str, Any]:
     """Stop terminal service for the project's sandbox."""
     info = await service.get_project_sandbox(project_id)
 
@@ -890,7 +890,7 @@ async def proxy_project_desktop(
     request: Request,
     current_user: User = Depends(get_current_user_from_desktop_proxy),
     service: ProjectSandboxLifecycleService = Depends(get_lifecycle_service),
-):
+) -> None:
     """Proxy requests to the project's sandbox desktop (KasmVNC) web client.
 
     This allows browser access to the desktop without exposing container ports directly.

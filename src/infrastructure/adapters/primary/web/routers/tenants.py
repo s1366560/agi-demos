@@ -1,6 +1,7 @@
 """Tenant management API endpoints."""
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -531,7 +532,7 @@ async def get_tenant_analytics(
     period: str = Query("30d", description="Time period: 7d, 30d, 90d"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """
     Get analytics data for tenant dashboard charts.
 

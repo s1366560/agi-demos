@@ -12,6 +12,7 @@ import hashlib
 import logging
 import time
 from collections import defaultdict
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -505,7 +506,7 @@ class QueryMonitor:
         self._query_counts = defaultdict(int)
 
     @contextmanager
-    def track(self, operation: str):
+    def track(self, operation: str) -> Generator[Any, None, None]:
         """
         Context manager for tracking operation timing.
 

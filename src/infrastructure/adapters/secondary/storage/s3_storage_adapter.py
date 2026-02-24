@@ -1,6 +1,7 @@
 """S3 Storage Adapter - Implementation of StorageServicePort for S3/MinIO."""
 
 import logging
+from typing import Any
 
 import aioboto3
 from botocore.exceptions import ClientError
@@ -73,7 +74,7 @@ class S3StorageAdapter(StorageServicePort):
             f"no_proxy={no_proxy}"
         )
 
-    async def _get_client(self):
+    async def _get_client(self) -> Any:
         """Get an S3 client context manager."""
         return self._session.client(
             "s3",

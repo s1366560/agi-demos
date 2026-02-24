@@ -7,8 +7,11 @@ Provides endpoints for event management and execution monitoring:
 - get_workflow_status: Get Ray Actor status
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,7 +33,7 @@ from .utils import get_container_with_db
 logger = logging.getLogger(__name__)
 
 
-async def _get_resume_service(db: AsyncSession):
+async def _get_resume_service(db: AsyncSession) -> Any:
     """Build ExecutionResumeService with per-request DB session."""
     from src.application.services.agent.execution_resume_service import (
         ExecutionResumeService,
@@ -226,7 +229,7 @@ async def resume_execution(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
-):
+) -> dict[str, Any]:
     """
     Resume agent execution from the last checkpoint.
 

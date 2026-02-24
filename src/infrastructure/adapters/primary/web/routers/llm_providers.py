@@ -7,6 +7,7 @@ including CRUD operations, health checks, and tenant assignments.
 
 import logging
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -59,7 +60,7 @@ async def get_current_user_with_roles(
     return result.scalar_one()
 
 
-async def require_admin(current_user: User = Depends(get_current_user_with_roles)):
+async def require_admin(current_user: User = Depends(get_current_user_with_roles)) -> None:
     """Dependency to require admin role."""
     is_admin = any(r.role.name == "admin" for r in current_user.roles)
     if not is_admin:
@@ -136,7 +137,7 @@ async def list_provider_types(
 async def list_models_for_provider_type(
     provider_type: str,
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     List available models for a given provider type.
 
@@ -388,7 +389,7 @@ async def list_tenant_assignments(
     ),
     current_user: User = Depends(get_current_user_with_roles),
     service: ProviderService = Depends(get_provider_service_with_session),
-):
+) -> None:
     """
     List all provider assignments for a tenant.
     """
@@ -414,7 +415,7 @@ async def assign_provider_to_tenant(
     ),
     current_user: User = Depends(require_admin),
     service: ProviderService = Depends(get_provider_service_with_session),
-):
+) -> dict[str, Any]:
     """
     Assign a provider to a specific tenant.
 
@@ -477,7 +478,7 @@ async def unassign_provider_from_tenant(
     ),
     current_user: User = Depends(require_admin),
     service: ProviderService = Depends(get_provider_service_with_session),
-):
+) -> dict[str, Any]:
     """
     Unassign a provider from a tenant.
 
@@ -507,7 +508,7 @@ async def get_provider_usage(
     operation_type: str | None = Query(None, description="Filter by operation type"),
     current_user: User = Depends(get_current_user_with_roles),
     service: ProviderService = Depends(get_provider_service_with_session),
-):
+) -> dict[str, Any]:
     """
     Get usage statistics for a provider.
 
@@ -538,7 +539,7 @@ async def get_provider_usage(
 @router.get("/system/status")
 async def get_system_resilience_status(
     current_user: User = Depends(require_admin),
-):
+) -> dict[str, Any]:
     """
     Get system-wide resilience status for all LLM providers.
 
@@ -590,7 +591,7 @@ async def get_system_resilience_status(
 async def reset_circuit_breaker(
     provider_type: str,
     current_user: User = Depends(require_admin),
-):
+) -> dict[str, Any]:
     """
     Reset circuit breaker for a specific provider type.
 

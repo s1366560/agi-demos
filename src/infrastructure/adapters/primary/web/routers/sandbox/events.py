@@ -98,13 +98,13 @@ async def sse_generator(
         yield sse_message
 
 
-@router.get("/events/{project_id}", response_class=StreamingResponse)
+@router.get("/events/{project_id}", response_class=StreamingResponse, response_model=None)
 async def subscribe_sandbox_events(
     project_id: str,
     last_id: str = Query("0", description="Last event ID for resuming stream"),
     _current_user: User = Depends(get_current_user_from_header_or_query),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
-):
+) -> StreamingResponse:
     """
     SSE endpoint for sandbox events.
 

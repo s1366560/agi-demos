@@ -241,7 +241,7 @@ def retry_decorator(
     max_delay: float = 60.0,
     is_transient_fn: Callable[[Exception], bool] | None = None,
     jitter: bool = True,
-):
+) -> None:
     """
     Decorator to add retry logic to async functions.
 

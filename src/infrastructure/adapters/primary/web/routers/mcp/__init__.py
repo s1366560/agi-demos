@@ -40,7 +40,7 @@ async def create_mcp_server_root(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> None:
     """Create MCP server (root path alias)."""
     return await servers.create_mcp_server(
         server_data=server_data, request=request, db=db, tenant_id=tenant_id
@@ -53,7 +53,7 @@ async def list_mcp_servers_root(
     enabled_only: bool = Query(False, description="Only return enabled servers"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> None:
     """List MCP servers (root path alias)."""
     return await servers.list_mcp_servers(
         project_id=project_id, enabled_only=enabled_only, db=db, tenant_id=tenant_id

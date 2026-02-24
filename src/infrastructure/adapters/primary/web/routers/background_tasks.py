@@ -5,6 +5,7 @@ This router provides endpoints for managing long-running background tasks.
 """
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -18,7 +19,7 @@ router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
 
 
 @router.get("/{task_id}")
-async def get_task_status(task_id: str, current_user: User = Depends(get_current_user)):
+async def get_task_status(task_id: str, current_user: User = Depends(get_current_user)) -> Any:
     """
     Get the status of a background task.
 
@@ -36,7 +37,7 @@ async def get_task_status(task_id: str, current_user: User = Depends(get_current
 
 
 @router.post("/{task_id}/cancel")
-async def cancel_task(task_id: str, current_user: User = Depends(get_current_user)):
+async def cancel_task(task_id: str, current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     """
     Cancel a running background task.
 
@@ -58,7 +59,7 @@ async def list_tasks(
     status: str | None = Query(None, description="Filter by status"),
     limit: int = Query(50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     List all background tasks.
 

@@ -1,5 +1,7 @@
 """Billing and invoice management router."""
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +25,7 @@ async def get_billing_info(
     tenant_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Get billing information for a tenant."""
 
     # Verify user has access to tenant (permission-first)
@@ -114,7 +116,7 @@ async def list_invoices(
     tenant_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """List all invoices for a tenant."""
 
     # Verify user has access to tenant (permission-first)
@@ -161,7 +163,7 @@ async def upgrade_plan(
     plan_data: dict,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Upgrade tenant plan."""
 
     # Verify user is owner (permission-first)

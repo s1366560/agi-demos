@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -464,7 +465,7 @@ class MCPRuntimeService:
         return deleted
 
     @asynccontextmanager
-    async def _lock(self, key: str, timeout: int = 60):
+    async def _lock(self, key: str, timeout: int = 60) -> AsyncGenerator[Any, None]:
         """Acquire a distributed lock."""
         if not self._redis_client:
             yield

@@ -2,6 +2,8 @@
 V2 SQLAlchemy implementation of ProjectSandboxRepository using BaseRepository.
 """
 
+from __future__ import annotations
+
 import hashlib
 import logging
 from collections.abc import AsyncGenerator
@@ -51,7 +53,7 @@ class SqlProjectSandboxRepository(BaseRepository[ProjectSandbox, object], Projec
             metadata=orm.metadata_json or {},
         )
 
-    def _to_orm(self, domain: ProjectSandbox):
+    def _to_orm(self, domain: ProjectSandbox) -> Any:
         """Convert domain entity to ORM model."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             ProjectSandbox as ProjectSandboxORM,

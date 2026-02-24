@@ -2,6 +2,7 @@
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,7 +23,7 @@ async def list_notifications(
     limit: int = Query(20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """List notifications for the current user."""
     query = select(Notification).where(Notification.user_id == current_user.id)
 
@@ -71,7 +72,7 @@ async def mark_notification_read(
     notification_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Mark a notification as read."""
     result = await db.execute(
         select(Notification).where(
@@ -93,7 +94,7 @@ async def mark_notification_read(
 async def mark_all_read(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Mark all notifications as read for the current user."""
     result = await db.execute(
         select(Notification).where(
@@ -115,7 +116,7 @@ async def delete_notification(
     notification_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Delete a notification."""
     result = await db.execute(
         select(Notification).where(
@@ -140,7 +141,7 @@ async def create_notification(
     notification_data: dict,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Create a new notification (for internal use)."""
     notification = Notification(
         id=str(uuid4()),

@@ -11,6 +11,7 @@ Provides MCP tool operations:
 """
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -36,7 +37,7 @@ async def connect_mcp(
     sandbox_id: str,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-):
+) -> dict[str, Any]:
     """Connect MCP client to sandbox."""
     try:
         success = await adapter.connect_mcp(sandbox_id)
@@ -56,7 +57,7 @@ async def list_tools(
     sandbox_id: str,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-):
+) -> ListToolsResponse:
     """List available MCP tools in sandbox."""
     try:
         tools = await adapter.list_tools(sandbox_id)
@@ -81,7 +82,7 @@ async def list_tools(
 async def list_agent_tools(
     sandbox_id: str,
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     List sandbox tools registered to Agent context.
 
@@ -132,7 +133,7 @@ async def call_tool(
     request: ToolCallRequest,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-):
+) -> ToolCallResponse:
     """
     Call an MCP tool on the sandbox.
 
@@ -170,7 +171,7 @@ async def read_file(
     limit: int = 2000,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-):
+) -> None:
     """Read a file from sandbox (convenience endpoint)."""
     result = await adapter.call_tool(
         sandbox_id=sandbox_id,
@@ -187,7 +188,7 @@ async def write_file(
     content: str,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-):
+) -> None:
     """Write a file to sandbox (convenience endpoint)."""
     result = await adapter.call_tool(
         sandbox_id=sandbox_id,
@@ -205,7 +206,7 @@ async def execute_bash(
     working_dir: str | None = None,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-):
+) -> None:
     """Execute bash command in sandbox (convenience endpoint)."""
     args = {"command": command, "timeout": timeout}
     if working_dir:

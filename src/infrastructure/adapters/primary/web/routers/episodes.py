@@ -73,7 +73,7 @@ async def create_episode(
     current_user: User = Depends(get_current_user),
     graphiti_client: Any=Depends(get_graphiti_client),
     workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
-):
+) -> EpisodeResponse:
     """
     Create a new episode and ingest it into the knowledge graph.
 
@@ -209,7 +209,7 @@ async def get_episode(
     episode_name: str,
     current_user: User = Depends(get_current_user),
     graphiti_client: Any=Depends(get_graphiti_client),
-):
+) -> EpisodeDetail:
     """
     Get episode details by name.
     """
@@ -257,7 +257,7 @@ async def list_episodes(
     sort_desc: bool = Query(True, description="Sort descending if True"),
     current_user: User = Depends(get_current_user),
     graphiti_client: Any=Depends(get_graphiti_client),
-):
+) -> dict[str, Any]:
     """
     List episodes with filtering and pagination.
     """
@@ -335,7 +335,7 @@ async def delete_episode(
     episode_name: str,
     current_user: User = Depends(get_current_user),
     graphiti_client: Any=Depends(get_graphiti_client),
-):
+) -> dict[str, Any]:
     """
     Delete an episode and its relationships.
 
@@ -367,7 +367,7 @@ async def delete_episode(
 @router.get("/health", response_model=dict)
 async def health_check(
     current_user: User = Depends(get_current_user), graphiti_client: Any=Depends(get_graphiti_client)
-):
+) -> dict[str, Any]:
     """
     Health check endpoint for episode service.
     """

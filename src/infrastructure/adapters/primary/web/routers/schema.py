@@ -32,7 +32,7 @@ async def verify_project_access(
     user: User,
     db: AsyncSession,
     required_role: list[str] | None = None,
-):
+) -> None:
     query = select(UserProject).where(
         and_(UserProject.user_id == user.id, UserProject.project_id == project_id)
     )
@@ -57,7 +57,7 @@ async def list_entity_types(
     project_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> all:
     await verify_project_access(project_id, current_user, db)
     result = await db.execute(select(EntityType).where(EntityType.project_id == project_id))
     return result.scalars().all()
@@ -69,7 +69,7 @@ async def create_entity_type(
     entity_data: EntityTypeCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     await verify_project_access(project_id, current_user, db, ["owner", "admin", "member"])
 
     # Check uniqueness
@@ -104,7 +104,7 @@ async def update_entity_type(
     entity_data: EntityTypeUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     await verify_project_access(project_id, current_user, db)
     entity_type = await db.get(EntityType, entity_id)
     if not entity_type or entity_type.project_id != project_id:
@@ -144,7 +144,7 @@ async def list_edge_types(
     project_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> all:
     await verify_project_access(project_id, current_user, db)
     result = await db.execute(select(EdgeType).where(EdgeType.project_id == project_id))
     return result.scalars().all()
@@ -156,7 +156,7 @@ async def create_edge_type(
     edge_data: EdgeTypeCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     await verify_project_access(project_id, current_user, db)
 
     existing = await db.execute(
@@ -187,7 +187,7 @@ async def update_edge_type(
     edge_data: EdgeTypeUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     await verify_project_access(project_id, current_user, db)
     edge_type = await db.get(EdgeType, edge_id)
     if not edge_type or edge_type.project_id != project_id:
@@ -227,7 +227,7 @@ async def list_edge_maps(
     project_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> all:
     await verify_project_access(project_id, current_user, db)
     result = await db.execute(select(EdgeTypeMap).where(EdgeTypeMap.project_id == project_id))
     return result.scalars().all()
@@ -239,7 +239,7 @@ async def create_edge_map(
     map_data: EdgeTypeMapCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     await verify_project_access(project_id, current_user, db)
 
     # Check uniqueness

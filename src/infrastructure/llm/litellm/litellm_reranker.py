@@ -237,7 +237,7 @@ class LiteLLMReranker(BaseReranker):
 
         if not hasattr(litellm, "acompletion"):
 
-            async def _noop_acompletion(**kwargs: Any):
+            async def _noop_acompletion(**kwargs: Any) -> None:
                 return type(
                     "Resp",
                     (),

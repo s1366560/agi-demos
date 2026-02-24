@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING, Any
 
 from src.configuration.di_container import DIContainer
 from src.infrastructure.adapters.secondary.persistence.database import async_session_factory
@@ -60,7 +61,7 @@ async def initialize_docker_services(container: DIContainer) -> DockerEventMonit
         )
 
         @asynccontextmanager
-        async def sandbox_repository_factory():
+        async def sandbox_repository_factory() -> AsyncGenerator[Any, None]:
             async with async_session_factory() as session:
                 yield SqlProjectSandboxRepository(session)
 

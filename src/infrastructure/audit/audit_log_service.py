@@ -183,7 +183,7 @@ class AuditLogService:
         provider_type: str,
         actor: str | None = None,
         tenant_id: str | None = None,
-    ):
+    ) -> None:
         """Log provider creation."""
         return await self.log_event(
             action="provider.created",
@@ -203,7 +203,7 @@ class AuditLogService:
         changes: dict[str, Any],
         actor: str | None = None,
         tenant_id: str | None = None,
-    ):
+    ) -> None:
         """Log provider update."""
         return await self.log_event(
             action="provider.updated",
@@ -220,7 +220,7 @@ class AuditLogService:
         provider_name: str,
         actor: str | None = None,
         tenant_id: str | None = None,
-    ):
+    ) -> None:
         """Log provider deletion."""
         return await self.log_event(
             action="provider.deleted",
@@ -237,7 +237,7 @@ class AuditLogService:
         status: str,
         response_time_ms: int | None = None,
         actor: str | None = None,
-    ):
+    ) -> None:
         """Log provider health check."""
         return await self.log_event(
             action="provider.health_check",
@@ -256,7 +256,7 @@ class AuditLogService:
         provider_id: UUID,
         priority: int,
         actor: str | None = None,
-    ):
+    ) -> None:
         """Log tenant-provider assignment."""
         return await self.log_event(
             action="tenant_provider.assigned",
@@ -275,7 +275,7 @@ class AuditLogService:
         tenant_id: str,
         provider_id: UUID,
         actor: str | None = None,
-    ):
+    ) -> None:
         """Log tenant-provider unassignment."""
         return await self.log_event(
             action="tenant_provider.unassigned",

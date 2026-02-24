@@ -7,6 +7,7 @@ Provides REST API endpoints for:
 """
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import RedirectResponse
@@ -39,7 +40,7 @@ router = APIRouter(prefix="/api/v1/attachments", tags=["attachments"])
 _storage_service = None
 
 
-def _get_storage_service():
+def _get_storage_service() -> None:
     """Get or create the storage service singleton (stateless)."""
     global _storage_service
     if _storage_service is None:
@@ -172,7 +173,7 @@ async def initiate_multipart_upload(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     attachment_service: AttachmentService = Depends(get_attachment_service),
-):
+) -> InitiateUploadResponse:
     """
     Initialize a multipart upload for large files.
 
@@ -213,7 +214,7 @@ async def upload_part(
     file: UploadFile = File(..., description="Part data"),
     current_user: User = Depends(get_current_user),
     attachment_service: AttachmentService = Depends(get_attachment_service),
-):
+) -> UploadPartResponse:
     """
     Upload a single part in a multipart upload.
 
@@ -246,7 +247,7 @@ async def complete_multipart_upload(
     request: CompleteUploadRequest,
     current_user: User = Depends(get_current_user),
     attachment_service: AttachmentService = Depends(get_attachment_service),
-):
+) -> _attachment_to_response:
     """
     Complete a multipart upload.
 
@@ -282,7 +283,7 @@ async def abort_multipart_upload(
     attachment_id: str = Form(..., description="ID of the attachment"),
     current_user: User = Depends(get_current_user),
     attachment_service: AttachmentService = Depends(get_attachment_service),
-):
+) -> dict[str, Any]:
     """
     Abort a multipart upload.
 
@@ -312,7 +313,7 @@ async def upload_simple(
     current_user: User = Depends(get_current_user),
     tenant_id: str = Depends(get_current_user_tenant),
     attachment_service: AttachmentService = Depends(get_attachment_service),
-):
+) -> _attachment_to_response:
     """
     Upload a small file directly (recommended for files ≤10MB).
 
@@ -349,7 +350,7 @@ async def list_attachments(
     status: str | None = Query(None, description="Filter by status"),
     current_user: User = Depends(get_current_user),
     attachment_service: AttachmentService = Depends(get_attachment_service),
-):
+) -> AttachmentListResponse:
     """
     List attachments for a conversation.
     """
@@ -374,7 +375,7 @@ async def get_attachment(
     attachment_id: str,
     current_user: User = Depends(get_current_user),
     attachment_service: AttachmentService = Depends(get_attachment_service),
-):
+) -> _attachment_to_response:
     """
     Get attachment details by ID.
     """
@@ -391,7 +392,7 @@ async def download_attachment(
     attachment_id: str,
     current_user: User = Depends(get_current_user),
     attachment_service: AttachmentService = Depends(get_attachment_service),
-):
+) -> RedirectResponse:
     """
     Download an attachment via presigned URL redirect.
     """
@@ -408,7 +409,7 @@ async def delete_attachment(
     attachment_id: str,
     current_user: User = Depends(get_current_user),
     attachment_service: AttachmentService = Depends(get_attachment_service),
-):
+) -> dict[str, Any]:
     """
     Delete an attachment.
     """

@@ -50,7 +50,7 @@ async def start_desktop(
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
-):
+) -> DesktopStatusResponse:
     """
     Start the remote desktop service (noVNC) for a sandbox.
 
@@ -112,7 +112,7 @@ async def stop_desktop(
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
-):
+) -> DesktopStopResponse:
     """
     Stop the remote desktop service for a sandbox.
 
@@ -156,7 +156,7 @@ async def get_desktop_status(
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
-):
+) -> DesktopStatusResponse:
     """
     Get the current status of the remote desktop service.
     """
@@ -197,7 +197,7 @@ async def start_terminal(
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
-):
+) -> TerminalStatusResponse:
     """
     Start the web terminal service (ttyd) for a sandbox.
 
@@ -252,7 +252,7 @@ async def stop_terminal(
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
-):
+) -> TerminalStopResponse:
     """
     Stop the web terminal service for a sandbox.
 
@@ -296,7 +296,7 @@ async def get_terminal_status(
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     orchestrator: SandboxOrchestrator = Depends(get_sandbox_orchestrator),
-):
+) -> TerminalStatusResponse:
     """
     Get the current status of the web terminal service.
     """

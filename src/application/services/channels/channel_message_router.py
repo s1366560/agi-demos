@@ -1627,7 +1627,7 @@ class ChannelMessageRouter:
             rate_limit = routing.get("rate_limit_per_minute", 0)
         return self._rate_limiter.is_allowed(key, limit=rate_limit)
 
-    async def _load_channel_config(self, message: Message):
+    async def _load_channel_config(self, message: Message) -> None:
         """Load the ChannelConfigModel for this message."""
         config_id = self._extract_channel_config_id(message)
         if not config_id:
@@ -1832,7 +1832,7 @@ def get_channel_message_router() -> ChannelMessageRouter:
                 async_session_factory,
             )
 
-            async def _init_media_service():
+            async def _init_media_service() -> None:
                 """Initialize media import service asynchronously."""
                 try:
                     async with async_session_factory() as session:

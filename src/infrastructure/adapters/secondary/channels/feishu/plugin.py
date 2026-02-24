@@ -16,7 +16,7 @@ class FeishuChannelPlugin:
     def setup(self, api: PluginRuntimeApi) -> None:
         """Register Feishu adapter factory under channel_type=feishu."""
 
-        def _factory(context: ChannelAdapterBuildContext):
+        def _factory(context: ChannelAdapterBuildContext) -> FeishuAdapter:
             return FeishuAdapter(context.channel_config)
 
         api.register_channel_type(

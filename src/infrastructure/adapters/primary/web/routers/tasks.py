@@ -3,7 +3,9 @@
 import asyncio
 import json
 import logging
+from collections.abc import AsyncGenerator
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -111,7 +113,7 @@ def task_to_response(task: TaskLog) -> TaskLogResponse:
 
 
 @router.get("/stats", response_model=TaskStatsResponse)
-async def get_task_stats(db: AsyncSession = Depends(get_db)):
+async def get_task_stats(db: AsyncSession = Depends(get_db)) -> TaskStatsResponse:
     """Get task statistics."""
     now = datetime.now(UTC)
     one_day_ago = now - timedelta(days=1)
@@ -188,7 +190,7 @@ async def get_task_stats(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/queue-depth", response_model=list[QueueDepthPoint])
-async def get_queue_depth(db: AsyncSession = Depends(get_db)):
+async def get_queue_depth(db: AsyncSession = Depends(get_db)) -> None:
     """Get queue depth over time."""
     now = datetime.now(UTC)
     points = []
@@ -226,7 +228,7 @@ async def get_recent_tasks(
     limit: int = 50,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
-):
+) -> None:
     """Get recent tasks with filtering."""
     # For complex queries with multiple filters, use direct DB access
     # In a full refactoring, this would move to a use case with filter objects
@@ -289,7 +291,7 @@ async def get_recent_tasks(
 
 
 @router.get("/status-breakdown")
-async def get_status_breakdown(db: AsyncSession = Depends(get_db)):
+async def get_status_breakdown(db: AsyncSession = Depends(get_db)) -> dict[str, Any]:
     """Get task status breakdown."""
     now = datetime.now(UTC)
     one_day_ago = now - timedelta(days=1)
@@ -315,7 +317,7 @@ async def get_status_breakdown(db: AsyncSession = Depends(get_db)):
 async def retry_task_endpoint(
     task_id: str,
     container: DIContainer = Depends(get_di_container),
-):
+) -> dict[str, Any]:
     """Retry a failed task."""
     use_case = container.update_task_use_case()
 
@@ -351,7 +353,7 @@ async def stop_task_endpoint(
     task_id: str,
     db: AsyncSession = Depends(get_db),
     container: DIContainer = Depends(get_di_container),
-):
+) -> dict[str, Any]:
     """Stop a running task."""
     get_use_case = container.get_task_use_case()
     update_use_case = container.update_task_use_case()
@@ -383,8 +385,8 @@ async def stop_task_endpoint(
     return {"message": "Task marked as stopped"}
 
 
-@router.get("/{task_id}/stream", response_class=EventSourceResponse)
-async def stream_task_status(task_id: str, db: AsyncSession = Depends(get_db)):
+@router.get("/{task_id}/stream", response_class=EventSourceResponse, response_model=None)
+async def stream_task_status(task_id: str, db: AsyncSession = Depends(get_db)) -> AsyncGenerator[Any, None]:
     """Stream task status updates using Server-Sent Events (SSE).
 
     This endpoint provides real-time updates for task progress, completion, and errors.
@@ -407,7 +409,7 @@ async def stream_task_status(task_id: str, db: AsyncSession = Depends(get_db)):
     """
     logger.info(f"SSE stream requested for task {task_id}")
 
-    async def event_generator():
+    async def event_generator() -> AsyncGenerator[Any, None]:
         """Generate SSE events for task status updates."""
         logger.info(f"Event generator started for task {task_id}")
 
@@ -586,7 +588,7 @@ async def stream_task_status(task_id: str, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{task_id}", response_model=TaskLogResponse)
-async def get_task_status(task_id: str, db: AsyncSession = Depends(get_db)):
+async def get_task_status(task_id: str, db: AsyncSession = Depends(get_db)) -> task_to_response:
     """Get a single task by ID."""
     result = await db.execute(select(DBTaskLog).where(DBTaskLog.id == task_id))
     task = result.scalar_one_or_none()
@@ -601,7 +603,7 @@ async def get_task_status(task_id: str, db: AsyncSession = Depends(get_db)):
 async def cancel_task_endpoint(
     task_id: str,
     container: DIContainer = Depends(get_di_container),
-):
+) -> None:
     """Cancel a task (alias for stop)."""
     # Reuse the stop logic
     return await stop_task_endpoint(task_id, container)

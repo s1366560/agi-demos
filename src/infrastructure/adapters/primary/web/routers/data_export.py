@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/data", tags=["data"])
 
 
-def _records(result: Any):
+def _records(result: Any) -> list[Any]:
     try:
         recs = getattr(result, "records", None)
         if isinstance(recs, (list, tuple)):
@@ -30,7 +30,7 @@ def _records(result: Any):
         return []
 
 
-def _first_value(recs: Any, key: str):
+def _first_value(recs: Any, key: str) -> Any:
     if not recs:
         return 0
     r0 = recs[0]
@@ -65,7 +65,7 @@ async def export_data(
     include_communities: bool = Body(True, description="Include community data"),
     current_user: User = Depends(get_current_user),
     graphiti_client: Any=Depends(get_graphiti_client),
-):
+) -> dict[str, Any]:
     """
     Export graph data as JSON.
     """
@@ -160,7 +160,7 @@ async def get_graph_stats(
     tenant_id: str | None = Query(None, description="Filter by tenant ID"),
     current_user: User = Depends(get_current_user),
     graphiti_client: Any=Depends(get_graphiti_client),
-):
+) -> dict[str, Any]:
     """
     Get graph statistics.
 
@@ -246,7 +246,7 @@ async def cleanup_data(
     body: dict | None = Body(None),
     current_user: User = Depends(get_current_user),
     graphiti_client: Any=Depends(get_graphiti_client),
-):
+) -> dict[str, Any]:
     """
     Clean up old graph data.
 

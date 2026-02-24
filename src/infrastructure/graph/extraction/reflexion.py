@@ -128,7 +128,7 @@ class ReflexionChecker:
         # Filter out entities that are actually already extracted
         # (LLM might incorrectly report some as missed)
         # Handle both EntityNode objects and dictionaries
-        def get_name(e: Exception):
+        def get_name(e: Exception) -> Any:
             if hasattr(e, "name"):
                 return e.name.lower() if e.name else ""
             return e.get("name", "").lower()

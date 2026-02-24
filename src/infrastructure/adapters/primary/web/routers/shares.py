@@ -2,9 +2,11 @@
 
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import Response
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,7 +54,7 @@ async def create_share(
     share_data: dict,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Create share - strict/lenient payloads, includes memory_id for integration."""
     memory_result = await db.execute(select(Memory).where(Memory.id == memory_id))
     memory = memory_result.scalar_one_or_none()
@@ -130,7 +132,7 @@ async def list_shares(
     memory_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """List all share links for a memory."""
     # Get memory to verify access
     memory_result = await db.execute(select(Memory).where(Memory.id == memory_id))
@@ -167,14 +169,14 @@ async def list_shares(
     }
 
 
-@router.delete("/memories/{memory_id}/shares/{share_id}")
+@router.delete("/memories/{memory_id}/shares/{share_id}", response_model=None)
 async def delete_share(
     memory_id: str,
     share_id: str,
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Response | dict[str, Any]:
     """Delete a share link."""
     # Get memory to verify access
     memory_result = await db.execute(select(Memory).where(Memory.id == memory_id))
@@ -217,7 +219,7 @@ async def delete_share(
 async def get_shared_memory(
     share_token: str,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Access a shared memory via share token (public endpoint)."""
     # Get share
     share_result = await db.execute(

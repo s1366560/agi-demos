@@ -52,7 +52,7 @@ async def verify_project_access(
     user: User,
     db: AsyncSession,
     required_role: list[str] | None = None,
-):
+) -> None:
     """Verify that user has access to the project.
 
     Args:
@@ -741,7 +741,7 @@ async def list_project_plugins(
     project_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> RuntimePluginListResponse:
     """List runtime plugins available to the current deployment."""
     await verify_project_access(project_id, current_user, db)
     project_tenant_id = await _resolve_project_tenant_id(project_id, db)
@@ -760,7 +760,7 @@ async def list_tenant_plugins(
     tenant_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> RuntimePluginListResponse:
     """List runtime plugins for tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db)
     plugin_records, diagnostics, _ = await _load_runtime_plugins(tenant_id=tenant_id)
@@ -778,7 +778,7 @@ async def list_tenant_channel_plugin_catalog(
     tenant_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ChannelPluginCatalogResponse:
     """List channel plugin catalog for tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db)
     plugin_records, _, _ = await _load_runtime_plugins(tenant_id=tenant_id)
@@ -796,7 +796,7 @@ async def get_tenant_channel_plugin_schema(
     channel_type: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ChannelPluginConfigSchemaResponse:
     """Return plugin channel schema metadata for tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db)
     plugin_records, _, _ = await _load_runtime_plugins(tenant_id=tenant_id)
@@ -836,7 +836,7 @@ async def install_tenant_plugin(
     data: PluginInstallRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> PluginActionResponse:
     """Install plugin package from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
     control_plane = _build_plugin_control_plane()
@@ -859,7 +859,7 @@ async def enable_tenant_plugin(
     plugin_name: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> PluginActionResponse:
     """Enable plugin from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
     control_plane = _build_plugin_control_plane()
@@ -884,7 +884,7 @@ async def disable_tenant_plugin(
     plugin_name: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> PluginActionResponse:
     """Disable plugin from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
     control_plane = _build_plugin_control_plane()
@@ -909,7 +909,7 @@ async def uninstall_tenant_plugin(
     plugin_name: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> PluginActionResponse:
     """Uninstall plugin package from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
     control_plane = _build_plugin_control_plane()
@@ -931,7 +931,7 @@ async def reload_tenant_plugins(
     tenant_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> PluginActionResponse:
     """Reload plugins from tenant-scoped plugin hub."""
     await verify_tenant_access(tenant_id, current_user, db, ["owner", "admin"])
     control_plane = _build_plugin_control_plane()
@@ -951,7 +951,7 @@ async def list_project_channel_plugin_catalog(
     project_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ChannelPluginCatalogResponse:
     """List channel types currently provided by loaded plugins."""
     await verify_project_access(project_id, current_user, db)
     project_tenant_id = await _resolve_project_tenant_id(project_id, db)
@@ -970,7 +970,7 @@ async def get_project_channel_plugin_schema(
     channel_type: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ChannelPluginConfigSchemaResponse:
     """Return config schema metadata for a plugin-provided channel type."""
     await verify_project_access(project_id, current_user, db)
     project_tenant_id = await _resolve_project_tenant_id(project_id, db)
@@ -1012,7 +1012,7 @@ async def install_project_plugin(
     data: PluginInstallRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> PluginActionResponse:
     """Install a plugin package and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
     control_plane = _build_plugin_control_plane()
@@ -1035,7 +1035,7 @@ async def enable_project_plugin(
     plugin_name: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> PluginActionResponse:
     """Enable plugin and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
     project_tenant_id = await _resolve_project_tenant_id(project_id, db)
@@ -1061,7 +1061,7 @@ async def disable_project_plugin(
     plugin_name: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> PluginActionResponse:
     """Disable plugin and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
     project_tenant_id = await _resolve_project_tenant_id(project_id, db)
@@ -1087,7 +1087,7 @@ async def uninstall_project_plugin(
     plugin_name: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> PluginActionResponse:
     """Uninstall plugin package and reload runtime plugin registry."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
     control_plane = _build_plugin_control_plane()
@@ -1109,7 +1109,7 @@ async def reload_project_plugins(
     project_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> PluginActionResponse:
     """Reload runtime plugin discovery and registrations."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
     control_plane = _build_plugin_control_plane()
@@ -1131,7 +1131,7 @@ async def create_config(
     data: ChannelConfigCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> to_response:
     """Create a new channel configuration for a project."""
     # Verify project access (requires admin or owner role)
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
@@ -1223,7 +1223,7 @@ async def list_configs(
     enabled_only: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ChannelConfigList:
     """List channel configurations for a project."""
     # Verify project access
     await verify_project_access(project_id, current_user, db)
@@ -1241,7 +1241,7 @@ async def get_config(
     config_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> to_response:
     """Get a channel configuration by ID."""
     repo = ChannelConfigRepository(db)
     config = await repo.get_by_id(config_id)
@@ -1261,7 +1261,7 @@ async def update_config(
     data: ChannelConfigUpdate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> to_response:
     """Update a channel configuration."""
     repo = ChannelConfigRepository(db)
     config = await repo.get_by_id(config_id)
@@ -1384,7 +1384,7 @@ async def test_config(
     config_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """Test a channel configuration by attempting to connect."""
     repo = ChannelConfigRepository(db)
     config = await repo.get_by_id(config_id)
@@ -1520,7 +1520,7 @@ async def get_project_channel_observability_summary(
     project_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ChannelObservabilitySummaryResponse:
     """Get project-level channel routing and delivery observability summary."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
 
@@ -1595,7 +1595,7 @@ async def list_project_channel_outbox(
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ChannelOutboxListResponse:
     """List outbound queue items for a project."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
 
@@ -1648,7 +1648,7 @@ async def list_project_channel_session_bindings(
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ChannelSessionBindingListResponse:
     """List deterministic channel session bindings for a project."""
     await verify_project_access(project_id, current_user, db, ["owner", "admin"])
 
@@ -1695,7 +1695,7 @@ async def get_connection_status(
     config_id: str,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> ChannelStatusResponse:
     """Get real-time connection status for a channel configuration.
 
     This endpoint returns the live connection status from the
@@ -1747,7 +1747,7 @@ async def get_connection_status(
 async def list_all_connection_status(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-):
+) -> list[Any]:
     """Get connection status for all channels.
 
     Returns a list of all channel connection statuses.

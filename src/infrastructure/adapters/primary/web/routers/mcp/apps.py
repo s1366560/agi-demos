@@ -127,7 +127,7 @@ async def list_mcp_apps(
     include_disabled: bool = Query(False, description="Include disabled apps"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> list[Any]:
     """List MCP Apps. If project_id is provided, scopes to that project; otherwise lists all tenant apps."""
     service = _get_mcp_app_service(request, db)
     if project_id:
@@ -178,7 +178,7 @@ async def proxy_tool_call_direct(
     body: MCPDirectToolCallRequest,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> MCPAppToolCallResponse:
     """Proxy a tool call directly to a sandbox MCP server (no DB lookup).
 
     Used when the MCP App was auto-discovered during an agent session
@@ -221,7 +221,7 @@ async def get_mcp_app(
     app_id: str,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> MCPAppResponse:
     """Get MCP App details."""
     service = _get_mcp_app_service(request, db)
     app = await service.get_app(app_id)
@@ -254,7 +254,7 @@ async def get_mcp_app_resource(
     app_id: str,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> MCPAppResourceResponse:
     """Get the resolved HTML resource for an MCP App.
 
     Returns the cached HTML content if available, or returns 404
@@ -289,7 +289,7 @@ async def proxy_tool_call(
     body: MCPAppToolCallRequest,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> MCPAppToolCallResponse:
     """Proxy a tool call from an MCP App iframe to its MCP server.
 
     This endpoint is called by the AppBridge when the app needs to
@@ -341,7 +341,7 @@ async def delete_mcp_app(
     app_id: str,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> dict[str, Any]:
     """Delete an MCP App."""
     try:
         runtime = await _get_mcp_runtime_service(request, db)
@@ -366,7 +366,7 @@ async def refresh_mcp_app_resource(
     app_id: str,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> MCPAppResponse:
     """Re-fetch the HTML resource for an MCP App.
 
     Useful when the app has been rebuilt (e.g., by the agent).
@@ -459,7 +459,7 @@ async def proxy_resource_read(
     body: MCPResourceReadRequest,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> MCPResourceReadResponse:
     """Proxy a resources/read request to the appropriate MCP server.
 
     Resolution order:
@@ -633,7 +633,7 @@ async def proxy_resource_list(
     body: MCPResourceListRequest,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> MCPResourceListResponse:
     """Proxy a resources/list request to sandbox MCP servers.
 
     Returns the aggregated list of resources from all running MCP

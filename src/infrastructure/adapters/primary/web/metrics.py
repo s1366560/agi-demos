@@ -210,7 +210,7 @@ class AgentMetrics:
 agent_metrics = AgentMetrics()
 
 
-def track_execution(operation_name: str):
+def track_execution(operation_name: str) -> None:
     """
     Decorator to track execution time and success/failure.
 
@@ -223,7 +223,7 @@ def track_execution(operation_name: str):
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        async def async_wrapper(*args: Any, **kwargs: Any):
+        async def async_wrapper(*args: Any, **kwargs: Any) -> None:
             start_time = time.time()
             success = True
 
@@ -247,7 +247,7 @@ def track_execution(operation_name: str):
                     agent_metrics.increment(f"{operation_name}_failure")
 
         @wraps(func)
-        def sync_wrapper(*args: Any, **kwargs: Any):
+        def sync_wrapper(*args: Any, **kwargs: Any) -> None:
             start_time = time.time()
             success = True
 

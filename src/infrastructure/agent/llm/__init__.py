@@ -32,7 +32,7 @@ __all__ = [
 ]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> getattr:
     """Lazy import components to avoid circular imports."""
     # LLM stream components
     if name in (

@@ -167,7 +167,7 @@ async def extract_entities(
     payload: dict,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     content = payload.get("content")
     memory_id = payload.get("memory_id")
     if not content and memory_id:
@@ -187,7 +187,7 @@ async def extract_relationships(
     payload: dict,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     content = payload.get("content")
     memory_id = payload.get("memory_id")
     if not content and memory_id:
@@ -221,7 +221,7 @@ async def create_memory(
     db: AsyncSession = Depends(get_db),
     graphiti_client: Any=Depends(get_graphiti_client),
     workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
-):
+) -> Any:
     """Create a new memory.
 
     This endpoint stores memory using a hybrid approach:
@@ -414,7 +414,7 @@ async def list_memories(
     search: str | None = Query(None, description="Search query"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> MemoryListResponse:
     """List memories for a project."""
     # Verify access
     user_project_result = await db.execute(
@@ -472,7 +472,7 @@ async def get_memory(
     memory_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Any:
     """Get a specific memory."""
     result = await db.execute(select(Memory).where(Memory.id == memory_id))
     memory = result.scalar_one_or_none()
@@ -498,13 +498,13 @@ async def get_memory(
     return MemoryResponse.from_orm(memory)
 
 
-@router.delete("/memories/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/memories/{memory_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_memory(
     memory_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     graph_service: GraphServicePort | None=Depends(get_graph_service),
-):
+) -> JSONResponse | Response:
     """Delete a memory from all storage systems (DB, Graphiti)."""
     # 1. Get memory to check permissions and project_id
     result = await db.execute(select(Memory).where(Memory.id == memory_id))
@@ -566,7 +566,7 @@ async def reprocess_memory(
     db: AsyncSession = Depends(get_db),
     workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
     graph_service: GraphServicePort | None=Depends(get_graph_service),
-):
+) -> Any:
     """Manually trigger re-processing of a memory."""
     # 1. Get memory
     result = await db.execute(select(Memory).where(Memory.id == memory_id))
@@ -696,7 +696,7 @@ async def update_memory(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
-):
+) -> Any:
     """Update an existing memory with optimistic locking."""
     # 1. Get memory
     result = await db.execute(select(Memory).where(Memory.id == memory_id))
@@ -849,7 +849,7 @@ async def create_memory_share(
     share_data: dict,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Share a memory - accepts both strict and lenient payloads."""
     result = await db.execute(select(Memory).where(Memory.id == memory_id))
     memory = result.scalar_one_or_none()
@@ -933,7 +933,7 @@ async def delete_memory_share(
     share_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> Response:
     """Delete a memory share."""
     # 1. Get memory and verify ownership
     result = await db.execute(select(Memory).where(Memory.id == memory_id))

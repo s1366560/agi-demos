@@ -9,6 +9,8 @@ individual Think-Act-Observe cycles. This repository tracks the overall
 message generation status.
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -63,7 +65,7 @@ class SqlMessageExecutionStatusRepository(
             project_id=model.project_id,
         )
 
-    def _to_model(self, entity: AgentExecution):
+    def _to_model(self, entity: AgentExecution) -> Any:
         """Convert domain entity to database model."""
         from src.infrastructure.adapters.secondary.persistence.models import (
             MessageExecutionStatus as MessageExecutionStatusModel,

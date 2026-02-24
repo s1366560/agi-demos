@@ -1,5 +1,7 @@
 """DI sub-container for sandbox domain."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from typing import Any
 
@@ -55,7 +57,7 @@ class SandboxContainer:
             default_timeout=self._settings.sandbox_timeout_seconds if self._settings else 300,
         )
 
-    def sandbox_tool_registry(self):
+    def sandbox_tool_registry(self) -> Any:
         """Get SandboxToolRegistry for dynamic MCP tool registration to Agent."""
         from src.application.services.sandbox_tool_registry import SandboxToolRegistry
 
@@ -84,7 +86,7 @@ class SandboxContainer:
             cpu_limit_override=self._settings.sandbox_cpu_limit if self._settings else None,
         )
 
-    def project_sandbox_lifecycle_service(self):
+    def project_sandbox_lifecycle_service(self) -> Any:
         """Get ProjectSandboxLifecycleService for project-dedicated sandbox management."""
         from src.application.services.project_sandbox_lifecycle_service import (
             ProjectSandboxLifecycleService,
@@ -105,7 +107,7 @@ class SandboxContainer:
             cpu_limit_override=self._settings.sandbox_cpu_limit if self._settings else None,
         )
 
-    def sandbox_mcp_server_manager(self):
+    def sandbox_mcp_server_manager(self) -> Any:
         """Get SandboxMCPServerManager for managing user MCP servers in sandbox."""
         from src.application.services.sandbox_mcp_server_manager import (
             SandboxMCPServerManager,
@@ -116,7 +118,7 @@ class SandboxContainer:
             app_service=self.mcp_app_service() if self._db else None,
         )
 
-    def mcp_app_service(self):
+    def mcp_app_service(self) -> Any:
         """Get MCPAppService for MCP App lifecycle management."""
         from src.application.services.mcp_app_service import MCPAppService
         from src.infrastructure.adapters.secondary.persistence.sql_mcp_app_repository import (

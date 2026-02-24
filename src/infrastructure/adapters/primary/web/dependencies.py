@@ -4,7 +4,7 @@ from src.domain.ports.services.graph_service import GraphServicePort
 from src.domain.ports.services.workflow_engine_port import WorkflowEnginePort
 
 
-def get_graphiti_client(request: Request):
+def get_graphiti_client(request: Request) -> None:
     """Get Graphiti client from app state."""
     return request.app.state.container.graphiti_client
 

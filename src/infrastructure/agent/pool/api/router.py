@@ -15,11 +15,14 @@ Pool Status API Router.
 - POST /api/v1/admin/pool/projects/{project_id}/tier - 设置项目分级
 """
 
+from __future__ import annotations
+
 import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from starlette.responses import PlainTextResponse
 
 from ..integration.session_adapter import get_global_adapter
 from ..manager import AgentPoolManager
@@ -461,7 +464,7 @@ def create_pool_router(
     @router.get("/metrics/prometheus", response_class=None)
     async def get_metrics_prometheus(
         manager: AgentPoolManager = Depends(get_pool_manager),
-    ):
+    ) -> PlainTextResponse:
         """获取指标 (Prometheus 格式)."""
         from fastapi.responses import PlainTextResponse
 

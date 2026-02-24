@@ -8,6 +8,7 @@ Provides REST API endpoints for:
 """
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
@@ -108,7 +109,7 @@ async def list_artifacts(
     tool_execution_id: str | None = Query(None, description="Filter by tool execution"),
     limit: int = Query(100, ge=1, le=500, description="Maximum number of artifacts to return"),
     current_user: User = Depends(get_current_user),
-):
+) -> ArtifactListResponse:
     """
     List artifacts for a project.
 
@@ -176,7 +177,7 @@ async def list_artifacts(
 async def get_artifact(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
-):
+) -> ArtifactResponse:
     """
     Get a single artifact by ID.
     """
@@ -212,7 +213,7 @@ async def get_artifact(
 async def download_artifact(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
-):
+) -> RedirectResponse:
     """
     Download an artifact.
 
@@ -244,7 +245,7 @@ async def download_artifact(
 async def refresh_artifact_url(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
-):
+) -> RefreshUrlResponse:
     """
     Refresh the presigned URL for an artifact.
 
@@ -274,7 +275,7 @@ async def update_artifact_content(
     artifact_id: str,
     request: UpdateContentRequest,
     current_user: User = Depends(get_current_user),
-):
+) -> UpdateContentResponse:
     """
     Update the text content of an artifact (canvas save-back).
 
@@ -308,7 +309,7 @@ async def update_artifact_content(
 async def delete_artifact(
     artifact_id: str,
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     Delete an artifact.
 
@@ -330,7 +331,7 @@ async def delete_artifact(
 @router.get("/categories/list")
 async def list_categories(
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, Any]:
     """
     List all available artifact categories.
 

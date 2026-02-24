@@ -19,7 +19,7 @@ from src.domain.model.auth.user import User
 logger = logging.getLogger(__name__)
 
 
-def require_permission(permission: str):
+def require_permission(permission: str) -> None:
     """
     Decorator to require a specific permission for endpoint access.
 
@@ -36,9 +36,9 @@ def require_permission(permission: str):
         Decorator function
     """
 
-    def decorator(func: Callable):
+    def decorator(func: Callable) -> None:
         @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any):
+        async def wrapper(*args: Any, **kwargs: Any) -> None:
             # Extract current_user from kwargs (injected by FastAPI Depends)
             current_user: User | None = kwargs.get("current_user")
             if not current_user:
@@ -95,7 +95,7 @@ def require_permission(permission: str):
     return decorator
 
 
-def require_any_permission(*permissions: str):
+def require_any_permission(*permissions: str) -> None:
     """
     Decorator to require ANY of the specified permissions.
 
@@ -114,9 +114,9 @@ def require_any_permission(*permissions: str):
         Decorator function
     """
 
-    def decorator(func: Callable):
+    def decorator(func: Callable) -> None:
         @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any):
+        async def wrapper(*args: Any, **kwargs: Any) -> None:
             current_user: User | None = kwargs.get("current_user")
             if not current_user:
                 raise HTTPException(
@@ -163,7 +163,7 @@ def require_any_permission(*permissions: str):
     return decorator
 
 
-def require_all_permissions(*permissions: str):
+def require_all_permissions(*permissions: str) -> None:
     """
     Decorator to require ALL of the specified permissions.
 
@@ -182,9 +182,9 @@ def require_all_permissions(*permissions: str):
         Decorator function
     """
 
-    def decorator(func: Callable):
+    def decorator(func: Callable) -> None:
         @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any):
+        async def wrapper(*args: Any, **kwargs: Any) -> None:
             current_user: User | None = kwargs.get("current_user")
             if not current_user:
                 raise HTTPException(
@@ -230,7 +230,7 @@ def require_all_permissions(*permissions: str):
     return decorator
 
 
-def require_role(role: str):
+def require_role(role: str) -> None:
     """
     Decorator to require a specific role.
 
@@ -250,9 +250,9 @@ def require_role(role: str):
         Decorator function
     """
 
-    def decorator(func: Callable):
+    def decorator(func: Callable) -> None:
         @functools.wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any):
+        async def wrapper(*args: Any, **kwargs: Any) -> None:
             current_user: User | None = kwargs.get("current_user")
             if not current_user:
                 raise HTTPException(

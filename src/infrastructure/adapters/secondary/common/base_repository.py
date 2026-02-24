@@ -18,7 +18,7 @@ All concrete repositories should inherit from BaseRepository and implement:
 
 import logging
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager, suppress
 from functools import wraps
 from typing import Any, TypeVar
@@ -55,7 +55,7 @@ def handle_db_errors(entity_type: str = "Entity") -> Callable:
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any):
+        async def wrapper(*args: Any, **kwargs: Any) -> None:
             try:
                 return await func(*args, **kwargs)
             except IntegrityError as e:
@@ -114,7 +114,7 @@ def transactional(func: Callable) -> Callable:
     """
 
     @wraps(func)
-    async def wrapper(self: Any, *args: Any, **kwargs: Any):
+    async def wrapper(self: Any, *args: Any, **kwargs: Any) -> None:
         session = getattr(self, "_session", None)
         if session is None:
             raise RepositoryError("No session available for transaction")
@@ -559,7 +559,7 @@ class BaseRepository[T, M](ABC):
         await self._session.rollback()
 
     @asynccontextmanager
-    async def transaction(self):
+    async def transaction(self) -> AsyncGenerator[Any, None]:
         """
         Context manager for transactional operations.
 

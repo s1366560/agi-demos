@@ -7,6 +7,7 @@ allowing tenants to disable or override system skills.
 
 import logging
 from datetime import UTC
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -106,7 +107,7 @@ async def list_tenant_skill_configs(
     request: Request,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> TenantSkillConfigListResponse:
     """
     List all skill configurations for the current tenant.
 
@@ -130,7 +131,7 @@ async def get_tenant_skill_config(
     system_skill_name: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> config_to_response:
     """
     Get a specific tenant skill configuration.
 
@@ -157,7 +158,7 @@ async def disable_system_skill(
     data: DisableSkillRequest,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> config_to_response:
     """
     Disable a system skill for this tenant.
 
@@ -205,7 +206,7 @@ async def override_system_skill(
     data: OverrideSkillRequest,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> config_to_response:
     """
     Override a system skill with a tenant skill.
 
@@ -329,7 +330,7 @@ async def get_skill_status(
     system_skill_name: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """
     Get the status of a system skill for this tenant.
 

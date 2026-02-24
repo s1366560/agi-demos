@@ -31,7 +31,7 @@ async def list_all_mcp_tools(
     per_page: int = Query(50, ge=1, le=200, description="Items per page"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> MCPToolListResponse:
     """
     List all MCP tools from all enabled servers, optionally filtered by project.
     Supports pagination via page/per_page query parameters.
@@ -77,7 +77,7 @@ async def call_mcp_tool(
     request_data: MCPToolCallRequest,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> MCPToolCallResponse:
     """
     Call a tool on an MCP server.
 

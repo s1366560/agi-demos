@@ -60,8 +60,8 @@ def convert_tools(tools: dict[str, Any]) -> list[ToolDefinition]:
                 parameters = schema.model_json_schema()
 
         # Create execute wrapper with captured variables
-        def make_execute_wrapper(tool_instance: Any, tool_name: str):
-            async def execute_wrapper(**kwargs: Any):
+        def make_execute_wrapper(tool_instance: Any, tool_name: str) -> None:
+            async def execute_wrapper(**kwargs: Any) -> Any:
                 """Wrapper to execute tool."""
                 try:
                     # Try different execute method names

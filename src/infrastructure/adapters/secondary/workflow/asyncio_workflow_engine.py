@@ -68,7 +68,7 @@ class AsyncioWorkflowEngine(WorkflowEnginePort):
     ) -> WorkflowExecution:
         run_id = str(uuid.uuid4())
 
-        async def _execute():
+        async def _execute() -> None:
             async with self._semaphore:
                 handler = self._workflow_handlers.get(workflow_name)
                 if handler:

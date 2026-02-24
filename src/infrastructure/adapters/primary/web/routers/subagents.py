@@ -266,7 +266,7 @@ async def create_subagent(
     data: SubAgentCreate,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> subagent_to_response:
     """
     Create a new subagent.
 
@@ -330,7 +330,7 @@ async def list_subagents(
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> SubAgentListResponse:
     """
     List all subagents for the current tenant.
 
@@ -406,7 +406,7 @@ class FilesystemSubAgentListResponse(BaseModel):
 async def list_filesystem_subagents(
     request: Request,
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> FilesystemSubAgentListResponse:
     """
     List SubAgents available from the filesystem (.memstack/agents/*.md).
 
@@ -460,7 +460,7 @@ async def import_filesystem_subagent(
     project_id: str | None = Query(None, description="Optional project to scope to"),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> subagent_to_response:
     """
     Import a filesystem SubAgent into the database for customization.
 
@@ -537,7 +537,7 @@ async def list_subagent_templates(
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> TemplateListResponse:
     """
     List published subagent templates with optional filtering.
     """
@@ -569,7 +569,7 @@ async def create_template(
     data: TemplateCreate,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> TemplateResponse:
     """
     Create a new subagent template.
     """
@@ -598,7 +598,7 @@ async def list_template_categories(
     request: Request,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """
     List all available template categories.
     """
@@ -614,7 +614,7 @@ async def get_template(
     template_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> TemplateResponse:
     """
     Get a specific template by ID.
     """
@@ -638,7 +638,7 @@ async def update_template(
     data: TemplateUpdate,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> TemplateResponse:
     """
     Update an existing template.
     """
@@ -707,7 +707,7 @@ async def install_template(
     template_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> subagent_to_response:
     """
     Create a SubAgent from a template (install).
     """
@@ -764,7 +764,7 @@ async def export_subagent_as_template(
     subagent_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> TemplateResponse:
     """
     Export an existing SubAgent as a reusable template.
     """
@@ -811,7 +811,7 @@ async def get_subagent(
     subagent_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> subagent_to_response:
     """
     Get a specific subagent by ID.
     """
@@ -842,7 +842,7 @@ async def update_subagent(
     data: SubAgentUpdate,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> subagent_to_response:
     """
     Update an existing subagent.
     """
@@ -965,7 +965,7 @@ async def toggle_subagent_enabled(
     enabled: bool = Query(..., description="Enable or disable"),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> subagent_to_response:
     """
     Enable or disable a subagent.
     """
@@ -999,7 +999,7 @@ async def get_subagent_stats(
     subagent_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> SubAgentStatsResponse:
     """
     Get statistics for a subagent.
     """
@@ -1037,7 +1037,7 @@ async def match_subagent(
     data: SubAgentMatchRequest,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> SubAgentMatchResponse:
     """
     Find the best matching subagent for a task description.
 
@@ -1070,7 +1070,7 @@ async def seed_templates(
     request: Request,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """
     Seed builtin templates for the current tenant.
 

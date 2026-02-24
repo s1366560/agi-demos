@@ -1,4 +1,6 @@
 import logging
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -53,7 +55,7 @@ else:
     logger.info("No read replica configured, using primary for all operations")
 
 
-async def get_db():
+async def get_db() -> AsyncGenerator[Any, None]:
     """
     Dependency that provides a database session for write operations.
 
@@ -71,7 +73,7 @@ async def get_db():
         await session.close()
 
 
-async def get_read_db():
+async def get_read_db() -> AsyncGenerator[Any, None]:
     """
     Dependency that provides a database session for read operations.
 

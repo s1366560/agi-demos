@@ -7,7 +7,9 @@ connection overhead.
 
 import asyncio
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 from src.infrastructure.mcp.clients.websocket_client import MCPWebSocketClient
 
@@ -175,7 +177,7 @@ class MCPConnectionPool:
         logger.info("All pool connections closed")
 
     @asynccontextmanager
-    async def connection(self):
+    async def connection(self) -> AsyncGenerator[Any, None]:
         """Context manager for getting and returning a connection.
 
         Usage:

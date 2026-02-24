@@ -1,6 +1,7 @@
 """Support ticket management router."""
 
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -19,7 +20,7 @@ async def create_support_ticket(
     ticket_data: dict,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Create a new support ticket."""
 
     ticket_id = str(uuid4())
@@ -54,7 +55,7 @@ async def list_support_tickets(
     status: str | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """List support tickets for the current user."""
 
     query = select(SupportTicket).where(SupportTicket.user_id == current_user.id)
@@ -93,7 +94,7 @@ async def get_support_ticket(
     ticket_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Get a specific support ticket."""
 
     result = await db.execute(
@@ -125,7 +126,7 @@ async def update_support_ticket(
     update_data: dict,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Update a support ticket."""
 
     result = await db.execute(
@@ -166,7 +167,7 @@ async def close_support_ticket(
     ticket_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """Close a support ticket."""
 
     result = await db.execute(

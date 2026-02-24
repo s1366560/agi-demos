@@ -169,7 +169,7 @@ async def create_skill(
     data: SkillCreate,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> skill_to_response:
     """
     Create a new skill.
 
@@ -253,7 +253,7 @@ async def list_skills(
     offset: int = Query(0, ge=0, description="Offset for pagination"),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> SkillListResponse:
     """
     List all skills for the current tenant.
 
@@ -300,7 +300,7 @@ async def get_skill(
     skill_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> skill_to_response:
     """
     Get a specific skill by ID.
     """
@@ -331,7 +331,7 @@ async def update_skill(
     data: SkillUpdate,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> skill_to_response:
     """
     Update an existing skill.
     """
@@ -428,7 +428,7 @@ async def match_skills(
     data: SkillMatchRequest,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> list[Any]:
     """
     Find skills that match a query.
 
@@ -453,7 +453,7 @@ async def update_skill_status(
     status_value: str = Query(..., alias="status", description="New status"),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> skill_to_response:
     """
     Update skill status (active, disabled, deprecated).
     """
@@ -518,7 +518,7 @@ async def get_skill_stats(
     skill_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """
     Get usage statistics for a skill.
     """
@@ -558,7 +558,7 @@ async def list_system_skills(
     status_filter: str | None = Query(None, alias="status", description="Filter by status"),
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> SkillListResponse:
     """
     List all system-level skills.
 
@@ -618,7 +618,7 @@ async def get_skill_content(
     skill_id: str,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> SkillContentResponse:
     """
     Get the full content of a skill.
 
@@ -657,7 +657,7 @@ async def update_skill_content(
     data: SkillContentUpdate,
     tenant_id: str = Depends(get_current_user_tenant),
     db: AsyncSession = Depends(get_db),
-):
+) -> skill_to_response:
     """
     Update the full content of a skill.
 
@@ -765,7 +765,7 @@ async def list_skill_versions(
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
     tenant: dict = Depends(get_current_user_tenant),
-):
+) -> SkillVersionListResponse:
     """List all versions of a skill, ordered by version_number DESC."""
     from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
         SqlSkillVersionRepository,
@@ -802,7 +802,7 @@ async def get_skill_version(
     version_number: int,
     db: AsyncSession = Depends(get_db),
     tenant: dict = Depends(get_current_user_tenant),
-):
+) -> SkillVersionDetailResponse:
     """Get a specific version of a skill including content and resource files."""
     from src.infrastructure.adapters.secondary.persistence.sql_skill_version_repository import (
         SqlSkillVersionRepository,
@@ -840,7 +840,7 @@ async def rollback_skill(
     request_body: SkillRollbackRequest,
     db: AsyncSession = Depends(get_db),
     tenant: dict = Depends(get_current_user_tenant),
-):
+) -> skill_to_response:
     """Rollback a skill to a specific version. Creates a new version entry."""
     from pathlib import Path
 

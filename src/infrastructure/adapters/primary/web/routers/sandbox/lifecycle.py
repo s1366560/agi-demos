@@ -11,6 +11,7 @@ Provides CRUD operations for sandbox instances:
 """
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -41,7 +42,7 @@ router = APIRouter()
 
 
 @router.get("/profiles", response_model=ListProfilesResponse)
-async def list_sandbox_profiles():
+async def list_sandbox_profiles() -> ListProfilesResponse:
     """
     List all available sandbox profiles.
 
@@ -74,7 +75,7 @@ async def check_sandbox_health(
     level: str = Query("basic", description="Health check level: basic, mcp, services, full"),
     _current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-):
+) -> HealthCheckResponse:
     """
     Check sandbox health status.
 
@@ -117,7 +118,7 @@ async def create_sandbox(
     tenant_id: str = Depends(get_current_user_tenant),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
     event_publisher: SandboxEventPublisher | None = Depends(get_event_publisher),
-):
+) -> SandboxResponse:
     """
     Create a new MCP sandbox.
 
@@ -209,7 +210,7 @@ async def get_sandbox(
     sandbox_id: str,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-):
+) -> SandboxResponse:
     """Get sandbox status and information."""
     instance = await adapter.get_sandbox(sandbox_id)
 
@@ -240,7 +241,7 @@ async def terminate_sandbox(
     sandbox_id: str,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-):
+) -> dict[str, Any]:
     """Terminate a sandbox and unregister its tools from Agent context."""
     # Unregister tools from Agent context first
     try:
@@ -268,7 +269,7 @@ async def list_sandboxes(
     status: str | None = None,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-):
+) -> ListSandboxesResponse:
     """List all sandboxes."""
     status_filter = None
     if status:
@@ -300,7 +301,7 @@ async def cleanup_expired(
     max_age_seconds: int = 3600,
     current_user: User = Depends(get_current_user),
     adapter: MCPSandboxAdapter = Depends(get_sandbox_adapter),
-):
+) -> dict[str, Any]:
     """Clean up expired sandboxes."""
     count = await adapter.cleanup_expired(max_age_seconds=max_age_seconds)
     return {"cleaned_up": count}

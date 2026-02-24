@@ -122,7 +122,7 @@ class NativeGraphAdapter(GraphServicePort):
         return self._neo4j_client
 
     @property
-    def driver(self):
+    def driver(self) -> None:
         """Get the Neo4j driver (for direct driver access)."""
         return self._neo4j_client.driver
 

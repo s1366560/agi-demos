@@ -2088,7 +2088,7 @@ def get_hitl_response_listener() -> Any | None:
     return _hitl_response_listener
 
 
-def get_session_registry():
+def get_session_registry() -> Any:
     """Get the AgentSessionRegistry for HITL waiter tracking.
 
     Returns:

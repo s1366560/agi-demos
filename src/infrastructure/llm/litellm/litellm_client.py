@@ -8,7 +8,7 @@ Provides unified access to 100+ LLM providers.
 import logging
 import math
 import warnings
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import Any
 
 from pydantic import BaseModel
@@ -352,7 +352,7 @@ class LiteLLMClient(LLMClient):
         ]
         return any(indicator in error_str for indicator in client_indicators)
 
-    async def _execute_with_resilience(self, coro_factory: Callable[[], Awaitable[Any]]):
+    async def _execute_with_resilience(self, coro_factory: Callable[[], Awaitable[Any]]) -> None:
         """Execute an LLM call with circuit breaker and rate limiter.
 
         Args:
@@ -513,7 +513,7 @@ class LiteLLMClient(LLMClient):
         model_size: ModelSize = ModelSize.medium,
         langfuse_context: dict[str, Any] | None = None,
         **kwargs: Any,
-    ):
+    ) -> AsyncGenerator[Any, None]:
         """
         Generate streaming response using LiteLLM.
 

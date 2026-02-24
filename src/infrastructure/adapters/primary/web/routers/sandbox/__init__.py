@@ -60,7 +60,7 @@ async def list_sandboxes_root(
     status: str | None = None,
     current_user: User=Depends(get_current_user),
     adapter: MCPSandboxAdapter=Depends(get_sandbox_adapter),
-):
+) -> None:
     """List all sandboxes (root path alias)."""
     from .lifecycle import list_sandboxes
 

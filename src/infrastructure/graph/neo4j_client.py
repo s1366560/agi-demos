@@ -10,6 +10,7 @@ This module provides a thin wrapper around the Neo4j AsyncDriver that:
 import asyncio
 import logging
 import re
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from types import TracebackType
 from typing import Any
@@ -204,7 +205,7 @@ class Neo4jClient:
             raise TimeoutError(f"Neo4j query timeout after {timeout}s") from None
 
     @asynccontextmanager
-    async def session(self):
+    async def session(self) -> AsyncGenerator[Any, None]:
         """
         Create an async session for transaction control.
 

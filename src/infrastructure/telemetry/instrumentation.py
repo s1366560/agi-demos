@@ -111,7 +111,7 @@ def instrument_fastapi(app: Any) -> bool | None:
         return False
 
 
-def instrument_all(auto_instrument: bool = True):
+def instrument_all(auto_instrument: bool = True) -> None:
     """Instrument all supported libraries.
 
     Args:

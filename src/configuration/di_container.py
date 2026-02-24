@@ -6,6 +6,8 @@ the exact same public interface for all callers.
 
 
 
+from typing import Any
+
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -179,7 +181,7 @@ class DIContainer:
             workflow_engine=self._infra.workflow_engine_port(),
         )
 
-    def ai_service_factory(self):
+    def ai_service_factory(self) -> Any:
         """Get the AIServiceFactory singleton."""
         from src.infrastructure.llm.provider_factory import get_ai_service_factory
         return get_ai_service_factory()
@@ -187,14 +189,14 @@ class DIContainer:
     # === Properties that stay on the main class ===
 
     @property
-    def neo4j_client(self):
+    def neo4j_client(self) -> None:
         """Get Neo4j client for direct driver access."""
         if self._graph_service and hasattr(self._graph_service, "client"):
             return self._graph_service.client
         return None
 
     @property
-    def graph_service(self):
+    def graph_service(self) -> None:
         """Get the GraphServicePort for graph operations."""
         return self._graph_service
 
@@ -271,25 +273,25 @@ class DIContainer:
     def redis(self) -> redis.Redis | None:
         return self._infra.redis()
 
-    def sequence_service(self):
+    def sequence_service(self) -> Any:
         return self._infra.sequence_service()
 
     def hitl_message_bus(self) -> HITLMessageBusPort | None:
         return self._infra.hitl_message_bus()
 
-    def storage_service(self):
+    def storage_service(self) -> Any:
         return self._infra.storage_service()
 
-    def distributed_lock_adapter(self):
+    def distributed_lock_adapter(self) -> Any:
         return self._infra.distributed_lock_adapter()
 
     def workflow_engine_port(self) -> WorkflowEnginePort | None:
         return self._infra.workflow_engine_port()
 
-    def sandbox_adapter(self):
+    def sandbox_adapter(self) -> Any:
         return self._infra.sandbox_adapter()
 
-    def sandbox_event_publisher(self):
+    def sandbox_event_publisher(self) -> Any:
         return self._infra.sandbox_event_publisher()
 
     # === Sandbox Container delegates ===
@@ -300,19 +302,19 @@ class DIContainer:
     def sandbox_orchestrator(self) -> SandboxOrchestrator:
         return self._sandbox.sandbox_orchestrator()
 
-    def sandbox_tool_registry(self):
+    def sandbox_tool_registry(self) -> Any:
         return self._sandbox.sandbox_tool_registry()
 
     def sandbox_resource(self) -> SandboxResourcePort:
         return self._sandbox.sandbox_resource()
 
-    def project_sandbox_lifecycle_service(self):
+    def project_sandbox_lifecycle_service(self) -> Any:
         return self._sandbox.project_sandbox_lifecycle_service()
 
-    def sandbox_mcp_server_manager(self):
+    def sandbox_mcp_server_manager(self) -> Any:
         return self._sandbox.sandbox_mcp_server_manager()
 
-    def mcp_app_service(self):
+    def mcp_app_service(self) -> Any:
         return self._sandbox.mcp_app_service()
 
     # === Agent Container delegates ===
@@ -335,7 +337,7 @@ class DIContainer:
     def workflow_pattern_repository(self) -> SqlWorkflowPatternRepository:
         return self._agent.workflow_pattern_repository()
 
-    def context_summary_adapter(self):
+    def context_summary_adapter(self) -> Any:
         return self._agent.context_summary_adapter()
 
     def tool_composition_repository(self) -> SqlToolCompositionRepository:
@@ -353,7 +355,7 @@ class DIContainer:
     def skill_repository(self) -> SqlSkillRepository:
         return self._agent.skill_repository()
 
-    def skill_version_repository(self):
+    def skill_version_repository(self) -> Any:
         return self._agent.skill_version_repository()
 
     def tenant_skill_config_repository(self) -> SqlTenantSkillConfigRepository:
@@ -365,13 +367,13 @@ class DIContainer:
     def subagent_template_repository(self) -> SqlSubAgentTemplateRepository:
         return self._agent.subagent_template_repository()
 
-    def attachment_repository(self):
+    def attachment_repository(self) -> Any:
         return self._agent.attachment_repository()
 
-    def attachment_service(self):
+    def attachment_service(self) -> Any:
         return self._agent.attachment_service()
 
-    def artifact_service(self):
+    def artifact_service(self) -> Any:
         return self._agent.artifact_service()
 
     def skill_service(self) -> SkillService:
@@ -380,37 +382,37 @@ class DIContainer:
     def agent_service(self, llm: LLMClient) -> AgentService:
         return self._agent.agent_service(llm)
 
-    def event_converter(self):
+    def event_converter(self) -> Any:
         return self._agent.event_converter()
 
-    def skill_orchestrator(self):
+    def skill_orchestrator(self) -> Any:
         return self._agent.skill_orchestrator()
 
-    def subagent_orchestrator(self):
+    def subagent_orchestrator(self) -> Any:
         return self._agent.subagent_orchestrator()
 
-    def attachment_processor(self):
+    def attachment_processor(self) -> Any:
         return self._agent.attachment_processor()
 
-    def llm_invoker(self, llm: LLMClient):
+    def llm_invoker(self, llm: LLMClient) -> Any:
         return self._agent.llm_invoker(llm)
 
-    def tool_executor(self, tools: dict):
+    def tool_executor(self, tools: dict) -> Any:
         return self._agent.tool_executor(tools)
 
-    def artifact_extractor(self):
+    def artifact_extractor(self) -> Any:
         return self._agent.artifact_extractor()
 
-    def react_loop(self, llm: LLMClient, tools: dict):
+    def react_loop(self, llm: LLMClient, tools: dict) -> Any:
         return self._agent.react_loop(llm, tools)
 
-    def message_builder(self):
+    def message_builder(self) -> Any:
         return self._agent.message_builder()
 
-    def attachment_injector(self):
+    def attachment_injector(self) -> Any:
         return self._agent.attachment_injector()
 
-    def context_facade(self, window_manager: ContextWindowManager | None=None):
+    def context_facade(self, window_manager: ContextWindowManager | None=None) -> Any:
         return self._agent.context_facade(window_manager)
 
     def create_conversation_use_case(self, llm: LLMClient) -> CreateConversationUseCase:

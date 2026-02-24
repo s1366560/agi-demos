@@ -6,6 +6,7 @@ MCP servers are project-scoped and run inside project sandbox containers.
 
 import logging
 import time
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,7 +58,7 @@ async def create_mcp_server(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> Any:
     """
     Create a new MCP server configuration.
 
@@ -105,7 +106,7 @@ async def list_mcp_servers(
     enabled_only: bool = Query(False, description="Only return enabled servers"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> list[Any]:
     """
     List MCP servers. If project_id is provided, returns servers for that project only.
     Otherwise returns all servers for the current tenant.
@@ -132,7 +133,7 @@ async def get_mcp_server(
     server_id: str,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> Any:
     """
     Get a specific MCP server by ID.
     """
@@ -162,7 +163,7 @@ async def update_mcp_server(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> Any:
     """
     Update an MCP server configuration.
 
@@ -276,7 +277,7 @@ async def sync_mcp_server_tools(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> Any:
     """
     Sync tools from an MCP server.
 
@@ -326,7 +327,7 @@ async def test_mcp_server_connection(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> MCPServerTestResult:
     """
     Test connection to an MCP server.
 
@@ -387,7 +388,7 @@ async def reconcile_mcp_project(
     request: Request,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> MCPReconcileResultResponse:
     """Reconcile enabled MCP servers with current sandbox runtime."""
     try:
         runtime = await _get_runtime_service(request, db)
@@ -444,7 +445,7 @@ async def get_mcp_health_summary(
     project_id: str | None = Query(None, description="Filter by project ID"),
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> MCPHealthSummary:
     """Get aggregated health summary for all MCP servers."""
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
         SqlMCPServerRepository,
@@ -475,7 +476,7 @@ async def get_mcp_server_health(
     server_id: str,
     db: AsyncSession = Depends(get_db),
     tenant_id: str = Depends(get_current_user_tenant),
-):
+) -> _compute_server_health:
     """Get health status for a single MCP server (lightweight, no connection test)."""
     from src.infrastructure.adapters.secondary.persistence.sql_mcp_server_repository import (
         SqlMCPServerRepository,

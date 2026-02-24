@@ -27,7 +27,7 @@ from src.infrastructure.adapters.secondary.persistence.database import get_db
 logger = logging.getLogger(__name__)
 
 
-def get_neo4j_client(request: Request):
+def get_neo4j_client(request: Request) -> None:
     """Get Neo4j client from app state for direct graph queries."""
     try:
         return request.app.state.container.neo4j_client
@@ -36,7 +36,7 @@ def get_neo4j_client(request: Request):
         return None
 
 
-def get_workflow_engine(request: Request):
+def get_workflow_engine(request: Request) -> None:
     """Get WorkflowEngine from app state.
 
     Returns the Temporal WorkflowEngine for submitting workflow tasks.
@@ -64,7 +64,7 @@ def get_workflow_engine(request: Request):
     return state.workflow_engine
 
 
-def get_graph_service(request: Request):
+def get_graph_service(request: Request) -> None:
     """Get GraphServicePort (NativeGraphAdapter) from app state.
 
     This provides the adapter layer that handles knowledge graph operations

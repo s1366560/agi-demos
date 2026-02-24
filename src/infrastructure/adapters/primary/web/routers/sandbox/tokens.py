@@ -4,6 +4,7 @@ Provides token generation, validation, and revocation for sandbox authentication
 """
 
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends
 
@@ -30,7 +31,7 @@ async def generate_sandbox_token(
     request: SandboxTokenRequest,
     current_user: User = Depends(get_current_user),
     token_service: SandboxTokenService = Depends(get_sandbox_token_service),
-):
+) -> SandboxTokenResponse:
     """
     Generate a short-lived access token for sandbox WebSocket connection.
 
@@ -68,7 +69,7 @@ async def generate_sandbox_token(
 async def validate_sandbox_token(
     request: ValidateTokenRequest,
     token_service: SandboxTokenService = Depends(get_sandbox_token_service),
-):
+) -> ValidateTokenResponse:
     """
     Validate a sandbox access token.
 
@@ -94,7 +95,7 @@ async def revoke_project_tokens(
     project_id: str,
     current_user: User = Depends(get_current_user),
     token_service: SandboxTokenService = Depends(get_sandbox_token_service),
-):
+) -> dict[str, Any]:
     """
     Revoke all active tokens for a project.
 

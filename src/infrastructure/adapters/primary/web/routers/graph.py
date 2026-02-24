@@ -86,7 +86,7 @@ async def list_communities(
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
-):
+) -> dict[str, Any]:
     """
     List communities in the knowledge graph with filtering and pagination.
 
@@ -163,7 +163,7 @@ async def list_entities(
     offset: int = Query(0, ge=0, description="Pagination offset"),
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
-):
+) -> dict[str, Any]:
     """List entities in the knowledge graph with filtering and pagination."""
     try:
         conditions = []
@@ -235,7 +235,7 @@ async def get_entity_types(
     project_id: str | None = None,
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
-):
+) -> dict[str, Any]:
     """
     Get all available entity types with their counts.
 
@@ -280,7 +280,7 @@ async def get_entity(
     entity_id: str,
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
-):
+) -> dict[str, Any]:
     """
     Get entity details by UUID.
 
@@ -346,7 +346,7 @@ async def get_entity_relationships(
     limit: int = Query(50, ge=1, le=200, description="Maximum relationships to return"),
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
-):
+) -> dict[str, Any]:
     """
     Get relationships for an entity.
 
@@ -435,7 +435,7 @@ async def get_graph(
     limit: int = 100,
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
-):
+) -> dict[str, Any]:
     """Get graph data for visualization."""
     try:
         query = """
@@ -518,7 +518,7 @@ async def get_subgraph(
     params: SubgraphRequest,
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
-):
+) -> dict[str, Any]:
     """Get subgraph for specific nodes."""
     try:
         project_id = params.project_id
@@ -623,7 +623,7 @@ async def get_community(
     community_id: str,
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
-):
+) -> dict[str, Any]:
     """
     Get community details by UUID.
 
@@ -670,7 +670,7 @@ async def get_community_members(
     limit: int = Query(100, ge=1, le=500, description="Maximum members to return"),
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
-):
+) -> dict[str, Any]:
     """
     Get members (entities) of a community.
 
@@ -721,7 +721,7 @@ async def rebuild_communities(
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
     workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
     graph_service: GraphServicePort | None=Depends(get_graph_service),
-):
+) -> dict[str, Any]:
     """
     Rebuild communities using the Louvain algorithm for the specified project.
 

@@ -1,5 +1,7 @@
 """DI sub-container for agent domain."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from typing import Any
 
@@ -135,7 +137,7 @@ class AgentContainer:
         """Get SqlContextSummaryAdapter for context summary persistence."""
         return SqlContextSummaryAdapter(self._db)
 
-    def context_loader(self):
+    def context_loader(self) -> Any:
         """Get ContextLoader for smart context loading with summary caching."""
         from src.application.services.agent.context_loader import ContextLoader
 
@@ -182,7 +184,7 @@ class AgentContainer:
 
     # === Attachment & Artifact ===
 
-    def attachment_repository(self):
+    def attachment_repository(self) -> Any:
         """Get AttachmentRepository for attachment persistence."""
         from src.infrastructure.adapters.secondary.persistence.sql_attachment_repository import (
             SqlAttachmentRepository,
@@ -190,7 +192,7 @@ class AgentContainer:
 
         return SqlAttachmentRepository(self._db)
 
-    def attachment_service(self):
+    def attachment_service(self) -> Any:
         """Get AttachmentService for file upload handling."""
         from src.application.services.attachment_service import AttachmentService
 
@@ -202,7 +204,7 @@ class AgentContainer:
             upload_max_size_sandbox_mb=self._settings.upload_max_size_sandbox_mb,
         )
 
-    def artifact_service(self):
+    def artifact_service(self) -> Any:
         """Get ArtifactService for managing tool output artifacts."""
         from src.application.services.artifact_service import ArtifactService
 
@@ -296,19 +298,19 @@ class AgentContainer:
 
     # === Agent Orchestrators ===
 
-    def event_converter(self):
+    def event_converter(self) -> Any:
         """Get EventConverter for domain event to SSE conversion."""
         from src.infrastructure.agent.events.converter import get_event_converter
 
         return get_event_converter()
 
-    def skill_orchestrator(self):
+    def skill_orchestrator(self) -> Any:
         """Get SkillOrchestrator for skill matching and execution."""
         from src.infrastructure.agent.skill.orchestrator import create_skill_orchestrator
 
         return create_skill_orchestrator()
 
-    def subagent_orchestrator(self):
+    def subagent_orchestrator(self) -> Any:
         """Get SubAgentOrchestrator for sub-agent routing."""
         from src.infrastructure.agent.routing.subagent_orchestrator import (
             create_subagent_orchestrator,
@@ -316,31 +318,31 @@ class AgentContainer:
 
         return create_subagent_orchestrator()
 
-    def attachment_processor(self):
+    def attachment_processor(self) -> Any:
         """Get AttachmentProcessor for handling chat attachments."""
         from src.infrastructure.agent.attachment.processor import get_attachment_processor
 
         return get_attachment_processor()
 
-    def llm_invoker(self, llm: LLMClient):
+    def llm_invoker(self, llm: LLMClient) -> Any:
         """Get LLMInvoker for LLM invocation with streaming."""
         from src.infrastructure.agent.llm.invoker import LLMInvoker
 
         return LLMInvoker(llm_client=llm)
 
-    def tool_executor(self, tools: dict):
+    def tool_executor(self, tools: dict) -> Any:
         """Get ToolExecutor for tool execution with permission checking."""
         from src.infrastructure.agent.tools.executor import ToolExecutor
 
         return ToolExecutor(tools=tools)
 
-    def artifact_extractor(self):
+    def artifact_extractor(self) -> Any:
         """Get ArtifactExtractor for extracting artifacts from tool results."""
         from src.infrastructure.agent.artifact.extractor import get_artifact_extractor
 
         return get_artifact_extractor()
 
-    def react_loop(self, llm: LLMClient, tools: dict):
+    def react_loop(self, llm: LLMClient, tools: dict) -> Any:
         """Get ReActLoop for core reasoning loop."""
         from src.infrastructure.agent.core.react_loop import ReActLoop
 
@@ -351,19 +353,19 @@ class AgentContainer:
 
     # === Context Management ===
 
-    def message_builder(self):
+    def message_builder(self) -> Any:
         """Get MessageBuilder for converting messages to LLM format."""
         from src.infrastructure.agent.context.builder import MessageBuilder
 
         return MessageBuilder()
 
-    def attachment_injector(self):
+    def attachment_injector(self) -> Any:
         """Get AttachmentInjector for injecting attachment context."""
         from src.infrastructure.agent.context.builder import AttachmentInjector
 
         return AttachmentInjector()
 
-    def context_facade(self, window_manager: ContextWindowManager | None=None):
+    def context_facade(self, window_manager: ContextWindowManager | None=None) -> Any:
         """Get ContextFacade for unified context management."""
         from src.infrastructure.agent.context import ContextFacade
 

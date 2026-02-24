@@ -1,7 +1,9 @@
 import logging
 import os
 import sys
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Any
 
 # Configure application-wide logging before any other imports.
 # Uvicorn only configures its own loggers; without this, all src.* loggers
@@ -100,7 +102,7 @@ logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[Any, None]:
     """Application lifespan manager - handles startup and shutdown."""
     # Startup
     logger.info("Starting MemStack (Hexagonal) application...")
@@ -291,7 +293,7 @@ Check the `/api/v1/tenant/config` endpoint for your current limits.
     configure_exception_handlers(app)
 
     @app.get("/health")
-    async def health_check():
+    async def health_check() -> dict[str, Any]:
         return {"status": "ok", "version": "0.2.0"}
 
     # Serve static files (MCP Apps sandbox proxy, etc.)

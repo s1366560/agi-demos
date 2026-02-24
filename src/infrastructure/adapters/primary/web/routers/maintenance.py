@@ -33,7 +33,7 @@ async def incremental_refresh(
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
     workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
-):
+) -> dict[str, Any]:
     """
     Perform incremental refresh of the knowledge graph.
 
@@ -119,7 +119,7 @@ async def deduplicate_entities(
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
     workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
-):
+) -> dict[str, Any]:
     """
     Find and optionally merge duplicate entities.
 
@@ -230,7 +230,7 @@ async def invalidate_stale_edges(
     dry_run: bool = Body(True, description="If true, only report without deleting"),
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
-):
+) -> dict[str, Any]:
     """
     Invalidate or remove stale edges that haven't been updated.
 
@@ -296,7 +296,7 @@ async def invalidate_stale_edges(
 async def get_maintenance_status(
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
-):
+) -> dict[str, Any]:
     """
     Get maintenance status and recommendations.
 
@@ -384,7 +384,7 @@ async def optimize_graph(
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
     workflow_engine: WorkflowEnginePort=Depends(get_workflow_engine),
-):
+) -> None:
     """
     Run multiple optimization operations.
 
@@ -633,7 +633,7 @@ async def get_embedding_status(
     project_id: str | None = Query(None, description="Project ID to check"),
     current_user: User = Depends(get_current_user),
     graphiti_client: Any=Depends(get_graphiti_client),
-):
+) -> dict[str, Any]:
     """
     Check embedding dimension status for a project.
 
@@ -696,7 +696,7 @@ async def rebuild_embeddings(
     project_id: str = Query(..., description="Project ID to rebuild embeddings for"),
     current_user: User = Depends(get_current_user),
     graphiti_client: Any=Depends(get_graphiti_client),
-):
+) -> dict[str, Any]:
     """
     Rebuild embeddings for a project after switching LLM providers.
 
@@ -728,7 +728,7 @@ async def check_embedding_dimensions(
     project_id: str | None = Query(None, description="Project ID to check"),
     current_user: User = Depends(get_current_user),
     graphiti_client: Any=Depends(get_graphiti_client),
-):
+) -> None:
     """
     Check for mixed embedding dimensions in Neo4j.
 
@@ -777,7 +777,7 @@ async def validate_embeddings(
     project_id: str | None = Query(None, description="Project ID to validate"),
     current_user: User = Depends(get_current_user),
     graphiti_client: Any=Depends(get_graphiti_client),
-):
+) -> None:
     """
     Validate all embeddings in the database.
 
@@ -816,7 +816,7 @@ async def get_native_embedding_status(
     project_id: str | None = Query(None, description="Project ID to check"),
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
-):
+) -> dict[str, Any]:
     """
     Get embedding dimension status using native graph adapter.
 
@@ -960,7 +960,7 @@ async def migrate_embeddings(
     dry_run: bool = Query(True, description="If true, only report without migrating"),
     current_user: User = Depends(get_current_user),
     neo4j_client: Neo4jClient | None=Depends(get_neo4j_client),
-):
+) -> dict[str, Any]:
     """
     Migrate embeddings to a new model dimension.
 

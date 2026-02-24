@@ -3,6 +3,7 @@ Authentication router.
 """
 
 import logging
+from typing import Any
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -107,7 +108,7 @@ async def _ensure_default_project(db: AsyncSession, user: DBUser) -> None:
 async def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     """
     Login endpoint to get an access token (API Key).
     """
@@ -170,7 +171,7 @@ async def create_new_api_key(
     key_data: APIKeyCreate,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> APIKeyResponse:
     """Create a new API key."""
     plain_key, api_key = await create_api_key(
         db,
@@ -193,7 +194,7 @@ async def create_new_api_key(
 @router.get("/auth/keys", response_model=list[APIKeyResponse])
 async def list_api_keys(
     current_user: DBUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+) -> list[Any]:
     """List all API keys for the current user."""
     result = await db.execute(select(DBAPIKey).where(DBAPIKey.user_id == current_user.id))
     keys = result.scalars().all()
@@ -234,7 +235,7 @@ async def revoke_api_key(
 @router.get("/auth/me", response_model=UserSchema)
 async def read_users_me(
     current_user: DBUser = Depends(get_current_user), db: AsyncSession = Depends(get_db)
-):
+) -> UserSchema:
     """Get current user information."""
     logger.info(f"Reading user info for: {current_user.id}")
 
@@ -264,7 +265,7 @@ async def update_user_me(
     user_update: UserUpdate,
     current_user: DBUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-):
+) -> UserSchema:
     """Update current user information."""
     if user_update.name is not None:
         current_user.full_name = user_update.name

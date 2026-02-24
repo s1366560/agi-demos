@@ -6,6 +6,7 @@ for distributed tracing and metrics collection.
 
 import contextlib
 import logging
+from typing import Any
 
 from opentelemetry import metrics, trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
@@ -69,7 +70,7 @@ def _create_resource(settings_override: dict | None = None) -> Resource:
     return Resource.create(attributes)
 
 
-def _create_trace_exporter(settings_override: dict | None = None):
+def _create_trace_exporter(settings_override: dict | None = None) -> Any:
     """Create appropriate trace exporter based on configuration."""
     settings = settings_override or get_settings().__dict__
 
@@ -92,7 +93,7 @@ def _create_trace_exporter(settings_override: dict | None = None):
         return ConsoleSpanExporter()
 
 
-def _get_sampler(settings_override: dict | None = None):
+def _get_sampler(settings_override: dict | None = None) -> TraceIdRatioBased:
     """Create sampler based on environment."""
     settings = settings_override or get_settings().__dict__
     environment = settings.get("environment", "development")

@@ -2,6 +2,10 @@
 
 
 
+from __future__ import annotations
+
+from typing import Any
+
 import redis.asyncio as redis
 
 from src.configuration.config import Settings
@@ -30,7 +34,7 @@ class InfraContainer:
         """Get the Redis client for cache operations."""
         return self._redis_client
 
-    def sequence_service(self):
+    def sequence_service(self) -> Any:
         """Get RedisSequenceService for atomic sequence number generation."""
         if not self._redis_client:
             return None
@@ -54,7 +58,7 @@ class InfraContainer:
 
         return RedisHITLMessageBusAdapter(self._redis_client)
 
-    def storage_service(self):
+    def storage_service(self) -> Any:
         """Get StorageServicePort for file storage operations (S3/MinIO)."""
         from src.infrastructure.adapters.secondary.storage.s3_storage_adapter import (
             S3StorageAdapter,
@@ -69,7 +73,7 @@ class InfraContainer:
             no_proxy=self._settings.s3_no_proxy,
         )
 
-    def distributed_lock_adapter(self):
+    def distributed_lock_adapter(self) -> Any:
         """Get Redis-based distributed lock adapter.
 
         Returns None if Redis client is not available.
@@ -93,7 +97,7 @@ class InfraContainer:
         """Get WorkflowEnginePort for workflow orchestration."""
         return self._workflow_engine
 
-    def sandbox_adapter(self):
+    def sandbox_adapter(self) -> Any:
         """Get the MCP Sandbox adapter for desktop and terminal management."""
         from src.configuration.config import get_settings
         from src.infrastructure.adapters.secondary.sandbox.mcp_sandbox_adapter import (
@@ -109,7 +113,7 @@ class InfraContainer:
             workspace_base=settings.sandbox_workspace_base,
         )
 
-    def sandbox_event_publisher(self):
+    def sandbox_event_publisher(self) -> Any:
         """Get SandboxEventPublisher for SSE event emission."""
         from src.application.services.sandbox_event_service import SandboxEventPublisher
 

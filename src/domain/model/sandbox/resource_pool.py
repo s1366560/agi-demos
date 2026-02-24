@@ -7,9 +7,9 @@ and enable efficient reuse.
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from src.domain.model.sandbox.exceptions import (
     SandboxResourceError,
@@ -252,7 +252,7 @@ class ResourcePool[T]:
             self._cond.notify_all()
 
     @asynccontextmanager
-    async def resource(self):
+    async def resource(self) -> AsyncGenerator[Any, None]:
         """Context manager for automatic resource acquisition and release."""
         resource_id = await self.acquire()
         try:
